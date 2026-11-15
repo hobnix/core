@@ -260,7 +260,7 @@ xrun() {   # xrun <stage> <vm> "<name=device ...>": a console scenario of the ha
   local st=$1 on=$2 disks=$3 rc=0 d
   (cd "$src" && HS_NESTED_PASSWORD_FILE=$4 HS_NESTED_DISKS=$disks HS_NESTED_BACKUP_PASS_FILE=${5:-} timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" \
      bash scripts/dev/nested.sh run --stage "$st" --name "$on" --keep) || rc=$?
-  d=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+  d=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
   [ -z "$d" ] || { mkdir -p "$rundir/harness-$st"; cp "$d"/*.log "$d"/result-*.json "$rundir/harness-$st/" 2>/dev/null || true; }
   if [ -n "$d" ] && [ -f "$d/result-$st.json" ]; then json_ok "$d/result-$st.json"; return; fi
   case "$rc" in 0) echo ok ;; 3) echo skipped ;; *) echo error ;; esac
@@ -290,7 +290,7 @@ if [ "$sel" = 7 ]; then
   step "$(t 'Installing %s in VM %s' "$from" "$vm")"
   nrc=0
   (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage iso --iso "$oldiso" --name "$vm" --keep) || nrc=$?
-  ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+  ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
   ur=error
   if [ "$nrc" = 0 ]; then
     export HS_NESTED_CANDIDATE=$ref
@@ -316,7 +316,7 @@ step "$(t 'Running the nested harness, VM %s' "$vm")"
 nrc=0
 keepvm=(); [ -z "$extras" ] || keepvm=(--keep)   # stages 3 to 6 work on the installed VM: it stays until the end (cleanup deletes it)
 (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage "$nested_stage" --name "$vm" ${keepvm[@]+"${keepvm[@]}"}) || nrc=$?
-ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
 [ -z "$ndir" ] || cp -r "$ndir" "$rundir/harness" 2>/dev/null || true
 [ -z "$ndir" ] || rm -f "$rundir/harness/key" "$rundir/harness/password"   # a throwaway key and password of the VM: not kept
 pwfile=$ndir/password   # the password of the installed VM: the later stages log in with it (the copy in the run folder is deleted)
@@ -360,7 +360,7 @@ stage_backup() {
   vm2=$vm-b
   step "$(t 'Stage 4: a second, clean VM %s' "$vm2")"
   (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage all --name "$vm2" --keep) || { res[4]=error; return; }
-  local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd)
+  local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P)
   "$incus" config device remove "$vm" bk >/dev/null || { res[4]=error; return; }
   "$incus" config device add "$vm2" bk disk "pool=$spool" "source=$vm-bk" >/dev/null || { res[4]=error; return; }
   b=$(xrun restore "$vm2" "backup=bk" "$d2/password" "$rundir/.backup-pass")
