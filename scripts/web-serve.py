@@ -920,7 +920,7 @@ def pool_change_ok(hs, args):
     """A change of the area pool names a pool that exists (add/adopt: also a new one); close/open/convert only a SnapRAID pool (kind - = unknown)."""
     if len(args) < 2 or not re.fullmatch(POOL_NAME, args[0]):
         return False
-    if args[1] in ("add", "adopt"):
+    if args[1] in ("add", "adopt", "import"):
         return True
     row = next((r for r in POOLS.rows(hs) if r[0] == args[0]), None)
     if row is None:
@@ -1179,6 +1179,8 @@ CHANGES = {
     "pool": [{"fixed": [POOL_NAME, r"^add$"],
               "opts": {"--disks": (DISKIDS, False), "--role": (r"^(data|parity)$", False), "--fs": (FSTYPE, False), "--encrypt": (None, False),
                       "--use": (r"^(data|apps)$", False), "--kind": (r"^(zfs|snapraid)$", False)}, "stdin": True},
+             # import: a ZFS pool that is on the disks already (pool-import.sh; the confirm word is a disk of the pool)
+             {"fixed": [POOL_NAME, r"^import$"], "opts": {"--use": (r"^data$", False)}},
              {"fixed": [POOL_NAME, r"^adopt$"],
               "opts": {"--disks": (DISKIDS, False), "--merge": (None, False), "--chown": (None, False)}},
              # replace and remove always name the member (a bare `remove` is refused here, not answered with `needs`)
@@ -1360,7 +1362,7 @@ CHANGES = {
                [r"^(remove|test)$", NOTIFY_CHANNEL],
                [r"^migrate$"]],
 }
-CONFIRM_RE = re.compile(r"^[A-Za-z0-9._ -]{1,64}$")
+CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,64}$")
 
 
 # ─────────────────────── extension packages: reads and changes from their manifests ───────────────────────

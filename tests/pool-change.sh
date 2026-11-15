@@ -140,6 +140,21 @@ n=$(grep -n 'confirm_name ' "$SCRIPTS/manage-pool.sh" | grep -v '^[0-9]*:[[:spac
 check_eq "only confirm_plan's call has no assume_yes on its line" 1 "$n"
 check_out "and that call is inside the --yes guard" "if ! .assume_yes; then" bash -c "grep -B2 'confirm_name \"\$word\"' '$SCRIPTS/manage-pool.sh'"
 
+echo "-- import goes to pool-import.sh"
+cat > "$WORK/import-standin.sh" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s
+' "$*" > "$(dirname "$0")/import-args"
+printf 'status	ok
+'
+FAKE
+rc=0; out=$(HS_POOL_IMPORT=$WORK/import-standin.sh bash "$SCRIPTS/pool-change.sh" plan tank import --use data </dev/null 2>/dev/null) || rc=$?
+check_eq "import: exit 0 from the stand-in" 0 "$rc"
+check_eq "import: the stand-in got plan, the pool and the options" "plan tank --use data" "$(cat "$WORK/import-args")"
+check_eq "import: its output is the plan" "status	ok" "$out"
+rc=0; out=$(HS_POOL_IMPORT=$WORK/import-standin.sh bash "$SCRIPTS/pool-change.sh" start tank import --use data --confirm ata-A </dev/null 2>/dev/null) || rc=$?
+check_eq "import: start passes --confirm on" "start tank --use data --confirm ata-A" "$(cat "$WORK/import-args")"
+
 echo "-- a new pool needs --use"
 : > "$WORK/disc.tsv"
 plan zfs new plan tank add --disks a,b

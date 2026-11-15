@@ -186,6 +186,10 @@ Per-feature history and implementation details moved out of CLAUDE.md so that ev
   working, the second run changed nothing, the way back left no duplicate branch, a reboot mounted everything at the new place, detach and attach worked on the new layout. tests/bulk-switch.sh does the same with loop devices (root, mergerfs).
   Tests that build pools under /mnt/bulk set `HS_DISKS_ROOT` in tests/lib.sh. Outside this repo anything that names /mnt/bulk/data-NN (own scripts, Prometheus rules, restic include lists) has to follow; the Grafana dashboard json knows both.
 
+- `hs pool <pool> import` (scripts/pool-import.sh, #181): a separate script, not a mode of manage-pool.sh, because the import shares nothing with its format paths
+  and its `adopt` means SnapRAID. `pool-change.sh` hands plan|start of the action `import` straight to it. Never `-f` (a pool last used by another system is refused;
+  a later issue designs an explicit path); the typed word is the name of a disk of the pool (nothing is formatted, the pool name would prove nothing).
+
 ## Backup and recovery
 
 - `hs backup` (scripts/backup.sh, restic): repository `/mnt/backup/restic` on a plain ext4 disk
