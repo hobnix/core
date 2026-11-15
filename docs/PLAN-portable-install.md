@@ -160,7 +160,7 @@ existing pool.
 
 ### Storage incident on any pool (#573)
 
-Status: design only, nothing built. No storage behaviour changed. Not tested on hardware yet.
+Status: Accepted 2026-11-15 (owner accepted I1-I8 as recommended); building step by step (PRs on branch 0.4). Not tested on hardware yet.
 
 `hs storage incident` (scripts/storage-incident.sh) must work on any pool rows: no pool, one or several data pools, one or several apps pools,
 and the one SnapRAID pool (D6). A server without a `pools` line gets the legacy rows and must see the same lines it sees today.
@@ -288,6 +288,8 @@ Also: `bash -n scripts/storage-incident.sh`, `scripts/dev/t quick storage-incide
 | I6 | Shares with the SnapRAID upload cache on when the apps pool degrades | `at-risk`; not listed (today) | `at-risk`, in step 4 (a legacy output change, so the owner says yes first) |
 | I7 | Resume per pool or per instance | all (today); `resume [<instance>...]` | all for now; names later if asked |
 | I8 | Instances with only a custom volume on the affected apps pool | root disk only; also custom volumes | root disk only now, custom volumes as a later issue |
+
+Decisions (2026-11-15): all recommended answers accepted: I1 row order leads `step`/`next`; I2 a BAD disk outside any pool is health only; I3 instances on a degraded apps pool are not paused; I4 one line per instance; I5 `bulk:` stays the SnapRAID kind prefix; I6 upload-cache shares are at-risk (step 4, legacy output change accepted); I7 resume stays all-or-nothing; I8 root disk only.
 
 ## Q2 in detail: local users and Samba without a domain controller (#575)
 
