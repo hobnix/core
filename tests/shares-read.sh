@@ -5,7 +5,7 @@
 # with stat, which needs the real path); the folders of /bulk/shares are the real server's to test.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-export HS_LANG=en HS_PLAIN=1
+export HS_LANG=en HS_PLAIN=1 HS_MACHINE_FILE=$WORK/no-machine.toml
 BIN=$WORK/bin; mkdir -p "$BIN"
 export CALLS=$WORK/calls; : > "$CALLS"
 
