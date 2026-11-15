@@ -254,7 +254,10 @@ def run_steps(console, steps, params_vars=None, report=None):
             k = s["kind"]
             if k == "login":   # an installed VM: the console is at a login prompt or still in a shell
                 console.send("")
-                got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
+                got = console.expect(LOGIN_OR_SHELL % s["user"] + r"|\[root@[^\]]*\]# $", s.get("timeout", 60))
+                if re.search(r"\[root@[^\]]*\]# $", got):   # the stage before left a root shell (`sudo -i`): back to the user's shell
+                    console.send("exit")
+                    got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
                 if re.search(r"login: $", got):
                     console.send(s["user"])
                     console.expect(r"[Pp]assword: ?$", 30)

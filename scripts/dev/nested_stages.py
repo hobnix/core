@@ -56,6 +56,9 @@ def rollback(params):
         step("run_var", "git -C /etc/nixos push -q /var/tmp/hs-lab-origin.git HEAD:refs/heads/{branch}", what="the current state goes to the local origin"),
         step("run", "git -C /etc/nixos remote set-url origin /var/tmp/hs-lab-origin.git && git -C /etc/nixos fetch -q origin", what="/etc/nixos follows the local origin"),
         step("run_var", "git -C /etc/nixos branch -q --set-upstream-to=origin/{branch}", what="the branch tracks it"),
+        # the stable channel follows the newest release tag, and the VM knows v0.1.0 from the ISO's checkout: `hs update` would never look at the
+        # bad commit. Without a tag it follows the current branch (scripts/update.sh).
+        step("run", "git -C /etc/nixos tag -l | xargs -r git -C /etc/nixos tag -d >/dev/null", what="no release tag: the update follows the branch"),
         step("run_var", "git clone -q -b {branch} /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work", what="a work copy for the bad commit"),
         step("run", "printf '%%s\\n' %s > /var/tmp/hs-lab-work/hs-testlab-bad.nix" % _q(bad), what="the bad module (sshd off)"),
         step("run", "sed -i 's|imports = \\[ ./hardware-configuration.nix \\]|imports = [ ./hardware-configuration.nix ./hs-testlab-bad.nix ]|' "

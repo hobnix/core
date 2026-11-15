@@ -198,6 +198,17 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(ok, res)
         self.assertNotIn("pw", "".join(t.sent))
 
+    def test_login_step_leaves_a_root_shell_the_stage_before_left_open(self):
+        class T(FakeTransport):
+            def write(self, text):
+                super().write(text)
+                if text.strip() == "exit":
+                    self.queue.append("[adminuser@nested-test:~]$ ")
+        t = T(banner="[root@nested-test:/]# ")
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
+        self.assertTrue(ok, res)
+        self.assertIn("exit", "".join(t.sent))
+
     def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
         P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
         text = " ".join(s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P))
