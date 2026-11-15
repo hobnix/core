@@ -614,6 +614,7 @@ doc = '''
 # How the data disks under /bulk are organised. Default "zfs".
 #   "zfs"       a ZFS pool of mirror pairs: equal disks, always protected, snapshots
 #   "snapraid"  single disks of any size, merged; the parity is updated every few hours
+# Only without a pools line; with one, the kind is chosen per pool (hs pool <name> --kind).
 # Disks are added with `hs manage-pool` in both cases, never listed here.'''
 value = '''
 bulkType = "snapraid"'''
@@ -628,8 +629,8 @@ secret = false
 default = 'null'
 doc = '''
 # The storage pools of this server: the key is the pool name (a lower case letter, then up to 11 letters or digits),
-# `role` is "data" (shares) or "apps" (Incus storage, SSD shares), `kind` is "zfs" or "snapraid" (at most one,
-# named bulk). Without this line the two classic rows apply, derived from bulkType.
+# `role` is "data" (shares) or "apps" (Incus storage, SSD shares), `kind` is "zfs" or "snapraid" (at most one).
+# Without this line the two classic rows apply, derived from bulkType.
 # `pools = {}` is a server without any pool: apps run on the system disk, no shares. The line is written by
 # the installer and `hs pool`, not by hand.'''
 value = '''

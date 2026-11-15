@@ -15,8 +15,10 @@ ls -l /dev/disk/by-id/ | grep -v part
 ```
 
 ## Pick a layout for the data disks
-The pool `fast` (SSDs, for containers and VMs) is always a ZFS mirror. The data disks, mounted as `/bulk`, come in two layouts. You
-choose with `bulkType` in `machine.toml` **before you install**; the installer reads it only once.
+The pool `fast` (SSDs, for containers and VMs) is always a ZFS mirror. The data disks come in two layouts. On a server with a `pools`
+line the layout is chosen per pool, when you create it (`hs pool <name> --kind zfs|snapraid`, see "Create a pool with any name"). Only a
+server without a `pools` line (mounted as `/bulk`) chooses with `bulkType` in `machine.toml` **before you install**; the installer reads
+it only once.
 
 | | `bulkType = "zfs"` (default) | `bulkType = "snapraid"` |
 | --- | --- | --- |
@@ -144,7 +146,11 @@ sudo hs pool tank --use data
   written the pool stays, and the message shows the row to add by hand.
 - A server without a `pools` line refuses a new name before anything is erased: run `hs pool record` first. `bulk` and `fast` there work as
   before.
-- A new name is always a ZFS pool. Only the pool named `bulk` can use the SnapRAID layout.
+- `--kind zfs|snapraid` picks the layout of a new data pool (default `zfs`; a terminal is asked). An apps pool is always ZFS.
+- A server has at most one SnapRAID pool, with any valid name. `sudo hs pool tank --use data --kind snapraid --dry-run` shows the plan;
+  `/tank` is the merged folder of its disks. The disks of a SnapRAID pool keep the labels `bulk-data-NN` and `bulk-parity-N`. Add the
+  first parity disk with a second run: `sudo hs pool tank add --role parity --disks <disk>`.
+- `--role` works only with `--kind snapraid`. A second SnapRAID pool is refused before any disk is listed.
 
 Not tested on hardware yet. CI runs the root test `tests/pool.sh` (loop devices, needs udev); the dry-run plans are covered by `tests/pool-bare.sh`.
 

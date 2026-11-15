@@ -15,6 +15,8 @@ pools_add_row() {   # pools_add_row <name> <role> <kind>; the cache is cleared
   pool_name_ok "$1" || return 1
   _pools_load
   [ "$_HS_POOLS_SOURCE" = config ] || return 1
+  # one SnapRAID pool per server (the caller refuses earlier with a message; this is the second guard)
+  if [ "$3" = snapraid ] && rows=$(pool_snapraid) && [ "$rows" != "$1" ]; then return 1; fi
   rows=$({ pools_rows | awk -F'\t' -v n="$1" '$1 != n'; printf '%s\t%s\t%s\n' "$1" "$2" "$3"; } | sort)
   machine_set pools "$(pools_format_rows <<<"$rows")" pool-create >/dev/null || return 1
   _HS_POOLS_LOADED=
