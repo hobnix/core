@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change a pool without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: einen Pool ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <pool> <add|adopt|replace|remove|convert|close|open> [--member <name>] [--disks <id,...>] [--role data|parity] [--kind zfs|snapraid] [--fs ext4|xfs|btrfs] [--encrypt] [--discard] [--mode detach|vdev] [--drain] [--merge] [--chown] [--confirm <word>]
+# args: plan|start <pool> <add|adopt|import|replace|remove|convert|close|open> [--member <name>] [--disks <id,...>] [--role data|parity] [--kind zfs|snapraid] [--fs ext4|xfs|btrfs] [--encrypt] [--discard] [--mode detach|vdev] [--drain] [--merge] [--chown] [--confirm <word>]
 # System command (hs sys pool plan|start): for the interface, timers and tests. It never asks and prints plain
 # key<TAB>value lines. The questions of the console wizards are
 # manage-pool.sh's; both use the same code for the plan: this script runs manage-pool.sh --dry-run and sorts its lines.
@@ -17,17 +17,20 @@
 # start: the same checks, then the work runs as a background job. It needs --confirm <word> equal to confirm_name.
 #   With --encrypt the passphrase is the first line on standard input (it goes into a 0600 file that the job
 #   reads and deletes, never into an argument). Output: status<TAB>started and unit<TAB><job unit>; exit codes as plan.
-# Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR.
+# Action import (a ZFS pool that is on the disks already) is pool-import.sh's: plan|start go straight to it (it has its own plan, and
+# its confirm_name is a disk of the pool).
+# Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_POOL_IMPORT (stand-in for pool-import.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR.
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/pools.sh"
 manage=${HS_MANAGE_POOL:-$here/manage-pool.sh}
 
 verb=${1:-}; pool=${2:-}; action=${3:-}
-case "$verb" in plan|start) ;; *) echo "usage: pool-change.sh plan|start <pool> <add|adopt|replace|remove|convert|close|open> [options]" >&2; exit 1 ;; esac
+case "$verb" in plan|start) ;; *) echo "usage: pool-change.sh plan|start <pool> <add|adopt|import|replace|remove|convert|close|open> [options]" >&2; exit 1 ;; esac
 [[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || { printf 'status\trefused\nreason\tinvalid pool name\n'; exit 1; }
-case "$action" in add|adopt|replace|remove|convert|close|open) ;; *) printf 'status\trefused\nreason\tunknown action (add, adopt, replace, remove, convert, close or open)\n'; exit 1 ;; esac
+case "$action" in add|adopt|import|replace|remove|convert|close|open) ;; *) printf 'status\trefused\nreason\tunknown action (add, adopt, import, replace, remove, convert, close or open)\n'; exit 1 ;; esac
 shift 3
+if [ "$action" = import ]; then exec bash "${HS_POOL_IMPORT:-$here/pool-import.sh}" "$verb" "$pool" "$@"; fi
 
 member="" disks="" role="" kind="" fs="" mode="" confirm="" encrypt=false merge=false chown=false drain=false discard=false
 while [ $# -gt 0 ]; do

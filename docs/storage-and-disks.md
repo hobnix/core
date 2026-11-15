@@ -100,6 +100,37 @@ usb, sas, virtio, other), model, what it holds (kind), a label and a state. It o
 A field without a value shows `-`. Without ZFS installed, a disk with a ZFS label shows `importable` and no pool name. A ZFS pool on top of LUKS or another device-mapper layer, made outside `hs`, shows as `importable` even when it is imported. Not tested on
 hardware yet.
 
+## Bring in a pool that is already on the disks
+
+```bash
+hs pool tank import --dry-run
+hs pool tank import
+```
+
+Use this when `hs sys storage discover` shows a ZFS pool as `importable` (for example disks moved from another server, or a reinstall after
+`zpool export`). The pool keeps its name and its data; nothing on the disks is erased. `--dry-run` shows the plan and changes nothing. Without it
+you type the name of **a disk of the pool** (the plan names it), then you can run the work as a background job. The web interface offers the same
+plan and starts the same job (`hs sys pool plan tank import`).
+
+The job imports the pool by its id without mounting it (never with `-f`), checks that it mounts at `/tank`, mounts its datasets, creates
+`tank/shares` and `tank/sensitive` when they are missing, and adds `tank` to the `pools` line of `machine.toml` (role `data`). That takes effect
+with `hs rebuild`; until then a reboot leaves the pool unimported. A pool with native encryption stays locked until `hs unlock`.
+
+The command refuses, and says why, in these cases:
+
+| Reason | What to do |
+| --- | --- |
+| The pool is damaged (not ONLINE, or a disk is missing) | Repair it where it was made; it is not imported here. |
+| The pool was last used by another system | Export it there first (`zpool export`); it is never forced. |
+| The name does not fit the pool name rule | Rename it on a machine that can import it; a name is a lower case letter, then up to 11 lower case letters or digits. |
+| Two pools have the same name, or the pool is imported already | Nothing is imported by id from here. |
+| A disk of the pool is encrypted by LUKS, is the system disk, a backup disk or belongs to another pool | Look at it with `hs sys storage discover`; erase a disk on its disk page only when you no longer need it. |
+| It is an apps pool | Importing a pool for containers and VMs comes later. |
+| `/tank` already holds files on the system disk | Move them away first. |
+| The server has no `pools` line | Run `hs pool record` first. |
+
+Not tested on hardware yet.
+
 ## Where shares live
 `bulk` has two top folders. Each folder below them is one network share ([Users and shares](users-and-shares.md)).
 
