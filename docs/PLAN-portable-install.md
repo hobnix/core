@@ -158,6 +158,137 @@ SnapRAID pool. Incus never changes the driver or source of `default`, so later a
 Open for verification in step 3: whether `hs config check` accepts nested tables, and what the Incus preseed does when re-applied to an
 existing pool.
 
+### Storage incident on any pool (#573)
+
+Status: design only, nothing built. No storage behaviour changed. Not tested on hardware yet.
+
+`hs storage incident` (scripts/storage-incident.sh) must work on any pool rows: no pool, one or several data pools, one or several apps pools,
+and the one SnapRAID pool (D6). A server without a `pools` line gets the legacy rows and must see the same lines it sees today.
+
+#### What the script does today
+
+- Commands: `report` (default, reads only), `--state [pool]` (`hs sys incident state`), `--alert-line` (last line of the health push),
+  `pause [--yes] [<instance>...]`, `resume`, `replace [--pool] [--member] [--disk] [--dry-run]` (hands over to `hs disk replace`), and
+  `plan|start pause|resume` for the web interface.
+- State lines (contract, docs/api/sys.toml `incident state`): `ok`, `incident`, `member`, `target`, `share`, `app`, `progress`, `paused`,
+  `free`, `phase`, `step`, `next`. An empty field is `-`.
+- Data sources: `manage-pool.sh <pool> --members` and `--list-disks`, `zpool list -o health` and `zpool status`, `disk-health.sh --list`
+  (SMART BAD), `monitor.sh --disks` (role column: ZFS pool name, or `bulk data-NN` from the label), `share-overview.sh` (path, cache,
+  `disks`, `mounted_in`), `incus list -c ns`, `disk-detach.sh marks`, `jobs.sh --records` (`pool-replace-<member>`), the admin lock
+  /run/hs-bulk.admin, and the paused list `$HS_STATE_DIR/incident-paused` (one instance name per line).
+
+#### Literal names and assumptions
+
+| Line | Assumption | Becomes |
+| --- | --- | --- |
+| 43 | kind from /etc/hs/bulk-type, applies to `bulk` only | `pool_kind <pool>` (lib/pools.sh) |
+| 67-68 | SnapRAID disk = pool `bulk`, monitor role `bulk <m>` | kind `snapraid`, role whose 2nd word is the member |
+| 70 | ZFS disk: role matches `^<pool>` as a regex (`ssd` also matches `ssd2`) | exact first word = pool name |
+| 78, 181 | `for pool in bulk fast` | `pool_names` (row order, sorted by name) |
+| 80, 131, 233, 467 | `pool = bulk && bulk_type = snapraid` | `pool_kind = snapraid` |
+| 102-103 | SMART hit maps to `bulk`/`fast` only | role first word is a pool row, or the label form maps to the SnapRAID row |
+| 140-150 | share belongs to a pool by `disks` = `bulk`/`fast` | path under `pool_root <pool>/`; SnapRAID members still from `disks` |
+| 160-161 | apps pool `fast` = every instance | instances whose root disk is on an Incus pool of that pool |
+| 223 | app pool guessed by grepping `share fast` | kept from the relation that found it |
+| 234 | any running `pool-replace-*` job counts | job `pool-replace-<m>` with `<m>` a member of that pool |
+| 256 | `$freed` is never set (dead code) | removed |
+
+The ratchet counts 26 hits (tests/pool-names-ratchet.tsv), all in code; the target is 0.
+
+#### Behaviour per case
+
+- **No pool (`pools = {}`, one disk).** No row, no loop: one `ok` line, no alert line; `pause` and `replace` refuse as on a healthy
+  server. A BAD system disk is not an incident (no member to replace); `hs health` keeps `disk:<d>:smart`.
+- **One data pool, any name.** Same flow as `bulk` today under its own name (`incident tank:degraded tank ...`). Its shares are the ones
+  under `pool_root tank`. Without an apps pool there are no "lives on this pool" apps unless an Incus pool sits on it.
+- **Several data pools.** Every row is checked. `incident`, `member`, `target`, `progress`, `phase` lines come per pool in row order.
+  `share` lines carry their own pool. `free` is written once per disk, when it is large enough for at least one target; `phase` uses the
+  size of that pool's own target. `step` and `next` follow the first affected pool (I1).
+- **Apps pool incident.** Affected apps are the instances whose root disk is on the Incus pool of that apps pool, `via` = `pool`,
+  `writes` = `no` (I3). Shares under its root are `at-risk`. A second apps pool's instances are not listed.
+- **SnapRAID pool.** Kind, not name, selects the SnapRAID path: health `SNAPRAID`, no `pool-degraded` line, members `data-NN` and
+  `parity-N` from `--members`, disks from the label role. A missing data disk makes the shares whose `disks` list holds it `unavailable`
+  (mergerfs still serves the other branches), every other share of the pool `at-risk`; a missing parity disk makes them all `at-risk`. A lost
+  content file is not an incident: there is one on the system disk and one per data disk. Progress is the replace job of one of its
+  members, or the admin lock (one SnapRAID pool, so the lock stays global). The nightly sync refuses on its own while a member is missing.
+- **Legacy server.** `pool_names` gives `bulk fast` (same order as today), `pool_kind bulk` reads `bulkType` or /etc/hs/bulk-type,
+  `pool_root` gives /bulk and /fast, the first apps pool maps to Incus `default`. Output is byte for byte the same; the existing tests stay
+  unchanged.
+
+#### Pause and resume across pools
+
+- Pools, shares and instances: a share belongs to the pool whose root holds its path; an instance belongs to the pool of its root disk
+  (`incus list -c nsb` = name, state, storage pool), and the Incus pool to a Hobnix pool by its source from `ct-pools.sh` (dataset
+  `<pool>/...` or a path under `pool_root <pool>`); without an answer the first apps pool owns `default` (`pool_incus`).
+- One `app` line per instance (the web keys them by name). Its pool is the first pool, in row order, through which it writes; else the
+  first that touches it. `writes` is `yes` when any affected share is mounted read-write (I4).
+- `pause` freezes the running writers of every affected pool, in row order, then share order, each name once. `incus pause` is a freeze
+  (memory kept, no shutdown), so no start/stop order between instances is needed. No service is stopped: Samba, mergerfs
+  (`bulk-mount.service`) and the timers keep running.
+- The paused file keeps its format (one name per line), so a file written by the old version still resumes. `resume` thaws every name in
+  the file, in file order, also while another pool still has an incident (I7).
+
+#### Health check ids
+
+| Health id (health-check.sh) | Incident record |
+| --- | --- |
+| `zfs:<pool>:<STATE>` | `incident <pool>:degraded <pool> pool-degraded`, members not ONLINE as `member-down` |
+| `zfs:<pool>:missing`, `zfs:<pool>:scrub-*` | none (no members to read; scrubs are not an incident) |
+| `bulk:<member>:<STATE>` | `incident <snapraid pool>:down:<member> ... member-down` |
+| `bulk:no-parity`, `bulk:scrub-*` | none |
+| `disk:<d>:smart`, `bad`, `pending` | `<pool>:failing:<member>` when the disk is a pool member; none otherwise |
+
+The `zfs:` ids already carry any pool name. `bulk:` is the SnapRAID kind prefix, not the pool name, and stays (I5). The trigger in
+health-check.sh line 546 needs no change. Its own literal `manage-pool.sh bulk --members` (line 96) belongs to step 8.
+
+#### Web contract
+
+No line changes shape, no new record, no new enum value: docs/api/sys.toml, openapi.json and sys.gen.d.ts stay. The topic
+`("incident", "state")` and the `incident` change in web-serve.py stay. Incident.svelte already reads the pool from each line and tells
+SnapRAID members by their names; with several targets its Replace button takes the first (a per-pool button is a later web issue).
+`--state <pool>` keeps its filter (lines with that pool plus `ok`, `step`, `next`, `paused`, `free`).
+
+#### Steps (small PRs)
+
+1. **Rows, no behaviour change.** Source lib/pools.sh; `pool_names` loops; `pool_kind`; shares by `pool_root`; app pool from the
+   relation; exact role match; drop `$freed`. Legacy tests unchanged; new fixtures for no pool and a renamed data pool. Ratchet row falls.
+2. **Instances by root disk.** `incus list -c nsb`, the Incus pool map from `ct-pools.sh` (new knob `HS_CT_POOLS`). Changes legacy
+   output only for an instance whose root is not on `default`.
+3. **Several affected pools.** `free` once per disk, one `app` line per name with the pool rule, pause order. Fixtures for two pools.
+4. **SnapRAID by kind.** Job match by member, parity-only case; upload cache at risk if I6 is accepted.
+5. **Docs.** docs/disk-failures.md uses `<pool>` where it now says `bulk`; changelog entry. Ratchet row removed when it reaches 0.
+
+#### Test plan
+
+All in tests/storage-incident.sh, recorded output only (stand-ins for manage-pool, zpool, disk-health, monitor, share-overview, incus,
+ct-pools, jobs). Set `HS_MACHINE_FILE` per case; a missing file means legacy (pools.sh reads `HS_BULK_TYPE_FILE` then).
+
+| Fixture | Rows | Checks |
+| --- | --- | --- |
+| legacy-zfs, legacy-snap | none (legacy) | every current check, unchanged |
+| no-pool | `pools = {}` | one `ok` line, empty alert line, `pause`/`replace` refuse, BAD system disk gives no incident |
+| renamed | `tank` data zfs, `ssd` apps zfs | `incident tank:degraded`, share under /tank at-risk, `replace` hands over `--pool tank` |
+| two-data | `tank` zfs, `bulk` snapraid, `ssd` apps | both pools' lines in row order, each `free` once, `--state tank` filter |
+| apps | `ssd`, `ssd2` apps, `tank` data | only instances rooted on `ssd` listed as `via pool`, `ssd2` ones not |
+| parity | `bulk` snapraid | parity missing: all shares at-risk, target `parity-1`, progress from `pool-replace-parity-1` |
+| prefix | `ssd`, `ssd2` | a SMART BAD disk of `ssd2` is not counted for `ssd` |
+
+Also: `bash -n scripts/storage-incident.sh`, `scripts/dev/t quick storage-incident pool-names-ratchet pools`,
+`python3 tests/pool-names-ratchet-test.py --update` after each step (the count only falls).
+
+#### Open questions
+
+| Id | Question | Options | Recommended |
+| --- | --- | --- | --- |
+| I1 | Which pool leads `step`/`next` when several are hit | row order (as today); worst severity first | row order: legacy stays identical, the page shows every banner |
+| I2 | BAD disk outside any pool (system disk of a one-disk server) | health only; an incident without pool | health only (as D9: no pool is not an incident) |
+| I3 | Instances that live on a degraded apps pool | `writes=no`, not paused; paused as writers | not paused: pausing every instance of a working mirror is an outage |
+| I4 | An instance touched by two pools | one line, first writing pool; one line per pool | one line (web keys by name, shape unchanged) |
+| I5 | Health id of a SnapRAID pool not named `bulk` (step 11) | keep `bulk:`; `<pool>:` | keep `bulk:` as the kind prefix: acks and known keys stay, the text names the pool |
+| I6 | Shares with the SnapRAID upload cache on when the apps pool degrades | `at-risk`; not listed (today) | `at-risk`, in step 4 (a legacy output change, so the owner says yes first) |
+| I7 | Resume per pool or per instance | all (today); `resume [<instance>...]` | all for now; names later if asked |
+| I8 | Instances with only a custom volume on the affected apps pool | root disk only; also custom volumes | root disk only now, custom volumes as a later issue |
+
 ## Q2 in detail: local users and Samba without a domain controller (#575)
 
 Status: design only (issue #575, step 1). No user or Samba behaviour was changed. Not tested on hardware yet: nothing here was run on a server or in a VM.

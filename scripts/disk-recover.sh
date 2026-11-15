@@ -171,7 +171,7 @@ echo "Recovering deleted files from $member (the disk is only read)."
 mkdir -p "$recdir"; printf '%s\n' "$to" > "$recdir/$member"
 live_refresh_recover
 if [ "$testmode" != 1 ] && [ "$mounted" = yes ]; then
-  for m in /bulk "$rawpool"; do
+  for m in "$(snap_root)" "$rawpool"; do
     mountpoint -q "$m" 2>/dev/null && setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
   done
   umount "$dir" || { rm -f "$recdir/$member"; bash "$bulkmount" >/dev/null 2>&1 || true; echo "$member is busy and could not be unmounted (something still uses it); nothing was changed."; exit 1; }

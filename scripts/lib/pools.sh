@@ -11,7 +11,9 @@
 #   pool_kind <name>         kind (zfs | snapraid); exit 1 when unknown
 #   pool_default <role>      first name of that role; exit 1 when none
 #   pool_incus <name>        the Incus storage pool of an apps pool: `default` for the first apps pool (pinned, D5), else the pool name
-#   pool_root <name>         ${HS_POOLS_ROOT}/<name>
+#   pool_snapraid            the name of the one SnapRAID pool; exit 1 when none
+#   pool_is_snapraid <name>  exit 0 when the pool's kind is snapraid
+#   pool_root <name>        ${HS_POOLS_ROOT}/<name>
 #   pool_mounted <name>      exit 0 when pool_root is a mount point
 #   pool_name_ok <name>      exit 0 when the name is allowed for a new pool (^[a-z][a-z0-9]{0,11}$, not a reserved word)
 #   pools_format_rows        stdin: name<TAB>role<TAB>kind lines; stdout: the value `{ name = { role = "..", kind = ".." }, ... }`
@@ -92,11 +94,18 @@ pool_incus() {   # pool_incus <apps pool>
 '; else printf '%s
 ' "$1"; fi
 }
+pool_snapraid() {   # the one SnapRAID pool; exit 1 when none
+  local n
+  n=$(pools_rows | awk -F'\t' '$3 == "snapraid" { print $1; exit }')
+  [ -n "$n" ] || return 1
+  printf '%s\n' "$n"
+}
+pool_is_snapraid() { [ "$(pool_kind "$1" 2>/dev/null)" = snapraid ]; }
 pool_root() { printf '%s/%s\n' "${HS_POOLS_ROOT:-}" "$1"; }
 pool_mounted() { "${HS_MOUNTPOINT:-mountpoint}" -q "$(pool_root "$1")"; }
 pool_name_ok() {
   [[ $1 =~ ^[a-z][a-z0-9]{0,11}$ ]] || return 1
-  case " mirror raidz raidz1 raidz2 raidz3 draid spare log cache special dedup default none system incus boot nix etc var home root tmp usr bin sbin lib lib64 srv mnt run proc sys dev opt media " in
+  case " mirror raidz raidz1 raidz2 raidz3 draid spare log cache special dedup default dir none system incus boot nix etc var home root tmp usr bin sbin lib lib64 srv mnt run proc sys dev opt media " in
     *" $1 "*) return 1 ;;
   esac
   return 0

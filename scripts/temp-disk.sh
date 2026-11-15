@@ -7,6 +7,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/admin.sh"
+. "$(dirname "$0")/lib/bulkpath.sh"
 adm="$(admin_user)"
 
 live_refresh_temp() {
@@ -53,7 +54,7 @@ TEMP_ROOT=/mnt/temp
 candidates() {
   # -l: flat list, partitions are tied to their disk by PKNAME (the JSON of
   # a tree and of a list differ between lsblk versions and column sets)
-  lsblk -J -l -b -o NAME,PKNAME,PATH,TYPE,FSTYPE,LABEL,SIZE,MOUNTPOINTS | jq -r '
+  lsblk -J -l -b -o NAME,PKNAME,PATH,TYPE,FSTYPE,LABEL,SIZE,MOUNTPOINTS | jq -r --arg snap "$(snap_root)" '
     .blockdevices as $all
     | def below($n): $all[] | select(.pkname == $n) | ., below(.name);
     $all[] | select(.type == "disk" and (.size | tonumber) > 0
@@ -62,7 +63,7 @@ candidates() {
     | ($grp | map(.mountpoints // [] | map(select(. != null))) | flatten) as $mps
     | select(
         ($mps | any(. == "/" or startswith("/boot") or startswith("/nix")
-                    or startswith("/bulk") or startswith("/mnt/bulk") or startswith("/var/lib/hs/disks")
+                    or startswith("/bulk") or startswith($snap) or startswith("/mnt/bulk") or startswith("/var/lib/hs/disks")
                     or startswith("/var/lib/incus") or startswith("[SWAP"))
          or ($grp | any(.fstype == "zfs_member" or .fstype == "swap"
                         or .fstype == "linux_raid_member" or .fstype == "LVM2_member"
@@ -179,7 +180,7 @@ cmd_copy() {
   [ $# -eq 2 ] || usage
   local name=$1 dest=$2 src target used avail
   src=$TEMP_ROOT/$name
-  target=/bulk/shares/$dest
+  target=$(snap_root)/shares/$dest
   findmnt -rn "$src" >/dev/null 2>&1 || die "$(t '%s is not mounted (see: hs disk temp)' "$name")"
   [ -d "$target" ] || die "$(t 'No share %s. Create it first: hs share add %s' "$dest" "$dest")"
 

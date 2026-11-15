@@ -63,8 +63,8 @@ zfs_how=""   # ZFS remove of a 2-disk mirror: detach | vdev (asked on a terminal
 action=""   # replace | remove
 member=""
 mode=""   # list | info: machine-readable output for the web interface (Disks)
-# "zfs": /bulk is a ZFS pool like fast. "snapraid": single disks, merged, with parity.
-bulk_type=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
+# The kind of a pool comes from its row (pool_is_snapraid): zfs = mirror pairs, snapraid = single disks, merged, with parity.
+root=$(snap_root)   # the merged SnapRAID view (/bulk on a legacy server)
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=true; shift ;;
@@ -150,7 +150,7 @@ pdone() { if fancy; then ok "$1"; else echo "$1"; fi; }        # the closing lin
 
 # One line per pool for the menu: what it is for and what exists already
 describe() {
-  if [ "$1" = bulk ] && [ "$bulk_type" = snapraid ]; then
+  if pool_is_snapraid "$1"; then
     echo "$(lsblk -nr -o LABEL | grep -c '^bulk-data-' || true) data, $(lsblk -nr -o LABEL | grep -c '^bulk-parity-' || true) parity disk(s)  ->  add disks"
   elif zpool list -H "$1" >/dev/null 2>&1; then
     zpool list -H -o size,alloc,health "$1" | awk '{printf "exists: %s, %s used, %s  ->  add mirror pairs", $1, $2, $3}'
@@ -364,7 +364,7 @@ format_member_run() {
 # The preparation questions for disks that are about to be formatted:
 # filesystem and encryption, asked on a terminal when the options were not given.
 prepare_questions() {
-  [ "$bulk_type" = snapraid ] || return 0
+  pool_is_snapraid "$pool" || return 0
   person && ! $dry || return 0
   # the order of : encrypt?, filesystem, key
   if ! $encrypt && confirm "Encrypt the new disk(s)? (LUKS, one passphrase for all encrypted disks; you type it next)"; then encrypt=true; fi
@@ -397,13 +397,13 @@ if [ "$mode" = list ]; then
   exit 0
 fi
 if [ "$mode" = info ]; then
-  if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+  if pool_is_snapraid "$pool"; then
     echo "layout: SnapRAID + mergerfs"
     nd=$(lsblk -nr -o LABEL | grep -c '^bulk-data-' || true)
     np=$(lsblk -nr -o LABEL | grep -c '^bulk-parity-' || true)
     echo "disks: $nd data, $np parity"
-    if mountpoint -q /bulk; then
-      df -h --output=size,used,avail,pcent /bulk | tail -n1 |
+    if mountpoint -q "$root"; then
+      df -h --output=size,used,avail,pcent "$root" | tail -n1 |
         awk '{ printf "size: %s\nused: %s (%s)\nfree: %s\n", $1, $2, $4, $3 }'
     else
       echo "state: not mounted"
@@ -434,7 +434,7 @@ if [ "$mode" = info ]; then
         print "  " (n > 26 ? ".." substr($1, n - 23) : $1) " " $2
       }'
   else
-    if [ "$pool" = bulk ] && [ "$bulk_type" != snapraid ] || [ "$pool" = fast ]; then
+    if ! pool_is_snapraid "$pool"; then
       echo "layout: ZFS mirror pairs"
     fi
     echo "state: not created yet"
@@ -444,7 +444,7 @@ fi
 
 # ── Members of a pool: name, bytes, state, group (tab separated) ──
 members() {
-  if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+  if pool_is_snapraid "$pool"; then
     local l size state fsname enc closed
     # everything ever added (recorded by bulk-mount.sh) plus what carries a label now,
     # so a disk that died completely still shows up as MISSING
@@ -500,7 +500,7 @@ if [ "$mode" = show ]; then
     } | table
   fi
   echo
-  note "$(t 'Change it: hs pool %s add | replace | remove | convert%s' "$pool" "$([ "$pool" = bulk ] && [ "$bulk_type" = snapraid ] && echo ' | sync')")"
+  note "$(t 'Change it: hs pool %s add | replace | remove | convert%s' "$pool" "$(pool_is_snapraid "$pool" && echo ' | sync')")"
   exit 0
 fi
 
@@ -569,7 +569,7 @@ if [ -n "$action" ]; then
     fi
     # hours of work on the disks: no parity sync or cache mover run may start meanwhile
     # (they skip while this runs; a sync from the timer would fail on SnapRAID's own lock)
-    if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+    if pool_is_snapraid "$pool"; then
       . "$here/lib/bulklock.sh"
       bulk_lock_admin 60
     fi
@@ -579,7 +579,7 @@ if [ -n "$action" ]; then
   # job (survives a closed terminal; follow it with hs job follow). The job repeats this command with
   # --yes and the answers; a passphrase goes through a root-only file that the job reads and deletes.
   offer_job() {
-    [ -n "$action" ] && [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ] || return 0
+    [ -n "$action" ] && pool_is_snapraid "$pool" || return 0
     person || return 0
     confirm "Run the work as a background job? (recommended: it keeps going if the terminal closes; follow it with: hs job follow)" || return 0
     . "$here/lib/job.sh"
@@ -598,7 +598,7 @@ if [ -n "$action" ]; then
     exit 0
   }
 
-  if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+  if pool_is_snapraid "$pool"; then
     conf=/var/lib/snapraid/snapraid.conf
     label="bulk-$member"; dir=$(disk_dir "$member")
     # SnapRAID's own name for the disk: data-03, parity, 2-parity, ...
@@ -614,12 +614,12 @@ if [ -n "$action" ]; then
     # (/mnt/bulk/pool: the same disks without the upload caches on top, so the files go to
     # the disks and not into a share's cache.) Leaves the disk unmounted when everything moved.
     evacuate_disk() {
-      local target=/bulk left left_n m
+      local target=$root left left_n m
       # without /bulk the files would land in a folder on the system disk and the disk would be wiped
-      mountpoint -q /bulk || { echo "Not possible: /bulk is not mounted. $member is not changed."; exit 1; }
+      mountpoint -q "$root" || { echo "Not possible: /bulk is not mounted. $member is not changed."; exit 1; }
       # a retry after a failed convert/remove: the branch may be gone already, that is fine; any other failure is not
-      for m in /bulk /mnt/bulk/pool; do
-        [ "$m" = /bulk ] || mountpoint -q "$m" || continue
+      for m in "$root" /mnt/bulk/pool; do
+        [ "$m" = "$root" ] || mountpoint -q "$m" || continue
         setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null && continue
         case "$(getfattr --only-values -n user.mergerfs.branches "$m/.mergerfs" 2>/dev/null || true)" in
           *"$dir"*) echo "Could not take $member out of $m. $member is not changed."; exit 1 ;;
@@ -640,7 +640,7 @@ if [ -n "$action" ]; then
     }
     # --discard: take the disk out of /bulk and unmount it, its files are not moved (they go with the format)
     discard_disk() {
-      setfattr -n user.mergerfs.branches -v "-$dir" /bulk/.mergerfs
+      setfattr -n user.mergerfs.branches -v "-$dir" "$root/.mergerfs"
       if mountpoint -q /mnt/bulk/pool; then setfattr -n user.mergerfs.branches -v "-$dir" /mnt/bulk/pool/.mergerfs; fi
       umount "$dir" || umount -l "$dir"
     }
@@ -692,8 +692,8 @@ if [ -n "$action" ]; then
       if ! $drain; then pdone "$member takes no new files any more. Undo: hs pool $pool open $member. To empty it: hs pool $pool close $member --drain (not by hand)"; done_refresh; fi
       # drain: leave the branch, move everything onto the others, join again (closed)
       drain_disk() {
-        local target=/bulk rc=0 left
-        for m in /bulk /mnt/bulk/pool; do setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true; done
+        local target=$root rc=0 left
+        for m in "$root" /mnt/bulk/pool; do setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true; done
         mountpoint -q /mnt/bulk/pool && target=/mnt/bulk/pool
         rsync -aHAX --remove-source-files --no-inc-recursive --info=progress2,name1 \
           --exclude=/snapraid.content --exclude=/lost+found "$dir"/ "$target"/ || rc=$?
@@ -784,7 +784,7 @@ if [ -n "$action" ]; then
       if $encrypt; then crypt_new_pass || exit 1; fi
 
       if mountpoint -q "$dir"; then
-        [ "$mgroup" = parity ] || for m in /bulk /mnt/bulk/pool; do
+        [ "$mgroup" = parity ] || for m in "$root" /mnt/bulk/pool; do
           setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
         done
         umount "$dir" || umount -l "$dir"
@@ -840,7 +840,7 @@ if [ -n "$action" ]; then
       plt "  2. take it out of the array (the parity follows with the next scheduled sync, or now if you ask for it)"
       plt "The disk itself is not erased, only unlabelled; format it afterwards."
       confirm_plan
-      for m in /bulk /mnt/bulk/pool; do
+      for m in "$root" /mnt/bulk/pool; do
         setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
       done
       umount "$dir" || umount -l "$dir"
@@ -951,7 +951,7 @@ if [ -n "$action" ]; then
 fi
 
 # ── SnapRAID layout: /bulk is made of single labelled disks, not a ZFS pool ──
-if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+if pool_is_snapraid "$pool"; then
   here=$(dirname "$0")
   steps 2   # "Current array" and the plan (add and adopt; the job offer prints no heading)
   # existing members: label and size in bytes
@@ -1164,7 +1164,7 @@ if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
   done
   udevadm settle 2>/dev/null || true
   bash "$here/bulk-mount.sh"
-  df -h /bulk "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null | sed 's/^/      /'
+  df -h "$root" "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null | sed 's/^/      /'
   if fancy; then ok "$(t '%s disk(s) added to the array' "${#todo[@]}")"; fi
   say "New data is protected after the next sync (three times a day, or now: hs pool bulk sync)."
   done_refresh

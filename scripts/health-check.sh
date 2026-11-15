@@ -18,6 +18,7 @@ here=$(dirname "$0")
 . "$here/lib/dc.sh"
 . "$here/lib/capacity.sh"
 . "$here/lib/bulklock.sh"
+. "$here/lib/bulkpath.sh"
 . "$here/lib/capability.sh"
 . "$here/lib/channels.sh"
 . "$here/lib/event.sh"
@@ -160,7 +161,7 @@ fi
 used_pct() { df --output=pcent "$1" 2>/dev/null | tail -n1 | tr -dc '0-9' || true; }
 mounts=(/)
 # on the ZFS layout /bulk is covered by the pool below
-if [ "$bulk_type" = snapraid ] && mountpoint -q /bulk 2>/dev/null; then mounts+=(/bulk); fi
+if [ "$bulk_type" = snapraid ] && mountpoint -q "$(snap_root)" 2>/dev/null; then mounts+=("$(snap_root)"); fi
 for m in "${mounts[@]}"; do
   pct=$(used_pct "$m")
   if [ -n "$pct" ] && [ "$pct" -ge "$max_full" ]; then
