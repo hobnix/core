@@ -7,6 +7,7 @@
   import { go } from '../route.svelte.js';
   import { VPS_NODE } from '../redirects.js';
   import { tick } from 'svelte';
+  import { pools } from '../pools.svelte.js';
   import { setSelection } from '../select.svelte.js';
 
   let q = $state('');
@@ -48,9 +49,10 @@
     return out;
   });
 
-  // monitor disks column 4: "bulk ..." = bulk pool, free/mounted = not in a pool, anything else = fast
+  // monitor disks column 4: "bulk ..." = the SnapRAID pool, free/mounted = not in a pool, anything else = the ZFS pool of that name
   const local = (p) => `/node/${encodeURIComponent(ui.host)}${p}`;
-  const diskPath = (role) => (/^bulk/.test(role) ? '/storage/disks?pool=bulk' : role === 'free' || role === 'mounted' ? '/storage/disks?pool=none' : '/storage/disks?pool=fast');
+  const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? 'bulk');
+  const diskPath = (role) => (/^bulk/.test(role) ? `/storage/disks?pool=${snapName}` : role === 'free' || role === 'mounted' ? '/storage/disks?pool=none' : `/storage/disks?pool=${/^[a-z][a-z0-9]{0,11}$/.test(role) ? role : 'all'}`);
 
   // lists: [searchable strings, the shown item]; the first string is the name
   const sources = $derived({

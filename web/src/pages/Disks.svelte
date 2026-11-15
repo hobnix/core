@@ -1,5 +1,5 @@
 <script>
-  // Storage > Disks: every disk of this server in one list (/storage/disks, filter ?pool=bulk|fast|none|missing), a drawer for the selected one
+  // Storage > Disks: every disk of this server in one list (/storage/disks, filter ?pool=<pool name>|none|missing), a drawer for the selected one
   // (SMART history, self-test results, the actions that belong to a single disk). Changing pool membership (replace, remove, close, convert)
   // stays on Pools; a free disk is added from here (the Pools plan).
   import UsageBar from '../shell/UsageBar.svelte';
@@ -7,7 +7,10 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import { StatusDot, Chip, Kv, Drawer, Split, Banner } from '../ui/index.js';
+  import { onMount } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
+  import { live } from '../live.svelte.js';
+  import { pools, loadPools } from '../pools.svelte.js';
   import { takeSelection } from '../select.svelte.js';
   import { route, go } from '../route.svelte.js';
   import { healthDot } from '../format.js';
@@ -20,11 +23,14 @@
   import DetachDisk from '../forms/storage/DetachDisk.svelte';
   import RecoverDisk from '../forms/storage/RecoverDisk.svelte';
   import { filesLink } from '../files/links.js';
-  import { diskPool, sizeTxt, hoursTxt, roleLabel, dateOf, serialIn } from './storage/pool.js';
+  import { diskPool, poolTopic, sizeTxt, hoursTxt, roleLabel, dateOf, serialIn } from './storage/pool.js';
 
   let { deck } = $props();
 
-  const TABS = [{ id: 'all', label: 'All' }, { id: 'bulk', label: 'bulk' }, { id: 'fast', label: 'fast' }, { id: 'none', label: 'Free' }, { id: 'missing', label: 'Missing' }];
+  onMount(() => { loadPools(); });
+  // the one SnapRAID pool (its disks are labelled "bulk data-01" by monitor disks, an internal prefix) and the filter chips of every pool
+  const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? '');
+  const TABS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name })), { id: 'none', label: 'Free' }, { id: 'missing', label: 'Missing' }]);
   const filter = $derived(TABS.some((t) => t.id === route.query.pool) ? route.query.pool : 'all');
   const setFilter = (id) => { selName = ''; go(id === 'all' ? '/storage/disks' : `/storage/disks?pool=${id}`); };
   let selName = $state('');
@@ -38,10 +44,12 @@
   // data disks that are out of the pool by hand: member, detached | recovering, since (epoch)
   const marks = poll('/api/sys/disk/marks', 15000, 'disk-marks');
   const markOf = $derived(Object.fromEntries(rows(marks).map((r) => [r[0], r[1]])));
-  const poolInfo = poll('/api/sys/pool/info?pool=bulk', 60000, 'pool-info-bulk');
-  const bulkSnap = $derived(rows(poolInfo).some((r) => /SnapRAID/i.test(r[0] ?? '')));
-  const membBulk = poll('/api/sys/pool/members?pool=bulk', 30000, 'pool-members-bulk');
-  const membFast = poll('/api/sys/pool/members?pool=fast', 30000, 'pool-members-fast');
+  const poolInfo = poll(() => (snapName ? `/api/sys/pool/info?pool=${snapName}` : ''), 60000, () => poolTopic('info', snapName, live.topics));
+  const snapPool = $derived(rows(poolInfo).some((r) => /SnapRAID/i.test(r[0] ?? '')));
+  // members: the SnapRAID pool and the pool the page is looking at (the filter, else the pool of the selected disk)
+  const zName = $derived(pools.rows.some((p) => p.name === filter && p.name !== snapName) ? filter : sel && poolOf(sel) !== snapName ? poolOf(sel) : '');
+  const membSnap = poll(() => (snapName ? `/api/sys/pool/members?pool=${snapName}` : ''), 30000, () => poolTopic('members', snapName, live.topics));
+  const membZ = poll(() => (zName ? `/api/sys/pool/members?pool=${zName}` : ''), 30000, () => poolTopic('members', zName, live.topics));
 
   // monitor disks: name, bytes, SSD/HDD, role, temp, health, hours, reallocated, pending, crc, model+serial, free, power, filesystem (xfs, ext4, zfs, ... / none / -)
   const all = $derived(rows(mon).map((r) => ({
@@ -54,11 +62,13 @@
   const missing = $derived(known.filter((k) => k.state === 'missing'));
 
   const isLoose = (d) => d.role === 'free' || d.role === 'mounted';
+  // the pool a disk belongs to ("bulk ..." labels are the SnapRAID pool, whatever its name)
+  const poolOf = (d) => { const p = diskPool(d.role); return p === 'bulk' && snapName ? snapName : p; };
   const counts = $derived({
-    all: all.length, bulk: all.filter((d) => diskPool(d.role) === 'bulk').length, fast: all.filter((d) => diskPool(d.role) === 'fast').length,
+    all: all.length, ...Object.fromEntries(pools.rows.map((p) => [p.name, all.filter((d) => poolOf(d) === p.name).length])),
     none: all.filter(isLoose).length, missing: missing.length,
   });
-  const visible = $derived(all.filter((d) => (filter === 'all' ? true : filter === 'none' ? isLoose(d) : filter === 'missing' ? false : diskPool(d.role) === filter)));
+  const visible = $derived(all.filter((d) => (filter === 'all' ? true : filter === 'none' ? isLoose(d) : filter === 'missing' ? false : poolOf(d) === filter)));
   const sel = $derived(filter === 'missing' ? null : all.find((d) => d.name === selName) ?? null);
   const selMissing = $derived(filter === 'missing' ? missing.find((m) => m.serial === selName) ?? null : null);
 
@@ -73,21 +83,21 @@
   const serialOf = (d) => (d.model ?? '').trim().split(/\s+/).pop();
 
   // The pool member a disk is (SnapRAID: "bulk data-01" -> data-01; ZFS: the by-id name of the members list) and its group (data | parity | mirror-0 ...)
-  const membRows = (p) => rows(p === 'fast' ? membFast : membBulk);
+  const membRows = (p) => (p === snapName ? rows(membSnap) : p === zName ? rows(membZ) : []);
   const snapRole = (d) => /^bulk (data|parity)-\d+$/.test(d?.role ?? '');
   const memberOf = (d) => {
-    if (!d || !diskPool(d.role)) return '';
+    if (!d || !poolOf(d)) return '';
     if (snapRole(d)) return d.role.replace(/^bulk /, '');
-    return membRows(diskPool(d.role)).map((r) => r[0]).find((n) => serialIn(d.model, n)) ?? '';
+    return membRows(poolOf(d)).map((r) => r[0]).find((n) => serialIn(d.model, n)) ?? '';
   };
   const roleText = (d) => {
     if (snapRole(d)) return roleLabel(d.role);
-    const g = membRows(diskPool(d.role)).find((r) => r[0] === memberOf(d))?.[3];
+    const g = membRows(poolOf(d)).find((r) => r[0] === memberOf(d))?.[3];
     return g && g !== '-' ? g : roleLabel(d.role);
   };
-  const poolText = (d) => diskPool(d.role) || (isLoose(d) ? 'free' : d.role);
+  const poolText = (d) => poolOf(d) || (isLoose(d) ? 'free' : d.role);
   // the pane next to a disk in the file manager: another data disk (a pool disk and its own pool never meet there)
-  const otherDisk = (member) => { const o = dataMembers('bulk').find((n) => n !== member); return o ? `disk:${o}` : ''; };
+  const otherDisk = (member) => { const o = dataMembers(snapName).find((n) => n !== member); return o ? `disk:${o}` : ''; };
   const dataMembers = (p) => membRows(p).filter((r) => r[3] === 'data' && r[2] === 'ONLINE').map((r) => r[0]);
 
   // ── the drawer: SMART history and self-tests
@@ -118,8 +128,8 @@
   const fsText = (d) => (d.fs && d.fs !== '-' ? d.fs : '–');
 
   const runTest = (kind) => openPlan('disk', [sel.name, 'test', kind], `${kind === 'long' ? 'Long' : 'Short'} test of ${sel.name}`);
-  const addToPool = (pool) => openCreate(AddDisks, { pool, variant: 'empty', snap: pool === 'bulk' ? bulkSnap : false });
-  const poolForNew = $derived(filter === 'fast' ? 'fast' : 'bulk');
+  const addToPool = (pool) => openCreate(AddDisks, { pool, variant: 'empty', snap: pool === snapName ? snapPool : false });
+  const poolForNew = $derived(pools.rows.some((p) => p.name === filter) ? filter : snapName || (pools.rows[0]?.name ?? ''));
   const lockTip = (t) => (locked ? 'The storage is locked' : t);
 
   const columns = [
@@ -216,7 +226,7 @@
                   { k: 'Free space', v: sel.free && sel.free !== '-' ? sizeTxt(Number(sel.free)) : '' }, { k: 'First seen', v: rec?.first ? dateOf(rec.first) : '' },
                 ]} />
                 {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p class="pad">{verdicts[sel.name].reason}</p>{/if}
-                {#if markOf[member]}<div class="pad"><Banner tone="info">{markOf[member] === 'detached' ? 'This disk is out of /bulk on purpose (detached). Attach it again when you are done.' : 'Recovery is running or waiting for its finish; the disk is out of /bulk until then.'}</Banner></div>{/if}
+                {#if markOf[member]}<div class="pad"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
                 <div class="pad links">
                   {#if diskPool(sel.role)}<Button size="sm" tooltip={`Open the pool ${diskPool(sel.role)}`} onclick={() => go(`/storage/pools/${diskPool(sel.role)}`)}><i class="ph ph-cylinder"></i>Pool {diskPool(sel.role)}</Button>{/if}
                   <Button size="sm" tooltip={'Open the health page'} onclick={() => go('/operations/health')}><i class="ph ph-heartbeat"></i>Health</Button>
@@ -256,10 +266,10 @@
                 <Button variant="danger" size="sm" disabled={locked} tooltip={lockTip('Erase this disk so it can be added to a pool')} onclick={() => openCreate(WipeDisk, { disk: sel.name, model: modelOf(sel), size: sel.size })}><i class="ph ph-eraser"></i>Format…</Button>
               {/if}
               {#if snapRole(sel) && /data/.test(sel.role) && member}
-                <Button size="sm" disabled={locked} tooltip={'Take this disk out of /bulk to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: 'bulk', member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
+                <Button size="sm" disabled={locked} tooltip={'Take this disk out of the pool to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: snapName, member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
                 <Button size="sm" disabled={locked} tooltip={'Look at the files of this disk, next to another disk'} onclick={() => go(filesLink({ left: `disk:${member}`, right: otherDisk(member) }))}><i class="ph ph-folder-open"></i>Browse files</Button>
                 <Button size="sm" disabled={locked} tooltip={'Move files to another data disk in the file manager; their path stays'} onclick={() => go(filesLink({ left: `disk:${member}`, path: '/shares', right: otherDisk(member), rpath: '/shares' }))}><i class="ph ph-arrows-left-right"></i>Move files…</Button>
-                <Button size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: 'bulk', member, members: dataMembers('bulk') })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
+                <Button size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: snapName, member, members: dataMembers(snapName) })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
               {/if}
             {/snippet}
           </Drawer>
