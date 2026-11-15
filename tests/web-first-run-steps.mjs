@@ -7,7 +7,8 @@ assert.deepEqual(active(FIRST_RUN_STEPS, ['account', 'preset', 'done']).map((s) 
 assert.deepEqual(active(FIRST_RUN_STEPS, ['account', 'network', 'preset', 'done']).map((s) => s.id), ['account', 'network', 'preset', 'done']);
 assert.ok(FIRST_RUN_STEPS.every((s) => s.question && s.primary));
 for (const s of FIRST_RUN_STEPS.filter((x) => x.slot)) assert.match(s.slot, /^#\d+$/);
-assert.deepEqual(FIRST_RUN_STEPS.filter((s) => s.slot).map((s) => s.id), ['network', 'storage']);
+assert.deepEqual(FIRST_RUN_STEPS.filter((s) => s.slot).map((s) => s.id), ['network']);
+assert.deepEqual(active(FIRST_RUN_STEPS, ['account', 'storage', 'preset', 'done']).map((s) => s.id), ['account', 'storage', 'preset', 'done']);
 assert.equal(clampIndex(-1, 3), 0);
 assert.equal(clampIndex(9, 3), 2);
 assert.equal(clampIndex(1, 3), 1);

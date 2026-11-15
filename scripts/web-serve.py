@@ -942,6 +942,7 @@ READS = {
     ("pool", "state"): {"kind": "tsv", "ttl": 10, "query": {"pool": (POOL_NAME, "")},
                         "topic": ("pool", "state")},     # bulk lock, health-check pause, last scrub / parity sync (lock, paused, scrub <pool>, sync bulk)
     ("incident", "state"): {"kind": "tsv", "ttl": 10},     # the storage incident workflow (scripts/storage-incident.sh --state)
+    ("storage", "discover"): {"kind": "tsv", "ttl": 30},     # what is on every whole disk (hs sys storage discover); the first-run Storage step
     ("pool", "list"): {"kind": "tsv", "ttl": 15},     # name, role, kind, state of every pool (hs pool)
     ("pool", "disks"): {"kind": "tsv", "ttl": 15, "query": {"role": (r"^adopt$", "--role")}},
     ("disk-health", "list"): {"kind": "tsv", "ttl": 30, "topic": "disk-health"},
