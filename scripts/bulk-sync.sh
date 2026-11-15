@@ -24,7 +24,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ "$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)" != snapraid ]; then
+if ! pool_snapraid >/dev/null; then
   ok "This server uses ZFS for /bulk: parity is always current, nothing to sync."
   exit 0
 fi

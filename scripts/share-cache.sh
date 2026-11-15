@@ -15,6 +15,8 @@ here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$here/lib/pools.sh"
+. "$here/lib/bulkpath.sh"
+root=$(snap_root)
 live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
 cache=/mnt/bulk/cache      # ZFS dataset fast/hs-cache; its quota is the size of the cache
 dataset=fast/hs-cache
@@ -40,22 +42,25 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 
-supported() { [ "$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)" = snapraid ]; }
+supported() {   # the legacy file, or a SnapRAID row of a pools line
+  [ "$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)" = snapraid ] || { [ "$(pools_source)" = config ] && pool_snapraid >/dev/null; }
+}
 
 # "shares/fotos" for a share name (or for its folder)
 rel_of() {
   local path
   case "$1" in
-    /bulk/*) path=$1 ;;
+    "$root"/*) path=$1 ;;
     *) path=$(net conf getparm "$1" path 2>/dev/null || true)
        if [ -z "$path" ]; then
          for k in shares sensitive; do
-           if [ -d "/bulk/$k/$1" ]; then path="/bulk/$k/$1"; break; fi
+           if [ -d "$root/$k/$1" ]; then path="$root/$k/$1"; break; fi
          done
        fi ;;
   esac
-  [[ "${path:-}" =~ ^/bulk/(shares|sensitive)/[^/]+$ ]] || return 1
-  echo "${path#/bulk/}"
+  [[ "${path:-}" == "$root"/* ]] || return 1
+  [[ "${path#"$root"/}" =~ ^(shares|sensitive)/[^/]+$ ]] || return 1
+  echo "${path#"$root"/}"
 }
 
 state_of() {   # state_of <rel>
@@ -69,7 +74,7 @@ waiting_bytes() { du -sb "$cache/$1" 2>/dev/null | cut -f1 || echo 0; }
 # running instances that have this share mounted: they keep the view they
 # started with, so they only see files in the cache after a restart
 users_of() {
-  incus list -f json 2>/dev/null | jq -r --arg p "/bulk/$1" \
+  incus list -f json 2>/dev/null | jq -r --arg p "$root/$1" \
     '.[] | select(.status == "Running")
          | select([.expanded_devices[]? | select(.type == "disk" and .source == $p)] | length > 0) | .name'
 }
@@ -134,7 +139,7 @@ if [ "$want" = on ]; then
   fi
 fi
 rel=$(rel_of "$share") || fail "$(t "No share called '%s' under /bulk/shares or /bulk/sensitive." "$share")"
-[ -d "/bulk/$rel" ] || fail "$(t '/bulk/%s does not exist.' "$rel")"
+[ -d "$root/$rel" ] || fail "$(t '/bulk/%s does not exist.' "$rel")"
 share=${rel##*/}
 now=$(state_of "$rel")
 users=$(users_of "$rel" | tr '\n' ' ' || true)
@@ -160,7 +165,7 @@ if [ "$want" = on ]; then
   rm -f "$cache/$rel.off"
   mkdir -p "$cache/$rel"
   bash "$here/bulk-mount.sh" >/dev/null
-  mountpoint -q "/bulk/$rel" || { rmdir "$cache/$rel" 2>/dev/null || true; fail "$(t 'The cache could not be mounted over /bulk/%s.' "$rel")"; }
+  mountpoint -q "$root/$rel" || { rmdir "$cache/$rel" 2>/dev/null || true; fail "$(t 'The cache could not be mounted over /bulk/%s.' "$rel")"; }
   smbcontrol smbd close-share "${rel##*/}" 2>/dev/null || true
   if $restart; then restart_users; fi
   ok "Done."

@@ -199,7 +199,8 @@ fi
 #   temp-eject <name>                     remove the share and unmount; afterwards it is safe to unplug
 if [ "$action" != test ]; then
   tdisk=${HS_TEMP_DISK:-$here/temp-disk.sh}
-  bulk=${HS_BULK:-/bulk}
+  . "$here/lib/bulkpath.sh"
+  bulk=$(snap_root)
   shift 3
   name="" to=""
   while [ $# -gt 0 ]; do

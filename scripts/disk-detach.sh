@@ -104,7 +104,7 @@ mkdir -p "$detdir"
 
 if [ "$action" = detach ]; then
   if [ "$testmode" != 1 ]; then
-    for m in /bulk "$rawpool"; do
+    for m in "$(snap_root)" "$rawpool"; do
       mountpoint -q "$m" 2>/dev/null && setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
     done
   fi

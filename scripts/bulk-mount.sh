@@ -10,11 +10,17 @@ set -euo pipefail
 # writes the labels, this script (at boot and after changes) does the rest.
 . "$(dirname "$0")/lib/bulkpath.sh"
 . "$(dirname "$0")/lib/admin.sh"
+. "$(dirname "$0")/lib/ui.sh"
 adm="$(admin_user)"
+# the merged view: /bulk on legacy servers, else the folder of the SnapRAID pool row (never mount /bulk by guess)
+if [ "$(pools_source)" = config ] && [ -z "${HS_BULK:-}" ] && ! pool_snapraid >/dev/null; then
+  fail "No SnapRAID pool in the pools line."
+fi
+root=$(snap_root)
 base=/mnt/bulk                 # the pool view (pool), the upload cache (cache)
 dbase=$(disks_root)           # the disks: data-NN, parity-N
 conf=/var/lib/snapraid/snapraid.conf
-mkdir -p "$base" "$dbase" /bulk /var/lib/snapraid
+mkdir -p "$base" "$dbase" "$root" /var/lib/snapraid
 if [ "$dbase" != "$base" ] && [ ! -e "$dbase/README" ]; then
   cat > "$dbase/README" <<'README'
 These are the disks of the bulk array (hs pool bulk), mounted for the system. Do not copy or move files between a disk here and /bulk:
@@ -80,7 +86,7 @@ mode_of() { if grep -qx "${1##*/}" "$closed_file" 2>/dev/null; then echo NC; els
 bspec=()
 for d in "${mdata[@]}"; do bspec+=("$d=$(mode_of "$d")"); done
 branches=$(IFS=:; echo "${bspec[*]}")
-for m in /bulk "$base/pool"; do
+for m in "$root" "$base/pool"; do
   mkdir -p "$m"
   if mountpoint -q "$m"; then
     # already merged: add branches that are new, without unmounting; switch the mode of the ones
@@ -110,15 +116,15 @@ for m in /bulk "$base/pool"; do
       setfattr -n user.mergerfs.branches -v "$spec" "$m/.mergerfs"
     fi
   else
-    name=bulk; [ "$m" = /bulk ] || name=bulk-pool
+    name=bulk; [ "$m" = "$root" ] || name=bulk-pool
     mergerfs -o "cache.files=off,dropcacheonclose=true,category.create=mfs,moveonenospc=true,minfreespace=$minfree,allow_other,fsname=$name" \
       "$branches" "$m"
   fi
 done
 
-mkdir -p /bulk/shares /bulk/sensitive
-chown "$adm":users /bulk/shares
-chmod 2775 /bulk/shares
+mkdir -p "$root/shares" "$root/sensitive"
+chown "$adm":users "$root/shares"
+chmod 2775 "$root/shares"
 
 # ── Upload caches (hs share <share> cache) ──
 # A share that has a folder on the SSD cache gets a small merge of its own
@@ -144,11 +150,11 @@ if mountpoint -q "$cache"; then
     mode=RW; [ ! -e "$cache/$rel.off" ] || mode=NC
     # 1M: how full the disks may get is decided by the merge below, not here
     spec="$cache/$rel=$mode,$cminfree:$base/pool/$rel=RW,1M"
-    if mountpoint -q "/bulk/$rel"; then
-      setfattr -n user.mergerfs.branches -v "$spec" "/bulk/$rel/.mergerfs"
+    if mountpoint -q "$root/$rel"; then
+      setfattr -n user.mergerfs.branches -v "$spec" "$root/$rel/.mergerfs"
     else
       mergerfs -o "cache.files=off,dropcacheonclose=true,category.create=ff,moveonenospc=true,allow_other,fsname=cache-${rel##*/}" \
-        "$spec" "/bulk/$rel"
+        "$spec" "$root/$rel"
     fi
     cached=$((cached + 1))
   done
@@ -164,7 +170,7 @@ for l in "${labels[@]}"; do
     mountpoint -q "$alt" 2>/dev/null || continue
     mountpoint -q "$dir" 2>/dev/null || continue            # only when the new place is there
     still=""
-    for m in /bulk "$base/pool"; do
+    for m in "$root" "$base/pool"; do
       mountpoint -q "$m" 2>/dev/null || continue
       [[ ":$(getfattr --only-values -n user.mergerfs.branches "$m/.mergerfs" 2>/dev/null || true)" == *":$alt="* ]] && still=yes
     done
