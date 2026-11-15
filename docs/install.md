@@ -8,11 +8,11 @@ and the web interface. It ends with the first-run checklist. Everything after th
 - A PC for the server with UEFI boot, one disk for the system, and the disks for your data. **Every disk you use is erased.** Back up
   what you want to keep first.
 - A second computer on the same network with an SSH client, and a USB stick for the installer.
-- A decision about how the data disks work, made **before** the install because `bulkType` is read during it (see
-  [Storage and disks](storage-and-disks.md)):
-  - `zfs` (the default): disks in mirrored pairs, every file stored twice, protected at once.
-  - `snapraid`: single disks of any size merged into one folder, with a parity disk; new files are protected after the next nightly sync.
-  The pool `fast` for the SSDs is always a ZFS mirror.
+- A thought about how the data disks work. You decide it later, when you create each pool with `hs pool` (see
+  [Storage and disks](storage-and-disks.md)); the installer needs no answer:
+  - ZFS (the default): disks in mirrored pairs, every file stored twice, protected at once.
+  - SnapRAID (`--kind snapraid`): single disks of any size merged into one folder, with a parity disk; new files are protected after the next nightly sync.
+  The pools have names you choose. Not tested on hardware yet.
 
 ## Create an SSH key
 
@@ -212,7 +212,7 @@ nano /mnt/etc/nixos/machine.toml
 | --- | --- |
 | `hostId` | A random value: run `head -c4 /dev/urandom \| od -A none -t x4` and use the result, for example `"a1b2c3d4"`. It must never change later, ZFS remembers it |
 | `sshKeys` | The whole line of `id_hobnix.pub`, in quotes, inside the brackets |
-| `bulkType` | Only for `snapraid`: remove the `#` in front of `bulkType = "snapraid"` now, not later |
+| `pools` | Leave it as it is (`pools = {}`): the pools get their names when you create them with `hs pool` |
 
 With `hostId` still `CHANGEME` the install stops with a hint. Install the base system:
 
@@ -261,16 +261,17 @@ It prints `root` after asking for the password of `adminuser`.
 
 ## Create the storage pools
 
-`zpool status` reports no pools yet, which is right. The disk menu lists the free disks with size and model, asks which pool to create
-(`fast` from SSDs, `bulk` from the data disks) and shows its plan, including the exact `zpool create` command, before you type the pool
-name to confirm. The system disk and disks that are in use are never offered.
+`zpool status` reports no pools yet, which is right. `hs pool` lists the free disks with size and model and shows its plan, including the
+exact `zpool create` command, before you type the pool name to confirm. The system disk and disks that are in use are never offered.
+Choose the names yourself: one pool for the apps (SSDs), one for the data. Not tested on hardware yet.
 
 ```bash
-sudo bash /etc/nixos/scripts/manage-pool.sh
+sudo hs pool ssd --use apps
+sudo hs pool tank --use data
 ```
 
-Run it once for `fast` and once for `bulk`. With `bulkType = "snapraid"` the data disks are added the same way and one of them is the
-parity disk. The full story, including adding, replacing and removing disks later, is in [Storage and disks](storage-and-disks.md).
+For a SnapRAID data pool add `--kind snapraid`: the data disks are added the same way and one of them is the parity disk. The full story,
+including adding, replacing and removing disks later, is in [Storage and disks](storage-and-disks.md).
 
 Check the result:
 
@@ -278,11 +279,10 @@ Check the result:
 zpool status
 ```
 
-`fast` must be `ONLINE` with a `mirror-0`. With `zfs`, `bulk` is `ONLINE` as well. With `snapraid`, `zpool status` shows only `fast`, and you
-check `bulk` like this:
+A ZFS pool must be `ONLINE` (a mirror shows `mirror-0`). A SnapRAID pool does not appear in `zpool status`; check it like this:
 
 ```bash
-df -h /bulk
+df -h /tank
 ```
 
 ## Apply the full configuration
@@ -463,7 +463,7 @@ The same list is the **Setup** page of the web interface. Each open item leads t
 | Language | The default language of the web interface (`en` or `de`); the `hs` commands print English only | `hs config set language de` |
 | Time zone | Without it times in messages are UTC | `hs config set timeZone Europe/Berlin` |
 | Notifications | A push address, so you hear about a disk problem | `hs config set notifications true` |
-| Storage pool | A pool, if you skipped it | `hs pool bulk add` |
+| Storage pool | A pool, if you skipped it | `hs pool <name> --use data` |
 | A first share | A folder you see from Windows | `hs share add <name>` |
 | Backup disk | A disk for `hs backup` | `hs backup init <device>` |
 | Optional parts | Metrics, Tailscale and so on | `hs config set capabilities ...` |

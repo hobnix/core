@@ -34,6 +34,7 @@ check_eq "timeZone" '"Europe/Vienna"' "$(get timeZone)"
 check_out "sshKeys holds the key" "AAAAC3NzaC1lZDI1NTE5AAAAItestkey" python3 -c "import sys;print(sys.argv[1])" "$(get sshKeys)"
 check_out "hostId is a new 8-digit hex value (no CHANGEME)" '^"[0-9a-f]{8}"$' echo "$(get hostId)"
 check "the preset was applied (runtime setting written)" test -f "$T/var/lib/hs/settings/backupNewShares"
+check_eq "a new home server gets an empty pools line" "{}" "$(get pools)"
 
 echo "-- what it refuses"
 out=$($W --dry-run --disk sda --hostname "bad name" --key "$KEY" --target "$T" --repo "$REPO" 2>&1 || true)
@@ -139,6 +140,7 @@ TE=$WORK/edge-target
 $W --role edge --bios --disk sda --hostname edge1 --key "$KEY" --timezone Europe/Berlin --target "$TE" --repo "$REPO" >/dev/null 2>&1 || true
 M=$TE/etc/nixos/machine.toml
 check_eq "role" '"edge"' "$(get role)"
+check_eq "an edge node gets no pools line" "" "$(get pools)"
 check "an edge node serves no web page and arms no setup" bash -c "test -z \"$(get webUi)\" && test ! -e '$TE/var/lib/hs/first-run.json'"
 if [ "$(uname -o 2>/dev/null)" = Msys ]; then skip "bootDevice: Git Bash rewrites /dev/sda in arguments (Linux only)"
 else check_eq "bootDevice (GRUB, BIOS)" '"/dev/sda"' "$(get bootDevice)"; fi
@@ -163,3 +165,15 @@ check_eq "nothing of the plan is shown" 0 "$(grep -c 'The plan' <<<"$nout")"
 nout=$(PATH="$NB:$PATH" HS_SYS_NET="$WORK/nonet" $W --dry-run --disk sda --hostname myserver --key "$KEY" --preset minimal --target "$T" --repo "$REPO" 2>&1)
 check_out "HS_INSTALL_SKIP_NETCHECK goes on to the plan" "Dry run" echo "$nout"
 finish
+
+echo "-- the pools line and a SnapRAID preset"
+mkdir -p "$WORK/prerepo"; cp -r "$REPO/." "$WORK/prerepo/"
+printf '[machine]
+bulkType = "snapraid"
+' > "$WORK/prerepo/presets/snaptest.toml"
+out=$($W --disk sda --hostname snapbox --key "$KEY" --preset snaptest --target "$WORK/snap-target" --repo "$WORK/prerepo" 2>&1)
+M=$WORK/snap-target/etc/nixos/machine.toml
+check_eq "the preset's bulkType is kept" '"snapraid"' "$(get bulkType)"
+check_eq "and the pools line is written" "{}" "$(get pools)"
+check_out "the note says bulkType is not used" "bulkType is not used.*--kind snapraid" echo "$out"
+check_out "the last note names hs pool" "sudo hs pool ssd --use apps" echo "$out"

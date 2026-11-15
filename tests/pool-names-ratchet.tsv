@@ -6,7 +6,7 @@ capabilities/samba/module.nix	2
 capabilities/storage/module.nix	14
 config/schema.toml	6
 configuration.nix	15
-install.nix	3
+install.nix	1
 scripts/admin-change.sh	2
 scripts/backup.sh	14
 scripts/bulk-mount.sh	36
@@ -35,7 +35,6 @@ scripts/fm.sh	8
 scripts/health-change.sh	2
 scripts/health-check.sh	24
 scripts/health.sh	3
-scripts/install-wizard.sh	1
 scripts/lib/bulklock.sh	3
 scripts/lib/bulkpath.sh	9
 scripts/lib/capacity.sh	7
