@@ -1,0 +1,4 @@
+date  = "2026-11-15"
+type  = "change"
+title = "The storage incident guide works with any pool"
+body  = """`hs storage incident` now checks every pool you have, whatever its name, and finds an apps pool's instances by the pool of their root disk. Shares that use the upload cache are listed as at risk when the apps pool is degraded. A server with the default pools sees the same output as before."""
