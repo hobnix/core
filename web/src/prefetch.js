@@ -4,6 +4,7 @@
 import { touch } from './data.svelte.js';
 import { readsFor } from './readsfor.js';
 import { ui } from './ui.svelte.js';
+import { pools } from './pools.svelte.js';
 
 export { readsFor };
 
@@ -14,6 +15,6 @@ export function prefetchRoute(path) {
   const now = Date.now();
   if (!path || now - (last.get(path) ?? 0) < 5000) return;
   last.set(path, now);
-  const paths = readsFor(path, ui.features.extensions, ui.features.live);
+  const paths = readsFor(path, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined);
   if (paths.length) touch(paths);
 }

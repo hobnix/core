@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   // Storage > Pools: the list (/storage/pools) and the detail of one pool (/storage/pools/<name>) in one page. Membership changes (add, adopt,
   // replace, remove, close, open, convert) and scrub / sync live here; everything about a single disk lives on Disks (a link, not a copy).
@@ -19,11 +20,16 @@
   import ConvertPool from '../forms/storage/ConvertPool.svelte';
   import CloseDisk from '../forms/storage/CloseDisk.svelte';
   import { parseInfo, percentOf, diskPool, serialIn, sizeTxt, parseSize, poolTopic } from './storage/pool.js';
+  import { pools, loadPools, poolOfRole, poolRow } from '../pools.svelte.js';
+  import { live } from '../live.svelte.js';
 
   let { deck } = $props();
 
-  const NAMES = ['bulk', 'fast'];
+  onMount(() => { loadPools(true); });
   const pool = $derived(route.path.startsWith('/storage/pools/') ? route.path.slice('/storage/pools/'.length) : '');
+  const row = $derived(poolRow(pool));
+  const role = $derived(row?.role ?? '');
+  const unknownPool = $derived(!!pool && pools.loaded && !pools.legacy && !row);
   const locked = $derived(!!deck?.data?.locked);
 
   // ── shared by list and detail
@@ -32,10 +38,10 @@
   const monitor = $derived(rows(disks).map((r) => ({ name: r[0], role: r[3], model: r[10], free: r[11] })));
   const freeDisks = $derived(monitor.filter((d) => d.role === 'free' || d.role === 'mounted'));
 
-  const infoBulk = poll('/api/sys/pool/info?pool=bulk', 15000, 'pool-info-bulk');
-  const infoFast = poll('/api/sys/pool/info?pool=fast', 15000, 'pool-info-fast');
-  const infos = $derived({ bulk: infoBulk, fast: infoFast });
-  const factsOf = (name) => parseInfo(rows(infos[name])).facts;
+  // the facts of the one SnapRAID pool (D6) come from its `pool info`; a ZFS pool says its layout and state in the list row
+  const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? '');
+  const snapInfo = poll(() => (snapName ? `/api/sys/pool/info?pool=${snapName}` : ''), 15000, () => poolTopic('info', snapName, live.topics));
+  const snapFacts = $derived(parseInfo(rows(snapInfo)).facts);
   const isSnap = (f) => /SnapRAID/i.test(f.layout ?? '');
   const layoutOf = (f) => (isSnap(f) ? 'SnapRAID' : /ZFS/i.test(f.layout ?? '') ? 'ZFS mirror' : (f.layout ?? ''));
   const dotOf = (state) => {
@@ -44,13 +50,15 @@
   };
 
   // ── the list
-  const list = $derived(NAMES.map((name) => {
-    const f = factsOf(name), dp = deck?.data?.pools?.[name];
-    const loaded = infos[name].loaded, failed = loaded && !rows(infos[name]).length;
-    const created = loaded && !failed && !/not created/i.test(f.state ?? '');
+  const list = $derived(pools.rows.map((r) => {
+    const isSnapRow = r.name === snapName, f = isSnapRow ? snapFacts : {}, dp = deck?.data?.pools?.[r.name];
+    const failed = isSnapRow && snapInfo.loaded && !rows(snapInfo).length;
+    const created = r.state !== 'missing' && !(isSnapRow && /not created/i.test(f.state ?? ''));
     return {
-      name, loaded, failed, created, layout: layoutOf(f), state: (f.state ?? '').toLowerCase(), sync: f['last sync'] ?? '',
-      size: dp?.size ?? 0, used: dp?.used ?? null, count: monitor.filter((d) => diskPool(d.role) === name).length,
+      name: r.name, role: r.role, loaded: pools.loaded && (!isSnapRow || snapInfo.loaded), failed, created,
+      layout: r.kind === 'snapraid' ? 'SnapRAID' : r.kind === 'zfs' ? 'ZFS' : layoutOf(f),
+      state: r.state !== '-' ? r.state.toLowerCase() : (f.state ?? '').toLowerCase(), sync: f['last sync'] ?? '',
+      size: dp?.size ?? 0, used: dp?.used ?? null, count: monitor.filter((d) => diskPool(d.role) === r.name).length,
     };
   }));
   const shown = $derived(list.filter((p) => p.created || p.failed || !p.loaded));
@@ -61,14 +69,14 @@
   ];
 
   // ── the detail
-  const info = poll(() => (pool ? `/api/sys/pool/info?pool=${pool}` : ''), 15000, () => poolTopic('info', pool));
-  const memb = poll(() => (pool ? `/api/sys/pool/members?pool=${pool}` : ''), 15000, () => poolTopic('members', pool));
-  const shares = poll(() => (pool === 'bulk' ? '/api/sys/shares/overview' : ''), 30000, 'shares-overview');
-  const cts = poll(() => (pool === 'fast' ? '/api/sys/ct/list' : ''), 30000);
+  const info = poll(() => (pool && !unknownPool ? `/api/sys/pool/info?pool=${pool}` : ''), 15000, () => poolTopic('info', pool, live.topics));
+  const memb = poll(() => (pool && !unknownPool ? `/api/sys/pool/members?pool=${pool}` : ''), 15000, () => poolTopic('members', pool, live.topics));
+  const shares = poll(() => (role === 'data' ? '/api/sys/shares/overview' : ''), 30000, 'shares-overview');
+  const cts = poll(() => (role === 'apps' ? '/api/sys/ct/list' : ''), 30000);
 
   // what the pool is doing (`hs sys pool state`): lock <free|busy|pool-change|unknown> text / paused <yes|no> text / scrub <pool> <running|ok|errors|never|unknown> text / sync bulk <running|ok|never|unknown> text.
   // `pool info` has no scrub field on either layout (SnapRAID: "last sync" only), so the scrub and sync lines come from here.
-  const st = poll(() => (pool ? `/api/sys/pool/state?pool=${pool}` : ''), 10000, () => poolTopic('state', pool));
+  const st = poll(() => (pool && !unknownPool ? `/api/sys/pool/state?pool=${pool}` : ''), 10000, () => poolTopic('state', pool, live.topics));
   const stRows = $derived(rows(st));
   const lockRow = $derived(stRows.find((r) => r[0] === 'lock'));
   const lockState = $derived(lockRow?.[1] ?? '');
@@ -117,8 +125,8 @@
     if (scrubRow) out.push({ k: 'Scrub', v: scrubRow[2] === 'running' ? `running, since ${scrubRow[3]}` : scrubRow[2] === 'unknown' ? '–' : scrubRow[3] });
     if (lockRow && lockState !== 'unknown') out.push({ k: 'Bulk lock', v: lockTxt[lockState] ?? lockState });
     if (f['upload cache']) out.push({ k: 'Upload cache', v: f['upload cache'].replace(/\s*\(.*/, '') });
-    if (snap) out.push({ k: 'Merged by mergerfs', v: '/mnt/bulk/pool, shared as /bulk' });
-    if (pool === 'fast') out.push({ k: 'Incus storage pool', v: '"default"' });
+    if (snap) out.push({ k: 'Merged by mergerfs', v: `/mnt/${pool}/pool, shared as /${pool}` });
+    if (pool === poolOfRole('apps')) out.push({ k: 'Incus storage pool', v: '"default"' });
     return out;
   });
 
@@ -137,12 +145,12 @@
       {#if freeDisks.length}<Button tooltip={'Show the disks that belong to no pool'} onclick={() => go('/storage/disks?pool=none')}><i class="ph ph-hard-drive"></i>{freeDisks.length} free disk{freeDisks.length === 1 ? '' : 's'}</Button>{/if}
     {/snippet}
   </PageHeader>
-  <PageState loading={!(infoBulk.loaded && infoFast.loaded)} hasData={infoBulk.loaded && infoFast.loaded} empty={!shown.length} emptyIcon="cylinder" emptyTitle="No pool yet"
+  <PageState loading={!pools.loaded} hasData={pools.loaded} empty={!shown.length} emptyIcon="cylinder" emptyTitle="No pool yet"
              emptyText="A pool groups disks into one place for the shares. Pick free disks to create the first one.">
     <div class="card"><div class="scrollx">
       <Table id="pools" {columns} rows={shown} key="name" onrow={(p) => go(`/storage/pools/${p.name}`)} empty="No pools.">
         {#snippet cell(p, col)}
-          {#if col.key === 'name'}<span class="nm"><i class="ph {p.name === 'fast' ? 'ph-lightning' : 'ph-cylinder'}"></i>{p.name}</span>
+          {#if col.key === 'name'}<span class="nm"><i class="ph {p.role === 'apps' ? 'ph-lightning' : 'ph-cylinder'}"></i>{p.name}</span>
           {:else if col.key === 'layout'}{#if p.layout}<Chip>{p.layout}</Chip>{:else}–{/if}
           {:else if col.key === 'usage'}{#if p.size}<UsageBar used={p.used} size={p.size} />{:else}<span class="mute">{p.loaded ? 'not mounted' : '…'}</span>{/if}
           {:else if col.key === 'state'}<StatusDot state={p.failed ? 'bad' : dotOf(p.state)} label={p.failed ? 'cannot be read' : p.state || (p.loaded ? 'unknown' : 'reading')} />
@@ -152,7 +160,7 @@
       </Table>
     </div></div>
     {#if notYet.length}
-      <p class="mute">Not created yet: {notYet.map((p) => p.name).join(', ')}. Open the pool's page to create it from free disks.</p>
+      <p class="mute">Not found (not created yet or not imported): {notYet.map((p) => p.name).join(', ')}. Open the pool's page to create it from free disks.</p>
     {/if}
   </PageState>
 {:else}
@@ -166,7 +174,7 @@
     {/snippet}
   </PageHeader>
 
-  <PageState loading={!info.loaded} hasData={info.loaded} error={failed ? 'the pool could not be read' : ''}>
+  <PageState loading={!info.loaded && !unknownPool} hasData={info.loaded} error={unknownPool ? `There is no pool ${pool} on this server.` : failed ? 'the pool could not be read' : ''}>
     {#if notCreated}
       <Banner tone="info">The pool {pool} has not been created yet. {#if freeDisks.length}{freeDisks.length} free disk{freeDisks.length === 1 ? ' is' : 's are'} available.{:else}There is no free disk to build it from.{/if}
         {#snippet action()}<Button size="sm" tooltip={locked ? 'Storage is locked' : 'Pick free disks and make a new pool'} disabled={locked} onclick={() => addPool('empty')}>Create pool</Button>{/snippet}
@@ -211,12 +219,12 @@
       </div>
 
       <div class="card sect">
-        {#if pool === 'bulk'}
+        {#if role === 'data'}
           <div class="sh"><b>Shares</b><span class="mute">{shares.loaded ? `${shareRows.length} share${shareRows.length === 1 ? '' : 's'}${shareBytes ? ` · ${sizeTxt(shareBytes)}` : ''}` : 'Loading…'}</span>
-            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go('/storage/shares?pool=bulk')}>Shares<i class="ph ph-caret-right"></i></Button></div>
+            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button></div>
         {:else}
           <div class="sh"><b>Instance volumes</b><span class="mute">{cts.loaded ? `${volumes.length} volume${volumes.length === 1 ? '' : 's'}${volBytes ? ` · ${sizeTxt(volBytes)}` : ''} · Incus pool "default"` : 'Loading…'}</span>
-            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go('/storage/shares?pool=fast')}>Shares<i class="ph ph-caret-right"></i></Button>
+            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
             <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go('/instances')}>Instances<i class="ph ph-caret-right"></i></Button></div>
         {/if}
       </div>

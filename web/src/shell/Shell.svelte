@@ -10,6 +10,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
+  import { pools, loadPools } from '../pools.svelte.js';
   import { changes, startChanges } from '../changes.svelte.js';
   import { treeMeta } from '../pages/proxy/status.js';
   import { treeMeta as dockerTree, dockerChildren } from '../pages/docker/health.js';
@@ -52,10 +53,11 @@
   $effect(() => {
     if (!deck.loaded || locked || prefetched) return;
     prefetched = true;
+    loadPools();
     // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data
     const pages = ['/instances', '/storage/shares', '/storage/pools/bulk', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
       '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
-    prefetch([...new Set([...pages.flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live)),
+    prefetch([...new Set([...pages.flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
       '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
   });
 

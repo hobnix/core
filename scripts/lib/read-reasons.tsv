@@ -43,6 +43,7 @@ jobs tail	free argument: output of one job unit from a cursor, fetched on demand
 live inspect	ttl 0 and never cached: the Live state page re-reads it on each change of topic live
 live raw	free argument: one topic's stored output, fetched on demand on the Live state page
 logs show	free query: unit, level and time chosen by the user, polled every 10 s while the logs tab is open
+pool list	rows change only through hs pool; the web store reads them once per page load, no timer
 pool disks	free query: depends on the role, no fixed topic
 state events	free query: the number of rows asked for, polled every 15 s while the events tab is open
 
