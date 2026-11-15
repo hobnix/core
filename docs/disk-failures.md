@@ -10,6 +10,8 @@ with [Storage and disks](storage-and-disks.md).
 - **None of these cases was run on a real failure. Not tested on hardware yet.** A step that uses a plain ZFS or SnapRAID tool instead of
   `hs` says so, because `hs` does not wrap it.
 
+Below, `bulk` is the name a default server gives its data pool; use the name of your own pool (`hs pool` lists them) where you see it. `hs storage incident` finds every pool by itself.
+
 Rules for every case: do not reboot, power off or unplug anything before you know which disk it is. Name a disk by its `/dev/disk/by-id/`
 name or by its pool name (`data-02`), never by `/dev/sdX`. Start here:
 

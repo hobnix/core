@@ -72,7 +72,6 @@ scripts/share-undelete.sh	8
 scripts/smoke.sh	5
 scripts/snapshots-auto.sh	7
 scripts/state-db.py	2
-scripts/storage-incident.sh	3
 scripts/system-change.sh	7
 scripts/temp-disk.sh	3
 scripts/web-serve.py	19

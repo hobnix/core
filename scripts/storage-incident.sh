@@ -134,11 +134,11 @@ hs_pool_of_incus() {   # <incus pool name> -> pool name
 }
 state_of_app() { awk -F, -v n="$1" '$1 == n { print $2; exit }' <<<"$incus_rows"; }
 
-share_in_pool() {   # <pool> <path> <disks>: the share lives under the pool root; legacy servers go by the disks column (bulk | fast | member list)
+share_in_pool() {   # <pool> <path> <disks>: the share lives under the pool root; legacy servers go by the disks column (a pool name or a member list)
   local root; root=$(pool_root "$1")
   case "$2" in "$root"/*) return 0 ;; esac
   [ "$3" = "$1" ] && return 0
-  pool_is_snapraid "$1" && [ "$(pools_source)" = legacy ] && [ "$3" != fast ]
+  pool_is_snapraid "$1" && [ "$(pools_source)" = legacy ] && [ "$3" != "$(pool_default apps 2>/dev/null)" ]
 }
 
 # $pool_inc[<pool>]: space separated "member:kind"

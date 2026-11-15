@@ -160,7 +160,7 @@ existing pool.
 
 ### Storage incident on any pool (#573)
 
-Status: Accepted 2026-11-15 (owner accepted I1-I8 as recommended); building step by step (PRs on branch 0.4). Not tested on hardware yet.
+Status: Accepted 2026-11-15 (owner accepted I1-I8 as recommended); built in steps 1-5 (PRs on branch 0.4). Not tested on hardware yet.
 
 `hs storage incident` (scripts/storage-incident.sh) must work on any pool rows: no pool, one or several data pools, one or several apps pools,
 and the one SnapRAID pool (D6). A server without a `pools` line gets the legacy rows and must see the same lines it sees today.
