@@ -31,7 +31,7 @@ scripts/disk-recover.sh	8
 scripts/disk-replace.sh	3
 scripts/disk-spindown.sh	6
 scripts/doctor.sh	1
-scripts/fm.sh	12
+scripts/fm.sh	8
 scripts/health-change.sh	2
 scripts/health-check.sh	26
 scripts/health.sh	3
@@ -41,7 +41,7 @@ scripts/lib/bulkpath.sh	9
 scripts/lib/capacity.sh	7
 scripts/lib/collected-reads.tsv	6
 scripts/lib/docker-apps.sh	1
-scripts/lib/fm.sh	16
+scripts/lib/fm.sh	8
 scripts/lib/hs.sh	3
 scripts/lib/live-topics.tsv	8
 scripts/lib/pools.sh	3
@@ -49,7 +49,6 @@ scripts/lib/registry.tsv	33
 scripts/lib/sharepath.sh	17
 scripts/manage-ct.sh	9
 scripts/manage-pool.sh	91
-scripts/manage-shares.sh	19
 scripts/migrate-check.sh	1
 scripts/migrate.sh	5
 scripts/monitor.sh	4
@@ -76,7 +75,6 @@ scripts/smoke.sh	5
 scripts/snapshots-auto.sh	7
 scripts/state-db.py	2
 scripts/storage-incident.sh	26
-scripts/sync-shares.sh	16
 scripts/system-change.sh	7
 scripts/temp-disk.sh	4
 scripts/web-serve.py	19
