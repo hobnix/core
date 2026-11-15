@@ -92,7 +92,6 @@ web/src/forms/instances/IsoAdd.svelte	1
 web/src/forms/instances/steps/StepNetwork.svelte	5
 web/src/forms/instances/steps/StepPlacement.svelte	11
 web/src/forms/ops/PeerMount.svelte	1
-web/src/forms/shares/NewShare.svelte	10
 web/src/forms/storage/AddDisks.svelte	9
 web/src/forms/storage/CloseDisk.svelte	5
 web/src/forms/storage/ConvertPool.svelte	3
@@ -102,18 +101,15 @@ web/src/forms/storage/RecoverDisk.svelte	4
 web/src/forms/storage/RemoveMember.svelte	1
 web/src/nav.js	4
 web/src/pages/Apps.svelte	2
-web/src/pages/Backup.svelte	1
 web/src/pages/Disks.svelte	28
 web/src/pages/Files.svelte	1
-web/src/pages/Groups.svelte	1
 web/src/pages/Health.svelte	7
 web/src/pages/Instances.svelte	3
 web/src/pages/Marketplace.svelte	3
 web/src/pages/Pools.svelte	4
 web/src/pages/Section.svelte	5
-web/src/pages/Shares.svelte	14
+web/src/pages/Shares.svelte	3
 web/src/pages/Summary.svelte	8
-web/src/pages/Users.svelte	1
 web/src/pages/storage/pool.js	11
 web/src/readsfor.js	1
 web/src/route.svelte.js	1

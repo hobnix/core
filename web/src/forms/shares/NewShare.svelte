@@ -1,9 +1,11 @@
 <script>
-  // New share: `hs sys shares plan|start <name> add --kind shares|sensitive [--tier bulk|fast] [--ct <instance> --path <inside> [--as <uid>:<gid>]]`.
+  // New share: `hs sys shares plan|start <name> add --kind shares|sensitive --pool <pool> [--ct <instance> --path <inside> [--as <uid>:<gid>]]`.
   // The command has no switches for backup, cache or snapshots at creation: those are separate changes on the share afterwards.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
-  import { Field, TextInput, Select, Checkbox } from '../../ui';
+  import { Field, TextInput, Select, Checkbox, Banner } from '../../ui';
+  import { onMount } from 'svelte';
+  import { pools, loadPools, poolsOfRole, poolOfRole, poolRow } from '../../pools.svelte.js';
 
   let { onclose, ondone = () => {} } = $props();
 
@@ -12,7 +14,11 @@
 
   let name = $state('');
   let kind = $state('shares');
-  let tier = $state('bulk');
+  onMount(() => { loadPools(); });
+  const choices = $derived([...poolsOfRole('data'), ...poolsOfRole('apps')]);
+  let chosen = $state('');
+  const pool = $derived(chosen || poolOfRole('data'));
+  const isApps = $derived(poolRow(pool)?.role === 'apps');
   let bind = $state(false);
   let ct = $state('');
   let path = $state('');
@@ -22,9 +28,8 @@
 
   const nameOk = $derived(/^[a-z0-9][a-z0-9-]{0,40}$/.test(name));
   const args = () => {
-    if (!nameOk) return null;
-    const a = [name, 'add', '--kind', kind];
-    if (tier === 'fast') a.push('--tier', 'fast');
+    if (!nameOk || !pool) return null;
+    const a = [name, 'add', '--kind', kind, '--pool', pool];
     if (bind) {
       if (!ct) return null;
       a.push('--ct', ct);
@@ -49,12 +54,17 @@
       </div>
     </Field>
 
-    <Field label="Where" id="ns-tier" help={tier === 'fast' ? 'Fast and small: for app data and files used often.' : 'The big pool of disks: for media, photos and backups.'}>
-      <div class="seg" id="ns-tier">
-        <label class="seg-opt"><input type="radio" bind:group={tier} value="bulk" /><i class="ph ph-hard-drives"></i>Disks (bulk)</label>
-        <label class="seg-opt"><input type="radio" bind:group={tier} value="fast" /><i class="ph ph-lightning"></i>SSD (fast)</label>
-      </div>
-    </Field>
+    {#if pools.loaded && !choices.length}
+      <Banner tone="info">Shares wait for a pool: this server has none yet. Add one on Storage > Pools first.</Banner>
+    {:else}
+      <Field label="Where" id="ns-tier" help={isApps ? 'Fast and small: for app data and files used often.' : 'The big pool of disks: for media, photos and backups.'}>
+        <div class="seg" id="ns-tier">
+          {#each choices as c (c)}
+            <label class="seg-opt"><input type="radio" bind:group={chosen} value={c} checked={pool === c} /><i class="ph {poolRow(c)?.role === 'apps' ? 'ph-lightning' : 'ph-hard-drives'}"></i>{c}</label>
+          {/each}
+        </div>
+      </Field>
+    {/if}
 
     <div class="field">
       <Checkbox bind:checked={bind} label="Mount it into an instance" />

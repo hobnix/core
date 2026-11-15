@@ -4,6 +4,7 @@
   // permissions are edited on the share itself (decision 4 of ); a row links to the share.
   import { poll, rows } from '../data.svelte.js';
   import { go } from '../route.svelte.js';
+  import { poolOfRole } from '../pools.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
   import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import NewGroup from '../forms/users/NewGroup.svelte';
@@ -38,7 +39,7 @@
   const det = poll(() => (sel ? `/api/sys/users/group-details/${encodeURIComponent(sel.name)}` : ''), 30000);
   const descr = $derived((() => { const v = rows(det).find((r) => r[0] === 'description')?.[1]; return v && v !== '-' ? v : ''; })());
   const reachColumns =[{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];
-  const toShare = (s) => { setSelection('shares', s); go('/storage/shares?pool=bulk'); };
+  const toShare = (s) => { setSelection('shares', s); go(`/storage/shares${poolOfRole('data') ? `?pool=${poolOfRole('data')}` : ''}`); };
 
   const columns = [
     { key: 'name', label: 'Group' }, { key: 'count', label: 'Members', sort: 'num', align: 'right', value: (g) => g.members.length },
