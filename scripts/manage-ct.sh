@@ -13,7 +13,8 @@ set -euo pipefail
 #                                            boots from that installer image (the ISO library, hs iso) instead of the Debian image
 #   --profiles                               network profiles to create on: name, network or bridge, description
 #   <name> --users                           users that run services inside: name, uid, gid, commands
-#   <name> --add-storage <fast|shares|sensitive> <storage-name> <path> [--readonly] [--as <uid>:<gid>]
+#   <name> --add-storage <fast|shares|sensitive> <storage-name> <path> [-s <apps pool>] [--readonly] [--as <uid>:<gid>]
+#                                            kind fast = a volume on an apps pool (-s names it; default: the first apps pool; shares/sensitive: a share on its own pool)
 #   <name> --snapshots                       snapshots: name, date
 #   <name> --snapshot [label] | --restore <snapshot> | --delete-snapshot <snapshot>
 #   <name> --update                          snapshot, then update the software inside
@@ -111,12 +112,14 @@ users() {
 }
 
 storage() {
-  incus query "/1.0/instances/$1" | jq -r '.expanded_devices | to_entries[]
+  local roots
+  roots=$({ printf '%s\n' /bulk /fast; while IFS= read -r p; do pool_root "$p"; done < <(pool_names); } | jq -R . | jq -sc 'unique')
+  incus query "/1.0/instances/$1" | jq -r --argjson roots "$roots" '.expanded_devices | to_entries[]
     | select(.value.type == "disk" and .value.path != "/")
     | [ .key,
         (if (.value.pool // "") != "" then "fast"
-         elif (.value.source // "" | startswith("/bulk/shares/") or startswith("/fast/shares/")) then "shares"
-         elif (.value.source // "" | startswith("/bulk/sensitive/") or startswith("/fast/sensitive/")) then "sensitive"
+         elif ((.value.source // "") as $s | any($roots[]; . as $r | $s | startswith($r + "/shares/"))) then "shares"
+         elif ((.value.source // "") as $s | any($roots[]; . as $r | $s | startswith($r + "/sensitive/"))) then "sensitive"
          else "other" end),
         (if (.value.pool // "") != "" then "volume " + .value.source else .value.source end),
         .value.path,
@@ -286,10 +289,11 @@ case "$1" in
   --add-storage)
     [ $# -ge 4 ] || usage
     refuse_if_locked "$ct" "$(t 'adding a device')"
-    kind="$2"; sname="$3"; path="$4"; readonly=false; as=""
+    kind="$2"; sname="$3"; path="$4"; readonly=false; as=""; apool=""
     shift 4
     while [ $# -gt 0 ]; do
       case "$1" in
+        -s|--pool)  [ $# -ge 2 ] || usage; apool="$2"; shift 2 ;;
         --readonly) readonly=true; shift ;;
         --as)       [ $# -ge 2 ] || usage; as="$2"; shift 2 ;;
         *) usage ;;
@@ -303,9 +307,12 @@ case "$1" in
     fi
     case "$kind" in
       fast)
-        # a volume on the SSD pool: survives the instance, can be snapshotted on its own
-        incus storage volume show default "$sname" >/dev/null 2>&1 || run incus storage volume create default "$sname"
-        run incus storage volume attach default "$sname" "$ct" "$sname" "$path"
+        # a volume on an apps pool: survives the instance, can be snapshotted on its own
+        if [ -z "$apool" ]; then apool=$(pool_default apps) || fail "$(t 'There is no apps pool to put a volume on.')"; fi
+        ipool=$(pool_incus "$apool") || fail "$(t "'%s' is not an apps pool. Known: %s" "$apool" "$(pool_names apps | tr '
+' ' ')")"
+        incus storage volume show "$ipool" "$sname" >/dev/null 2>&1 || run incus storage volume create "$ipool" "$sname"
+        run incus storage volume attach "$ipool" "$sname" "$ct" "$sname" "$path"
         ;;
       shares|sensitive)
         if $is_vm; then
@@ -313,7 +320,8 @@ case "$1" in
         fi
         share_args=("$sname")
         [ "$kind" = sensitive ] && share_args+=(--sensitive)
-        [ "$(share_tier "$sname" 2>/dev/null || true)" != fast ] || share_args+=(--fast)
+        stier=$(share_tier "$sname" 2>/dev/null || true)
+        [ "$(pool_role "$stier" 2>/dev/null || true)" != apps ] || share_args+=(--pool "$stier")
         share_args+=(--ct "$ct" "$path")
         [ -z "$as" ] || share_args+=(--as "$as")
         before=$(incus config get "$ct" raw.idmap)

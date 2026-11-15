@@ -350,7 +350,7 @@ health_rows() {
   else
     if running; then c_state=ok; c_reason=$(t 'The container docker runs.')
     else c_state=fail; c_reason=$(t 'The container docker is stopped.'); fi
-    if [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" = fast ]; then s_state=ok; s_reason=$(t 'The share apps is on the SSD pool.')
+    if [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" = apps ]; then s_state=ok; s_reason=$(t 'The share apps is on the SSD pool.')
     else s_state=fail; s_reason=$(t 'The share apps is missing on the SSD pool. Fix: hs docker enable'); fi
     if [ "$c_state" != ok ]; then m_reason=$(t 'Checked when the container runs.')
     elif docker_apps_mounted; then m_state=ok; m_reason=$(t 'The share apps is mounted in Docker at %s.' "$DOCKER_APPS_ROOT")
@@ -416,9 +416,11 @@ st_lock() {   # a container that cannot be locked is removed again: never leave 
 st_install() { inc exec "$CT" -- sh -c 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker.io docker-compose' </dev/null; }
 st_dir() { inc exec "$CT" -- mkdir -p /opt/apps </dev/null; }
 APPS_SHARE=apps
-st_share() {   # the share apps on fast, always in the backup, auto snapshots on (a share that is there is kept as it is)
-  if [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" != fast ]; then
-    if [ -n "${HS_DOCKER_CREATE_SHARE:-}" ]; then "$HS_DOCKER_CREATE_SHARE" "$APPS_SHARE" --fast; else bash "$here/create-share.sh" "$APPS_SHARE" --fast; fi || return 1
+st_share() {   # the share apps on the apps pool, always in the backup, auto snapshots on (a share that is there is kept as it is)
+  local apool
+  if [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" != apps ]; then
+    apool=$(pool_default apps) || { fail "$(t 'There is no apps pool: the share apps needs one.')"; return 1; }
+    if [ -n "${HS_DOCKER_CREATE_SHARE:-}" ]; then "$HS_DOCKER_CREATE_SHARE" "$APPS_SHARE" --pool "$apool"; else bash "$here/create-share.sh" "$APPS_SHARE" --pool "$apool"; fi || return 1
   fi
   backup_cmd "$APPS_SHARE" on || return 1
   if [ -n "${HS_DOCKER_SNAPS:-}" ]; then "$HS_DOCKER_SNAPS" "$APPS_SHARE" on; else bash "$here/snapshots-auto.sh" "$APPS_SHARE" on; fi
@@ -465,7 +467,7 @@ apps_on_bulk() {
 # Docker is on already (an older server): make sure the share apps is there and mounted in docker. Idempotent; the mount restarts every app.
 ensure_apps() {   # ensure_apps <yes> <dry> <job>
   local yes=$1 dry=$2 job=$3 have_share=0 have_dev=0 path s=1
-  [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" != fast ] || have_share=1
+  [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" != apps ] || have_share=1
   path=$(inc config device get "$CT" "$APPS_SHARE" path 2>/dev/null </dev/null || true)
   if [ "$path" = "$DOCKER_APPS_ROOT" ]; then have_dev=1
   elif [ -n "$path" ]; then fail_fix "$(t "'%s' has a device called apps at %s already." "$CT" "$path")" "hs ct storage docker"; fi
@@ -505,11 +507,11 @@ cmd_enable() {
     if ! owned; then
       fail_fix "$(t "An instance called 'docker' exists and is not managed by hs (the docker recipe?). Taking it over comes later (hs docker adopt).")" "hs ct list"
     fi
-    if [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" = bulk ]; then apps_on_bulk; fi
+    if [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" = data ]; then apps_on_bulk; fi
     if capability_on docker; then ensure_apps "$yes" "$dry" "$job"; return 0; fi
     fail_fix "$(t 'A docker container from an earlier try exists.')" "hs docker disable"
   fi
-  if [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" = bulk ]; then apps_on_bulk; fi
+  if [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" = data ]; then apps_on_bulk; fi
   MANAGER=$manager
   read -r MEM CPUS < <(size_of "$size")
   plan_enable
@@ -805,7 +807,7 @@ cmd_move_apps() {   # move-apps [--yes --confirm docker] [--job] [--dry-run] [--
     ok "$(t 'The old folders are removed.')"
     return 0
   fi
-  [ "$(share_tier "$APPS_SHARE" 2>/dev/null || true)" = fast ] || fail_fix "$(t 'The share apps is not on the SSD pool.')" "hs docker enable"
+  [ "$(share_tier_role "$APPS_SHARE" 2>/dev/null || true)" = apps ] || fail_fix "$(t 'The share apps is not on the SSD pool.')" "hs docker enable"
   rows=$(ma_list) || fail "$(t 'The apps in %s could not be read.' "$DOCKER_APPS_LEGACY")"
   skip=$(manager_project "$(setting_get dockerManager 2>/dev/null || true)")
   step "$(t 'Move the apps into the share apps')"
