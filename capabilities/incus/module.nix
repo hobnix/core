@@ -16,7 +16,12 @@ let
   };
 
   # A dir pool (no apps pool) copies a whole instance per snapshot: no nightly schedule there (system disk).
-  profileSnapshots = if appsPool != null then autoSnapshots else { };
+  # `default` is pinned by incusDefaultPool (written by hs pool when a second apps pool is added); without it: the first apps pool.
+  defaultPool =
+    if machine.incusDefaultPool == null then appsPool
+    else if machine.incusDefaultPool == "dir" then null
+    else machine.incusDefaultPool;
+  profileSnapshots = if defaultPool != null then autoSnapshots else { };
 
   defaultVlanNames = builtins.attrNames (lib.filterAttrs (_: v: v.default or false) vlans);
   defaultVlan =
@@ -50,18 +55,18 @@ in
 
       # With an apps pool: ZFS on it. Without one: Incus' own folder on the system disk (no redundancy).
       # `default` stays what it was first (D5); every further ZFS apps pool becomes an Incus pool beside it, named like the pool.
-      storage_pools = if appsPool != null then [{
+      storage_pools = (if defaultPool != null then [{
         name = "default";
         driver = "zfs";
-        config.source = "${appsPool}/incus";   # Incus creates/mounts child datasets itself
-      }] ++ map (n: {
+        config.source = "${defaultPool}/incus";   # Incus creates/mounts child datasets itself
+      }] else [{
+        name = "default";
+        driver = "dir";
+      }]) ++ map (n: {
         name = n;
         driver = "zfs";
         config.source = "${n}/incus";
-      }) (lib.filter (n: n != appsPool) zfsAppsPools) else [{
-        name = "default";
-        driver = "dir";
-      }];
+      }) (lib.filter (n: n != defaultPool) zfsAppsPools);
 
       # "default" profile uses the VLAN marked `default = true` in machine.toml.
       # Every VLAN also gets its own profile named after it:
@@ -122,6 +127,9 @@ in
   networking.dhcpcd.denyInterfaces = [ link.name ];   # a role without the home networking would otherwise ask for a lease on it
   environment.etc."hs/internal-link".text = "name=${link.name}\nsubnet=${link.subnet}\nhost=${link.host}\npeer=${link.peer}\n";
   assertions = [{
+    assertion = machine.incusDefaultPool == null || machine.incusDefaultPool == "dir" || builtins.elem machine.incusDefaultPool zfsAppsPools;
+    message = "machine.toml: incusDefaultPool names no ZFS apps pool";
+  } {
     assertion = link.valid;
     message = "machine.toml: incusInternalSubnet = \"${link.subnet}\" must be a private /29 network such as \"10.99.0.0/29\" (10.x, 172.16-31.x or 192.168.x; the last number a multiple of 8).";
   }];

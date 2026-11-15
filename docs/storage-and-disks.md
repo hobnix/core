@@ -151,6 +151,9 @@ sudo hs pool tank --use data
   `/tank` is the merged folder of its disks. The disks of a SnapRAID pool keep the labels `bulk-data-NN` and `bulk-parity-N`. Add the
   first parity disk with a second run: `sudo hs pool tank add --role parity --disks <disk>`.
 - `--role` works only with `--kind snapraid`. A second SnapRAID pool is refused before any disk is listed.
+- A new `apps` pool does not move the Incus pool `default`: it stays on the first apps pool (or on the system disk when there was none), and
+  the choice is written to `incusDefaultPool` in `machine.toml`. The new pool becomes the Incus pool `<name>`; the plan says so, and
+  `hs ct add <name> -s <pool>` puts an instance on it. If Incus cannot add it at once, `hs rebuild` does. Not tested on hardware yet.
 
 Not tested on hardware yet. CI runs the root test `tests/pool.sh` (loop devices, needs udev); the dry-run plans are covered by `tests/pool-bare.sh`.
 

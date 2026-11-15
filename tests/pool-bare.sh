@@ -101,6 +101,26 @@ check_out "a bad kind is refused" "kind: zfs or snapraid" run zfs new tank --use
 printf 'pools = { bulk = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }
 ' >"$HS_MACHINE_FILE"
 check_out "a second snapraid pool is refused" "there can be only one" run zfs new tank --use data --kind snapraid --role data $D --dry-run
+
+echo "-- a new apps pool: Incus default stays (fake incus)"
+printf 'pools = { ssd = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+cat >"$WORK/fake-incus" <<'EOF'
+#!/usr/bin/env bash
+[ "$1 $2" = "query /1.0/storage-pools/default" ] || exit 1
+cat "$FAKE_INCUS_DEFAULT"
+EOF
+chmod +x "$WORK/fake-incus"
+export HS_INCUS=$WORK/fake-incus FAKE_INCUS_DEFAULT=$WORK/incus-default.json
+printf '{"driver":"dir","config":{"source":"/var/lib/incus/storage-pools/default"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on the system disk: the plan says it stays" "Incus keeps its pool default \(on the system disk\); 'nvme' becomes the extra Incus pool 'nvme'" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"ssd/incus"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on ssd: the plan says so" "Incus keeps its pool default \(on ssd\)" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"gone/incus"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on an unknown pool: refused before the disks" "Run hs pool record first" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"ssd/incus"}}' >"$FAKE_INCUS_DEFAULT"
+out=$(run zfs new tank --use data $D --dry-run)
+if grep -q "Incus keeps" <<<"$out"; then fail "a data pool mentions Incus"; else pass "a data pool: no Incus note"; fi
+unset HS_INCUS FAKE_INCUS_DEFAULT
 rm -f "$HS_MACHINE_FILE"
 
 finish

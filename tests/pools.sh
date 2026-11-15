@@ -110,4 +110,17 @@ check "rows: an unknown name is not" fails 'pool_is_snapraid nope'
 printf 'pools = {}\n' >"$HS_MACHINE_FILE"
 check "pools = {}: no snapraid pool" fails pool_snapraid
 
+# 12. pool_incus follows incusDefaultPool (D5)
+printf 'pools = { ssd = { role = "apps", kind = "zfs" }, nvme = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+first=$(run 'pool_default apps')
+other=nvme; [ "$first" != nvme ] || other=ssd
+check_eq "no key: the first apps pool is default" "default" "$(run pool_incus "$first")"
+check_eq "no key: the other apps pool has its own name" "$other" "$(run pool_incus "$other")"
+printf 'incusDefaultPool = "dir"\npools = { ssd = { role = "apps", kind = "zfs" }, nvme = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+check_eq "dir: no apps pool is default" "ssd" "$(run pool_incus ssd)"
+check "dir: pool_incus_default fails" fails pool_incus_default
+printf 'incusDefaultPool = "nvme"\npools = { ssd = { role = "apps", kind = "zfs" }, nvme = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+check_eq "pinned to nvme: nvme is default" "default" "$(run pool_incus nvme)"
+check_eq "pinned to nvme: ssd is beside it" "ssd" "$(run pool_incus ssd)"
+
 finish

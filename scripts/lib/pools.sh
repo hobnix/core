@@ -88,11 +88,18 @@ pool_default() {   # pool_default <role>
   [ -n "$n" ] || return 1
   printf '%s\n' "$n"
 }
+pool_incus_default() {   # the apps pool behind the Incus pool `default` (machine.toml incusDefaultPool); exit 1 when it is the system disk
+  local v
+  v=$(machine_get incusDefaultPool 2>/dev/null || true)
+  case "$v" in
+    dir) return 1 ;;
+    '') pool_default apps ;;
+    *) printf '%s\n' "$v" ;;
+  esac
+}
 pool_incus() {   # pool_incus <apps pool>
   [ "$(pool_role "$1" 2>/dev/null)" = apps ] || return 1
-  if [ "$1" = "$(pool_default apps)" ]; then printf 'default
-'; else printf '%s
-' "$1"; fi
+  if [ "$1" = "$(pool_incus_default 2>/dev/null || true)" ]; then printf 'default\n'; else printf '%s\n' "$1"; fi
 }
 pool_snapraid() {   # the one SnapRAID pool; exit 1 when none
   local n

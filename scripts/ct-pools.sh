@@ -23,6 +23,7 @@ while IFS=$'\t' read -r name driver source; do
   kind=other
   case "$source" in "$bulk_root"/*|"${HS_DISKS_ROOT:-/mnt/bulk}"/*|/var/lib/hs/disks/*) kind=bulk ;; esac
   # `default` and an Incus pool made for an apps pool (source <pool>/incus) are the SSDs
-  [ "$name" = default ] || [ "$(pool_role "${source%%/*}" 2>/dev/null || true)" = apps ] && kind=fast
+  # (a `default` of driver dir, Incus' folder on the system disk, is `other`)
+  { [ "$name" = default ] && [ "$driver" != dir ]; } || [ "$(pool_role "${source%%/*}" 2>/dev/null || true)" = apps ] && kind=fast
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$driver" "$kind" "$free" "${total:--}" "${source:--}"
 done < <(jq -r '.[] | [.name, .driver, (.config.source // "-")] | @tsv' <<<"$list" 2>/dev/null)
