@@ -1,8 +1,9 @@
 <script>
   // The overview of a group in the tree (Storage, Identity, Protection, Operations): one card per child page with the note the tree shows,
-  // and for Storage the capacity of the two pools on top. Nothing is read here that the tree does not read already.
+  // and for Storage the capacity of the pools on top. Nothing is read here that the tree does not read already.
   import { route, go } from '../route.svelte.js';
-  import { tree } from '../nav.js';
+  import { tree, poolItems, poolIcon } from '../nav.js';
+  import { pools as poolStore } from '../pools.svelte.js';
   import { bytes } from '../format.js';
 
   let { deck, meta = {} } = $props();
@@ -18,13 +19,13 @@
   const node = $derived(find(tree, route.path));
   const locked = $derived(!!deck?.data?.locked);
 
-  // a child may be a group itself (bulk and fast hold Disks and Shares): its pages are listed under it
-  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, kids: c.children ?? [] })));
+  // a child may be a group itself (Pools holds one page per pool): its pages are listed under it
+  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
   const dim = (c) => locked && c.storage;
   const note = (it) => (dim(it) ? { text: 'locked', warn: true } : meta[it.path] ?? null);
   const shown = (n) => n.text ?? '●';
 
-  const pools = $derived(['bulk', 'fast'].map((n) => ({ name: n, ...(deck?.data?.pools?.[n] ?? {}) })).filter((p) => p.size > 0));
+  const pools = $derived(poolStore.rows.map((r) => ({ name: r.name, role: r.role, ...(deck?.data?.pools?.[r.name] ?? {}) })).filter((p) => p.size > 0));
   const pct = (p) => Math.round((p.used / p.size) * 100);
   const isStorage = $derived(route.path === '/storage');
 </script>
@@ -37,7 +38,7 @@
     <div class="two">
       {#each pools as p}
         <button class="card elev-sm pool" onclick={() => go(`/storage/pools/${p.name}`)}>
-          <div class="row"><i class="ph ph-{p.name === 'fast' ? 'lightning' : 'cylinder'}" style="color:var(--color-accent)"></i><span class="nm">{p.name}</span><span class="sub" style="margin-left:auto">{pct(p)} % used</span></div>
+          <div class="row"><i class="ph ph-{poolIcon(p.role)}" style="color:var(--color-accent)"></i><span class="nm">{p.name}</span><span class="sub" style="margin-left:auto">{pct(p)} % used</span></div>
           <div class="bar"><div style="width:{pct(p)}%"></div></div>
           <div class="sub">{bytes(p.used)} of {bytes(p.size)}</div>
         </button>

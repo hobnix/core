@@ -58,8 +58,6 @@ export const routes = {
   '/operations': Section,
   '/monitoring': Section,
   '/storage/pools': Pools,
-  '/storage/pools/bulk': Pools,
-  '/storage/pools/fast': Pools,
   '/storage/incident': Incident,
   '/storage/disks': Disks,
   '/storage/shares': Shares,
