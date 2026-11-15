@@ -12,6 +12,8 @@ set -euo pipefail
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/pools.sh"
 . "$(dirname "$0")/lib/pools-write.sh"
+# shellcheck source=scripts/lib/effect.sh
+. "$(dirname "$0")/lib/effect.sh"
 
 live_refresh_pool() {
   live_refresh status monitor-disks disk-inventory disk-marks pool-info-bulk pool-info-fast pool-members-bulk pool-members-fast pool-state-bulk pool-state-fast shares-overview fm-locations encryption
@@ -211,6 +213,20 @@ fi
 # the role of the pool: its row (legacy rows: the data pool and the apps pool as before), or what a new pool is for
 prole=$(pool_role "$pool" 2>/dev/null || true)
 ! $newname || prole=$use
+
+# A new apps pool is an extra Incus pool: `default` stays where it is (D5). incus_def = "<driver> <source pool or ->" when Incus answers.
+incus_bin() { "${HS_INCUS:-incus}" "$@"; }
+incus_def=""
+if $newname && [ "$prole" = apps ]; then
+  if def_json=$(incus_bin query /1.0/storage-pools/default 2>/dev/null) && [ -n "$def_json" ]; then
+    def_driver=$(jq -r '.driver // empty' <<<"$def_json" 2>/dev/null || true)
+    def_source=$(jq -r '.config.source // empty' <<<"$def_json" 2>/dev/null || true)
+    [ -z "$def_driver" ] || incus_def="$def_driver ${def_source%%/*}"
+  fi
+  if [ "${incus_def%% *}" = zfs ] && [ "${incus_def#* }" != "" ] && ! pool_exists "${incus_def#* }"; then
+    echo "Not possible: the Incus pool default is on '${incus_def#* }', which is not a pool of this server. Run hs pool record first."; exit 1
+  fi
+fi
 # ── Candidate disks: whole disks that are not mounted and not in a pool ──
 # One line per disk: by-id name, size in bytes, "SSD"/"HDD", model + serial
 has_label_disk() {   # the disk or one of its partitions carries a filesystem label matching the regex
@@ -1295,6 +1311,10 @@ pplan "$plan"
 pcmd "$(printf '%s' "${cmd[0]}"; printf ' %q' "${cmd[@]:1}")"
 if $newname; then
   pnote "This is a NEW pool '$pool' with role $prole. It is added to the pools line of machine.toml when it is created."
+  if [ "$prole" = apps ] && [ -n "$incus_def" ]; then
+    if [ "${incus_def%% *}" = zfs ]; then incus_what="on ${incus_def#* }"; else incus_what="on the system disk"; fi
+    pnote "Incus keeps its pool default ($incus_what); '$pool' becomes the extra Incus pool '$pool'."
+  fi
   pblank
 fi
 if [ -n "${leftover:-}" ]; then
@@ -1309,6 +1329,12 @@ fi
 
 pdanger "ALL DATA on these ${#sel[@]} disks will be erased."
 $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"
+
+# Pin the Incus pool `default` before the second apps pool exists (the preseed would otherwise move it to the first row).
+if $newname && [ "$prole" = apps ] && [ -n "$incus_def" ] && ! machine_has incusDefaultPool; then
+  if [ "${incus_def%% *}" = zfs ]; then pin=${incus_def#* }; else pin=dir; fi
+  machine_set incusDefaultPool "\"$pin\"" pool-create >/dev/null || fail "Could not write incusDefaultPool to machine.toml."
+fi
 
 if $encrypt && [ "$mode" = "create the new pool" ]; then
   crypt_new_pass || exit 1
@@ -1343,6 +1369,9 @@ if $newname; then
     pnote "The pools line of machine.toml has the new row. It takes effect with hs rebuild."
   else
     pwarn "The pool exists, but its row could not be written. Add it to the pools line of /etc/nixos/machine.toml: $pool = { role = \"$prole\", kind = \"zfs\" }  (then hs rebuild)"
+  fi
+  if [ "$prole" = apps ] && [ -n "$incus_def" ] && [ "$(pool_incus "$pool" 2>/dev/null || true)" != default ]; then
+    spin "Adding the Incus pool $pool" incus_bin storage create "$pool" zfs "source=$pool/incus" || pwarn "The Incus pool is added by hs rebuild."
   fi
 fi
 

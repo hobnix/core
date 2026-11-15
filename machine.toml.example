@@ -149,6 +149,10 @@ vlans = { home = { id = 95, default = true } }
 # the installer and `hs pool`, not by hand.
 # pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }
 
+# The apps pool behind the Incus storage pool `default`, or "dir" for Incus' folder on the system disk.
+# Written by hs pool when a second apps pool is added, never by hand. Without it: the first apps pool (or dir when there is none).
+# incusDefaultPool = "ssd"
+
 # How often the SnapRAID parity is updated, in hours. Default 24 (once a night at 03:00, so the
 # disks can sleep the rest of the day); allowed 1 2 3 4 6 8 12 24.
 # It starts at 03:00, so 4 means 03:00 07:00 11:00 15:00 19:00 23:00. New and changed files are

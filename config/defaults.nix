@@ -32,6 +32,7 @@
   tailscaleRouter = false;
   bulkType = "zfs";
   pools = null;
+  incusDefaultPool = null;
   syncEveryHours = 24;
   shareSnapshots = false;
   zfsArcMaxGB = 12;

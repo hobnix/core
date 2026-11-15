@@ -29,6 +29,12 @@ check_eq "default is fast, the free space is total minus used" $'default\tzfs\tf
 check_eq "a pool under /bulk is bulk" $'bulk1\tdir\tbulk\t3000\t4000\t/bulk/data-01/incus' "$(sed -n 2p <<<"$out")"
 check_eq "a pool Incus cannot size has - and no empty field" $'gone\tdir\tother\t-\t-\t-' "$(sed -n 3p <<<"$out")"
 
+echo "-- a default of driver dir (Incus' folder on the system disk) is other, not fast"
+dirdef=$(sed 's/"name":"default","driver":"zfs","config":{"source":"tank\/incus"}/"name":"default","driver":"dir","config":{"source":"\/var\/lib\/incus\/storage-pools\/default"}/' "$WORK/incus")
+printf '%s\n' "$dirdef" > "$WORK/incus-dir"; chmod +x "$WORK/incus-dir"
+out=$(HS_INCUS=$WORK/incus-dir bash "$SCRIPTS/ct-pools.sh")
+check_eq "dir default is other" $'default\tdir\tother\t60\t100\t/var/lib/incus/storage-pools/default' "$(sed -n 1p <<<"$out")"
+
 echo "-- create with a pool and an image (dry run)"
 : > "$WORK/calls"
 touch "$WORK/x.iso"

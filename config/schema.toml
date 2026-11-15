@@ -638,6 +638,21 @@ pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = 
 
 [[item]]
 kind = "option"
+key = "incusDefaultPool"
+type = "string"
+required = false
+settable = false
+secret = false
+default = 'null'
+page = "storage"
+doc = '''
+# The apps pool behind the Incus storage pool `default`, or "dir" for Incus' folder on the system disk.
+# Written by hs pool when a second apps pool is added, never by hand. Without it: the first apps pool (or dir when there is none).'''
+value = '''
+incusDefaultPool = "ssd"'''
+
+[[item]]
+kind = "option"
 key = "syncEveryHours"
 type = "int"
 required = false

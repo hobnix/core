@@ -46,6 +46,7 @@
   "tailscaleRouter": "cap:tailscale",
   "bulkType": "storage",
   "pools": "storage",
+  "incusDefaultPool": "storage",
   "syncEveryHours": "storage",
   "shareSnapshots": "storage",
   "zfsArcMaxGB": "storage",

@@ -129,7 +129,7 @@ hs sys ct pools
 ```
 
 The default pool is the fast one (the SSD). A pool on the bulk disks only appears when someone created an Incus pool there; hobnix does not
-create one for you. A disk that does not fit the free space of the pool is refused in the plan. Choose the pool when you create:
+create one for you. A new apps pool made with `hs pool` is an Incus pool of its own with the pool's name (`-s <name>`); `default` stays where it was. A disk that does not fit the free space of the pool is refused in the plan. Choose the pool when you create:
 
 ```bash
 hs ct add --kind vm --name <name> --disk 100 --pool <pool>
