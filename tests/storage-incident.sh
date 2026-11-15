@@ -20,6 +20,7 @@ case "$*" in
     case "$sc" in
       zfs-degraded|zfs-resilver) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
       smart) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
+      snap-parity) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\nparity-1\t0\tMISSING\tparity\t-\t-\t-\n' ;;
       snap-missing) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\ndata-02\t0\tMISSING\tdata\t-\t-\t-\nparity-1\t4000000000\tONLINE\tparity\text4\t-\t-\n' ;;
       *) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
     esac ;;
@@ -58,12 +59,13 @@ X
 cat > "$WORK/m/sov.sh" <<'X'
 #!/usr/bin/env bash
 sc=$(cat "$(dirname "$0")/../scen")
-if [ "$sc" = snap-missing ]; then
+if [ "$sc" = snap-missing ] || [ "$sc" = snap-parity ]; then
   printf 'docs\tshares\t/bulk/shares/docs\toff\t1\t-\ton\tdata-01\t-\n'
   printf 'media\tshares\t/bulk/shares/media\toff\t1\t-\ton\tdata-01,data-02\timmich(rw),jelly(ro)\n'
 else
   printf 'docs\tshares\t/bulk/shares/docs\toff\t1\t-\ton\tbulk\timmich(rw),jelly(ro)\n'
 fi
+[ -f "$(dirname "$0")/../multi" ] && printf 'cdocs\tshares\t/bulk/shares/cdocs\ton\t1\t-\ton\tbulk\t-\n'
 printf 'tankdocs\tshares\t/tank/shares/docs\toff\t1\t-\ton\ttank\t-\n'
 printf 'fastone\tshares\t/fast/shares/x\toff\t1\t-\ton\tfast\t-\n'
 X
@@ -76,6 +78,12 @@ cat > "$WORK/m/ctp.sh" <<'X'
 [ -f "$(dirname "$0")/../multi" ] || exit 0
 printf 'default\tzfs\tfast\t-\t-\tssd/incus\nsecond\tzfs\tfast\t-\t-\tssd2/incus\n'
 X
+cat > "$WORK/m/jobs.sh" <<'X'
+#!/usr/bin/env bash
+[ -f "$(dirname "$0")/../job" ] && printf 'u1	%s	-	-	-	-	-	-	-	-	-	3	4
+' "$(cat "$(dirname "$0")/../job")"
+exit 0
+X
 cat > "$WORK/m/none.sh" <<'X'
 #!/usr/bin/env bash
 exit 0
@@ -86,7 +94,7 @@ echo "replace $*" >> "$(dirname "$0")/../calls"
 X
 mkdir -p "$WORK/bin"; cp "$WORK/bin-zpool" "$WORK/bin/zpool"; chmod +x "$WORK"/m/*.sh "$WORK/bin/zpool"
 export HS_MANAGE_POOL=$WORK/m/pool.sh HS_ZPOOL=$WORK/bin/zpool HS_DISK_HEALTH=$WORK/m/dh.sh HS_MONITOR=$WORK/m/mon.sh HS_SHARE_OVERVIEW=$WORK/m/sov.sh \
-  HS_INCUS=$WORK/m/incus.sh HS_CT_POOLS=$WORK/m/ctp.sh HS_JOBS=$WORK/m/none.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
+  HS_INCUS=$WORK/m/incus.sh HS_CT_POOLS=$WORK/m/ctp.sh HS_JOBS=$WORK/m/jobs.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
 st() { bash "$S" --state "$@" 2>/dev/null; }
 lines() { grep -c "^$1	" <<<"$out"; }
 
@@ -205,6 +213,22 @@ check_eq "two pools: a phase for each" "phase	bulk	ready
 phase	tank	ready" "$(grep '^phase' <<<"$out")"
 check_eq "two pools: step follows the first pool" "ready" "$(awk -F'	' '$1=="phase"{print $3; exit}' <<<"$out")"
 rm -f "$WORK/newdisk" "$WORK/machine.toml"; scen healthy
+
+echo "-- SnapRAID: replace job matched by member, parity missing, upload cache"
+echo snapraid > "$WORK/bt"; scen snap-missing; echo pool-replace-data-02 > "$WORK/job"; out=$(st)
+check_eq "job of a member of the pool is its progress" "progress	bulk	rebuild	75" "$(grep '^progress' <<<"$out" | cut -f1-4)"
+echo pool-replace-other > "$WORK/job"; out=$(st)
+check_eq "job of another disk is not" "0" "$(grep -c '^progress' <<<"$out")"
+rm -f "$WORK/job"
+scen snap-parity; out=$(st)
+check_eq "parity missing: target parity-1" "target	bulk	parity-1	-	-" "$(grep '^target' <<<"$out")"
+check_eq "parity missing: every share of the pool at risk" "2" "$(grep -cE "^share	bulk	(docs|media)	.*	at-risk" <<<"$out")"
+echo zfs > "$WORK/bt"
+printf 'pools = { bulk = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }
+' > "$WORK/machine.toml"
+: > "$WORK/multi"; scen healthy; out=$(st)
+check_eq "apps pool degraded: a share with upload cache is at risk" "share	ssd	cdocs	/bulk/shares/cdocs	at-risk" "$(grep '^share' <<<"$out")"
+rm -f "$WORK/multi" "$WORK/machine.toml"
 
 echo "-- no pool at all"
 printf 'pools = {}\n' > "$WORK/machine.toml"
