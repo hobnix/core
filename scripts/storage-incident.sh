@@ -28,6 +28,7 @@
 set -uo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
+. "$here/lib/pools.sh"
 
 mp=${HS_MANAGE_POOL:-$here/manage-pool.sh}
 zpool=${HS_ZPOOL:-zpool}
@@ -40,7 +41,6 @@ detach=${HS_DISK_DETACH:-$here/disk-detach.sh}
 replace_sh=${HS_DISK_REPLACE:-$here/disk-replace.sh}
 admin_lock=${HS_LOCK_ADMIN:-/run/hs-bulk.admin}
 paused_file=${HS_INCIDENT_PAUSED:-${HS_STATE_DIR:-/var/lib/hs}/incident-paused}
-bulk_type=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
 
 usage() {
   say "usage: hs storage incident                 what is wrong with the storage and what to do next (reads only)"
@@ -64,10 +64,10 @@ mon_rows=""
 load_monitor() { mon_rows=$(bash "$mon" --disks 2>/dev/null || true); }
 disk_of_member() {   # <pool> <member> -> "dev<TAB>model serial" ("-" when unknown)
   local pool=$1 m=$2 hit=""
-  if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
-    hit=$(awk -F'\t' -v r="bulk $m" '$4 == r { print $1 "\t" $11; exit }' <<<"$mon_rows")
+  if pool_is_snapraid "$pool"; then
+    hit=$(awk -F'\t' -v r="$pool $m" '$4 == r { print $1 "\t" $11; exit }' <<<"$mon_rows")
   else
-    hit=$(awk -F'\t' -v p="$pool" -v m="$m" '$4 ~ ("^" p) { n = split($11, a, " "); s = a[n]; if (length(s) > 3 && index(m, s)) { print $1 "\t" $11; exit } }' <<<"$mon_rows")
+    hit=$(awk -F'\t' -v p="$pool" -v m="$m" '{ split($4, w, " ") } w[1] == p { n = split($11, a, " "); s = a[n]; if (length(s) > 3 && index(m, s)) { print $1 "\t" $11; exit } }' <<<"$mon_rows")
   fi
   [ -n "$hit" ] && printf '%s' "$hit" || printf -- '-\t-'
 }
@@ -75,9 +75,9 @@ disk_of_member() {   # <pool> <member> -> "dev<TAB>model serial" ("-" when unkno
 collect_pools() {
   local pool health line name size state group fs enc closed marks p
   marks=$(bash "$detach" marks 2>/dev/null | cut -f1 || true)       # data disks taken out by hand are not an incident
-  for pool in bulk fast; do
+  for pool in $(pool_names); do
     health=""
-    if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then health=SNAPRAID
+    if pool_is_snapraid "$pool"; then health=SNAPRAID
     elif command -v "$zpool" >/dev/null 2>&1; then health=$("$zpool" list -H -o health "$pool" 2>/dev/null || true); fi
     [ -n "$health" ] || continue
     pool_health[$pool]=$health
@@ -98,10 +98,10 @@ collect_smart() {
     [ "$verdict" = BAD ] || continue
     pool=""; m=""
     hit=$(awk -F'\t' -v n="$name" '$1 == n { print $4 }' <<<"$mon_rows")
-    case "$hit" in
-      bulk\ *) pool=bulk; m=${hit#bulk } ;;
-      bulk|fast) pool=$hit ;;
-    esac
+    if pool_exists "${hit%% *}"; then   # a pool name, or "<snapraid pool> data-NN"
+      pool=${hit%% *}
+      if [ "$hit" != "$pool" ] && pool_is_snapraid "$pool"; then m=${hit#* }; fi
+    fi
     if [ -n "$pool" ] && [ -z "$m" ]; then   # ZFS: the member whose name carries the serial
       for key in "${!mstate[@]}"; do
         [ "${key%%/*}" = "$pool" ] || continue
@@ -121,6 +121,13 @@ shares_rows=""; incus_rows=""
 load_shares() { shares_rows=$(bash "$sov" 2>/dev/null || true); incus_rows=$("$incus" list -f csv -c ns 2>/dev/null </dev/null || true); }
 state_of_app() { awk -F, -v n="$1" '$1 == n { print $2; exit }' <<<"$incus_rows"; }
 
+share_in_pool() {   # <pool> <path> <disks>: the share lives under the pool root; legacy servers go by the disks column (bulk | fast | member list)
+  local root; root=$(pool_root "$1")
+  case "$2" in "$root"/*) return 0 ;; esac
+  [ "$3" = "$1" ] && return 0
+  pool_is_snapraid "$1" && [ "$(pools_source)" = legacy ] && [ "$3" != fast ]
+}
+
 # $pool_inc[<pool>]: space separated "member:kind"
 collect_impact() {
   local pool=$1 members data_down=false parity_down=false key m
@@ -128,7 +135,7 @@ collect_impact() {
     [ "${key%%/*}" = "$pool" ] || continue
     m=${key#*/}
     if [ "${inc_member[$key]}" = down ]; then
-      if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+      if pool_is_snapraid "$pool"; then
         [ "${mgroup[$key]}" = parity ] && parity_down=true || data_down=true
       fi
     fi
@@ -137,28 +144,27 @@ collect_impact() {
   while IFS=$'\t' read -r name kind path cache size meas bk disks mounted; do
     [ -n "$name" ] && [ "$kind" != other ] || continue
     impact=""
-    if [ "$pool" = fast ]; then [ "$disks" = fast ] && impact=at-risk
-    elif [ "$bulk_type" = snapraid ]; then
-      [ "$disks" != fast ] || continue
+    share_in_pool "$pool" "$path" "$disks" || continue
+    if pool_is_snapraid "$pool"; then
       if $data_down; then
         for key in "${!inc_member[@]}"; do
-          [ "${key%%/*}" = bulk ] && [ "${mgroup[$key]}" != parity ] && [ "${inc_member[$key]}" = down ] || continue
+          [ "${key%%/*}" = "$pool" ] && [ "${mgroup[$key]}" != parity ] && [ "${inc_member[$key]}" = down ] || continue
           case ",$disks," in *",${key#*/},"*) impact=unavailable ;; esac
         done
         [ -n "$impact" ] || impact=at-risk
       else impact=at-risk; fi
-    else [ "$disks" = bulk ] && impact=at-risk; fi
+    else impact=at-risk; fi
     [ -n "$impact" ] || continue
     rec share "$pool" "$name" "$path" "$impact"
     if [ -n "$mounted" ] && [ "$mounted" != - ]; then
       for hit in ${mounted//,/ }; do
         d=${hit%%(*}; w=no; [[ "$hit" == *"(rw)"* ]] && w=yes
-        printf '%s\t%s\t%s\n' "$d" "$name" "$w" >> "$appfile"
+        printf '%s\t%s\t%s\t%s\n' "$d" "$name" "$w" "$pool" >> "$appfile"
       done
     fi
   done <<<"$shares_rows"
-  if [ "$pool" = fast ]; then   # every instance has its root disk on the fast pool (Incus pool "default")
-    while IFS=, read -r d _; do [ -z "$d" ] || printf '%s\t%s\t%s\n' "$d" pool no >> "$appfile"; done <<<"$incus_rows"
+  if [ "$(pool_role "$pool")" = apps ]; then   # every instance has its root disk on the apps pool (Incus pool "default")
+    while IFS=, read -r d _; do [ -z "$d" ] || printf '%s\t%s\t%s\t%s\n' "$d" pool no "$pool" >> "$appfile"; done <<<"$incus_rows"
   fi
 }
 
@@ -178,7 +184,7 @@ collect() {
   load_monitor; collect_pools; collect_smart
   declare -gA targets=()
   local pools_hit=""
-  for pool in bulk fast; do
+  for pool in $(pool_names); do
     [ -n "${pool_health[$pool]:-}" ] || continue
     local down="" failing="" worst=warn
     for key in "${!inc_member[@]}"; do
@@ -218,9 +224,8 @@ collect() {
   for pool in $pools_hit; do collect_impact "$pool"; done
   # apps, once per name: writes = yes when it mounts an affected share read-write
   declare -A seen=()
-  while IFS=$'\t' read -r name via w; do
+  while IFS=$'\t' read -r name via w pool; do
     [ -n "$name" ] || continue
-    pool=bulk; grep -q "^share	fast	$via	" <<<"$REC" && pool=fast; [ "$via" = pool ] && pool=fast
     [ -z "${seen[$name]:-}" ] || { [ "$w" = yes ] && [ "${seen[$name]}" != yes ] && REC=$(awk -F'\t' -v n="$name" 'BEGIN{OFS="\t"} $1=="app" && $3==n { $7="yes" } { print }' <<<"$REC")$'\n'; continue; }
     seen[$name]=$w
     rec app "$pool" "$name" "$(f "$(state_of_app "$name")")" "$via" "$w"
@@ -230,7 +235,7 @@ collect() {
   local running=""
   for pool in $pools_hit; do
     local pg
-    if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
+    if pool_is_snapraid "$pool"; then
       local jl; jl=$(bash "$jobs" --records --state running 2>/dev/null | awk -F'\t' '$2 ~ /^pool-replace-/ { print; exit }' || true)
       if [ -n "$jl" ] || [ -e "$admin_lock" ]; then
         local pct=- unit=
@@ -253,7 +258,6 @@ collect() {
     local ready=false
     while IFS=$'\t' read -r id size role _; do
       [ -n "$id" ] && [[ "${size:-}" =~ ^[0-9]+$ ]] && [ "$size" -ge "$need" ] || continue
-      if [ "$pool" = "${freed:-}" ]; then continue; fi
       rec free "$id" "$size" "$(f "$role")"; ready=true
     done <<<"$fl"
     local ph=detect; $ready && ph=ready; case " $running " in *" $pool "*) ph=running ;; esac
@@ -464,7 +468,7 @@ case "$mode" in
     key=$pool/$member
     [ -n "${mstate[$key]:-}" ] || fail "$(t "'%s' is not a member of %s." "$member" "$pool")"
     # never take a healthy disk out of a mirror whose partner is already down: it would hold the only copy
-    if [ "${mstate[$key]}" = ONLINE ] && [ "${mgroup[$key]}" != - ] && [ "$pool" != bulk -o "$bulk_type" != snapraid ]; then
+    if [ "${mstate[$key]}" = ONLINE ] && [ "${mgroup[$key]}" != - ] && ! pool_is_snapraid "$pool"; then
       for k in "${!mstate[@]}"; do
         [ "${k%%/*}" = "$pool" ] && [ "$k" != "$key" ] && [ "${mgroup[$k]}" = "${mgroup[$key]}" ] && [ "${mstate[$k]}" != ONLINE ] \
           && fail "$(t '%s is the only good copy of its mirror right now. Replace the failed disk %s first, not this one.' "$member" "${k#*/}")"

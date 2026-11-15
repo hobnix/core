@@ -4,7 +4,7 @@
 # pause/resume of the writing apps, the plan/start protocol for the web interface and the alert line. Not run on real hardware.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-export HS_PLAIN=1 HS_LANG=en HS_STATE_DIR=$WORK/state HS_BULK_TYPE_FILE=$WORK/bt HS_INCIDENT_PAUSED=$WORK/paused HS_LOCK_ADMIN=$WORK/noadmin
+export HS_PLAIN=1 HS_LANG=en HS_STATE_DIR=$WORK/state HS_BULK_TYPE_FILE=$WORK/bt HS_INCIDENT_PAUSED=$WORK/paused HS_LOCK_ADMIN=$WORK/noadmin HS_MACHINE_FILE=$WORK/machine.toml
 unset HS_CALLER HS_GUIDED_TTY
 mkdir -p "$WORK/m" "$WORK/state"
 S=$SCRIPTS/storage-incident.sh
@@ -23,7 +23,8 @@ case "$*" in
       snap-missing) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\ndata-02\t0\tMISSING\tdata\t-\t-\t-\nparity-1\t4000000000\tONLINE\tparity\text4\t-\t-\n' ;;
       *) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
     esac ;;
-  "fast --members") ;;
+  "fast --members"|"ssd --members") ;;
+  "tank --members") printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
   "--list-disks") [ -f "$(dirname "$0")/../newdisk" ] && printf 'ata-NEW_SERN\t4000000000\tfree\n' ;;
 esac
 X
@@ -34,6 +35,7 @@ sc=$(cat "$(dirname "$0")/../scen")
 case "$1 $2 $3 $4 $5" in
   "list -H -o health bulk") case "$sc" in zfs-*) echo DEGRADED ;; *) echo ONLINE ;; esac ;;
   "list -H -o health fast") exit 1 ;;
+  "list -H -o health tank") echo DEGRADED ;;
   "status bulk   ") [ "$sc" = zfs-resilver ] && printf '  scan: resilver in progress since Sun Nov  8 10:00:00 2026\n\t800G resilvered, 26.67%% done, 02:10:00 to go\n' ;;
 esac
 exit 0
@@ -46,6 +48,7 @@ X
 cat > "$WORK/m/mon.sh" <<'X'
 #!/usr/bin/env bash
 printf 'sda\t4000000000\tHDD\tbulk\t30\tPASS\t100\t0\t0\t0\tMODEL SERA\t1\tspinning\tzfs\n'
+printf 'sdc\t4000000000\tHDD\ttank\t31\tPASS\t100\t0\t0\t0\tMODEL SERB\t1\tspinning\tzfs\n'
 printf 'sdb\t4000000000\tHDD\tbulk\t31\tPASS\t100\t0\t0\t0\tMODEL SERB\t1\tspinning\tzfs\n'
 X
 cat > "$WORK/m/sov.sh" <<'X'
@@ -57,6 +60,7 @@ if [ "$sc" = snap-missing ]; then
 else
   printf 'docs\tshares\t/bulk/shares/docs\toff\t1\t-\ton\tbulk\timmich(rw),jelly(ro)\n'
 fi
+printf 'tankdocs\tshares\t/tank/shares/docs\toff\t1\t-\ton\ttank\t-\n'
 printf 'fastone\tshares\t/fast/shares/x\toff\t1\t-\ton\tfast\t-\n'
 X
 cat > "$WORK/m/incus.sh" <<'X'
@@ -165,4 +169,22 @@ check_out "names the disk" "MODEL SERB" echo "$out"
 check_out "names the affected share" "docs" echo "$out"
 check_out "suggests the pause" "Suggestion: pause" echo "$out"
 check_out "shows the next step" "hs storage incident replace" echo "$out"
+echo "-- renamed pools (tank data zfs, ssd apps zfs)"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }\n' > "$WORK/machine.toml"
+scen healthy; out=$(st)
+check_eq "renamed: incident on tank" "1" "$(grep -c '^incident	tank:degraded	tank	pool-degraded	error	' <<<"$out")"
+check_eq "renamed: the disk to pull" "target	tank	ata-B_SERB	sdc	MODEL SERB" "$(grep '^target' <<<"$out")"
+check_eq "renamed: share under /tank is at risk" "share	tank	tankdocs	/tank/shares/docs	at-risk" "$(grep '^share' <<<"$out")"
+check_eq "renamed: legacy pool names are not read" "0" "$(grep -c 'bulk' <<<"$out")"
+
+echo "-- no pool at all"
+printf 'pools = {}\n' > "$WORK/machine.toml"
+out=$(st)
+check_eq "no pool: one ok line" "ok	-	no storage incident: every pool and every disk looks fine" "$out"
+check_eq "no pool: no alert line" "" "$(bash "$S" --alert-line)"
+rc=0; bash "$S" pause --yes >/dev/null 2>&1 || rc=$?
+check_eq "no pool: pause refused" "1" "$rc"
+rc=0; bash "$S" replace --dry-run >/dev/null 2>&1 || rc=$?
+check_eq "no pool: replace refused" "1" "$rc"
+rm -f "$WORK/machine.toml"
 finish
