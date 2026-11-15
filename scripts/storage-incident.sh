@@ -23,7 +23,7 @@
 #   resume            thaw what `pause` froze
 #   replace           the guided replace: names the disk to pull, waits for the new one, then hands over to hs disk replace (plan, typed disk name, job)
 #   plan|start pause|resume   the same for the web interface (key<TAB>value lines like jobs-change.sh; start needs no confirmation: nothing is lost by a pause)
-# Test knobs: HS_MANAGE_POOL, HS_ZPOOL, HS_DISK_HEALTH, HS_MONITOR, HS_SHARE_OVERVIEW, HS_INCUS, HS_JOBS, HS_DISK_DETACH, HS_DISK_REPLACE, HS_BULK_TYPE_FILE,
+# Test knobs: HS_MANAGE_POOL, HS_ZPOOL, HS_DISK_HEALTH, HS_MONITOR, HS_SHARE_OVERVIEW, HS_INCUS, HS_CT_POOLS, HS_JOBS, HS_DISK_DETACH, HS_DISK_REPLACE, HS_BULK_TYPE_FILE,
 #   HS_LOCK_ADMIN, HS_INCIDENT_PAUSED, HS_FREE_WAIT (seconds to wait for the new disk, default 600), HS_NOROOT.
 set -uo pipefail
 here=$(dirname "$0")
@@ -40,6 +40,7 @@ jobs=${HS_JOBS:-$here/jobs.sh}
 detach=${HS_DISK_DETACH:-$here/disk-detach.sh}
 replace_sh=${HS_DISK_REPLACE:-$here/disk-replace.sh}
 admin_lock=${HS_LOCK_ADMIN:-/run/hs-bulk.admin}
+ctp=${HS_CT_POOLS:-$here/ct-pools.sh}
 paused_file=${HS_INCIDENT_PAUSED:-${HS_STATE_DIR:-/var/lib/hs}/incident-paused}
 
 usage() {
@@ -118,7 +119,19 @@ collect_smart() {
 
 # shares and instances that an incident touches
 shares_rows=""; incus_rows=""
-load_shares() { shares_rows=$(bash "$sov" 2>/dev/null || true); incus_rows=$("$incus" list -f csv -c ns 2>/dev/null </dev/null || true); }
+load_shares() { shares_rows=$(bash "$sov" 2>/dev/null || true); incus_rows=$("$incus" list -f csv -c nsb 2>/dev/null </dev/null || true); ctp_rows=$(bash "$ctp" 2>/dev/null || true); }
+# the Hobnix pool behind an Incus storage pool: its source is <pool>/... or a path under pool_root <pool>; `default` without an answer belongs to the first apps pool
+hs_pool_of_incus() {   # <incus pool name> -> pool name
+  local ip=${1:-default} src p
+  src=$(awk -F'	' -v n="$ip" '$1 == n { print $6; exit }' <<<"$ctp_rows")
+  if [ -n "$src" ] && [ "$src" != - ]; then
+    p=${src%%/*}; if pool_exists "$p" 2>/dev/null; then printf '%s' "$p"; return 0; fi
+    for p in $(pool_names); do case "$src" in "$(pool_root "$p")"/*) printf '%s' "$p"; return 0 ;; esac; done
+  fi
+  if [ "$ip" = default ]; then pool_incus_default 2>/dev/null; return; fi
+  pool_exists "$ip" 2>/dev/null && printf '%s' "$ip"
+  return 0
+}
 state_of_app() { awk -F, -v n="$1" '$1 == n { print $2; exit }' <<<"$incus_rows"; }
 
 share_in_pool() {   # <pool> <path> <disks>: the share lives under the pool root; legacy servers go by the disks column (bulk | fast | member list)
@@ -164,7 +177,11 @@ collect_impact() {
     fi
   done <<<"$shares_rows"
   if [ "$(pool_role "$pool")" = apps ]; then   # every instance has its root disk on the apps pool (Incus pool "default")
-    while IFS=, read -r d _; do [ -z "$d" ] || printf '%s\t%s\t%s\t%s\n' "$d" pool no "$pool" >> "$appfile"; done <<<"$incus_rows"
+    local ip
+    while IFS=, read -r d _ ip; do
+      [ -n "$d" ] || continue
+      [ "$(hs_pool_of_incus "$ip")" = "$pool" ] && printf '%s\t%s\t%s\t%s\n' "$d" pool no "$pool" >> "$appfile"
+    done <<<"$incus_rows"
   fi
 }
 

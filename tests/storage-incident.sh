@@ -23,7 +23,9 @@ case "$*" in
       snap-missing) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\ndata-02\t0\tMISSING\tdata\t-\t-\t-\nparity-1\t4000000000\tONLINE\tparity\text4\t-\t-\n' ;;
       *) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
     esac ;;
-  "fast --members"|"ssd --members") ;;
+  "fast --members") ;;
+  "ssd --members") [ -f "$(dirname "$0")/../multi" ] && printf 'ata-S1_SS1\t1000000000\tONLINE\tmirror-0\tzfs\t-\nata-S2_SS2\t1000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
+  "ssd2 --members") ;;
   "tank --members") printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
   "--list-disks") [ -f "$(dirname "$0")/../newdisk" ] && printf 'ata-NEW_SERN\t4000000000\tfree\n' ;;
 esac
@@ -36,6 +38,8 @@ case "$1 $2 $3 $4 $5" in
   "list -H -o health bulk") case "$sc" in zfs-*) echo DEGRADED ;; *) echo ONLINE ;; esac ;;
   "list -H -o health fast") exit 1 ;;
   "list -H -o health tank") echo DEGRADED ;;
+  "list -H -o health ssd") [ -f "$(dirname "$0")/../multi" ] && echo DEGRADED || exit 1 ;;
+  "list -H -o health ssd2") echo ONLINE ;;
   "status bulk   ") [ "$sc" = zfs-resilver ] && printf '  scan: resilver in progress since Sun Nov  8 10:00:00 2026\n\t800G resilvered, 26.67%% done, 02:10:00 to go\n' ;;
 esac
 exit 0
@@ -65,7 +69,12 @@ printf 'fastone\tshares\t/fast/shares/x\toff\t1\t-\ton\tfast\t-\n'
 X
 cat > "$WORK/m/incus.sh" <<'X'
 #!/usr/bin/env bash
-case "$1" in list) printf 'immich,RUNNING\njelly,RUNNING\n' ;; *) echo "incus $*" >> "$(dirname "$0")/../calls" ;; esac
+case "$1" in list) if [ -f "$(dirname "$0")/../multi" ]; then printf 'immich,RUNNING,default\njelly,RUNNING,second\nplain,STOPPED,default\n'; else printf 'immich,RUNNING\njelly,RUNNING\n'; fi ;; *) echo "incus $*" >> "$(dirname "$0")/../calls" ;; esac
+X
+cat > "$WORK/m/ctp.sh" <<'X'
+#!/usr/bin/env bash
+[ -f "$(dirname "$0")/../multi" ] || exit 0
+printf 'default\tzfs\tfast\t-\t-\tssd/incus\nsecond\tzfs\tfast\t-\t-\tssd2/incus\n'
 X
 cat > "$WORK/m/none.sh" <<'X'
 #!/usr/bin/env bash
@@ -77,7 +86,7 @@ echo "replace $*" >> "$(dirname "$0")/../calls"
 X
 mkdir -p "$WORK/bin"; cp "$WORK/bin-zpool" "$WORK/bin/zpool"; chmod +x "$WORK"/m/*.sh "$WORK/bin/zpool"
 export HS_MANAGE_POOL=$WORK/m/pool.sh HS_ZPOOL=$WORK/bin/zpool HS_DISK_HEALTH=$WORK/m/dh.sh HS_MONITOR=$WORK/m/mon.sh HS_SHARE_OVERVIEW=$WORK/m/sov.sh \
-  HS_INCUS=$WORK/m/incus.sh HS_JOBS=$WORK/m/none.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
+  HS_INCUS=$WORK/m/incus.sh HS_CT_POOLS=$WORK/m/ctp.sh HS_JOBS=$WORK/m/none.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
 st() { bash "$S" --state "$@" 2>/dev/null; }
 lines() { grep -c "^$1	" <<<"$out"; }
 
@@ -176,6 +185,15 @@ check_eq "renamed: incident on tank" "1" "$(grep -c '^incident	tank:degraded	tan
 check_eq "renamed: the disk to pull" "target	tank	ata-B_SERB	sdc	MODEL SERB" "$(grep '^target' <<<"$out")"
 check_eq "renamed: share under /tank is at risk" "share	tank	tankdocs	/tank/shares/docs	at-risk" "$(grep '^share' <<<"$out")"
 check_eq "renamed: legacy pool names are not read" "0" "$(grep -c 'bulk' <<<"$out")"
+
+echo "-- instances by the pool of their root disk (two apps pools)"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" }, ssd2 = { role = "apps", kind = "zfs" } }
+' > "$WORK/machine.toml"
+: > "$WORK/multi"; scen healthy; out=$(st)
+check_eq "apps pool ssd degraded: its instances live on it, once each" "app	ssd	immich	RUNNING	pool	no
+app	ssd	plain	STOPPED	pool	no" "$(grep '^app' <<<"$out")"
+check_eq "an instance of the healthy second pool is not listed" "0" "$(grep -c jelly <<<"$out")"
+rm -f "$WORK/multi" "$WORK/machine.toml"
 
 echo "-- no pool at all"
 printf 'pools = {}\n' > "$WORK/machine.toml"
