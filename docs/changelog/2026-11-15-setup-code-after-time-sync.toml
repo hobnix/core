@@ -1,0 +1,4 @@
+date  = "2026-11-15"
+type  = "fix"
+title = "The one-time setup code is shown after the clock is set"
+body  = """The boot unit that prints the setup code now starts after time-sync.target, so a clock that jumps after the code was made does not use up its 15 minutes."""

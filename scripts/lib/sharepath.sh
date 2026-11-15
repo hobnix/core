@@ -13,7 +13,9 @@
 #   share_tier_role <share>    the role (data | apps) of the pool that holds <share>; exit 1: none
 #   share_dataset <share>      zfs dataset <pool>/<kind>/<share> (exit 1 on a snapraid pool)
 #   share_kind_of_path <path>  shares | sensitive | other
-#   share_name_taken <share>   exit 0 when a folder of that name exists in any tier (case-insensitive) or Samba has the share
+#   share_tier_of_path <path>  the pool whose shares/ or sensitive/ holds <path>; exit 1: none
+#   share_any_snapraid         exit 0 when a data pool has the kind snapraid
+#   share_name_taken <share>  exit 0 when a folder of that name exists in any tier (case-insensitive) or Samba has the share
 # A share on an apps pool is a plain ZFS dataset <pool>/<kind>/<name> mounted at /<pool>/<kind>/<name>.
 # Test knobs: HS_BULK, HS_FAST, HS_POOLS_ROOT, HS_MACHINE_FILE, HS_ZFS, HS_NET, HS_BULK_TYPE_FILE.
 
@@ -80,6 +82,23 @@ share_kind_of_path() {   # share_kind_of_path <path>
     esac
   done < <(_share_pools)
   printf 'other\n'
+}
+
+share_tier_of_path() {   # share_tier_of_path <path>: the pool whose shares/ or sensitive/ holds <path>; exit 1: none
+  local tier r
+  _pools_load
+  while IFS= read -r tier; do
+    [ -n "$tier" ] || continue
+    r=$(share_root "$tier")
+    case "$1" in "$r"/shares/*|"$r"/sensitive/*) printf '%s\n' "$tier"; return 0 ;; esac
+  done < <(_share_pools)
+  return 1
+}
+
+share_any_snapraid() {   # exit 0 when a data pool has the kind snapraid
+  local p
+  while IFS= read -r p; do [ -n "$p" ] && [ "$(share_pool_kind "$p")" = snapraid ] && return 0; done < <(pool_names data)
+  return 1
 }
 
 share_kind() {   # share_kind <share>

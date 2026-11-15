@@ -1,0 +1,4 @@
+date  = "2026-11-15"
+type  = "change"
+title = "Shares and the file manager follow the pools of machine.toml"
+body  = """Share repair, share sizes and rename, and the file manager follow the pools of machine.toml; the file manager shows every pool by its name. Not tested on hardware yet."""
