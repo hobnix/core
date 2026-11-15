@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "The file manager takes the pool names from the server"
+docs  = "storage-and-disks"
+body  = """The file manager locks the top level of the SnapRAID pool by its real name, and the parity hint and the peer-mount text name your data pool instead of bulk. Nothing changes on a server with the default pools."""

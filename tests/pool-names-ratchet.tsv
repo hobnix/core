@@ -83,9 +83,7 @@ scripts/web-serve.py	19
 scripts/web_terminal.py	1
 web/src/editor/volumes.js	4
 web/src/files/FmPlan.svelte	1
-web/src/files/fm.svelte.js	3
-web/src/files/links.js	1
-web/src/files/selection.js	1
+web/src/files/fm.svelte.js	1
 web/src/forms/instances/BindStorage.svelte	3
 web/src/forms/instances/CreateInstance.svelte	1
 web/src/forms/instances/IsoAdd.svelte	1
@@ -95,7 +93,6 @@ web/src/forms/ops/PeerMount.svelte	1
 web/src/nav.js	1
 web/src/pages/Apps.svelte	2
 web/src/pages/Disks.svelte	6
-web/src/pages/Files.svelte	1
 web/src/pages/Health.svelte	3
 web/src/pages/Instances.svelte	3
 web/src/pages/Marketplace.svelte	3
