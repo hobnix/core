@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "The Pools page lists the pools of the server instead of the two fixed ones"
+docs  = "storage-and-disks"
+body  = """The web interface reads the pool names, roles and layouts from the server. A pool with another name than bulk or fast gets its own page and can be changed; it is read directly (no live topic). A server without the pool list shows bulk and fast as before."""

@@ -54,12 +54,13 @@ check('inspect: has.needs only with the key', !pi({}).has.needs && pi({ needs: [
 check('inspect: has.status and has.ttl', pi({ status: 'ok', ttl: 45 }).has.status && pi({ ttl: 45 }).has.ttl && !pi({}).has.ttl && !pi({ ttl: null }).has.ttl);
 check('inspect: garbage gives no rows', parseInspect(null).rows.length === 0 && parseInspect({ topics: 5 }).rows.length === 0 && parseInspect({ topics: [null, {}, { topic: 3 }] }).rows.length === 0);
 check('inspect: unknown keys are kept', pi({ extra: 1 }).rows[0].extra === 1);
-check('poolTopic kinds', poolTopic('info', 'bulk') === 'pool-info-bulk' && poolTopic('members', 'fast') === 'pool-members-fast' && poolTopic('state', 'bulk') === 'pool-state-bulk');
-check('poolTopic rejects bad args', poolTopic('info', 'other') === undefined && poolTopic('disks', 'bulk') === undefined && poolTopic('info', 'fast') === 'pool-info-fast');
+const TOPICS = { '/api/sys/pool/info?pool=bulk': 'pool-info-bulk', '/api/sys/pool/members?pool=fast': 'pool-members-fast', '/api/sys/pool/state?pool=bulk': 'pool-state-bulk', '/api/sys/pool/info?pool=fast': 'pool-info-fast' };
+check('poolTopic kinds', poolTopic('info', 'bulk', TOPICS) === 'pool-info-bulk' && poolTopic('members', 'fast', TOPICS) === 'pool-members-fast' && poolTopic('state', 'bulk', TOPICS) === 'pool-state-bulk');
+check('poolTopic: a pool without a topic, a bad kind, no map', poolTopic('info', 'other', TOPICS) === undefined && poolTopic('disks', 'bulk', TOPICS) === undefined && poolTopic('info', 'bulk') === undefined);
 check('storage topic, live open: no timer', nextDelay('shares-overview', true, 30000) === null);
 check('storage topic, live closed: the interval', nextDelay('shares-overview', false, 30000) === 30000);
-check('fixed-pool topic, live open: no timer', nextDelay(poolTopic('info', 'bulk'), true, 15000) === null);
-check('fixed-pool topic, live closed: the interval', nextDelay(poolTopic('state', 'fast'), false, 10000) === 10000);
-check('direct pool read (no topic), live open: the interval', nextDelay(poolTopic('info', 'archive'), true, 15000) === 15000);
+check('fixed-pool topic, live open: no timer', nextDelay(poolTopic('info', 'bulk', TOPICS), true, 15000) === null);
+check('fixed-pool topic, live closed: the interval', nextDelay(poolTopic('state', 'bulk', TOPICS), false, 10000) === 10000);
+check('direct pool read (no topic), live open: the interval', nextDelay(poolTopic('info', 'archive', TOPICS), true, 15000) === 15000);
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

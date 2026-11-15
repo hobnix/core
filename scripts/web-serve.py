@@ -217,7 +217,7 @@ def features(cfg, first_run=None):
 
 
 def live_topic_map():
-    """Read URL -> live-state topic, from READS (mode redis): a string topic is /api/sys/<words>, a pool mapping is /api/sys/pool/<kind>?pool=<x>.
+    """Read URL -> live-state topic, from READS (mode redis): a string topic is /api/sys/<words>, a pool topic (kind, word) is /api/sys/pool/<word>?pool=<x> for each pool with a live topic.
     The session answer carries it so poll(path) follows the live stream without a topic argument on each page."""
     out = {}
     for words, spec in READS.items():
@@ -225,10 +225,27 @@ def live_topic_map():
         base = "/api/sys/" + "/".join(words)
         if isinstance(t, str):
             out[base] = t
-        elif isinstance(t, dict):
-            for pool, name in t.items():
-                out["%s?pool=%s" % (base, pool)] = name
+        elif isinstance(t, tuple):
+            for name in sorted(_live_topic_names()):
+                prefix = "%s-%s-" % t
+                if name.startswith(prefix) and re.fullmatch(POOL_NAME, name[len(prefix):]):
+                    out["%s?pool=%s" % (base, name[len(prefix):])] = name
     return out
+
+
+_live_names = {"at": 0.0, "names": set()}
+
+
+def _live_topic_names():
+    """the names of the live-state topics (scripts/lib/live-topics.tsv), cached 30 s; unreadable = none"""
+    now = time.monotonic()
+    if now - _live_names["at"] > 30 or not _live_names["at"]:
+        try:
+            _live_names["names"] = {t[0] for t in ls.topics()}
+        except OSError:
+            _live_names["names"] = set()
+        _live_names["at"] = now
+    return _live_names["names"]
 
 
 def _runtime(fn):
@@ -866,18 +883,66 @@ APP = r"^[a-z0-9][a-z0-9_-]{0,40}$"      # an app (compose project) in the Docke
 UNIT = r"^hs-[A-Za-z0-9@._-]{1,80}$"
 GROUP = r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$"     # group names may hold spaces (Domain Admins); the path segment is unquoted first
 FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
+POOL_NAME = r"^[a-z][a-z0-9]{0,11}$"     # a pool name (hs pool: lower case, at most 12 characters; reserved words are refused by the scripts)
+LEGACY_POOLS = [("bulk", "data", "-", "-"), ("fast", "apps", "zfs", "-")]     # no `hs sys pool list` yet: the two fixed pools (kind - = unknown)
+
+
+class PoolList:
+    """The pool rows of `hs sys pool list` (name, role data|apps, kind zfs|snapraid, state), cached 15 s. A failing command = the legacy two pools."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.at, self.cached = 0.0, None
+        self.fetch = lambda hs: _run_plain([hs, "sys", "pool", "list"], timeout=10)      # tests replace it
+
+    def rows(self, hs):
+        with self.lock:
+            now = time.monotonic()
+            if self.cached is not None and now - self.at < 15:
+                return self.cached
+            rc, out = self.fetch(hs)
+            if rc != 0:
+                rows = list(LEGACY_POOLS)
+            else:
+                rows = []
+                for line in out.splitlines():
+                    f = line.split("	")
+                    if len(f) >= 4 and re.fullmatch(POOL_NAME, f[0]) and f[1] in ("data", "apps") and f[2] in ("zfs", "snapraid"):
+                        rows.append((f[0], f[1], f[2], f[3]))
+            self.at, self.cached = now, rows
+            return rows
+
+
+POOLS = PoolList()
+
+
+def pool_change_ok(hs, args):
+    """A change of the area pool names a pool that exists (add/adopt: also a new one); close/open/convert only a SnapRAID pool (kind - = unknown)."""
+    if len(args) < 2 or not re.fullmatch(POOL_NAME, args[0]):
+        return False
+    if args[1] in ("add", "adopt"):
+        return True
+    row = next((r for r in POOLS.rows(hs) if r[0] == args[0]), None)
+    if row is None:
+        return False
+    if args[1] in ("close", "open", "convert"):
+        return row[2] in ("snapraid", "-")
+    return True
+
+
 READS = {
     ("status",):{"kind": "tsv", "ttl": 10, "topic": "status"},      # topic: the live-state key (read only in mode redis)
     ("deck",): {"kind": "json", "ttl": 8, "topic": "deck"},
     ("ups", "status"): {"kind": "tsv", "ttl": 15, "topic": "ups"},
     ("monitor", "disks"): {"kind": "tsv", "ttl": 15, "topic": "monitor-disks"},
-    ("pool", "info"): {"kind": "tsv", "ttl": 15, "query": {"pool": (NAME, "")},
-                       "topic": {"bulk": "pool-info-bulk", "fast": "pool-info-fast"}},
-    ("pool", "members"): {"kind": "tsv", "ttl": 15, "query": {"pool": (NAME, "")},
-                          "topic": {"bulk": "pool-members-bulk", "fast": "pool-members-fast"}},
-    ("pool", "state"): {"kind": "tsv", "ttl": 10, "query": {"pool": (NAME, "")},
-                        "topic": {"bulk": "pool-state-bulk", "fast": "pool-state-fast"}},     # bulk lock, health-check pause, last scrub / parity sync (lock, paused, scrub <pool>, sync bulk)
+    ("pool", "info"): {"kind": "tsv", "ttl": 15, "query": {"pool": (POOL_NAME, "")},
+                       "topic": ("pool", "info")},
+    ("pool", "members"): {"kind": "tsv", "ttl": 15, "query": {"pool": (POOL_NAME, "")},
+                          "topic": ("pool", "members")},
+    ("pool", "state"): {"kind": "tsv", "ttl": 10, "query": {"pool": (POOL_NAME, "")},
+                        "topic": ("pool", "state")},     # bulk lock, health-check pause, last scrub / parity sync (lock, paused, scrub <pool>, sync bulk)
     ("incident", "state"): {"kind": "tsv", "ttl": 10},     # the storage incident workflow (scripts/storage-incident.sh --state)
+    ("pool", "list"): {"kind": "tsv", "ttl": 15},     # name, role, kind, state of every pool (hs pool)
     ("pool", "disks"): {"kind": "tsv", "ttl": 15, "query": {"role": (r"^adopt$", "--role")}},
     ("disk-health", "list"): {"kind": "tsv", "ttl": 30, "topic": "disk-health"},
     ("state", "disks"): {"kind": "tsv", "ttl": 15, "topic": "disk-inventory"},
@@ -1111,20 +1176,20 @@ CHANGES = {
                            r"[A-Za-z0-9+/]{16,700}={0,3}( [A-Za-z0-9@._:+=, -]{1,100})?"],
                 [r"^remove$", r"[A-Za-z0-9][A-Za-z0-9@._:+/= -]{0,100}"]],
     # pool-change.sh: only the options each action defines; a passphrase (--encrypt) travels on stdin, never in the arguments
-    "pool": [{"fixed": [r"^(bulk|fast)$", r"^add$"],
+    "pool": [{"fixed": [POOL_NAME, r"^add$"],
               "opts": {"--disks": (DISKIDS, False), "--role": (r"^(data|parity)$", False), "--fs": (FSTYPE, False), "--encrypt": (None, False)}, "stdin": True},
-             {"fixed": [r"^(bulk|fast)$", r"^adopt$"],
+             {"fixed": [POOL_NAME, r"^adopt$"],
               "opts": {"--disks": (DISKIDS, False), "--merge": (None, False), "--chown": (None, False)}},
              # replace and remove always name the member (a bare `remove` is refused here, not answered with `needs`)
-             {"fixed": [r"^(bulk|fast)$", r"^replace$", r"^--member$", DISKID],
+             {"fixed": [POOL_NAME, r"^replace$", r"^--member$", DISKID],
               "opts": {"--disks": (DISKIDS, False), "--fs": (FSTYPE, False), "--encrypt": (None, False)}, "stdin": True},
-             {"fixed": [r"^(bulk|fast)$", r"^remove$", r"^--member$", DISKID],
+             {"fixed": [POOL_NAME, r"^remove$", r"^--member$", DISKID],
               "opts": {"--mode": (r"^(detach|vdev|move|nomove)$", False)}},
              # close/open: a SnapRAID data disk takes no new files any more (--drain also moves its files away) / takes them again
-             {"fixed": [r"^bulk$", r"^close$", r"^--member$", DISKID], "opts": {"--drain": (None, False)}},
-             {"fixed": [r"^bulk$", r"^open$", r"^--member$", DISKID]},
-             # convert: a SnapRAID data disk is emptied and formatted again (--fs, --encrypt); ZFS has nothing to convert, so only bulk
-             {"fixed": [r"^bulk$", r"^convert$", r"^--member$", DISKID],
+             {"fixed": [POOL_NAME, r"^close$", r"^--member$", DISKID], "opts": {"--drain": (None, False)}},
+             {"fixed": [POOL_NAME, r"^open$", r"^--member$", DISKID]},
+             # convert: a SnapRAID data disk is emptied and formatted again (--fs, --encrypt); ZFS has nothing to convert, so only a SnapRAID pool (pool_change_ok)
+             {"fixed": [POOL_NAME, r"^convert$", r"^--member$", DISKID],
               "opts": {"--fs": (FSTYPE, False), "--encrypt": (None, False), "--discard": (None, False)}, "stdin": True}],
     # the storage incident workflow: freeze the apps that write to an affected share, thaw them again (storage-incident.sh plan|start)
     "incident": [[r"^(pause|resume)$"]],
@@ -1602,7 +1667,7 @@ class Reads:
 
     def resolve(self, segments, query):
         """-> (spec, argv words, cache key) or None when this is not an allowlisted read.
-        A fixed-pool topic mapping is resolved per request: only pool=bulk|fast gets the Redis topic, other pool values stay direct."""
+        A fixed-pool topic mapping is resolved per request: only a pool with a live topic gets the Redis topic, other pool values stay direct."""
         ext_refresh()
         for n in range(len(segments), 0, -1):
             words = tuple(segments[:n])
@@ -1629,12 +1694,13 @@ class Reads:
     def _resolve_topic(spec, query):
         """Copy the spec and resolve a fixed-pool topic mapping to a concrete string topic."""
         topic = spec.get("topic")
-        if not isinstance(topic, dict):
+        if not isinstance(topic, tuple):
             return spec
         spec = dict(spec)
         pool = (query.get("pool") or [""])[0]
-        if pool in topic:
-            spec["topic"] = topic[pool]
+        name = "%s-%s-%s" % (topic + (pool,))
+        if re.fullmatch(POOL_NAME, pool) and name in _live_topic_names():
+            spec["topic"] = name
         else:
             spec.pop("topic", None)
         return spec
@@ -2928,6 +2994,8 @@ def make_handler(app):
             if ch is None:
                 return self._json(400, {"error": "That change is not allowed."})
             area, args, confirm, stdin = ch
+            if area == "pool" and not pool_change_ok(cfg.hs, args):
+                return self._json(400, {"error": "That change is not allowed."})
             cmd = [cfg.hs, "sys"] + area.split("/") + [verb] + args      # "ext/games" = the words `ext games` (an extension package)
             if verb == "start" and confirm:
                 cmd += ["--confirm", confirm]
