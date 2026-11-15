@@ -65,7 +65,7 @@ check "pool_mounted no" env HS_MOUNTPOINT="$WORK/mp-no" bash -c '. "$1/scripts/l
 
 # 8. name rule
 for n in tank a1 abcdefghijkl; do check "name ok: $n" run "pool_name_ok $n"; done
-for n in Tank 1a mirror nix abcdefghijklm 'a/b' ''; do
+for n in Tank 1a mirror dir nix abcdefghijklm 'a/b' ''; do
   check "name refused: '$n'" fails "pool_name_ok '$n'"
 done
 
@@ -89,5 +89,22 @@ check_eq "the cache is cleared in the same process" "data" "$(run 'pools_add_row
 check "bad role refused" fails 'pools_add_row x1 other zfs'
 check "bad kind refused" fails 'pools_add_row x1 data ext4'
 check "bad name refused" fails 'pools_add_row Mirror data zfs'
+
+# 11. pool_snapraid / pool_is_snapraid
+rm -f "$HS_MACHINE_FILE" "$HS_BULK_TYPE_FILE"
+check "legacy zfs: no snapraid pool" fails pool_snapraid
+check "legacy zfs: bulk is not snapraid" fails 'pool_is_snapraid bulk'
+printf 'snapraid\n' >"$HS_BULK_TYPE_FILE"
+check_eq "legacy snapraid: the pool is bulk" "bulk" "$(run pool_snapraid)"
+check "legacy snapraid: bulk is snapraid" run 'pool_is_snapraid bulk'
+check "legacy snapraid: fast is not" fails 'pool_is_snapraid fast'
+rm -f "$HS_BULK_TYPE_FILE"
+printf 'pools = { tank = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+check_eq "rows: tank is the snapraid pool" "tank" "$(run pool_snapraid)"
+check "rows: tank is snapraid" run 'pool_is_snapraid tank'
+check "rows: ssd is not" fails 'pool_is_snapraid ssd'
+check "rows: an unknown name is not" fails 'pool_is_snapraid nope'
+printf 'pools = {}\n' >"$HS_MACHINE_FILE"
+check "pools = {}: no snapraid pool" fails pool_snapraid
 
 finish

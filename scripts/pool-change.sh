@@ -20,6 +20,7 @@
 # Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR.
 set -euo pipefail
 here=$(dirname "$0")
+. "$here/lib/pools.sh"
 manage=${HS_MANAGE_POOL:-$here/manage-pool.sh}
 
 verb=${1:-}; pool=${2:-}; action=${3:-}
@@ -47,8 +48,7 @@ while [ $# -gt 0 ]; do
 done
 [ "$action" != adopt ] || role=adopt
 
-bulk_type=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
-snapraid=false; { [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; } && snapraid=true
+snapraid=false; pool_is_snapraid "$pool" && snapraid=true
 
 # What is still missing (only what nobody else can decide: the choices with a default are options below)
 needs=()
