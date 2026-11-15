@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "The Disks page and the disk forms use the pools of the server"
+docs  = "storage-and-disks"
+body  = """The filter chips of the Disks page and the pool choice in Add disks come from the pool list of the server instead of the two fixed names bulk and fast. A SnapRAID pool with another name works in detach, recover, close, convert and remove. A server without the pool list shows bulk and fast as before."""

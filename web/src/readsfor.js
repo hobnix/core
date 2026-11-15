@@ -2,7 +2,7 @@
 import { LEGACY_POOLS } from './pages/storage/pool.js';
 
 const A = '/api/sys/';
-const DISKS = [`${A}monitor/disks`, `${A}disk-health/list`, `${A}state/disks`, `${A}disk/marks`, `${A}pool/members?pool=bulk`];
+const DISKS = [`${A}monitor/disks`, `${A}disk-health/list`, `${A}state/disks`, `${A}disk/marks`];
 const SHARES = [`${A}shares/overview`, `${A}shares/deleted`, `${A}ct/list`];
 const pool = (p) => [`${A}pool/info?pool=${p}`, `${A}pool/members?pool=${p}`, `${A}monitor/disks`, `${A}disk/marks`];
 
@@ -56,7 +56,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case '/storage/vault': return [`${A}status`, `${A}vault/list`, `${A}vault/usage`, `${A}vault/uses`];
     case '/storage/pools': return [`${A}pool/list`, `${A}monitor/disks`, ...poolList.filter((p) => p.kind !== 'zfs').map((p) => `${A}pool/info?pool=${p.name}`)];
     case '/storage/incident': return [`${A}incident/state`, `${A}pool/disks`];
-    case '/storage/disks': return DISKS;
+    case '/storage/disks': return [...DISKS, ...poolList.filter((p) => p.kind !== 'zfs').slice(0, 1).map((p) => `${A}pool/members?pool=${p.name}`)];
     case '/storage/shares': return SHARES;
     case '/storage/files': return [`${A}fm/locations`];
     case '/settings': return [`${A}config/list`];
