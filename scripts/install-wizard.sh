@@ -285,6 +285,12 @@ fi
 ok "machine.toml: server name, SSH key, network card and the rest"
 HS_PRESETS_DIR=${HS_PRESETS_DIR:-$etc/presets} bash "$here/preset.sh" apply "$preset" --yes >/dev/null || fail "The preset could not be applied."
 ok "$(t "Preset '%s' applied (only what was not set yet)" "$preset")"
+# a new home server names its pools itself (hs pool <name> --use ...): an empty pools line says "no classic pool rows".
+# A restore keeps the pool rows of its own machine.toml (a legacy server has none and must stay legacy).
+if [ -z "$restore_from" ] && [ "$role" = homeserver ] && ! machine_has pools; then
+  mset pools "{}"
+  [ "$(machine_get bulkType 2>/dev/null || true)" != snapraid ] || note "With a pools line bulkType is not used: create the SnapRAID pool with hs pool <name> --use data --kind snapraid."
+fi
 
 # ---- the settings from the backup (hs-restore): over the fresh machine.toml, then what the new disk needs is set again
 if [ -n "$restore_from" ]; then
@@ -323,7 +329,7 @@ else
   note "Take the stick out and reboot. Then, from your PC:  ssh $admin@$hostname_.local   (or the address your router gave it)"
 fi
 if [ "$role" = homeserver ]; then
-  note "Next: create the pools (the hs command is there from the first boot: sudo hs pool bulk add; or zpool create, as in section 3 of the Homeserver guide), then sudo hs rebuild. The guide: docs/install.md."
+  note "Next: create the pools: sudo hs pool ssd --use apps, sudo hs pool tank --use data [--kind snapraid] (any names), then sudo hs rebuild. The guide: docs/install.md."
 else
   note "Next: fill the section \"Edge node\" of /etc/nixos/machine.toml, put the Tailscale auth key into /var/lib/hs/tailscale-authkey (mode 0600), then sudo nixos-rebuild switch. The guide: docs/operations.md."
 fi

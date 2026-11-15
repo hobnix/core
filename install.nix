@@ -2,7 +2,7 @@
 #
 # It boots, gets an address via DHCP, lets adminuser in over SSH and can
 # create ZFS pools. No Incus, Samba, NVIDIA or web UIs: those are in
-# configuration.nix, which needs the pools "fast" and "bulk" to exist.
+# configuration.nix, which needs the pools of the pools line to exist.
 #
 #   NIXOS_CONFIG=/mnt/etc/nixos/install.nix nixos-install
 #
@@ -29,6 +29,9 @@ let
   hsWeb = pkgs.callPackage ./pkgs/hs-web.nix { };
   adminUser = machine.adminUser;
   hsCommand = import ./hs-command.nix { inherit pkgs; };
+  # The pool rows (no pools line = the classic data pool of kind bulkType, as in configuration.nix)
+  pools = if machine.pools == null then { bulk = { role = "data"; kind = machine.bulkType; }; } else machine.pools;
+  bulkSnapraid = lib.any (p: (p.kind or "") == "snapraid") (lib.attrValues pools);
 in
 {
   imports = [ ./hardware-configuration.nix ];
@@ -119,8 +122,8 @@ in
     mergerfs snapraid attr jq rsync   # bulkType = "snapraid"
   ];
 
-  # so scripts/manage-pool.sh knows how /bulk is meant to be built
-  environment.etc."hs/bulk-type" = lib.mkIf home { text = machine.bulkType; };
+  # so scripts/manage-pool.sh knows how the data pool is meant to be built (same text as configuration.nix)
+  environment.etc."hs/bulk-type" = lib.mkIf home { text = if bulkSnapraid then "snapraid" else "zfs"; };
 
   system.stateVersion = "26.05";
 }

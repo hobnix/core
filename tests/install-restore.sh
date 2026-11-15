@@ -75,6 +75,7 @@ M=$T/etc/nixos/machine.toml
 get() { HS_MACHINE_FILE=$M python3 "$SCRIPTS/machine-toml.py" get "$M" "$1" --json 2>/dev/null; }
 check_eq "machine.toml of the backup is in place (hostName)" '"oldbox"' "$(get hostName)"
 check_eq "and its hostId is kept (ZFS pools)" '"deadbeef"' "$(get hostId)"
+check_eq "a restore adds no pools line (a legacy server stays legacy)" "" "$(get pools)"
 check "the repository copy is there" test -f "$T/etc/nixos/install.nix"
 check_eq "vault-uuid is back" "uuid-old" "$(cat "$T/var/lib/hs/vault-uuid" 2>/dev/null)"
 check "the backup password is NOT written" test ! -e "$T/var/lib/hs/restic-password"
