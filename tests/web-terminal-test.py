@@ -39,12 +39,18 @@ def mask_frame(op, payload=b"", fin=True, mask=b"\x01\x02\x03\x04", masked=True,
     return head + mask + bytes(c ^ mask[i % 4] for i, c in enumerate(payload))
 
 
+# Bytes that arrived in the same read as the 101 response (the shell's first output often does): kept per socket, read before the socket.
+LEFTOVER = {}
+
+
 def read_frame(sock, timeout=5):
     """One server frame -> (opcode, payload). Server frames are never masked."""
     sock.settimeout(timeout)
 
     def need(n):
-        buf = b""
+        buf = LEFTOVER.get(sock, b"")[:n]
+        if buf:
+            LEFTOVER[sock] = LEFTOVER[sock][len(buf):]
         while len(buf) < n:
             chunk = sock.recv(n - len(buf))
             if not chunk:
@@ -157,6 +163,7 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         for s in self.socks:
+            LEFTOVER.pop(s, None)
             s.close()
         self.srv.shutdown()
         self.srv.server_close()
@@ -195,7 +202,7 @@ class Base(unittest.TestCase):
         return obj["ticket"]
 
     # --- websocket
-    def upgrade(self, ticket, cookie, origin="same", key="dGhlIHNhbXBsZSBub25jZQ==", host=None, extra=""):
+    def upgrade(self, ticket, cookie, origin="same", key="dGhlIHNhbXBsZSBub25jZQ==", host=None, extra="", settle=0):
         s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
         self.socks.append(s)
         host = host or "127.0.0.1:%d" % self.port
@@ -210,6 +217,8 @@ class Base(unittest.TestCase):
         if cookie:
             lines.append("Cookie: hs_session=" + cookie)
         s.sendall(("\r\n".join(lines) + "\r\n" + extra + "\r\n").encode())
+        if settle:
+            time.sleep(settle)      # lets the answer and the shell's first output pile up, so one recv() returns both
         buf = b""
         while b"\r\n\r\n" not in buf:
             d = s.recv(4096)
@@ -218,7 +227,8 @@ class Base(unittest.TestCase):
             buf += d
         head, _, rest = buf.partition(b"\r\n\r\n")
         status = int(head.split()[1])
-        return s, status, head.decode(), rest
+        LEFTOVER[s] = rest
+        return s, status, head.decode(), b""
 
     def open_ws(self, cookie, csrf, target="host"):
         s, status, head, rest = self.upgrade(self.ticket(cookie, csrf, target), cookie)
@@ -522,7 +532,6 @@ class Upgrade(Base):
         cookie, csrf, _ = self.login()
         s, head, rest = self.open_ws(cookie, csrf)
         self.assertIn("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", head)
-        s.sendall(rest and b"" or b"")
         read_until(s, b"homeserver:~$ ")
         s.sendall(mask_frame(wt.OP_BINARY, b"ls\r"))
         self.assertIn(b"ls\r", read_until(s, b"ls\r"))
@@ -533,6 +542,13 @@ class Upgrade(Base):
                 self.assertEqual(data, b"hey")
                 break
         self.assertEqual(len(FakeMaster.made), 1)
+
+    def test_first_output_in_the_same_read_as_the_101(self):
+        # The flake of #596: the prompt frame arriving with the 101 response was dropped by the test and waited for in vain.
+        cookie, csrf, _ = self.login()
+        s, status, head, _ = self.upgrade(self.ticket(cookie, csrf), cookie, settle=0.3)
+        self.assertEqual(status, 101, head)
+        self.assertIn(b"homeserver:~$ ", read_until(s, b"homeserver:~$ ", timeout=2))
 
     def test_resize_reaches_the_shell_and_junk_does_not(self):
         cookie, csrf, _ = self.login()
