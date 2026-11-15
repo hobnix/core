@@ -195,6 +195,17 @@ app	ssd	plain	STOPPED	pool	no" "$(grep '^app' <<<"$out")"
 check_eq "an instance of the healthy second pool is not listed" "0" "$(grep -c jelly <<<"$out")"
 rm -f "$WORK/multi" "$WORK/machine.toml"
 
+echo "-- two degraded data pools (tank, bulk): free once, one app line, row order"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, bulk = { role = "data", kind = "zfs" } }
+' > "$WORK/machine.toml"
+scen zfs-degraded; touch "$WORK/newdisk"; out=$(st)
+check_eq "two pools: both incidents, in row order" "bulk:degraded tank:degraded" "$(awk -F'	' '$1=="incident" && $4=="pool-degraded" { printf "%s%s", sep, $2; sep=" " }' <<<"$out")"
+check_eq "two pools: the new disk is listed once" "1" "$(grep -c '^free	ata-NEW_SERN' <<<"$out")"
+check_eq "two pools: a phase for each" "phase	bulk	ready
+phase	tank	ready" "$(grep '^phase' <<<"$out")"
+check_eq "two pools: step follows the first pool" "ready" "$(awk -F'	' '$1=="phase"{print $3; exit}' <<<"$out")"
+rm -f "$WORK/newdisk" "$WORK/machine.toml"; scen healthy
+
 echo "-- no pool at all"
 printf 'pools = {}\n' > "$WORK/machine.toml"
 out=$(st)
