@@ -306,6 +306,7 @@ if [ "$sel" = 7 ]; then
   case "$ur" in ok) finish 0 7 "" ;; failed) finish 1 7 "the upgrade from $from failed" ;; skipped) finish 3 7 "the harness cannot run here" ;; *) finish 4 7 "upgrade $ur" ;; esac
 fi
 
+if sel_has 4 || sel_has 5; then export HS_NESTED_ROLE=homeserver; fi   # restic, mkfs and SnapRAID come with the homeserver role (after `hs rebuild`)
 hs_job_step 3 4 "Building the installer ISO"; hs_job_progress 2 4 steps
 step "$(t 'Building the installer ISO (this takes a long time)')"
 if ! (cd "$src" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh); then fail_run 4 2 "the ISO build failed (see run.log)"; fi

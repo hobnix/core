@@ -24,6 +24,13 @@ def step(kind, text, **kw):
     return d
 
 
+def full_system():
+    """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic, mkfs, SnapRAID come
+    with it): the same step every real install is followed by."""
+    return [step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --yes",
+                 timeout=3000, what="the full configuration is built (hs rebuild)")]
+
+
 def login_root(params):
     """Reach a root shell on the console of an installed VM: log in as adminuser when a login prompt is shown, then `sudo -i`."""
     user, pw = "adminuser", params["password"]
@@ -81,7 +88,7 @@ def rollback(params):
 def backup(params):
     """On the first VM: set up the backup disk (a virtual disk), write a marker file into /var/lib/hs, back up, check the snapshot, and keep the
     restic password stays in the VM: testlab.sh pulls /var/lib/hs/restic-password with `incus file pull`, never through the console log."""
-    return login_root(params) + [
+    return login_root(params) + full_system() + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is a block device"),
         step("run_var", "HS_BACKUP_YES=1 hs backup init {dev}", timeout=300, what="hs backup init makes the disk the backup disk"),
@@ -97,7 +104,7 @@ def restore(params):
     """On the second, clean VM (a fresh install): the backup disk was moved here. Read the host snapshot from the disk with only the backup
     password (hs backup config restore --from-disk) and expect the marker file of the first VM back."""
     pw = params["backup_pass"]
-    return login_root(params) + [
+    return login_root(params) + full_system() + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is attached to the second VM"),
         step("run", "test ! -e /var/lib/hs/testlab-marker", what="the second VM is clean: no marker yet"),
@@ -114,12 +121,13 @@ def restore(params):
 def pool(params):
     """Two virtual disks become the data disks of the pool bulk (SnapRAID, no parity), then the file manager copies a file from one data disk
     to the other. The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it is switched on first."""
-    return login_root(params) + [
+    return login_root(params) + full_system() + [
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
-        step("capture", "hs sys pool start bulk add --disks $(basename {d1}),$(basename {d2}) --role data --fs ext4 --confirm bulk", var="start", timeout=120,
-             strip=True, what="the pool is created as a background job"),
+        # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
+        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks $(basename {d1}),$(basename {d2}) --role data --fs ext4 --confirm bulk",
+             var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         step("run", "u=$(hs job list --plain 2>/dev/null | awk '/pool/ {print $1; exit}'); [ -z \"$u\" ] || while systemctl is-active --quiet \"$u\"; do sleep 5; done",
              timeout=1800, what="the pool job finishes"),

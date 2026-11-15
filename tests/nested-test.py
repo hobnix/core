@@ -209,6 +209,18 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(ok, res)
         self.assertIn("exit", "".join(t.sent))
 
+    def test_capture_with_fmt_fills_in_the_variables(self):
+        t = FakeTransport(outputs={"basename": "sdc\n"})
+        c = n.Console(t, clock=Clock())
+        ok, res = n.run_steps(c, [n.step("capture", "basename {d1}", var="x", fmt=True, what="c")], params_vars={"d1": "/dev/sdc"})
+        self.assertTrue(ok, res)
+        self.assertIn("basename /dev/sdc;", "".join(t.sent))
+
+    def test_the_pool_and_backup_stages_build_the_full_configuration_first(self):
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        for st in ("backup", "restore", "pool"):
+            self.assertIn("hs rebuild --yes", " ".join(s["text"] for s in n.build_scenario(st, P)), st)
+
     def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
         P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
         text = " ".join(s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P))
