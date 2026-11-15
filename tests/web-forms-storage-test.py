@@ -63,6 +63,7 @@ class Storage(lt.Base):
             ["fast", "remove", "--member", ID1, "--mode", "detach"],
             ["bulk", "remove", "--member", "parity-1"],
             ["tank", "add", "--disks", ID1],                     # a new pool
+            ["tank", "add", "--use", "data", "--kind", "zfs", "--disks", ID1 + "," + ID2],
         ]
         for a in ok:
             self.assertTrue(self.allowed("pool", a), a)
@@ -71,6 +72,7 @@ class Storage(lt.Base):
 
     def test_refused_shapes(self):
         bad = [
+            ["tank", "add", "--use", "x", "--disks", ID1],
             ["bulk", "add", "--disks", "/dev/sda"],                 # a path
             ["bulk", "add", "--disks", "../sda"],
             ["bulk", "add", "--disks", "a..b"],

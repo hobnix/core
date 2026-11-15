@@ -13,6 +13,11 @@ mkdir -p "$WORK/state"
 printf '#!/usr/bin/env bash\nprintf "%%s\n" "$*" >> "%s/jobcalls"; env | grep "^HS_DISK_PASSPHRASE_FILE=" >> "%s/jobcalls" || true\n' "$WORK" "$WORK" > "$BIN/systemd-run"
 chmod +x "$BIN/systemd-run"
 P="bash $SCRIPTS/pool-change.sh"
+# discover stand-in: the rows of $WORK/disc.tsv (none = no disk is known)
+printf '#!/usr/bin/env bash
+cat "%s/disc.tsv" 2>/dev/null || true
+' "$WORK" > "$WORK/discover"
+export HS_DISCOVER=$WORK/discover
 
 plan() {   # plan <layout> <zpool scenario> <args...>: stdout and exit code in $out / $rc, stdin empty
   local layout=$1 sc=$2; shift 2
@@ -134,6 +139,55 @@ echo "-- every typed confirmation honours --yes (a background job has no one to 
 n=$(grep -n 'confirm_name ' "$SCRIPTS/manage-pool.sh" | grep -v '^[0-9]*:[[:space:]]*#' | grep -v 'assume_yes' | wc -l | tr -d ' ')
 check_eq "only confirm_plan's call has no assume_yes on its line" 1 "$n"
 check_out "and that call is inside the --yes guard" "if ! .assume_yes; then" bash -c "grep -B2 'confirm_name \"\$word\"' '$SCRIPTS/manage-pool.sh'"
+
+echo "-- a new pool needs --use"
+: > "$WORK/disc.tsv"
+plan zfs new plan tank add --disks a,b
+check_eq "a new pool without --use: exit 2" 2 "$rc"
+check_eq "it needs the use" "status	needs
+needs	use" "$out"
+
+echo "-- a new pool only on empty disks"
+printf 'ata-E1	1000	SSD	M	empty	-	-
+ata-F1	1000	SSD	M	foreign	-	has-data
+' > "$WORK/disc.tsv"
+plan zfs new plan tank add --use data --disks ata-E1,ata-F1
+check_eq "a disk with data is refused" 1 "$rc"
+has '^reason	ata-F1 is not empty (foreign has-data): ' && pass "the reason names the disk and what is on it" || fail "reason: $out"
+plan zfs new plan tank add --use data --disks ata-E1,ata-GONE
+has '^reason	ata-GONE is not a disk this server sees$' && pass "an unknown disk is refused" || fail "unknown: $out"
+printf 'ata-E1	1000	SSD	M	empty	-	-
+ata-E2	1000	SSD	M	empty	-	-
+' > "$WORK/disc.tsv"
+printf '#!/usr/bin/env bash
+printf "Plan: make the pool\n"
+' > "$WORK/okplan.sh"
+rc=0; out=$(HS_MANAGE_POOL=$WORK/okplan.sh bash "$SCRIPTS/pool-change.sh" plan tank add --use data --disks ata-E1,ata-E2 </dev/null 2>/dev/null) || rc=$?
+check_eq "two empty disks: allowed" 0 "$rc"
+
+echo "-- a disk of an importable pool is refused on any pool"
+printf 'ata-Z1	1000	SSD	M	zfs	tank	importable
+' > "$WORK/disc.tsv"
+plan zfs two plan bulk add --disks ata-Z1
+check_eq "adding it to an existing pool is refused" 1 "$rc"
+has '^reason	ata-Z1 belongs to the ZFS pool tank' && pass "the reason names the pool" || fail "zfs member: $out"
+plan zfs new plan tank add --use data --disks ata-Z1
+check_eq "and for a new pool" 1 "$rc"
+: > "$WORK/disc.tsv"
+
+echo "-- --use goes to manage-pool.sh"
+printf '#!/usr/bin/env bash
+printf "%%s\n" "$*" >> "%s/mpcalls"
+printf "Plan: make the pool\n"
+' "$WORK" > "$WORK/logger.sh"
+printf 'ata-E1	1000	SSD	M	empty	-	-
+' > "$WORK/disc.tsv"
+: > "$WORK/mpcalls"
+rc=0; out=$(HS_MANAGE_POOL=$WORK/logger.sh bash "$SCRIPTS/pool-change.sh" plan tank add --use data --kind zfs --disks ata-E1 </dev/null 2>/dev/null) || rc=$?
+grep -q -- "--use data" "$WORK/mpcalls" && pass "manage-pool.sh got --use data" || fail "use: $(cat "$WORK/mpcalls")"
+rc=0; out=$(bash "$SCRIPTS/pool-change.sh" plan tank add --use x --disks ata-E1 </dev/null 2>/dev/null) || rc=$?
+check_eq "--use x is refused" 1 "$rc"
+: > "$WORK/disc.tsv"
 
 echo "-- the registry rows"
 HS="bash $SCRIPTS/lib/hs.sh"

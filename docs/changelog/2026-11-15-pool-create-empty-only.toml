@@ -1,0 +1,4 @@
+date  = "2026-11-15"
+type  = "fix"
+title = "A new pool is only made on empty disks"
+body  = """A new pool is only made on empty disks; a disk that belongs to a ZFS pool is never offered for another pool. Erase a disk on its disk page first. The web interface can now create a new pool (it passes what the pool is for)."""
