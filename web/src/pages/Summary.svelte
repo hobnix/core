@@ -7,6 +7,8 @@
   import { untrack } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
   import { live } from '../live.svelte.js';
+  import { pools as poolStore, poolOfRole } from '../pools.svelte.js';
+  import { poolIcon } from '../nav.js';
   import { go } from '../route.svelte.js';
   import { changes } from '../changes.svelte.js';
   import { openPlan, jobRunning, ui } from '../ui.svelte.js';
@@ -80,10 +82,11 @@
   ]);
 
   // --- one UsageBar per pool (the numbers are in the status document)
-  const pools = $derived(['bulk', 'fast'].map((n) => ({ name: n, ...(d?.pools?.[n] ?? {}) })).filter((p) => p.size > 0));
+  const pools = $derived(poolStore.rows.map((r) => ({ name: r.name, role: r.role, ...(d?.pools?.[r.name] ?? {}) })).filter((p) => p.size > 0));
 
   // --- one line per fact: icon, label, value, a note, the dot, and the page that owns it (a click opens it)
-  const OWNER = { Backup: '/protection/backup', Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': '/storage/pools/bulk', 'Parity sync': '/storage/pools/bulk', Scrub: '/storage/pools/bulk', 'Disk health': '/storage/disks?pool=bulk', 'Hottest disk': '/monitoring/hardware' };
+  const dataPage = $derived(poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools');
+  const OWNER = $derived({ Backup: '/protection/backup', Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': '/monitoring/hardware' });
   const facts = $derived.by(() => {
     const m = {};
     const jobs = [];
@@ -185,7 +188,7 @@
         <div class="ctitle">Pools</div>
         {#each pools as p}
           <button class="prow" onclick={() => go(`/storage/pools/${p.name}`)}>
-            <span class="pn"><i class="ph {p.name === 'bulk' ? 'ph-cylinder' : 'ph-lightning'}"></i>{p.name}</span>
+            <span class="pn"><i class="ph ph-{poolIcon(p.role)}"></i>{p.name}</span>
             <StatusDot state={p.health && p.health !== 'ONLINE' ? 'warn' : 'ok'} label={p.health && p.health !== 'ONLINE' ? p.health.toLowerCase() : 'online'} />
             <UsageBar used={p.used} size={p.size} width={180} />
           </button>

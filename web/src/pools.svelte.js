@@ -26,4 +26,6 @@ export function loadPools(force = false) {
 export const poolNames = () => pools.rows.map((p) => p.name);
 export const poolsOfRole = (role) => pools.rows.filter((p) => p.role === role).map((p) => p.name);
 export const poolOfRole = (role) => poolsOfRole(role)[0] ?? '';
+// the Shares page of the data pool (the shares live there); the bare page while there is none
+export const sharesPath = () => (poolOfRole('data') ? `/storage/shares?pool=${poolOfRole('data')}` : '/storage/shares');
 export const poolRow = (name) => pools.rows.find((p) => p.name === name) ?? null;

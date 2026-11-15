@@ -4,7 +4,7 @@
   // ONLY here: permissions are edited on the share itself (decision 4 of ); a row links to the share.
   import { poll, rows } from '../data.svelte.js';
   import { go } from '../route.svelte.js';
-  import { poolOfRole } from '../pools.svelte.js';
+  import { sharesPath } from '../pools.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
   import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import NewUser from '../forms/users/NewUser.svelte';
@@ -44,7 +44,7 @@
   const isAdmin =$derived(sel?.name.toLowerCase() === 'administrator' && !!sel?.enabled);
   const reachColumns = [{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];
   const stateOf = (u) => (u.enabled ? 'active' : 'locked');
-  const toShare = (s) => { setSelection('shares', s); go(`/storage/shares${poolOfRole('data') ? `?pool=${poolOfRole('data')}` : ''}`); };
+  const toShare = (s) => { setSelection('shares', s); go(sharesPath()); };
 
   const columns = [
     { key: 'name', label: 'User' }, { key: 'full', label: 'Name', optional: true }, { key: 'groups', label: 'Groups', optional: true, value: (u) => u.groups.join(', ') },

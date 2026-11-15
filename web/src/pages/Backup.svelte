@@ -7,6 +7,7 @@
   import RestoreFiles from '../forms/backup/RestoreFiles.svelte';
   import SetupDisk from '../forms/backup/SetupDisk.svelte';
   import { get, prefetchPlan } from '../api.js';
+  import { sharesPath } from '../pools.svelte.js';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -15,7 +16,6 @@
   import Banner from '../ui/Banner.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import { link } from './instances/ct.js';
-  import { poolOfRole } from '../pools.svelte.js';
 
   let { deck } = $props();
   // locked storage: the share and instance rows cannot be read (and their switches would act on nothing), so they are left out
@@ -81,7 +81,7 @@
   const browsing = $derived(s.browse === 'on');
   const tipWhy = (t) => (why ? `${t} (${why})` : t);
   const headDot = $derived(!configured ? 'off' : s.status === 'failed' ? 'bad' : s.last_ok ? 'ok' : 'warn');
-  const itemLink = (i) => (i.kind === 'ct' ? link('/instances', 'instances', i.name) : link(`/storage/shares${poolOfRole('data') ? `?pool=${poolOfRole('data')}` : ''}`, 'shares', i.name));
+  const itemLink = (i) => (i.kind === 'ct' ? link('/instances', 'instances', i.name) : link(sharesPath(), 'shares', i.name));
   const toggle = (i) => openPlan('backup', ['toggle', '--name', i.name, '--kind', i.kind, '--to', i.on ? 'off' : 'on'], `${i.on ? 'Leave out of' : 'Put into'} the backup: ${i.name}`);
   const kindName = { shares: 'share', sensitive: 'sensitive share', ct: 'instance', always: 'always' };
   const kindIcon = { shares: 'folder', sensitive: 'folder-lock', ct: 'cube', always: 'desktop-tower' };

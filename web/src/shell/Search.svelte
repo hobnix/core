@@ -1,13 +1,13 @@
 <script>
   import Button from '../ui/Button.svelte';
   // Jump-to search of the top bar. Client side only: the lists are the reads the pages already use, fetched when the box gets focus.
-  import { mainTree, vpsTree, visible } from '../nav.js';
+  import { nodeItems, vpsTree, visible } from '../nav.js';
+  import { pools, poolNames, poolOfRole } from '../pools.svelte.js';
   import { ui } from '../ui.svelte.js';
   import { poll, rows } from '../data.svelte.js';
   import { go } from '../route.svelte.js';
   import { VPS_NODE } from '../redirects.js';
   import { tick } from 'svelte';
-  import { pools } from '../pools.svelte.js';
   import { setSelection } from '../select.svelte.js';
 
   let q = $state('');
@@ -44,15 +44,17 @@
         if (it.children) walk(it.children, [...trail, it.label], node);
       }
     };
-    walk(mainTree, [], ui.host);
+    walk(nodeItems('main', ui.features.capabilities, null, [], pools.rows), [], ui.host);
     if ((ui.features.capabilities ?? ['vps']).includes('vps')) walk(vpsTree, [VPS_NODE], VPS_NODE);
     return out;
   });
 
-  // monitor disks column 4: "bulk ..." = the SnapRAID pool, free/mounted = not in a pool, anything else = the ZFS pool of that name
+  // monitor disks column 4: "<pool> ..." = that pool, free/mounted = not in a pool, anything else = the apps pool
   const local = (p) => `/node/${encodeURIComponent(ui.host)}${p}`;
-  const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? 'bulk');
-  const diskPath = (role) => (/^bulk/.test(role) ? `/storage/disks?pool=${snapName}` : role === 'free' || role === 'mounted' ? '/storage/disks?pool=none' : `/storage/disks?pool=${/^[a-z][a-z0-9]{0,11}$/.test(role) ? role : 'all'}`);
+  const diskPath = (role) => {
+    const w = String(role).split(' ')[0];
+    return `/storage/disks?pool=${poolNames().includes(w) ? w : role === 'free' || role === 'mounted' ? 'none' : poolOfRole('apps') || 'none'}`;
+  };
 
   // lists: [searchable strings, the shown item]; the first string is the name
   const sources = $derived({

@@ -10,7 +10,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
-  import { pools, loadPools } from '../pools.svelte.js';
+  import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
   import { changes, startChanges } from '../changes.svelte.js';
   import { treeMeta } from '../pages/proxy/status.js';
   import { treeMeta as dockerTree, dockerChildren } from '../pages/docker/health.js';
@@ -53,12 +53,13 @@
   $effect(() => {
     if (!deck.loaded || locked || prefetched) return;
     prefetched = true;
-    loadPools();
-    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data
-    const pages = ['/instances', '/storage/shares', '/storage/pools/bulk', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
-      '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
-    prefetch([...new Set([...pages.flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
-      '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
+    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them)
+    loadPools().then(() => {
+      const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
+        '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
+      prefetch([...new Set([...pages.flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
+        '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
+    });
   });
 
   // the proxyserver node: the VPS status document (404 = proxyStatusUrl not set, 502 = not reachable); it drives the dots of its tree rows
@@ -103,16 +104,16 @@
   const meta = $derived.by(() => {
     const m = {};
     const d = deck.data;
-    for (const p of ['bulk', 'fast']) {
+    for (const p of pools.rows.map((r) => r.name)) {
       const pl = d?.pools?.[p];
       if (pl?.size > 0) m[`/storage/pools/${p}`] = { text: `${Math.round((pl.used / pl.size) * 100)} %` };
     }
-    // monitor disks: name, bytes, SSD/HDD, role, temp, health, ...; the role of a pool member is the pool ("bulk data-01" for SnapRAID)
+    // monitor disks: name, bytes, SSD/HDD, role, temp, health, ...; the role of a pool member starts with the pool name ("bulk data-01" for SnapRAID)
     const dl = rows(disks);
     if (disks.loaded && dl.length) {
       let watchAll = 0;
-      for (const p of ['bulk', 'fast']) {
-        const mine = dl.filter((r) => (p === 'bulk' ? /^bulk/.test(r[3]) : r[3] === p));
+      for (const p of pools.rows.map((r) => r.name)) {
+        const mine = dl.filter((r) => String(r[3]).split(' ')[0] === p);
         watchAll += mine.filter((r) => /WATCH|WARN|BAD|FAIL/i.test(r[5])).length;
       }
       m['/storage/disks'] = watchAll ? { text: `${watchAll} watch`, warn: true } : { text: String(dl.length) };
