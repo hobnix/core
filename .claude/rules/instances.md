@@ -18,7 +18,7 @@ paths:
 
 Loaded when you touch the files above (path-scoped rule). The root CLAUDE.md has the rules that always apply.
 
-- "fast" storage for an instance = an Incus custom volume on the default (SSD) pool.
+- "fast" storage for an instance = an Incus custom volume on an apps pool (`pool_incus`: `default` for the first apps pool, the pool name for further ones; `-s <apps pool>` chooses).
   Shares are mounted with a 1:1 user mapping when an app user is chosen (`--as uid:gid`,
   raw.idmap "uid 1000 <uid>"): that user's files are adminuser's on disk. One such user per
   container; root can't be mapped (it would make container root the host's adminuser).

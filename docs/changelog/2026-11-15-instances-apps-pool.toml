@@ -1,0 +1,4 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "Fast volumes of instances go on the apps pool, and -s chooses another one"
+body  = """hs ct <name> storage --kind fast and manage-ct --add-storage fast put the volume on the first apps pool (Incus pool default). With -s <apps pool> it goes on another apps pool; each extra ZFS apps pool becomes an Incus pool of the same name after hs rebuild. Servers with the classic fast pool behave as before. Not tested on hardware yet."""

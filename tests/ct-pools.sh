@@ -15,6 +15,8 @@ case "$1 $2" in
   "info vm1") exit 1 ;;
   "storage show") [ "$3" = bulk1 ] || exit 1 ;;
   "storage list") echo default ;;
+  "query /1.0/instances/web") echo '{"type":"container"}' ;;
+  "config device"|"storage volume") exit 1 ;;
 esac
 exit 0
 FAKE
@@ -44,6 +46,7 @@ check_eq "an unknown pool is refused before anything is created" 1 "$rc"
 check_eq "...and no init ran" 0 "$(grep -c '^init' "$WORK/calls")"
 echo "-- fast volumes follow the apps pools (D5: default stays the first, others beside it)"
 export HS_MACHINE_FILE=$WORK/machine.toml
+mkdir -p "$WORK/bin"; cp "$WORK/incus" "$WORK/bin/incus"; export PATH="$WORK/bin:$PATH"
 printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" }, ssd2 = { role = "apps", kind = "zfs" } }
 ' > "$HS_MACHINE_FILE"
 : > "$WORK/calls"
