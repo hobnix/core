@@ -44,9 +44,11 @@ def disk_by_name(params, key, var):
 
 # ---------------------------------------------------------------- stage 3: a bad update rolls back by itself
 def rollback(params):
-    """Put a bad commit on a local origin of /etc/nixos (it switches sshd off after the switch), run `hs update --yes`, and expect that the
+    """Put a bad commit on a local origin of /etc/nixos (it makes sshd fail to start after the switch), run `hs update --yes`, and expect that the
     update goes back to the previous generation by itself and sshd runs again (scripts/update.sh, scripts/rebuild.sh rollback_now)."""
-    bad = "{ lib, ... }: { services.openssh.enable = lib.mkForce false; }"
+    # sshd must exist and fail to start: with services.openssh.enable = false the unit is gone after the switch, and post_check in
+    # scripts/rebuild.sh (it only looks at an sshd unit that exists) finds nothing wrong, so no rollback would be due
+    bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
     return login_root(params) + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
         # the ISO of a ref that is not in develop leaves /etc/nixos on a detached HEAD (scripts/lib/checkout.sh): the stage needs a branch to push
