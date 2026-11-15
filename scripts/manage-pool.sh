@@ -25,6 +25,7 @@ usage() {
   say "  --plain     simple menus instead of the full-screen interface"
   say "  --disks     skip the disk menu; names from /dev/disk/by-id, comma separated"
   say "  --use       a NEW pool (a name that is not in the pools line yet): what it is for, data (shares) or apps (containers and VMs)"
+  say "  --kind      a NEW pool: zfs (mirror pairs, default) or snapraid (single disks with parity, role data only)"
   say "  --role      snapraid layout only: add the disks as data or as parity, or adopt"
   say "              disks that already hold files (e.g. from Unraid; nothing is erased)"
   say "  --encrypt   new disks and pools are encrypted (LUKS on snapraid disks, ZFS native encryption on pools)"
@@ -51,6 +52,7 @@ dry=false
 picked=""
 role=""
 use=""   # --use data|apps: the role of a NEW pool
+kind=""   # --kind zfs|snapraid: the layout of a NEW data pool
 plain=false
 chown_files=false
 merge_folders=false
@@ -72,6 +74,8 @@ while [ $# -gt 0 ]; do
     --role)    [ $# -ge 2 ] || usage; role="$2"; shift 2 ;;
     --use)     [ $# -ge 2 ] || usage; use="$2"; shift 2
                case "$use" in data|apps) ;; *) echo "--use: data or apps." >&2; exit 1 ;; esac ;;
+    --kind)    [ $# -ge 2 ] || usage; kind="$2"; shift 2
+               case "$kind" in zfs|snapraid) ;; *) echo "--kind: zfs or snapraid." >&2; exit 1 ;; esac ;;
     --plain)   plain=true; shift ;;
     --chown)   chown_files=true; shift ;;
     --merge)   merge_folders=true; shift ;;
@@ -185,10 +189,23 @@ if [ -z "$mode" ] && [ -z "$action" ] && ! pool_exists "$pool" && ! zpool list -
   newname=true
   pool_name_ok "$pool" || { echo "invalid pool name '$pool': a lower case letter, then up to 11 lower case letters or digits, and not a word ZFS or the system uses."; exit 1; }
   [ "$(pools_source)" != legacy ] || { echo "Run hs pool record first: this server has no pools line, so a new pool would not be known to the system."; exit 1; }
-  [ -z "$role" ] || { echo "Not possible: only the pool named bulk can be a SnapRAID pool. '$pool' would be a ZFS pool; --role is for the snapraid layout."; exit 1; }
+  [ -z "$role" ] || [ "$kind" = snapraid ] || { echo "Not possible: --role is for a SnapRAID pool. Add --kind snapraid."; exit 1; }
   if [ -z "$use" ]; then
     person || usage
     use=$(menu_pick "Pool '$pool'" "What is the new pool '$pool' for?"       data "data: shares and sensitive folders (HDDs)"       apps "apps: containers and VMs (SSDs)") || { echo "cancelled"; exit 1; }
+  fi
+  [ "$kind" != snapraid ] || [ "$use" = data ] || { echo "Not possible: a SnapRAID pool holds data; an apps pool is always ZFS."; exit 1; }
+  if [ "$kind" = snapraid ] && other=$(pool_snapraid); then
+    echo "Not possible: '$other' is the SnapRAID pool of this server; there can be only one."; exit 1
+  fi
+  if [ -z "$kind" ]; then
+    kind=zfs
+    if [ "$use" = data ] && person; then
+      kind=$(menu_pick "Pool '$pool'" "How are the disks of '$pool' organised?" zfs "zfs: mirror pairs of equal disks, always protected" snapraid "snapraid: single disks of any size, one parity disk, protected after each sync") || { echo "cancelled"; exit 1; }
+      if [ "$kind" = snapraid ] && other=$(pool_snapraid); then
+        echo "Not possible: '$other' is the SnapRAID pool of this server; there can be only one."; exit 1
+      fi
+    fi
   fi
 fi
 # the role of the pool: its row (legacy rows: the data pool and the apps pool as before), or what a new pool is for
@@ -364,7 +381,7 @@ format_member_run() {
 # The preparation questions for disks that are about to be formatted:
 # filesystem and encryption, asked on a terminal when the options were not given.
 prepare_questions() {
-  pool_is_snapraid "$pool" || return 0
+  pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; } || return 0
   person && ! $dry || return 0
   # the order of : encrypt?, filesystem, key
   if ! $encrypt && confirm "Encrypt the new disk(s)? (LUKS, one passphrase for all encrypted disks; you type it next)"; then encrypt=true; fi
@@ -951,7 +968,7 @@ if [ -n "$action" ]; then
 fi
 
 # ── SnapRAID layout: /bulk is made of single labelled disks, not a ZFS pool ──
-if pool_is_snapraid "$pool"; then
+if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
   here=$(dirname "$0")
   steps 2   # "Current array" and the plan (add and adopt; the job offer prints no heading)
   # existing members: label and size in bytes
@@ -969,8 +986,24 @@ if pool_is_snapraid "$pool"; then
   fi
   pblank
 
+  # A NEW SnapRAID pool: the row goes into the pools line once the disks are formatted; from then on snap_root is /<pool>,
+  # and the merged view is mounted (hs rebuild does it where mergerfs is not there yet).
+  snap_new_pool() {
+    $newname || return 0
+    if pools_add_row "$pool" data snapraid; then
+      pnote "The pools line of machine.toml has the new row. It takes effect with hs rebuild."
+    else
+      pwarn "The disks are ready, but the row could not be written. Add it to the pools line of /etc/nixos/machine.toml: $pool = { role = \"data\", kind = \"snapraid\" }  (then hs rebuild)"
+    fi
+    _HS_POOLS_LOADED=
+    root=$(snap_root)
+  }
+  snap_mount() {   # merge the disks (a new pool without mergerfs here: hs rebuild does it)
+    if ! $newname || command -v mergerfs >/dev/null 2>&1; then bash "$here/bulk-mount.sh"; else pnote "It is mounted by hs rebuild."; fi
+  }
+
   if [ -z "$role" ]; then
-    role=$(menu_pick "Pool 'bulk'" "What do you want to add?" \
+    role=$(menu_pick "Pool '$pool'" "What do you want to add?" \
       data   "Data disks: more space. Any size up to the parity disk's." \
       parity "Parity disk: protects against one disk failing. Must be the largest." \
       adopt  "Disks that already hold files (xfs/ext4/btrfs, e.g. from Unraid): kept as they are.") || { echo "cancelled"; exit 1; }
@@ -988,10 +1021,10 @@ if pool_is_snapraid "$pool"; then
   if [ -z "$picked" ]; then
     items=()
     for d in "${disks[@]}"; do
-      IFS=$'\t' read -r id size kind rest <<<"$d"
-      items+=("$id" "$(printf '%8s  %s  %s' "$(human "$size")" "$kind" "$rest")" OFF)
+      IFS=$'\t' read -r id size dkind rest <<<"$d"   # (not "kind": that is the --kind option)
+      items+=("$id" "$(printf '%8s  %s  %s' "$(human "$size")" "$dkind" "$rest")" OFF)
     done
-    picked=$(disk_pick "Pool 'bulk'" "New $role disk(s)" "${items[@]}") || { echo "cancelled"; exit 1; }
+    picked=$(disk_pick "Pool '$pool'" "New $role disk(s)" "${items[@]}") || { echo "cancelled"; exit 1; }
     picked=$(tr '\n' ',' <<<"$picked")
   fi
   IFS=',' read -r -a chosen <<<"${picked%,}"
@@ -1063,13 +1096,17 @@ if pool_is_snapraid "$pool"; then
       warn "$(t 'Not possible: a data disk (%s) would be larger than a parity disk (%s).' "$(human "$max_data")" "$(human "$min_parity")")"
       exit 1
     fi
-    [ "$min_parity" -gt 0 ] || pnote "no parity disk yet. Add one afterwards: hs pool bulk add --role parity (it ERASES that disk)."
+    [ "$min_parity" -gt 0 ] || pnote "no parity disk yet. Add one afterwards: hs pool $pool add --role parity (it ERASES that disk)."
+    if $newname; then
+      pnote "This is a NEW pool '$pool' with role data (SnapRAID). It is added to the pools line of machine.toml when it is created."
+      pblank
+    fi
     if $dry; then
       pdry
       exit 0
     fi
     say "The disks keep all their files. Their label is written and their folders are renamed."
-    $assume_yes || confirm_name bulk "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
+    $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
 
     for t in "${todo[@]}"; do
       IFS=$'\t' read -r part fs label luksdev <<<"$t"
@@ -1097,13 +1134,14 @@ if pool_is_snapraid "$pool"; then
       ok "$(t '%s: %s folder(s) moved into shares/' "${label#bulk-}" "${#names[@]}")"
     done
     # merge the disks into /bulk (skipped in tests that have no mergerfs)
-    [ -n "${HS_ADOPT_SKIP_MERGE:-}" ] || bash "$here/bulk-mount.sh"
+    snap_new_pool
+    [ -n "${HS_ADOPT_SKIP_MERGE:-}" ] || snap_mount
     pblank
     if $merge_folders; then pdone "Done. Every folder is now /bulk/shares/<name>, like the shares before."
     else pdone "Done. Every folder is now its own share /bulk/shares/<disk>-<name>. Move what belongs together by hand on the server, e.g.  mv /bulk/shares/data-02-media/Movies /bulk/shares/media/  (a rename on the same disk, copies nothing; always inside /bulk, never from /mnt/bulk/data-NN: those are the same files and a copy empties them); rename a share with: hs share <share> rename <new>"; fi
     say "Publish them over Samba: hs share repair (new shares start closed to Domain Admins; open them in hs share <share> perm)."
     $chown_files || echo "Files still belong to their old owner (Unraid: nobody:users). To make them adminuser's: sudo chown -R adminuser:users /bulk/shares (slow on big disks), or use --chown next time."
-    say "Parity is only written by the next sync: hs pool bulk sync."
+    say "Parity is only written by the next sync: hs pool $pool sync."
     done_refresh
   fi
 
@@ -1147,6 +1185,10 @@ if pool_is_snapraid "$pool"; then
     exit 1
   fi
   [ "$min_parity" -gt 0 ] || pnote "no parity disk yet. Until you add one, a failed disk loses its data."
+  if $newname; then
+    pnote "This is a NEW pool '$pool' with role data (SnapRAID). It is added to the pools line of machine.toml when it is created."
+    pblank
+  fi
 
   if $dry; then
     pdry
@@ -1154,7 +1196,7 @@ if pool_is_snapraid "$pool"; then
   fi
 
   pdanger "ALL DATA on these ${#todo[@]} disk(s) will be erased."
-  $assume_yes || confirm_name bulk "the pool name" || fail "cancelled"   # --yes: a background job (hs sys pool start), the typed name was checked before
+  $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job (hs sys pool start), the typed name was checked before
   if $encrypt; then crypt_new_pass || exit 1; fi
 
   for t in "${todo[@]}"; do
@@ -1163,10 +1205,11 @@ if pool_is_snapraid "$pool"; then
     format_member "$id" "$label"
   done
   udevadm settle 2>/dev/null || true
-  bash "$here/bulk-mount.sh"
+  snap_new_pool
+  snap_mount
   df -h "$root" "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null | sed 's/^/      /'
   if fancy; then ok "$(t '%s disk(s) added to the array' "${#todo[@]}")"; fi
-  say "New data is protected after the next sync (three times a day, or now: hs pool bulk sync)."
+  say "New data is protected after the next sync (three times a day, or now: hs pool $pool sync)."
   done_refresh
 fi
 

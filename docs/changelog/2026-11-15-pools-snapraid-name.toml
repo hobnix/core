@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "A new data pool can use the SnapRAID layout, with any name"
+docs  = "storage-and-disks"
+body  = """hs pool <name> --kind snapraid creates the one SnapRAID pool of a server under any valid name (single disks with parity, its folder is /<name>). The plan, the erase warning and the typed pool name work as for a ZFS pool. A second SnapRAID pool is refused. Not tested on hardware yet."""

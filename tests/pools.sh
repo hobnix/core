@@ -86,6 +86,9 @@ check_eq "one pools line" "1" "$(grep -c '^pools' "$HS_MACHINE_FILE")"
 check "add_row overwrites a row" run 'pools_add_row tank apps zfs'
 check_eq "role changed, no duplicate" "tank${T}apps${T}zfs" "$(run pools_rows | grep tank)"
 check_eq "the cache is cleared in the same process" "data" "$(run 'pools_add_row aaa data zfs; pool_role aaa')"
+check "a first snapraid row is written" run 'pools_add_row tank data snapraid'
+check "a second snapraid row is refused" fails 'pools_add_row tank2 data snapraid'
+check "the snapraid row itself may be written again" run 'pools_add_row tank data snapraid'
 check "bad role refused" fails 'pools_add_row x1 other zfs'
 check "bad kind refused" fails 'pools_add_row x1 data ext4'
 check "bad name refused" fails 'pools_add_row Mirror data zfs'

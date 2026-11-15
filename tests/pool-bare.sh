@@ -84,12 +84,23 @@ check_out "a bad name is refused" "invalid pool name" run zfs new mirror --use d
 check_out "a long name is refused" "invalid pool name" run zfs new abcdefghijklm --use data $D --dry-run
 check_out "no --use, no terminal: the usage line" "usage: hs pool" run zfs new tank $D --dry-run
 check_out "--use must be data or apps" "use: data or apps" run zfs new tank --use fast $D --dry-run
-check_out "a snapraid request for another name is refused" "only the pool named bulk" run zfs new tank --use data --role data $D --dry-run
+check_out "--role without --kind snapraid is refused" "Add --kind snapraid" run zfs new tank --use data --role data $D --dry-run
 check_out "the menu offers the rows and a new pool" "new" ask '2\n' zfs new --use apps $D --dry-run
-out=$(HS_ANSWERS='2\ntank\n' tty_ run zfs new --use data $D --dry-run)
+out=$(HS_ANSWERS='2\ntank\n' tty_ run zfs new --use data --kind zfs $D --dry-run)
 check_out "the menu: a new pool asks the name" "a NEW pool 'tank' with role data" echo "$out"
-out=$(HS_ANSWERS='1\n' tty_ run zfs new tank $D --dry-run)
+out=$(HS_ANSWERS='1\n' tty_ run zfs new tank --kind zfs $D --dry-run)
 check_out "a terminal is asked what the new pool is for" "a NEW pool 'tank' with role data" echo "$out"
+# --kind snapraid: a NEW SnapRAID pool of any name (one per server)
+printf 'pools = { ssd = { role = "apps", kind = "zfs" } }
+' >"$HS_MACHINE_FILE"
+out=$(run zfs new tank --use data --kind snapraid --role data $D --dry-run)
+check_out "new snapraid pool: a plan" "Plan:" echo "$out"
+check_out "new snapraid pool: the plan says NEW pool" "NEW pool 'tank'" echo "$out"
+check_out "snapraid for an apps pool is refused" "an apps pool is always ZFS" run zfs new tank --use apps --kind snapraid $D --dry-run
+check_out "a bad kind is refused" "kind: zfs or snapraid" run zfs new tank --use data --kind raid5 $D --dry-run
+printf 'pools = { bulk = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }
+' >"$HS_MACHINE_FILE"
+check_out "a second snapraid pool is refused" "there can be only one" run zfs new tank --use data --kind snapraid --role data $D --dry-run
 rm -f "$HS_MACHINE_FILE"
 
 finish
