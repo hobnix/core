@@ -7,7 +7,7 @@
 . "$(dirname "$0")/lib.sh"
 # shellcheck source=tests/lib-standins.sh
 . "$(dirname "$0")/lib-standins.sh"
-export TZ=UTC HS_LANG=en HS_PLAIN=1 HS_STATE_DIR=$WORK/state HS_LOCK=$WORK/lock HS_BULK_TYPE_FILE=$WORK/no-bulk-type
+export TZ=UTC HS_LANG=en HS_PLAIN=1 HS_STATE_DIR=$WORK/state HS_LOCK=$WORK/lock HS_BULK_TYPE_FILE=$WORK/no-bulk-type HS_MACHINE_FILE=$WORK/no-machine.toml
 MS="bash $SCRIPTS/manage-shares.sh"; CS="bash $SCRIPTS/create-share.sh"
 
 echo "-- manage-shares: what the interface reads is unchanged"

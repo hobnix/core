@@ -5,7 +5,7 @@
 # with stat, which needs the real path); the folders of /bulk/shares are the real server's to test.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-export HS_LANG=en HS_PLAIN=1
+export HS_LANG=en HS_PLAIN=1 HS_MACHINE_FILE=$WORK/no-machine.toml
 BIN=$WORK/bin; mkdir -p "$BIN"
 export CALLS=$WORK/calls; : > "$CALLS"
 
@@ -60,7 +60,7 @@ check_out "without a domain the new share starts open, and it says so" "open to 
 
 echo "-- hs share repair (--fix-owner) goes through the registry"
 fake=$WORK/reg; mkdir -p "$fake/lib"
-cp "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/live.sh "$SCRIPTS"/lib/sharepath.sh "$SCRIPTS"/lib/admin.sh "$SCRIPTS"/lib/pools.sh "$SCRIPTS"/lib/machine.sh "$SCRIPTS"/lib/audit.sh "$SCRIPTS/lib/registry.tsv" "$fake/lib/"
+cp "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/live.sh "$SCRIPTS"/lib/sharepath.sh "$SCRIPTS"/lib/admin.sh "$SCRIPTS"/lib/pools.sh "$SCRIPTS"/lib/machine.sh "$SCRIPTS"/lib/audit.sh "$SCRIPTS"/lib/event.sh "$SCRIPTS"/lib/bulkpath.sh "$SCRIPTS/lib/registry.tsv" "$fake/lib/"
 cp "$SCRIPTS/sync-shares.sh" "$SCRIPTS/machine-toml.py" "$fake/"
 F="env HS_CALLER=t HS_COMPLETE_DIR=$WORK/complete bash $fake/lib/hs.sh"
 : > "$CALLS"

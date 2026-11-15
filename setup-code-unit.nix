@@ -4,8 +4,10 @@
 {
   description = "Show the one-time setup code on the console (only while the first setup is pending)";
   wantedBy = [ "multi-user.target" ];
-  after = [ "network.target" "hs-web.service" ];
-  wants = [ "hs-web.service" ];
+  # time-sync.target: the code expires from the clock at issue time; a clock that jumps afterwards would burn it (#580). Ordering only: the
+  # target is passive, so a box that never syncs still gets its code.
+  after = [ "network.target" "hs-web.service" "time-sync.target" ];
+  wants = [ "hs-web.service" "time-sync.target" ];
   path = [ hsCommand pkgs.bash pkgs.python3 pkgs.gnused pkgs.util-linux pkgs.findutils pkgs.iproute2 pkgs.gawk pkgs.gnugrep pkgs.coreutils pkgs.hostname ];
   environment = { HS_WEB_PORT = toString webPort; HS_STATE_DIR = "/var/lib/hs"; };
   unitConfig.ConditionPathExists = "/var/lib/hs/first-run.json";

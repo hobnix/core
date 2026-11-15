@@ -42,7 +42,9 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 
-supported() { pool_snapraid >/dev/null; }
+supported() {   # the legacy file, or a SnapRAID row of a pools line
+  [ "$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)" = snapraid ] || { [ "$(pools_source)" = config ] && pool_snapraid >/dev/null; }
+}
 
 # "shares/fotos" for a share name (or for its folder)
 rel_of() {

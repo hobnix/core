@@ -29,4 +29,5 @@ check "boot after done prints nothing, not even on stderr" bash -c "out=\$(HS_SE
 echo "-- the boot unit"
 check "both Nix configurations use the shared unit" bash -c "grep -q 'setup-code-unit.nix' '$ROOT/install.nix' && grep -q 'setup-code-unit.nix' '$ROOT/configuration.nix'"
 check "the unit prints to the tty only" bash -c "grep -q 'StandardOutput = \"tty\"' '$ROOT/setup-code-unit.nix' && grep -q 'TTYPath = \"/dev/console\"' '$ROOT/setup-code-unit.nix' && ! grep -q '/etc/issue' '$ROOT/setup-code-unit.nix'"
+check "the unit is ordered after time-sync.target" grep -q '"time-sync.target"' "$ROOT/setup-code-unit.nix"
 finish
