@@ -1177,7 +1177,8 @@ CHANGES = {
                 [r"^remove$", r"[A-Za-z0-9][A-Za-z0-9@._:+/= -]{0,100}"]],
     # pool-change.sh: only the options each action defines; a passphrase (--encrypt) travels on stdin, never in the arguments
     "pool": [{"fixed": [POOL_NAME, r"^add$"],
-              "opts": {"--disks": (DISKIDS, False), "--role": (r"^(data|parity)$", False), "--fs": (FSTYPE, False), "--encrypt": (None, False)}, "stdin": True},
+              "opts": {"--disks": (DISKIDS, False), "--role": (r"^(data|parity)$", False), "--fs": (FSTYPE, False), "--encrypt": (None, False),
+                      "--use": (r"^(data|apps)$", False), "--kind": (r"^(zfs|snapraid)$", False)}, "stdin": True},
              # import: a ZFS pool that is on the disks already (pool-import.sh; the confirm word is a disk of the pool)
              {"fixed": [POOL_NAME, r"^import$"], "opts": {"--use": (r"^data$", False)}},
              {"fixed": [POOL_NAME, r"^adopt$"],
