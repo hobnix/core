@@ -49,8 +49,9 @@ def rollback(params):
     bad = "{ lib, ... }: { services.openssh.enable = lib.mkForce false; }"
     return login_root(params) + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
-        step("capture", "git -C /etc/nixos rev-parse --abbrev-ref HEAD", var="branch", strip=True, what="/etc/nixos is on a branch"),
-        step("run_var", "test {branch} != HEAD", what="not a detached checkout"),
+        # the ISO of a ref that is not in develop leaves /etc/nixos on a detached HEAD (scripts/lib/checkout.sh): the stage needs a branch to push
+        step("run", "git -C /etc/nixos symbolic-ref -q HEAD >/dev/null || git -C /etc/nixos switch -q -c hs-testlab", what="/etc/nixos is on a branch"),
+        step("capture", "git -C /etc/nixos symbolic-ref --short HEAD", var="branch", strip=True, what="the name of the branch"),
         step("run", "rm -rf /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work && git init -q --bare /var/tmp/hs-lab-origin.git", what="a local origin for /etc/nixos"),
         step("run_var", "git -C /etc/nixos push -q /var/tmp/hs-lab-origin.git HEAD:refs/heads/{branch}", what="the current state goes to the local origin"),
         step("run", "git -C /etc/nixos remote set-url origin /var/tmp/hs-lab-origin.git && git -C /etc/nixos fetch -q origin", what="/etc/nixos follows the local origin"),
