@@ -30,7 +30,6 @@ scripts/disk-move.sh	12
 scripts/disk-recover.sh	8
 scripts/disk-replace.sh	3
 scripts/disk-spindown.sh	6
-scripts/docker.sh	7
 scripts/doctor.sh	1
 scripts/fm.sh	12
 scripts/health-change.sh	2
@@ -48,7 +47,7 @@ scripts/lib/live-topics.tsv	8
 scripts/lib/pools.sh	3
 scripts/lib/registry.tsv	33
 scripts/lib/sharepath.sh	17
-scripts/manage-ct.sh	11
+scripts/manage-ct.sh	9
 scripts/manage-pool.sh	91
 scripts/manage-shares.sh	19
 scripts/migrate-check.sh	1

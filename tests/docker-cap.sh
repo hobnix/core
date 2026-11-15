@@ -160,7 +160,7 @@ rc=0; $D enable --yes --manager portainer --size s </dev/null >/dev/null 2>&1 ||
 check_eq "exit 0" 0 "$rc"
 grep -qF "manage-ct --create docker --docker --ram 2048 --cpu 2 OWNER=docker" "$MLOG" && pass "create with the owner's pass" || fail "create: $(cat "$MLOG")"
 grep -qF "incus config set docker user.hs.managed_by=docker" "$LOG" && pass "locked" || fail "lock not set"
-grep -qF "create-share apps --fast" "$MLOG" && grep -qF "backup apps on" "$BLOG" && grep -qF "snapshots-auto apps on" "$MLOG" && pass "share apps made, in the backup, snapshots on" || fail "share apps: $(cat "$MLOG" "$BLOG")"
+grep -qF "create-share apps --pool fast" "$MLOG" && grep -qF "backup apps on" "$BLOG" && grep -qF "snapshots-auto apps on" "$MLOG" && pass "share apps made, in the backup, snapshots on" || fail "share apps: $(cat "$MLOG" "$BLOG")"
 grep -qF "manage-ct docker --add-storage shares apps /shares/apps --as 1000:1000" "$MLOG" && pass "docker gets the share apps at /shares/apps" || fail "mount: $(cat "$MLOG")"
 grep -qF "backup ct docker on" "$BLOG" && pass "in the backup" || fail "backup: $(cat "$BLOG")"
 grep -qF "tee /opt/portainer/docker-compose.yml" "$LOG" && pass "manager compose written" || fail "compose not written"
@@ -220,7 +220,7 @@ echo "$out" | grep -q "restarts" && pass "plan warns about the restart" || fail 
 check_eq "dry-run changed nothing" 0 "$(grep -c 'create-share\|add-storage' "$MLOG" || true)"
 rc=0; $D enable --yes </dev/null >/dev/null 2>&1 || rc=$?
 check_eq "ensure exit 0" 0 "$rc"
-grep -qF "create-share apps --fast" "$MLOG" && grep -qF "backup apps on" "$BLOG" && pass "ensure: share made, in the backup" || fail "ensure share: $(cat "$MLOG" "$BLOG")"
+grep -qF "create-share apps --pool fast" "$MLOG" && grep -qF "backup apps on" "$BLOG" && pass "ensure: share made, in the backup" || fail "ensure share: $(cat "$MLOG" "$BLOG")"
 grep -qF "manage-ct docker --add-storage shares apps /shares/apps --as 1000:1000" "$MLOG" && pass "ensure: mounted" || fail "ensure mount: $(cat "$MLOG")"
 check_eq "ensure created no container" 0 "$(grep -c -- '--create' "$MLOG" || true)"
 

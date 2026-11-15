@@ -10,6 +10,7 @@
 #   share_dir <share>          the folder: the first of <pool>/shares, <pool>/sensitive over the tiers that holds <share> (exit 1: none)
 #   share_kind <share>         shares | sensitive
 #   share_tier <share>         the pool name (legacy: bulk | fast)
+#   share_tier_role <share>    the role (data | apps) of the pool that holds <share>; exit 1: none
 #   share_dataset <share>      zfs dataset <pool>/<kind>/<share> (exit 1 on a snapraid pool)
 #   share_kind_of_path <path>  shares | sensitive | other
 #   share_name_taken <share>   exit 0 when a folder of that name exists in any tier (case-insensitive) or Samba has the share
@@ -96,6 +97,12 @@ share_tier() {   # share_tier <share>
     case "$d" in "$(share_root "$tier")"/*) printf '%s\n' "$tier"; return 0 ;; esac
   done < <(_share_pools)
   return 1
+}
+
+share_tier_role() {   # share_tier_role <share>
+  local t
+  t=$(share_tier "$1" 2>/dev/null) || return 1
+  pool_role "$t"
 }
 
 share_dataset() {   # share_dataset <share>

@@ -1,7 +1,7 @@
 { config, lib, pkgs, hs, ... }:
 
 let
-  inherit (hs) machine appsPool whenUnlocked notifyFailure;
+  inherit (hs) machine appsPool zfsAppsPools whenUnlocked notifyFailure;
   scripts = hs.scripts;
   incusUi = machine.incusUi;
   link = import ./internal-link.nix { inherit lib machine; };
@@ -49,11 +49,16 @@ in
       config = lib.optionalAttrs incusUi { "core.https_address" = ":8443"; };
 
       # With an apps pool: ZFS on it. Without one: Incus' own folder on the system disk (no redundancy).
+      # `default` stays what it was first (D5); every further ZFS apps pool becomes an Incus pool beside it, named like the pool.
       storage_pools = if appsPool != null then [{
         name = "default";
         driver = "zfs";
         config.source = "${appsPool}/incus";   # Incus creates/mounts child datasets itself
-      }] else [{
+      }] ++ map (n: {
+        name = n;
+        driver = "zfs";
+        config.source = "${n}/incus";
+      }) (lib.filter (n: n != appsPool) zfsAppsPools) else [{
         name = "default";
         driver = "dir";
       }];

@@ -10,6 +10,7 @@
 #   pool_role <name>         role; exit 1 when unknown
 #   pool_kind <name>         kind (zfs | snapraid); exit 1 when unknown
 #   pool_default <role>      first name of that role; exit 1 when none
+#   pool_incus <name>        the Incus storage pool of an apps pool: `default` for the first apps pool (pinned, D5), else the pool name
 #   pool_root <name>         ${HS_POOLS_ROOT}/<name>
 #   pool_mounted <name>      exit 0 when pool_root is a mount point
 #   pool_name_ok <name>      exit 0 when the name is allowed for a new pool (^[a-z][a-z0-9]{0,11}$, not a reserved word)
@@ -84,6 +85,12 @@ pool_default() {   # pool_default <role>
   n=$(pool_names "$1" | head -n1)
   [ -n "$n" ] || return 1
   printf '%s\n' "$n"
+}
+pool_incus() {   # pool_incus <apps pool>
+  [ "$(pool_role "$1" 2>/dev/null)" = apps ] || return 1
+  if [ "$1" = "$(pool_default apps)" ]; then printf 'default
+'; else printf '%s
+' "$1"; fi
 }
 pool_root() { printf '%s/%s\n' "${HS_POOLS_ROOT:-}" "$1"; }
 pool_mounted() { "${HS_MOUNTPOINT:-mountpoint}" -q "$(pool_root "$1")"; }
