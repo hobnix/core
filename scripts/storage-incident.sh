@@ -157,8 +157,12 @@ collect_impact() {
   while IFS=$'\t' read -r name kind path cache size meas bk disks mounted; do
     [ -n "$name" ] && [ "$kind" != other ] || continue
     impact=""
-    share_in_pool "$pool" "$path" "$disks" || continue
-    if pool_is_snapraid "$pool"; then
+    if ! share_in_pool "$pool" "$path" "$disks"; then   # the upload cache of a share lives on the apps pool (I6)
+      [ "$(pool_role "$pool")" = apps ] || continue
+      case "$cache" in on|emptying) impact=at-risk ;; *) continue ;; esac
+    fi
+    if [ -n "$impact" ]; then :
+    elif pool_is_snapraid "$pool"; then
       if $data_down; then
         for key in "${!inc_member[@]}"; do
           [ "${key%%/*}" = "$pool" ] && [ "${mgroup[$key]}" != parity ] && [ "${inc_member[$key]}" = down ] || continue
@@ -254,7 +258,8 @@ collect() {
   for pool in $pools_hit; do
     local pg
     if pool_is_snapraid "$pool"; then
-      local jl; jl=$(bash "$jobs" --records --state running 2>/dev/null | awk -F'\t' '$2 ~ /^pool-replace-/ { print; exit }' || true)
+      local jl ms=""; for key in "${!mstate[@]}"; do [ "${key%%/*}" = "$pool" ] && ms+="${key#*/} "; done
+      jl=$(bash "$jobs" --records --state running 2>/dev/null | awk -F'\t' -v ms="$ms" 'BEGIN { n = split(ms, a, " "); for (i = 1; i <= n; i++) ok["pool-replace-" a[i]] = 1 } $2 in ok { print; exit }' || true)
       if [ -n "$jl" ] || [ -e "$admin_lock" ]; then
         local pct=- unit=
         if [ -n "$jl" ]; then
