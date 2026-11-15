@@ -239,14 +239,15 @@ collect() {
   if [ -z "$pools_hit" ]; then rm -f "$appfile"; rec ok - "no storage incident: every pool and every disk looks fine"; return; fi
   load_shares
   for pool in $pools_hit; do collect_impact "$pool"; done
-  # apps, once per name: writes = yes when it mounts an affected share read-write
-  declare -A seen=()
+  # apps, one line per name (I4): its pool is the first pool, in row order, through which it writes, else the first that touches it
+  local -a order=(); declare -A a_pool=() a_via=() a_w=()
   while IFS=$'\t' read -r name via w pool; do
     [ -n "$name" ] || continue
-    [ -z "${seen[$name]:-}" ] || { [ "$w" = yes ] && [ "${seen[$name]}" != yes ] && REC=$(awk -F'\t' -v n="$name" 'BEGIN{OFS="\t"} $1=="app" && $3==n { $7="yes" } { print }' <<<"$REC")$'\n'; continue; }
-    seen[$name]=$w
-    rec app "$pool" "$name" "$(f "$(state_of_app "$name")")" "$via" "$w"
+    if [ -z "${a_pool[$name]:-}" ]; then order+=("$name"); a_pool[$name]=$pool; a_via[$name]=$via; a_w[$name]=$w
+    elif [ "$w" = yes ] && [ "${a_w[$name]}" != yes ]; then a_pool[$name]=$pool; a_via[$name]=$via; a_w[$name]=yes; fi
   done < "$appfile"
+  for name in "${order[@]}"; do rec app "${a_pool[$name]}" "$name" "$(f "$(state_of_app "$name")")" "${a_via[$name]}" "${a_w[$name]}"; done
+  rm -f "$appfile"
   rm -f "$appfile"
   # a replacement that is running
   local running=""
@@ -267,15 +268,26 @@ collect() {
       IFS=$'\t' read -r pct txt <<<"$pg"; rec progress "$pool" resilver "$pct" "$txt"; running+="$pool "
     fi
   done
-  # free disks that would do
+  # free disks that would do: one `free` line per disk, when it fits at least one target; the phase uses each pool's own target
   local fl; fl=$(bash "$mp" --list-disks 2>/dev/null || true)
+  local minneed="" need id size role
   for pool in $pools_hit; do
     [ -n "${targets[$pool]:-}" ] || continue
-    local need; need=${msize["$pool/${targets[$pool]%%$'\t'*}"]:-0}
+    need=${msize["$pool/${targets[$pool]%%$'\t'*}"]:-0}
+    [ -n "$minneed" ] && [ "$minneed" -le "$need" ] || minneed=$need
+  done
+  if [ -n "$minneed" ]; then
+    while IFS=$'\t' read -r id size role _; do
+      [ -n "$id" ] && [[ "${size:-}" =~ ^[0-9]+$ ]] && [ "$size" -ge "$minneed" ] || continue
+      rec free "$id" "$size" "$(f "$role")"
+    done <<<"$fl"
+  fi
+  for pool in $pools_hit; do
+    [ -n "${targets[$pool]:-}" ] || continue
+    need=${msize["$pool/${targets[$pool]%%$'\t'*}"]:-0}
     local ready=false
     while IFS=$'\t' read -r id size role _; do
-      [ -n "$id" ] && [[ "${size:-}" =~ ^[0-9]+$ ]] && [ "$size" -ge "$need" ] || continue
-      rec free "$id" "$size" "$(f "$role")"; ready=true
+      [ -n "$id" ] && [[ "${size:-}" =~ ^[0-9]+$ ]] && [ "$size" -ge "$need" ] && ready=true
     done <<<"$fl"
     local ph=detect; $ready && ph=ready; case " $running " in *" $pool "*) ph=running ;; esac
     rec phase "$pool" "$ph"
