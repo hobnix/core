@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "First setup: choose your storage"
+body  = """The first-run wizard has a Storage step. It lists the ZFS pools that are already on the disks (import one under its own name), the empty disks (make a mirror pool from them) and the disks it only shows. Every change opens a plan first."""
