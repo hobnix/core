@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change a pool without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: einen Pool ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <pool> <add|adopt|replace|remove|convert|close|open> [--member <name>] [--disks <id,...>] [--role data|parity] [--kind zfs|snapraid] [--fs ext4|xfs|btrfs] [--encrypt] [--discard] [--mode detach|vdev] [--drain] [--merge] [--chown] [--confirm <word>]
+# args: plan|start <pool> <add|adopt|replace|remove|convert|close|open> [--member <name>] [--disks <id,...>] [--role data|parity] [--kind zfs|snapraid] [--use data|apps] [--fs ext4|xfs|btrfs] [--encrypt] [--discard] [--mode detach|vdev] [--drain] [--merge] [--chown] [--confirm <word>]
 # System command (hs sys pool plan|start): for the interface, timers and tests. It never asks and prints plain
 # key<TAB>value lines. The questions of the console wizards are
 # manage-pool.sh's; both use the same code for the plan: this script runs manage-pool.sh --dry-run and sorts its lines.
@@ -17,7 +17,8 @@
 # start: the same checks, then the work runs as a background job. It needs --confirm <word> equal to confirm_name.
 #   With --encrypt the passphrase is the first line on standard input (it goes into a 0600 file that the job
 #   reads and deletes, never into an argument). Output: status<TAB>started and unit<TAB><job unit>; exit codes as plan.
-# Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR.
+# A NEW pool is made on empty disks only (what discover says), and a disk of a ZFS pool that can be imported is never formatted.
+# Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR, HS_DISCOVER, HS_ZPOOL.
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/pools.sh"
@@ -29,13 +30,14 @@ case "$verb" in plan|start) ;; *) echo "usage: pool-change.sh plan|start <pool> 
 case "$action" in add|adopt|replace|remove|convert|close|open) ;; *) printf 'status\trefused\nreason\tunknown action (add, adopt, replace, remove, convert, close or open)\n'; exit 1 ;; esac
 shift 3
 
-member="" disks="" role="" kind="" fs="" mode="" confirm="" encrypt=false merge=false chown=false drain=false discard=false
+use="" member="" disks="" role="" kind="" fs="" mode="" confirm="" encrypt=false merge=false chown=false drain=false discard=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --member)  member=${2:-}; shift 2 ;;
     --disks)   disks=${2:-}; shift 2 ;;
     --role)    role=${2:-}; shift 2 ;;
     --kind)    kind=${2:-}; shift 2 ;;
+    --use)     use=${2:-}; shift 2 ;;
     --fs)      fs=${2:-}; shift 2 ;;
     --mode)    mode=${2:-}; shift 2 ;;
     --confirm) confirm=${2:-}; shift 2 ;;
@@ -47,15 +49,20 @@ while [ $# -gt 0 ]; do
     *) printf 'status\trefused\nreason\tunknown option %s\n' "$1"; exit 1 ;;
   esac
 done
+case "$use" in ''|data|apps) ;; *) printf 'status\trefused\nreason\t--use: data or apps\n'; exit 1 ;; esac
 [ "$action" != adopt ] || role=adopt
+refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 snapraid=false; pool_is_snapraid "$pool" && snapraid=true
+newpool=false
+if [ "$action" = add ] && ! pool_exists "$pool" && ! "${HS_ZPOOL:-zpool}" list -H "$pool" >/dev/null 2>&1; then newpool=true; fi
 
 # What is still missing (only what nobody else can decide: the choices with a default are options below)
 needs=()
 case "$action" in
   add|adopt) [ -n "$disks" ] || needs+=(disks)
-             if [ "$action" = add ] && $snapraid && [ -z "$role" ]; then needs+=(role); fi ;;
+             if [ "$action" = add ] && $snapraid && [ -z "$role" ]; then needs+=(role); fi
+             if $newpool && [ -z "$use" ]; then needs+=(use); fi ;;
   replace)   [ -n "$member" ] || needs+=(member); [ -n "$disks" ] || needs+=(disks) ;;
   remove|convert|close|open) [ -n "$member" ] || needs+=(member) ;;
 esac
@@ -65,10 +72,25 @@ if [ ${#needs[@]} -gt 0 ]; then
   exit 2
 fi
 
+# Only empty disks for a new pool; a disk of a ZFS pool that can be imported is never formatted for another one
+if [ "$action" = add ]; then
+  disc=$(bash "${HS_DISCOVER:-$here/storage-discover.sh}" 2>/dev/null </dev/null || true)
+  for id in ${disks//,/ }; do
+    row=$(awk -F'\t' -v i="$id" '$1 == i' <<<"$disc")
+    if [ -z "$row" ]; then
+      ! $newpool || refuse "$id is not a disk this server sees"
+      continue
+    fi
+    k=$(cut -f5 <<<"$row"); l=$(cut -f6 <<<"$row"); s=$(cut -f7 <<<"$row")
+    if $newpool && [ "$k" != empty ]; then refuse "$id is not empty ($k $s): erase it on its disk page first (hs sys disk plan $id wipe)"; fi
+    if [ "$k" = zfs ] && [ "$l" != - ]; then refuse "$id belongs to the ZFS pool $l: import it (hs pool $l import) or erase it on its disk page first"; fi
+  done
+fi
+
 # The command line of manage-pool.sh for this change
 args=("$pool")
 case "$action" in
-  add|adopt) args+=(--disks "$disks"); [ -z "$role" ] || args+=(--role "$role") ;;
+  add|adopt) args+=(--disks "$disks"); [ -z "$role" ] || args+=(--role "$role"); [ -z "$use" ] || args+=(--use "$use") ;;
   replace)   args+=(--replace "$member" --disks "$disks") ;;
   remove)    args+=(--remove "$member"); [ -z "$mode" ] || args+=(--mode "$mode") ;;
   convert)   args+=(--convert "$member"); ! $discard || args+=(--discard) ;;
