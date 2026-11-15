@@ -1,18 +1,20 @@
 <script>
   // Add disks (design: "Create dialog" > "Add disks", three variants):
-  //   fast / ZFS bulk : exactly 2 free disks become a new mirror vdev (red, the pool name is typed to confirm)
-  //   bulk SnapRAID   : "Add empty disks" (role, filesystem, optional LUKS) or "Adopt disks" (one disk that already holds files)
+  //   ZFS pool        : exactly 2 free disks become a new mirror vdev (red, the pool name is typed to confirm)
+  //   SnapRAID pool   : "Add empty disks" (role, filesystem, optional LUKS) or "Adopt disks" (one disk that already holds files)
   // The server's plan (hs sys pool plan <pool> add|adopt ...) decides what is allowed and what must be typed; this form only collects the choices.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import DiskPicker from './DiskPicker.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { parseInfo, poolTopic } from '../../pages/storage/pool.js';
+  import { live } from '../../live.svelte.js';
+  import { pools, poolNames, poolOfRole, poolRow } from '../../pools.svelte.js';
   import { freeDisks, FS } from './disks.js';
 
-  let { pool: pool0 = 'bulk', variant: variant0 = 'empty', snap: snap0 = undefined } = $props();
+  let { pool: pool0 = '', variant: variant0 = 'empty', snap: snap0 = undefined } = $props();
 
-  let pool = $state(pool0);
-  let variant = $state(variant0);        // 'empty' | 'adopt' (only SnapRAID bulk)
+  let pool = $state(pool0 || poolOfRole('data') || poolNames()[0] || '');
+  let variant = $state(variant0);        // 'empty' | 'adopt' (only SnapRAID)
   let picked = $state([]);
   let role = $state('data');
   let fs = $state('ext4');
@@ -21,18 +23,18 @@
   let merge = $state(false);
   let chown = $state(false);
 
-  const info = poll(() => `/api/sys/pool/info?pool=${pool}`, 60000, () => poolTopic('info', pool));
+  const info = poll(() => `/api/sys/pool/info?pool=${pool}`, 60000, () => poolTopic('info', pool, live.topics));
   // the adopt listing also names encrypted disks (hs sys pool disks --role adopt), the plain one does not
   const free = poll(() => (variant === 'adopt' ? '/api/sys/pool/disks?role=adopt' : '/api/sys/pool/disks'), 15000);
 
   // does this pool use SnapRAID? the page that opened the form knows (snap0); a pool picked here is read
   const layout = $derived(parseInfo(rows(info)).facts.layout ?? '');
-  const snap = $derived(pool === 'bulk' && (/SnapRAID/i.test(layout) || (!info.loaded && snap0 === true)));
+  const snap = $derived(poolRow(pool)?.kind !== 'zfs' && (/SnapRAID/i.test(layout) || (!info.loaded && snap0 === true)));
   const disks = $derived(freeDisks(rows(free)));
   const adopting = $derived(snap && variant === 'adopt');
   const list = $derived(adopting ? disks.filter((d) => d.hasFiles || d.notes.some((n) => /encrypted/.test(n))) : disks);
 
-  function setPool(p) { pool = p; picked = []; if (p !== 'bulk') variant = 'empty'; }
+  function setPool(p) { pool = p; picked = []; if (poolRow(p)?.kind === 'zfs') variant = 'empty'; }
   function setVariant(v) { variant = v; picked = []; }
 
   const args = () => {
@@ -51,7 +53,7 @@
     <div class="field">
       <label for="ad-pool">Pool</label>
       <div class="seg" id="ad-pool" role="radiogroup" aria-label="Pool">
-        {#each ['bulk', 'fast'] as p}
+        {#each pools.rows as { name: p }}
           <label class="seg-opt"><input type="radio" name="ad-pool" checked={pool === p} onchange={() => setPool(p)} />{p}</label>
         {/each}
       </div>

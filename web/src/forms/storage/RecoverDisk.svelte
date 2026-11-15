@@ -1,10 +1,11 @@
 <script>
   // Get deleted files back from a SnapRAID data disk (hs sys disk plan|start <member> recover [--to <member>] [--types media|all]) and give the disk back
-  // to the pool afterwards (<member> recover-finish). The disk leaves /bulk, is made read-only and searched by content (photorec), a long background job;
+  // to the pool afterwards (<member> recover-finish). The disk leaves /<pool>, is made read-only and searched by content (photorec), a long background job;
   // what is found goes onto another data disk (share "recovered"). Names and folders of deleted files cannot be recovered. The server names the word to type.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { poolOfRole } from '../../pools.svelte.js';
 
-  let { pool = 'bulk', member, members = [] } = $props();
+  let { pool = poolOfRole('data'), member, members = [] } = $props();
 
   let choice = $state('recover');
   let to = $state('');
@@ -42,9 +43,9 @@
           <label class="seg-opt"><input type="radio" name="rc-types" checked={types === 'all'} onchange={() => (types = 'all')} />Every kind (slow, many junk files)</label>
         </div>
       </div>
-      <div class="hint">The disk leaves /bulk (its files are not visible there meanwhile), is set read-only and is read completely: hours, a background job. Names and folders of deleted files are gone for good; files come back numbered, videos and music named by their tags. A file that was written in pieces can come back cut off. Nothing is ever written to this disk.</div>
+      <div class="hint">The disk leaves /{pool} (its files are not visible there meanwhile), is set read-only and is read completely: hours, a background job. Names and folders of deleted files are gone for good; files come back numbered, videos and music named by their tags. A file that was written in pieces can come back cut off. Nothing is ever written to this disk.</div>
     {:else}
-      <div class="hint">The disk can be written to again and is mounted into /bulk. What was recovered stays where it is. Refused while the search is still running.</div>
+      <div class="hint">The disk can be written to again and is mounted into /{pool}. What was recovered stays where it is. Refused while the search is still running.</div>
     {/if}
   {/snippet}
 </CreateDialog>
