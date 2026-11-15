@@ -2,8 +2,12 @@
   // Mount a share of another homeserver read only (hs sys peers plan|start add <peer> <host> <share> --user <login> [--domain <D>]).
   // The password of the login is one line on standard input: it never goes into the arguments or the job log.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { pools, loadPools, poolOfRole } from '../../pools.svelte.js';
 
   let { onclose, ondone } = $props();
+
+  loadPools();
+  const dataPool = $derived((pools.loaded ? poolOfRole('data') : '') || 'bulk');
 
   let peer = $state('');
   let host = $state('');
@@ -48,7 +52,7 @@
       <label for="pm-pass">Password</label>
       <input id="pm-pass" class="input" type="password" bind:value={pass} autocomplete="new-password" />
     </div>
-    <div class="hint">Read only. It is not part of /bulk, the parity or the backup. The other server makes the login with “Give access…” on its Network page (or <code>hs remote offer</code>); the password is shown once.</div>
+    <div class="hint">Read only. It is not part of /{dataPool}, the parity or the backup. The other server makes the login with “Give access…” on its Network page (or <code>hs remote offer</code>); the password is shown once.</div>
   {/snippet}
 </CreateDialog>
 

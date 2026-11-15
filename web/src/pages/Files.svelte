@@ -2,7 +2,7 @@
   // Storage > Files: a two-pane file manager for disks, pools, shares and temporary disks (docs/PLAN-file-manager.md, web/design/HANDOFF.md "Files").
   // Nothing runs from a click or a key: copy, move, delete, rename and new folder open a plan first (files/FmPlan.svelte). The same-files rule (a pool
   // disk and the pool of the same array never meet) is enforced by the server; the picker and the plan dialog only show its answer.
-  // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:bulk[&rpath=/y][&select=<name>].
+  // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:<name>[&rpath=/y][&select=<name>].
   import { onDestroy, untrack } from 'svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { live } from '../live.svelte.js';
@@ -15,6 +15,7 @@
   import Chip from '../ui/Chip.svelte';
   import { route } from '../route.svelte.js';
   import { Fm } from '../files/fm.svelte.js';
+  import { loadPools } from '../pools.svelte.js';
   import FmPane from '../files/FmPane.svelte';
   import FmPlan from '../files/FmPlan.svelte';
   import FmJob from '../files/FmJob.svelte';
@@ -23,6 +24,7 @@
   import * as S from '../files/selection.js';
 
   let { deck } = $props();
+  loadPools();
   const fm = new Fm();
   let root;
   // nothing is read while the storage is locked (the frame shows the lock banner), and not before the status document has said so
