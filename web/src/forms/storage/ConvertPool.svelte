@@ -1,11 +1,12 @@
 <script>
-  // Convert a SnapRAID data disk (hs sys pool plan|start bulk convert --member <name> [--fs ext4|xfs|btrfs] [--encrypt]):
+  // Convert a SnapRAID data disk (hs sys pool plan|start <pool> convert --member <name> [--fs ext4|xfs|btrfs] [--encrypt]):
   // its files move onto the other data disks, the disk is erased and formatted again (another filesystem, or LUKS).
-  // It is red and long (a background job); the server names the word to type (the disk). Only the data disks of a SnapRAID bulk pool qualify.
+  // It is red and long (a background job); the server names the word to type (the disk). Only the data disks of a SnapRAID pool qualify.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { poolOfRole } from '../../pools.svelte.js';
   import { FS } from './disks.js';
 
-  let { pool = 'bulk', member: member0 = '', members = [] } = $props();
+  let { pool = poolOfRole('data'), member: member0 = '', members = [] } = $props();
 
   let member = $state(member0 || members[0] || '');
   let fs = $state('ext4');
