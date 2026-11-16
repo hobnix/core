@@ -232,12 +232,12 @@ def upgrade_steps(params):
         step("run", "git -C /etc/nixos rev-parse HEAD > /var/tmp/upgrade-rev-before", what="the revision of the old release is noted"),
         step("run", "cp /etc/nixos/machine.toml /var/tmp/upgrade-machine-before", what="machine.toml of the old release is kept"),
         step("run", "%s > /var/tmp/upgrade-schema-before && %s > /var/tmp/upgrade-events-before" % (ver, rows), what="the state.db schema version and event count are noted"),
-        # point the old checkout at the candidate branch: update.sh follows the upstream of the current branch while no newer signed tag exists
-        step("run", "git -C /etc/nixos remote set-url origin %s" % _q(repo), what="origin is the Hobnix repository"),
-        # /etc/nixos of a release is a detached HEAD at the tag (lib/checkout.sh): a local branch on that commit follows the candidate
-        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/%s" % (_q(cand), _q(cand)), timeout=600, what="the candidate branch is fetched"),
-        step("run", "git -C /etc/nixos checkout -q -B upgrade-from-release", what="a local branch stands on the revision of the old release"),
-        step("run", "git -C /etc/nixos branch -u origin/%s" % _q(cand), what="the current branch follows the candidate"),
+        # The stable channel follows the newest signed release tag (v0.1.0 is the newest: "already the latest"), and a candidate is no tag yet. The
+        # channel edge follows origin/develop: the candidate becomes `develop` of a bare repository in the VM, and origin points there (no network needed)
+        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/candidate" % _q(cand), timeout=600, what="the candidate branch is fetched"),
+        step("run", "git init -q --bare /var/tmp/candidate.git && git -C /etc/nixos push -q /var/tmp/candidate.git refs/remotes/origin/candidate:refs/heads/develop --tags", what="the candidate is `develop` of a local repository"),
+        step("run", "chown -R \"$(stat -c %U /etc/nixos)\" /var/tmp/candidate.git && git -C /etc/nixos remote set-url origin /var/tmp/candidate.git", what="origin is that repository"),
+        step("run", "hs config set updateChannel edge", what="the update channel is edge"),
         step("run", "hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),
