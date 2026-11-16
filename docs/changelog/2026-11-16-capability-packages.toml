@@ -1,4 +1,4 @@
 date  = "2026-11-16"
 type  = "change"
 title = "Packages can now be optional parts of the server (kind capability)"
-body  = """The package checks know a third kind, capability, next to recipe and extension. `hs pkg list --kind capability` lists them. A package that needs a newer Nix interface level than the server has (capabilities/nix-api-level) is refused at install. Nothing is installed from it yet; the repository for them comes later."""
+body  = """The package checks know a third kind, capability, next to recipe and extension. `hs pkg list --kind capability` lists them. A package that needs a newer Nix interface level than the server has (capabilities/nix-api-level) is refused at install. Such a package from a default repository may also own its own name as a command word (`hs <name> ...`), as long as no core command uses that word. Nothing is installed from it yet; the repository for them comes later."""
