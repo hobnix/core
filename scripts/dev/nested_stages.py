@@ -171,7 +171,7 @@ def pool(params):
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
         step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="the pool job finishes (/bulk shows up)", expect_rc=None),
         # what the console log needs when /bulk does not show up (not a check)
-        step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | tail -n 25 | cut -c1-200; "
+        step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "
                     "systemctl status bulk-mount.service --no-pager | head -n 12 | cut -c1-200; grep -E 'bulk|data' /proc/mounts | cut -c1-150; ls /var/lib/hs/disks 2>&1 | head",
              expect_rc=None, what="the state of the pool job and the mounts is shown"),
         step("run", "hs pool bulk | grep -q data", what="hs pool bulk lists the data disks"),
