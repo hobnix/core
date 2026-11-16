@@ -6,10 +6,11 @@
   import { route, go } from '../route.svelte.js';
   import { nodeItems } from '../nav.js';
   import { capEntries } from '../settings/layout.js';
-  import layout from '../settings/layout.gen.json';
+  import { useLayout } from '../settings/layoutstate.svelte.js';
   import { ui } from '../ui.svelte.js';
   import { pools } from '../pools.svelte.js';
 
+  const getLayout = useLayout();
   let { nodes = [], locked = false, meta = {} } = $props();
 
   // open state per node name; a node stays open while the page on screen belongs to it
@@ -23,7 +24,7 @@
   <div class="thead"><span>Servers</span><span class="cnt">{nodes.length}</span></div>
   <div class="tscroll">
     {#each nodes as n (n.name)}
-      {@const items = nodeItems(n.kind, n.local ? ui.features.capabilities : n.caps, n.local ? ui.features.extensions : null, n.local ? capEntries(layout, ui.features.capabilities) : [], pools.rows).filter((i) => i.path !== '/')}
+      {@const items = nodeItems(n.kind, n.local ? ui.features.capabilities : n.caps, n.local ? ui.features.extensions : null, n.local ? capEntries(getLayout(), ui.features.capabilities) : [], pools.rows).filter((i) => i.path !== '/')}
       <TreeRow icon={n.kind === 'main' ? 'hard-drives' : n.kind === 'peer' ? 'house-line' : 'globe-hemisphere-west'} label={n.name} strong gap={n !== nodes[0]}
                href={addr(n)} active={route.node === n.name && route.path === '/'}
                caret={items.length ? (isOpen(n) ? 'open' : 'closed') : null} ontoggle={() => (open[n.name] = !isOpen(n))}

@@ -47,6 +47,7 @@ export const terminalTicket = (target) => call('POST', '/api/terminal', { target
 export const vmConsoleTicket = (target) => call('POST', '/api/vmconsole', { target });
 
 // the last revision of the changelog this user has seen (What's new), kept on the server
+export const settingsLayout = () => call('GET', '/api/settings-layout');
 export const changesSeen = () => call('GET', '/api/changes/seen');
 export const liveRefresh = (topic) => call('POST', '/api/live/refresh', { topic });
 export const markChangesSeen = (rev) => call('POST', '/api/changes/seen', { rev });

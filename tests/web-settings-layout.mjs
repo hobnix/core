@@ -2,7 +2,7 @@
 // capabilities that are on and have a page show in the tree. Plain node. The key lists come from the .sh (HS_KEYS, HS_SETTABLE).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fieldsFor, capEntries, pageOf } from '../web/src/settings/layout.js';
+import { fieldsFor, capEntries, pageOf, mergeLayout } from '../web/src/settings/layout.js';
 import { mainTree, nodeItems } from '../web/src/nav.js';
 
 const layout = JSON.parse(readFileSync(new URL('../web/src/settings/layout.gen.json', import.meta.url), 'utf8'));
@@ -55,3 +55,14 @@ assert.deepEqual(net.map((s) => s.id), ['site-name', 'share-networks', 'dhcp-ran
 assert.ok(net.at(-1).keys.join() === 'nic' && !net.at(-1).options?.length);
 assert.ok(net.find((s) => s.id === 'incus-ui').options.some((o) => o.recommended && o.set.incusUi === 'true'));
 console.log('  ok    settings layout');
+
+// (5) the layout of installed capability packages is added, never replaces the core
+const ov = { keys: { zetaHost: 'cap:zeta', language: 'cap:zeta' }, caps: { zeta: { title: 'Zeta', icon: 'star', entry: true }, gateway: { title: 'X', icon: 'x', entry: true } } };
+const merged = mergeLayout(layout, ov);
+assert.equal(merged.keys.zetaHost, 'cap:zeta');
+assert.equal(merged.keys.language, layout.keys.language, 'the core keeps its key');
+assert.equal(merged.caps.gateway.title, layout.caps.gateway.title, 'the core keeps its capability');
+assert.deepEqual(capEntries(merged, ['zeta']).map((e) => e.path), ['/settings/capabilities/zeta']);
+assert.equal(fieldsFor(merged, 'cap:zeta', [{ key: 'zetaHost' }, { key: 'language' }]).length, 1);
+assert.equal(mergeLayout(layout, null), layout);
+assert.equal(mergeLayout(layout, {}).keys.language, layout.keys.language);

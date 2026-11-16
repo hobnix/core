@@ -12,7 +12,7 @@
   schema-gen.py overlay retire NAME [--packages DIR] [--out DIR]   remember the option keys of a package that is about to be removed (retired-keys.tsv)
                            the same kind of derived file for the capability packages installed on a machine (docs/PLAN-capabilities-on-machine.md):
                            reads DIR/<name>/capability.toml (default $HS_PACKAGES_DIR or /var/lib/hs/packages/current) and writes
-                           capabilities.tsv, schema.overlay.json and config-keys.overlay (the options.toml of kind = "capability"
+                           capabilities.tsv, schema.overlay.json, config-keys.overlay and layout.overlay.json (the options.toml of kind = "capability"
                            packages; a key of the core or of another package is refused) into OUT (default $HS_STATE_DIR/generated or /var/lib/hs/generated); a package named like a core
                            capability is refused. Never touches the checkout. `list` prints the rows without writing.
   schema-gen.py rule KEY   type<TAB>choices<TAB>min<TAB>pattern<TAB>hint of one option (what hs sys config set checks); exit 1 if unknown
@@ -464,6 +464,28 @@ def retire_package(pkgdir, name, out):
     return keys
 
 
+def render_overlay_layout(pkgdir):
+    """layout.overlay.json: the Settings page of every option of an installed capability package (`cap:<name>`) and the package's page entry
+    (title, icon, entry), the same shape as keys and caps of web/src/settings/layout.gen.json. [settings] icon / entry of package.toml are optional.
+    The same inputs give the same bytes."""
+    opts = overlay_options(pkgdir)
+    keys = {o['key']: 'cap:' + o['capability'] for o in opts}
+    caps = {}
+    for name in sorted({o['capability'] for o in opts}):
+        with open(os.path.join(pkgdir, name, 'package.toml'), 'rb') as fh:
+            m = tomllib.load(fh)
+        st = m.get('settings', {})
+        if not isinstance(st, dict):
+            die('%s: [settings] must be a table' % name)
+        icon = st.get('icon', 'puzzle-piece')
+        if not (isinstance(icon, str) and re.fullmatch(r'[a-z][a-z0-9-]*', icon)):
+            die('%s: [settings] icon must be a Phosphor name' % name)
+        if 'entry' in st and not isinstance(st['entry'], bool):
+            die('%s: [settings] entry must be true or false' % name)
+        caps[name] = {'title': str(m.get('title', name)), 'icon': icon, 'entry': bool(st.get('entry', True))}
+    return json.dumps({'keys': keys, 'caps': caps}, sort_keys=True, separators=(',', ':'), ensure_ascii=False) + '\n'
+
+
 def overlay_main(rest):
     def opt(flag, default):
         return rest[rest.index(flag) + 1] if flag in rest and rest.index(flag) + 1 < len(rest) else default
@@ -478,7 +500,7 @@ def overlay_main(rest):
             print('retired ' + k)
         return 0
     files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
-             ('config-keys.overlay', render_overlay_keys(pkgdir))]
+             ('config-keys.overlay', render_overlay_keys(pkgdir)), ('layout.overlay.json', render_overlay_layout(pkgdir))]
     core_example = opt('--example', os.path.join(ROOT, 'machine.toml.example'))
     merged = render_overlay_example(pkgdir, read(core_example)) if os.path.isfile(core_example) else ''
     if merged:
