@@ -405,6 +405,8 @@ A package update does not touch a running app. For a recipe it replaces the pack
 
 A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`). `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has: run `hs update` first. There is no upper bound: the core only raises its level and keeps a function for one level after announcing its removal (ADR 0008).
 
+A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from the repository `capabilities` and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
+
 Add a repository of your own (a typed repository name confirms it; releases must be signed with a key you trust):
 
 ```bash
