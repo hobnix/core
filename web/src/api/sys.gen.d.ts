@@ -1593,7 +1593,7 @@ export interface SysOperations {
     lines: string;
   };
   "pkg.market": {
-    /** every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|orphan), core (yes|no), audience, title */
+    /** every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|waits|orphan; waits = the release needs a newer core), core (yes|no), audience, title */
     words: ["pkg", "market"];
     path: "/pkg/market";
     method: "get";

@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       nix: ${{ steps.f.outputs.nix }}
+      capmx: ${{ steps.f.outputs.capmx }}
       root: ${{ steps.f.outputs.root }}
       rust: ${{ steps.f.outputs.rust }}
       pkg: ${{ steps.f.outputs.pkg }}
@@ -41,7 +42,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
-          nix=true root=true rust=true pkg=true
+          nix=true root=true rust=true pkg=true capmx=true
           # only a pull request is narrowed; everything else gets the full set (the merge queue, `develop`, the nightly run)
           [ "${{ github.event_name }}" = pull_request ] || BASE=""
           if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
@@ -51,6 +52,8 @@ jobs:
             echo "$files" | grep -qvE '^(web/|docs/|\.claude/|\.github/ISSUE_TEMPLATE/)|\.md$' || root=false
             # rust: the Cargo workspace, the scripts it stands in for, or this workflow
             # pkg: what the package repositories are checked against (the core's helpers and libraries, the package folders and their tests)
+            # capmx: the Nix interface capability packages build against (decision O9 of docs/PLAN-capabilities-repo.md); the matrix runs with --vendor then
+            echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/nix-matrix\.sh)$' || capmx=false
             echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
             echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
           fi
@@ -71,6 +74,7 @@ jobs:
             else matrix='[1,2,3,4]'; fi
           fi
           echo "nix=$nix" >> "$GITHUB_OUTPUT"
+          echo "capmx=$capmx" >> "$GITHUB_OUTPUT"
           echo "root=$root" >> "$GITHUB_OUTPUT"
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
@@ -246,6 +250,44 @@ jobs:
         run: |
           rm -f machine.toml hardware-configuration.nix
           bash scripts/dev/nix-matrix.sh
+      # Capability packages (docs/PLAN-capabilities-repo.md Q5, decision O9): the same matrix with every package that has a Nix module vendored into
+      # the checkout (`pkg.py vendor`, no --impure). First the fixture of this repository (tests/fixtures/capabilities/hello-nix), then
+      # hobnix/capabilities: the branch of the same name if it exists, else `develop`; a release pull request (into main) and a v* tag use its
+      # newest tag (what stable servers get). Runs when the pull request touches the Nix interface (the `changes` job), always for a release pull
+      # request, a tag and the runs that are not pull requests.
+      - name: Capability matrix with the fixture package (--vendor)
+        if: needs.changes.outputs.capmx == 'true' || github.base_ref == 'main'
+        run: |
+          rm -f machine.toml hardware-configuration.nix
+          bash scripts/dev/nix-matrix.sh --vendor tests/fixtures/capabilities
+      - name: Choose the ref of hobnix/capabilities
+        id: capref
+        if: needs.changes.outputs.capmx == 'true' || github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          url=https://github.com/hobnix/capabilities.git
+          ref=develop
+          if [ "$RELEASE" = true ]; then
+            ref=$(git ls-remote --tags --refs "$url" 'v*' | sed 's#.*refs/tags/##' | sort -V | tail -n 1)
+            [ -n "$ref" ] || ref=main
+          elif git ls-remote --exit-code --heads "$url" "$HEAD_REF" >/dev/null 2>&1; then
+            ref=$HEAD_REF
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        if: steps.capref.outputs.ref != ''
+        with:
+          repository: hobnix/capabilities
+          ref: ${{ steps.capref.outputs.ref }}
+          path: pkgs/capabilities
+      - name: Capability matrix with hobnix/capabilities (--vendor)
+        if: steps.capref.outputs.ref != ''
+        run: |
+          echo "hobnix/capabilities: ${{ steps.capref.outputs.ref }} at $(git -C pkgs/capabilities rev-parse HEAD)"
+          rm -f machine.toml hardware-configuration.nix
+          bash scripts/dev/nix-matrix.sh --vendor pkgs/capabilities
       - name: Installer ISO evaluates (installer/iso.nix; the image itself is built on a release tag)
         run: bash scripts/dev/build-iso.sh --eval
 

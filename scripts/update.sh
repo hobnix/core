@@ -115,6 +115,23 @@ else
   fi
 fi
 
+# A package with a Nix module that the pulled core does not suit (needs a newer API level than the core has) stops the update BEFORE the rebuild
+# and is named, instead of a failed evaluation (docs/PLAN-capabilities-repo.md, Q6). Checked with the pulled copy of pkg.py.
+bad=""
+if [ -f "$repo/scripts/pkg.py" ] && ! bad=$(python3 -I "$repo/scripts/pkg.py" core-check 2>/dev/null); then
+  if [ -n "$bad" ]; then
+    while IFS=$'	' read -r pname ptext; do
+      [ -n "$pname" ] || continue
+      warn "$(t '%s does not suit this core: %s' "$pname" "$ptext")"
+      note "$(t 'Look for a release that does: hs pkg update %s' "$pname")"
+    done <<< "$bad"
+    note "$(t 'The new configuration is fetched, nothing was rebuilt. Fix the package, then run: hs rebuild')"
+    event_emit update.stopped "$(hostname)" "A package does not suit the new core"
+    bash "$(dirname "$0")/notify.sh" --category info "$(hostname): update stopped" "A package does not suit the new core. Nothing was rebuilt; see \`hs update\`." low || true
+    exit 1
+  fi
+fi
+
 # machine.nix -> machine.toml once (the old file is kept as machine.nix.migrated), then the options that are new in
 # machine.toml.example are put into machine.toml in their place, commented out (nothing of yours is changed)
 sync=$repo/scripts/machine-sync.sh

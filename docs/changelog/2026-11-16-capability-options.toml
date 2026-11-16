@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "Options of an installed capability package work like the built-in ones"
+body  = """After a package is installed, `hs config list`, `hs config set` and `hs config check` know its options, and `hs config sync` keeps them in their own section of machine.toml. Options of the built-in parts are unchanged."""

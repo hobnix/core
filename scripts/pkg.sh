@@ -46,9 +46,14 @@ case "${1:-list}" in
     next_step "hs pkg updates" ;;
   updates)
     rows=$(py updates)
-    if [ -z "$rows" ]; then ok "$(t 'Every package is up to date.')"; exit 0; fi
-    { thead 'Package' 'Applied' 'Available'; printf '%s\n' "$rows"; } | table
-    next_step "hs recipe <name>" ;;
+    waits=$(py updates --waits)
+    if [ -z "$rows" ] && [ -z "$waits" ]; then ok "$(t 'Every package is up to date.')"; exit 0; fi
+    if [ -n "$rows" ]; then { thead 'Package' 'Applied' 'Available'; printf '%s\n' "$rows"; } | table; fi
+    while IFS=$'\t' read -r n v w; do
+      [ -n "$n" ] || continue
+      note "$(t '%s %s waits for core: it needs %s. Run: hs update' "$n" "$v" "$w")"
+    done <<<"$waits"
+    [ -z "$rows" ] || next_step "hs recipe <name>" ;;
   validate)
     if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
       while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
@@ -142,6 +147,9 @@ case "${1:-list}" in
         fail "$(t 'Removing needs a person at a terminal, --yes or --confirm-name <name>.')"; exit 1
       fi
     fi
+    # the keys of its options become "retired" (hs config check says "unused", not "unknown"): written before the folder is gone
+    PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay retire "$name" --packages "$st/packages/current" --out "$st/generated" >/dev/null \
+      || warn "$(t 'The options of this package could not be remembered.')"
     py remove "$name"
     for o in on off; do
       f=$st/capabilities-$o

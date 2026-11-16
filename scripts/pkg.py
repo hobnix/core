@@ -127,6 +127,35 @@ def nix_api_level():
     return 1
 
 
+def waits_for(entry):
+    """"" when this core meets what a release needs, else the words for it ("core API level 3", "Nix API level 2"): the release waits for a newer core."""
+    rq = REQUIRES.match(str(entry.get("requires_core", "")))
+    if rq and int(rq.group(1)) > api_level():
+        return "core API level %s" % rq.group(1)
+    v = entry.get("requires_nix_api")
+    if isinstance(v, int) and not isinstance(v, bool) and v > nix_api_level():
+        return "Nix API level %d" % v
+    return ""
+
+
+def core_check():
+    """[(name, text)]: installed vendored packages (a Nix module) whose needs the core in this checkout does not meet, for `hs update` after the
+    pull and before the rebuild (docs/PLAN-capabilities-repo.md, Q6)."""
+    out = []
+    for n in sorted(installed()):
+        try:
+            with open(os.path.join(state_dir(), "current", n, "package.toml"), "rb") as f:
+                m = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        if m.get("kind") != "capability" or not m.get("module"):
+            continue
+        w = waits_for(m)
+        if w:
+            out.append((n, "needs %s, this core has core API level %d and Nix API level %d" % (w, api_level(), nix_api_level())))
+    return out
+
+
 def semver_key(v):
     return tuple(int(x) for x in v.split("."))
 
@@ -511,6 +540,11 @@ def main(argv):
         for f in found:
             print("	".join(f))
         return 1 if found else 0
+    elif cmd == "core-check":      # name TAB text per installed vendored package this core does not suit, exit 1 when any
+        found = core_check()
+        for n, t in found:
+            print("%s	%s" % (n, t))
+        return 1 if found else 0
     elif cmd == "nix-api":
         print(nix_api_level())
     elif cmd == "list":
@@ -523,8 +557,11 @@ def main(argv):
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
     elif cmd == "updates":
         seen = set()
+        inst_now = installed()
         for r in rows(True):
-            if r["installed"] != "-" and semver_key(r["version"]) > semver_key(r["installed"]):
+            if "repo" in inst_now.get(r["name"], {}):
+                continue       # installed from a repository: compared with its newest release below
+            if "--waits" not in rest and r["installed"] != "-" and semver_key(r["version"]) > semver_key(r["installed"]):
                 print("\t".join([r["name"], r["installed"], r["version"]]))
                 seen.add(r["name"])
         # packages from a repository: the newest verified release in the cached clones (hs pkg fetch refreshes them)
@@ -537,7 +574,12 @@ def main(argv):
                 continue
             for r_name, e, _, _ in cat.get(n, []):
                 if r_name == have["repo"] and semver_key(e["version"]) > semver_key(have["version"]):
-                    print("\t".join([n, have["version"], e["version"]]))
+                    w = waits_for(e)
+                    if "--waits" in rest:     # newer releases this core cannot take yet: name, available, what they wait for
+                        if w:
+                            print("\t".join([n, e["version"], w]))
+                    elif not w:
+                        print("\t".join([n, have["version"], e["version"]]))
     elif cmd == "capabilities":
         # the capability packages the repositories offer (hs sys pkg capabilities): name, repo, available version, installed version (- = none),
         # state (new|current|update), requires (comma list, - = none), type (feature|provider, - = not given), title. requires and type come from
