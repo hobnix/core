@@ -13,10 +13,15 @@
   import PageTabs from '../ui/PageTabs.svelte';
   import Button from '../ui/Button.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
+  import StageBadge from '../ui/StageBadge.svelte';
+  import { parseStates, stageActions } from './states.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
   const repoList = poll('/api/sys/pkg/repos', 30000);
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos'];
+  // the lifecycle stage and flags of every package (ADR 0027); the table still reads the market for the versions and `core`
+  const stateList = poll('/api/sys/pkg/states', 30000);
+  const stageOf = $derived(parseStates(rows(stateList)));
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states'];
 
   // name, kind, repository, available version, installed version (- = none), state (new|current|update|waits|orphan), core, audience, title
   const pkgs = $derived(rows(market).map((r) => ({ name: r[0], kind: r[1], repo: r[2], avail: r[3], inst: r[4] === '-' ? '' : r[4], state: r[5], core: r[6] === 'yes', title: r[8] === '-' ? '' : r[8] })));
@@ -51,6 +56,7 @@
 
   const install = (p) => openPlan('pkg', ['install', p.name], `Install ${p.name}`);
   const update = (p) => openPlan('pkg', ['update', p.name], `Update ${p.name}`);
+  const turn = (p, want) => openPlan('parts', [want, p.name], `${want === 'enable' ? 'Turn on' : 'Turn off'} ${p.name}`);
   const remove = (p) => openPlan('pkg', ['remove', p.name], `Remove ${p.name}`);
   const fetchAll = () => openPlan('pkg', ['fetch'], 'Read the repositories again');
   const addRepo = () => openCreate(RepoAdd, {});
@@ -176,8 +182,16 @@
           {:else if col.key === 'repo'}
             {p.repo}
           {:else if col.key === 'state'}
-            <StatusDot state={stateDot(p)} label={stateText(p)} />
+            {#if stageOf.get(p.name)}
+              <StageBadge stage={stageOf.get(p.name).stage} flags={stageOf.get(p.name).flags} />
+            {:else}
+              <StatusDot state={stateDot(p)} label={stateText(p)} />
+            {/if}
           {:else if p.state !== 'new'}
+            {@const turnTo = stageActions(stageOf.get(p.name)).turn}
+            {#if turnTo}
+              <Button size="sm" busy={jobRunning('parts', ['enable', p.name]) || jobRunning('parts', ['disable', p.name])} tooltip={turnTo === 'enable' ? 'Switch it on (shows the plan)' : 'Switch it off (shows the plan)'} onclick={() => turn(p, turnTo)}>{turnTo === 'enable' ? 'Turn on' : 'Turn off'}</Button>
+            {/if}
             <Button variant="ghost" class="btn-icon" icon="trash" disabled={p.core} busy={jobRunning('pkg', ['remove', p.name])} tooltip={p.core ? 'The server refers to this package by name: it stays' : 'Remove the installed copy (data and containers stay)'} aria-label="Remove {p.name}" onclick={() => remove(p)} />
           {/if}
         {/snippet}

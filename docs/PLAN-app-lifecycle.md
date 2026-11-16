@@ -1,6 +1,7 @@
 # Plan: one lifecycle for apps and packages (milestone 0.6)
 
-Status: **Proposal 2026-11-16**, waits for the owner's answers (table "Decisions for the owner"). Design record for epic
+Status: **Accepted 2026-11-16**: the owner accepted all recommended answers D1 to D17 (table "Decisions for the owner"); #269 moves to a later
+milestone (the board is updated separately). Design record for epic
 [#187](https://github.com/hobnix/server/issues/187) and its open children #465, #466, #467, #468, #469, #470, #471 and #269, with the three bugs #612,
 #613 and #614 that fit into the steps they touch. Nothing is built by this page. It checks the facts of the issues against the code of branch `0.6`
 (2026-11-16), names where the code differs from what the issues assume, and gives an ordered list of steps, each sized for one pull request. This plan

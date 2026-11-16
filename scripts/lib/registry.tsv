@@ -230,6 +230,7 @@ sys	sys ssh-key list	ssh-key.sh	--list	the SSH keys of adminuser, one per line: 
 sys	sys ssh-key plan <action>	ssh-key-change.sh	plan {1} {rest}	what adding or removing an SSH key would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused)	-
 sys	sys ssh-key start <action>	ssh-key-change.sh	start {1} {rest}	do it (hs sys ssh-key start add <public key line> | remove <id> --confirm remove); takes effect with hs rebuild	-
 sys	sys recipes list	recipes-list.sh	--list	the app recipes: name, description, instances, state (installed|partly|not installed|parked|unknown)	-
+sys	sys apps list	apps-list.sh	--list	the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title	-
 sys	sys recipes versions	recipes-versions.sh	--list	the app recipes with versions: name, available version, applied version (- = not known), state (current|update|unknown)	-
 sys	sys setup list	setup-list.sh	--list	the first-run checklist: id, state (done|open), label, command, web page; the last line (finished) is done once setupDone is true	-
 sys	sys setup plan <action>	setup-change.sh	plan {1} {rest}	what closing the first-run wizard would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
@@ -500,6 +501,7 @@ user	pkg repo add <name> <url>	pkg.sh	repo add {1} {2} {rest}	add a package repo
 user	pkg repo remove <name>	pkg.sh	repo remove {1}	remove a repository that was added	ein hinzugefügtes Repository entfernen	topic:system,changes
 sys	sys pkg available	pkg.sh	available	what the repositories offer as data: repo, package, kind, version, applied version (- = not installed)	-
 sys	sys pkg market	pkg.sh	--market	every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|waits|orphan; waits = the release needs a newer core), core (yes|no), audience, title	-
+sys	sys pkg states	pkg.sh	--states	the lifecycle stage of every package: name, kind, stage (available|installed|on|running), flags (comma list of update|waits|orphan|pending|failed|unhealthy|stopped, - = none), repo, available version, installed version, instances (comma list, - = none), title	-
 sys	sys pkg repos	pkg.sh	--repos	the package repositories as data: name, address, signed|unsigned, default|added	-
 sys	sys pkg plan <action>	pkg-change.sh	plan {1} {rest}	what installing, updating or removing a package, fetching, or adding or removing a repository would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused); check-draft checks a package.toml draft on stdin (finding lines, changes nothing)	-
 sys	sys pkg start <action>	pkg-change.sh	start {1} {rest}	do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name>	-

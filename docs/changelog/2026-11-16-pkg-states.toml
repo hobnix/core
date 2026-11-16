@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "Apps and packages show one stage: available, installed, on or running"
+body  = """Every package now has the same four stages, with notes such as update, pending or stopped. The Marketplace and Apps pages show them and offer Install, Update and Remove."""
