@@ -26,7 +26,7 @@ EXIT_OK, EXIT_FAIL, EXIT_USAGE, EXIT_NOHOST, EXIT_INFRA = 0, 1, 2, 3, 4
 ANSI = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1bP[^\x1b]*\x1b\\")
 PROMPT_ISO = r"\[nixos@[^\]]*\]\$ "      # the auto-login shell of the NixOS installer image
 LOGIN = r"\n[^\n]*login: $"
-LOGIN_OR_SHELL = r"(?:login: $|\[%s@[^\]]*\][$#] $)"
+LOGIN_OR_SHELL = r"(?:login: $|\[%s@[^\]]*\][$#] $|\[root@[^\]]*\]# $)"   # a root shell is left over from the stage before: the login step exits it
 
 
 # ---------------------------------------------------------------- preflight
@@ -252,6 +252,9 @@ def run_steps(console, steps, params_vars=None, report=None):
             if k == "login":   # an installed VM: the console is at a login prompt or still in a shell
                 console.send("")
                 got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
+                if re.search(r"\[root@[^\]]*\]# $", got):   # left-over `sudo -i` shell: back to adminuser (or to the login prompt)
+                    console.send("exit")
+                    got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
                 if re.search(r"login: $", got):
                     console.send(s["user"])
                     console.expect(r"[Pp]assword: ?$", 30)
@@ -277,6 +280,10 @@ def run_steps(console, steps, params_vars=None, report=None):
                 rec["rc"] = rc
                 if k == "capture":
                     vars_[s["var"]] = out.strip() if s.get("strip") else out
+                    if s.get("record"):   # the value goes into result-<stage>.json for the caller (testlab.sh reads the address of the VM there)
+                        # one value: the last line (an echoed command line or a prompt may stand before it in the console stream)
+                        lines = [x.strip() for x in out.splitlines() if x.strip()]
+                        rec["value"] = vars_[s["var"]] = lines[-1] if lines else ""
                 rec["ok"] = want is None or rc == want
             elif k == "pick_disk":
                 d = pick_disk(vars_.get(s["src"], ""))

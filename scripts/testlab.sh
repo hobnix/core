@@ -372,9 +372,15 @@ stage_pool() {
   res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2" "$pwfile")
 }
 stage_browser() {
-  local ip rc=0
-  ip=$("$incus" list "$vm" -f csv -c 4 2>/dev/null | head -n1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
-  if [ -z "$ip" ]; then warn "The VM has no IPv4 address that Incus can see."; res[6]=error; return; fi
+  local ip rc=0 ar
+  # the VM has no incus agent and sits on a LAN bridge, so `incus list` shows no address: ask the VM on its serial console (scenario address)
+  ar=$(xrun address "$vm" "" "$pwfile")
+  ip=$(python3 -I -c 'import json,re,sys
+for s in json.load(open(sys.argv[1])).get("steps", []):
+    v = s.get("value", "")
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+", v): print(v); break' "$rundir/harness-address/result-address.json" 2>/dev/null || true)
+  if [ -z "$ip" ]; then warn "Could not read an IPv4 address from the VM's console (scenario address: $ar)."; res[6]=error; return; fi
+  note "$(t 'The VM answers on %s' "$ip")"
   [ -f "$src/scripts/dev/testlab-browser.py" ] || { warn "this ref has no scripts/dev/testlab-browser.py"; res[6]=error; return; }
   mkdir -p "$rundir/harness-browser"
   HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" run --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}" \
