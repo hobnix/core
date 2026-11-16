@@ -102,6 +102,18 @@ def api_level():
         return int(f.read().split()[0])
 
 
+def nix_api_level():
+    """The Nix interface level of this core (capabilities/nix-api-level): what a capability module may rely on from `hs.*`. Goes up only
+    when a name a module may use is removed or changes meaning (docs/PLAN-capabilities-repo.md, Q3)."""
+    for r in (root(), os.path.dirname(HERE)):
+        try:
+            with open(os.path.join(r, "capabilities", "nix-api-level"), encoding="utf-8") as f:
+                return int(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            continue
+    return 1
+
+
 def semver_key(v):
     return tuple(int(x) for x in v.split("."))
 
@@ -239,6 +251,8 @@ def capability_problems(m, path=None):
         bad("requires_nix_api must be a whole number from 1")
     if nix is not None and mod is None:
         bad("requires_nix_api without module")
+    if isinstance(nix, int) and not isinstance(nix, bool) and nix > nix_api_level():
+        bad(f"requires_nix_api {nix} is above the Nix API level {nix_api_level()}")
     opt = m.get("options")
     if opt is not None:
         if not isinstance(opt, str) or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.toml$", opt):
@@ -440,6 +454,8 @@ def main(argv):
     cmd, rest = argv[0], argv[1:]
     if cmd == "api":
         print(api_level())
+    elif cmd == "nix-api":
+        print(nix_api_level())
     elif cmd == "list":
         kind = rest[rest.index("--kind") + 1] if "--kind" in rest else None
         data = rows("--all" in rest, kind)

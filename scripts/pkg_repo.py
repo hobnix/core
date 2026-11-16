@@ -262,25 +262,34 @@ class Repos:
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
         tmp = os.path.join(self.state, "current", ".new-" + name)
-        shutil.rmtree(tmp, ignore_errors=True)
+        self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
         self.extract(r, tag, entry["path"], tmp)
         with open(os.path.join(tmp, "package.toml"), "rb") as fh:
             m = tomllib.load(fh)
         if m.get("name") != name or m.get("version") != entry["version"]:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
         rq = self.pkg.REQUIRES.match(str(m.get("requires_core", "")))
         if not rq or int(rq.group(1)) > self.pkg.api_level():
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml says requires_core %r, this server has API level %d: hs update first" % (name, m.get("requires_core"), self.pkg.api_level()))
+        for src, v in (("index.toml", entry.get("requires_nix_api")), ("package.toml", m.get("requires_nix_api"))):
+            if v is None:
+                continue
+            if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+                self.rm_quiet(tmp)
+                raise Refused("%s: requires_nix_api in %s must be a whole number from 1" % (name, src))
+            if v > self.pkg.nix_api_level():
+                self.rm_quiet(tmp)
+                raise Refused("%s: %s says requires_nix_api %d, this core has Nix API level %d: hs update first" % (name, src, v, self.pkg.nix_api_level()))
         ev = self.pkg.pkg_events.manifest_problems(name, m.get("events", []))
         if ev:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml [[events]]: %s" % (name, ev[0]))
         pm = self.pkg.pkg_perms.manifest_problems(name, m, self.pkg.capability_toml(tmp))
         if pm:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
@@ -324,6 +333,12 @@ class Repos:
             os.chmod(p, stat.S_IRWXU)
             fn(p)
         shutil.rmtree(path, onerror=onerr)
+
+    @classmethod
+    def rm_quiet(cls, path):
+        """Remove a folder if it exists; read-only files too (a refused install leaves one behind, and on Windows a plain rmtree keeps it)."""
+        if os.path.lexists(path):
+            cls.rm(path)
 
     def recorded(self, name):
         """installed.toml's entry for a package that sits in current/; an entry without repo (written by the old `hs recipe` record, which
