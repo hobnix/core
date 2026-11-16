@@ -138,4 +138,73 @@ check_out "a pending part is on with the flag" "^fixext${tab}extension${tab}on${
 check_eq "--kind keeps one kind" "2" "$(states --kind recipe | wc -l)"
 check_eq "the output is sorted by name" "$(states | cut -f1)" "$(states | cut -f1 | sort)"
 check_eq "every row has nine fields" "0" "$(states | awk -F'\t' 'NF != 9' | wc -l)"
+echo "-- the app contract and store fields (API level 9, docs/Package-API.md)"
+AF=$ROOT/tests/fixtures/pkgapp
+APPT=$WORK/apptree
+appcase() {   # appcase <label> <expected text | ""> <python snippet that changes the text t of package.toml; p is its path>
+  rm -rf "$APPT"; mkdir -p "$APPT/packages"; cp -r "$AF/packages/fixstore" "$APPT/packages/fixstore"
+  python3 - "$APPT/packages/fixstore/package.toml" "$3" <<'PY'
+import os, sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+exec(sys.argv[2])
+open(p, "w", encoding="utf-8").write(t)
+PY
+  if [ -z "$2" ]; then check "$1" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate"
+  else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate; true"; fi
+}
+appcase "the good fixture package passes" "" 'pass'
+check_eq "the API level is 9" "9" "$($PKG api)"
+appcase "an old manifest (requires >=1, no app fields) is unchanged" "" 't = "name = \"fixstore\"\nversion = \"1.0.0\"\nkind = \"recipe\"\ntitle = \"x\"\nrequires_core = \">=1\"\nscript = \"run.sh\"\n"'
+appcase "app fields on an older requires_core are named" 'need requires_core' 't = t.replace(">=9", ">=8")'
+appcase "an unknown category is named" 'category is not one of' 't = t.replace("tools", "stuff")'
+appcase "an unknown [app] key is named" 'unknown key' 't = t.replace("autostart = true", "autostart = true\nfoo = 1")'
+appcase "instances other than one or many is named" 'instances is not one or many' 't = t.replace("many", "two")'
+appcase "an http health check without a port is named" 'needs a port' 't = t.replace("port = 8080\npath", "path")'
+appcase "backup mode paths without paths is named" 'needs paths' 't = t.replace("paths = [\"/var/lib/fixstore\"]\n", "")'
+appcase "a default route that does not exist is named" 'default must name' 't = t.replace("default = \"web\"", "default = \"nope\"")'
+appcase "a public admin route is refused" 'admin page is never public' 't = t.replace("private-ok\" }", "public-ok\", admin = true }")'
+appcase "update kind is checked" 'kind is not pin, os or manual' 't = t.replace("kind = \"pin\"", "kind = \"x\"")'
+appcase "http-json without a pointer is named" 'needs a path and a JSON pointer' 't = t.replace("pointer = \"/version\"\n", "")'
+appcase "more than five screenshots are refused" 'at most 5' 't = t.replace("[\"shots/one.png\"]", "[" + ",".join("\"shots/one.png\"" for _ in range(6)) + "]")'
+appcase "a screenshot that is not in the package is named" 'is not in the package' 't = t.replace("shots/one.png", "shots/gone.png")'
+appcase "a screenshot outside the package is refused" 'relative png or webp' 't = t.replace("shots/one.png", "../x.png")'
+appcase "a screenshot that is not png or webp is refused" 'relative png or webp' 't = t.replace("shots/one.png", "shots/one.gif")'
+appcase "a screenshot over 300 KB is refused" 'larger than 300 KB' 'f = open(os.path.join(os.path.dirname(p), "shots/one.png"), "ab"); f.write(b"0" * 307201); f.close()'
+appcase "a Phosphor icon name is accepted" "" 't = t.replace("icon = \"icon.svg\"", "icon = \"ph:image\"")'
+appcase "an icon that is neither a name nor an svg is named" 'icon must be' 't = t.replace("icon.svg", "icon.png")'
+appcase "an svg icon with a script is refused" 'contains <script' 'open(os.path.join(os.path.dirname(p), "icon.svg"), "w").write("<svg><script>1</script></svg>")'
+appcase "an svg icon with an event handler is refused" 'handler' 'open(os.path.join(os.path.dirname(p), "icon.svg"), "w").write("<svg onload=\"x()\"></svg>")'
+appcase "an svg icon with an external reference is refused" 'external reference' 'open(os.path.join(os.path.dirname(p), "icon.svg"), "w").write("<svg><image href=\"https://x.test/a.png\"/></svg>")'
+appcase "app_version with spaces is named" 'app_version must be' 't = t.replace("2.3.4", "two point")'
+appcase "an upstream that is not https is named" 'upstream must be' 't = t.replace("https://example.org", "http://example.org")'
+appcase "a store package without an icon only gets a warning" "" 't = t.replace("icon = \\"icon.svg\\"\n", "")'
+appcase "a list as a route port does not crash" 'port [(]1 to 65535[)] missing' 't = t.replace("port = 8080, scheme", "port = [1], scheme").replace("private-ok", "public-ok")'
+appcase "an svg animation is refused" 'animation' 'open(os.path.join(os.path.dirname(p), "icon.svg"), "w").write("<svg><set attributeName=a to=b/></svg>")'
+appcase "an unknown key with a control character stays on one line" 'unknown key a.b' 'k = "a" + chr(9) + "b"; t = t.replace("autostart = true", "autostart = true" + chr(10) + chr(34) + k + chr(34) + " = 1")'
+
+echo "-- repo-check: index keys, core recipes and warnings"
+RC=$WORK/repo; rm -rf "$RC"; mkdir -p "$RC/recipes"; cp -r "$AF/packages/fixstore" "$RC/recipes/fixstore"
+idx() { printf '[package.fixstore]\npath = "recipes/fixstore"\nkind = "recipe"\nversion = "1.0.0"\nrequires_core = ">=9"\n%b' "$1" > "$RC/index.toml"; }
+idx 'icon = "icon.svg"\ncategory = "tools"\napp_version = "2.3.4"\n'
+check "repo-check passes with the three index keys" $PKG repo-check "$RC"
+idx 'icon = "icon.svg"\ncategory = "media"\napp_version = "2.3.4"\n'
+check_out "an index category that differs is named" "category differs between index and package.toml" bash -c "$PKG repo-check $RC; true"
+idx ''
+check_out "an index without the keys is named" "icon differs" bash -c "$PKG repo-check $RC; true"
+rm -rf "$RC/recipes/fixstore"; mkdir -p "$RC/recipes/fixold"
+printf '#!/usr/bin/env bash\n# recipe: Old\n# kind: generic\n# needs: -\n# uses: -\n' > "$RC/recipes/fixold/run.sh"
+printf 'name = "fixold"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Old"\nrequires_core = ">=1"\nscript = "run.sh"\n' > "$RC/recipes/fixold/package.toml"
+printf '[package.fixold]\npath = "recipes/fixold"\nkind = "recipe"\nversion = "1.0.0"\nrequires_core = ">=1"\n' > "$RC/index.toml"
+check "an old package passes repo-check" $PKG repo-check "$RC"
+check_out "and gets a warning on stderr" 'warning: fixold: has no \[app\] contract' bash -c "$PKG repo-check $RC 2>&1"
+printf 'core = true\n' >> "$RC/index.toml"
+check_out "a core recipe written before level 9 only gets a warning" 'warning: fixold: missing: \[app.health\]' bash -c "$PKG repo-check $RC 2>&1"
+check "and repo-check still passes" $PKG repo-check "$RC"
+sed -i 's/>=1/>=9/' "$RC/recipes/fixold/package.toml" "$RC/index.toml"
+check_out "a core recipe at level 9 without the contract is an error" 'missing: \[app.health\]' bash -c "$PKG repo-check $RC; true"
+
+echo "-- check-draft sees the fields"
+check_out "a draft with a bad category is an error" "error${tab}category${tab}category is not one of" bash -c "sed 's/tools/stuff/' $AF/packages/fixstore/package.toml | $PKG check-draft; true"
+
 finish

@@ -1,0 +1,55 @@
+# Fixture for the app contract and store fields (docs/Package-API.md, API level 9): a good manifest that uses every field. Not a real app.
+name = "fixstore"
+version = "1.0.0"
+kind = "recipe"
+title = "Fixture store app"
+requires_core = ">=9"
+needs = []
+uses = []
+input = "none"
+script = "run.sh"
+description = "A fixture with every field of the app contract and the store."
+description_de = "Eine Fixture mit allen Feldern des App-Vertrags und des Stores."
+icon = "icon.svg"
+category = "tools"
+upstream = "https://example.org"
+app_version = "2.3.4"
+screenshots = ["shots/one.png"]
+
+[app]
+instances = "many"
+autostart = true
+
+[app.health]
+check = "http"
+port = 8080
+path = "/health"
+timeout = 5
+
+[app.backup]
+mode = "paths"
+paths = ["/var/lib/fixstore"]
+dump = "postgres-compose"
+
+[app.routes]
+default = "web"
+web = { port = 8080, scheme = "http", exposure = "private-ok" }
+
+[app.update]
+kind = "pin"
+default = "notify"
+
+[app.version]
+source = "http-json"
+path = "/api/version"
+pointer = "/version"
+
+[app.remove]
+keeps = ["data volume", "share"]
+data = ["/var/lib/fixstore"]
+
+[app.uses]
+ram_mb = 512
+disk_gb = 2
+ports = [8080]
+gpu = false
