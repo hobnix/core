@@ -37,12 +37,14 @@ $plan || [ "$(git branch --show-current)" = develop ] || fail "Switch to develop
 [ -z "$(git status --porcelain)" ] || fail "The tree has uncommitted changes."
 
 last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
-range=${last:+$last..}HEAD
-[ -n "$last" ] || note "There is no tag yet: every package counts as changed."
+range=$last..HEAD
+[ -n "$last" ] || fail "There is no tag yet: the first release keeps the versions as they are. Use release.sh --version vX.Y.Z."
 
 labels_of() {   # labels_of <sha>: the bump labels of the pull requests that brought the commit in, one per line
   if [ -n "${HS_PREPARE_LABELS:-}" ]; then awk -F'\t' -v s="$1" '$1 == s { print $2 }' "$HS_PREPARE_LABELS"; return 0; fi
-  gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[].labels[].name' 2>/dev/null | grep '^bump: ' || true
+  local out
+  out=$(gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[].labels[].name') || fail "gh api failed for commit ${1:0:7} (login, rate limit?): without the labels a bump: major would be lost."
+  grep '^bump: ' <<<"$out" || true
 }
 rank() { case $1 in major) echo 2 ;; minor) echo 1 ;; *) echo 0 ;; esac; }
 
@@ -60,7 +62,7 @@ for sha in $(git rev-list --reverse "$range" -- "$repo/"); do
   done
 done
 [ -z "$bad" ] || fail "Pull requests with more than one bump label ($bad ): leave one label and run this again."
-[ ${#level[@]} -gt 0 ] || fail "No package changed since ${last:-the start}: there is nothing to release."
+[ ${#level[@]} -gt 0 ] || fail "No package changed since $last: there is nothing to release."
 
 bump_next() {   # bump_next <x.y.z> <level>
   local a b c; IFS=. read -r a b c <<<"$1"
@@ -70,7 +72,7 @@ top=patch rows=""
 for pkg in $(printf '%s\n' "${!level[@]}" | sort); do
   old=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$repo/$pkg/package.toml" | head -n1)
   # a package whose version was already raised since the tag keeps it: nothing is raised twice
-  if [ -n "$last" ] && [ "$(git show "$last:$repo/$pkg/package.toml" 2>/dev/null | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)" != "$old" ]; then continue; fi
+  if [ "$(git show "$last:$repo/$pkg/package.toml" 2>/dev/null | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)" != "$old" ]; then continue; fi
   rows="$rows$pkg	$old	$(bump_next "$old" "${level[$pkg]}")	${level[$pkg]}
 "
   [ "$(rank "${level[$pkg]}")" -le "$(rank "$top")" ] || top=${level[$pkg]}
@@ -81,7 +83,7 @@ if $plan; then printf '%s' "$rows"; echo "tag	$top"; exit 0; fi
 step "Prepare the release ($repo, tag level $top)"
 branch=release/prepare-$(date -u +%Y%m%d-%H%M)
 git checkout -q -b "$branch" || fail "Could not make the branch $branch."
-body="Raises the versions of the packages that changed since ${last:-the start}. Tag level for the release workflow: **$top**.
+body="Raises the versions of the packages that changed since $last. Tag level for the release workflow: **$top**.
 "
 while IFS=$'\t' read -r pkg old new lv; do
   [ -n "$pkg" ] || continue

@@ -8,6 +8,7 @@
 #    verifies it against config/trusted-keys/<repo>.allowed_signers of the core (a tag that fails is deleted, nothing is pushed), pushes it and
 #    creates the GitHub release with the list of packages whose version changed.
 #
+# A tag made with GITHUB_TOKEN starts no other workflow (the tag has no ci run to wait for here; the core's ci runs on its own tags only).
 # Open question (first run): does a job with `environment: release` inside a reusable workflow get the environment secret of the calling
 # repository? If not, the caller passes `secrets: inherit` (repository secret) or carries the whole workflow.
 name: package-release
@@ -37,6 +38,8 @@ jobs:
   gate:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.g.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,6 +51,7 @@ jobs:
           ref: ${{ inputs.core_ref }}
           path: core
       - name: Check the release (nothing is signed or pushed)
+        id: g
         working-directory: repo
         env:
           LEVEL: ${{ inputs.level }}
@@ -58,6 +62,7 @@ jobs:
           args=("$LEVEL")
           [ -z "$VERSION" ] || args=(--version "$VERSION")
           bash ../core/scripts/dev/release.sh "${args[@]}" --dry-run
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   release:
     needs: gate
@@ -85,6 +90,8 @@ jobs:
           [ -n "$RELEASE_SIGNING_KEY" ] || { echo "::error::The secret RELEASE_SIGNING_KEY is not set in the environment release."; exit 1; }
           git fetch --tags --force origin
           git checkout -q -B main origin/main
+          # the approver saw this commit in the gate: a merge while the run waited is not tagged
+          [ "$(git rev-parse HEAD)" = "${{ needs.gate.outputs.sha }}" ] || { echo "::error::main moved since the gate; run the release again."; exit 1; }
           git config user.name "hobnix release"; git config user.email "release@users.noreply.github.com"
           keydir=$(mktemp -d); trap 'rm -rf "$keydir"' EXIT
           umask 077

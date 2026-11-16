@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Which ref of hobnix/capabilities CI checks out (docs/PLAN-capabilities-repo.md Q5; ADR 0017 decision 7). Prints one ref.
 #   caps-ref.sh <head-branch> <release: true|false>
-# A release pull request (into main) or a v* tag: the newest vX.Y.Z tag of the repository, `main` while it has none (what stable servers get).
+# A release pull request (into main) or a v* tag: the newest vX.Y.Z tag of the repository (its signature is not checked here: `hs pkg` does that on a server), `main` while it has none (what stable servers get).
 # Anything else: the branch of the same name if it exists there, else `develop`. HS_CAPS_URL replaces the repository URL (tests).
 set -uo pipefail
 url=${HS_CAPS_URL:-https://github.com/hobnix/capabilities.git}

@@ -174,7 +174,7 @@ jobs:
   # (into main) and a v* tag use its newest tag (scripts/dev/caps-ref.sh). The job logs the commit it used.
   packages:
     needs: changes
-    if: needs.changes.outputs.pkg == 'true'
+    if: needs.changes.outputs.pkg == 'true' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
