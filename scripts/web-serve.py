@@ -1041,6 +1041,7 @@ READS = {
     ("recipes", "versions"): {"kind": "tsv", "ttl": 60, "topic": "recipes-versions"},
     # the Marketplace: everything installable and the repositories it comes from (pkg-change.sh does the changes)
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
+    ("pkg", "capabilities"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},   # the capability packages (first-run wizard)
     ("pkg", "repos"): {"kind": "tsv", "ttl": 30, "topic": "pkg-repos"},
     ("dc", "state"): {"kind": "tsv", "ttl": 60, "topic": "dc-state"},
     ("recipes", "asks"): {"kind": "tsv", "ttl": 60, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},
@@ -1263,6 +1264,8 @@ CHANGES = {
             [r"^repo-remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
             # the package builder (ADR 0020): a package.toml draft as text on stdin, checked by pkg.py, never written anywhere (plan only)
             {"fixed": [r"^check-draft$"], "document": True}],
+    # the Optional parts step of the first-run wizard (pkg-bundle.sh): install, switch on, rebuild as one job; one comma list of names
+    "pkg/bundle": [[r"^[a-z0-9][a-z0-9-]{0,40}(,[a-z0-9][a-z0-9-]{0,40}){0,15}$"]],
     # an answer is `--set KEY=value` (no control characters); the one secret answer of a recipe is a single line on stdin
     "recipes": [{"fixed": [r"^[a-z0-9][a-z0-9-]{0,40}$", r"^run$"],
                  "opts": {"--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--interactive": (None, False)}, "stdin": True}],

@@ -7479,6 +7479,240 @@
     }
    }
   },
+  "/pkg/bundle/plan/{names}": {
+   "post": {
+    "operationId": "pkg.bundle.plan.by_names",
+    "summary": "what installing capability packages (one comma list) with what they require, switching them on and one rebuild would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused, also without the network)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "bundle",
+      "plan",
+      "<names>"
+     ],
+     "script": "pkg-bundle.sh",
+     "args": "plan {1} {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "names",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/pkg/bundle/start/{names}": {
+   "post": {
+    "operationId": "pkg.bundle.start.by_names",
+    "summary": "do it as one background job: install, switch on, hs rebuild (hs sys pkg bundle start a,b): status started, unit",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "bundle",
+      "start",
+      "<names>"
+     ],
+     "script": "pkg-bundle.sh",
+     "args": "start {1} {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "parameters": [
+     {
+      "name": "names",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/pkg/capabilities": {
+   "get": {
+    "operationId": "pkg.capabilities",
+    "summary": "the capability packages the repositories offer, as data: name, repo, available version, installed version (- = none), state (new|current|update), requires (comma list, - = none), type (feature|provider, - = not given), title",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "capabilities"
+     ],
+     "script": "pkg.sh",
+     "args": "--capabilities",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/capabilities",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
+    "description": "The capability packages the repositories offer (read from the cached clones). installed is - when none; requires is a comma list or -; type is - when the package.toml does not give one.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "available"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "installed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state",
+            "enum": [
+             "new",
+             "current",
+             "update"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "requires"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "type",
+            "enum": [
+             "feature",
+             "provider",
+             "-"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           }
+          ],
+          "minItems": 8,
+          "maxItems": 8
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/list": {
    "get": {
     "operationId": "pkg.list",

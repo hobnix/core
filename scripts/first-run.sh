@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# help: after the installation: web interface language, notifications, and a checklist of what is still to set up
-# help.de: nach der Installation: Sprache der Weboberfläche, Benachrichtigungen und eine Checkliste, was noch einzurichten ist
-# args: [--language en|de] [--notify <url|none>] [--yes]
+# help: after the installation: web interface language, notifications, optional parts, and a checklist of what is still to set up
+# help.de: nach der Installation: Sprache der Weboberfläche, Benachrichtigungen, optionale Teile und eine Checkliste, was noch einzurichten ist
+# args: [--language en|de] [--notify <url|none>] [--parts <a,b|none>] [--yes]
 # Asks the two things that can be answered right away and shows the rest as a checklist with the command
 # for each open item. HS_BIN points tests at a stand-in for the hs dispatcher.
 set -euo pipefail
@@ -13,13 +13,14 @@ here=$(dirname "$0")
 hsbin=${HS_BIN:-$here/lib/hs.sh}
 cfg() { HS_CALLER="" bash "$hsbin" config "$@"; }
 
-lang=""; notify=""; yes=false
+lang=""; notify=""; parts=""; yes=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --language) [ $# -ge 2 ] || exit 1; lang=$2; shift 2 ;;
     --notify)   [ $# -ge 2 ] || exit 1; notify=$2; shift 2 ;;
+    --parts)    [ $# -ge 2 ] || exit 1; parts=$2; shift 2 ;;
     --yes)      yes=true; shift ;;
-    *) say "usage: hs first-run [--language en|de] [--notify <url|none>] [--yes]"; exit 1 ;;
+    *) say "usage: hs first-run [--language en|de] [--notify <url|none>] [--parts <a,b|none>] [--yes]"; exit 1 ;;
   esac
 done
 
@@ -38,6 +39,29 @@ if [ -n "$notify" ]; then cfg set notifyUrl "$notify"; else note "Notifications 
 
 step "Core packages"
 if bash "$hsbin" pkg install --core; then :; else warn "Some core packages could not be fetched; try again with: hs pkg install --core"; fi
+
+step "Optional parts"
+offer=$(bash "$hsbin" sys pkg capabilities 2>/dev/null | awk -F'\t' '$4 == "-"' || true)
+if [ -z "$offer" ]; then note "No optional parts are offered (reading the repositories needs the network)."
+else
+  if [ -z "$parts" ] && [ -t 0 ] && ! $yes; then
+    { thead 'Name' 'Needs' 'What'; awk -F'\t' '{ print $1 "\t" $6 "\t" $8 }' <<<"$offer"; } | table
+    parts=$(ask "Parts to add (names separated by commas, empty to skip):" "")
+  fi
+  case "$parts" in
+    ""|none) note "No optional parts added; later: hs pkg install <name>." ;;
+    *) plan=$(bash "$hsbin" sys pkg bundle plan "$parts" 2>/dev/null) || true
+       if ! grep -q $'^status\tok' <<<"$plan"; then warn "$(awk -F'\t' '$1 == "reason" { print $2 }' <<<"$plan")"
+       else
+         while IFS=$'\t' read -r k v; do case "$k" in step|note) note "$v" ;; warn|danger) warn "$v" ;; esac; done <<<"$plan"
+         if $yes || confirm "Install, switch on and rebuild now?"; then
+           out=$(bash "$hsbin" sys pkg bundle start "$parts" 2>/dev/null) || true
+           unit=$(awk -F'\t' '$1 == "unit" { print $2 }' <<<"$out")
+           if [ -n "$unit" ]; then ok "$(t 'Started as a job: hs job follow %s' "$unit")"; else warn "$(awk -F'\t' '$1 == "reason" { print $2 }' <<<"$out")"; fi
+         fi
+       fi ;;
+  esac
+fi
 
 step "What is still to do"
 check() {   # check <label> <command to run when open> <test...>

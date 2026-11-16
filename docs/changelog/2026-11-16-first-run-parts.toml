@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "First setup: add optional parts"
+body  = """The first-run wizard and hs first-run offer optional parts from the signed repositories and install, switch on and rebuild them in one job. Installed capability packages now also show on the Capabilities page of the settings. Not tested on hardware yet."""

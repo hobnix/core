@@ -29,4 +29,5 @@ config	system
 system	system
 parts	system
 pkg	system
+pkg/bundle	system
 testlab	system

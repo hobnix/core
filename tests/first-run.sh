@@ -30,4 +30,30 @@ echo "-- the boot unit"
 check "both Nix configurations use the shared unit" bash -c "grep -q 'setup-code-unit.nix' '$ROOT/install.nix' && grep -q 'setup-code-unit.nix' '$ROOT/configuration.nix'"
 check "the unit prints to the tty only" bash -c "grep -q 'StandardOutput = \"tty\"' '$ROOT/setup-code-unit.nix' && grep -q 'TTYPath = \"/dev/console\"' '$ROOT/setup-code-unit.nix' && ! grep -q '/etc/issue' '$ROOT/setup-code-unit.nix'"
 check "the unit is ordered after time-sync.target" grep -q '"time-sync.target"' "$ROOT/setup-code-unit.nix"
+echo "-- optional parts (hs first-run --parts)"
+FRB=$WORK/hsbin.sh; FRL=$WORK/hs-calls
+cat > "$FRB" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$FRL"
+case "\$*" in
+  "sys pkg capabilities") printf 'a	caps	1.0.0	-	new	-	feature	A part
+' ;;
+  "sys pkg bundle plan a") printf 'status	ok
+step	install a 1.0.0
+' ;;
+  "sys pkg bundle start a") printf 'status	started
+unit	hs-job-demo-1
+' ;;
+esac
+exit 0
+STUB
+frun() { : > "$FRL"; HS_BIN="$FRB" HS_STATE_DIR="$WORK/frstate" bash "$SCRIPTS/first-run.sh" "$@" 2>&1 </dev/null || true; }
+mkdir -p "$WORK/frstate"
+out=$(frun --yes --language en --notify none)
+check "--yes alone never calls the bundle" bash -c "! grep -q 'bundle' '$FRL'"
+out=$(frun --yes --language en --parts none)
+check "--parts none says it adds nothing" grep -q 'No optional parts added' <<<"$out"
+out=$(frun --yes --language en --parts a)
+check "--parts a --yes plans then starts" bash -c "grep -n 'bundle' '$FRL' | tr '\n' ' ' | grep -q 'bundle plan a.*bundle start a'"
+check "and prints the unit" grep -q 'hs-job-demo-1' <<<"$out"
 finish

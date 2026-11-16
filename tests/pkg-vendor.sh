@@ -27,7 +27,7 @@ git init -q . && git config user.email t@t && git config user.name t && git conf
 release() {   # release <tag> <version> <name> [extra files: nested]: a capability package <name> with a module, an options file, a helper, a script
   local d="$R/capabilities/$3"
   rm -rf "$R/capabilities"; mkdir -p "$d"
-  printf 'name = "%s"\nversion = "%s"\nkind = "capability"\ntype = "feature"\ntitle = "Vend"\nrequires_core = ">=1"\nmodule = "module.nix"\noptions = "options.toml"\nrequires_nix_api = 1\n' "$3" "$2" > "$d/package.toml"
+  printf 'name = "%s"\nversion = "%s"\nkind = "capability"\ntype = "feature"\ntitle = "Vend"\nrequires = ["corecap"]\nrequires_core = ">=1"\nmodule = "module.nix"\noptions = "options.toml"\nrequires_nix_api = 1\n' "$3" "$2" > "$d/package.toml"
   printf '{ ... }: { imports = [ ./helper.nix ]; } # %s\n' "$2" > "$d/module.nix"
   printf '{ ... }: { }\n' > "$d/helper.nix"
   printf '[[item]]\nkey = "x"\ncapability = "%s"\nstore = "machine"\ntype = "string"\ndefault = "a"\ndescription = "x"\n' "$3" > "$d/options.toml"
@@ -41,7 +41,9 @@ cd "$ROOT"
 
 echo "-- install"
 $PKG fetch >/dev/null 2>&1
+check_out "the capabilities read lists the package with requires" "^fixmod${tab}caps${tab}1[.]0[.]0${tab}-${tab}new${tab}corecap${tab}feature${tab}Vend$" $PKG capabilities
 check_out "install of a capability package with a module works" "fixmod" bash -c "$PKG install fixmod 2>&1"
+check_out "the capabilities read shows it installed" "^fixmod${tab}caps${tab}1[.]0[.]0${tab}1[.]0[.]0${tab}current${tab}corecap${tab}feature${tab}Vend$" $PKG capabilities
 V=$HS_NIXOS_DIR/vendor
 check "the module is vendored" test -f "$V/capabilities/fixmod/module.nix"
 check "and its helper and script too" test -f "$V/capabilities/fixmod/run.sh"

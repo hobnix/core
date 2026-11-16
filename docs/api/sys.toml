@@ -145,3 +145,21 @@ kind = "tsv"
 columns = ["item", "state", "value", "fix"]
 enums = { item = ["link", "wireless", "address", "route", "dns", "clock"], state = ["ok", "warn", "fail"] }
 note = "Six rows in this order. value and fix are - when empty. Exit 1 when a row is fail (the rows are still printed)."
+
+["pkg capabilities"]
+kind = "tsv"
+columns = ["name", "repo", "available", "installed", "state", "requires", "type", "title"]
+enums = { state = ["new", "current", "update"], type = ["feature", "provider", "-"] }
+note = "The capability packages the repositories offer (read from the cached clones). installed is - when none; requires is a comma list or -; type is - when the package.toml does not give one."
+
+["pkg bundle plan <names>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], heading = ["text"], step = ["text"], note = ["text"], command = ["text"], long = ["yes_no"] }
+enums = { status = ["ok", "refused"], long = ["yes", "no"] }
+note = "The names are one comma list (a,b). The plan puts what a package requires in front of it. Exit 0 ok, 1 refused (also without the network)."
+
+["pkg bundle start <names>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], unit = ["unit"] }
+enums = { status = ["started", "refused"] }
+note = "One background job installs, switches on and rebuilds: hs sys pkg bundle start a,b; status started and the job unit."
