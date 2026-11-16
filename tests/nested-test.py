@@ -251,6 +251,14 @@ class ScenarioTests(unittest.TestCase):
         self.assertGreater(i_rst, i_upd)
         self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
 
+    def test_long_hs_commands_run_in_the_foreground(self):
+        # a long command on a terminal asks "Run it in the background as a job?" and waits for a key: it left the console stuck in run 12
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        text = [s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P)]
+        for cmd in ("hs backup now", "hs backup verify", "hs rebuild"):
+            self.assertTrue(all("--foreground" in t for t in text if cmd in t and "command -v" not in t.split(cmd)[0]), cmd)
+            self.assertTrue(any(cmd in t for t in text), cmd)
+
     def test_nested_sh_plans_every_stage(self):
         # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
         for st in n.STAGES:

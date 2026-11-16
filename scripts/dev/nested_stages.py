@@ -117,9 +117,9 @@ def backup(params):
         step("run_var", "test -b {dev}", what="the backup disk is a block device"),
         step("run_var", "HS_BACKUP_YES=1 hs backup init {dev}", timeout=300, what="hs backup init makes the disk the backup disk"),
         step("run", "mkdir -p /var/lib/hs && echo hs-testlab-marker > /var/lib/hs/testlab-marker", what="a marker file in the state folder"),
-        step("run", "hs backup now", timeout=1800, what="hs backup now finishes"),
+        step("run", "hs backup now --foreground", timeout=1800, what="hs backup now finishes"),
         step("run", "hs backup list | grep -q .", what="a snapshot is listed"),
-        step("run", "hs backup verify", timeout=900, what="hs backup verify passes"),
+        step("run", "hs backup verify --foreground", timeout=900, what="hs backup verify passes"),
         step("run", "sync && umount /var/lib/hs-backup 2>/dev/null; sync", expect_rc=None, what="the disk is quiet before it is moved"),
     ]
 
@@ -215,7 +215,7 @@ def upgrade_steps(params):
         step("run", "sudo -n git -C /etc/nixos remote set-url origin %s" % _q(repo), what="origin is the Hobnix repository"),
         step("run", "sudo -n git -C /etc/nixos fetch origin %s" % _q(cand), timeout=600, what="the candidate branch is fetched"),
         step("run", "sudo -n git -C /etc/nixos branch -u origin/%s" % _q(cand), what="the current branch follows the candidate"),
-        step("run", "sudo -n hs update --yes", timeout=3600, what="hs update moves the server to the candidate"),
+        step("run", "sudo -n hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the updated system is running"),
