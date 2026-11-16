@@ -48,6 +48,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-channels](PLAN-channels.md) | Update channels Stable, Beta, Edge on top of develop and main |
 | [PLAN-portable-install](PLAN-portable-install.md) | Audit of fixed names and assumptions that break on another machine, options for pools, users and single-disk installs |
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
+| [PLAN-app-lifecycle](PLAN-app-lifecycle.md) | Design for milestone 0.6: one lifecycle for apps and packages, one Install job, app contract, store fields, update policy |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
