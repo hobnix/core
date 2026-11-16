@@ -203,3 +203,9 @@ records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"
 enums = { status = ["started", "refused"] }
 note = "hs sys apps start install <name> --tag <tag of the plan> [--repo R] [--name <container>] [--set KEY=value]... [--ask] [--from <step>] [--confirm <name>]: one orchestration job whose record steps are read, needs, ask, run:<phase>, check, done (on, rebuild for an extension or capability) and whose result holds package, kind, version, tag, instance, open, data and backup. A secret answer is one line on standard input; the questions the recipe asks while it runs wait in the record (hs sys jobs answer). hs sys apps start retry <job> [--set KEY=value]...: a new Install job from the step that failed (--from run:<phase> restarts at a recipe phase, which runs whole). hs sys apps start cleanup <job> --confirm <instance> [--delete-data]: a background job that removes what the created ledger lists (data is kept unless --delete-data). A failed Install record carries a result {status failed, failed_step, reason, tail, package, repo, tag, instance}. Refused: status refused and a reason, exit 1."
 
+
+["apps recover <verb> <action>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"], heading = ["text"], package = ["name"], instance = ["name"], failed_step = ["text"], tail = ["text"], retry_from = ["text"], item = ["text"], data = ["text"], question = ["text"], note = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["text"] }
+enums = { status = ["ok", "refused", "started"] }
+note = "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly."

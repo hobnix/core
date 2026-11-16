@@ -13,7 +13,7 @@ tab=$'\t'
 PKGPY="python3 -I $SCRIPTS/pkg.py"
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/good" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/signers"
-R=$WORK/repo; mkdir -p "$R/recipes/demo" "$R/recipes/needy" "$R/recipes/docker"; cd "$R"
+R=$WORK/repo; mkdir -p "$R/recipes/multi" "$R/recipes/demo" "$R/recipes/needy" "$R/recipes/docker"; cd "$R"
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
 printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho demo\n' > recipes/demo/run.sh
 printf '#!/usr/bin/env bash\n# kind: generic\n# needs: docker tailscale\n# uses: -\n# phases: fetch configure\necho needy\n' > recipes/needy/run.sh
@@ -44,6 +44,25 @@ port = 8080
 ram_mb = 512
 disk_gb = 2
 TOML
+printf '#!/usr/bin/env bash
+# kind: generic
+# needs: -
+# uses: -
+echo multi
+' > recipes/multi/run.sh
+printf 'name = "multi"
+version = "1.0.0"
+kind = "recipe"
+title = "Multi"
+requires_core = ">=1"
+audience = "generic"
+needs = []
+uses = []
+input = "none"
+script = "run.sh"
+[app]
+instances = "many"
+' > recipes/multi/package.toml
 cat > recipes/needy/package.toml <<'TOML'
 name = "needy"
 version = "1.0.0"
@@ -78,8 +97,8 @@ version = "1.0.0"
 kind = "recipe"
 path = "recipes/docker"
 requires_core = ">=1"
-[package.demo]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/demo"\nrequires_core = ">=1"\n[package.needy]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/needy"\nrequires_core = ">=1"\n' > index.toml
-mkdir -p recipes/failapp && cp "$ROOT/tests/fixtures/pkgtree/packages/failapp/"* recipes/failapp/
+[package.demo]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/demo"\nrequires_core = ">=1"\n[package.multi]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/multi"\nrequires_core = ">=1"\n[package.needy]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/needy"\nrequires_core = ">=1"\n' > index.toml
+mkdir -p recipes/failapp && cp "$ROOT/tests/fixtures/pkgtree/failing/failapp/"* recipes/failapp/
 printf '[package.failapp]
 version = "1.0.0"
 kind = "recipe"
@@ -94,8 +113,9 @@ $PKGPY fetch test >/dev/null
 # stand-ins: incus (docker is not there), parts (tailscale off), recipe, orchestrator, health, job library
 LOG=$WORK/log; : > "$LOG"
 printf '#!/usr/bin/env bash
-case "$1 $2" in "info "*) [ -e "%s/ct-$2" ] ;; "delete -f") rm -f "%s/ct-$3" ;; *) exit 1 ;; esac
-' "$WORK" "$WORK" > "$WORK/incus"
+case "${1:-} ${2:-}" in "info "*) [ -e "%s/ct-$2" ] && exit 0; [ -s "%s/have_ct" ] && [ "${2:-}" = "$(cat "%s/have_ct")" ] && exit 0; exit 1 ;; "delete -f") rm -f "%s/ct-$3" ;; *) exit 1 ;; esac
+' "$WORK" "$WORK" "$WORK" "$WORK" > "$WORK/incus"
+chmod +x "$WORK/incus"
 printf '#!/usr/bin/env bash\nprintf "tailscale\\toff\\tpart\\tyes\\tyes\\tT\\n"\n' > "$WORK/parts.sh"
 printf '#!/usr/bin/env bash\necho "recipe $*" >> "%s"\n' "$LOG" > "$WORK/recipe.sh"
 cat > "$WORK/orch.sh" <<STUB
@@ -136,8 +156,18 @@ has "^command${tab}hs sys apps start install demo --tag v1.0.0" && pass "the com
 has "^confirm_name${tab}demo" && pass "a package of an added repository asks for the typed name" || fail "confirm_name: $out"
 run start install demo --tag v1.0.0; if [ "$rc" = 1 ] && has "type the name (demo)"; then pass "start without the typed name is refused"; else fail "start red: $out"; fi
 check "plan installs nothing" test ! -e "$HS_STATE_DIR/packages/current/demo"
-run plan install demo --name second;     check_eq "a container name of its own is allowed" 0 "$rc"
-has "an instance named second" && pass "and shows it" || fail "$out"
+run plan install demo --name demo-second
+if [ "$rc" = 1 ] && has "runs once on a server"; then pass "a second instance of a one package is refused"; else fail "one: $out"; fi
+run plan install demo --name demo;       check_eq "its own name is allowed (a repair)" 0 "$rc"
+run plan install multi --name multi-kids
+if [ "$rc" = 0 ] && has "an instance named multi-kids"; then pass "a many package gets <recipe>-<word>"; else fail "many: $out"; fi
+run plan install multi --name other;     if [ "$rc" = 1 ] && has "is named multi-<word>"; then pass "a name off the pattern is refused"; else fail "pattern: $out"; fi
+run plan install multi --name multi-Bad; [ "$rc" = 1 ] && pass "invalid characters are refused" || fail "chars: $out"
+echo multi-kids > "$WORK/have_ct"; run plan install multi --name multi-kids; rm -f "$WORK/have_ct"
+if [ "$rc" = 1 ] && has "taken already"; then pass "a duplicate instance name is refused"; else fail "dup: $out"; fi
+mkdir -p "$WORK/svc"; : > "$WORK/svc/multi-tv.toml"
+HS_SERVICES_DIR=$WORK/svc run plan install multi --name multi-tv
+if [ "$rc" = 1 ] && has "taken already"; then pass "a name used by a service is refused"; else fail "svc: $out"; fi
 run plan install needy
 if [ "$rc" = 0 ] && has "^need${tab}docker${tab}missing" && has "^need${tab}tailscale${tab}missing.*${tab}yes\$" && has "^warn${tab}This rebuilds the server"; then pass "plan needy: docker and tailscale are plan lines, the rebuild is said"; else fail "plan needy: $out"; fi
 check_eq "needy steps include needs" "read|needs|run|done" "$(awk -F'\t' '$1=="jobstep"{print $2}' <<<"$out" | paste -sd'|')"
@@ -246,6 +276,7 @@ done
 STUB
 printf '#!/usr/bin/env bash\nrm -f "%s/$2.toml"\n' "$HS_SERVICES_DIR" > "$WORK/services.sh"
 printf '#!/usr/bin/env bash\ncase "$1" in reserved) [ -e "%s/resv" ] && echo 10.0.0.9 ;; clear-ip) rm -f "%s/resv" ;; esac\n' "$WORK" "$WORK" > "$WORK/unifi.sh"
+chmod +x "$WORK/orch2.sh" "$WORK/services.sh" "$WORK/unifi.sh"
 export HS_ORCHESTRATE=$WORK/orch2.sh HS_SERVICES=$WORK/services.sh HS_UNIFI=$WORK/unifi.sh
 touch "$WORK/resv" "$WORK/ct-other"; : > "$HS_SERVICES_DIR/other.toml"
 rm -rf "$HS_STATE_DIR/packages/current/failapp"

@@ -4,7 +4,7 @@
   import { takeSelection } from '../select.svelte.js';
   import { openCreate, openPlan, jobRunning, ui, track, showTab } from '../ui.svelte.js';
   import { start, get } from '../api.js';
-  import RunRecipe from '../forms/ops/RunRecipe.svelte';
+  import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
@@ -50,7 +50,7 @@
 
   // Start/Stop of one instance of an app (the plan of the instance, like the Instances page); the container docker is not stopped from here
   const flipCt = (c, running) => openPlan('ct', [c, running ? 'stop' : 'start'], `${running ? 'Stop' : 'Start'} ${c}`);
-  const run = (a) => openCreate(RunRecipe, { recipe: a.name });
+  const run = (a) => (a.state === 'installed' ? openPlan('recipes', [a.name, 'run'], `${a.name}`) : openCreate(InstallDialog, { pkg: a.name }));
   // the form only writes the description: read the services and the plan again now, so the Services page's Apply count is right at once
   const services = (a) => openCreate(AppServices, { app: a.name, cts: a.cts ? a.cts.split(',') : [], ondone: () => refresh(['/api/sys/services/app', '/api/sys/services/list', '/api/sys/services/routes']) });
 

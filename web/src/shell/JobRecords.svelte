@@ -11,7 +11,7 @@
   import Table from './Table.svelte';
   import Button from '../ui/Button.svelte';
   import { openCreate } from '../ui.svelte.js';
-  import RunQuestions from '../forms/ops/RunQuestions.svelte';
+  import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import { parseRecord, stateDot, stateKnown, stepText, percent, progressText, clock, duration, isJobEvent } from '../jobrecords.js';
 
   let { onload = () => {} } = $props();
@@ -103,7 +103,7 @@
       {:else if !detail}<div class="muted">{tr('Loading…')}</div>
       {:else}
         <div class="kv">{#each kv(detail) as [k, v]}<span class="k">{tr(k)}</span><span class="mono">{v}</span>{/each}</div>
-        {#if detail.state === 'waiting'}<div><Button variant="primary" size="sm" onclick={() => openCreate(RunQuestions, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
+        {#if detail.state === 'waiting'}<div><Button variant="primary" size="sm" onclick={() => openCreate(InstallDialog, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
         {#if detail.step}<div>{tr('Step')}: {stepText(detail.step)}</div>{/if}
         {#if detail.error}<div class="err"><strong>{detail.error.category ?? ''}</strong> {detail.error.message ?? ''}</div>{/if}
         {#if detail.cancel}<div class="muted">{tr('Cancel requested')}{detail.cancel.requested_by ? ` · ${detail.cancel.requested_by}` : ''}</div>{/if}

@@ -149,6 +149,26 @@ class Changes(unittest.TestCase):
         d = ws.parse_change("status\tstarted\nunit\ths-job-system-reboot-031500\n", 0)
         self.assertRegex(d["unit"], ws.UNIT)
 
+    def test_one_install_plan_lines(self):
+        out = ("status\tok\nheading\tInstall jellyfin\npackage\tjellyfin\nkind\trecipe\nrepo\trecipes\nversion\t1.2.0\ntag\tv1.2.0\ncommit\tabc123\n"
+               "title\tJellyfin\ndescription\tMedia server\ncreates\ta container\ncreates\ta share\nneed\tdocker\tmissing\tneeds docker\tyes\nneeds\tdate\n"
+               "ask\tPORT\tPort\ttext\t-\t8096\t[0-9]+\t-\nask\tKIND\tKind\tchoice\ta,b\ta\t-\tPORT=1\njobstep\tread\tFetch the release\njobstep\trun\tSet it up\n"
+               "note\thello\nlong\tyes\n")
+        d = ws.parse_change(out, 0)
+        for k, v in (("package", "jellyfin"), ("kind", "recipe"), ("repo", "recipes"), ("version", "1.2.0"), ("tag", "v1.2.0"), ("commit", "abc123"),
+                     ("title", "Jellyfin"), ("description", "Media server")):
+            self.assertEqual(d[k], v)
+        self.assertEqual(d["creates"], ["a container", "a share"])
+        self.assertEqual(d["needl"], [["docker", "missing", "needs docker", "yes"]])
+        self.assertEqual(d["needs"], ["date"])
+        self.assertEqual(d["asks"], [["PORT", "Port", "text", "-", "8096", "[0-9]+", "-"], ["KIND", "Kind", "choice", "a,b", "a", "-", "PORT=1"]])
+        self.assertEqual(d["jobsteps"], [["read", "Fetch the release"], ["run", "Set it up"]])
+        self.assertEqual(d["steps"], [["note", "hello"]])
+        self.assertTrue(d["long"])
+        e = ws.parse_change("status\tdone\n", 0)
+        for k in ("creates", "needl", "asks", "jobsteps"):
+            self.assertNotIn(k, e)
+
 
 if __name__ == "__main__":
     unittest.main()

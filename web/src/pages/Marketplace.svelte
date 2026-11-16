@@ -7,6 +7,7 @@
   import { route, go } from '../route.svelte.js';
   import { start } from '../api.js';
   import RepoAdd from '../forms/ops/RepoAdd.svelte';
+  import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -54,7 +55,7 @@
     { key: 'tools', label: '', sort: false, align: 'right' },
   ];
 
-  const install = (p) => openPlan('pkg', ['install', p.name], `Install ${p.name}`);
+  const install = (p) => openCreate(InstallDialog, { pkg: p.name, repo: p.repo });
   const update = (p) => openPlan('pkg', ['update', p.name], `Update ${p.name}`);
   const turn = (p, want) => openPlan('parts', [want, p.name], `${want === 'enable' ? 'Turn on' : 'Turn off'} ${p.name}`);
   const remove = (p) => openPlan('pkg', ['remove', p.name], `Remove ${p.name}`);
@@ -170,7 +171,7 @@
             <input type="checkbox" checked={selected.has(p.name)} onchange={(e) => toggle(p.name, e.target.checked)} aria-label="Select {p.name}" />
           {:else if col.key === 'go'}
             {#if p.state === 'new'}
-              <Button variant="primary" size="sm" busy={jobRunning('pkg', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
+              <Button variant="primary" size="sm" busy={jobRunning('apps', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
             {:else if p.state === 'update'}
               <Button variant="primary" size="sm" busy={jobRunning('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
             {/if}

@@ -43,6 +43,14 @@ them by position. Milestones 0.11 and 0.13 read the same words, so they are deci
 The interface uses the same verbs for every kind: **Install** (`available` towards `on`), **Remove** (back to `available`, data stays), **Update**
 (flag `update`). **Start/Stop** only for the instances of a recipe. **Turn off/on** (secondary) only for extension and capability.
 
+## Several instances (D16, #471)
+
+A recipe runs once on a server unless its manifest says `[app] instances = "many"` (default `one`). The first instance carries the package name;
+further ones are named `<recipe>-<word>` (`[a-z0-9-]`, at most 40 characters), unique across instances and services. The plan of
+`hs sys apps plan install` refuses `--name <other>` for a `one` package with a plain message, and for a `many` package it refuses a name off the
+pattern or one already taken by an instance or a service. The package is installed once; instances carry `on`/`running`. `pelican`, `arr` and
+`docker` stay `one` until a recipe has been tried with two. Not tested on hardware yet.
+
 ## API stability
 
 The stage and flag words are part of the machine-readable contract. Changing or removing a word, or the column order, needs an API level bump

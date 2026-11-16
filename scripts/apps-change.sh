@@ -27,7 +27,8 @@
 #   on, rebuild   (extension and capability) switch it on; rebuild only for a capability with a Nix module (same code as pkg-bundle.sh)
 # `--from <step>` starts the job at that step (read|needs|ask|run|check|done|on|rebuild): the steps before it are not run again. Step 9 (retry) uses it.
 # The job writes only through the helpers that fill the created ledger (scripts/lib/created.sh): what this run made is recorded, nothing else.
-# Test knobs: HS_PKG (pkg.sh), HS_PARTS (parts.sh), HS_PART_CHANGE (part-change.sh), HS_REBUILD (rebuild.sh), HS_RECIPE (recipe.sh), HS_ORCHESTRATE
+# A package that says `instances = "one"` (the default) refuses --name other than itself; `many` takes --name <package>-<word>, free among instances and services.
+# Test knobs: HS_SERVICES_DIR, HS_PKG (pkg.sh), HS_PARTS (parts.sh), HS_PART_CHANGE (part-change.sh), HS_REBUILD (rebuild.sh), HS_RECIPE (recipe.sh), HS_ORCHESTRATE
 #   (recipe-orchestrate.sh), HS_APPS_LIST (apps-list.sh), HS_INCUS, HS_JOB_LIB, HS_RUN_DIR, HS_BUNDLE_NET (ok|fail), HS_LOCKED_MARKER, HS_CHECK_WAIT (seconds
 #   the check waits for a healthy app, default 60), HS_RECIPES_DIR.
 set -euo pipefail
@@ -105,6 +106,15 @@ if [ "$kind" = recipe ]; then
   [ "$input" != terminal ] || refuse "$name needs a person at a terminal (a password is typed into the setup): hs pkg install $name, then hs recipe $name"
 elif [ -n "$ct" ] || [ ${#given[@]} -gt 0 ]; then
   refuse "$name is an $kind: it takes no container name and no answers"
+fi
+
+# several instances (D16, #471): only a package that says `instances = "many"` may have more than the one named after it; the name is checked here
+if [ "$kind" = recipe ] && [ -n "$ct" ] && [ "$ct" != "$name" ]; then
+  [ "$(sv instances)" = many ] || refuse "$name runs once on a server: its package does not allow a second instance (--name $ct)"
+  [[ "$ct" =~ ^$name-[a-z0-9][a-z0-9-]*$ ]] && [ ${#ct} -le 40 ] || refuse "an instance of $name is named $name-<word> (lower case letters, digits and dashes, at most 40 characters): '$ct' does not fit"
+  if "$incus" info "$ct" >/dev/null 2>&1 || [ -e "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}/$ct.toml" ]; then
+    refuse "the name $ct is taken already by an instance or a service: choose another word"
+  fi
 fi
 
 # ── the answers up front: every --set names a question; values fit their pattern or choices ──

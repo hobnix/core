@@ -81,6 +81,34 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "apps.recover.by_verb.by_action": {
+    /** after a failed install (called by sys apps plan|start retry|cleanup): hs sys apps recover plan|start retry|cleanup <job> [--set KEY=value]... [--delete-data] [--confirm <name>]; the same lines as plan|start */
+    words: ["apps", "recover", "<verb>", "<action>"];
+    path: "/apps/recover/{verb}/{action}";
+    method: "get";
+    class: "read";
+    params: { verb: string; action: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused" | "started"]
+      | [tag: "reason", text: Field]
+      | [tag: "unit", unit: Field]
+      | [tag: "job", id: Field]
+      | [tag: "heading", text: Field]
+      | [tag: "package", name: Field]
+      | [tag: "instance", name: Field]
+      | [tag: "failed_step", text: Field]
+      | [tag: "tail", text: Field]
+      | [tag: "retry_from", text: Field]
+      | [tag: "item", text: Field]
+      | [tag: "data", text: Field]
+      | [tag: "question", text: Field]
+      | [tag: "note", text: Field]
+      | [tag: "danger", text: Field]
+      | [tag: "confirm_name", name: Field]
+      | [tag: "command", text: Field]
+      | [tag: "long", text: Field])[];
+  };
   "apps.start.by_action": {
     /** install it as one guided job: read needs ask run check done (hs sys apps start install <name> --tag <tag from the plan> [--set KEY=value]... [--ask] [--from <step>]): status started, unit, job; a secret answer is one line on stdin; a package of an added repository needs --confirm <name> */
     words: ["apps", "start", "<action>"];
