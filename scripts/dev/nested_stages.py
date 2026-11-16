@@ -234,7 +234,9 @@ def upgrade_steps(params):
         step("run", "%s > /var/tmp/upgrade-schema-before && %s > /var/tmp/upgrade-events-before" % (ver, rows), what="the state.db schema version and event count are noted"),
         # point the old checkout at the candidate branch: update.sh follows the upstream of the current branch while no newer signed tag exists
         step("run", "git -C /etc/nixos remote set-url origin %s" % _q(repo), what="origin is the Hobnix repository"),
-        step("run", "git -C /etc/nixos fetch origin %s" % _q(cand), timeout=600, what="the candidate branch is fetched"),
+        # /etc/nixos of a release is a detached HEAD at the tag (lib/checkout.sh): a local branch on that commit follows the candidate
+        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/%s" % (_q(cand), _q(cand)), timeout=600, what="the candidate branch is fetched"),
+        step("run", "git -C /etc/nixos checkout -q -B upgrade-from-release", what="a local branch stands on the revision of the old release"),
         step("run", "git -C /etc/nixos branch -u origin/%s" % _q(cand), what="the current branch follows the candidate"),
         step("run", "hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
