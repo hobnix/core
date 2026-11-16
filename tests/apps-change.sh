@@ -105,7 +105,7 @@ $PKGPY fetch test >/dev/null
 
 # stand-ins: incus (docker is not there), parts (tailscale off), recipe, orchestrator, health, job library
 LOG=$WORK/log; : > "$LOG"
-printf '#!/usr/bin/env bash\n[ "${1:-}" = info ] && [ "${2:-}" = "${HAVE_CT:-}" ] && exit 0\nexit 1\n' > "$WORK/incus"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = info ] && [ -s "%s/have_ct" ] && [ "${2:-}" = "$(cat "%s/have_ct")" ] && exit 0\nexit 1\n' "$WORK" "$WORK" > "$WORK/incus"
 printf '#!/usr/bin/env bash\nprintf "tailscale\\toff\\tpart\\tyes\\tyes\\tT\\n"\n' > "$WORK/parts.sh"
 printf '#!/usr/bin/env bash\necho "recipe $*" >> "%s"\n' "$LOG" > "$WORK/recipe.sh"
 cat > "$WORK/orch.sh" <<STUB
@@ -153,7 +153,7 @@ run plan install multi --name multi-kids
 if [ "$rc" = 0 ] && has "an instance named multi-kids"; then pass "a many package gets <recipe>-<word>"; else fail "many: $out"; fi
 run plan install multi --name other;     if [ "$rc" = 1 ] && has "is named multi-<word>"; then pass "a name off the pattern is refused"; else fail "pattern: $out"; fi
 run plan install multi --name multi-Bad; [ "$rc" = 1 ] && pass "invalid characters are refused" || fail "chars: $out"
-HAVE_CT=multi-kids run plan install multi --name multi-kids
+echo multi-kids > "$WORK/have_ct"; run plan install multi --name multi-kids; rm -f "$WORK/have_ct"
 if [ "$rc" = 1 ] && has "taken already"; then pass "a duplicate instance name is refused"; else fail "dup: $out"; fi
 mkdir -p "$WORK/svc"; : > "$WORK/svc/multi-tv.toml"
 HS_SERVICES_DIR=$WORK/svc run plan install multi --name multi-tv
