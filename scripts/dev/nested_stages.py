@@ -24,11 +24,22 @@ def step(kind, text, **kw):
     return d
 
 
-def full_system():
-    """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic, mkfs, SnapRAID come
-    with it): the same step every real install is followed by."""
-    return [step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --foreground",
-                 timeout=3000, what="the full configuration is built (hs rebuild)")]
+def full_system(params):
+    """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic and SnapRAID come with
+    it). That configuration always imports a ZFS pool named `fast`, so, as on a real server (docs/install.md), the pool comes first: a mirror
+    of two small virtual disks (`hs pool fast add`), bulkType snapraid for the data pool, then `hs rebuild`. Safe to run twice."""
+    return [
+        disk_by_name(params, "fast1", "f1"),
+        disk_by_name(params, "fast2", "f2"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks $(basename {f1}),$(basename {f2}) "
+                        "--confirm fast | grep -q 'status.*started'", timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
+        step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
+             timeout=900, what="the pool fast exists"),
+        step("run", "grep -q '^bulkType' /etc/nixos/machine.toml && sed -i 's/^bulkType.*/bulkType = \"snapraid\"/' /etc/nixos/machine.toml "
+                    "|| printf 'bulkType = \"snapraid\"\\n' >> /etc/nixos/machine.toml", what="the data pool is SnapRAID (no second ZFS pool to import)"),
+        step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --foreground",
+             timeout=3000, what="the full configuration is built (hs rebuild)"),
+    ]
 
 
 def login_root(params):
@@ -88,7 +99,7 @@ def rollback(params):
 def backup(params):
     """On the first VM: set up the backup disk (a virtual disk), write a marker file into /var/lib/hs, back up, check the snapshot, and keep the
     restic password stays in the VM: testlab.sh pulls /var/lib/hs/restic-password with `incus file pull`, never through the console log."""
-    return login_root(params) + full_system() + [
+    return login_root(params) + full_system(params) + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is a block device"),
         step("run_var", "HS_BACKUP_YES=1 hs backup init {dev}", timeout=300, what="hs backup init makes the disk the backup disk"),
@@ -104,7 +115,7 @@ def restore(params):
     """On the second, clean VM (a fresh install): the backup disk was moved here. Read the host snapshot from the disk with only the backup
     password (hs backup config restore --from-disk) and expect the marker file of the first VM back."""
     pw = params["backup_pass"]
-    return login_root(params) + full_system() + [
+    return login_root(params) + full_system(params) + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is attached to the second VM"),
         step("run", "test ! -e /var/lib/hs/testlab-marker", what="the second VM is clean: no marker yet"),
@@ -121,7 +132,7 @@ def restore(params):
 def pool(params):
     """Two virtual disks become the data disks of the pool bulk (SnapRAID, no parity), then the file manager copies a file from one data disk
     to the other. The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it is switched on first."""
-    return login_root(params) + full_system() + [
+    return login_root(params) + full_system(params) + [
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
@@ -129,8 +140,8 @@ def pool(params):
         step("capture", "HS_CALLER=test hs sys pool start bulk add --disks $(basename {d1}),$(basename {d2}) --role data --fs ext4 --confirm bulk",
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
-        step("run", "u=$(hs job list --plain 2>/dev/null | awk '/pool/ {print $1; exit}'); [ -z \"$u\" ] || while systemctl is-active --quiet \"$u\"; do sleep 5; done",
-             timeout=1800, what="the pool job finishes"),
+        # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
+        step("run", "for i in $(seq 1 180); do mountpoint -q /bulk && break; sleep 5; done", timeout=1800, what="the pool job finishes (/bulk shows up)"),
         step("run", "hs pool bulk | grep -q data", what="hs pool bulk lists the data disks"),
         step("run", "mountpoint -q /bulk", what="/bulk is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),

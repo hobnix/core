@@ -352,10 +352,15 @@ worst() {   # worst <result>...: the first that is not ok
 stage_rollback() {
   res[3]=$(xrun rollback "$vm" "" "$pwfile")
 }
+fast_on=
+fast_disks() {   # fast_disks <vm>: two small virtual disks for the pool `fast` (the full configuration of the storage part always imports it)
+  case " $fast_on " in *" $1 "*) return 0 ;; esac
+  vdisk_add "$1" f1 2GiB && vdisk_add "$1" f2 2GiB && fast_on="$fast_on $1"
+}
 stage_backup() {
   local a b
-  vdisk_add "$vm" bk 2GiB || { res[4]=error; return; }
-  a=$(xrun backup "$vm" "backup=bk" "$pwfile")
+  vdisk_add "$vm" bk 2GiB && fast_disks "$vm" || { res[4]=error; return; }
+  a=$(xrun backup "$vm" "backup=bk fast1=f1 fast2=f2" "$pwfile")
   [ "$a" = ok ] || { res[4]=$a; return; }
   ( umask 077; "$incus" file pull "$vm/var/lib/hs/restic-password" "$rundir/.backup-pass" ) || { res[4]=error; return; }
   vm2=$vm-b
@@ -364,13 +369,14 @@ stage_backup() {
   local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P)
   "$incus" config device remove "$vm" bk >/dev/null || { res[4]=error; return; }
   "$incus" config device add "$vm2" bk disk "pool=$spool" "source=$vm-bk" >/dev/null || { res[4]=error; return; }
-  b=$(xrun restore "$vm2" "backup=bk" "$d2/password" "$rundir/.backup-pass")
+  fast_disks "$vm2" || { res[4]=error; return; }
+  b=$(xrun restore "$vm2" "backup=bk fast1=f1 fast2=f2" "$d2/password" "$rundir/.backup-pass")
   rm -f "$rundir/.backup-pass"
   res[4]=$(worst "$a" "$b")
 }
 stage_pool() {
-  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB || { res[5]=error; return; }
-  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2" "$pwfile")
+  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB && fast_disks "$vm" || { res[5]=error; return; }
+  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2 fast1=f1 fast2=f2" "$pwfile")
 }
 stage_browser() {
   local ip rc=0

@@ -172,7 +172,7 @@ class ScenarioTests(unittest.TestCase):
             n.build_scenario("nope", self.P)
 
     def test_extra_stages_are_registered_and_build(self):
-        P = dict(self.P, backup_pass="BKPASS", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        P = dict(self.P, backup_pass="BKPASS", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
         for st in ("rollback", "backup", "restore", "pool"):
             self.assertIn(st, n.STAGES)
             steps = n.build_scenario(st, P)
@@ -217,12 +217,15 @@ class ScenarioTests(unittest.TestCase):
         self.assertIn("basename /dev/sdc;", "".join(t.sent))
 
     def test_the_pool_and_backup_stages_build_the_full_configuration_first(self):
-        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
         for st in ("backup", "restore", "pool"):
-            self.assertIn("hs rebuild --foreground", " ".join(s["text"] for s in n.build_scenario(st, P)), st)
+            text = " ".join(s["text"] for s in n.build_scenario(st, P))
+            self.assertIn("hs rebuild --foreground", text, st)
+            self.assertLess(text.index("pool start fast add"), text.index("hs rebuild --foreground"), st)   # the pool fast comes first
+            self.assertIn("incus_f1", text)
 
     def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
-        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
         text = " ".join(s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P))
         self.assertNotIn("/dev/sda", text)
         self.assertIn("incus_bk", text)
