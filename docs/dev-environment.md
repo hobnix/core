@@ -67,6 +67,15 @@ VM.** Only its logic is tested (`scripts/dev/t quick nested`, a fake console and
 Exit codes: 0 passed, 1 a check failed, 2 usage, 3 this machine cannot run it, 4 harness or Incus error. Logs: `.work/nested/<run-id>/`
 (`run.log`, `console-<stage>.log`, `result-<stage>.json`; `.work/nested/latest`).
 
+**File manager write checks (stages `pool` and `poolzfs`, #425).** Both run on an installed VM (`--name`) with two virtual disks
+(`HS_NESTED_DISKS="pool1=<device> pool2=<device>"`) that are still empty, so each needs a fresh VM or fresh disks. `pool` makes a SnapRAID `bulk`
+(two data disks, no parity), `poolzfs` a ZFS `bulk` (a mirror). Then `fileManagerWrite` is switched on and the file manager does, with a checksum
+of the folder before and after: copy, move (source gone only after the target matches), rename, mkdir, an overwrite choice (refused without the typed
+name, done with it), delete (refused with a wrong `delete N files`, done with the right one) and a cancelled move (`hs sys jobs stop`: afterwards the
+data is whole in one place). On SnapRAID this runs disk to disk and share to share, and checks the guard: `sys fm pair disk:data-01 pool:bulk` says
+`refused` and a `start` with that pair refuses. On ZFS it runs share to share and share to the pool view (a ZFS pool has no data disks).
+`nested.sh plan pool` and `plan poolzfs` print the steps. Not tested on hardware yet: the stages have not run against a real VM.
+
 Limits: nested virtualization must be enabled on the host. Where it is not (exit 3, a WSL2 without it, many CI runners) use `scripts/dev/t vm`
 on a machine with Incus; that tests our scripts on Ubuntu VMs, not the ISO. The rebuild rehearsal is not part of it yet. CI: the manual
 workflow `nested` (Actions, "Run workflow", give an ISO URL).
