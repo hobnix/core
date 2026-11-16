@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# The file manager's locations and path rules (docs/PLAN-file-manager.md). Sourced by scripts/fm.sh, not run.
+# The file manager's locations and path rules (docs/PLAN-storage-nas.md). Sourced by scripts/fm.sh, not run.
 #
 #   fm_resolve <id>        fills L*: LID LKIND LLABEL LROOT (real path) LFS LSIZE LFREE LADD (may receive files) LMOD (files may be removed/renamed in it)
 #                          LREASON (why not writable, or -) LPOOL LDISK LUSABLE (yes|no; LERR says why not) LAK (array key: what busy marks are keyed by)

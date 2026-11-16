@@ -1,4 +1,4 @@
-// The ONLY place the file manager talks to the backend (the contract is `hs sys fm ...`, docs/PLAN-file-manager.md section 7). Everything else in
+// The ONLY place the file manager talks to the backend (the contract is `hs sys fm ...`, docs/PLAN-storage-nas.md). Everything else in
 // web/src/files works with the objects this module returns, so a change of the wire format is a change here.
 //
 // READS (GET /api/sys/fm/<words>, tsv rows; the first row is `status<TAB>ok|refused`, a refusal has `reason<TAB>text`):
