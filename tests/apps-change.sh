@@ -329,4 +329,10 @@ run plan cleanup "$FJ";                     if [ "$rc" = 1 ] && has "another run
 run plan cleanup "$RJ";                     if [ "$rc" = 1 ] && has "did not fail"; then pass "a job that did not fail has nothing to clean"; else fail "ok job: $out"; fi
 check "recipe-orchestrate.sh knows --from-phase" grep -q -- '--from-phase' "$SCRIPTS/recipe-orchestrate.sh"
 
+printf '#!/usr/bin/env bash
+echo "ARGS: $*"
+' > "$WORK/av.sh"; chmod +x "$WORK/av.sh"
+rc=0; out=$(HS_APPS_VERSION=$WORK/av.sh bash "$SCRIPTS/apps-change.sh" plan update demo 2>&1 </dev/null) || rc=$?
+check_eq "plan update is handed to apps-version.sh" "ARGS: plan update demo" "$out"
+
 finish

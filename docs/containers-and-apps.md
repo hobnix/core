@@ -320,6 +320,13 @@ tell you so):
 hs recipe <name> --check
 ```
 
+To see or change what happens when an app has an update (`notify` mentions an offered update in the weekly summary, `pinned` never offers one; nothing is updated by itself). The Apps page shows the version each app runs next to its package version. Not tested on hardware yet.
+
+```bash
+hs apps policy <instance>
+hs apps policy <instance> pinned
+```
+
 To be asked the questions again:
 
 ```bash

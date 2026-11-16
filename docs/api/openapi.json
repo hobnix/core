@@ -351,6 +351,51 @@
     }
    }
   },
+  "/apps/policy/{instance}": {
+   "get": {
+    "operationId": "apps.policy.by_instance",
+    "summary": "the update policy of an installed app: without a value it prints notify or pinned, with one (hs sys apps policy <instance> notify|pinned) it is written into the app record; automatic is refused; exit 1 = refused",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "policy",
+      "<instance>"
+     ],
+     "script": "apps-version.sh",
+     "args": "policy {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "instance",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "description": "hs sys apps policy <instance>: prints notify or pinned (the default is notify). hs sys apps policy <instance> notify|pinned writes it into the app record (/var/lib/hs/apps/<instance>.toml) and prints nothing. automatic is refused (not available yet); an unknown instance is refused with a message on stderr, exit 1.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/apps/recover/{verb}/{action}": {
    "get": {
     "operationId": "apps.recover.by_verb.by_action",
@@ -734,6 +779,89 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/apps/versions": {
+   "get": {
+    "operationId": "apps.versions",
+    "summary": "the installed apps with their versions and update policy: name, instance, package version, app version offered, app version running (- when not known), policy (notify|pinned), state (current|update|pinned)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "versions"
+     ],
+     "script": "apps-version.sh",
+     "args": "--list",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/apps/versions",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
+    "description": "One row per installed app instance. package_version is the version of the package (package.toml), app_offered the app version the release says it ships, app_running the version read on this server (the image tag, the app's own version endpoint or a command in the instance: [app.version]); - when not known. state is update when offered and running are both known and differ, pinned when the policy is pinned (a pinned app is never offered), else current. Nothing is looked up on the internet.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "instance"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package_version"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "app_offered"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "app_running"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "policy",
+            "enum": [
+             "notify",
+             "pinned"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state",
+            "enum": [
+             "current",
+             "update",
+             "pinned"
+            ]
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }

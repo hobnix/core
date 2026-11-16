@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Apps show the version of the app itself and have an update policy"
+body  = """The Apps page now shows the version an app is running next to the package version, and says when the release offers a newer one. `hs apps policy <instance> pinned` stops an app from being offered updates; `notify` (the default) mentions them in the weekly summary. Nothing is updated by itself."""
