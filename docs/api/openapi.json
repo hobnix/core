@@ -351,6 +351,320 @@
     }
    }
   },
+  "/apps/recover/{verb}/{action}": {
+   "get": {
+    "operationId": "apps.recover.by_verb.by_action",
+    "summary": "after a failed install (called by sys apps plan|start retry|cleanup): hs sys apps recover plan|start retry|cleanup <job> [--set KEY=value]... [--delete-data] [--confirm <name>]; the same lines as plan|start",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "recover",
+      "<verb>",
+      "<action>"
+     ],
+     "script": "apps-recover.sh",
+     "args": "{1} {2} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "verb",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused",
+               "started"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "unit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "unit"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "job"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "id"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "heading"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "package"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "instance"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "failed_step"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "tail"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "retry_from"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "item"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "data"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "question"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "note"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "danger"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "confirm_name"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "command"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "long"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/apps/start/{action}": {
    "post": {
     "operationId": "apps.start.by_action",

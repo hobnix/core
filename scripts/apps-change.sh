@@ -46,11 +46,12 @@ steps_all=(read needs ask run check done on rebuild)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start|run) ;; *) echo "usage: apps-change.sh plan|start install <package> [--repo R] [--tag T] [--name <container>] [--set KEY=value]... [--ask] [--from <step>]" >&2; exit 1 ;; esac
-[ "$action" = install ] || refuse "unknown action (install)"
+case "$action" in retry|cleanup) exec bash "${HS_APPS_RECOVER:-$here/apps-recover.sh}" "$verb" "$action" "${@:3}" ;; esac   # a failed install (step 9, #466)
+[ "$action" = install ] || refuse "unknown action (install, retry, cleanup)"
 [[ "$name" =~ $word ]] || refuse "not a package name (lower case letters, digits and dashes)"
 shift 3 || true
 
-repo="" tag="" ct="" ask_again=false from="" by="" role="" confirm=""
+repo="" tag="" ct="" ask_again=false from="" from_phase="" by="" role="" confirm=""
 declare -A given=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -59,7 +60,9 @@ while [ $# -gt 0 ]; do
     --name)    [ $# -ge 2 ] && [[ "$2" =~ $word ]] || refuse "'${2:-}' is not a container name (lower-case letters, digits and dashes)"; ct=$2; shift 2 ;;
     --ask)     ask_again=true; shift ;;
     --from)    [ $# -ge 2 ] || refuse "--from needs a step"
-               [[ " ${steps_all[*]} " == *" $2 "* ]] || refuse "--from names one of: ${steps_all[*]}"; from=$2; shift 2 ;;
+               if [[ "$2" =~ ^run:([a-z0-9][a-z0-9-]{0,30})$ ]]; then from=run; from_phase=${BASH_REMATCH[1]}   # a recipe phase: that phase and the ones after it
+               else [[ " ${steps_all[*]} " == *" $2 "* ]] || refuse "--from names one of: ${steps_all[*]}, run:<phase>"; from=$2; fi
+               shift 2 ;;
     --by)      [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse "--by needs a user name"; by=$2; shift 2 ;;
     --role)    [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse "--role needs a role"; role=$2; shift 2 ;;
     --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
@@ -196,6 +199,50 @@ if [ "$verb" = run ]; then
   . "$here/lib/install-steps.sh"
   total=${#jsteps[@]}
   from=${APPS_FROM:-$from}
+  . "$here/lib/created.sh"
+  # a failed run leaves its step and reason on the record (the Retry and Remove buttons read them; docs/PLAN-app-lifecycle.md Q3)
+  cur_step=read; last_reason=""
+  _ui_fail_body=$(declare -f fail | sed '1s/^fail/_ui_fail/'); eval "$_ui_fail_body"
+  fail() { last_reason=$*; _ui_fail "$@"; }
+  on_exit() {
+    local rc=$? st rec
+    [ "$rc" -ne 0 ] && [ -n "${HS_JOB_ID:-}" ] || return 0
+    st=$cur_step
+    if [[ "$cur_step" = run* ]]; then   # the orchestrator names the phase in the record
+      rec=$(hs_job_record get "$HS_JOB_ID" 2>/dev/null || true)
+      st=$(python3 -c 'import json,sys
+t=(json.loads(sys.argv[1]).get("step") or {}).get("text","")
+print(t if t.startswith("run:") else "run")' "$rec" 2>/dev/null || echo run)
+    fi
+    [ -n "$last_reason" ] || last_reason="the step $st did not finish (exit $rc)"
+    install_failed_note "$st" "$last_reason"
+  }
+  install_failed_note() {   # install_failed_note <step> <reason>: the record's result names the step, the reason and the last lines of its log
+    local tail="" json
+    tail=$(failed_tail 2>/dev/null || true)
+    json=$(python3 -c 'import json,sys
+k=["status","failed_step","reason","tail","package","repo","tag","instance","kind","version"]
+v=[x[:900] for x in sys.argv[1:]]
+print(json.dumps(dict(zip(k,["failed"]+v))))' "$1" "$2" "$tail" "$name" "$repo" "$tag" "${ct:-$name}" "$kind" "$version")
+    hs_job_record result "$HS_JOB_ID" --json "$json" >/dev/null 2>&1 || true
+  }
+  failed_tail() {   # the last lines of the log of the failed phase's sub-job (its unit's journal), best effort
+    local u
+    u=$(python3 - "$HS_JOB_ID" <<'PY' 2>/dev/null || true
+import json,os,sys,glob
+d=os.environ.get("HS_JOBS_DIR","/var/lib/hs/jobs"); best=None
+for f in glob.glob(os.path.join(d,"*.json")):
+    try: r=json.load(open(f))
+    except Exception: continue
+    if r.get("parent")==sys.argv[1] and r.get("state") in ("failed","interrupted") and (best is None or r.get("ended","")>=best.get("ended","")): best=r
+print((best or {}).get("unit",""))
+PY
+)
+    [ -n "$u" ] || return 0
+    if [ -n "${HS_JOB_TAIL:-}" ]; then bash "$HS_JOB_TAIL" "$u"; else journalctl -u "$u.service" -n 6 --no-pager -o cat 2>/dev/null; fi | tr -d '
+' | tail -n 6 | cut -c1-200 | paste -sd'|' | sed 's/|/ | /g'
+  }
+  trap on_exit EXIT
   recipe_file=""
   nphase=1
   n=0; skipping=false; [ -z "$from" ] || skipping=true
@@ -214,6 +261,7 @@ if [ "$verb" = run ]; then
       fi
       skipping=false
     fi
+    cur_step=$s
     case "$s" in
       read)
         hs_job_step "$n" "$total" read
@@ -241,7 +289,7 @@ if [ "$verb" = run ]; then
         pl=($ph); nphase=${#pl[@]}
         total=$((total - 1 + nphase))   # the record counts the phases of the recipe as steps
         HS_STEP_BASE=$((n - 1)) HS_STEP_TOTAL=$total HS_STEP_PREFIX='run:' \
-          bash "${HS_ORCHESTRATE:-$here/recipe-orchestrate.sh}" "$name" ${ct:+--name "$ct"} || exit $?
+          bash "${HS_ORCHESTRATE:-$here/recipe-orchestrate.sh}" "$name" ${ct:+--name "$ct"} ${from_phase:+--from-phase "$from_phase"} || exit $?
         n=$((n + nphase - 1)) ;;
       on)
         hs_job_step "$n" "$total" on
@@ -312,7 +360,7 @@ if [ "$verb" = start ]; then
   export HS_JOB_ENV=$env_lines HS_JOB_KIND=orchestration HS_JOB_INITIATOR=${by:-${SUDO_USER:-${USER:-}}}
   rargs=(run install "$name" --repo "$repo" --tag "$tag")
   [ -z "$ct" ] || rargs+=(--name "$ct")
-  [ -z "$from" ] || rargs+=(--from "$from")
+  [ -z "$from" ] || rargs+=(--from "$from${from_phase:+:$from_phase}")
   unit=$(hs_job "app-install-$name${ct:+-$ct}" "hs apps install $name${ct:+ --name $ct}" -- bash -c 'd=$1; shift; "$@"; rc=$?; [ -z "$d" ] || rm -rf "$d"; exit $rc' _ "$sdir" \
           bash "$here/apps-change.sh" "${rargs[@]}") || { [ -z "$sdir" ] || rm -rf "$sdir"; refuse "the job could not be started"; }
   jid=$(hs_job_record find-unit "$unit" 2>/dev/null) || jid=""

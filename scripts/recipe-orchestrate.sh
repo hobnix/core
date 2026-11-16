@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the orchestrator of an interactive recipe run (a job; started by hs sys recipes start <recipe> run --interactive)
 # help.de: der Orchestrator eines interaktiven Rezeptlaufs (ein Auftrag; gestartet mit hs sys recipes start <Rezept> run --interactive)
-# args: <recipe> [--name <container>]
+# args: <recipe> [--name <container>] [--from-phase <phase>]
 # Runs as the unit of an orchestration job (docs/adr/0018-interactive-recipe-runs.md, docs/PLAN-recipe-orchestrator.md). It makes the folder
 # $HS_RUN_DIR/ask/<job id> (0700), runs the recipe as sub-jobs (one per phase of a `# phases: a b c` header, else ONE named `run`; a phase reaches the
 # recipe as RECIPE_PHASE), and while a step waits in ask_q it copies the oldest question into its own record (state waiting, event job.waiting, one
@@ -23,6 +23,8 @@ py="$here/lib/ask-q.py"
 name=${1:-}; shift || true
 ct=""
 [ "${1:-}" != --name ] || { ct=${2:-}; shift 2 || true; }
+from_phase=""
+[ "${1:-}" != --from-phase ] || { from_phase=${2:-}; shift 2 || true; }   # a retry (docs/PLAN-app-lifecycle.md Q3): the phases before it are not run again
 [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || { fail "$(t "Usage: recipe-orchestrate.sh <recipe> [--name <container>]")"; exit 2; }
 orch=${HS_JOB_ID:-}
 [ -n "$orch" ] || { fail "$(t 'The orchestrator needs a job record (HS_JOB_ID).')"; exit 2; }
@@ -92,8 +94,13 @@ watch_once() {
 }
 
 rc=0; n=0
+if [ -n "$from_phase" ] && [[ " ${phase_list[*]} " != *" $from_phase "* ]]; then fail "$(t "The recipe has no phase called '%s' (%s)." "$from_phase" "${phase_list[*]}")"; exit 1; fi
 for phase in "${phase_list[@]}"; do
   n=$((n + 1))
+  if [ -n "$from_phase" ]; then
+    [ "$phase" = "$from_phase" ] || { note "$(t 'Phase %s: done before.' "$phase")"; continue; }
+    from_phase=""
+  fi
   [[ "$phase" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { fail "$(t "'%s' is not a phase name." "$phase")"; rc=1; break; }
   # inside the Install job (apps-change.sh) the phases are steps of ONE record: HS_STEP_BASE = steps before them, HS_STEP_TOTAL = all steps, the text is run:<phase>
   hs_job_step "$((${HS_STEP_BASE:-0} + n))" "${HS_STEP_TOTAL:-$total}" "${HS_STEP_PREFIX:-}$phase"

@@ -124,6 +124,8 @@ pattern as `sys pkg`). Each is a `sys` row: `openapi-gen.py`, `openapi-ts-gen.py
 - **Steps have names.** The record's `step.text` is one of `read, needs, ask, run:<phase>, check`; a failure sets `error {category, step, text, tail}`
   with the last lines of the sub-job's log (the existing `error` field; the Rust writer must learn it, or the Python fallback stays, see PLAN-jobs).
   The Jobs page and the dialog show "failed at: run: configure" and the lines.
+  Built (step 9): the record ends after the job wrapper wrote `error`, so the failed Install job writes its step, reason and tail into the record's `result`
+  (`status failed, failed_step, reason, tail, package, repo, tag, instance`); the `error` field stays the wrapper's `exit` category.
 - **Retry** = `sys apps start retry <job>`: a new orchestration that starts at the failed step (`--from <step>`), with the answers already given
   (stored in `recipe-<ct>.conf` and the job's secrets folder is removed only when the job ends for good). Retry is **per step and per recipe phase**;
   a recipe step that fails in the middle of a phase re-runs the whole phase, which is safe because recipes are idempotent (pins and stamps skip what is

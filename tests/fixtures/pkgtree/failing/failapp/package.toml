@@ -1,0 +1,11 @@
+# Manifest of a package that fails on purpose (docs/PLAN-app-lifecycle.md Q3): a fixture for the tests of the core, not a real app.
+name = "failapp"
+version = "1.0.0"
+kind = "recipe"
+title = "Fixture app that fails on purpose"
+requires_core = ">=1"
+audience = "generic"
+needs = []
+uses = []
+input = "none"
+script = "run.sh"
