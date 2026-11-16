@@ -1,0 +1,13 @@
+# Manifest of a capability package with a Nix module (docs/PLAN-capabilities-repo.md, step 5): the fixture of `nix-matrix.sh --vendor`.
+name = "hello-nix"
+version = "1.0.0"
+kind = "capability"
+type = "feature"
+title = "Hello (Nix fixture)"
+title_de = "Hallo (Nix-Fixture)"
+requires_core = ">=1"
+audience = "generic"
+requires = []
+provides = []
+module = "module.nix"
+requires_nix_api = 1

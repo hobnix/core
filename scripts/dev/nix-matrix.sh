@@ -3,14 +3,29 @@
 # step 8, "test matrix"). A capability that breaks alone, or that only works because another one is on, is entangled: this finds it.
 # CI runs it in the "nixos" job; it can be run by hand wherever `nix-instantiate` and nixpkgs exist (the WSL Debian here):
 #
-#   bash scripts/dev/nix-matrix.sh [--only <variant>]      (NIX_PATH must find <nixpkgs>, default nixpkgs=channel:nixos-unstable)
+#   bash scripts/dev/nix-matrix.sh [--only <variant>] [--vendor <dir>]      (NIX_PATH must find <nixpkgs>, default nixpkgs=channel:nixos-unstable)
+#
+# --vendor <dir>: <dir> is a checkout of a capabilities repository (capabilities/<name>/package.toml, or a folder of package folders). In the
+# temporary copy every package with a `module` is vendored through `pkg.py vendor` (the code `hs pkg install` uses; vendor/ and its lock, no
+# --impure), then each gets a variant only-<name> (its own file etc/hs/<name> must exist when the package ships one) and all of them are switched on
+# in variant all. A package whose requires_nix_api is above capabilities/nix-api-level fails by name.
 #
 # Needs no machine, no pools and no root: the configuration is only evaluated, never built. Not an `hs` command.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-only=""
-[ "${1:-}" != --only ] || only=${2:-}
+only=""; vendor=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only)   only=${2:-}; shift 2 || shift ;;
+    --vendor) vendor=${2:-}; shift 2 || shift ;;
+    *)        echo "unknown argument: $1"; exit 2 ;;
+  esac
+done
+if [ -n "$vendor" ]; then
+  [ -d "$vendor" ] || { echo "--vendor: $vendor is not a folder"; exit 2; }
+  vendor=$(cd "$vendor" && pwd)
+fi
 export NIX_PATH=${NIX_PATH:-nixpkgs=channel:nixos-unstable}
 command -v jq >/dev/null 2>&1 || { echo "jq is not installed: cannot compare the values"; exit 77; }
 command -v nix-instantiate >/dev/null 2>&1 || { echo "nix-instantiate is not installed: nothing to evaluate"; exit 77; }
@@ -21,8 +36,27 @@ trap 'rm -rf "$work"' EXIT
 printf '{ lib, ... }: { fileSystems."/" = { device = "/dev/vda1"; fsType = "ext4"; }; boot.loader.grub.enable = lib.mkDefault false; }\n' > "$work/hardware-configuration.nix"
 
 pass=0; fail=0
+vendored=()
 ok()  { pass=$((pass + 1)); echo "  ok    $*"; }
 bad() { fail=$((fail + 1)); echo "  FAIL  $*"; }
+
+# --vendor: copy every package with a module into <work>/vendor/ with the code of `hs pkg install`
+vendor_all() {
+  local pj p name lvl need
+  lvl=$(tr -dc '0-9' < "$work/capabilities/nix-api-level")
+  for p in "$vendor"/capabilities/*/ "$vendor"/*/; do
+    [ -f "$p/package.toml" ] || continue
+    grep -qE '^module *=' "$p/package.toml" || continue
+    name=$(basename "$p")
+    need=$(grep -E '^requires_nix_api *=' "$p/package.toml" | head -n 1 | tr -dc '0-9')
+    if [ "${need:-0}" -gt "${lvl:-0}" ]; then bad "$name: requires_nix_api $need is above the core's nix-api-level $lvl"; continue; fi
+    if python3 -I "$work/scripts/pkg.py" vendor --from "${p%/}" --to "$work" >/dev/null; then
+      vendored+=("$name"); ok "$name: vendored"
+    else
+      bad "$name: pkg.py vendor refused it"
+    fi
+  done
+}
 
 # write machine.toml: the example, CHANGEME replaced, plus the given lines
 machine() { cp "$work/machine.toml.example" "$work/machine.toml"; sed -i 's/CHANGEME/deadbeef/' "$work/machine.toml"; for l in "$@"; do printf '%s\n' "$l" >> "$work/machine.toml"; done; }
@@ -69,6 +103,7 @@ refused() {
   if evaluates; then bad "$name: evaluated, but should have been refused"; else ok "$name: refused, as it should be"; fi
 }
 
+[ -z "$vendor" ] || vendor_all
 PROM='services.prometheus.enable'; TS='services.tailscale.enable'; PRIV='hs.privateInterfaces'
 
 variant core         "$PROM=false|$TS=false|$PRIV=[ ]"
@@ -81,7 +116,15 @@ for dir in "$repo"/capabilities/*/; do
     *)         variant "only-$cap" "$PROM=false|$TS=false|$PRIV=[ ]" "capabilities = [\"$cap\"]" ;;   # no Nix module: it must still evaluate
   esac
 done
-all=$(ls -d "$repo"/capabilities/*/ | xargs -n1 basename | sed 's/.*/"&"/' | paste -sd, | sed 's/,/, /g')
+# the vendored packages are each switched on alone: the module must load from vendor/ and its /etc file (if it ships one) must exist
+for n in "${vendored[@]}"; do
+  case "$n" in
+    hello-nix) variant "only-$n" 'environment.etc."hs/hello-nix".text="hello\n"' "capabilities = [\"$n\"]" ;;   # tests/fixtures/capabilities/hello-nix
+    *)         variant "only-$n" "" "capabilities = [\"$n\"]" ;;   # it must evaluate; its own tests check the rest
+  esac
+done
+all=$( { ls -d "$repo"/capabilities/*/ | xargs -n1 basename; printf '%s
+' "${vendored[@]}"; } | grep . | sed 's/.*/"&"/' | paste -sd, | sed 's/,/, /g')
 variant all          "$PROM=true|$TS=true|$PRIV=[ \"tailscale0\" ]" "capabilities = [$all]"
 refused gateway-webport-80 'capabilities = ["gateway"]' 'webUi = true' 'webPort = 80'
 variant gateway-public "services.traefik.enable=true" 'capabilities = ["gateway"]' 'gatewayPublicHttps = 4443' 'gatewayPublicHttp = 8008'
