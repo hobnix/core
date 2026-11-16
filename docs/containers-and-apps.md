@@ -199,8 +199,21 @@ The disk can only grow:
 hs ct <name> set disk=50
 ```
 
-`hs ct <name> set` also takes `autostart=yes|no` and `docker=yes|no` (restart the instance after changing `docker`). The guided form is
+`hs ct <name> set` also takes `autostart=on|off` and `docker=yes|no` (restart the instance after changing `docker`). The guided form is
 `hs ct <name> edit`; it shows the current values first.
+
+### Start at boot
+
+```bash
+hs ct <name> autostart on
+hs ct <name> autostart off
+```
+
+`off` removes the setting, so Incus restores the last state. An instance made before this change may carry `boot.autostart=false`, which means "never at boot" (the list shows `false`); run `off` once to turn it into an unset key. There is no migration.
+
+On starts the instance at every boot. Off removes the flag instead of writing `false`: Incus then restores the state the instance had before
+the shutdown, so a running one comes back and a stopped one stays stopped. To stop an instance and keep it off at boot, use the Stop plan on the
+Instances page ("also keep it off at boot"). After `hs unlock` the instances with the flag on start. Not tested on hardware yet (the reboot).
 
 ## Add storage
 

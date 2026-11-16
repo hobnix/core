@@ -15,7 +15,7 @@ incus=${HS_INCUS:-incus}
 
 usage() {
   say "usage: hs ct add [--kind empty|docker|vm] [--name <n>] [--ram MB] [--cpu N] [--disk GB] [--ip <address>] [--profile <vlan>] [--pool <incus pool>] [--iso <name.iso>] [--yes]"
-  say "       hs ct <ct> edit [--ram MB|none] [--cpu N|none] [--disk GB] [--autostart yes|no] [--docker yes|no] [--yes]"
+  say "       hs ct <ct> edit [--ram MB|none] [--cpu N|none] [--disk GB] [--autostart on|off] [--docker yes|no] [--yes]"
   say "       hs ct <ct> snapshot [label]            (without a label: a menu)"
   say "       hs ct <ct> storage [--kind fast|shares|sensitive] [--source <share>] [--name <n>] [--path </x>] [-s <apps pool>] [--readonly] [--as uid:gid] [--yes]"
   say "       hs ct <ct> ip [<address>]"
@@ -103,8 +103,8 @@ edit)
     new=$(ask "Memory in MB (none = no limit):" "${cur_ram:-none}"); [ "$new" = "${cur_ram:-none}" ] || ram=$new
     new=$(ask "CPU cores (none = no limit):" "${cur_cpu:-none}"); [ "$new" = "${cur_cpu:-none}" ] || cpu=$new
     new=$(ask "Disk size in GB:" "${cur_disk:-}"); [ "$new" = "${cur_disk:-}" ] || disk=$new
-    d=no; [ "$cur_auto" = true ] && d=yes
-    new=$(ask "Start with the server (yes/no):" "$d"); [ "$new" = "$d" ] || auto=$new
+    d=off; [ "$cur_auto" = true ] && d=on
+    new=$(ask "Start with the server (on/off; off = Incus restores its last state):" "$d"); [ "$new" = "$d" ] || auto=$new
     d=no; [ "$cur_dock" = true ] && d=yes
     new=$(ask "Docker inside (yes/no):" "$d"); [ "$new" = "$d" ] || docker=$new
   fi

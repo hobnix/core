@@ -1,6 +1,7 @@
 <script>
-  // Settings of one instance: `ct <name> set [--ram .. --cpu .. --disk .. --autostart yes|no --docker yes|no]` or `ct <name> ip --address <ip>`.
+  // Settings of one instance: `ct <name> set [--ram .. --cpu .. --disk .. --autostart on|off --docker yes|no]` or `ct <name> ip --address <ip>`.
   // Only what differs from today's value is sent.
+  import Checkbox from '../../ui/Checkbox.svelte';
   import CreateDialog from '../../shell/CreateDialog.svelte';
 
   let { ct, ondone = () => {} } = $props();
@@ -22,7 +23,7 @@
     if (ram.trim() && ram.trim() !== start.ram) a.push('--ram', ram.trim());
     if (cpu.trim() && cpu.trim() !== start.cpu) a.push('--cpu', cpu.trim());
     if (disk.trim() && disk.trim() !== start.disk) a.push('--disk', disk.trim());
-    if (autostart !== start.autostart) a.push('--autostart', autostart ? 'yes' : 'no');
+    if (autostart !== start.autostart) a.push('--autostart', autostart ? 'on' : 'off');
     if (docker !== start.docker) a.push('--docker', docker ? 'yes' : 'no');
     return a.length > 2 ? a : null;
   };
@@ -43,7 +44,7 @@
         <label for="is-disk">Disk size (GiB, can only grow)</label>
         <input id="is-disk" class="input" bind:value={disk} autocomplete="off" />
       </div>
-      <label class="chk"><input type="checkbox" bind:checked={autostart} />Start at boot</label>
+      <Checkbox bind:checked={autostart} label="Start at boot" hint="off = keep it off: it stays as it is" />
       <label class="chk"><input type="checkbox" bind:checked={docker} />Docker support (restart the instance afterwards)</label>
     {:else}
       <div class="field">

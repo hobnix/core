@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "change"
+title = "Start at boot is a clear on/off flag for every instance"
+body  = """`hs ct <name> autostart on|off` (and the Start at boot switch on the Instances page) decides whether an instance starts at every boot. On sets the flag. Off removes it, and Incus then brings the instance back in the state it had before the shutdown: a stopped one stays stopped. The Instances table shows a Starts at boot column, and the Stop plan offers "also keep it off at boot". After `hs unlock` the instances with the flag start.
+
+Not tested on hardware yet."""

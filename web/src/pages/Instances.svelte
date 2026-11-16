@@ -64,7 +64,12 @@
   const kind = (c) => (isVm(c) ? 'VM' : 'CT');
   const word = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
   const dot = (s) => (/running/i.test(s) ? 'ok' : /partial/i.test(s) ? 'warn' : 'off');
-  const plan = (e, c, action) => { e.stopPropagation(); openPlan('ct', [c.name, action], `${action} ${c.name}`); };
+  const plan = (e, c, action) => {
+    e.stopPropagation();
+    // a stop can also keep the instance off at boot (`--autostart off` unsets boot.autostart)
+    openPlan('ct', [c.name, action], `${action} ${c.name}`, action === 'stop' ? { option: { label: 'also keep it off at boot', args: ['--autostart', 'off'] } } : {});
+  };
+  const boots = (c) => /^(true|yes|on)$/i.test(c.autostart || '');
   const eligible = (c) => c.owner === 'docker' && (kids.get(c.name)?.length || 0) > 0;
   const toggleApps = (e, name) => {
     e.stopPropagation();
@@ -80,7 +85,7 @@
 
   const columns = [
     { key: 'name', label: 'Name' }, { key: 'owner', label: 'Lock', width: '64px', value: (c) => c.owner }, { key: 'type', label: 'Type', value: kind, optional: true }, { key: 'state', label: 'State', value: (c) => word(c.state) },
-    { key: 'address', label: 'Address' }, { key: 'ram', label: 'RAM', sort: 'num', optional: true, value: (c) => sizeToBytes(c.ram) },
+    { key: 'address', label: 'Address' }, { key: 'boot', label: 'Starts at boot', optional: true, value: (c) => (boots(c) ? 'yes' : 'no') }, { key: 'ram', label: 'RAM', sort: 'num', optional: true, value: (c) => sizeToBytes(c.ram) },
     { key: 'cpu', label: 'CPU', sort: 'num', optional: true, value: (c) => Number(c.cpu) },
     { key: 'lastSnap', label: 'Last snapshot', optional: true }, { key: 'route', label: 'Route', optional: true, value: (c) => servicesOf(c, services).length },
     { key: 'actions', label: '', sort: false, align: 'right' },
@@ -113,6 +118,7 @@
           {:else if col.key === 'type'}<span class="kd">{kind(c)}</span>
           {:else if col.key === 'state'}<StatusDot state={dot(c.state)} label={word(c.state)} />
           {:else if col.key === 'address'}<span class="mono addr">{c.address}</span>
+          {:else if col.key === 'boot'}<span class="kd">{boots(c) ? 'yes' : 'no'}</span>
           {:else if col.key === 'ram'}{spaced(c.ram)}
           {:else if col.key === 'cpu'}{c.cpu}
           {:else if col.key === 'lastSnap'}<span class="kd">{dash(c.lastSnap)}</span>
@@ -121,7 +127,7 @@
             {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<span class="kd">–</span>{/if}
           {:else}
             <span class="acts">
-              <Button variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={(jobRunning('ct', [c.name, 'stop']) || jobRunning('ct', [c.name, 'start']))} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
+              <Button variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={(jobRunning('ct', [c.name, 'stop']) || jobRunning('ct', [c.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [c.name, 'start']))} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
               <Button variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={jobRunning('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
               <Button variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={jobRunning('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
             </span>
@@ -146,6 +152,7 @@
       {#if sel}
         <Drawer title={sel.name} chip={kind(sel)} state={dot(sel.state)} stateLabel={word(sel.state)} {tabs} bind:tab onclose={() => { selName = ''; }}>
           {#snippet children(t)}
+            <Chip>{boots(sel) ? 'starts at boot' : 'not set to start at boot'}</Chip>
             {#if sel.owner}<span use:tip={`Managed by ${sel.owner}: turn it off under Settings, Capabilities to change or delete it`}><Chip kind="strong"><i class="ph ph-lock"></i> locked: {sel.owner}</Chip></span>{/if}
             <Kv items={[
               { k: 'Address', v: sel.address }, { k: 'RAM / CPU', v: `${spaced(sel.ram) || '–'} / ${sel.cpu || '–'}` },
@@ -216,7 +223,7 @@
             {/if}
           {/snippet}
           {#snippet actions()}
-            <Button size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={(jobRunning('ct', [sel.name, 'stop']) || jobRunning('ct', [sel.name, 'start']))} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
+            <Button size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={(jobRunning('ct', [sel.name, 'stop']) || jobRunning('ct', [sel.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [sel.name, 'start']))} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
             <Button size="sm" icon="arrow-clockwise" busy={jobRunning('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
             <Button size="sm" icon="arrows-clockwise" busy={jobRunning('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
             <Button size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'A shell inside the instance' : 'The instance is not running'} onclick={() => openCreate(Terminal, { target: sel.name, title: sel.name })}><i class="ph ph-terminal-window"></i>Terminal</Button>

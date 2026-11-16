@@ -21,6 +21,9 @@ class CtForms(unittest.TestCase):
         self.assertTrue(ok("web1", "create", "--address", "10.10.95.25", "--type", "docker", "--ram", "none"))
         self.assertTrue(ok("web1", "create", "--profile", "home", "--bind", "shares:media:/media", "--bind", "fast:data-1:/srv/data:ro", "--type", "docker"))
         self.assertTrue(ok("web1", "set", "--ram", "none", "--cpu", "4", "--disk", "50", "--autostart", "yes", "--docker", "no"))
+        self.assertTrue(ok("web1", "set", "--autostart", "on"))
+        self.assertTrue(ok("web1", "set", "--autostart", "off"))
+        self.assertTrue(ok("web1", "stop", "--autostart", "off"))
         self.assertTrue(ok("web1", "ip", "--address", "10.10.95.40"))
         self.assertTrue(ok("web1", "add-storage", "--kind", "shares", "--name", "media", "--path", "/media/tv", "--readonly", "--as", "1000:1000"))
         self.assertTrue(ok("web1", "add-storage", "--kind", "fast", "--name", "data-1", "--path", "/srv/data"))
@@ -40,7 +43,7 @@ class CtForms(unittest.TestCase):
             ("web1", "create", "--bind", "other:media:/m"), ("web1", "create", "--bind", "shares:m;x:/m"), ("web1", "create", "--bind", "shares:media:/m:rw"),
             ("web1", "create", "--bind", "shares:media:/m x"), ("web1", "create", "--bind", "shares:-m:/m"), ("web1", "create", "--bind"),
             ("web1", "set", "--profile", "home"), ("web1", "start", "--bind", "fast:x:/x"),
-            ("web1", "set", "--autostart", "maybe"), ("web1", "set", "--docker", "1"), ("web1", "set", "--address", "10.10.95.2"),
+            ("web1", "set", "--autostart", "maybe"), ("web1", "stop", "--autostart", "on"), ("web1", "stop", "--autostart", "yes"), ("web1", "restart", "--autostart", "off"), ("web1", "set", "--docker", "1"), ("web1", "set", "--address", "10.10.95.2"),
             ("web1", "ip", "--address", "10.10.95.2/24"), ("web1", "ip", "--address", "10.10.95.2 --x"),
             ("web1", "add-storage", "--kind", "other", "--name", "m", "--path", "/m"),
             ("web1", "add-storage", "--kind", "shares", "--name", "m", "--path", "/a/../etc"),

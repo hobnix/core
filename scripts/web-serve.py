@@ -1327,7 +1327,8 @@ CHANGES = {
                                                  "--profile": (CT_PROFILE, False), "--pool": (CT_PROFILE, False),
                                                  "--iso": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.[iI][sS][oO]$", False), "--bind": (CT_BIND, True)}},
            {"fixed": [CT, r"^set$"], "opts": {"--ram": (CT_RAM, False), "--cpu": (CT_CPU, False), "--disk": (CT_DISK, False),
-                                             "--autostart": (r"^(yes|no)$", False), "--docker": (r"^(yes|no)$", False)}},
+                                             "--autostart": (r"^(on|off|yes|no)$", False), "--docker": (r"^(yes|no)$", False)}},
+           {"fixed": [CT, r"^stop$"], "opts": {"--autostart": (r"^(off|no)$", False)}},     # stop and keep it off at boot (boot.autostart unset)
            {"fixed": [CT, r"^ip$"], "opts": {"--address": (IPV4, False)}},
            {"fixed": [CT, r"^add-storage$"], "opts": {"--kind": (r"^(fast|shares|sensitive)$", False), "--name": (CT_STORE, False),
                                                       "--path": (CT_PATH, False), "--readonly": (None, False), "--as": (r"^[0-9]{1,6}:[0-9]{1,6}$", False)}},

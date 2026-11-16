@@ -122,8 +122,21 @@ run plan immich set --ram abc
 check_eq "a bad number is refused" 1 "$rc"
 run plan immich set --ram 4096 --autostart yes
 check_eq "set: exit 0" 0 "$rc"
-has '^step	memory limit: 4096 MiB$' && has '^step	start at boot: yes$' && has '^command	incus config set immich limits.memory=4096MiB$' && pass "set: the steps and the command" || fail "set: $out"
+has '^step	memory limit: 4096 MiB$' && has '^step	start at boot: on$' && has '^command	incus config set immich limits.memory=4096MiB$' && pass "set: the steps and the command" || fail "set: $out"
 has '^danger' && fail "set is not red" || pass "set is not red"
+run plan immich set --autostart off
+has '^step	start at boot: off$' && pass "set autostart off: the step" || fail "set autostart off: $out"
+run plan immich set --autostart maybe
+check_eq "set autostart maybe is refused" 1 "$rc"
+run plan immich stop --autostart off
+has '^step	stop the instance$' && has '^step	keep it off at boot$' && pass "stop --autostart off: the extra step" || fail "stop keep off: $out"
+grep -q 'mc immich --stop --keep-off' "$WORK/mccalls" && pass "stop --autostart off asks manage-ct for --keep-off" || fail "keep-off not passed"
+run plan immich stop --autostart on
+check_eq "stop --autostart on is refused" 1 "$rc"
+run plan immich restart --autostart off
+check_eq "restart --autostart off is refused" 1 "$rc"
+run plan immich stop
+has 'keep it off' && fail "plain stop has no keep-off step" || pass "plain stop has no keep-off step"
 run plan immich ip
 check_eq "ip without an address" "2 status	needs
 needs	address" "$rc $out"
