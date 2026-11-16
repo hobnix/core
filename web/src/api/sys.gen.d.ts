@@ -48,6 +48,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "apps.health": {
+    /** the declared health of the apps that declare [app.health]: name, health (healthy|unhealthy|stopped); apps without a declared check have no row */
+    words: ["apps", "health"];
+    path: "/apps/health";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, health: "healthy" | "unhealthy" | "stopped"])[];
+  };
   "apps.list": {
     /** the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title */
     words: ["apps", "list"];

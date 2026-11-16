@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
 #   --list      the same as data (hs sys pkg list): name, kind, version, installed (- = never), audience, title; every package
 #   updates     the packages whose version in the tree is newer than the one last applied (`hs recipe <name>` applies a recipe)
 #   validate    check every manifest (and that a recipe's header lines agree); lists the problems, exit 1 when there are any
-#   new <name> --template recipe|extension [--dir <path>] [--title <text>] [--title-de <text>]   write a package that passes the checks into a
+#   new <name> --template recipe|extension|capability [--dir <path>] [--title <text>] [--title-de <text>]   write a package that passes the checks into a
 #               checkout of a package repository (recipes/<name> or extensions/<name>, plus its index.toml entry); never overwrites (pkg_new.py)
 #   repo list|add|remove   the package repositories: the two defaults (config/package-repos.toml) and the ones a person added. Adding one
 #                          shows the address and the signer key(s) and asks to TYPE the repository's name (--confirm-name <name> without a terminal);
@@ -34,7 +34,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 py() { python3 -I "$here/pkg.py" "$@"; }
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
-pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh pkg-market pkg-states apps-list pkg-repos recipes-list recipes-versions parts-list; exit "$rc"' EXIT; }
+pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list; exit "$rc"' EXIT; }
 
 case "${1:-list}" in
   --list) py list --all ;;
@@ -81,11 +81,12 @@ case "${1:-list}" in
     if [ "$rc" -ne 0 ]; then
       line=$(sed -n 's/^error\t//p' <<<"$out"); code=${line%%$'\t'*}; detail=${line#*$'\t'}
       case "$code" in
-        usage) say "usage: hs pkg new <name> --template recipe|extension [--dir <path>] [--title <text>] [--title-de <text>]"; exit 1 ;;
-        template) fail "$(t 'Unknown template %s: use recipe or extension (a capability template waits for the service extensions, issue #238).' "$detail")" ;;
+        usage) say "usage: hs pkg new <name> --template recipe|extension|capability [--dir <path>] [--title <text>] [--title-de <text>] [--description <text>] [--icon ph:<name>] [--category <id>] [--app-version <text>] [--instances one|many]"; exit 1 ;;
+        template) fail "$(t 'Unknown template %s: use recipe, extension or capability.' "$detail")" ;;
         name) fail "$(t 'The name %s is not allowed: lower case letters, digits and -, starting with a letter, at most 41 characters, and not list, enable or disable.' "$detail")" ;;
         title) fail "$(t 'A title is one line of at most 100 characters, without spaces at its ends.')" ;;
-        notrepo) fail "$(t '%s is not a checkout of a package repository: it needs index.toml and the folder recipes/ (recipe) or extensions/ (extension). Use --dir <path>.' "$detail")" ;;
+        field) fail "$(t 'The value of %s is not allowed: an icon like ph:image, a category of config/package-categories.toml, a short app version, one or many, one short paragraph; a capability has no store fields.' "$detail")" ;;
+        notrepo) fail "$(t '%s is not a checkout of a package repository: it needs index.toml and the folder recipes/ (recipe), extensions/ (extension) or capabilities/ (capability). Use --dir <path>.' "$detail")" ;;
         exists) fail "$(t 'There is a package %s already (its folder or its index.toml entry); nothing was changed.' "$detail")" ;;
         *) fail "$(t 'The package could not be written (%s); nothing was left behind.' "$detail")" ;;
       esac
@@ -99,7 +100,7 @@ case "${1:-list}" in
     next_step "python3 -I $here/pkg.py repo-check $(dirname "$index")" ;;
   fetch)
     shift
-    trap 'live_refresh pkg-market pkg-states apps-list pkg-repos recipes-list recipes-versions parts-list' EXIT
+    trap 'live_refresh pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list' EXIT
     hs_job_step 1 1 "Fetching the package repositories and checking their signatures"
     out=$(py fetch "$@") || rc=$?
     { thead 'Repository' 'Release' 'Commit' 'Result'; printf '%s\n' "$out"; } | table

@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "New packages start with an icon, category, description and app contract"
+body  = """hs pkg new and the package builder now write the store fields (description, icon, category, app version) and, for an app, the contract tables and how many instances it allows. A capability can be started the same way."""

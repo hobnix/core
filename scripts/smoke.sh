@@ -91,6 +91,7 @@ default_probes() {
     $'hs sys pkg show\tsys pkg show hs-smoke-none\t0 1' \
     $'hs sys pkg asset\tsys pkg asset hs-smoke-none x.svg\t0 1' \
     $'hs sys apps list\tsys apps list\t0' \
+    $'hs sys apps health\tsys apps health\t0' \
     $'hs sys rebuild pending\tsys rebuild pending\t0' \
     $'hs sys net nics\tsys net nics\t0' \
     $'hs sys preset list\tsys preset list\t0' \

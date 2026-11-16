@@ -9,6 +9,13 @@ export function parseStates(rows) {
   }]));
 }
 
+// The declared health of an app (`hs sys apps health`: name, healthy|unhealthy|stopped; only apps that declare [app.health] have a row) as the three
+// words and a dot state. No row = no word: an app without a declared check shows nothing new.
+export const HEALTH_WORDS = { healthy: ['healthy', 'ok'], unhealthy: ['not healthy', 'bad'], stopped: ['stopped', 'off'] };
+export function parseHealth(rows) {
+  return new Map((rows ?? []).filter((r) => HEALTH_WORDS[r[1]]).map((r) => [r[0], { word: HEALTH_WORDS[r[1]][0], dot: HEALTH_WORDS[r[1]][1] }]));
+}
+
 // What the buttons of a package offer. Install only while it is available, Update with the flag, Remove once it is here;
 // Start/Stop belong to the instances of a recipe, Turn off/on to an extension or capability (the secondary button).
 export function stageActions(s) {

@@ -439,7 +439,7 @@ def draft_findings(text):
     out = []
     for t in manifest_problems(m):
         key = t.split(" ", 1)[0].rstrip(":")
-        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions", "icon", "category", "description", "upstream", "app_version", "screenshots") else "-", t))
+        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions", "icon", "category", "description", "description_de", "upstream", "app_version", "screenshots") else "-", t))
     if not out:
         out.append(("warn", "-", "Checked without files: the script and its header lines, and capability.toml, are checked when the package is built (hs pkg validate)."))
     return out

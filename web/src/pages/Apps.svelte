@@ -12,7 +12,7 @@
   import Button from '../ui/Button.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
-  import { parseStates, stageActions } from './states.js';
+  import { parseStates, parseHealth, stageActions } from './states.js';
   import { link } from './instances/ct.js';
   import { appAction } from './apps.js';
 
@@ -20,6 +20,10 @@
   // the lifecycle stage and flags of every app (ADR 0027): name, kind, stage, flags, repo, available, installed, instances, title
   const stateList = poll('/api/sys/apps/list', 30000);
   const stageOf = $derived(parseStates(rows(stateList)));
+  // the declared health check of the apps that have one: name, healthy|unhealthy|stopped. Follows the event stream (topic apps-health); the
+  // timer is only the fallback while the stream is down
+  const healthList = poll('/api/sys/apps/health', 30000);
+  const healthOf = $derived(parseHealth(rows(healthList)));
   // name, available version, applied version (- = not known), state: current | update | unknown
   const vers = poll('/api/sys/recipes/versions', 30000);
   const verOf = $derived(new Map(rows(vers).map((r) => [r[0], { avail: r[1], applied: r[2], vstate: r[3] }])));
@@ -199,9 +203,12 @@
           <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c)}>{c}</a>{/each}</div>{/if}
         {:else if col.key === 'state'}
           {#if stageOf.get(a.name)}
-            <StageBadge stage={stageOf.get(a.name).stage} flags={stageOf.get(a.name).flags} />
+            <StageBadge stage={stageOf.get(a.name).stage} flags={stageOf.get(a.name).flags.filter((f) => f !== 'unhealthy' || !healthOf.has(a.name))} />
           {:else}
             <StatusDot state={on ? 'ok' : a.state === 'partly' ? 'warn' : 'off'} label={a.state} />
+          {/if}
+          {#if healthOf.get(a.name)}
+            <div class="hl-row"><StatusDot state={healthOf.get(a.name).dot} label={healthOf.get(a.name).word} /></div>
           {/if}
         {:else}
           {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
@@ -258,6 +265,7 @@
   .nm.hl { outline: 2px solid var(--accent); outline-offset: 3px; }
   .ds { font-size: 12.5px; color: var(--fg-3); }
   .in { font-size: 12px; color: var(--fg-2); }
+  .hl-row { margin-top: 2px; }
   :global(.btn.apps-go) { min-width: 96px; }
   .vr { font: 500 12.5px var(--mono); }
   .vr.dim { color: var(--fg-3); }
