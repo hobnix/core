@@ -174,4 +174,10 @@ note = "The lifecycle stage of every package (ADR 0027). flags is a comma list o
 kind = "tsv"
 columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
 enums = { stage = ["available", "installed", "on", "running"] }
-note = "The recipe rows of pkg states, same columns (a stub: step 10 of docs/PLAN-app-lifecycle.md adds health)."
+note = "The recipe rows of pkg states, same columns. An app whose declared check fails while its instances run is stage on with the flag unhealthy."
+
+["apps health"]
+kind = "tsv"
+columns = ["name", "health"]
+enums = { health = ["healthy", "unhealthy", "stopped"] }
+note = "One row per app whose package.toml declares [app.health]: the check (container, tcp or http) run against the instance. No row for an app without a declared check."

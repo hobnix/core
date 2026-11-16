@@ -89,6 +89,7 @@ default_probes() {
     $'hs sys parts pending\tsys parts pending\t0' \
     $'hs sys pkg states\tsys pkg states\t0' \
     $'hs sys apps list\tsys apps list\t0' \
+    $'hs sys apps health\tsys apps health\t0' \
     $'hs sys rebuild pending\tsys rebuild pending\t0' \
     $'hs sys net nics\tsys net nics\t0' \
     $'hs sys preset list\tsys preset list\t0' \

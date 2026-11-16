@@ -62,6 +62,7 @@ services-stats	services stats	30	skip	dashboard	network	-
 pkg-market	pkg market	120	skip	-	system,instances	-
 pkg-states	pkg states	120	skip	-	system,instances	-
 apps-list	apps list	120	skip	-	system,instances	-
+apps-health	apps health	60	skip	-	instances,system	-
 pkg-repos	pkg repos	300	run	-	system	-
 recipes-list	recipes list	60	skip	incus	instances,system	-
 recipes-versions	recipes versions	60	skip	-	instances,system	-

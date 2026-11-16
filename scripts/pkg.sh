@@ -34,7 +34,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 py() { python3 -I "$here/pkg.py" "$@"; }
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
-pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh pkg-market pkg-states apps-list pkg-repos recipes-list recipes-versions parts-list; exit "$rc"' EXIT; }
+pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list; exit "$rc"' EXIT; }
 
 case "${1:-list}" in
   --list) py list --all ;;
@@ -97,7 +97,7 @@ case "${1:-list}" in
     next_step "python3 -I $here/pkg.py repo-check $(dirname "$index")" ;;
   fetch)
     shift
-    trap 'live_refresh pkg-market pkg-states apps-list pkg-repos recipes-list recipes-versions parts-list' EXIT
+    trap 'live_refresh pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list' EXIT
     hs_job_step 1 1 "Fetching the package repositories and checking their signatures"
     out=$(py fetch "$@") || rc=$?
     { thead 'Repository' 'Release' 'Commit' 'Result'; printf '%s\n' "$out"; } | table
