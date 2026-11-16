@@ -80,7 +80,7 @@ api() {
   local out code body
   case "$1 $2" in
     "GET rest/networkconf"|"GET rest/user"|"GET stat/sta"|"POST rest/user") ;;
-    "PUT rest/user/"*) [[ "${2#rest/user/}" =~ ^[0-9a-f]{24}$|^u[0-9]+$ ]] || { fail "$(t 'Refused: %s %s is not a client id' "$1" "$2")" >&2; return 1; } ;;
+    "PUT rest/user/"*) [[ "${2#rest/user/}" =~ ^[0-9a-f]{24}$|^u[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { warn "$(t 'Refused: the router gave a client id this script does not know how to use.')" >&2; return 1; } ;;
     *) fail "$(t 'Refused: this script may not call %s %s' "$1" "$2")" >&2; return 1 ;;
   esac
   out=$(curl -sS -k -m 15 -w '\n%{http_code}' -X "$1" \

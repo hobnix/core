@@ -27,7 +27,8 @@ code=${FAKE_CODE:-200}
 if [ "$method" = GET ]; then
   case "$path" in
     rest/networkconf) echo '{"data":[{"name":"Default","ip_subnet":"10.10.10.1/24","dhcpd_enabled":true,"dhcpd_start":"10.10.10.100","dhcpd_stop":"10.10.10.254","_id":"n1"},{"name":"home","ip_subnet":"10.10.95.1/24","dhcpd_enabled":true,"dhcpd_start":"10.10.95.100","dhcpd_stop":"10.10.95.254","_id":"n95"},{"name":"nodhcp","ip_subnet":"10.20.0.1/24","dhcpd_enabled":false,"_id":"n20"}]}' ;;
-    rest/user) echo '{"data":[{"mac":"aa:bb:cc:00:00:01","name":"web","use_fixedip":true,"fixed_ip":"10.10.95.21","_id":"u1"},{"mac":"aa:bb:cc:00:00:02","hostname":"phone","use_fixedip":false,"_id":"u2"}]}' ;;
+    rest/user) out='{"data":[{"mac":"aa:bb:cc:00:00:01","name":"web","use_fixedip":true,"fixed_ip":"10.10.95.21","_id":"u1"},{"mac":"aa:bb:cc:00:00:02","hostname":"phone","use_fixedip":false,"_id":"u2"}]}'
+      echo "${out}" | { [ -n "${FAKE_UUID:-}" ] && sed 's/"u1"/"c61a053c-23ef-4b55-abab-4e98fa9e8149"/;s/"u2"/"0a1b2c3d-1111-2222-3333-444455556666"/' || cat; } ;;
     stat/sta) echo '{"data":[{"mac":"aa:bb:cc:00:00:09","ip":"10.10.95.45","name":"laptop"}]}' ;;
   esac
 else echo '{"data":[]}'; fi
@@ -113,6 +114,16 @@ check_out "clear: an unknown MAC is no error" "does not know aa:bb:cc:00:00:55, 
 : > "$CALLS"
 check_out "clear: removed" "reservation of aa:bb:cc:00:00:01 removed" $U clear-ip aa:bb:cc:00:00:01
 check_out "clear sends use_fixedip=false" 'PUT rest/user/u1 \{"use_fixedip":false\}' cat "$CALLS"
+echo "-- UniFi ids that are UUIDs (#612)"
+: > "$CALLS"
+check_out "clear: a UUID id releases the reservation" "reservation of aa:bb:cc:00:00:01 removed" env FAKE_UUID=1 $U clear-ip aa:bb:cc:00:00:01
+check_out "and the PUT goes to that id" 'PUT rest/user/c61a053c-23ef-4b55-abab-4e98fa9e8149 ' cat "$CALLS"
+: > "$CALLS"
+out=$(bash -c ". $SCRIPTS/lib/ui.sh; sed -n '/^api() {/,/^}/p' $SCRIPTS/unifi.sh > $WORK/api.sh; url=u key=k site=default; . $WORK/api.sh; api PUT 'rest/user/not an id' '{}'" 2>&1 || true)
+check_eq "an unusable id is one plain line" "1" "$(printf '%s
+' "$out" | grep -c .)"
+check_out "and says what happened, no raw text" "client id this script does not know" printf '%s' "$out"
+check_eq "nothing was sent for it" "" "$(cat "$CALLS")"
 
 echo "-- the script calls only what it needs"
 : > "$CALLS"

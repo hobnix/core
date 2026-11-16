@@ -411,9 +411,12 @@ case "$1" in
     mac=$(incus query "/1.0/instances/$ct" | jq -r '.expanded_devices.eth0.hwaddr // empty')
     incus delete -f "$ct"
     # give its address back, if UniFi is connected
-    if [ -n "$mac" ] && [ -r /var/lib/hs/unifi ]; then bash "$here/unifi.sh" clear-ip "$mac" || true
-    elif [ -L /var/lib/hs/unifi ]; then warn "The vault is closed: run hs unlock"; note "The fixed IP in UniFi was not given back; remove it in UniFi by hand"; fi
-    ok "Deleted. Remove its fixed IP in UniFi and any Zoraxy rule that pointed to it."
+    unifi_left=false
+    if [ -n "$mac" ] && [ -r /var/lib/hs/unifi ]; then
+      bash "$here/unifi.sh" clear-ip "$mac" 2>/dev/null || { unifi_left=true; warn "The fixed IP in UniFi could not be given back."; }
+    elif [ -L /var/lib/hs/unifi ]; then unifi_left=true; warn "The vault is closed: run hs unlock"; fi
+    if $unifi_left; then ok "Deleted. Remove its fixed IP in UniFi by hand, and any Zoraxy rule that pointed to it."
+    else ok "Deleted. Remove any Zoraxy rule that pointed to it."; fi
     ;;
 
   *) usage ;;
