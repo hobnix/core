@@ -168,11 +168,13 @@ jobs:
           if [ "$NAMES" != all ]; then for n in $NAMES; do only+=(--only "$n"); done; fi
           HS_TEST_CI=1 bash tests/run-all.sh --jobs 2 --shard ${{ matrix.shard }}/${{ strategy.job-total }} "${only[@]}"
 
-  # The default package repositories at their latest main, checked against this core: manifests, indexes and their own tests. A core change
-  # that breaks a package is seen here, before a release (docs/PLAN-packages.md, "Compatibility and CI across repositories").
+  # The default package repositories checked against this core: manifests, indexes and their own tests. A core change that breaks a package is
+  # seen here, before a release (docs/PLAN-packages.md, "Compatibility and CI across repositories"). recipes and extensions: latest main.
+  # hobnix/capabilities (docs/PLAN-capabilities-repo.md Q5): the branch of the same name if it exists, else `develop`; a release pull request
+  # (into main) and a v* tag use its newest tag (scripts/dev/caps-ref.sh). The job logs the commit it used.
   packages:
     needs: changes
-    if: needs.changes.outputs.pkg == 'true'
+    if: needs.changes.outputs.pkg == 'true' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -184,18 +186,33 @@ jobs:
         with:
           repository: hobnix/extensions
           path: pkgs/extensions
+      - name: Choose the ref of hobnix/capabilities
+        id: capref
+        env:
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
+        run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/capabilities
+          ref: ${{ steps.capref.outputs.ref }}
+          path: pkgs/capabilities
       - name: Manifests and indexes
         run: |
-          mkdir -p pkgs/tree
+          echo "hobnix/capabilities: ${{ steps.capref.outputs.ref }} at $(git -C pkgs/capabilities rev-parse HEAD)"
+          mkdir -p pkgs/tree pkgs/captree
           ln -s "$PWD/pkgs/recipes/recipes" pkgs/tree/packages
           ln -s "$PWD/pkgs/extensions/extensions" pkgs/tree/capabilities
+          ln -s "$PWD/pkgs/capabilities/capabilities" pkgs/captree/capabilities
           HS_PACKAGES_ROOT="$PWD/pkgs/tree" python3 -I scripts/pkg.py validate
+          HS_PACKAGES_ROOT="$PWD/pkgs/captree" python3 -I scripts/pkg.py validate
           python3 -I scripts/pkg.py repo-check pkgs/recipes
           python3 -I scripts/pkg.py repo-check pkgs/extensions
-      - name: The tests of both repositories against this core
+          python3 -I scripts/pkg.py repo-check pkgs/capabilities
+      - name: The tests of the three repositories against this core
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq jq python3-pil
-          for r in recipes extensions; do HS_CORE="$PWD" HS_TEST_CI=1 bash pkgs/$r/tests/run-all.sh || exit 1; done
+          for r in recipes extensions capabilities; do HS_CORE="$PWD" HS_TEST_CI=1 bash pkgs/$r/tests/run-all.sh || exit 1; done
 
   nixos:
     needs: changes
@@ -266,16 +283,7 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
           RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
-        run: |
-          url=https://github.com/hobnix/capabilities.git
-          ref=develop
-          if [ "$RELEASE" = true ]; then
-            ref=$(git ls-remote --tags --refs "$url" 'v*' | sed 's#.*refs/tags/##' | sort -V | tail -n 1)
-            [ -n "$ref" ] || ref=main
-          elif git ls-remote --exit-code --heads "$url" "$HEAD_REF" >/dev/null 2>&1; then
-            ref=$HEAD_REF
-          fi
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+        run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         if: steps.capref.outputs.ref != ''
         with:
