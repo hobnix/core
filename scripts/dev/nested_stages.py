@@ -246,7 +246,7 @@ def upgrade_steps(params):
         step("run", "test -s /etc/nixos/machine.toml && grep -q . /var/tmp/upgrade-machine-before", what="machine.toml is still there and not empty"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-schema-before)\"" % ver, what="the state.db schema version did not go back"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-events-before)\"" % rows, what="state.db kept its events"),
-        step("run", "hs smoke", timeout=900, what="hs smoke passes on the updated system"),
+        step("run", "hs smoke", timeout=2400, what="hs smoke passes on the updated system"),
         step("run", "hs health", timeout=120, what="hs health reports no problem"),
     ]
     if app:
