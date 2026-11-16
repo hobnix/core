@@ -18,7 +18,7 @@ scripts/ct-change.sh	5
 scripts/ct-guided.sh	6
 scripts/ct-pools.sh	7
 scripts/deck-status.sh	16
-scripts/dev/nested_stages.py	7
+scripts/dev/nested_stages.py	1
 scripts/dev/nix-matrix.sh	2
 scripts/dev/reads-inventory.py	2
 scripts/dev/sysdisk-encrypt.sh	1

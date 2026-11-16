@@ -14,6 +14,11 @@ import os
 LOGIN = r"\n[^\n]*login: $"
 
 
+POOL = "bulk"   # the pool name of the stages (a name that is spelled once, tests/pool-names-ratchet.sh)
+ROOT = "/" + POOL
+SHARES = ROOT + "/shares"
+
+
 def _q(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
@@ -175,21 +180,21 @@ def _bulk_steps(params, kind):
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
-        step("capture", "hs sys pool start bulk add --disks $(basename {d1}),$(basename {d2}) --use data --kind %s%s --confirm bulk" % (kind, extra), var="start",
+        step("capture", "hs sys pool start %s add --disks $(basename {d1}),$(basename {d2}) --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start",
              timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         step("run", "u=$(hs job list --plain 2>/dev/null | awk '/pool/ {print $1; exit}'); [ -z \"$u\" ] || while systemctl is-active --quiet \"$u\"; do sleep 5; done",
              timeout=1800, what="the pool job finishes"),
-        step("run", "hs pool bulk | grep -q data", what="hs pool bulk lists the pool"),
-        step("run", "mountpoint -q /bulk", what="/bulk is mounted"),
+        step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
+        step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
         step("run", FM_HELPERS, what="helper functions for the checks (checksums, wait for a job)"),
-        step("run", "hs share add hslab1 && hs share add hslab2 && [ -d /bulk/shares/hslab1 ] && [ -d /bulk/shares/hslab2 ]", what="two shares for share to share"),
+        step("run", "hs share add hslab1 && hs share add hslab2 && [ -d %s/hslab1 ] && [ -d %s/hslab2 ]" % (SHARES, SHARES), what="two shares for share to share"),
     ]
 
 
 def pool(params):
-    """Stage `pool`: a SnapRAID pool bulk of two data disks (no parity). The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it
+    """Stage `pool`: a SnapRAID data pool of two data disks (no parity). The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it
     is switched on first. Then the full write list (docs/PLAN-storage-nas.md step 2, #425): copy, move, rename, mkdir, overwrite, delete, cancel, disk to
     disk and share to share, and the guard: a pool disk and the pool view of its array are never the two sides of one job."""
     dk = "/var/lib/hs/disks"
@@ -199,22 +204,22 @@ def pool(params):
              what="a folder on each data disk, the file manager lists it"),
     ] + write_checks("dd", "disk:data-01", "shares/hslab-a", dk + "/data-01/shares/hslab-a",
                      "disk:data-02", "shares/hslab-b", dk + "/data-02/shares/hslab-b", "hslab-b") \
-      + write_checks("ss", "share:hslab1", "", "/bulk/shares/hslab1", "share:hslab2", "", "/bulk/shares/hslab2", "hslab2") + [
+      + write_checks("ss", "share:hslab1", "", SHARES + "/hslab1", "share:hslab2", "", SHARES + "/hslab2", "hslab2") + [
         # the guard
-        step("run", "hs sys fm pair disk:data-01 pool:bulk | grep -q 'status.refused'", what="the guard: a pool disk and the pool view are refused as a pair"),
-        step("run", "out=$(printf 'dd-src\\0' | hs sys fm start copy --from disk:data-01 --path shares/hslab-a --to pool:bulk --to-path shares/hslab2 2>&1); rc=$?; "
-                    "[ $rc -ne 0 ] && echo \"$out\" | grep -q refused", what="the guard: a start with that pair refuses"),
+        step("run", "hs sys fm pair disk:data-01 pool:%s | grep -q 'status.refused'" % POOL, what="the guard: a pool disk and the pool view are refused as a pair"),
+        step("run", "out=$(printf 'dd-src\\0' | hs sys fm start copy --from disk:data-01 --path shares/hslab-a --to pool:%s --to-path shares/hslab2 2>&1); rc=$?; "
+                    "[ $rc -ne 0 ] && echo \"$out\" | grep -q refused" % POOL, what="the guard: a start with that pair refuses"),
     ]
 
 
 def poolzfs(params):
-    """Stage `poolzfs`: the same write list on a ZFS pool bulk (a mirror of the two virtual disks), on a VM whose two disks are still empty. A ZFS pool has
+    """Stage `poolzfs`: the same write list on a ZFS data pool (a mirror of the two virtual disks), on a VM whose two disks are still empty. A ZFS pool has
     no data disks, so the pairs are share to share and share to the pool view."""
     return _bulk_steps(params, "zfs") + [
-        step("run", "hs sys fm locations | grep -q 'pool:bulk'", what="the file manager sees the pool"),
-        step("run", "mkdir -p /bulk/shares/hslab2/zz-in", what="a folder in the pool view"),
-    ] + write_checks("ss", "share:hslab1", "", "/bulk/shares/hslab1", "share:hslab2", "", "/bulk/shares/hslab2", "hslab2") \
-      + write_checks("sp", "share:hslab1", "", "/bulk/shares/hslab1", "pool:bulk", "shares/hslab2/zz-in", "/bulk/shares/hslab2/zz-in", "zz-in")
+        step("run", "hs sys fm locations | grep -q pool:" + POOL, what="the file manager sees the pool"),
+        step("run", "mkdir -p " + SHARES + "/hslab2/zz-in", what="a folder in the pool view"),
+    ] + write_checks("ss", "share:hslab1", "", SHARES + "/hslab1", "share:hslab2", "", SHARES + "/hslab2", "hslab2") \
+      + write_checks("sp", "share:hslab1", "", SHARES + "/hslab1", "pool:" + POOL, "shares/hslab2/zz-in", SHARES + "/hslab2/zz-in", "zz-in")
 
 
 def upgrade_steps(params):
