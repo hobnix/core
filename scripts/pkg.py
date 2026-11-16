@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Packages: recipes and extensions as one thing (docs/PLAN-packages.md, step 1). Standard library only.
 
-  pkg.py list [--kind recipe|extension] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
+  pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
   pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py validate                                          check every manifest (and that a recipe's header agrees); exit 1 on a problem
@@ -70,7 +70,10 @@ def capability_toml(folder):
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-KINDS = ("recipe", "extension")
+KINDS = ("recipe", "extension", "capability")
+CAP_TYPES = ("feature", "provider")
+CAP_LISTS = ("requires", "provides", "needs", "variants", "implied_by")
+NIX_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.nix$")
 AUDIENCES = ("generic", "personal")
 NEEDS = ("docker", "share", "tailscale")
 USES = ("gpu",)
@@ -209,6 +212,55 @@ def convert(script):
     return "\n".join(lines) + "\n"
 
 
+def capability_problems(m, path=None):
+    """[text] for the capability fields of a package.toml with kind = "capability" (docs/PLAN-capabilities-repo.md, Q1).
+    `path` = the file: the files `module` and `options` name must exist beside it then."""
+    out = []
+    bad = out.append
+    folder = os.path.dirname(path) if path else None
+    if m.get("type") not in CAP_TYPES:
+        bad("type is not feature or provider")
+    for k in CAP_LISTS:
+        v = m.get(k, [])
+        if not isinstance(v, list) or not all(isinstance(x, str) and NAME.match(x) for x in v):
+            bad(f"{k} is not a list of capability names")
+    if folder and os.path.isfile(os.path.join(folder, "capability.toml")):
+        bad("a capability package has no capability.toml (package.toml holds its fields)")
+    mod = m.get("module")
+    if mod is not None:
+        if not isinstance(mod, str) or not NIX_FILE.match(mod):
+            bad("module must be the name of a .nix file in the package folder")
+        elif folder and not os.path.isfile(os.path.join(folder, mod)):
+            bad(f"module {mod} not found in the package")
+    nix = m.get("requires_nix_api")
+    if mod is not None and nix is None:
+        bad("requires_nix_api is required when module is set")
+    if nix is not None and (isinstance(nix, bool) or not isinstance(nix, int) or nix < 1):
+        bad("requires_nix_api must be a whole number from 1")
+    if nix is not None and mod is None:
+        bad("requires_nix_api without module")
+    opt = m.get("options")
+    if opt is not None:
+        if not isinstance(opt, str) or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.toml$", opt):
+            bad("options must be the name of a .toml file in the package folder")
+        elif folder:
+            of = os.path.join(folder, opt)
+            try:
+                with open(of, "rb") as f:
+                    items = tomllib.load(f).get("item", [])
+            except OSError:
+                bad(f"options {opt} not found in the package")
+                items = []
+            except tomllib.TOMLDecodeError as e:
+                bad(f"options {opt} is not valid TOML: {e}")
+                items = []
+            for it in items:
+                if not isinstance(it, dict) or it.get("capability") != m.get("name"):
+                    bad(f"options {opt}: every [[item]] needs capability = \"{m.get('name')}\"")
+                    break
+    return out
+
+
 def manifest_problems(m, path=None, seen=None):
     """[text] for one package.toml dict. `path` = its file: the checks that need the folder (name = folder, the script and its header, the
     capability.toml of an extension) run only then; None = a draft that is not on disk yet (hs pkg check-draft, the web package builder, ADR 0018)."""
@@ -230,7 +282,7 @@ def manifest_problems(m, path=None, seen=None):
     if not SEMVER.match(str(m.get("version", ""))):
         bad("version is not semver (1.2.3)")
     if m.get("kind") not in KINDS:
-        bad("kind is not recipe or extension")
+        bad("kind is not recipe, extension or capability")
     if not m.get("title"):
         bad("title missing")
     rq = REQUIRES.match(str(m.get("requires_core", "")))
@@ -283,6 +335,9 @@ def manifest_problems(m, path=None, seen=None):
                 bad(f"question {a.get('key')}: a choice needs choices")
             if not a.get("label"):
                 bad(f"question {a.get('key')}: label missing")
+    elif m.get("kind") == "capability":
+        for t in capability_problems(m, path):
+            bad(t)
     elif path and not os.path.isfile(os.path.join(os.path.dirname(path), "capability.toml")):
         bad("an extension needs its capability.toml beside package.toml")
     for t in pkg_events.manifest_problems(n, m.get("events", [])):
@@ -354,7 +409,7 @@ def repo_check(folder):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
-    for sub in ("recipes", "extensions"):
+    for sub in ("recipes", "extensions", "capabilities"):
         d = os.path.join(folder, sub)
         if os.path.isdir(d):
             for n in sorted(os.listdir(d)):

@@ -1,0 +1,14 @@
+# Manifest of a capability package (docs/PLAN-capabilities-repo.md, Q1): a fixture for the tests of the core.
+name = "fixcap"
+version = "1.0.0"
+kind = "capability"
+type = "feature"
+title = "Fixture capability"
+title_de = "Fixture-Fähigkeit"
+requires_core = ">=1"
+audience = "generic"
+requires = []
+provides = []
+module = "module.nix"
+options = "options.toml"
+requires_nix_api = 1

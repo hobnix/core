@@ -483,7 +483,7 @@ sys	sys live raw <topic>	live.sh	raw {1}	the stored document of one live-state t
 sys	sys live check	live.sh	check	problems of the live state (Redis down, a topic older than three intervals): key and text	-	capability:live-state
 sys	sys reads collect	reads-collect.sh	{rest}	read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)	-
 sys	sys ext list	ext.sh	--list	extension packages as name, on|off, commands, nix (yes = a rebuild switches it), title	-
-user	pkg list	pkg.sh	list {rest}	list the packages (recipes and extensions) with their version: hs pkg list [--all] [--kind recipe|extension]	die Pakete (Rezepte und Erweiterungen) mit Version auflisten: hs pkg list [--all] [--kind recipe|extension]	topic:system,reads
+user	pkg list	pkg.sh	list {rest}	list the packages (recipes and extensions) with their version: hs pkg list [--all] [--kind recipe|extension|capability]	die Pakete (Rezepte und Erweiterungen) mit Version auflisten: hs pkg list [--all] [--kind recipe|extension|capability]	topic:system,reads
 user	pkg updates	pkg.sh	updates	the packages whose version in the tree is newer than the one last applied	die Pakete, deren Version im Baum neuer ist als die zuletzt angewendete	topic:system,reads
 user	pkg validate	pkg.sh	validate	check every package manifest	alle Paket-Manifeste prüfen	topic:system,reads
 sys	sys pkg list	pkg.sh	--list	every package as data: name, kind, version, applied version (- = never), audience, title	-

@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "change"
+title = "Packages can now be optional parts of the server (kind capability)"
+body  = """The package checks know a third kind, capability, next to recipe and extension. `hs pkg list --kind capability` lists them. Nothing is installed from it yet; the repository for them comes later."""
