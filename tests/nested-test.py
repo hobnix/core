@@ -251,6 +251,12 @@ class ScenarioTests(unittest.TestCase):
         self.assertGreater(i_rst, i_upd)
         self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
 
+    def test_root_login_does_not_depend_on_the_prompt_of_the_system(self):
+        # after the full configuration root's shell has a starship prompt; sudo may also still know the password from the stage before
+        text = [s["text"] for s in n.build_scenario("rollback", self.P)]
+        self.assertLess(text.index("sudo -k"), text.index("sudo -i"))
+        self.assertTrue(any("exec bash --norc --noprofile" in t and "PS1=" in t for t in text))
+
     def test_long_hs_commands_run_in_the_foreground(self):
         # a long command on a terminal asks "Run it in the background as a job?" and waits for a key: it left the console stuck in run 12
         P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})

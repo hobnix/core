@@ -47,10 +47,14 @@ def login_root(params):
     user, pw = "adminuser", params["password"]
     return [
         step("login", "", user=user, secret=pw, timeout=420, what="the console is logged in as adminuser"),
+        step("run", "sudo -k", what="sudo forgets an earlier password (it would not ask again, and the password would be typed into the root shell)"),
         step("send", "sudo -i"),
-        step("wait", r"(?:\[sudo\] password for %s: ?|\[root@[^\]]*\]# )$" % user, timeout=30, what="sudo asks for the password or gives a root shell"),
+        step("wait", r"\[sudo\] password for %s: ?$" % user, timeout=30, what="sudo asks for the password"),
         step("send_secret", pw),
-        step("wait", r"\[root@[^\]]*\]# ", timeout=30, what="a root shell"),
+        # after the full configuration (hs rebuild) root's shell is zsh with a two-line starship prompt: the harness cannot wait for it. A plain
+        # bash with a prompt of its own shape is the same on every system
+        step("send", "PS1='[root@nested-test:\\w]# ' exec bash --norc --noprofile"),
+        step("wait", r"\[root@[^\]]*\]# ", timeout=60, what="a root shell"),
     ]
 
 
