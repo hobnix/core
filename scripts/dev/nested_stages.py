@@ -80,7 +80,10 @@ def rollback(params):
     # sshd must exist and fail to start: with services.openssh.enable = false the unit is gone after the switch, and post_check in
     # scripts/rebuild.sh (it only looks at an sshd unit that exists) finds nothing wrong, so no rollback would be due
     bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
-    return login_root(params) + [
+    # on a homeserver VM (disks for the pool fast given) the full configuration comes first: without the pool fast the switch of the update fails
+    # for that reason, and the bad sshd module would never be reached
+    prep = full_system(params) if "fast1" in params.get("disks", {}) else []
+    return login_root(params) + prep + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
         # the rollback goes back to the generation, not to the files: the bad commit stays in /etc/nixos and the next rebuild would apply it again
         # (stages 4 and 5 run on this VM afterwards), so the stage puts the checkout back where it was

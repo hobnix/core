@@ -251,6 +251,26 @@ class ScenarioTests(unittest.TestCase):
         self.assertGreater(i_rst, i_upd)
         self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
 
+    def test_output_after_a_command_that_was_echoed_twice(self):
+        # typed ahead of a starting shell, a line is echoed by the tty and again by the line editor: the output starts after the last echo
+        class T(FakeTransport):
+            def write(self, text):
+                line = text.rstrip("\n")
+                self.sent.append(text)
+                self.queue.append(line + "\r\n")
+                self.queue.append("[root@nested-test:~]# " + line + "\r\n")
+                import re as _re
+                m = _re.search(r'__(\w+)__ rc=\$\?"$', line)
+                self.queue.append("value-1\r\n__%s__ rc=0\r\n" % m.group(1))
+        c = n.Console(T(), clock=Clock())
+        self.assertEqual(c.run("readlink x"), (0, "value-1"))
+
+    def test_rollback_builds_the_full_system_first_on_a_homeserver_vm(self):
+        P = dict(self.P, disks={"fast1": "f1", "fast2": "f2"})
+        text = [s["text"] for s in n.build_scenario("rollback", P)]
+        self.assertLess(next(i for i, t in enumerate(text) if "hs rebuild --foreground" in t), next(i for i, t in enumerate(text) if "hs update --yes" in t))
+        self.assertFalse(any("hs rebuild" in s["text"] for s in n.build_scenario("rollback", self.P)))   # a minimal VM: no rebuild
+
     def test_root_login_does_not_depend_on_the_prompt_of_the_system(self):
         # after the full configuration root's shell has a starship prompt; sudo may also still know the password from the stage before
         text = [s["text"] for s in n.build_scenario("rollback", self.P)]
