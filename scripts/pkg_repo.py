@@ -505,6 +505,111 @@ class Repos:
         text = git("diff", "--stat", "-p", old, commit, "--", entry["path"], cwd=d).decode("utf-8", "replace")
         return old, tag, commit, text
 
+    # ── show: what a package is and would ask, read from the verified tag, nothing installed (docs/PLAN-app-lifecycle.md Q2, D4) ──
+    def verified_package(self, name, repo=None):
+        """(repo name, entry, tag, commit, manifest dict) from the newest verified tag; Refused with the reason (unknown, unsigned, unverified)"""
+        try:
+            r_name, entry, tag, commit = self.choose(name, repo)
+        except Refused as e:
+            # a repository whose newest tag does not verify drops out of the catalog silently: say why instead of "no such package"
+            why = []
+            for n, r in self.all().items():
+                if repo and n != repo:
+                    continue
+                try:
+                    self.verified_tag(r)
+                except Refused as x:
+                    if "no release tag" not in str(x):
+                        why.append(str(x))
+            if why and "no package" in str(e):
+                raise Refused("%s: not shown, no verified release: %s" % (name, "; ".join(why)))
+            raise
+        self.check_entry(name, entry, r_name)
+        path = entry["path"]
+        if not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
+            raise Refused("%s: the path %r in index.toml is not allowed" % (r_name, path))
+        try:
+            m = tomllib.loads(git("show", "%s:%s/package.toml" % (commit, path), cwd=self.clone_dir(r_name)).decode("utf-8"))
+        except tomllib.TOMLDecodeError as e:
+            raise Refused("%s: package.toml is not valid (%s)" % (name, e))
+        if m.get("name") != name or m.get("version") != entry.get("version"):
+            raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry.get("version")))
+        return r_name, entry, tag, commit, m
+
+    @staticmethod
+    def steps(m):
+        """the fixed step vocabulary of the install job for this package (Q3); the job refuses to differ from what was shown"""
+        app = m.get("app") or {}
+        needs = list(m.get("needs") or []) + list(m.get("requires") or [])
+        out = [("read", "Fetch the verified release")]
+        if needs:
+            out.append(("needs", "Meet what it needs: %s" % ", ".join(needs)))
+        if m.get("kind") == "recipe":
+            if m.get("ask"):
+                out.append(("ask", "Ask the questions"))
+            out.append(("run", "Run the recipe"))
+            if app.get("health"):
+                out.append(("check", "Check that it answers"))
+            return out + [("done", "Show where to open it")]
+        out.append(("on", "Switch it on"))
+        if m.get("kind") == "capability" and m.get("module"):
+            out.append(("rebuild", "Rebuild the system"))
+        return out + [("check", "Check that it works")]
+
+    def show(self, name, repo=None):
+        """the lines of `hs sys pkg show`: key TAB value ...; an empty value is -, a list is a comma list"""
+        r_name, entry, tag, commit, m = self.verified_package(name, repo)
+        app = m.get("app") or {}
+        uses = app.get("uses") or {}
+        routes = app.get("routes") or {}
+
+        def f(v):
+            if isinstance(v, (list, tuple)):
+                v = ",".join(str(x) for x in v)
+            v = " ".join(str(v if v is not None else "").split())
+            return v or "-"
+        rows = [("status", "ok"), ("name", name), ("kind", m.get("kind", "?")), ("repo", r_name), ("version", m.get("version")), ("tag", tag), ("commit", commit),
+                ("title", m.get("title")), ("description", m.get("description")), ("description_de", m.get("description_de")),
+                ("audience", m.get("audience", "generic")), ("requires_core", m.get("requires_core")), ("icon", m.get("icon")),
+                ("category", m.get("category")), ("app_version", m.get("app_version")), ("upstream", m.get("upstream")),
+                ("needs", list(m.get("needs") or []) + list(m.get("requires") or [])), ("input", m.get("input", "none")),
+                ("instances", app.get("instances")), ("ram_mb", uses.get("ram_mb")), ("disk_gb", uses.get("disk_gb")),
+                ("ports", uses.get("ports")), ("gpu", "yes" if uses.get("gpu") else "no")]
+        out = ["\t".join([k, f(v)]) for k, v in rows]
+        for shot in m.get("screenshots") or []:
+            out.append("\t".join(["screenshot", f(shot)]))
+        for rt, v in sorted(routes.items()):
+            if isinstance(v, dict):
+                out.append("\t".join(["route", f(rt), f(v.get("port")), f(v.get("scheme", "http")), f(v.get("exposure", "private-ok")), "yes" if rt == routes.get("default") else "no"]))
+        for a in m.get("ask") or []:
+            out.append("\t".join(["ask"] + [f(a.get(k)) for k in ("key", "label", "type", "choices", "default", "pattern", "when")]))
+        for n, t in self.steps(m):
+            out.append("\t".join(["step", n, t]))
+        return out
+
+    def asset(self, name, file, repo=None):
+        """the bytes of the icon or a screenshot of the verified tag; nothing else of the package is served"""
+        r_name, entry, tag, commit, m = self.verified_package(name, repo)
+        allowed = list(m.get("screenshots") or [])
+        icon = str(m.get("icon") or "")
+        if icon and not icon.startswith("ph:"):
+            allowed.append(icon)
+        if file not in allowed:
+            raise Refused("%s has no store file %s (the icon and the screenshots of its package.toml are served)" % (name, file))
+        lim = 20 * 1024 if file == icon else 300 * 1024
+        data = git("show", "%s:%s/%s" % (commit, entry["path"], file), cwd=self.clone_dir(r_name))
+        if len(data) > lim:
+            raise Refused("%s: %s is larger than %d bytes" % (name, file, lim))
+        if file == icon:
+            if not file.endswith(".svg"):
+                raise Refused("%s: the icon %s is not an svg file" % (name, file))
+            why = self.pkg.pkg_app.svg_problem(data.decode("utf-8", "replace"))
+            if why:
+                raise Refused("%s: the icon %s %s" % (name, file, why))
+        elif not self.pkg.pkg_app.PICTURE.match(file):
+            raise Refused("%s: %s is not a png or webp picture" % (name, file))
+        return data
+
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog().get(name, []) if c[0] == repo]
         if not cat:
@@ -539,6 +644,18 @@ def run(pkg, cmd, rest):
             for pname, rows in sorted(R.catalog().items()):
                 for r_name, e, tag, _ in rows:
                     print("\t".join([r_name, pname, e.get("kind", "?"), str(e.get("version")), have.get(pname, {}).get("version", "-")]))
+        elif cmd == "show":
+            repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            try:
+                lines = R.show(rest[0], repo)
+            except (Refused, AttributeError, TypeError, KeyError) as e:
+                print("status\trefused")
+                print("reason\t%s" % " ".join(str(e).split()))
+                return 1
+            print("\n".join(lines))
+        elif cmd == "asset":
+            repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
             # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that

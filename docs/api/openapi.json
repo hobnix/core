@@ -7593,6 +7593,60 @@
     }
    }
   },
+  "/pkg/asset/{name}/{file}": {
+   "get": {
+    "operationId": "pkg.asset.by_name.by_file",
+    "summary": "the bytes of the icon or a screenshot of a package, from its newest verified release (what pkg show lists)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "asset",
+      "<name>",
+      "<file>"
+     ],
+     "script": "pkg.sh",
+     "args": "--asset {1} {2} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "description": "The bytes of the package icon (an svg file) or one of its screenshots (png or webp), taken from the verified tag; only the files hs sys pkg show lists. Not text: a picture. Refused with a message on stderr, exit 1.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/available": {
    "get": {
     "operationId": "pkg.available",
@@ -8032,6 +8086,502 @@
        "text/tab-separated-values": {
         "schema": {
          "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/pkg/show/{name}": {
+   "get": {
+    "operationId": "pkg.show.by_name",
+    "summary": "what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "show",
+      "<name>"
+     ],
+     "script": "pkg.sh",
+     "args": "--show {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "What a package is and would ask, read from the verified clone of its newest signed release (nothing is installed): hs sys pkg show <name> [--repo R]. The tag and commit are the ones the install job must use. Absent values are -; lists are comma lists; route, ask and step lines repeat. A package that is unknown, or whose release does not verify, answers status refused and a reason, exit 1.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "name"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "kind"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "kind"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "repo"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "repo"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "version"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "tag"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "tag"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "commit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "commit"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "title"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "description"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "description_de"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "audience"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "audience"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "requires_core"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "icon"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "category"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "app_version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "upstream"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "needs"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "list"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "input"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "input"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "instances"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "ram_mb"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "disk_gb"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "ports"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "list"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "gpu"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "yes_no"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "screenshot"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "path"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "route"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "port"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "scheme"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "exposure"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "default",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             }
+            ],
+            "minItems": 6,
+            "maxItems": 6
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "ask"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "key"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "label"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "type"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "choices"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "default",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "pattern"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "when"
+             }
+            ],
+            "minItems": 8,
+            "maxItems": 8
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "step"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           }
+          ]
+         }
         }
        }
       }

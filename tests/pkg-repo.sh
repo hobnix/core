@@ -188,4 +188,40 @@ printf 'stable\n' > "$HS_SETTINGS_DIR/updateChannel"
 unset HS_SETTINGS_DIR
 $PKG repo remove chan
 
+echo "-- show and asset: the plan comes from the verified tag, nothing is installed"
+cd "$R"
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > recipes/demo/icon.svg; printf 'PNG' > recipes/demo/shot.png; printf 'secret' > recipes/demo/run.sh.bak
+release v6.0.0 6.0.0 "$WORK/good" ">=1" recipes/demo 'icon = "icon.svg"
+screenshots = ["shot.png"]
+description = "A demo."
+[[ask]]
+key = "NAME"
+label = "Name"
+type = "text"
+default = "x"'
+cd "$ROOT"
+$PKG repo add shown "$R" --key "$WORK/signers"
+$PKG fetch shown >/dev/null
+rm -rf "$HS_STATE_DIR/packages/current/demo"
+check_out "show names the tag and the commit" "^tag${tab}v6[.]0[.]0" $PKG show demo
+check_out "show names the version" "^version${tab}6[.]0[.]0" $PKG show demo
+check_out "show lists the question" "^ask${tab}NAME${tab}Name${tab}text${tab}-${tab}x${tab}-${tab}-" $PKG show demo
+check_out "show lists the steps of a recipe" "^step${tab}ask${tab}" $PKG show demo
+check_out "show lists the screenshot" "^screenshot${tab}shot.png" $PKG show demo
+check "show installs nothing" test ! -e "$HS_STATE_DIR/packages/current/demo"
+check_out "an unknown package is a plain refusal" "^status${tab}refused" bash -c "$PKG show nosuch; true"
+check "an unknown package exits 1" bash -c "! $PKG show nosuch >/dev/null"
+check "asset gives the icon bytes" bash -c "[ \"\$($PKG asset demo icon.svg)\" = '<svg xmlns=\"http://www.w3.org/2000/svg\"/>' ]"
+check "asset gives a screenshot" bash -c "[ \"\$($PKG asset demo shot.png)\" = PNG ]"
+check "asset refuses a file the manifest does not list" bash -c "! $PKG asset demo run.sh.bak >/dev/null 2>&1"
+check "asset refuses a listed file that is not a picture" bash -c "! $PKG asset demo run.sh >/dev/null 2>&1"
+check "asset refuses a path out of the folder" bash -c "! $PKG asset demo ../index.toml >/dev/null 2>&1"
+ssh-keygen -q -t ed25519 -N '' -f "$WORK/third" -C test >/dev/null
+printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/third.pub")" > "$WORK/evil.signers"
+$PKG repo add bad "$R" --key "$WORK/evil.signers"
+$PKG fetch bad >/dev/null 2>&1 || true
+check_out "a release that does not verify is refused with the reason" "^reason${tab}.*valid signature" bash -c "$PKG show demo --repo bad; true"
+$PKG repo remove bad
+$PKG repo remove shown
+
 finish

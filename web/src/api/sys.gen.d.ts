@@ -1559,6 +1559,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "pkg.asset.by_name.by_file": {
+    /** the bytes of the icon or a screenshot of a package, from its newest verified release (what pkg show lists) */
+    words: ["pkg", "asset", "<name>", "<file>"];
+    path: "/pkg/asset/{name}/{file}";
+    method: "get";
+    class: "read";
+    params: { name: string; file: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "pkg.available": {
     /** what the repositories offer as data: repo, package, kind, version, applied version (- = not installed) */
     words: ["pkg", "available"];
@@ -1646,6 +1657,44 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "pkg.show.by_name": {
+    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1 */
+    words: ["pkg", "show", "<name>"];
+    path: "/pkg/show/{name}";
+    method: "get";
+    class: "read";
+    params: { name: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused"]
+      | [tag: "reason", text: Field]
+      | [tag: "name", name: Field]
+      | [tag: "kind", kind: Field]
+      | [tag: "repo", repo: Field]
+      | [tag: "version", version: Field]
+      | [tag: "tag", tag2: Field]
+      | [tag: "commit", commit: Field]
+      | [tag: "title", text: Field]
+      | [tag: "description", text: Field]
+      | [tag: "description_de", text: Field]
+      | [tag: "audience", audience: Field]
+      | [tag: "requires_core", text: Field]
+      | [tag: "icon", text: Field]
+      | [tag: "category", text: Field]
+      | [tag: "app_version", text: Field]
+      | [tag: "upstream", text: Field]
+      | [tag: "needs", list: Field]
+      | [tag: "input", input: Field]
+      | [tag: "instances", text: Field]
+      | [tag: "ram_mb", count: Field]
+      | [tag: "disk_gb", count: Field]
+      | [tag: "ports", list: Field]
+      | [tag: "gpu", yes_no: Field]
+      | [tag: "screenshot", path: Field]
+      | [tag: "route", name: Field, port: Field, scheme: Field, exposure: Field, _default: "yes" | "no"]
+      | [tag: "ask", key: Field, label: Field, type: Field, choices: Field, _default: "yes" | "no", pattern: Field, when: Field]
+      | [tag: "step", name: Field, text: Field])[];
   };
   "pkg.start.by_action": {
     /** do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name> */
