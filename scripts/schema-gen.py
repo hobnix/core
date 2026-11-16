@@ -9,6 +9,7 @@
   schema-gen.py defaults   key<TAB>nix expression, for every option that has a default
   schema-gen.py pages      key<TAB>page, in file order (the settings page each option is shown on, besides Advanced)
   schema-gen.py overlay [write|check|list|keys] [--packages DIR] [--out DIR]
+  schema-gen.py overlay retire NAME [--packages DIR] [--out DIR]   remember the option keys of a package that is about to be removed (retired-keys.tsv)
                            the same kind of derived file for the capability packages installed on a machine (docs/PLAN-capabilities-on-machine.md):
                            reads DIR/<name>/capability.toml (default $HS_PACKAGES_DIR or /var/lib/hs/packages/current) and writes
                            capabilities.tsv, schema.overlay.json and config-keys.overlay (the options.toml of kind = "capability"
@@ -413,12 +414,69 @@ def generated_options():
         return []
 
 
+RETIRED_HEAD = ['# GENERATED on this machine by `hs pkg remove`: the options of capability packages that were removed. `hs config check` says',
+                '# "unused, capability X removed" for such a key in machine.toml instead of "unknown option". Never an error.',
+                '# key<TAB>capability<TAB>version']
+
+
+def read_retired(out):
+    path = os.path.join(out, 'retired-keys.tsv')
+    rows = {}
+    if os.path.isfile(path):
+        for line in read(path).splitlines():
+            f = line.split('\t')
+            if line and not line.startswith('#') and len(f) == 3:
+                rows[f[0]] = f
+    return rows
+
+
+def write_retired(out, rows):
+    path = os.path.join(out, 'retired-keys.tsv')
+    if not rows:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    text = '\n'.join(RETIRED_HEAD + ['\t'.join(rows[k]) for k in sorted(rows)]) + '\n'
+    if os.path.isfile(path) and read(path) == text:
+        return
+    os.makedirs(out, exist_ok=True)
+    with open(path + '.tmp', 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    os.replace(path + '.tmp', path)
+
+
+def retire_package(pkgdir, name, out):
+    """Before `hs pkg remove <name>` deletes the folder: remember the keys of its options.toml (key, capability, version) in retired-keys.tsv.
+    A key that is an option of the core or of an installed package is not retired. Returns the keys."""
+    try:
+        with open(os.path.join(pkgdir, name, 'package.toml'), 'rb') as f:
+            m = tomllib.load(f)
+        if m.get('kind') != 'capability' or not m.get('options'):
+            return []
+        with open(os.path.join(pkgdir, name, str(m['options'])), 'rb') as f:
+            keys = [it['key'] for it in tomllib.load(f).get('item', []) if isinstance(it.get('key'), str)]
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    rows = read_retired(out)
+    for k in keys:
+        rows[k] = [k, name, str(m.get('version', '-')).replace('\t', ' ')]
+    write_retired(out, rows)
+    return keys
+
+
 def overlay_main(rest):
     def opt(flag, default):
         return rest[rest.index(flag) + 1] if flag in rest and rest.index(flag) + 1 < len(rest) else default
     pkgdir = opt('--packages', os.environ.get('HS_PACKAGES_DIR') or '/var/lib/hs/packages/current')
     out = opt('--out', os.path.join(os.environ.get('HS_STATE_DIR') or '/var/lib/hs', 'generated'))
     mode = rest[0] if rest and not rest[0].startswith('--') else 'write'
+    if mode == 'retire':
+        if len(rest) < 2 or rest[1].startswith('--'):
+            print('overlay retire <name> [--packages DIR] [--out DIR]', file=sys.stderr)
+            return 2
+        for k in retire_package(pkgdir, rest[1], out):
+            print('retired ' + k)
+        return 0
     files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
              ('config-keys.overlay', render_overlay_keys(pkgdir))]
     core_example = opt('--example', os.path.join(ROOT, 'machine.toml.example'))
@@ -441,6 +499,10 @@ def overlay_main(rest):
     if mode != 'write':
         print('overlay: write, check, list or keys', file=sys.stderr)
         return 2
+    live = {o['key'] for o in overlay_options(pkgdir)}
+    rows = read_retired(out)
+    if any(k in live for k in rows):
+        write_retired(out, {k: v for k, v in rows.items() if k not in live})
     if gone:
         os.remove(gone)
         print('removed ' + gone)

@@ -75,9 +75,28 @@ check_out "a core key is still refused when wrong" "must be" bash -c "$CFG set s
 check "the core example is untouched" git -C "$ROOT" diff --quiet -- machine.toml.example
 
 echo "-- the package goes away"
+cp -r "$HS_PACKAGES_DIR/pkgx" "$WORK/pkgx.keep"
+check "retire remembers the keys" $GEN overlay retire pkgx --packages "$HS_PACKAGES_DIR" --out "$HS_GENERATED_DIR"
 rm -r "${HS_PACKAGES_DIR:?}/pkgx"
 check "overlay write" $GEN overlay write --packages "$HS_PACKAGES_DIR" --out "$HS_GENERATED_DIR" --example "$HS_MACHINE_EXAMPLE"
 check "the merged example is gone" test ! -e "$HS_GENERATED_DIR/machine.toml.example"
 check "the option is not settable any more" bash -c "! $CFG set pkgxHost c.lan >/dev/null 2>&1"
+
+check_eq "retired-keys.tsv lists the three keys" "pkgxHost pkgxOn pkgxPort" "$(grep -v '^#' "$HS_GENERATED_DIR/retired-keys.tsv" | cut -f1 | paste -sd' ')"
+check_eq "with capability and version" "pkgx	1.0.0" "$(grep '^pkgxHost' "$HS_GENERATED_DIR/retired-keys.tsv" | cut -f2,3)"
+echo "-- a removed package's key is a note, not an error"
+sed -i 's/^# pkgxHost = .*/pkgxHost = "a.lan"/' "$M"
+grep -q '^pkgxHost' "$M" || printf 'pkgxHost = "a.lan"
+' >> "$M"
+out=$(bash "$SCRIPTS/config-read.sh" check 2>&1); rc=$?
+check_eq "check exits 0" 0 "$rc"
+check "it says note, with the capability" bash -c 'grep -q "^note: pkgxHost: unused, capability pkgx removed" <<<"$1"' _ "$out"
+check "and not unknown option" bash -c '! grep -q "unknown option" <<<"$1"' _ "$out"
+check "a real typo is still a warning" bash -c "printf 'pkgxTypo = 1
+' >> '$M'; bash '$SCRIPTS/config-read.sh' check 2>&1 | grep -q 'warning: pkgxTypo.*unknown option'"
+echo "-- installed again: no longer retired"
+cp -r "$WORK/pkgx.keep" "$HS_PACKAGES_DIR/pkgx"
+check "overlay write" $GEN overlay write --packages "$HS_PACKAGES_DIR" --out "$HS_GENERATED_DIR" --example "$HS_MACHINE_EXAMPLE"
+check "the retired list is gone" test ! -e "$HS_GENERATED_DIR/retired-keys.tsv"
 
 finish
