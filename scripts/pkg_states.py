@@ -3,7 +3,7 @@
 the recipe list and the container list say about every package. Pure: the five inputs are files (tests feed fixtures), `hs pkg --states`
 makes them.
 
-  pkg.py states --market F --parts F --pending F --recipes F --running F [--kind K]
+  pkg.py states --market F --parts F --pending F --recipes F --running F [--kind K] [--health F]
     name, kind, stage, flags, repo, available, installed, instances, title   (tab separated, empty = -, sorted by name)
 
 stage: available | installed | on | running. flags (comma list or -): update, waits, orphan, pending, failed, unhealthy, stopped.
@@ -48,11 +48,12 @@ def col(r, i, default="-"):
     return v or default
 
 
-def states(market, parts, pending, recipes, running, kind=None):
+def states(market, parts, pending, recipes, running, kind=None, health=None):
     mk = {r[0]: r for r in market if r}
     pt = {r[0]: r for r in parts if r}
     pend = {r[0] for r in pending if r}
     rc = {r[0]: r for r in recipes if r}
+    hl = {r[0]: r[1] for r in (health or []) if len(r) > 1}
     out = []
     for name in sorted(set(mk) | set(pt) | set(rc)):
         m, p, rr = mk.get(name), pt.get(name), rc.get(name)
@@ -81,7 +82,11 @@ def states(market, parts, pending, recipes, running, kind=None):
                 stage = "on"
                 if running and instances:
                     if all(running[c] == "running" for c in instances):
-                        stage = "running"
+                        # a declared check that fails: the instance runs but the app is not up (Q1: running needs the check to pass)
+                        if hl.get(name) == "unhealthy":
+                            flags.add("unhealthy")
+                        else:
+                            stage = "running"
                     else:
                         flags.add("stopped")
             elif copy or (rr and not m):
@@ -114,13 +119,13 @@ def run(args):
     opts = {}
     i = 0
     while i < len(args):
-        if args[i] in ("--market", "--parts", "--pending", "--recipes", "--running", "--kind") and i + 1 < len(args):
+        if args[i] in ("--market", "--parts", "--pending", "--recipes", "--running", "--kind", "--health") and i + 1 < len(args):
             opts[args[i][2:]] = args[i + 1]
             i += 2
         else:
-            print("usage: pkg.py states --market F --parts F --pending F --recipes F --running F [--kind K]", file=sys.stderr)
+            print("usage: pkg.py states --market F --parts F --pending F --recipes F --running F [--kind K] [--health F]", file=sys.stderr)
             return 1
     for r in states(rows(opts.get("market")), rows(opts.get("parts")), rows(opts.get("pending")), rows(opts.get("recipes")),
-                    containers(opts.get("running")), opts.get("kind")):
+                    containers(opts.get("running")), opts.get("kind"), rows(opts.get("health"))):
         sys.stdout.write("\t".join(r) + "\n")
     return 0

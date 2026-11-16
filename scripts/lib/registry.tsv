@@ -231,6 +231,7 @@ sys	sys ssh-key plan <action>	ssh-key-change.sh	plan {1} {rest}	what adding or r
 sys	sys ssh-key start <action>	ssh-key-change.sh	start {1} {rest}	do it (hs sys ssh-key start add <public key line> | remove <id> --confirm remove); takes effect with hs rebuild	-
 sys	sys recipes list	recipes-list.sh	--list	the app recipes: name, description, instances, state (installed|partly|not installed|parked|unknown)	-
 sys	sys apps list	apps-list.sh	--list	the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title	-
+sys	sys apps health	apps-list.sh	--health	the declared health of the apps that declare [app.health]: name, health (healthy|unhealthy|stopped); apps without a declared check have no row	-
 sys	sys recipes versions	recipes-versions.sh	--list	the app recipes with versions: name, available version, applied version (- = not known), state (current|update|unknown)	-
 sys	sys setup list	setup-list.sh	--list	the first-run checklist: id, state (done|open), label, command, web page; the last line (finished) is done once setupDone is true	-
 sys	sys setup plan <action>	setup-change.sh	plan {1} {rest}	what closing the first-run wizard would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
