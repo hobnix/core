@@ -172,7 +172,7 @@ class ScenarioTests(unittest.TestCase):
             n.build_scenario("nope", self.P)
 
     def test_extra_stages_are_registered_and_build(self):
-        P = dict(self.P, backup_pass="BKPASS", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        P = dict(self.P, backup_pass="BKPASS", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
         for st in ("rollback", "backup", "restore", "pool"):
             self.assertIn(st, n.STAGES)
             steps = n.build_scenario(st, P)
@@ -228,8 +228,54 @@ class ScenarioTests(unittest.TestCase):
         ok, res = n.run_steps(n.Console(t, clock=Clock()), n.build_scenario("address", self.P))
         self.assertFalse(ok)
 
+    def test_the_homeserver_install_is_snapraid(self):
+        old = os.environ.get("HS_NESTED_ROLE")
+        try:
+            os.environ["HS_NESTED_ROLE"] = "homeserver"
+            text = " ".join(s["text"] for s in n.build_scenario("iso", self.P))
+            self.assertIn("--role homeserver", text)
+            self.assertIn("--bulk-type snapraid", text)
+            os.environ["HS_NESTED_ROLE"] = "minimal"
+            self.assertNotIn("--bulk-type", " ".join(s["text"] for s in n.build_scenario("iso", self.P)))
+        finally:
+            if old is None:
+                os.environ.pop("HS_NESTED_ROLE", None)
+            else:
+                os.environ["HS_NESTED_ROLE"] = old
+
+    def test_the_rollback_stage_puts_etc_nixos_back(self):
+        # stages 4 and 5 run on the same VM: the bad commit must not stay in /etc/nixos
+        text = [s["text"] for s in n.build_scenario("rollback", self.P)]
+        i_upd = next(i for i, t in enumerate(text) if "hs update --yes" in t)
+        i_rst = next(i for i, t in enumerate(text) if "reset -q --hard {orig}" in t)
+        self.assertGreater(i_rst, i_upd)
+        self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
+
+    def test_nested_sh_plans_every_stage(self):
+        # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
+        for st in n.STAGES:
+            if st == "upgrade":
+                continue
+            r = subprocess.run([sys.executable, "-I", LIB, "plan", st], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, "%s: %s" % (st, r.stderr))
+
+    def test_capture_with_fmt_fills_in_the_variables(self):
+        t = FakeTransport(outputs={"basename": "sdc\n"})
+        c = n.Console(t, clock=Clock())
+        ok, res = n.run_steps(c, [n.step("capture", "basename {d1}", var="x", fmt=True, what="c")], params_vars={"d1": "/dev/sdc"})
+        self.assertTrue(ok, res)
+        self.assertIn("basename /dev/sdc;", "".join(t.sent))
+
+    def test_the_pool_and_backup_stages_build_the_full_configuration_first(self):
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        for st in ("backup", "restore", "pool"):
+            text = " ".join(s["text"] for s in n.build_scenario(st, P))
+            self.assertIn("hs rebuild --foreground", text, st)
+            self.assertLess(text.index("pool start fast add"), text.index("hs rebuild --foreground"), st)   # the pool fast comes first
+            self.assertIn("incus_f1", text)
+
     def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
-        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
         text = " ".join(s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P))
         self.assertNotIn("/dev/sda", text)
         self.assertIn("incus_bk", text)

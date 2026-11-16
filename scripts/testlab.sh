@@ -306,6 +306,7 @@ if [ "$sel" = 7 ]; then
   case "$ur" in ok) finish 0 7 "" ;; failed) finish 1 7 "the upgrade from $from failed" ;; skipped) finish 3 7 "the harness cannot run here" ;; *) finish 4 7 "upgrade $ur" ;; esac
 fi
 
+if sel_has 4 || sel_has 5; then export HS_NESTED_ROLE=homeserver; fi   # restic, mkfs and SnapRAID come with the homeserver role (after `hs rebuild`)
 hs_job_step 3 4 "Building the installer ISO"; hs_job_progress 2 4 steps
 step "$(t 'Building the installer ISO (this takes a long time)')"
 if ! (cd "$src" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh); then fail_run 4 2 "the ISO build failed (see run.log)"; fi
@@ -351,10 +352,15 @@ worst() {   # worst <result>...: the first that is not ok
 stage_rollback() {
   res[3]=$(xrun rollback "$vm" "" "$pwfile")
 }
+fast_on=
+fast_disks() {   # fast_disks <vm>: two small virtual disks for the pool `fast` (the full configuration of the storage part always imports it)
+  case " $fast_on " in *" $1 "*) return 0 ;; esac
+  vdisk_add "$1" f1 2GiB && vdisk_add "$1" f2 2GiB && fast_on="$fast_on $1"
+}
 stage_backup() {
   local a b
-  vdisk_add "$vm" bk 2GiB || { res[4]=error; return; }
-  a=$(xrun backup "$vm" "backup=bk" "$pwfile")
+  vdisk_add "$vm" bk 2GiB && fast_disks "$vm" || { res[4]=error; return; }
+  a=$(xrun backup "$vm" "backup=bk fast1=f1 fast2=f2" "$pwfile")
   [ "$a" = ok ] || { res[4]=$a; return; }
   ( umask 077; "$incus" file pull "$vm/var/lib/hs/restic-password" "$rundir/.backup-pass" ) || { res[4]=error; return; }
   vm2=$vm-b
@@ -363,13 +369,14 @@ stage_backup() {
   local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P)
   "$incus" config device remove "$vm" bk >/dev/null || { res[4]=error; return; }
   "$incus" config device add "$vm2" bk disk "pool=$spool" "source=$vm-bk" >/dev/null || { res[4]=error; return; }
-  b=$(xrun restore "$vm2" "backup=bk" "$d2/password" "$rundir/.backup-pass")
+  fast_disks "$vm2" || { res[4]=error; return; }
+  b=$(xrun restore "$vm2" "backup=bk fast1=f1 fast2=f2" "$d2/password" "$rundir/.backup-pass")
   rm -f "$rundir/.backup-pass"
   res[4]=$(worst "$a" "$b")
 }
 stage_pool() {
-  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB || { res[5]=error; return; }
-  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2" "$pwfile")
+  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB && fast_disks "$vm" || { res[5]=error; return; }
+  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2 fast1=f1 fast2=f2" "$pwfile")
 }
 stage_browser() {
   local ip rc=0 ar

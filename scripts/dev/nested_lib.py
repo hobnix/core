@@ -115,8 +115,15 @@ def build_scenario(stage, params):
     host = params.get("hostname", "nested-test")
     if stage == "iso":      # ISO boot check (#175) and the unattended install (needs the flags of hs-install; the answers file is not read yet)
         pw, key = params["password"], params["pubkey"]
-        install = ("HS_INSTALL_PASSWORD=%s hs-install --role minimal --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal"
-                   % (shq(pw), shq(host), shq(key)))
+        # minimal: only the base (fast). The backup and pool stages need the tools of the homeserver role (restic, mkfs, SnapRAID): the test-lab
+        # sets HS_NESTED_ROLE=homeserver for them, and those stages run `hs rebuild` once, as after every real install.
+        role = os.environ.get("HS_NESTED_ROLE", "minimal")
+        if role not in ("minimal", "homeserver"):
+            role = "minimal"
+        # homeserver: SnapRAID for /bulk (hs-install --bulk-type), so the full configuration imports only the pool fast; a rebuild cannot change it later
+        bulk = " --bulk-type snapraid" if role == "homeserver" else ""
+        install = ("HS_INSTALL_PASSWORD=%s hs-install --role %s --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal%s"
+                   % (shq(pw), role, shq(host), shq(key), bulk))
         return [
             step("wait", PROMPT_ISO, timeout=420, what="the installer ISO boots to its shell"),
             step("send", "sudo -i"),
@@ -277,7 +284,7 @@ def run_steps(console, steps, params_vars=None, report=None):
                 console.send(s["text"].format(**vars_))
                 rec["ok"] = True
             elif k in ("run", "run_var", "capture"):
-                cmd = s["text"].format(**vars_) if k == "run_var" else s["text"]
+                cmd = s["text"].format(**vars_) if k == "run_var" or s.get("fmt") else s["text"]
                 rc, out = console.run(cmd, s.get("timeout", 60))
                 want = s.get("expect_rc", 0)
                 rec["rc"] = rc
@@ -393,7 +400,7 @@ def main(argv):
     if a.cmd == "plan":
         try:
             steps = build_scenario(a.stage, {"password": "<password>", "pubkey": "<pubkey>", "backup_pass": "<backup-password>",
-                                             "disks": {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2")}})
+                                             "disks": {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2", "fast1", "fast2")}})
         except KeyError:
             print("unknown stage %r (stages: %s)" % (a.stage, ", ".join(STAGES)), file=sys.stderr)
             return EXIT_USAGE
