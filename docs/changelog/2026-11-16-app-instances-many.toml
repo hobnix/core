@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "change"
+title = "An app can only be installed twice when it says so"
+body  = """The install plan now refuses a second instance of an app that runs once, with a plain message. An app that allows several instances (instances = "many" in its package) takes a name like <app>-<word>; a name that is not free is refused before anything is installed.
+
+Not tested on hardware yet."""
