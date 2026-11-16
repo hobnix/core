@@ -541,7 +541,7 @@ def run(pkg, cmd, rest):
                     print("\t".join([r_name, pname, e.get("kind", "?"), str(e.get("version")), have.get(pname, {}).get("version", "-")]))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
-            # (- = no copy in current/), state (new|current|update|orphan), core (yes|no), audience, title. A package of a repository that
+            # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that
             # is gone (or no longer lists it) is an orphan: its copy stays until `hs pkg remove`.
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
@@ -561,6 +561,8 @@ def run(pkg, cmd, rest):
                             state = "update" if pkg.semver_key(ver) > pkg.semver_key(inst) else "current"
                         except ValueError:
                             state = "update"
+                    if state in ("new", "update") and pkg.waits_for(e):
+                        state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
                     seen.add(pname)
                     print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
                                      e.get("audience", "generic"), (e.get("title") or "-").replace("	", " ")]))

@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "change"
+title = "Removing a capability package no longer makes its settings look like typos"
+body  = """`hs config check` shows a note ("unused, capability X removed") for a line in machine.toml that belonged to a package you removed. It is never an error; delete the line when you like."""
