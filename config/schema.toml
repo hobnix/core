@@ -437,6 +437,7 @@ webTerminalMaxHours = 8'''
 [[item]]
 kind = "option"
 key = "appsAutoupdateEnabled"
+page = "advanced"
 type = "bool"
 required = false
 settable = false
@@ -453,6 +454,7 @@ appsAutoupdateEnabled = false'''
 [[item]]
 kind = "option"
 key = "appsAutoupdateWindow"
+page = "advanced"
 type = "string"
 required = false
 settable = false
