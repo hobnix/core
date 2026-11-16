@@ -229,7 +229,7 @@ host_files() {
     for f in $HS_BACKUP_HOST_FILES; do [ -e "$f" ] && echo "$f"; done
     return 0
   fi
-  for f in /etc/nixos/machine.toml /etc/nixos/machine.nix /etc/nixos/hardware-configuration.nix "$STATE" \
+  for f in /etc/nixos/machine.toml /etc/nixos/machine.nix /etc/nixos/hardware-configuration.nix /etc/nixos/vendor "$STATE" \
            /var/lib/samba/private /etc/ssh/ssh_host_* /var/lib/hs-gateway/acme; do   # acme: the gateway's certificate keys (secret, never printed)
     [ -e "$f" ] && echo "$f"
   done
@@ -986,6 +986,8 @@ cmd_restore() {
 }
 
 # ── The settings only: hs backup config [restore] ──
+# vendor/ (the vendored Nix modules of capability packages and their lock, docs/PLAN-capabilities-repo.md, ADR 0017 decision 10) belongs to the
+# settings: machine.toml may switch such a package on, and a rebuild on a clean install needs the code and the lock without reaching GitHub.
 # What the host snapshot holds of the settings: the files under $NIXOS_DIR (the paths are the original ones in the snapshot).
 # hardware-configuration.nix, SSH host keys, Samba secrets, disks and networks are never put back by this command.
 NIXOS_DIR=${HS_NIXOS_DIR:-/etc/nixos}
@@ -1013,6 +1015,7 @@ cmd_config_list() {
       for f in "${CONFIG_FILES[@]}"; do
         if R ls "$id" "$NIXOS_DIR/$f" 2>/dev/null | grep -qxF "$NIXOS_DIR/$f"; then held+="${held:+, }$f"; fi
       done
+      if R ls "$id" "$NIXOS_DIR/vendor/capabilities.lock" 2>/dev/null | grep -qxF "$NIXOS_DIR/vendor/capabilities.lock"; then held+="${held:+, }vendor/"; fi
       printf '%s\t%s\t%s\n' "$id" "$time" "${held:--}"
     done < <(jq -r '.[] | [.id[0:8], (.time[0:16] | sub("T"; " "))] | @tsv' <<<"$snaps")
   } | table
@@ -1070,6 +1073,7 @@ cmd_config_restore() {
   CFG_TMP=$tmp
   local inc=() f
   for f in "${CONFIG_FILES[@]}"; do inc+=(--include "$NIXOS_DIR/$f"); done
+  inc+=(--include "$NIXOS_DIR/vendor")
   $with_state && inc+=(--include "$STATE")
   if [ -n "$from_disk" ]; then
     inc+=(--include "$SSH_DIR/ssh_host_*")
@@ -1085,6 +1089,9 @@ cmd_config_restore() {
     [ -f "$tmp$NIXOS_DIR/$f" ] || continue
     rows+=("$NIXOS_DIR/$f")
   done
+  if [ -d "$tmp$NIXOS_DIR/vendor" ]; then
+    while IFS= read -r -d '' f; do rows+=("${f#"$tmp"}"); done < <(find "$tmp$NIXOS_DIR/vendor" -type f -print0 | sort -z)
+  fi
   if $with_state && [ -d "$tmp$STATE" ]; then
     while IFS= read -r -d '' f; do
       rel=${f#"$tmp$STATE/"}

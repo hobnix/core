@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "The settings backup includes the vendored package code"
+body  = """`hs backup config` and its restore now cover `/etc/nixos/vendor` (the Nix code of installed capability packages and its lock) together with machine.toml. With `--from-disk` the installed package copies in the server state come back too, so a rebuild on a fresh install does not need to reach GitHub.
+
+Not tested on hardware yet."""
