@@ -185,7 +185,11 @@ def pool(params):
         step("run", "hs sys fm locations | grep -q 'disk:data-01' && hs sys fm locations | grep -q 'disk:data-02'", what="the file manager sees both data disks"),
         step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
         step("run", "hs sys fm ls disk:data-01 --path testlab | grep -q a.txt", what="the file manager lists it"),
-        step("run", "printf 'a.txt\\0' | hs sys fm start copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab | grep -q 'status.*done'",
+        # the plan and the answer of start stay in the console log (a refusal says why)
+        step("run", "printf 'a.txt\\0' | HS_CALLER=test hs sys fm plan copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab; true",
+             what="the plan of the copy is shown"),
+        step("run", "out=$(printf 'a.txt\\0' | HS_CALLER=test hs sys fm start copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab); "
+                    "echo \"$out\"; echo \"$out\" | grep -q 'status.*done'",
              timeout=300, what="the file manager copies it to the second data disk"),
         step("run", "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do [ -f /var/lib/hs/disks/data-02/testlab/a.txt ] && break; sleep 5; done; "
                     "grep -qx hs-testlab /var/lib/hs/disks/data-02/testlab/a.txt", timeout=120, what="the copy arrived with the same content"),
