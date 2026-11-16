@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "A failed install names the step and can be retried or cleaned up"
+body  = """When an install fails, the dialog says at which step and shows the last log lines. Retry starts again at that step; Remove what was created removes only what the run made, after you type the name of the app. Not tested on hardware yet."""

@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Several instances of one app"
+body  = """A package that allows it (instances = many) can be installed again under the name <package>-<word>, each with its own stage and policy. Other packages refuse a second install. Not tested on hardware yet."""

@@ -381,6 +381,60 @@ hs services plan
 
 The plan shows what the proxy will do. A proxy that cannot render a key (Zoraxy: headers and login) gets a `manual` row; set those by hand. With `reverseProxy = traefik-public` all keys are rendered (see the guide of the gateway proxy).
 
+## Install, check and remove an app (the Apps page)
+The Apps page installs and removes recipes in one flow. The commands behind it are `hs sys apps ...` (machine-readable, the web interface
+calls them); you do not type them. Not tested on hardware yet.
+
+### Install
+Press **Install** on a package. One dialog shows, in this order:
+1. **The plan.** Read only, nothing is installed: the version and release that will be installed, what it creates (container, share, ports),
+   what it needs (each need is present or missing) and whether it takes long. A package from a repository you added asks you to type its name.
+2. **The questions** of the recipe. A question you already answered in the form is not asked again.
+3. **The steps** as a list: `read` (fetch the release shown in the plan), `needs`, `ask`, `run` (one line per phase of the recipe),
+   `check` (the health the app declares). If a newer release came out since the plan, the install stops; open the plan again.
+4. **The result:** the **Open** button, where the data lives and how it is backed up.
+
+### When an install fails
+The dialog names the step ("failed at run: configure") and shows the last lines of the log. Two buttons:
+- **Retry** starts again at the failed step. The answers you gave are kept. A failed phase of the recipe runs again as a whole.
+- **Remove what was created** shows a plan first, lists only what this run made (container, route, fixed address, share) and asks you to type the
+  name of the app. It never touches what existed before the run.
+
+### Remove an app, keep or delete the data
+**Remove** shows a plan: what goes and what stays. The data is kept by default.
+
+**Deleting the data cannot be undone.** Choose **Delete the data** and type the name of the app twice (once for the app, once for the data).
+Data inside the container goes with the container. Data in a share or volume the install created is deleted only when you choose it.
+An app installed before this release has no record of what its install created; its plan lists only the container and its service
+description, and **Delete the data** is refused.
+
+### States and health
+Every package has a stage: `available` (in a repository, not on this server), `installed` (the signed copy is here, nothing set up),
+`on` (the container exists) and `running` (the container runs and its declared health check passes). Flags next to it: an update
+exists, the release waits for a newer core, the repository is gone, a rebuild is pending, an install failed, or the app is unhealthy. For a recipe
+the stage belongs to each instance. List the recipe rows:
+
+```bash
+hs sys apps list
+```
+
+An app without a declared health check counts as healthy while its container runs.
+
+### App version and policy
+The Apps page shows the version of the app itself next to the package version and says when the release offers a newer one. The policy of an
+app decides what happens then. `notify` (the default) mentions it in the weekly summary; `pinned` never offers it. Nothing updates by itself.
+
+```bash
+sudo hs apps policy <instance> pinned
+```
+
+Without a value the command shows the current policy.
+
+### Several instances of one app
+A package that declares `instances = "many"` can be installed again under a name `<package>-<word>` (lower-case letters, digits, dashes;
+unique among containers and services). The plan checks the name. Ports and the fixed address are asked again. A package with `instances = "one"`
+(the default) refuses a second install. The package is installed once; each instance has its own stage, health and policy.
+
 ## Install packages from a repository
 
 Recipes and extensions are both packages. They come from repositories, from signed release tags only. The project's two repositories

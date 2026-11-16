@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "One Install dialog for every package"
+body  = """Installing a package is one dialog: a plan that changes nothing, the questions, the steps and a result with an Open button. Not tested on hardware yet."""

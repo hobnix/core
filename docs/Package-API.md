@@ -4,8 +4,9 @@ What a package (`package.toml`) may say to the core, and from which API level. T
 a package states the lowest level it needs in `requires_core = ">=N"` and the core refuses one that needs more (ADR 0008, rule 4). The design
 is in [PLAN-app-lifecycle](PLAN-app-lifecycle.md) (Q4 and Q5); the states of a package are in ADR 0027.
 
-**These field names are a contract.** The Apps and Marketplace pages and the later steps of the lifecycle plan (0.11, 0.13) read them. After this
-page is merged a field is renamed or removed only with an API level bump and one level in which the old name still works. Adding an optional key
+**These field names are a contract.** The Apps and Marketplace pages and the later steps of the lifecycle plan (0.11, 0.13) read them. The field
+names are stable for milestones 0.11 and 0.13: a field is renamed or removed only with an API level bump and one level in which the old name still
+works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 9. Adding an optional key
 is a bump too, because an older core would refuse the unknown key.
 
 ## Level 9: the app contract and store fields

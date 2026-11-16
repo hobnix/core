@@ -1,12 +1,42 @@
 # Plan: one lifecycle for apps and packages (milestone 0.6)
 
-Status: **Accepted 2026-11-16**: the owner accepted all recommended answers D1 to D17 (table "Decisions for the owner"); #269 moves to a later
-milestone (the board is updated separately). Design record for epic
-[#187](https://github.com/hobnix/server/issues/187) and its open children #465, #466, #467, #468, #469, #470, #471 and #269, with the three bugs #612,
-#613 and #614 that fit into the steps they touch. Nothing is built by this page. It checks the facts of the issues against the code of branch `0.6`
-(2026-11-16), names where the code differs from what the issues assume, and gives an ordered list of steps, each sized for one pull request. This plan
-changes no storage, network or firewall behaviour by itself; steps 7, 9, 11 and 13 delete or change things on a server and are marked. Not tested on
-hardware yet.
+Status: **Built in 0.6 except step 14 (recipes repo, waits for 0.6 reaching develop) and step 18 (hardware).** Accepted 2026-11-16: the owner accepted
+all recommended answers D1 to D17; #269 moves to a later milestone. Design record for epic
+[#187](https://github.com/hobnix/server/issues/187) and its children #465, #466, #467, #468, #469, #470, #471 and #269, with the three bugs #612,
+#613 and #614 that fit into the steps they touch. It checks the facts of the issues against the code of branch `0.6`
+(2026-11-16, before the steps were built), names where the code differed from what the issues assumed, and gives an ordered list of steps, each sized
+for one pull request. Steps 7, 9, 11 and 13 delete or change things on a server and are marked. Not tested on hardware yet.
+
+## What was built
+
+- Step 1 (#612, UUID ids in UniFi): [#677](https://github.com/hobnix/server/pull/679)
+- Step 2 (#613, recipe answers asked once): [#680](https://github.com/hobnix/server/pull/680)
+- Step 3 (#614, autostart): [#681](https://github.com/hobnix/server/pull/681)
+- Step 4 (states, ADR 0027): [#683](https://github.com/hobnix/server/pull/683)
+- Step 5 (manifest contract, API level 9): [#686](https://github.com/hobnix/server/pull/686)
+- Step 6 (`pkg show`): [#690](https://github.com/hobnix/server/pull/690)
+- Step 7 (created ledger): [#682](https://github.com/hobnix/server/pull/682)
+- Step 8 (one Install, backend and web): [#691](https://github.com/hobnix/server/pull/691), [#693](https://github.com/hobnix/server/pull/693)
+- Step 9 (failed install, retry, cleanup): [#694](https://github.com/hobnix/server/pull/694)
+- Step 10 (health): [#689](https://github.com/hobnix/server/pull/689)
+- Step 11 (remove, keep or delete data): [#695](https://github.com/hobnix/server/pull/695)
+- Step 12 (versions and policy): [#696](https://github.com/hobnix/server/pull/696)
+- Step 13 (automatic updates, hidden and off): [#697](https://github.com/hobnix/server/pull/697)
+- Step 15 (`pkg new` fields): [#687](https://github.com/hobnix/server/pull/687)
+- Step 16 (instances field): [#692](https://github.com/hobnix/server/pull/692)
+- Step 14 is in hobnix/recipes: #33 and #34, waiting for 0.6 to reach develop. The plan itself: [#677](https://github.com/hobnix/server/pull/677).
+
+## Not tested on hardware
+
+Not tested on hardware yet (step 18):
+
+- Step 1: delete an instance that has a UniFi reservation: the reservation is gone, no raw API text.
+- Step 3: reboot (after `hs unlock`): only flagged instances start; a stopped one with the flag off stays stopped; confirm Incus restores the last state when the key is unset.
+- Step 8: install a package that was never fetched, answer the form and one dialog question, watch the steps, press Open.
+- Step 9: make a recipe fail (unreachable image), Retry, then "Remove what was created": container, route and UniFi reservation gone, data question asked.
+- Step 10: stop the app inside its instance: Apps says not healthy, the container still runs.
+- Step 11: remove with "keep the data", install again, the data is back; remove with "delete the data" needs the typed name.
+- Steps 12 and 13: an app with a pinned image updates through the plan; an update that breaks the health check is rolled back.
 
 Read together with ADR 0004 (job record), ADR 0008 and 0009 (capabilities and packages, a capability is a package kind), ADR 0018 (interactive recipe
 runs), docs/PLAN-packages.md, docs/PLAN-jobs.md, docs/PLAN-recipe-orchestrator.md and docs/PLAN-capabilities-repo.md. Milestones 0.11 (navigation) and
