@@ -291,6 +291,22 @@ class Repos:
         if pm:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
+        vendored = m.get("kind") == "capability" and bool(m.get("module"))
+        if vendored:
+            # Nix code from outside the checkout: default repositories only, never a name of the core, only files of its own folder (docs/PLAN-capabilities-repo.md, Q2/Q3)
+            problem = None
+            if not r.get("default"):
+                problem = "has a Nix module, which only the default repositories may ship (%s is an added repository)" % r_name
+            elif os.path.isdir(os.path.join(self.pkg.root(), "capabilities", name)):
+                problem = "has the name of a capability of the core, which a package does not replace"
+            else:
+                try:
+                    self.pkg_vendor.nix_hashes(tmp)
+                except self.pkg_vendor.Refused as e:
+                    problem = str(e)
+            if problem:
+                self.rm_quiet(tmp)
+                raise Refused("%s: %s" % (name, problem))
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -300,6 +316,12 @@ class Repos:
                     self.rm(os.path.join(prev, x))
             os.rename(cur, os.path.join(prev, "%s@%s" % (name, old.get("commit", "unknown")[:12])))
         os.rename(tmp, cur)
+        if m.get("kind") == "capability":
+            if vendored:
+                tree = git("rev-parse", "%s:%s" % (tag, entry["path"]), cwd=self.clone_dir(r_name)).decode().strip()
+                self.pkg_vendor.vendor(cur, self.nixos_dir(), dict(repo=r_name, tag=tag, commit=commit, tree=tree))
+            else:
+                self.pkg_vendor.unvendor(name, self.nixos_dir())
         data = self.pkg.installed()
         data[name] = {"version": entry["version"], "repo": r_name, "commit": commit, "tag": tag}
         if "applied" in old:
@@ -326,6 +348,15 @@ class Repos:
         raw = git("show", "%s:%s/package.toml" % (commit, entry["path"]), cwd=self.clone_dir(r_name))
         new = self.pkg.pkg_perms.of(tomllib.loads(raw.decode("utf-8", "replace")))
         return new, self.pkg.pkg_perms.added(self.installed_permissions(name), new)
+
+    @property
+    def pkg_vendor(self):
+        return self.pkg.pkg_vendor
+
+    @staticmethod
+    def nixos_dir():
+        """The checkout that vendor/ lives in (HS_NIXOS_DIR, default /etc/nixos)."""
+        return os.environ.get("HS_NIXOS_DIR", "/etc/nixos")
 
     @staticmethod
     def rm(path):
@@ -358,6 +389,7 @@ class Repos:
         if not os.path.isdir(cur):
             raise Refused("%s was not installed from a repository" % name)
         self.rm(cur)
+        self.pkg_vendor.unvendor(name, self.nixos_dir())
         self.pkg.pkg_events.remove(name)
         data.pop(name, None)
         self.pkg.save_installed(data)
