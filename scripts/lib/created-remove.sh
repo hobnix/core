@@ -9,7 +9,7 @@
 #   created_remove_all <instance> [yes]      do it (yes = also delete the data, default no); each line is checked again first.
 #                                            Returns 0 when nothing the ledger lists is left (kept data does not count), 1 otherwise.
 # Kinds: service (descriptor), reservation (UniFi fixed address, detail = mac), container (instance; its own disk goes with it), share and volume
-# (DATA: kept unless asked). Test knobs: HS_INCUS, HS_SERVICES (services.sh), HS_UNIFI (unifi.sh), HS_STATE_DIR.
+# (DATA: kept unless asked; a share is then taken away with its folder kept, never erased). Test knobs: HS_INCUS, HS_SERVICES (services.sh), HS_UNIFI (unifi.sh), HS_SHARE_DELETE (share-delete.sh), HS_STATE_DIR.
 _cr_here=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)
 
 _cr_data() { case "$1" in share|volume) return 0 ;; *) return 1 ;; esac; }
@@ -18,7 +18,7 @@ _cr_text() {   # what a line is, in words
     service)     echo "the service $2 (its description; the route follows with hs services apply)" ;;
     reservation) echo "the fixed address $2 in UniFi" ;;
     container)   echo "the instance $2 with its snapshots" ;;
-    share)       echo "the share $2 (data; shares are kept: hs share $2 delete removes one)" ;;
+    share)       echo "the share $2 (data; deleting it takes it away and keeps its folder as $2.deleted-<date>)" ;;
     volume)      echo "the volume $2 (data)" ;;
     *)           echo "$1 $2" ;;
   esac
@@ -33,7 +33,7 @@ created_plan() {   # created_plan <instance> [yes]
     case "$st" in
       gone) action=forget ;;
       unknown) action=skip ;;
-      *) if [ "$kind" = share ] || { _cr_data "$kind" && [ "$del" != yes ]; }; then action=keep; else action=remove; fi ;;   # a share is never removed here
+      *) if _cr_data "$kind" && [ "$del" != yes ]; then action=keep; else action=remove; fi ;;   # data is kept unless asked; a share is taken away, never erased (share-delete.sh)
     esac
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$detail" "$st" "$action" "$(_cr_text "$kind" "$id")"
   done < <(created_list "$inst" | awk -F'	' '{ l[NR] = $0; v[NR] = ($1 == "volume") } END { for (i = NR; i >= 1; i--) if (!v[i]) print l[i]; for (i = NR; i >= 1; i--) if (v[i]) print l[i] }')
@@ -46,6 +46,7 @@ _cr_one() {   # _cr_one <kind> <id> <detail>: remove one thing, 0 = gone now
     reservation) [ "$detail" != - ] && bash "${HS_UNIFI:-$_cr_here/unifi.sh}" clear-ip "$detail" >/dev/null 2>&1 ;;
     container)   "${HS_INCUS:-incus}" delete -f "$id" >/dev/null 2>&1 ;;
     volume)      [ "$detail" != - ] && "${HS_INCUS:-incus}" storage volume delete "$detail" "$id" >/dev/null 2>&1 ;;
+    share)       bash "${HS_SHARE_DELETE:-$_cr_here/share-delete.sh}" "$id" >/dev/null 2>&1 ;;
     *)           return 1 ;;
   esac
 }

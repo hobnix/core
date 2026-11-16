@@ -150,6 +150,7 @@ case "${1:-list}" in
     kv "$(t 'Version')" "$(mf version "$dir")"
     note "$(t 'Removed: the installed copy, its event declarations and its switch-on/off marks.')"
     note "$(t 'Stays: containers and data the package made (hs ct remove is for those).')"
+    note "$(t 'To remove an app with its route and address and choose to keep or delete its data: the Apps page (Remove), or hs sys apps plan remove <instance>.')"
     if [ "$dry" = 1 ]; then
       note "$(t 'Nothing was changed (dry run).')"
       exit 0

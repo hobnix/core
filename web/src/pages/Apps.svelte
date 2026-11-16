@@ -5,6 +5,7 @@
   import { openCreate, openPlan, jobRunning, ui, track, showTab } from '../ui.svelte.js';
   import { start, get } from '../api.js';
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
+  import RemoveApp from '../forms/ops/RemoveApp.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
@@ -57,6 +58,8 @@
   // Start/Stop of one instance of an app (the plan of the instance, like the Instances page); the container docker is not stopped from here
   const flipCt = (c, running) => openPlan('ct', [c, running ? 'stop' : 'start'], `${running ? 'Stop' : 'Start'} ${c}`);
   const run = (a) => (a.state === 'installed' ? openPlan('recipes', [a.name, 'run'], `${a.name}`) : openCreate(InstallDialog, { pkg: a.name }));
+  // Remove one instance of an app: the plan, the data question, the typed name (step 11)
+  const removeCt = (c) => openCreate(RemoveApp, { app: c, ondone: () => refresh(['/api/sys/apps/list', '/api/sys/recipes/list']) });
   // the form only writes the description: read the services and the plan again now, so the Services page's Apply count is right at once
   const services = (a) => openCreate(AppServices, { app: a.name, cts: a.cts ? a.cts.split(',') : [], ondone: () => refresh(['/api/sys/services/app', '/api/sys/services/list', '/api/sys/services/routes']) });
 
@@ -229,6 +232,11 @@
             {#if c !== 'docker'}
               {@const live = stageOf.get(a.name).stage === 'running' || !stageOf.get(a.name).flags.includes('stopped')}
               <Button variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
+            {/if}
+          {/each}
+          {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
+            {#if c !== 'docker'}
+              <Button variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
             {/if}
           {/each}
           <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>

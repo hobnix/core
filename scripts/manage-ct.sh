@@ -413,6 +413,7 @@ case "$1" in
     fi
     warn "$(t "Delete '%s' with all its snapshots. Attached storage stays:" "$ct")"
     while IFS=$'\t' read -r _ _ src dpath _; do note "$src -> $dpath"; done < <(storage "$ct")
+    note "$(t 'An app from a package is removed with its route and address, and you choose to keep or delete its data, on the Apps page (Remove) or with hs sys apps plan remove %s.' "$ct")"
     if ! $yes; then
       danger "$(t "'%s' and its snapshots are deleted for good." "$ct")"
       confirm_name "$ct" "the instance" || fail "cancelled"
