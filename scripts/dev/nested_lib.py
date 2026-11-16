@@ -120,8 +120,10 @@ def build_scenario(stage, params):
         role = os.environ.get("HS_NESTED_ROLE", "minimal")
         if role not in ("minimal", "homeserver"):
             role = "minimal"
-        install = ("HS_INSTALL_PASSWORD=%s hs-install --role %s --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal"
-                   % (shq(pw), role, shq(host), shq(key)))
+        # homeserver: SnapRAID for /bulk (hs-install --bulk-type), so the full configuration imports only the pool fast; a rebuild cannot change it later
+        bulk = " --bulk-type snapraid" if role == "homeserver" else ""
+        install = ("HS_INSTALL_PASSWORD=%s hs-install --role %s --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal%s"
+                   % (shq(pw), role, shq(host), shq(key), bulk))
         return [
             step("wait", PROMPT_ISO, timeout=420, what="the installer ISO boots to its shell"),
             step("send", "sudo -i"),

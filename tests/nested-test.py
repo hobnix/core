@@ -209,6 +209,21 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(ok, res)
         self.assertIn("exit", "".join(t.sent))
 
+    def test_the_homeserver_install_is_snapraid(self):
+        old = os.environ.get("HS_NESTED_ROLE")
+        try:
+            os.environ["HS_NESTED_ROLE"] = "homeserver"
+            text = " ".join(s["text"] for s in n.build_scenario("iso", self.P))
+            self.assertIn("--role homeserver", text)
+            self.assertIn("--bulk-type snapraid", text)
+            os.environ["HS_NESTED_ROLE"] = "minimal"
+            self.assertNotIn("--bulk-type", " ".join(s["text"] for s in n.build_scenario("iso", self.P)))
+        finally:
+            if old is None:
+                os.environ.pop("HS_NESTED_ROLE", None)
+            else:
+                os.environ["HS_NESTED_ROLE"] = old
+
     def test_nested_sh_plans_every_stage(self):
         # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
         for st in n.STAGES:

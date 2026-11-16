@@ -27,7 +27,7 @@ def step(kind, text, **kw):
 def full_system(params):
     """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic and SnapRAID come with
     it). That configuration always imports a ZFS pool named `fast`, so, as on a real server (docs/install.md), the pool comes first: a mirror
-    of two small virtual disks (`hs pool fast add`), bulkType snapraid for the data pool, then `hs rebuild`. Safe to run twice."""
+    of two small virtual disks (`hs pool fast add`), then `hs rebuild`. (The VM was installed with --bulk-type snapraid: nested_lib.py.) Safe to run twice."""
     return [
         disk_id_by_name(params, "fast1", "f1"),
         disk_id_by_name(params, "fast2", "f2"),
@@ -37,8 +37,6 @@ def full_system(params):
              timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
         step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
              timeout=900, what="the pool fast exists"),
-        step("run", "grep -q '^bulkType' /etc/nixos/machine.toml && sed -i 's/^bulkType.*/bulkType = \"snapraid\"/' /etc/nixos/machine.toml "
-                    "|| printf 'bulkType = \"snapraid\"\\n' >> /etc/nixos/machine.toml", what="the data pool is SnapRAID (no second ZFS pool to import)"),
         step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --foreground",
              timeout=3000, what="the full configuration is built (hs rebuild)"),
     ]
