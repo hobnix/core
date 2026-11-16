@@ -170,6 +170,18 @@ def pool(params):
     ]
 
 
+# ---------------------------------------------------------------- stage 6 (browser): the address of the VM
+def address(params):
+    """Read the IPv4 address of the VM from its own serial console. `incus list` shows none (no incus agent in the installed system, and the VM
+    sits on a LAN bridge Incus does not manage), so testlab.sh stage_browser reads the value recorded here from result-address.json."""
+    return [
+        step("login", "", user="adminuser", secret=params["password"], timeout=420, what="the console is logged in as adminuser"),
+        step("capture", "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1", var="ip", strip=True, record=True,
+             what="the VM has a global IPv4 address"),
+        step("run_var", "echo {ip} | grep -Eq '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'", what="it looks like an IPv4 address"),
+    ]
+
+
 def upgrade_steps(params):
     """Stage upgrade (#435): the system installed from the LAST release ISO is set up (a share, one app), `hs update` moves it to the candidate
     (a branch of the Hobnix repository that the old checkout is pointed at), and it must still be healthy with its shares, state.db and app.
@@ -225,5 +237,6 @@ SCENARIOS = {
     "backup": backup,
     "restore": restore,
     "pool": pool,
+    "address": address,
     "upgrade": upgrade_steps,
 }

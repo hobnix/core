@@ -198,16 +198,35 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(ok, res)
         self.assertNotIn("pw", "".join(t.sent))
 
-    def test_login_step_leaves_a_root_shell_the_stage_before_left_open(self):
-        class T(FakeTransport):
-            def write(self, text):
-                super().write(text)
-                if text.strip() == "exit":
-                    self.queue.append("[adminuser@nested-test:~]$ ")
-        t = T(banner="[root@nested-test:/]# ")
-        ok, res = n.run_steps(n.Console(t, clock=Clock()), [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
+    def test_login_step_leaves_a_root_shell_from_the_stage_before(self):
+        t = FakeTransport(banner="[root@nested-test:~]# ")
+        c = n.Console(t, clock=Clock())
+        orig = t.write
+
+        def write(text):
+            orig(text)
+            if text.strip() == "exit":
+                t.queue.append("[adminuser@nested-test:~]$ ")
+        t.write = write
+        ok, res = n.run_steps(c, [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
         self.assertTrue(ok, res)
-        self.assertIn("exit", "".join(t.sent))
+        self.assertIn("exit\n", t.sent)
+        self.assertNotIn("pw", "".join(t.sent))
+
+    def test_address_scenario_records_the_ip(self):
+        steps = n.build_scenario("address", self.P)
+        self.assertIn("address", n.STAGES)
+        t = FakeTransport(banner="[adminuser@nested-test:~]$ ", outputs={"ip -4 -o addr": "192.168.1.77\r\n"})
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), steps)
+        self.assertTrue(ok, res)
+        self.assertEqual([r.get("value") for r in res if "value" in r], ["192.168.1.77"])
+        self.assertNotIn(self.P["password"], "".join(t.sent))
+
+    def test_address_scenario_fails_without_an_ip(self):
+        t = FakeTransport(banner="[adminuser@nested-test:~]$ ", outputs={"ip -4 -o addr": "\r\n"},
+                          rc_for=lambda cmd: 1 if "grep -Eq" in cmd else 0)   # the fake shell does not run grep: the real one rejects an empty address
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), n.build_scenario("address", self.P))
+        self.assertFalse(ok)
 
     def test_the_homeserver_install_is_snapraid(self):
         old = os.environ.get("HS_NESTED_ROLE")
