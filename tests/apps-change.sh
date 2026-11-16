@@ -106,6 +106,7 @@ $PKGPY fetch test >/dev/null
 # stand-ins: incus (docker is not there), parts (tailscale off), recipe, orchestrator, health, job library
 LOG=$WORK/log; : > "$LOG"
 printf '#!/usr/bin/env bash\n[ "${1:-}" = info ] && [ -s "%s/have_ct" ] && [ "${2:-}" = "$(cat "%s/have_ct")" ] && exit 0\nexit 1\n' "$WORK" "$WORK" > "$WORK/incus"
+chmod +x "$WORK/incus"
 printf '#!/usr/bin/env bash\nprintf "tailscale\\toff\\tpart\\tyes\\tyes\\tT\\n"\n' > "$WORK/parts.sh"
 printf '#!/usr/bin/env bash\necho "recipe $*" >> "%s"\n' "$LOG" > "$WORK/recipe.sh"
 cat > "$WORK/orch.sh" <<STUB
