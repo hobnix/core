@@ -48,6 +48,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "apps.list": {
+    /** the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title */
+    words: ["apps", "list"];
+    path: "/apps/list";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, kind: Field, stage: "available" | "installed" | "on" | "running", flags: Field, repo: Field, available: Field, installed: Field, instances: Field, title: Field])[];
+  };
   "audit": {
     /** who did what: the commands that changed the server; id, time (epoch seconds), actor, result ok|failed, exit, command (hs sys audit [N]) */
     words: ["audit"];
@@ -1635,6 +1646,17 @@ export interface SysOperations {
     stdin: "no";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "pkg.states": {
+    /** the lifecycle stage of every package: name, kind, stage (available|installed|on|running), flags (comma list of update|waits|orphan|pending|failed|unhealthy|stopped, - = none), repo, available version, installed version, instances (comma list, - = none), title */
+    words: ["pkg", "states"];
+    path: "/pkg/states";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, kind: Field, stage: "available" | "installed" | "on" | "running", flags: Field, repo: Field, available: Field, installed: Field, instances: Field, title: Field])[];
   };
   "pool.disks": {
     /** disks the interface offers (device, size, role) */

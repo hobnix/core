@@ -415,7 +415,7 @@ INSTANCES = {
     ("services", "tiles"): "services-tiles", ("services", "stats"): "services-stats",
 }
 
-APPS = {("pkg", "market"): "pkg-market", ("pkg", "repos"): "pkg-repos", ("recipes", "list"): "recipes-list", ("recipes", "versions"): "recipes-versions"}
+APPS = {("pkg", "market"): "pkg-market", ("pkg", "states"): "pkg-states", ("apps", "list"): "apps-list", ("pkg", "repos"): "pkg-repos", ("recipes", "list"): "recipes-list", ("recipes", "versions"): "recipes-versions"}
 
 
 NETWORK = {

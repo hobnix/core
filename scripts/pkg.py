@@ -2,6 +2,7 @@
 """Packages: recipes and extensions as one thing (docs/PLAN-packages.md, step 1). Standard library only.
 
   pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
+  pkg.py states --market F --parts F --pending F --recipes F --running F   the lifecycle stage and flags of every package (pkg_states.py, ADR 0027)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
   pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py validate                                          check every manifest (and that a recipe's header agrees); exit 1 on a problem
@@ -620,6 +621,11 @@ def main(argv):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod.run(MAIN, cmd, rest)
+    elif cmd == "states":
+        spec = importlib.util.spec_from_file_location("pkg_states", os.path.join(HERE, "pkg_states.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.run(rest)
     elif cmd == "new":
         spec = importlib.util.spec_from_file_location("pkg_new", os.path.join(HERE, "pkg_new.py"))
         mod = importlib.util.module_from_spec(spec)

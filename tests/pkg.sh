@@ -103,4 +103,39 @@ check_out "hs ext enable refuses a recipe" "is a recipe" bash -c "$HS ext enable
 $PKG record fixapp
 check "after the recipe was applied the command is there" bash -c "$HS help --all 2>/dev/null | grep -q 'ext fixapp status'"
 check_out "hs sys ext fixapp status prints nothing without incus/container" "^$" bash -c "PATH=/nonexistent:\$PATH $HS sys ext fixapp status 2>/dev/null; echo"
+echo "-- the old reads stay byte-equal (market, recipes list)"
+GS=$WORK/gold; mkdir -p "$GS/state/packages/current/oldthing" "$GS/bin"
+printf '[package.oldthing]\nversion = "0.5.0"\nrepo = "gone"\n' > "$GS/state/packages/installed.toml"
+printf '#!/bin/sh\necho fixapp\n' > "$GS/bin/incus"; chmod +x "$GS/bin/incus"
+gold() { HS_STATE_DIR=$GS/state HS_INCUS=$GS/bin/incus bash "$@" | tr -d '\r'; }
+check_eq "pkg.sh --market is unchanged" "$(cat "$ROOT/tests/fixtures/pkg-market.golden")" "$(gold "$SCRIPTS/pkg.sh" --market)"
+check_eq "recipes-list.sh --list is unchanged" "$(cat "$ROOT/tests/fixtures/recipes-list.golden")" "$(gold "$SCRIPTS/recipes-list.sh" --list)"
+
+echo "-- lifecycle states (ADR 0027)"
+ST=$WORK/states; mkdir -p "$ST"
+row() { local IFS=$tab; printf '%s\n' "$*"; }   # one tab separated line
+{ row fixapp recipe repo 1.1.0 1.0.0 update no generic "Fixture app"
+  row fixext extension repo 1.0.0 1.0.0 current no generic "Fixture extension"
+  row fixcap capability repo 1.0.0 - new no generic "Fixture capability"
+  row newapp recipe repo 1.0.0 - new no generic "New app"
+  row gone "?" gone - 0.5.0 orphan no - -; } > "$ST/market"
+{ row fixext on extension no yes "Fixture extension"; row fixcap off part yes yes "Fixture capability"; } > "$ST/parts"
+: > "$ST/pending"
+{ row fixapp "Fixture app" "fixapp,fixapp2" partly; row newapp "New app" - "not installed"; } > "$ST/recipes"
+printf '%s\n' "fixapp,RUNNING" "fixapp2,STOPPED" "other,RUNNING" > "$ST/running"
+states() { $PKG states --market "$ST/market" --parts "$ST/parts" --pending "$ST/pending" --recipes "$ST/recipes" --running "$ST/running" "$@" | tr -d '\r'; }
+check_out "a recipe with one instance stopped is on, flagged update and stopped" "^fixapp${tab}recipe${tab}on${tab}update,stopped${tab}repo${tab}1[.]1[.]0${tab}1[.]0[.]0${tab}fixapp,fixapp2${tab}Fixture app\$" states
+check_out "a recipe that is not fetched is available" "^newapp${tab}recipe${tab}available${tab}-${tab}" states
+check_out "an extension that is on and not pending is running" "^fixext${tab}extension${tab}running${tab}-${tab}" states
+check_out "a capability that is off is installed" "^fixcap${tab}capability${tab}installed${tab}-${tab}" states
+check_out "an orphan is flagged" "^gone${tab}[?]${tab}installed${tab}orphan${tab}" states
+printf '%s\n' "fixapp,RUNNING" "fixapp2,RUNNING" > "$ST/running"
+check_out "a recipe whose instances all run is running" "^fixapp${tab}recipe${tab}running${tab}update${tab}" states
+: > "$ST/running"
+check_out "without a container list a recipe is on, never running" "^fixapp${tab}recipe${tab}on${tab}update${tab}" states
+{ row fixext on; row fixcap on; } > "$ST/pending"
+check_out "a pending part is on with the flag" "^fixext${tab}extension${tab}on${tab}pending${tab}" states
+check_eq "--kind keeps one kind" "2" "$(states --kind recipe | wc -l)"
+check_eq "the output is sorted by name" "$(states | cut -f1)" "$(states | cut -f1 | sort)"
+check_eq "every row has nine fields" "0" "$(states | awk -F'\t' 'NF != 9' | wc -l)"
 finish

@@ -2,7 +2,7 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { openCreate, ui, track, showTab } from '../ui.svelte.js';
+  import { openCreate, openPlan, jobRunning, ui, track, showTab } from '../ui.svelte.js';
   import { start, get } from '../api.js';
   import RunRecipe from '../forms/ops/RunRecipe.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
@@ -11,10 +11,15 @@
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
+  import StageBadge from '../ui/StageBadge.svelte';
+  import { parseStates, stageActions } from './states.js';
   import { link } from './instances/ct.js';
   import { appAction } from './apps.js';
 
   const list = poll('/api/sys/recipes/list', 30000);
+  // the lifecycle stage and flags of every app (ADR 0027): name, kind, stage, flags, repo, available, installed, instances, title
+  const stateList = poll('/api/sys/apps/list', 30000);
+  const stageOf = $derived(parseStates(rows(stateList)));
   // name, available version, applied version (- = not known), state: current | update | unknown
   const vers = poll('/api/sys/recipes/versions', 30000);
   const verOf = $derived(new Map(rows(vers).map((r) => [r[0], { avail: r[1], applied: r[2], vstate: r[3] }])));
@@ -39,6 +44,8 @@
   };
   const tag = (a) => (a.state === 'installed' ? (a.cts ? `in ${a.cts.split(',').join(', ')}` : 'installed') : a.state);
 
+  // Start/Stop of one instance of an app (the plan of the instance, like the Instances page); the container docker is not stopped from here
+  const flipCt = (c, running) => openPlan('ct', [c, running ? 'stop' : 'start'], `${running ? 'Stop' : 'Start'} ${c}`);
   const run = (a) => openCreate(RunRecipe, { recipe: a.name });
   // the form only writes the description: read the services and the plan again now, so the Services page's Apply count is right at once
   const services = (a) => openCreate(AppServices, { app: a.name, cts: a.cts ? a.cts.split(',') : [], ondone: () => refresh(['/api/sys/services/app', '/api/sys/services/list', '/api/sys/services/routes']) });
@@ -191,8 +198,18 @@
         {:else if col.key === 'desc'}
           <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c)}>{c}</a>{/each}</div>{/if}
         {:else if col.key === 'state'}
-          <StatusDot state={on ? 'ok' : a.state === 'partly' ? 'warn' : 'off'} label={a.state} />
+          {#if stageOf.get(a.name)}
+            <StageBadge stage={stageOf.get(a.name).stage} flags={stageOf.get(a.name).flags} />
+          {:else}
+            <StatusDot state={on ? 'ok' : a.state === 'partly' ? 'warn' : 'off'} label={a.state} />
+          {/if}
         {:else}
+          {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
+            {#if c !== 'docker'}
+              {@const live = stageOf.get(a.name).stage === 'running' || !stageOf.get(a.name).flags.includes('stopped')}
+              <Button variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
+            {/if}
+          {/each}
           <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
           <Button variant="ghost" class="btn-icon" icon={copied === a.name ? 'check' : 'terminal-window'} tooltip={copied === a.name ? 'Copied' : 'Copy the terminal command: hs recipe ' + a.name} aria-label="Copy hs recipe {a.name}" onclick={() => copy(a.name)} />
         {/if}

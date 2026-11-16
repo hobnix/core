@@ -163,3 +163,15 @@ kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"] }
 enums = { status = ["started", "refused"] }
 note = "One background job installs, switches on and rebuilds: hs sys pkg bundle start a,b; status started and the job unit."
+
+["pkg states"]
+kind = "tsv"
+columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
+enums = { stage = ["available", "installed", "on", "running"] }
+note = "The lifecycle stage of every package (ADR 0027). flags is a comma list of update, waits, orphan, pending, failed, unhealthy, stopped, or -. repo, available and installed are - for a package that is only in this tree; instances (recipes) is a comma list or -."
+
+["apps list"]
+kind = "tsv"
+columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
+enums = { stage = ["available", "installed", "on", "running"] }
+note = "The recipe rows of pkg states, same columns (a stub: step 10 of docs/PLAN-app-lifecycle.md adds health)."

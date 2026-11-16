@@ -133,6 +133,94 @@
     }
    }
   },
+  "/apps/list": {
+   "get": {
+    "operationId": "apps.list",
+    "summary": "the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "list"
+     ],
+     "script": "apps-list.sh",
+     "args": "--list",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/apps/list",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
+    "description": "The recipe rows of pkg states, same columns (a stub: step 10 of docs/PLAN-app-lifecycle.md adds health).",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "stage",
+            "enum": [
+             "available",
+             "installed",
+             "on",
+             "running"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "flags"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "available"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "installed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "instances"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           }
+          ],
+          "minItems": 9,
+          "maxItems": 9
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/audit": {
    "get": {
     "operationId": "audit",
@@ -7964,6 +8052,94 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/pkg/states": {
+   "get": {
+    "operationId": "pkg.states",
+    "summary": "the lifecycle stage of every package: name, kind, stage (available|installed|on|running), flags (comma list of update|waits|orphan|pending|failed|unhealthy|stopped, - = none), repo, available version, installed version, instances (comma list, - = none), title",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "states"
+     ],
+     "script": "pkg.sh",
+     "args": "--states",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/states",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
+    "description": "The lifecycle stage of every package (ADR 0027). flags is a comma list of update, waits, orphan, pending, failed, unhealthy, stopped, or -. repo, available and installed are - for a package that is only in this tree; instances (recipes) is a comma list or -.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "stage",
+            "enum": [
+             "available",
+             "installed",
+             "on",
+             "running"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "flags"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "available"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "installed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "instances"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           }
+          ],
+          "minItems": 9,
+          "maxItems": 9
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }
