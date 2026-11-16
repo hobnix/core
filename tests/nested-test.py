@@ -209,6 +209,14 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(ok, res)
         self.assertIn("exit", "".join(t.sent))
 
+    def test_nested_sh_plans_every_stage(self):
+        # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
+        for st in n.STAGES:
+            if st == "upgrade":
+                continue
+            r = subprocess.run([sys.executable, "-I", LIB, "plan", st], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, "%s: %s" % (st, r.stderr))
+
     def test_capture_with_fmt_fills_in_the_variables(self):
         t = FakeTransport(outputs={"basename": "sdc\n"})
         c = n.Console(t, clock=Clock())
