@@ -51,6 +51,9 @@ def login_root(params):
         step("send", "sudo -i"),
         step("wait", r"\[sudo\] password for %s: ?$" % user, timeout=30, what="sudo asks for the password"),
         step("send_secret", pw),
+        # what is typed while sudo still checks the password is thrown away (sudo flushes the terminal input): wait for root's first prompt,
+        # the plain bash one or the two-line starship prompt (its first line is "root <host> <dir>")
+        step("wait", r"(?:\[root@[^\]]*\]# |root nested-test )", timeout=60, what="sudo gave a root shell"),
         # after the full configuration (hs rebuild) root's shell is zsh with a two-line starship prompt: the harness cannot wait for it. A plain
         # bash with a prompt of its own shape is the same on every system
         step("send", "PS1='[root@nested-test:\\w]# ' exec bash --norc --noprofile"),
