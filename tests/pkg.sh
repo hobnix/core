@@ -68,6 +68,7 @@ capcase "requires_nix_api without a module is named" "requires_nix_api without m
 capcase "an options file that is missing is named" "options options.toml not found" 's/^$//' "rm options.toml"
 capcase "an option of another capability is named" "needs capability" 's/^$//' "sed -i 's/capability = \"fixcap\"/capability = \"other\"/' options.toml"
 capcase "a capability.toml beside it is refused" "has no capability.toml" 's/^$//' "touch capability.toml"
+capcase "a module needing a higher Nix API level is named" "above the Nix API level" 's/requires_nix_api = 1/requires_nix_api = 99/'
 capcase "the kind of a draft stays valid" "" 's/^$//'
 
 $PKG record fixapp
