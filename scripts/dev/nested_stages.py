@@ -29,10 +29,12 @@ def full_system(params):
     it). That configuration always imports a ZFS pool named `fast`, so, as on a real server (docs/install.md), the pool comes first: a mirror
     of two small virtual disks (`hs pool fast add`), bulkType snapraid for the data pool, then `hs rebuild`. Safe to run twice."""
     return [
-        disk_by_name(params, "fast1", "f1"),
-        disk_by_name(params, "fast2", "f2"),
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks $(basename {f1}),$(basename {f2}) "
-                        "--confirm fast | grep -q 'status.*started'", timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
+        disk_id_by_name(params, "fast1", "f1"),
+        disk_id_by_name(params, "fast2", "f2"),
+        # the plan first: its text (and a refusal's reason) stays in the console log
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks {f1},{f2} --confirm fast",
+             timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
         step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
              timeout=900, what="the pool fast exists"),
         step("run", "grep -q '^bulkType' /etc/nixos/machine.toml && sed -i 's/^bulkType.*/bulkType = \"snapraid\"/' /etc/nixos/machine.toml "
@@ -58,6 +60,12 @@ def disk_by_name(params, key, var):
     """A step that finds the virtual disk (an Incus disk device named params['disks'][key]) in the VM: /dev/disk/by-id/...incus_<name>."""
     name = params["disks"][key]
     return step("capture", "readlink -f /dev/disk/by-id/*incus_%s | head -n1" % name, var=var, strip=True, what="the virtual disk %s is visible" % key)
+
+
+def disk_id_by_name(params, key, var):
+    """The /dev/disk/by-id name of the virtual disk: `hs pool ... --disks` takes by-id names (manage-pool.sh), not sdX."""
+    name = params["disks"][key]
+    return step("capture", "ls /dev/disk/by-id/ | grep 'incus_%s$' | head -n1" % name, var=var, strip=True, what="the by-id name of the virtual disk %s" % key)
 
 
 # ---------------------------------------------------------------- stage 3: a bad update rolls back by itself
@@ -135,9 +143,11 @@ def pool(params):
     return login_root(params) + full_system(params) + [
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
+        disk_id_by_name(params, "pool1", "i1"),
+        disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
         # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
-        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks $(basename {d1}),$(basename {d2}) --role data --fs ext4 --confirm bulk",
+        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk",
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
