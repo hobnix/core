@@ -1,6 +1,6 @@
 # Plan: storage and NAS (milestone 0.7)
 
-Status: **Proposed 2026-11-16, waiting for the owner's answers to D1 to D20.** Design record for epic
+Status: **Accepted 2026-11-16, D1 to D20 as recommended (D2 name `.hn-trash`).** Design record for epic
 [#189](https://github.com/hobnix/server/issues/189) (Storage Management) and its open children #418, #419, #425, #426, #460, #463 and #527. It checks
 the facts of the issues against the code of branch `0.7` (2026-11-16), names where the code differs from what the issues assume, and gives an
 ordered list of steps, each sized for one pull request. Steps 4, 8, 9, 11, 12 and 15 change or delete files or disks on a server and are marked
@@ -83,9 +83,9 @@ PLAN-hardware-runbook were not reread for this page; no test was run (Windows).
   to disk and share to share, rename, mkdir, delete (with `--confirm`), an overwrite choice, a cancelled job (`hs sys jobs stop`, nothing unverified
   removed), and the guard: `sys fm pair disk:data-01 pool:bulk` must say `refused`, and a `start` with that pair must refuse. Each step compares
   checksums before and after. `fileManagerWrite` default after that: D1.
-- **Trash** (D2): delete becomes "move to trash" on the same filesystem (a rename, never a copy): `<filesystem root>/.hs-trash/<YYYY-MM-DD>/<path>`
-  plus a small `.hs-trash/<date>/.origin` list. Hidden from fm listings, Samba (`veto files`) and the backup (`--exclude`); emptied after 14 days by
-  the 03:35 job (inside the maintenance window). "Delete for good" stays, with the typed confirm. `sys fm plan restore` puts a trashed item back.
+- **Trash** (D2): delete becomes "move to trash" on the same filesystem (a rename, never a copy): `<filesystem root>/.hn-trash/<YYYY-MM-DD>/<path>`
+  plus a small `.hn-trash/<date>/.origin` list. Hidden from fm listings, Samba (`veto files`) and the backup (`--exclude`); emptied after 14 days by
+  the 03:35 job (inside the maintenance window). "Delete for good" stays, with the typed confirm. The folder name lives in ONE constant in `scripts/lib/fm.sh`, so a later rename of `hs` to `hn` is one line; trash is emptied after 14 days, so the code only has to read both names for 14 days. `sys fm plan restore` puts a trashed item back.
 - **Sizes**: `sys fm du <loc> --path P` as a background job (it walks folders, so it may wake disks: the plan says so), result cached per folder
   with its mtime; the Info panel shows owner, group and mode (read from `stat`, no change in this milestone).
 - **Pause** (D3): no SIGSTOP. "Pause" = stop the job and keep its list; "Continue" = a new job with `--conflict skip --verify size` over the same
@@ -185,7 +185,7 @@ that changes, a background job for long work.
 | 1 | S | Point the dangling `PLAN-file-manager.md` / `PLAN-mitigation.md` references at this page; fix the `autoMitigate` schema text or the code (Q7 level 1) | scripts/fm.sh, lib/fm.sh, config/schema.toml (+ generated), web-serve.py, Files.svelte, tests/fm.sh, tests/docs.sh | none | `grep PLAN-file-manager` finds nothing; tests/schema.sh green |
 | 2 | M | **#425** nested stage 5: move, delete, rename, mkdir, overwrite, cancel, guard refusal, on SnapRAID and ZFS, checksums | scripts/dev/nested_stages.py, docs/dev-environment.md | D1 | `t vm` stage passes once (seen, not claimed) |
 | 3 | S | `fileManagerWrite` default after step 2 and the hardware run (D1) | config/schema.toml (+ generated), docs/changelog | 2, 17 | default as decided; new installs only |
-| 4 | M | **#426 a** trash (rename into `.hs-trash`, restore, 14-day empty, Samba veto, backup exclude) — destructive | scripts/fm.sh, lib/fm.sh, scripts/backup.sh (exclude), Samba config, a timer in capabilities/storage/module.nix, tests/fm.sh | D2 | delete moves, restore puts back, empty after 14 days in a fake clock |
+| 4 | M | **#426 a** trash (rename into `.hn-trash`, restore, 14-day empty, Samba veto, backup exclude) — destructive | scripts/fm.sh, lib/fm.sh, scripts/backup.sh (exclude), Samba config, a timer in capabilities/storage/module.nix, tests/fm.sh | D2 | delete moves, restore puts back, empty after 14 days in a fake clock |
 | 5 | M | **#463 a** measure: `hs disk spindown log`, maintenance-window test over every timer and collector, exporter flag checked | scripts/disk-spindown.sh, tests/maintenance-window.sh, tests/disk-spindown.sh, registry.tsv | D6 | the test lists every unit; the log names a waking unit in a fake sysfs |
 | 6 | M | **#463 b** `diskSpindownPools`, `sys disk power`, asleep on the Disks page, power numbers with source | config/schema.toml (+ generated), scripts/disk-spindown.sh, monitor.sh (shape unchanged), web/src/pages/Disks.svelte, registry.tsv, sys.toml, smoke.sh | 5, D5, D7 | per-pool values applied in a test; page shows asleep from a fixture |
 | 7 | M | **#460 a** Unraid fixtures (loop disks made the Unraid way) and an Unraid nested stage (read-only: `migrate check` and the plan) | tests/lib-unraid.sh (new), tests/adopt.sh, scripts/dev/nested_stages.py | D8 | xfs, btrfs, LUKS and parity fixtures; refusals for ZFS and keyfile |
@@ -246,7 +246,7 @@ The "Recommended" answer is first in each row. "Hard to change later" says what 
 | Id | Question | Options | Recommended | Hard to change later |
 | --- | --- | --- | --- | --- |
 | D1 | `fileManagerWrite` default (#425) | stays false until the hardware run, then true for new installs only (an existing setting file is kept); true for all; false for good | False until step 17 saw it, then true for new installs | Low |
-| D2 | Trash location (#426) | `.hs-trash/<date>/` at the root of each file system (rename), 14 days; one central trash (copies across disks); no trash (snapshots and backup) | Per file system, rename only, 14 days, hidden from Samba and backup | Medium: files land there on every server |
+| D2 | Trash location (#426) | `.hn-trash/<date>/` at the root of each file system (rename), 14 days; one central trash (copies across disks); no trash (snapshots and backup) | Per file system, rename only, 14 days, hidden from Samba and backup | Medium: files land there on every server |
 | D3 | Pause of a copy | stop + continue as a new job with skip; SIGSTOP/SIGCONT | Stop + continue; a stopped process would hold the bulk lock | Low |
 | D4 | `hs fm` commands | read commands + guided copy/move/delete through the plan and typed confirm; read only; none | Read + guided changes | Low |
 | D5 | Spin-down setting shape (#463) | global `diskSpindownMinutes` + inline table `diskSpindownPools`; per disk by serial; global only | Global + per pool (a serial changes on replace) | Medium: a machine.toml key |
@@ -268,7 +268,7 @@ The "Recommended" answer is first in each row. "Hard to change later" says what 
 
 ## Check that it worked
 
-- `hs sys fm start delete` moves into `.hs-trash` and `sys fm plan restore` brings it back; a pool disk paired with its pool is refused in `pair`
+- `hs sys fm start delete` moves into `.hn-trash` and `sys fm plan restore` brings it back; a pool disk paired with its pool is refused in `pair`
   and in `start`; the nested stage passes on SnapRAID and ZFS.
 - `hs disk spindown log` over a night lists wake-ups only in the window; the Disks page says asleep; `sys monitor disks` is unchanged.
 - `hs migrate unraid --dry-run` on the fixture array lists disks, merged shares, the parity that is erased and the order; with a spare disk the
