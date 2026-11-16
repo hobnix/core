@@ -223,8 +223,8 @@ def upgrade_steps(params):
     steps = login_root(params) + [
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the old release finished starting"),
         # set up what a server in the field has
-        step("run", "hs share add %s" % share, timeout=300, what="a share is created on the old release"),
-        step("run", "hs sys shares list > /var/tmp/upgrade-shares-before && grep -q %s /var/tmp/upgrade-shares-before" % share, what="the share is listed"),
+        step("run", "hs config set timeZone Europe/Vienna", timeout=300, what="a setting is changed on the old release (a share needs the storage pool, a minimal system has none)"),
+        step("run", "grep -q Vienna /etc/nixos/machine.toml", what="the setting is in machine.toml"),
     ]
     if app:
         steps += [step("run", "hs pkg install %s --yes" % _q(app), timeout=1800, what="one app is installed on the old release")]
@@ -240,8 +240,7 @@ def upgrade_steps(params):
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the updated system is running"),
-        step("run", "hs sys shares list | grep -q %s" % share, what="the share survived the update"),
-        step("run", "diff <(hs sys shares list | grep %s) <(grep %s /var/tmp/upgrade-shares-before)" % (share, share), what="the share lists the same"),
+        step("run", "grep -q Vienna /etc/nixos/machine.toml", what="the setting survived the update"),
         step("run", "test -s /etc/nixos/machine.toml && grep -q . /var/tmp/upgrade-machine-before", what="machine.toml is still there and not empty"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-schema-before)\"" % ver, what="the state.db schema version did not go back"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-events-before)\"" % rows, what="state.db kept its events"),
