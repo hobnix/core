@@ -21,7 +21,10 @@ the loaders, `scripts/lib/api-level`) belongs here, and its pull request says wh
 - Code for a decision record (`docs/adr/`) is merged only when the record is Accepted, or when the code is behind a switch that is off by
   default (an option in `config/schema.toml`, or a feature a command refuses without). The pull request names the record and says which of
   the two applies. Code merged before its record was accepted stays behind its switch; nothing is built on it until the owner decides.
-- An issue is closed when every box under "Done when" is ticked. Code that is merged but was not run stays open, in the board column In Review.
+- Development and testing are two steps on the board. In Review: the pull request is open. Testing: the code is merged but was not run on a
+  real server; the issue stays open. Done: the boxes under "Hardware test" in the issue are ticked, a comment says what was seen, the
+  "Not tested on hardware yet." lines of that change are gone, and the issue is closed. A change with nothing to run on a server (a decision
+  record, CI, a text) goes from In Review to Done. `python3 scripts/dev/untested.py` lists the untested steps per guide.
 - Run the tests of the files you changed through the quiet runner, not raw: `scripts/dev/t quick [name...]` (`scripts/dev/t list` names
   them). Many tests need Linux (use WSL on Windows). Also `bash -n` on a script and `python3 scripts/pkg.py validate` for manifests.
 - `scripts/lib/i18n/de.tsv` is merged with git's `union` driver (`.gitattributes`), so pull requests that each append German texts do not conflict.
