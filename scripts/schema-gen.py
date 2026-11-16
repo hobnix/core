@@ -373,6 +373,46 @@ def render_overlay_keys(pkgdir):
     return '\n'.join(rows) + '\n'
 
 
+def toml_value(v):
+    """a TOML literal for a default of an option of a package (scalars and lists of scalars)"""
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, (int, float)) or isinstance(v, str):
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, list) and all(isinstance(x, (str, int, float, bool)) for x in v):
+        return '[' + ', '.join(toml_value(x) for x in v) + ']'
+    die('a default must be a string, a number, a boolean or a list of them (got %r)' % (v,))
+
+
+def render_overlay_example(pkgdir, core_example):
+    """The layout `hs config sync|check|list` work from on this machine: the core machine.toml.example, unchanged, followed by one section per
+    package with the options that live in machine.toml (store = "machine"; every one off, with its default). Empty string when there is none."""
+    mine = [o for o in overlay_options(pkgdir) if o['store'] == 'machine']
+    if not mine:
+        return ''
+    blocks, last = [], None
+    for o in mine:
+        if 'default' not in o:
+            die('%s: %s: an option in machine.toml needs a default (the module reads hs.machine.%s or <default>)' % (o['capability'], o['key'], o['key']))
+        if o['capability'] != last:
+            blocks.append(section_line('Package ' + o['capability']))
+            last = o['capability']
+        doc = ' '.join(str(o.get('description', o['key'])).split())
+        blocks.append('# %s\n# %s = %s' % (doc, o['key'], toml_value(o['default'])))
+    return core_example.rstrip('\n') + '\n\n' + '\n\n'.join(blocks) + '\n'
+
+
+def generated_options():
+    """the options of the installed capability packages, as `overlay write` left them (schema.overlay.json); [] when there is none"""
+    path = os.path.join(os.environ.get('HS_GENERATED_DIR') or os.path.join(os.environ.get('HS_STATE_DIR') or '/var/lib/hs', 'generated'),
+                        'schema.overlay.json')
+    try:
+        with open(path, encoding='utf-8') as f:
+            return json.load(f).get('items', [])
+    except (OSError, ValueError):
+        return []
+
+
 def overlay_main(rest):
     def opt(flag, default):
         return rest[rest.index(flag) + 1] if flag in rest and rest.index(flag) + 1 < len(rest) else default
@@ -381,6 +421,10 @@ def overlay_main(rest):
     mode = rest[0] if rest and not rest[0].startswith('--') else 'write'
     files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
              ('config-keys.overlay', render_overlay_keys(pkgdir))]
+    core_example = opt('--example', os.path.join(ROOT, 'machine.toml.example'))
+    merged = render_overlay_example(pkgdir, read(core_example)) if os.path.isfile(core_example) else ''
+    if merged:
+        files.append(('machine.toml.example', merged))
     if mode == 'list':
         print(''.join(l for l in files[0][1].splitlines(True) if not l.startswith('#')), end='')
         return 0
@@ -388,13 +432,18 @@ def overlay_main(rest):
         print(''.join(l for l in files[2][1].splitlines(True) if not l.startswith('#')), end='')
         return 0
     stale = [(n, w) for n, w in files if not os.path.exists(os.path.join(out, n)) or read(os.path.join(out, n)) != w]
+    gone = os.path.join(out, 'machine.toml.example')     # left over from a package that is no longer installed
+    gone = gone if not merged and os.path.isfile(gone) and os.path.isfile(core_example) else ''
     if mode == 'check':
-        if stale:
-            print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + '\n  '.join(os.path.join(out, n) for n, _ in stale))
-        return 1 if stale else 0
+        if stale or gone:
+            print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + '\n  '.join([os.path.join(out, n) for n, _ in stale] + ([gone] if gone else [])))
+        return 1 if stale or gone else 0
     if mode != 'write':
         print('overlay: write, check, list or keys', file=sys.stderr)
         return 2
+    if gone:
+        os.remove(gone)
+        print('removed ' + gone)
     if stale:
         os.makedirs(out, exist_ok=True)
     for n, w in stale:
@@ -675,12 +724,15 @@ def main(argv):
                 print('%s	%s' % (it['key'], it['capability']))
         return 0
     if cmd == 'settings':
+        for it in generated_options():
+            if it.get('store') == 'settings':
+                print('%s	%s' % (it['key'], it.get('legacy', '')))
         for it in options(items):
             if it.get('store') == 'settings':
                 print('%s	%s' % (it['key'], it.get('legacy', '')))
         return 0
     if cmd == 'rule':
-        for it in options(items):
+        for it in options(items) + generated_options():
             if it['key'] == (argv[2] if len(argv) > 2 else ''):
                 print('	'.join([it['type'], ' '.join(str(c) for c in it.get('choices', [])), str(it.get('min', '')),
                                  it.get('pattern', ''), it.get('hint', '')]))
