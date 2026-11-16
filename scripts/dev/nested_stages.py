@@ -58,6 +58,9 @@ def login_root(params):
         # bash with a prompt of its own shape is the same on every system
         step("send", "PS1='[root@nested-test:\\w]# ' exec bash --norc --noprofile"),
         step("wait", r"\[root@[^\]]*\]# ", timeout=60, what="a root shell"),
+        # the serial console is 80 columns wide: a long command line wraps, and the redraw of the line editor puts a space or a prompt into the
+        # middle of the end marker (seen as "__ HSN9__" in run 20)
+        step("run", "stty cols 500", what="the console is wide enough for a long command line"),
     ]
 
 
