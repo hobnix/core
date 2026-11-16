@@ -291,6 +291,9 @@ def check(m, folder=None, core=False):
     # strictness (D9): the five core recipes and a package that carries store fields must be complete; for the rest it is a warning
     store_carrier = any(k in m for k in STORE_KEYS)
     miss = []
+    rq9 = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
+    # a recipe written before level 9 cannot be required to carry what level 9 introduced: it gets a warning until it raises requires_core
+    strict = core and bool(rq9) and int(rq9.group(1)) >= API_LEVEL
     if kind == "recipe":
         if core:
             miss += [f"[app.{k}]" for k in CONTRACT_REQUIRED if k not in app]
@@ -299,7 +302,7 @@ def check(m, folder=None, core=False):
         if core or store_carrier:
             miss += [k for k in STORE_REQUIRED if k not in m]
         if miss:
-            (errors if core else warnings).append("missing: " + ", ".join(miss) + (" (required for a core recipe)" if core else " (a package with store fields should carry all of them)"))
+            (errors if strict else warnings).append("missing: " + ", ".join(miss) + (" (required for a core recipe at requires_core >=%d)" % API_LEVEL if core else " (a package with store fields should carry all of them)"))
         elif not app and not store_carrier:
             warnings.append("has no [app] contract and no store fields (optional; docs/Package-API.md)")
     return errors, warnings

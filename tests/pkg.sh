@@ -199,7 +199,10 @@ printf '[package.fixold]\npath = "recipes/fixold"\nkind = "recipe"\nversion = "1
 check "an old package passes repo-check" $PKG repo-check "$RC"
 check_out "and gets a warning on stderr" 'warning: fixold: has no \[app\] contract' bash -c "$PKG repo-check $RC 2>&1"
 printf 'core = true\n' >> "$RC/index.toml"
-check_out "a core recipe without the contract is an error" 'missing: \[app.health\]' bash -c "$PKG repo-check $RC; true"
+check_out "a core recipe written before level 9 only gets a warning" 'warning: fixold: missing: \[app.health\]' bash -c "$PKG repo-check $RC 2>&1"
+check "and repo-check still passes" $PKG repo-check "$RC"
+sed -i 's/>=1/>=9/' "$RC/recipes/fixold/package.toml" "$RC/index.toml"
+check_out "a core recipe at level 9 without the contract is an error" 'missing: \[app.health\]' bash -c "$PKG repo-check $RC; true"
 
 echo "-- check-draft sees the fields"
 check_out "a draft with a bad category is an error" "error${tab}category${tab}category is not one of" bash -c "sed 's/tools/stuff/' $AF/packages/fixstore/package.toml | $PKG check-draft; true"

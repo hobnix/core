@@ -67,9 +67,9 @@ An unknown key in any `[app]` table is an error. A route that is public-ok and m
 
 | Package | Without the contract / store fields |
 | --- | --- |
-| a recipe flagged `core = true` in the index | error: `[app.health]`, `[app.backup]`, `[app.routes]`, `[app.update]`, `[app.remove]` and the store fields `description`, `icon`, `category`, `app_version` are required |
+| a recipe flagged `core = true` in the index with `requires_core = ">=9"` | error: `[app.health]`, `[app.backup]`, `[app.routes]`, `[app.update]`, `[app.remove]` and the store fields `description`, `icon`, `category`, `app_version` are required |
 | a recipe that carries any store field | warning until `description`, `icon`, `category` and `app_version` are all there |
-| any other recipe | validates; `pkg.py repo-check` prints a warning on stderr |
+| a core recipe that still says a lower level, any other recipe | validates; `pkg.py repo-check` prints a warning on stderr |
 
 `pkg.py validate --warn` prints the same warnings for a tree. `pkg.py check-draft` (the package builder) reports errors only.
 
