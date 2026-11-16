@@ -183,7 +183,7 @@ def pool(params):
         step("run", "mountpoint -q /bulk", what="/bulk is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
         step("run", "hs sys fm locations | grep -q 'disk:data-01' && hs sys fm locations | grep -q 'disk:data-02'", what="the file manager sees both data disks"),
-        step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
+        step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab /var/lib/hs/disks/data-02/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
         step("run", "hs sys fm ls disk:data-01 --path testlab | grep -q a.txt", what="the file manager lists it"),
         # the plan and the answer of start stay in the console log (a refusal says why)
         step("run", "printf 'a.txt\\0' | HS_CALLER=test hs sys fm plan copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab; true",
