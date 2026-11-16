@@ -3,7 +3,7 @@
 # help.de: Dateimanager-Backend (zwei Fenster): Orte, Listen, und Kopieren/Verschieben/Löschen/Umbenennen/Neuer Ordner als Plan + Hintergrundjob
 # args: locations | pair <a> <b> | ls <loc> [--path P] [--cursor C] [--limit N] | plan|start <op> --from <loc> --path P [--to <loc> --to-path Q] [--conflict ...] [--verify ...] [--parity-after] [--newname N] [--conflicts] [--confirm T] | progress <unit>
 #
-# docs/PLAN-file-manager.md. The interface reads and changes only through `hs sys fm ...`; every rule below is enforced HERE, never only in the UI.
+# docs/PLAN-storage-nas.md. The interface reads and changes only through `hs sys fm ...`; every rule below is enforced HERE, never only in the UI.
 #
 #   locations             status ok, then loc<TAB>id<TAB>kind<TAB>label<TAB>fs<TAB>size_bytes<TAB>free_bytes<TAB>writable<TAB>reason<TAB>pool<TAB>disk
 #                         ids: disk:data-NN pool:<name> (every data pool; an apps pool when mounted) cache:bulk share:<name> temp:<name>   (storage locked: status ok + locked<TAB>yes and no loc rows)
@@ -18,7 +18,7 @@
 #   progress <unit>       the job's state: files_done files_total bytes_done bytes_total speed eta current phase result(running|done|cancelled|failed) skipped failed
 #                         (+ skip/fail rows). Cancel = `hs sys jobs stop <unit>`: copied files stay, nothing unverified is removed.
 #
-# Tested with folders standing in for the locations (HS_FM_TEST=1, tests/fm.sh); NOT yet on real mergerfs / ZFS (docs/PLAN-file-manager.md section 7).
+# Tested with folders standing in for the locations (HS_FM_TEST=1, tests/fm.sh); NOT yet on real mergerfs / ZFS (docs/PLAN-storage-nas.md).
 # Test knobs: HS_FM_TEST, HS_FM_DIR, HS_FM_SYNC=1 (start runs the job in the foreground), HS_FM_NO_RENAME=1 (folders on one filesystem stand in for disks: copy+verify, no rename), HS_FM_MARGIN (bytes), HS_FM_PARITY_CMD, HS_FM_POOL_ROOT, HS_FM_CACHE_ROOT,
 # HS_FM_FAST_ROOT, HS_FM_TEMP_ROOT, HS_FM_ZFS_ROOT, HS_BULK_TYPE_FILE, HS_MACHINE_FILE, HS_POOLS_ROOT, HS_STATE_DIR, HS_DISKS_ROOT, HS_DETACHED_ROOT, HS_LOCK, HS_LOCK_ADMIN, HS_CAPABILITIES_FILE.
 set -euo pipefail
@@ -32,7 +32,7 @@ adm="$(admin_user)"
 
 # The safety switch (runtime setting fileManagerWrite, default off): this code has never run on real disks. Browsing, pairs and plans work either way.
 write_on() { [ "$(setting_get fileManagerWrite 2>/dev/null || true)" = true ]; }
-WRITE_OFF_REASON="The file manager is read only until you allow it: hs config set fileManagerWrite true (web: Settings, 'Allow the file manager to copy, move and delete files'). Test it in a VM first (docs/PLAN-file-manager.md)."
+WRITE_OFF_REASON="The file manager is read only until you allow it: hs config set fileManagerWrite true (web: Settings, 'Allow the file manager to copy, move and delete files'). Test it in a VM first (docs/PLAN-storage-nas.md)."
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 gate() { capability_on storage || refuse "The file manager needs the capability 'storage' (role homeserver)."; }
 grab() { local p=$1 v; for v in ID KIND LABEL ROOT FS SIZE FREE ADD MOD REASON POOL DISK USABLE ERR AK REL TOP SNAP LOCK; do eval "$p$v=\"\${L$v}\""; done; }

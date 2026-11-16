@@ -112,6 +112,28 @@ if grep -q '^zfs:tank:DEGRADED' "$WORK/health-since"; then fail "the cleared key
 check_out "the acknowledge command still lists the problem" "^zfs:tank:FAULTED" $HA ack
 rm -f "$WORK/state/poolstate"
 
+echo "-- a pool above 95 % pauses, and the pause lifts itself"
+mkzp() { cat > "$WORK/bin/zpool" <<FAKE
+#!/usr/bin/env bash
+case "\$*" in
+  "list -H -o name") echo tank ;;
+  "status -x tank") echo "pool 'tank' is healthy" ;;
+  "list -Hp -o name,alloc,size") printf 'tank	100	1000
+' ;;
+  "list -H -o name,cap") printf 'tank	$1%%
+' ;;
+  "status tank") echo "  scan: scrub repaired 0B in 00:01:00 with 0 errors on Sun Oct  4 00:24:01 2099" ;;
+esac
+FAKE
+}
+rm -f "$WORK/paused" "$WORK/ack"; export HS_AUTO_MITIGATE=true
+mkzp 92; $HC >/dev/null 2>&1 || true
+[ ! -e "$WORK/paused" ] && pass "92 % full: a warning, no pause" || fail "92 % full: a warning, no pause"
+mkzp 97; $HC >/dev/null 2>&1 || true
+check_out "97 % full: the pool pauses" "^keys=space:pool:tank" cat "$WORK/paused"
+mkzp 10; $HC >/dev/null 2>&1 || true
+[ ! -e "$WORK/paused" ] && pass "space freed: the pause lifts" || fail "space freed: the pause lifts"
+
 echo "-- the daily SMART check: failing pauses, watch does not"
 if command -v python3 >/dev/null; then
   if command -v cygpath >/dev/null 2>&1; then export HS_TEST_BASH=$(cygpath -m "$BASH"); export HS_STATE_DIR=$(cygpath -m "$WORK/state"); fi

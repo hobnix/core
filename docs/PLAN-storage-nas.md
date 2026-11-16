@@ -58,8 +58,8 @@ Facts that differ from what the issues assume:
 - **#463 "a spin-down time per pool or disk"**: one global time exists; the Disks page already receives a `power` field, but no "asleep" text was
   found in web/src. Nothing was measured.
 - **#425 "the checks were not run"**: a nested-VM stage exists for copy only (nested_stages.py `pool()`); move, delete, rename and the guard are new.
-- **#426 "the open design questions at the end of the plan"**: `docs/PLAN-file-manager.md` is referenced by fm.sh, lib/fm.sh, schema.toml,
-  web-serve.py, Files.svelte and tests, but **the file is not in the tree** (no git history either). The same holds for docs/PLAN-mitigation.md and
+- **#426 "the open design questions at the end of the plan"**: the file-manager plan is referenced by fm.sh, lib/fm.sh, schema.toml,
+  web-serve.py, Files.svelte and tests, but **the file is not in the tree** (no git history either). The same holds for the mitigation plan and
   docs/PLAN-hidden-pool-disks.md named in the notes. Its questions are answered here (D1 to D4) and the references are pointed at this page (step 1).
 - **#419 "notify and pause merged"**: true for failing disks and degraded pools; a full pool does not pause anything, contrary to the schema text.
 - **#418 "a copy to another Hobnix server is built"**: what is built is a generic restic address (`sftp:` to any host). No Hobnix-to-Hobnix pairing
@@ -182,7 +182,7 @@ that changes, a background job for long work.
 
 | # | Size | Step | Files | Needs | Done when |
 | --- | --- | --- | --- | --- | --- |
-| 1 | S | Point the dangling `PLAN-file-manager.md` / `PLAN-mitigation.md` references at this page; fix the `autoMitigate` schema text or the code (Q7 level 1) | scripts/fm.sh, lib/fm.sh, config/schema.toml (+ generated), web-serve.py, Files.svelte, tests/fm.sh, tests/docs.sh | none | `grep PLAN-file-manager` finds nothing; tests/schema.sh green |
+| 1 | S | Point the dangling file-manager and mitigation plan references at this page; fix the `autoMitigate` schema text or the code (Q7 level 1) | scripts/fm.sh, lib/fm.sh, config/schema.toml (+ generated), web-serve.py, Files.svelte, tests/fm.sh, tests/docs.sh | none | grepping for the old plan file names finds nothing; tests/schema.sh green |
 | 2 | M | **#425** nested stage 5: move, delete, rename, mkdir, overwrite, cancel, guard refusal, on SnapRAID and ZFS, checksums | scripts/dev/nested_stages.py, docs/dev-environment.md | D1 | `t vm` stage passes once (seen, not claimed) |
 | 3 | S | `fileManagerWrite` default after step 2 and the hardware run (D1) | config/schema.toml (+ generated), docs/changelog | 2, 17 | default as decided; new installs only |
 | 4 | M | **#426 a** trash (rename into `.hn-trash`, restore, 14-day empty, Samba veto, backup exclude) — destructive | scripts/fm.sh, lib/fm.sh, scripts/backup.sh (exclude), Samba config, a timer in capabilities/storage/module.nix, tests/fm.sh | D2 | delete moves, restore puts back, empty after 14 days in a fake clock |

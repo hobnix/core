@@ -172,13 +172,13 @@ Per-feature history and implementation details moved out of CLAUDE.md so that ev
   has is never overwritten (it stays and is counted); a closed disk is never a target; the job holds the bulk admin lock. This is the replacement for what people try with mc: never
   copy between a branch path and the pool. Tested in an Incus VM with mergerfs (pool md5 list identical before and after).
 
-- **Detach and attach a data disk (2026-10-19, phase B of docs/PLAN-hidden-pool-disks.md).** `hs disk <member> detach|attach` (scripts/disk-detach.sh; web: Pool page, plug button; `hs sys disk plan|start detach|attach <member>`, detach needs the typed
+- **Detach and attach a data disk (2026-10-19, phase B of docs/PLAN-storage-nas.md).** `hs disk <member> detach|attach` (scripts/disk-detach.sh; web: Pool page, plug button; `hs sys disk plan|start detach|attach <member>`, detach needs the typed
   name). Detach takes the branch out of /bulk and /mnt/bulk/pool (`user.mergerfs.branches -dir`), writes the time to `/var/lib/hs/detached/<member>` and, when `detached_dir` differs from `disk_dir` (phase C), unmounts the disk and mounts it at
   `detached_dir` (refused while something has files open: the disk goes back). bulk-mount.sh mounts a detached disk at `detached_dir` and keeps it out of the merge (`mdata`) but in the SnapRAID config; bulk-sync.sh skips while any disk is
   detached; health-check.sh complains after 2 hours (`HS_DETACH_MAX`). A detached disk is not in the pool, so copying from it into /bulk is an ordinary copy: tested in an Incus VM with the exact action that destroyed files while the disk was a
   branch (the source stayed intact, the copy was complete). Attach removes the mark and runs bulk-mount.sh. Test knob HS_DETACHED_ROOT stands for the phase-C mount point.
 
-- **The pool disks moved to /var/lib/hs/disks (2026-10-19, phase C of docs/PLAN-hidden-pool-disks.md).** `disks_root` is `/var/lib/hs/disks` (README inside), a detached disk is mounted under `/mnt/bulk/<member>`; `/mnt/bulk/pool`
+- **The pool disks moved to /var/lib/hs/disks (2026-10-19, phase C of docs/PLAN-storage-nas.md).** `disks_root` is `/var/lib/hs/disks` (README inside), a detached disk is mounted under `/mnt/bulk/<member>`; `/mnt/bulk/pool`
   and `/mnt/bulk/cache` stay. bulk-mount.sh mounts every labelled disk at its wanted place (`want_dir`), swaps the branches of a RUNNING merge (`+>` the new path, `-` the old one, in /bulk and /mnt/bulk/pool; the cached-share
   merges name `/mnt/bulk/pool/<share>` and need nothing) and lets go of the old mount points with a lazy umount once no merge lists them (an open file keeps its mount until it is closed). bulk-mount.service is never restarted by a
   switch, so rebuild.sh runs bulk-mount.sh itself right after the switch when a disk is still mounted under /mnt/bulk (`move_bulk_disks`), and the reverse (`HS_DISKS_ROOT=/mnt/bulk`) after a rollback to the previous generation. At boot nothing is
@@ -651,7 +651,7 @@ Per-feature history and implementation details moved out of CLAUDE.md so that ev
   of problems changes (state in /var/lib/hs/health.state, reminder once a day). Scheduled
   jobs have `onFailure` -> `hs-notify-failure@<unit>.service`; give new ones the same.
 
-- Capacity alerts, mitigation, routing (2026-10-27, docs/PLAN-mitigation.md, not yet run on the server): `scripts/lib/capacity.sh` (called by health-check.sh)
+- Capacity alerts, mitigation, routing (2026-10-27, docs/PLAN-storage-nas.md, not yet run on the server): `scripts/lib/capacity.sh` (called by health-check.sh)
   adds `forecast:<volume>` (days until full from the `usage` readings in state.db, written via `state.sh usage-record`, read via `state.sh usage`; maths in
   scripts/forecast.py), `ssd:<dev>:wear|wear-high` (smartctl), `space:cache-backlog`. Setting `autoMitigate` (default false) = level 1: a failing disk or a
   degraded pool/bulk member makes the health check write /run/hs-bulk.paused; `bulk_lock_job` and cache-mover.sh skip while it exists (a pool change never);

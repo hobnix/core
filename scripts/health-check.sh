@@ -158,6 +158,7 @@ if [ -f "$selftest_state" ]; then
 fi
 
 # ── Space ──
+declare -A over_full=()   # space keys above 95 %: triggers of the automatic mitigation (level 1)
 used_pct() { df --output=pcent "$1" 2>/dev/null | tail -n1 | tr -dc '0-9' || true; }
 mounts=(/)
 # on the ZFS layout /bulk is covered by the pool below
@@ -166,6 +167,7 @@ for m in "${mounts[@]}"; do
   pct=$(used_pct "$m")
   if [ -n "$pct" ] && [ "$pct" -ge "$max_full" ]; then
     problem "space:$m" "$m is $pct % full"
+    [ "$pct" -le 95 ] || over_full["space:$m"]=1
   fi
 done
 # The upload cache may fill up during a big upload (new files then go straight
@@ -183,6 +185,7 @@ if have zpool; then
     cap=${cap%\%}
     if [[ "$cap" =~ ^[0-9]+$ ]] && [ "$cap" -ge "$max_full" ]; then
       problem "space:pool:$p" "ZFS pool $p is $cap % full"
+      [ "$cap" -le 95 ] || over_full["space:pool:$p"]=1
     fi
   done < <(zpool list -H -o name,cap 2>/dev/null || true)
 fi
@@ -383,7 +386,8 @@ fi
 
 # ── Automatic mitigation, level 1: notify and pause. Off unless the setting autoMitigate is true. ──
 # A failing disk (SMART red or rated BAD) or a degraded pool / missing bulk disk pauses the parity sync, the scrub and the
-# cache mover (the pause marker lib/bulklock.sh checks). Nothing is deleted, formatted or moved. The pause lifts itself when
+# cache mover (the pause marker lib/bulklock.sh checks). So does a pool that is full in less than the urgent forecast
+# (forecast:<volume>:urgent) or above 95 %. Nothing is deleted, formatted or moved. The pause lifts itself when
 # the cause is gone; `hs health resume` lifts it by hand and acknowledges its causes.
 mit_on=${HS_AUTO_MITIGATE-$(setting_get autoMitigate 2>/dev/null || true)}
 triggers=()
@@ -394,6 +398,8 @@ for k in "${keys[@]}"; do
     zfs:*:scrub-*) ;;
     zfs:*:*) triggers+=("$k") ;;
     bulk:*:*) triggers+=("$k") ;;
+    forecast:*:urgent) triggers+=("$k") ;;     # a pool that is full in less than the urgent forecast
+    space:*) [ -z "${over_full[$k]:-}" ] || triggers+=("$k") ;;   # a pool or the bulk disk above 95 %
   esac
 done
 if ! $dry; then

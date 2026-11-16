@@ -1,5 +1,5 @@
 <script>
-  // Storage > Files: a two-pane file manager for disks, pools, shares and temporary disks (docs/PLAN-file-manager.md, web/design/HANDOFF.md "Files").
+  // Storage > Files: a two-pane file manager for disks, pools, shares and temporary disks (docs/PLAN-storage-nas.md, web/design/HANDOFF.md "Files").
   // Nothing runs from a click or a key: copy, move, delete, rename and new folder open a plan first (files/FmPlan.svelte). The same-files rule (a pool
   // disk and the pool of the same array never meet) is enforced by the server; the picker and the plan dialog only show its answer.
   // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:<name>[&rpath=/y][&select=<name>].

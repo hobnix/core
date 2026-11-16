@@ -1006,7 +1006,7 @@ READS = {
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
     ("disk", "marks"): {"kind": "tsv", "ttl": 10, "topic": "disk-marks"},
-    # the file manager (fm.sh, docs/PLAN-file-manager.md): the places, the same-files rule, one page of a folder (a cursor, never the whole tree), a job's state
+    # the file manager (fm.sh, docs/PLAN-storage-nas.md): the places, the same-files rule, one page of a folder (a cursor, never the whole tree), a job's state
     ("fm", "locations"): {"kind": "tsv", "ttl": 5, "topic": "fm-locations"},
     ("fm", "pair"): {"kind": "tsv", "ttl": 5, "args": [FM_LOC, FM_LOC]},
     ("fm", "ls"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path"), "cursor": (r"^[0-9]{1,9}$", "--cursor"),

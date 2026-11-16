@@ -767,7 +767,7 @@ secret = false
 store = "settings"
 default = 'false'
 doc = '''
-# Allow the file manager to copy, move and delete files. Test it in a VM first (docs/PLAN-file-manager.md).
+# Allow the file manager to copy, move and delete files. Test it in a VM first (docs/PLAN-storage-nas.md).
 # false (default)  browsing and plans only: `hs sys fm start` refuses copy, move, delete, rename and new folder
 # true             the file manager changes files
 # This code has never run on real disks. Switch it on only after the VM test of the plan passed.'''
@@ -991,7 +991,7 @@ store = "settings"
 default = 'false'
 doc = '''
 # Level 1 of the automatic reaction: when a disk fails its SMART check, a pool is degraded or
-# a pool is nearly full, the health check pauses the parity sync, the scrub and the cache mover and says so in its
+# a pool is above 95 % full or will be full within a week, the health check pauses the parity sync, the scrub and the cache mover and says so in its
 # message. It never deletes, formats or moves anything. Off by default; lift a pause with: hs health resume.'''
 value = '''
 autoMitigate = true'''
