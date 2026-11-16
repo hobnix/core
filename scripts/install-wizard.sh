@@ -18,7 +18,7 @@ here=$(dirname "$0")
 # hostId, no network card or Samba networks to ask; on a machine without UEFI it lays out a BIOS boot partition and puts GRUB on the disk: machine.toml bootDevice)
 # or minimal (only the base). The role is written to machine.toml; a preset of the same name is the default.
 #
-# Everything it asks can be given up front (the options above, plus --nic, --smb-allow, --key <line>, --target <dir>, --repo <dir>).
+# Everything it asks can be given up front (the options above, plus --nic, --smb-allow, --bulk-type zfs|snapraid (homeserver role; the layout of /bulk, default zfs), --key <line>, --target <dir>, --repo <dir>).
 # An unattended run needs --disk and --confirm-disk <the same name>: without a terminal nothing is erased on a guess.
 # --restore-from <dir> is set by hs-restore (scripts/install-restore.sh): <dir> holds the settings read from a backup (machine.toml,
 # /var/lib/hs, SSH host keys). They are laid over the fresh configuration before nixos-install. UNVERIFIED: not tested on hardware.
@@ -29,7 +29,7 @@ here=$(dirname "$0")
 # Test knobs: HS_INSTALLER_VERSION_FILE, HS_INSTALL_ORIGIN (the url to fetch from), HS_INSTALL_FETCH_TIMEOUT, HS_INSTALL_SKIP_DISK=1 (no partitioning, no mounting, no nixos-install: only the files), HS_INSTALL_PASSWORD (the adminuser
 # password without asking), HS_PRESETS_DIR, HS_PYTHON.
 
-disk=""; hostname_=""; keyfile=""; key=""; tz=""; preset=""; confirm_disk=""; nic=""; smb=""; dry=false; role=""; bios=false
+disk=""; hostname_=""; keyfile=""; key=""; tz=""; preset=""; confirm_disk=""; nic=""; smb=""; dry=false; role=""; bios=false; bulk_type=""
 target=${HS_INSTALL_TARGET:-/mnt}
 repo=""; restore_from=""
 # no arguments in a terminal: the entry menu, "New install" next to "Restore from backup" (UNVERIFIED: not tested on hardware)
@@ -41,6 +41,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --role) role=${2:?}; shift 2 ;;
     --bios) bios=true; shift ;;
+    --bulk-type) bulk_type=${2:?}; shift 2 ;;
     --disk) disk=${2:?}; shift 2 ;;
     --hostname) hostname_=${2:?}; shift 2 ;;
     --key-file) keyfile=${2:?}; shift 2 ;;
@@ -54,7 +55,7 @@ while [ $# -gt 0 ]; do
     --repo) repo=${2:?}; shift 2 ;;
     --restore-from) restore_from=${2:?}; shift 2 ;;
     --dry-run) dry=true; shift ;;
-    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--dry-run]"; exit 1 ;;
+    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bulk-type zfs|snapraid] [--dry-run]"; exit 1 ;;
   esac
 done
 skip=${HS_INSTALL_SKIP_DISK:-}
@@ -118,6 +119,7 @@ if [ -z "$hostname_" ]; then
   defname=homeserver; [ "$role" = homeserver ] || defname=$role
   if $tty; then hostname_=$(ask "Name of the server (also in the Windows network, at most 15 characters)" "$defname"); else hostname_=$defname; fi
 fi
+case "$bulk_type" in ""|zfs|snapraid) ;; *) fail "$(t "'%s' is not a bulk type (zfs or snapraid)." "$bulk_type")" ;; esac
 valid_host "$hostname_" || fail "$(t "'%s' is not a usable server name (letters, digits, dashes; at most 15 characters)." "$hostname_")"
 
 if [ -z "$key" ] && [ -n "$keyfile" ]; then key=$(sed -n '/^ssh-/{p;q;}' "$keyfile" 2>/dev/null || true); fi
@@ -245,6 +247,7 @@ hostid=$(head -c4 /dev/urandom | od -A none -t x1 | tr -d ' \n')
 mset() { machine_set "$1" "$2" installer >/dev/null || fail "$(t "'%s' could not be written to machine.toml." "$1")"; }
 [ "$role" != homeserver ] || mset hostId "\"$hostid\""   # ZFS needs it; the other roles have no pools
 [ "$role" = homeserver ] || mset role "\"$role\""
+[ -z "$bulk_type" ] || [ "$role" != homeserver ] || mset bulkType "\"$bulk_type\""   # chosen here: a rebuild refuses to change it later
 ! $bios || mset bootDevice "\"/dev/$disk\""
 mset hostName "\"$hostname_\""
 mset sshKeys "[ \"$key\" ]"
