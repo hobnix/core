@@ -143,4 +143,32 @@ printf 'PASSWORD=Relay-9z\n' > "$T/script2"
 HS_ASK_SCRIPT=$T/script2 bash -c "$Q; answer() { :; }; ask_q_exec web1 PASSWORD secret Password -- sh -c 'cat > /etc/pw'"
 check "the command in the container got the answer on stdin" "Relay-9z" "$(cat "$T/out/relayed")"
 check "the answer is not in the incus command line" "0" "$(grep -c 'Relay-9z' "$T/log")"
+echo "-- an answer given up front (the wizard form) is not asked again; the dialog asks only what the form did not cover (#613)"
+mkdir -p "$T/recipes/vpn"
+printf '# recipe: Vpn
+# kind: generic
+# needs: -
+# input: form
+# ask: VPN_TYPE|Protocol|choice:wireguard,openvpn|wireguard||
+# ask: WG_ADDR|Address|text||[0-9a-fA-F:./,]+|VPN_TYPE=wireguard
+# ask: COUNTRIES|Countries|text|||
+' > "$T/recipes/vpn/run.sh"
+cat > "$T/recipe-vpn.sh" <<RCP
+#!/usr/bin/env bash
+. "$here/scripts/lib/ui.sh"; . "$here/scripts/lib/ask.sh"
+interactive() { false; }
+answer() { local e="RECIPE_\$1"; printf '%s' "\${!e:-}"; }
+addr=\$(ask_q WG_ADDR text "Address" "" '[0-9a-fA-F:./,]+') || exit \$?
+cty=\$(ask_q COUNTRIES text "Countries" "") || exit \$?
+printf '%s' "\$addr" > "\$HS_OUT/addr"; printf '%s' "\$cty" > "\$HS_OUT/cty"
+RCP
+export HS_RECIPE=$T/recipe-vpn.sh
+out=$(bash "$here/scripts/recipe-change.sh" start vpn run --interactive --by alice --set WG_ADDR=10.2.0.2/32 </dev/null)
+id=$(awk -F'	' '$1=="job"{print $2}' <<<"$out")
+wait_key COUNTRIES; check "only the question the form did not cover waits" "COUNTRIES" "$(J get "$id" | field waiting.key)"
+seq=$(J get "$id" | field waiting.seq)
+r=$(answer "de" --seq "$seq" --key COUNTRIES --role admin)
+wait_state "$id" ok; check "the run ends ok" "ok" "$(J get "$id" | field state)"
+check "the address of the form reached the step" "10.2.0.2/32 de" "$(cat "$T/out/addr") $(cat "$T/out/cty")"
+export HS_RECIPE=$T/recipe.sh
 exit $fail
