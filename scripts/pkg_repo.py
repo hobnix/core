@@ -21,6 +21,7 @@ State, all under <state>/packages (root-owned on the server):
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
 import io
+import json
 import os
 import re
 import shutil
@@ -315,6 +316,7 @@ class Repos:
                 if x.startswith(name + "@"):
                     self.rm(os.path.join(prev, x))
             os.rename(cur, os.path.join(prev, "%s@%s" % (name, old.get("commit", "unknown")[:12])))
+            self.keep_previous(name, old, vendored)
         os.rename(tmp, cur)
         if m.get("kind") == "capability":
             if vendored:
@@ -333,6 +335,97 @@ class Repos:
             print("%s: its events were not installed: %s" % (name, e), file=sys.stderr)
         self.last_permissions = self.pkg.pkg_perms.of(m)
         return entry["version"], r_name, tag
+
+    def keep_previous(self, name, old, vendored):
+        """An update replaced the copy: keep what a rollback needs besides previous/<name>@<commit>: the installed.toml entry, and for a
+        vendored package the old lock as vendor/capabilities.lock.previous (docs/PLAN-capabilities-repo.md, Q6)."""
+        prev = os.path.join(self.state, "previous")
+        with open(os.path.join(prev, name + ".entry.json"), "w", encoding="utf-8") as f:
+            json.dump(old, f)
+        lock = self.pkg_vendor.lock_file(self.nixos_dir())
+        if vendored and os.path.isfile(lock):
+            shutil.copyfile(lock, lock + ".previous")
+
+    def previous_copy(self, name):
+        """-> (folder, entry dict) of the kept previous copy, or raises Refused"""
+        prev = os.path.join(self.state, "previous")
+        found = sorted(x for x in os.listdir(prev) if x.startswith(name + "@")) if os.path.isdir(prev) else []
+        if not found:
+            raise Refused("%s has no previous copy to put back" % name)
+        try:
+            with open(os.path.join(prev, name + ".entry.json"), encoding="utf-8") as f:
+                entry = json.load(f)
+        except (OSError, ValueError):
+            entry = {}
+        return os.path.join(prev, found[0]), entry
+
+    def rollback_plan(self, name):
+        """-> (from version, to version): what `rollback` would do"""
+        folder, entry = self.previous_copy(name)
+        have = self.pkg.installed().get(name, {})
+        return have.get("version", "-"), entry.get("version") or self.manifest_version(folder)
+
+    @staticmethod
+    def manifest_version(folder):
+        try:
+            with open(os.path.join(folder, "package.toml"), "rb") as f:
+                return str(tomllib.load(f).get("version", "-"))
+        except (OSError, tomllib.TOMLDecodeError):
+            return "-"
+
+    def rollback(self, name):
+        """Put the previous copy and the old lock back (the update broke the rebuild). The kept copy is consumed."""
+        folder, entry = self.previous_copy(name)
+        if not os.path.isdir(os.path.join(self.state, "current", name)):
+            raise Refused("%s was not installed from a repository" % name)
+        with open(os.path.join(folder, "package.toml"), "rb") as f:
+            m = tomllib.load(f)
+        cur = os.path.join(self.state, "current", name)
+        self.rm(cur)
+        os.rename(folder, cur)
+        lock_path = self.pkg_vendor.lock_file(self.nixos_dir())
+        if m.get("kind") == "capability" and m.get("module"):
+            oldlock = {}
+            try:
+                with open(lock_path + ".previous", "rb") as f:
+                    oldlock = tomllib.load(f).get(name, {})
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+            self.pkg_vendor.vendor(cur, self.nixos_dir(), {k: oldlock.get(k) or entry.get(k) for k in ("repo", "tag", "commit", "tree")})
+            try:
+                os.remove(lock_path + ".previous")
+            except OSError:
+                pass
+        data = self.pkg.installed()
+        back = dict(entry) if entry.get("version") else {"version": m.get("version"), "repo": data.get(name, {}).get("repo", "")}
+        if "applied" in data.get(name, {}) and "applied" not in back:
+            back["applied"] = data[name]["applied"]
+        data[name] = back
+        self.pkg.save_installed(data)
+        try:
+            os.remove(os.path.join(self.state, "previous", name + ".entry.json"))
+        except OSError:
+            pass
+        return back.get("version")
+
+    def rollback_candidates(self):
+        """[(name, version now, version before)] for every vendored package whose entry in the lock differs from vendor/capabilities.lock.previous."""
+        lock = self.pkg_vendor.lock_file(self.nixos_dir())
+        try:
+            with open(lock + ".previous", "rb") as f:
+                before = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            return []
+        now = self.pkg_vendor.read_lock(self.nixos_dir())
+        out = []
+        for n in sorted(now):
+            if n in before and now[n].get("commit") != before[n].get("commit"):
+                try:
+                    self.previous_copy(n)
+                except Refused:
+                    continue
+                out.append((n, str(now[n].get("version", "-")), str(before[n].get("version", "-"))))
+        return out
 
     def installed_permissions(self, name):
         """The permissions of the installed copy (None = not declared, or not installed)."""
@@ -528,6 +621,17 @@ def run(pkg, cmd, rest):
                     raise Refused("not installed")
             v, r_name, tag = R.install(rest[0], R.recorded(rest[0])["repo"])
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
+        elif cmd == "rollback":
+            # rollback <name> --plan: "name TAB from TAB to" | rollback <name>: put the previous copy and lock back (the caller asked first)
+            if "--plan" in rest:
+                a, b = R.rollback_plan(rest[0])
+                print("\t".join([rest[0], a, b]))
+            else:
+                print("%s %s" % (rest[0], R.rollback(rest[0])))
+        elif cmd == "rollback-candidates":
+            # the vendored packages whose lock line differs from the kept old lock: name TAB now TAB before
+            for n, a, b in R.rollback_candidates():
+                print("\t".join([n, a, b]))
         elif cmd == "remove":
             R.remove_package(rest[0])
         else:
