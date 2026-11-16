@@ -148,6 +148,12 @@
      "class": "read",
      "rest": false
     },
+    "x-hs-web": {
+     "path": "/api/sys/apps/health",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
     "description": "One row per app whose package.toml declares [app.health]: the check (container, tcp or http) run against the instance. No row for an app without a declared check.",
     "responses": {
      "0": {
