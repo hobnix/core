@@ -60,6 +60,16 @@ check_eq "a second install gives the same lock, byte for byte" "$(sha256sum < "$
 check_eq "and the same tree" "$(sha256sum < "$WORK/tree1")" "$( (cd "$V/capabilities" && find . -type f | sort | xargs sha256sum) | sha256sum)"
 check "no .new left behind" bash -c "! ls '$V/capabilities.lock.new' '$V/capabilities'/.new-* 2>/dev/null"
 
+echo "-- the check before a rebuild"
+check "an enabled vendored package and a core capability pass" $PKG vendor-verify fixmod corecap
+check_out "a name that is nowhere is named, with the way out" "^nowhere${tab}is neither a part of the core nor an installed package${tab}hs ext disable nowhere" bash -c "$PKG vendor-verify nowhere; true"
+mv "$V/capabilities/fixmod" "$WORK/fixmod.away"
+check_out "a package whose vendored folder is gone is named" "^fixmod${tab}vendor/ differs from the lock: in the lock but not vendored${tab}hs pkg install fixmod" bash -c "$PKG vendor-verify fixmod; true"
+mv "$WORK/fixmod.away" "$V/capabilities/fixmod"
+cp "$V/capabilities.lock" "$WORK/lock.keep"; sed -i 's/^version = "1.0.0"/version = "0.9.0"/' "$V/capabilities.lock"
+check_out "a lock of another release is named" "^fixmod${tab}vendor/ holds another release" bash -c "$PKG vendor-verify fixmod; true"
+cp "$WORK/lock.keep" "$V/capabilities.lock"
+
 echo "-- a changed byte is found"
 printf '# changed\n' >> "$V/capabilities/fixmod/helper.nix"
 check_out "vendor-check names the package and the file" "^fixmod${tab}helper.nix differs from the lock" bash -c "$PKG vendor-check --to $HS_NIXOS_DIR; true"

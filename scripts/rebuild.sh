@@ -198,11 +198,25 @@ link_check() {
   fi
 }
 
+# Every capability that is on is a part of the core or an installed package, and a package with a Nix module is vendored and matches its lock
+# (docs/PLAN-capabilities-repo.md, Q3). The evaluation would stop with an error anyway; this says the same in plain words, before anything is built.
+vendor_check() {
+  local out line name problem cmd
+  out=$(python3 "$(dirname "$0")/pkg.py" vendor-verify $(capability_list) 2>/dev/null) && return 0
+  while IFS=$'	' read -r name problem cmd; do
+    [ -n "$name" ] || continue
+    warn "$(t '%s %s.' "$name" "$problem")"
+    note "$(t 'Fix it with: %s' "$cmd")"
+  done <<< "$out"
+  fail "$(t 'Nothing was built: a part that is switched on is not in place.')"
+}
+
 generation() { { readlink /nix/var/nix/profiles/system 2>/dev/null || true; } | sed -n 's/^system-\([0-9]*\)-link$/\1/p'; }
 
 config_check
 gpu_check
 link_check
+vendor_check
 
 [ -z "${HS_JOB_ID:-}" ] || [ -n "${HS_STEP_TOTAL:-}" ] || steps 1   # a rebuild job without the update in front: step 1 of 1
 step "Rebuild"

@@ -397,6 +397,42 @@ def draft_findings(text):
     return out
 
 
+def vendor_verify(enabled, nixos=None):
+    """[(name, problem, command)] for the capabilities that are switched on, before `hs rebuild` builds (docs/PLAN-capabilities-repo.md, Q3 rule 5):
+    every name is a folder of the core, an installed package or a package folder; a package with a module is vendored and its lock entry says what
+    installed.toml says. Nothing is built when this finds something."""
+    nixos = nixos or os.environ.get("HS_NIXOS_DIR", "/etc/nixos")
+    inst = installed()
+    known = {m.get("name") for _, m in manifests()}
+    lock = pkg_vendor.read_lock(nixos)
+    bad = {}
+    for n, t in pkg_vendor.problems(nixos):
+        bad.setdefault(n, t)
+    out = []
+    for n in sorted(set(enabled)):
+        if any(os.path.isdir(os.path.join(r, "capabilities", n)) for r in (root(), nixos)):
+            continue
+        if n in inst:
+            try:
+                with open(os.path.join(state_dir(), "current", n, "package.toml"), "rb") as f:
+                    m = tomllib.load(f)
+            except (OSError, tomllib.TOMLDecodeError):
+                m = {}
+            if m.get("kind") != "capability" or not m.get("module"):
+                continue
+            fix = "hs pkg install " + n
+            e = lock.get(n)
+            if e is None:
+                out.append((n, "has a Nix module but is not vendored", fix))
+            elif n in bad:
+                out.append((n, "vendor/ differs from the lock: " + bad[n], fix))
+            elif e.get("version") != inst[n].get("version") or (inst[n].get("commit") and e.get("commit") not in (None, inst[n].get("commit"))):
+                out.append((n, "vendor/ holds another release than the installed one", fix))
+        elif n not in known:
+            out.append((n, "is neither a part of the core nor an installed package", "hs ext disable " + n))
+    return out
+
+
 def repo_check(folder):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
@@ -469,6 +505,11 @@ def main(argv):
     elif cmd in ("vendor", "unvendor", "vendor-check"):
         # vendor --from <package folder> --to <checkout> [--repo R --tag T --commit C --tree X] | unvendor <name> --to <checkout> | vendor-check --to <checkout>
         return pkg_vendor.main([{"vendor-check": "check"}.get(cmd, cmd)] + rest)
+    elif cmd == "vendor-verify":     # names of the enabled capabilities as arguments: name TAB problem TAB command per finding, exit 1 when any
+        found = vendor_verify(rest)
+        for f in found:
+            print("	".join(f))
+        return 1 if found else 0
     elif cmd == "nix-api":
         print(nix_api_level())
     elif cmd == "list":
