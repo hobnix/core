@@ -4,6 +4,9 @@
 import { lang } from './lang.svelte.js';
 
 const de = {
+  'The install stopped': 'Die Installation ist angehalten', 'failed at': 'fehlgeschlagen bei', Retry: 'Erneut versuchen', 'Retry the install': 'Installation erneut versuchen',
+  'Remove what was created': 'Entfernen, was angelegt wurde', 'Only what the install itself created is removed. What was there before stays.': 'Entfernt wird nur, was die Installation selbst angelegt hat. Was vorher da war, bleibt.',
+  'Also delete the data it created': 'Auch die angelegten Daten löschen', 'Off: the data is kept (the default).': 'Aus: die Daten bleiben erhalten (Standard).', 'Type the name of the app to confirm:': 'Zur Bestätigung den Namen der App eintippen:',
   Storage: 'Speicher', Pools: 'Pools', Disks: 'Festplatten', Shares: 'Freigaben', Encryption: 'Verschlüsselung', Vault: 'Tresor',
   Instances: 'Instanzen', Apps: 'Apps', Services: 'Dienste', Network: 'Netzwerk', Identity: 'Identität', Groups: 'Gruppen', Users: 'Benutzer',
   Certificates: 'Zertifikate', Monitoring: 'Überwachung', Hardware: 'Hardware', Diagnostics: 'Diagnose', Protection: 'Schutz', Backup: 'Datensicherung',

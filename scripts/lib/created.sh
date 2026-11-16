@@ -59,14 +59,17 @@ created_list() {   # created_list [instance]
 created_check() {   # created_check <kind> <id> [detail]
   local kind=$1 id=$2 detail=${3:--} sd=${HS_STATE_DIR:-/var/lib/hs}
   case "$kind" in
-    container) incus info "$id" >/dev/null 2>&1 ;;
-    volume)    [ "$detail" != - ] || return 2; incus storage volume show "$detail" "$id" >/dev/null 2>&1 ;;
+    container) "${HS_INCUS:-incus}" info "$id" >/dev/null 2>&1 ;;
+    volume)    [ "$detail" != - ] || return 2; "${HS_INCUS:-incus}" storage volume show "$detail" "$id" >/dev/null 2>&1 ;;
     service)   [ -f "${HS_SERVICES_DIR:-$sd/services.d}/$id.toml" ] ;;
     share)     [ "$detail" != - ] || return 2; [ -d "$detail" ] ;;
     reservation)
-      [ "$detail" != - ] && declare -F network_run >/dev/null 2>&1 || return 2
       local got
-      got=$(network_run reserved "$detail" 2>/dev/null) || return 2
+      if [ -n "${HS_UNIFI:-}" ]; then got=$(bash "$HS_UNIFI" reserved "$detail" 2>/dev/null) || return 2   # test knob
+      else
+        [ "$detail" != - ] && declare -F network_run >/dev/null 2>&1 || return 2
+        got=$(network_run reserved "$detail" 2>/dev/null) || return 2
+      fi
       [ "$got" = "$id" ] ;;
     *) return 2 ;;
   esac

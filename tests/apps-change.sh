@@ -79,6 +79,13 @@ kind = "recipe"
 path = "recipes/docker"
 requires_core = ">=1"
 [package.demo]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/demo"\nrequires_core = ">=1"\n[package.needy]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/needy"\nrequires_core = ">=1"\n' > index.toml
+mkdir -p recipes/failapp && cp "$ROOT/tests/fixtures/pkgtree/packages/failapp/"* recipes/failapp/
+printf '[package.failapp]
+version = "1.0.0"
+kind = "recipe"
+path = "recipes/failapp"
+requires_core = ">=1"
+' >> index.toml
 git add -A && git commit -q -m one && git -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m release
 cd "$ROOT"
 $PKGPY repo add test "$R" --key "$WORK/signers"
@@ -86,7 +93,9 @@ $PKGPY fetch test >/dev/null
 
 # stand-ins: incus (docker is not there), parts (tailscale off), recipe, orchestrator, health, job library
 LOG=$WORK/log; : > "$LOG"
-printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/incus"
+printf '#!/usr/bin/env bash
+case "$1 $2" in "info "*) [ -e "%s/ct-$2" ] ;; "delete -f") rm -f "%s/ct-$3" ;; *) exit 1 ;; esac
+' "$WORK" "$WORK" > "$WORK/incus"
 printf '#!/usr/bin/env bash\nprintf "tailscale\\toff\\tpart\\tyes\\tyes\\tT\\n"\n' > "$WORK/parts.sh"
 printf '#!/usr/bin/env bash\necho "recipe $*" >> "%s"\n' "$LOG" > "$WORK/recipe.sh"
 cat > "$WORK/orch.sh" <<STUB
@@ -180,7 +189,7 @@ if [ "$rc" != 0 ] && [ ! -e "$HS_STATE_DIR/packages/current/demo" ]; then pass "
 rc=0; out=$(FAIL_RUN=1 bash "$SCRIPTS/apps-change.sh" run install demo --repo test --tag v1.0.0 2>&1 </dev/null) || rc=$?
 rec=$(python3 "$SCRIPTS/job-record.py" get "$HS_JOB_ID")
 check "a failing recipe fails the job" test "$rc" != 0
-check_eq "and no result is written" "none" "$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("result") or "none")' "$rec")"
+check_eq "and no success result is written (a failure result names the step)" "failed/run" "$(python3 -c 'import json,sys;r=json.loads(sys.argv[1]).get("result") or {};print("%s/%s"%(r.get("status"),r.get("failed_step")))' "$rec")"
 rc=0; out=$(HEALTH=unhealthy bash "$SCRIPTS/apps-change.sh" run install demo --repo test --tag v1.0.0 2>&1 </dev/null) || rc=$?
 if [ "$rc" != 0 ] && grep -q "does not answer" <<<"$out"; then pass "an unhealthy app fails the check step"; else fail "unhealthy: rc=$rc $out"; fi
 : > "$LOG"
@@ -213,5 +222,80 @@ rm -rf "$HS_STATE_DIR/packages/current/demo"
 check "pkg.py install --tag with another tag is refused" bash -c "! $PKGPY install demo --repo test --tag v9.9.9 >/dev/null 2>&1"
 check "and installs nothing" test ! -e "$HS_STATE_DIR/packages/current/demo"
 check "pkg.py install --tag with the verified tag works" $PKGPY install demo --repo test --tag v1.0.0
+
+echo "-- a failed install names its step, retries from it and removes what it made (step 9, #466)"
+export HS_JOB_RATE=0 HS_SCRIPTS=$SCRIPTS HS_SERVICES_DIR=$WORK/services.d
+mkdir -p "$HS_SERVICES_DIR"
+# an orchestrator stand-in that runs the fixture recipe phase by phase (as recipe-orchestrate.sh does), honouring --from-phase
+cat > "$WORK/orch2.sh" <<STUB
+#!/usr/bin/env bash
+. "$SCRIPTS/lib/job.sh"
+name=\$1; shift; ct=\$name; fp=""
+while [ \$# -gt 0 ]; do case "\$1" in --name) ct=\$2; shift 2 ;; --from-phase) fp=\$2; shift 2 ;; *) shift ;; esac; done
+n=0
+for ph in fetch configure; do
+  n=\$((n + 1))
+  if [ -n "\$fp" ] && [ "\$ph" != "\$fp" ]; then continue; fi
+  fp=""
+  echo "phase \$ph" >> "$LOG"
+  hs_job_step \$((HS_STEP_BASE + n)) "\$HS_STEP_TOTAL" "\${HS_STEP_PREFIX}\$ph"
+  [ "\$ph" != fetch ] || touch "$WORK/ct-\$ct"
+  [ "\$ph" != configure ] || touch "$HS_SERVICES_DIR/\$ct.toml"
+  out=\$(CREATED_APP=\$ct RECIPE_PHASE=\$ph bash "$HS_STATE_DIR/packages/current/\$name/run.sh" 2>&1) || { echo "\$out" >&2; exit 1; }
+done
+STUB
+printf '#!/usr/bin/env bash\nrm -f "%s/$2.toml"\n' "$HS_SERVICES_DIR" > "$WORK/services.sh"
+printf '#!/usr/bin/env bash\ncase "$1" in reserved) [ -e "%s/resv" ] && echo 10.0.0.9 ;; clear-ip) rm -f "%s/resv" ;; esac\n' "$WORK" "$WORK" > "$WORK/unifi.sh"
+export HS_ORCHESTRATE=$WORK/orch2.sh HS_SERVICES=$WORK/services.sh HS_UNIFI=$WORK/unifi.sh
+touch "$WORK/resv" "$WORK/ct-other"; : > "$HS_SERVICES_DIR/other.toml"
+rm -rf "$HS_STATE_DIR/packages/current/failapp"
+FJ=$(newjob); python3 "$SCRIPTS/job-record.py" run "$FJ"; export HS_JOB_ID=$FJ
+rc=0; out=$(RECIPE_FAIL_AT=configure bash "$SCRIPTS/apps-change.sh" run install failapp --repo test --tag v1.0.0 2>&1 </dev/null) || rc=$?
+python3 "$SCRIPTS/job-record.py" finish "$FJ" "$rc"
+check "the failing phase fails the job" test "$rc" != 0
+rec=$(python3 "$SCRIPTS/job-record.py" get "$FJ")
+rf() { python3 -c 'import json,sys;print(json.loads(sys.argv[1])["result"][sys.argv[2]])' "$rec" "$1"; }
+check_eq "the record names the failed step" "run:configure" "$(rf failed_step)"
+check_eq "and the instance and the tag" "failapp v1.0.0" "$(rf instance) $(rf tag)"
+case "$(rf reason)" in ?*) pass "and a reason";; *) fail "no reason";; esac
+check_eq "the ledger lists what the run made" "container${tab}failapp${tab}container|reservation${tab}10.0.0.9${tab}aa:bb:cc:dd:ee:09|service${tab}failapp${tab}-" "$(CREATED_APP=failapp bash -c ". $SCRIPTS/lib/created.sh; created_list" | paste -sd'|')"
+
+echo "-- retry: the plan, then the job starts at the failed step"
+rc=0; out=$($C plan retry "$FJ" 2>&1 </dev/null) || rc=$?
+if [ "$rc" = 0 ] && has "^failed_step${tab}run:configure" && has "^retry_from${tab}run:configure" && has "^tag${tab}v1.0.0" && has "^command${tab}hs sys apps start retry $FJ"; then pass "retry plan: step, tag, command"; else fail "retry plan: $out"; fi
+: > "$LOG"; run start retry "$FJ" --confirm failapp
+if [ "$rc" = 0 ] && has "^status${tab}started" && grep -q "run install failapp --repo test --tag v1.0.0 --from run:configure" "$LOG"; then pass "retry start: the new job runs from run:configure of the same tag"; else fail "retry start: $out $(cat "$LOG")"; fi
+run start retry "$FJ" --bogus;  check_eq "an unknown option is refused" 1 "$rc"
+run plan retry 20260101-000000-nosuch-ffff; check_eq "an unknown job is refused" 1 "$rc"
+: > "$LOG"; RJ=$(newjob); python3 "$SCRIPTS/job-record.py" run "$RJ"; HS_JOB_ID=$RJ
+rc=0; out=$(bash "$SCRIPTS/apps-change.sh" run install failapp --repo test --tag v1.0.0 --from run:configure 2>&1 </dev/null) || rc=$?
+check_eq "the retry succeeds" 0 "$rc"
+check_eq "only the failed phase runs again" "phase configure" "$(grep '^phase' "$LOG" | paste -sd'|')"
+
+echo "-- cleanup: a plan, the typed name, the data question, nothing the ledger does not list"
+: > "$WORK/shared-data-marker"; mkdir -p "$WORK/shared"
+CREATED_APP=failapp bash -c ". $SCRIPTS/lib/created.sh; created share media $WORK/shared"
+rc=0; out=$($C plan cleanup "$FJ" 2>&1 </dev/null) || rc=$?
+if [ "$rc" = 0 ] && has "^confirm_name${tab}failapp" && has "^data${tab}yes" && has "^question${tab}delete_data.*${tab}keep"; then pass "cleanup plan: typed name, the data question (default keep)"; else fail "cleanup plan: $out"; fi
+check_eq "the plan lists the ledger in reverse, each line checked" "share|service|reservation|container" "$(awk -F'\t' '$1=="item"{print $2}' <<<"$out" | paste -sd'|')"
+has "^item${tab}container${tab}failapp${tab}there${tab}remove" && pass "a line that is still there is a remove" || fail "$out"
+run start cleanup "$FJ";                    if [ "$rc" = 1 ] && has "type the name (failapp)"; then pass "cleanup without the typed name is refused"; else fail "no name: $out"; fi
+run start cleanup "$FJ" --confirm wrong;    check_eq "a wrong name is refused" 1 "$rc"
+run start cleanup "$FJ" --confirm failapp
+if [ "$rc" = 0 ] && has "^status${tab}started" && grep -q "apps-recover.sh run cleanup $FJ" "$LOG"; then pass "cleanup start: a background job"; else fail "cleanup start: $out"; fi
+rc=0; out=$(bash "$SCRIPTS/apps-recover.sh" run cleanup "$FJ" 2>&1 </dev/null) || rc=$?
+check_eq "the clean-up job ends well" 0 "$rc"
+if [ ! -e "$WORK/ct-failapp" ]; then pass "the instance is gone"; else fail "the instance is gone: $out"; fi
+check "the service description is gone" test ! -e "$HS_SERVICES_DIR/failapp.toml"
+check "the reservation is given back" test ! -e "$WORK/resv"
+check "the data of the created share is kept by default" test -d "$WORK/shared"
+check "the ledger is empty" test ! -e "$(CREATED_APP=failapp bash -c ". $SCRIPTS/lib/created.sh; created_file")"
+check "what the ledger did not list is untouched" test -e "$WORK/ct-other" -a -e "$HS_SERVICES_DIR/other.toml"
+run plan cleanup "$FJ";                     if [ "$rc" = 1 ] && has "no record of what the run created"; then pass "an app without a ledger is never removed by guesswork"; else fail "no ledger: $out"; fi
+python3 "$SCRIPTS/job-record.py" finish "$RJ" 0
+CREATED_APP=failapp bash -c ". $SCRIPTS/lib/created.sh; created container failapp container"
+run plan cleanup "$FJ";                     if [ "$rc" = 1 ] && has "another run"; then pass "a later good install is not cleaned away"; else fail "later: $out"; fi
+run plan cleanup "$RJ";                     if [ "$rc" = 1 ] && has "did not fail"; then pass "a job that did not fail has nothing to clean"; else fail "ok job: $out"; fi
+check "recipe-orchestrate.sh knows --from-phase" grep -q -- '--from-phase' "$SCRIPTS/recipe-orchestrate.sh"
 
 finish
