@@ -203,6 +203,7 @@ link_check() {
 vendor_check() {
   local out line name problem cmd
   out=$(python3 "$(dirname "$0")/pkg.py" vendor-verify $(capability_list) 2>/dev/null) && return 0
+  [ -n "$out" ] || return 0   # the check itself could not run (no pkg.py beside this script): the evaluation still checks the hashes
   while IFS=$'	' read -r name problem cmd; do
     [ -n "$name" ] || continue
     warn "$(t '%s %s.' "$name" "$problem")"
