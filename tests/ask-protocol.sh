@@ -100,6 +100,8 @@ echo "-- timeout: nobody answers"
 export HS_ASK_TIMEOUT=2
 out=$(bash "$here/scripts/recipe-change.sh" start quiz run --interactive --by alice </dev/null); id=$(awk -F'\t' '$1=="job"{print $2}' <<<"$out")
 wait_state "$id" cancelled; check "an unanswered question cancels the run" "cancelled" "$(J get "$id" | field state)"
+# the orchestrator writes the cancel and then the error as two record writes: the state is cancelled a moment before error.category is set
+for _ in $(seq 1 100); do [ -n "$(J get "$id" | field error.category)" ] && break; sleep 0.1; done
 check "with the reason input_timeout" "input_timeout" "$(J get "$id" | field error.category)"
 check "the sub-job's unit was stopped" "1" "$([ "$(grep -c '^systemctl stop hs-job-recipe-quiz-run' "$T/log")" -ge 1 ] && echo 1)"
 unset HS_ASK_TIMEOUT
