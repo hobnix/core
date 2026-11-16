@@ -1045,6 +1045,7 @@ READS = {
     ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
     ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
     ("apps", "health"): {"kind": "tsv", "ttl": 30, "topic": "apps-health"},
+    ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
     ("pkg", "capabilities"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},   # the capability packages (first-run wizard)
     ("pkg", "repos"): {"kind": "tsv", "ttl": 30, "topic": "pkg-repos"},
     ("dc", "state"): {"kind": "tsv", "ttl": 60, "topic": "dc-state"},

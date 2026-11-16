@@ -13,6 +13,7 @@
   import Button from '../ui/Button.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
+  import Chip from '../ui/Chip.svelte';
   import { parseStates, parseHealth, stageActions } from './states.js';
   import { link } from './instances/ct.js';
   import { appAction } from './apps.js';
@@ -28,6 +29,10 @@
   // name, available version, applied version (- = not known), state: current | update | unknown
   const vers = poll('/api/sys/recipes/versions', 30000);
   const verOf = $derived(new Map(rows(vers).map((r) => [r[0], { avail: r[1], applied: r[2], vstate: r[3] }])));
+  // the app's own version and its update policy, one row per installed instance: name, instance, package, offered, running (- = not known), policy, state
+  const appVers = poll('/api/sys/apps/versions', 30000);
+  // keyed by instance: a second instance of one recipe has its own row
+  const appVerOf = $derived(new Map(rows(appVers).map((r) => [r[1], { name: r[0], pkg: r[2], offered: r[3], running: r[4], policy: r[5], astate: r[6] }])));
   // services app: name, container, ... the containers that have a described service
   const svc = poll('/api/sys/services/app', 30000);
   const withService = $derived(new Set(rows(svc).map((r) => r[1])));
@@ -36,7 +41,8 @@
   // name, description, containers (comma separated, - for none), state: installed | partly | not installed | parked | unknown
   const apps = $derived(rows(list).map((r) => {
     const v = verOf.get(r[0]) ?? { avail: '-', applied: '-', vstate: 'unknown' };
-    return { name: r[0], desc: r[1], cts: r[2] === '-' ? '' : r[2], state: r[3], ...v, ver: v.applied !== '-' ? v.applied : v.avail !== '-' ? v.avail : '' };
+    const avs = (r[2] === '-' ? [] : r[2].split(',')).map((c) => ({ inst: c, ...appVerOf.get(c) })).filter((x) => x.name === r[0]);
+    return { name: r[0], desc: r[1], cts: r[2] === '-' ? '' : r[2], state: r[3], ...v, avs, ver: v.applied !== '-' ? v.applied : v.avail !== '-' ? v.avail : '' };
   }));
   const installed = $derived(apps.filter((a) => a.state === 'installed').length);
 
@@ -200,6 +206,14 @@
           {:else}
             <span class="vr dim">-</span>
           {/if}
+          {#each a.avs as av (av.inst)}
+            {#if av.running !== '-' || av.policy === 'pinned'}
+              <span class="vr" use:tip={av.astate === 'update' ? `${av.inst}: running ${av.running}, the release offers ${av.offered}` : `${av.inst}: the version of the app itself, read on this server`}>
+                {#if av.running !== '-'}{av.running}{#if av.pkg !== '-'} <span class="dim">(package {av.pkg})</span>{/if}{#if av.astate === 'update'} <span class="vnew">→ {av.offered}</span>{/if}{/if}
+                {#if av.policy === 'pinned'}<Chip tone="info" title="Pinned: this app is never offered an update">pinned</Chip>{/if}
+              </span>
+            {/if}
+          {/each}
         {:else if col.key === 'name'}
           <span id="app-{a.name}" class="nm" class:hl={hl === a.name}><i class="ph ph-{icons[a.name] ?? 'package'}" style="color:{on ? 'var(--accent-ink)' : 'var(--fg-3)'}"></i>{a.name}</span>
         {:else if col.key === 'desc'}

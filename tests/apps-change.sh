@@ -381,5 +381,10 @@ run plan remove nosuchapp;                        if [ "$rc" = 1 ] && has "no ap
 rc=0; out=$(bash "$SCRIPTS/apps-remove.sh" run remove oldapp 2>&1 </dev/null) || rc=$?
 check "the discovered instance and description go, the rest stays" test ! -e "$WORK/ct-oldapp" -a ! -e "$HS_SERVICES_DIR/oldapp.toml" -a -d "$WORK/oldshare" -a -e "$WORK/ct-other"
 
+printf '#!/usr/bin/env bash
+echo "ARGS: $*"
+' > "$WORK/av.sh"; chmod +x "$WORK/av.sh"
+rc=0; out=$(HS_APPS_VERSION=$WORK/av.sh bash "$SCRIPTS/apps-change.sh" plan update demo 2>&1 </dev/null) || rc=$?
+check_eq "plan update is handed to apps-version.sh" "ARGS: plan update demo" "$out"
 
 finish

@@ -81,6 +81,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "apps.policy.by_instance": {
+    /** the update policy of an installed app: without a value it prints notify or pinned, with one (hs sys apps policy <instance> notify|pinned) it is written into the app record; automatic is refused; exit 1 = refused */
+    words: ["apps", "policy", "<instance>"];
+    path: "/apps/policy/{instance}";
+    method: "get";
+    class: "read";
+    params: { instance: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "apps.recover.by_verb.by_action": {
     /** after a failed install (called by sys apps plan|start retry|cleanup): hs sys apps recover plan|start retry|cleanup <job> [--set KEY=value]... [--delete-data] [--confirm <name>]; the same lines as plan|start */
     words: ["apps", "recover", "<verb>", "<action>"];
@@ -130,6 +141,17 @@ export interface SysOperations {
     stdin: "no";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "apps.versions": {
+    /** the installed apps with their versions and update policy: name, instance, package version, app version offered, app version running (- when not known), policy (notify|pinned), state (current|update|pinned) */
+    words: ["apps", "versions"];
+    path: "/apps/versions";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, instance: Field, package_version: Field, app_offered: Field, app_running: Field, policy: "notify" | "pinned", state: "current" | "update" | "pinned"])[];
   };
   "audit": {
     /** who did what: the commands that changed the server; id, time (epoch seconds), actor, result ok|failed, exit, command (hs sys audit [N]) */
