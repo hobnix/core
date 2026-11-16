@@ -162,7 +162,7 @@ def pool(params):
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
         # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
-        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk",
+        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk | tr '\\n\\t' '  '",
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
