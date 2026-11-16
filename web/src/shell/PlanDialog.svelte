@@ -8,15 +8,18 @@
   import PlanSteps from './PlanSteps.svelte';
   import Halftone from './Halftone.svelte';
   import Chip from '../ui/Chip.svelte';
+  import Checkbox from '../ui/Checkbox.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
 
-  let { dialog } = $props();            // { area, args, title }
+  let { dialog } = $props();            // { area, args, title, option?: { label, args } } (option = a checkbox that adds its args and asks the plan again)
 
   let p = $state(null);                 // the plan, as the backend parsed it
   let loadError = $state('');
   let confirm = $state('');
   let busy = $state(false);
   let startError = $state('');
+  let extra = $state(false);            // the option checkbox
+  const args = $derived(extra && dialog.option ? [...dialog.args, ...dialog.option.args] : dialog.args);
   let saved = $state(!!dialog.saved);   // a change was written and waits for a rebuild: say so, offer "Rebuild now" (no plan is asked)
 
   const savedText = $derived(effectOf(p?.steps)?.text ?? 'This takes effect with hs rebuild.');
@@ -25,11 +28,19 @@
   const canStart = $derived(allowed && !busy && (!p.confirm_name || confirm === p.confirm_name));
   const kicker = $derived(p && !allowed ? 'Plan · refused' : danger ? 'Plan · danger' : 'Plan');
 
+  let asked = 0;                        // a newer question makes an older answer stale
+  function load() {
+    const n = ++asked;
+    p = null; loadError = ''; startError = ''; confirm = '';
+    askPlan(dialog.area, args, undefined, undefined, undefined, dialog.document)
+      .then((r) => { if (n === asked) p = r; }, (e) => { if (n === asked) loadError = e.message; });
+  }
+
   onMount(() => {
     if (saved) return;
     let open = true;       // the answer may be one a button already asked for (prefetchPlan): it is not cancelled with the dialog
-    askPlan(dialog.area, dialog.args, undefined, undefined, undefined, dialog.document)
-      .then((r) => { if (open) p = r; }, (e) => { if (open) loadError = e.message; });
+    askPlan(dialog.area, args, undefined, undefined, undefined, dialog.document)
+      .then((r) => { if (open && asked === 0) p = r; }, (e) => { if (open && asked === 0) loadError = e.message; });
     return () => { open = false; };
   });
 
@@ -39,9 +50,9 @@
     busy = true;
     startError = '';
     try {
-      const r = await doStart(dialog.area, dialog.args, p.confirm_name ? confirm : '', undefined, undefined, dialog.document);
+      const r = await doStart(dialog.area, args, p.confirm_name ? confirm : '', undefined, undefined, dialog.document);
       if (r.status === 'started' && r.unit) {
-        track(r.unit, dialog.title || p.heading, jobKey(dialog.area, dialog.args));
+        track(r.unit, dialog.title || p.heading, jobKey(dialog.area, args));
         showTab('tasks');
         close();
       } else if (r.status === 'done') {
@@ -90,6 +101,9 @@
       {:else}
         <PlanSteps steps={p.steps} long={p.long} />
         {#if p.command}<code class="cmd">{p.command}</code>{/if}
+      {/if}
+      {#if dialog.option && !saved && !loadError}
+        <Checkbox bind:checked={extra} label={dialog.option.label} onchange={load} />
       {/if}
       {#if startError}<div class="refused"><i class="ph ph-warning-circle"></i>{startError}</div>{/if}
     </div>
