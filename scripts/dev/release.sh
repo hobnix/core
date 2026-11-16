@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Releases of the package repositories (hobnix/recipes, hobnix/extensions; docs/PLAN-packages.md). Run it INSIDE the checkout of one of them.
+# Releases of the package repositories (hobnix/recipes, hobnix/extensions, hobnix/capabilities; docs/PLAN-packages.md). Run it INSIDE the checkout of one of them.
 # Not an `hs` command.
 #
-#   bash <core>/scripts/dev/release.sh [patch|minor|major] [--yes] [--key <file.pub>]
+#   bash <core>/scripts/dev/release.sh [patch|minor|major|--version vX.Y.Z] [--yes] [--dry-run] [--key <file.pub>]
 #       Tag the repository: the next vX.Y.Z (default patch) on main, signed with the release key, verified against the core's
 #       config/trusted-keys, then pushed. Refuses unless you are on main, the tree is clean, main equals origin/main and `pkg.py repo-check`
-#       passes. Shows what goes into the release and asks you to type the tag, or pass --yes.
-#   bash <core>/scripts/dev/release.sh bump <package> [patch|minor|major] [--pr]
+#       passes. Shows what goes into the release and asks you to type the tag, or pass --yes. --version names the tag (the first one of a
+#       repository, or a level the number rule does not give). --dry-run does every check and shows the plan, then stops before the key is
+#       needed (the `gate` job of the GitHub workflow uses it, so CI and this script cannot drift).
+#   bash <core>/scripts/dev/release.sh bump <package> [patch|minor|major] [--pr] [--no-push]
 #       Raise the version of one package (package.toml and index.toml agree, the rule of CONTRIBUTING.md), commit it on the current
-#       branch (not main) and push the branch; --pr also opens the pull request.
+#       branch (not main) and push the branch; --pr also opens the pull request; --no-push only commits (prepare-release.sh).
 #
 # The key is $HS_RELEASE_KEY or ~/.ssh/hobnix_release.pub (the private key beside it, or in ssh-agent). Test knobs: --signers <file>
 # (allowed-signers file instead of the core's), HS_RELEASE_REMOTE (default origin).
@@ -21,7 +23,7 @@ export HS_LANG=${HS_LANG:-en}
 . "$core/scripts/lib/ui.sh"
 remote=${HS_RELEASE_REMOTE:-origin}
 key=${HS_RELEASE_KEY:-$HOME/.ssh/hobnix_release.pub}
-signers="" yes=false pr=false mode="" what=tag pkg=""
+signers="" yes=false pr=false mode="" what=tag pkg="" dry=false push=true want=""
 
 while [ $# -gt 0 ]; do
   case $1 in
@@ -29,9 +31,12 @@ while [ $# -gt 0 ]; do
     bump) what=bump; shift; pkg=${1:-} ;;
     --yes) yes=true ;;
     --pr) pr=true ;;
+    --dry-run) dry=true ;;
+    --no-push) push=false ;;
+    --version) shift; want=${1:-} ;;
     --key) shift; key=${1:-} ;;
     --signers) shift; signers=${1:-} ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "Unknown argument: $1 (see --help)" ;;
   esac
   shift
@@ -41,7 +46,7 @@ mode=${mode:-patch}
 git rev-parse --show-toplevel >/dev/null 2>&1 || fail "Run this inside the checkout of hobnix/recipes or hobnix/extensions."
 cd "$(git rev-parse --show-toplevel)" || exit 1
 [ -f index.toml ] || fail "There is no index.toml here: this is not a package repository."
-if [ -d recipes ]; then repo=recipes; elif [ -d extensions ]; then repo=extensions; else fail "Neither recipes/ nor extensions/ is here."; fi
+if [ -d recipes ]; then repo=recipes; elif [ -d extensions ]; then repo=extensions; elif [ -d capabilities ]; then repo=capabilities; else fail "None of recipes/, extensions/, capabilities/ is here."; fi
 
 next_version() {   # next_version <x.y.z> <mode>
   local v=${1#v} m=$2 a b c
@@ -75,6 +80,7 @@ if [ "$what" = bump ]; then
   git add "$dir/package.toml" index.toml
   git commit -q -m "$pkg: $old -> $new" || fail "The commit failed."
   ok "$(t '%s: %s -> %s, committed on %s' "$pkg" "$old" "$new" "$branch")"
+  if ! $push; then exit 0; fi
   git push -q -u "$remote" "$branch" || fail "The push failed."
   ok "$(t 'Branch %s pushed' "$branch")"
   if $pr; then
@@ -99,8 +105,15 @@ last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
 last=${last:-v0.0.0}
 valid_semver "${last#v}" || fail "The last tag $last is not vX.Y.Z."
 tag=v$(next_version "$last" "$mode")
+if [ -n "$want" ]; then
+  valid_semver "${want#v}" || fail "--version wants vX.Y.Z."
+  tag=v${want#v}
+  [ "$(printf '%s
+%s
+' "${last#v}" "${tag#v}" | sort -V | tail -n1)" = "${tag#v}" ] && [ "${tag#v}" != "${last#v}" ] || fail "$tag is not above the last tag $last."
+fi
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "$tag exists already."
-[ -f "$key" ] || fail "The release key $key does not exist (HS_RELEASE_KEY or --key)."
+$dry || [ -f "$key" ] || fail "The release key $key does not exist (HS_RELEASE_KEY or --key)."
 [ -n "$signers" ] || signers=$core/config/trusted-keys/$repo.allowed_signers
 [ -f "$signers" ] || fail "There is no allowed-signers file $signers."
 
@@ -113,6 +126,7 @@ n=$(git rev-list --count "$last..HEAD" 2>/dev/null || echo "?")
 note "$(t '%s commit(s) since %s' "$n" "$last")"
 git log --format='%h %s' "$last..HEAD" 2>/dev/null | head -n 12 | trail
 
+if $dry; then ok "$(t 'Dry run: %s would be signed and pushed; nothing was changed' "$tag")"; exit 0; fi
 if ! $yes; then
   [ -t 0 ] || fail "Without a terminal pass --yes."
   confirm_name "$tag" "$(t 'the release')" || fail "Not confirmed: nothing was tagged."

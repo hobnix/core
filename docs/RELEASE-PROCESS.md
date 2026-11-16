@@ -123,6 +123,59 @@ environment approval and the secret reach the job, that `git push` of the tag is
 starts the tag build and its `iso` job (which then finds the release this workflow created), and that `gh release create --verify-tag`
 accepts the pushed tag. The scripts and the verification logic are tested locally with fakes.
 
+## Package repositories (recipes, extensions, capabilities)
+
+Versions are raised by the release, not by pull requests (hobnix/server#615): a pull request touches no `version` and carries at most one label,
+`bump: minor` (a feature) or `bump: major` (a person has to act); no label means patch. Two ways to cut a release, both end in the same signed tag
+and both run `scripts/dev/release.sh`, so they cannot drift (tests: `tests/release.sh`, `tests/prepare-release.sh`):
+
+1. **Prepare.** In the checkout, on `develop`: `bash <core>/scripts/dev/prepare-release.sh --plan` shows "package, old, new, level" and the tag
+   level; without `--plan` it raises the versions in `package.toml` and `index.toml` (one commit per package), runs `repo-check`, and opens a
+   pull request into `develop`. The GitHub workflow `prepare-release` of each repository does the same (a caller of
+   `hobnix/server/.github/workflows/package-prepare-release.yml`). Merge it, then open the release pull request `develop` into `main` (merge commit).
+2. **Tag.** On `main`: `bash <core>/scripts/dev/release.sh <patch|minor|major>` (the tag level the preparation names) with the key on your machine, or
+   the workflow `release` of the repository (`package-release.yml`, environment `release`, the secret `RELEASE_SIGNING_KEY`). `--dry-run` does every
+   check and stops; `--version vX.Y.Z` names the tag (the first tag of a repository).
+
+A capabilities release is gated in CI (`check` of hobnix/capabilities): the nix matrix with the packages vendored, against the newest stable
+core tag **and** `develop` of hobnix/server (decision O11). A core release is gated by the same matrix against the newest tag of
+hobnix/capabilities (`scripts/dev/caps-ref.sh`). Each run logs the commit of the other repository. Nothing of this ran on GitHub yet:
+**Not tested on hardware yet.**
+
+### The first signed tag of hobnix/capabilities, and then `package-repos.toml`
+
+`capabilities` joins `config/package-repos.toml` only after this tag (decision O8): with no tag every `hs pkg fetch` would show a failed row.
+What the owner does, in order. The files are ready; nobody ran it.
+
+1. The key: `config/trusted-keys/capabilities.allowed_signers` holds `release@hobnix` and `release-ci` (checked in, step 5 of
+   [PLAN-capabilities-repo](PLAN-capabilities-repo.md)). Check that the private key you sign with matches one of them (the command prints 1):
+   ```bash
+   grep -c "$(cut -d' ' -f2 ~/.ssh/hobnix_release.pub)" config/trusted-keys/capabilities.allowed_signers
+   ```
+2. Everything the first tag should contain is on `develop` and `check` is green; open the release pull request `develop` into `main` of
+   hobnix/capabilities (merge commit) and merge it.
+3. In a checkout of hobnix/capabilities (the core is a sibling checkout on this branch or newer), see the plan first:
+   ```bash
+   git switch main && git pull --ff-only
+   ```
+   ```bash
+   bash ../server/scripts/dev/release.sh --version v0.1.0 --dry-run
+   ```
+4. Sign and push the tag (you type the tag name to confirm):
+   ```bash
+   bash ../server/scripts/dev/release.sh --version v0.1.0
+   ```
+   The script verifies the signature against the file above and deletes the tag again if it does not verify.
+5. In hobnix/server, branch from `develop`, add to `config/package-repos.toml` (the tests of `tests/pkg-repo.sh` list the default repositories):
+   ```toml
+   [[repo]]
+   name = "capabilities"
+   url = "https://github.com/hobnix/capabilities"
+   ```
+   and open the pull request into `develop`.
+6. On a test server after that change: `hs pkg fetch` must show `capabilities` with its tag and no failed row; a server whose `/etc/nixos`
+   still lacks the line is not affected. Then the pilot (step 12) can move.
+
 ## Rule proposals for the owner
 
 The rulesets today (read 2026-11-10): `protect-branches` on `main` and `develop` (no deletion, no force push, pull request required with 0

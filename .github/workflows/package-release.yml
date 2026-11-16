@@ -1,0 +1,104 @@
+# Release of a package repository from GitHub (hobnix/server#522; hobnix/recipes, hobnix/extensions and hobnix/capabilities each carry a short
+# caller with `workflow_dispatch`). Reusable: the same steps as `bash scripts/dev/release.sh`, which this workflow calls, so the local way and
+# CI cannot drift. UNVERIFIED: this workflow has never run (see docs/RELEASE-PROCESS.md, "Package repositories").
+#
+# 1. `gate` (no secret): release.sh --dry-run on main: main's tip equals origin/main, `pkg.py repo-check`, the tag is new and above the last,
+#    and it shows the commits since the last tag.
+# 2. `release` waits for the owner (the environment `release` of the CALLING repository holds the secret RELEASE_SIGNING_KEY), signs the tag,
+#    verifies it against config/trusted-keys/<repo>.allowed_signers of the core (a tag that fails is deleted, nothing is pushed), pushes it and
+#    creates the GitHub release with the list of packages whose version changed.
+#
+# Open question (first run): does a job with `environment: release` inside a reusable workflow get the environment secret of the calling
+# repository? If not, the caller passes `secrets: inherit` (repository secret) or carries the whole workflow.
+name: package-release
+on:
+  workflow_call:
+    inputs:
+      level:
+        description: "patch, minor or major (the level the preparation pull request names); ignored when version is set"
+        type: string
+        default: patch
+      version:
+        description: "vX.Y.Z; needed for the first tag of a repository, otherwise empty"
+        type: string
+        default: ""
+      core_ref:
+        description: "ref of hobnix/server that holds release.sh and the trusted keys"
+        type: string
+        default: develop
+    secrets:
+      RELEASE_SIGNING_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          path: repo
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/server
+          ref: ${{ inputs.core_ref }}
+          path: core
+      - name: Check the release (nothing is signed or pushed)
+        working-directory: repo
+        env:
+          LEVEL: ${{ inputs.level }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          git fetch --tags --force origin
+          git checkout -q -B main origin/main
+          args=("$LEVEL")
+          [ -z "$VERSION" ] || args=(--version "$VERSION")
+          bash ../core/scripts/dev/release.sh "${args[@]}" --dry-run
+
+  release:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          path: repo
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/server
+          ref: ${{ inputs.core_ref }}
+          path: core
+      - name: Sign, verify against the trusted key, push
+        working-directory: repo
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          LEVEL: ${{ inputs.level }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          [ -n "$RELEASE_SIGNING_KEY" ] || { echo "::error::The secret RELEASE_SIGNING_KEY is not set in the environment release."; exit 1; }
+          git fetch --tags --force origin
+          git checkout -q -B main origin/main
+          git config user.name "hobnix release"; git config user.email "release@users.noreply.github.com"
+          keydir=$(mktemp -d); trap 'rm -rf "$keydir"' EXIT
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$keydir/key"
+          ssh-keygen -y -f "$keydir/key" > "$keydir/key.pub"
+          args=("$LEVEL")
+          [ -z "$VERSION" ] || args=(--version "$VERSION")
+          bash ../core/scripts/dev/release.sh "${args[@]}" --yes --key "$keydir/key.pub"
+      - name: GitHub release
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+          prev=$(git tag -l 'v[0-9]*' --sort=-v:refname | sed -n 2p)
+          notes=$(git log --format='- %s' ${prev:+$prev..}"$tag" | head -n 60)
+          gh release create "$tag" --verify-tag --title "$tag" --notes "$notes"
