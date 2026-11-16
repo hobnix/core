@@ -179,6 +179,12 @@ A line reads `web timing: plan pool bulk add --disks * 1834 ms run rc=0 status=o
 `run` (it ran), `cached` (answered again), `timeout` (took over 60 s) or `gone` (you changed the form, the check was stopped), the exit code and
 the result. Not tested on hardware yet.
 
+### Install and remove apps
+The Apps page has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**
+and **Remove what was created**. **Remove** keeps the data unless you choose **Delete the data** and type the name. Each app shows its stage
+(available, installed, on, running), a health mark and its app version next to the package version. Details:
+[Containers and apps](containers-and-apps.md). Not tested on hardware yet.
+
 ## Use a terminal in the browser
 
 Off by default. It adds a **Terminal** button next to Update (a shell as `adminuser`, like an SSH login; `sudo` asks for that user's

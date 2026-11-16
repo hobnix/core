@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Remove an app and keep or delete its data"
+body  = """Remove shows what goes and what stays. The data is kept by default; to delete it you type the name of the app twice. Not tested on hardware yet."""

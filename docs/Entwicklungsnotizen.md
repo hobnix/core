@@ -768,3 +768,13 @@ reads as `notify` in `sys apps versions` (the list keeps its shape).
   Snapshots are not pruned yet (one per update). Shared storage and volumes are not part of an Incus snapshot.
 - Tests: tests/apps-autoupdate.sh (fakes for incus, pkg, manage-ct, recipe, health, push). Hardware test still to do (step 18): a pinned-image app updates
   through the plan; an update that breaks the health check is rolled back.
+
+## App lifecycle docs and CI lessons (step 17, 2026-11-16)
+
+Two lessons from finishing PLAN-app-lifecycle. Not tested on hardware yet.
+
+- **Fakes in tests must be `chmod +x`.** A fake command written by a test (incus, unifi, pkg, recipe) that is not executable fails on Linux CI with
+  "permission denied" while it passes on Windows, where the executable bit does not exist. Every fake gets `chmod +x` when the test writes it.
+- **A recipes-repo check needs core `develop` at the same API level.** The `check` of hobnix/recipes validates against core `develop`; the recipes of step 14
+  use API level 9, which only branch `0.6` has. So the recipes pull requests hobnix/recipes#33 and #34 wait until 0.6 reaches `develop`; merging them
+  earlier turns the recipes CI red for a reason that is not in the recipes.

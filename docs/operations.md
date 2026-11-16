@@ -590,6 +590,16 @@ Close public SSH last, and only once SSH over Tailscale works (`sshOverIp = fals
 a command: it is a checklist you work through by hand (`docs/PLAN-nodes.md`, "Cutover checklist"). What a trial run does not prove: real mail
 delivery from the internet, outgoing mail, long game sessions through the forwarding, and a reboot of the real VPS.
 
+## Apps that are not healthy or have an update
+The weekly summary mentions an update of every app whose policy is `notify`; an app set to `pinned` is not mentioned. An update is not a
+health problem. An app that runs but fails its declared check shows as unhealthy on the Apps page. See and set the policy:
+
+```bash
+hs apps policy <instance>
+```
+
+How install, retry and remove work: [Containers and apps](containers-and-apps.md). Not tested on hardware yet.
+
 ## Optional parts from hobnix/capabilities
 Some optional parts of the server (capabilities) can come from the repository `capabilities` instead of the core. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
 
