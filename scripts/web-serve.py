@@ -10,6 +10,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/changes/seen   the revision this user has seen in What's new ({rev}, "" = never); session needed
   POST /api/changes/seen   {rev: 40 hex}: remember it for the signed-in user (web-changes-seen.json in the state folder); session + CSRF
   POST /api/live/refresh   {topic}: ask the live collector to read that topic again (mode redis; 409 otherwise); session + CSRF
+  GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
   GET  /api/events    server-sent events `changed` ({topic, gen}) in every mode (a watcher reads the table `topics` of state.db once a second; Redis, when on, is the fast path), `down`/`up` when Redis goes (mode db: when the heartbeat of hs-live-db stops or returns); session, same Origin
@@ -1162,6 +1163,42 @@ def area_refresh(area):
 # the keys of the docker steps (capabilities/docker/capability.toml; scripts/docker-setup.sh accepts the same ones)
 DOCKER_REGISTRY_HOST = r"^[a-z0-9][a-z0-9.-]{0,99}(:[0-9]{1,5})?$"
 DOCKER_SET = r"^(dockerManager=(webui|arcane|portainer|none)|dockerSize=[sml])$"
+def _config_entries(extra):
+    """The `config` entries of CHANGES: the core keys of CONFIG_KEYS plus `extra` (settable keys of installed capability packages, `a|b`)."""
+    keys = CONFIG_KEYS + ("|" + extra if extra else "")
+    return [[r"^set$", r"^(" + keys + r")$", r"^[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"], [r"^(sync|migrate)$"],
+            {"fixed": [r"^apply$"], "opts": {"--set": (r"^(" + keys + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$", True)}, "need": ["--set"]}]
+
+
+def overlay_dir():
+    return os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "generated")
+
+
+def overlay_settable():
+    """Keys the web may set that installed capability packages brought (config-keys.overlay, column 2 = yes); [] while there is none.
+    Only a plain key name is taken, whatever the file says."""
+    out = []
+    try:
+        with open(os.path.join(overlay_dir(), "config-keys.overlay"), encoding="utf-8") as f:
+            for line in f:
+                col = line.rstrip("\n").split("\t")
+                if len(col) > 1 and col[1] == "yes" and re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,63}", col[0]):
+                    out.append(col[0])
+    except OSError:
+        pass
+    return sorted(out)
+
+
+def overlay_layout():
+    """layout.overlay.json (which Settings page shows a package option, the package's page entry) as a dict; {} while there is none or it is unreadable"""
+    try:
+        with open(os.path.join(overlay_dir(), "layout.overlay.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 CHANGES = {
     "jobs": [[r"^(run|stop)$", UNIT],
              # ADR 0018: the answer to a question of an interactive recipe run is ONE line on stdin; --by and --role are added by the server, never by the client
@@ -1357,8 +1394,7 @@ CHANGES = {
     "docker-registry": [{"fixed": [r"^add$", DOCKER_REGISTRY_HOST], "opts": {"--user": (r"^[A-Za-z0-9][A-Za-z0-9._@+-]{0,99}$", False)}, "stdin": True},
                         [r"^remove$", DOCKER_REGISTRY_HOST]],
     # apply: the guided setup sets several keys in one plan, each as --set key=value (the same keys and values as set)
-    "config": [[r"^set$", r"^(" + CONFIG_KEYS + r")$", r"^[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"], [r"^(sync|migrate)$"],
-               {"fixed": [r"^apply$"], "opts": {"--set": (CONFIG_SET, True)}, "need": ["--set"]}],
+    "config": _config_entries(""),
     # notification channels: a secret (the topic address, the SMTP password) goes in on stdin, never as an argument; a text setting as --set key=value
     "notify": [{"fixed": [r"^add$", NOTIFY_CHANNEL],
                 "opts": dict(NOTIFY_OPTS, **{"--provider": (r"^[a-z][a-z0-9-]{0,30}$", False)}), "stdin": True},
@@ -1404,6 +1440,7 @@ def ext_refresh(force=False):
             del CHANGES[k]
         READS.update(reads)
         CHANGES.update(changes)
+        CHANGES["config"] = _config_entries("|".join(overlay_settable()))
 
 
 def _entry_match(entry, args):
@@ -2609,6 +2646,10 @@ def make_handler(app):
                 if not s:
                     return self._json(401, {"error": "not signed in"})
                 return self._json(200, {"user": s["user"], "realm": s["realm"], "csrf": s["csrf"], "features": features(cfg, app.first_run)})
+            if path == "/api/settings-layout":
+                if not self._session():
+                    return self._json(401, {"error": "not signed in"})
+                return self._json(200, overlay_layout())
             if path == "/api/sessions":
                 if not self._session():
                     return self._json(401, {"error": "not signed in"})

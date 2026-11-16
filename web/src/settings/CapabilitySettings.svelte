@@ -11,7 +11,7 @@
   import Fields from './Fields.svelte';
   import StatusPanel from './StatusPanel.svelte';
   import WizardSteps from './WizardSteps.svelte';
-  import layout from './layout.gen.json';
+  import { useLayout } from './layoutstate.svelte.js';
   import { fieldsFor } from './layout.js';
   import { useConfig } from './config.svelte.js';
   import { useParts, flip } from './parts.svelte.js';
@@ -23,6 +23,8 @@
 
   // the router gives no props: the name is the last part of the address (a caller may pass it)
   let { name = '' } = $props();
+  const getLayout = useLayout();
+  const layout = $derived(getLayout());
   const cap = $derived(name || route.path.split('/')[3] || '');
   const meta = $derived(layout.caps[cap]);
   let setupOff = $state('');
