@@ -8,6 +8,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/sharepath.sh"
 . "$(dirname "$0")/lib/pools.sh"
+. "$(dirname "$0")/lib/created.sh"
 live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
 
 usage() {
@@ -95,6 +96,7 @@ if [ -n "$ct" ]; then
   fi
 fi
 
+share_was_there=false; [ ! -e "$dir" ] || share_was_there=true   # the ledger lists a share only when this run made it
 if [ "$(pool_role "$tier")" = apps ]; then
   zfs list -H -o name "$tier/$parent" >/dev/null 2>&1 || zfs create -o "mountpoint=/$tier/$parent" "$tier/$parent"
   zfs list -H -o name "$tier/$parent/$name" >/dev/null 2>&1 || zfs create "$tier/$parent/$name"
@@ -166,6 +168,7 @@ if [ -n "$ct" ]; then
   fi
 fi
 
+$share_was_there || created share "$name" "$dir"
 ok "$(t "%s created" "$dir")${ct:+$(t ", mounted in %s at %s" "$ct" "$ctpath")}"
 [ -z "$after" ] || note "$after"
 
