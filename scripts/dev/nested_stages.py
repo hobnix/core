@@ -169,7 +169,12 @@ def pool(params):
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
-        step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="the pool job finishes (/bulk shows up)", expect_rc=None),
+        # the job has to be over first; then bulk-mount.service brings /bulk up the way boot does. WORKAROUND for hobnix/server#699: the mergerfs
+        # that the job started lives in the job's unit and ends with it, so /bulk is not mounted after the job
+        step("run", "for i in $(seq 1 120); do systemctl list-units 'hs-job-pool-add-bulk-*' --state=active,activating --no-legend | grep -q . || break; sleep 3; done",
+             timeout=600, what="the pool job is over"),
+        step("run", "systemctl restart bulk-mount.service", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
+        step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="/bulk shows up", expect_rc=None),
         # what the console log needs when /bulk does not show up (not a check)
         step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "
                     "systemctl status bulk-mount.service --no-pager | head -n 12 | cut -c1-200; grep -E 'bulk|data' /proc/mounts | cut -c1-150; ls /var/lib/hs/disks 2>&1 | head",
