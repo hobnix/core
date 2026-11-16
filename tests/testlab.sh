@@ -42,6 +42,9 @@ d=$root/.work/nested/run1; mkdir -p "$d"; ln -sfn run1 "$root/.work/nested/lates
 echo secret > "$d/password"; echo key > "$d/key"
 case "$3" in iso|smoke|all) ;; *)   # an extra stage (rollback, backup, restore, pool)
   env | grep -E '^HS_NESTED_(DISKS|BACKUP_PASS_FILE|PASSWORD_FILE)=' >> "$b/nested.env.log"
+  if [ "$3" = address ]; then   # the address comes from the console of the VM (steps[].value), not from `incus list`
+    echo "{\"stage\":\"address\",\"ok\":true,\"steps\":[{\"step\":\"login\",\"ok\":true},{\"step\":\"ip\",\"ok\":true,\"value\":\"${FAKE_ADDRESS-10.0.0.5}\"}]}" > "$d/result-address.json"; exit 0
+  fi
   if [ "${FAKE_FAIL_STAGE:-}" = "$3" ]; then echo "{\"stage\":\"$3\",\"ok\":false}" > "$d/result-$3.json"; exit 1; fi
   echo "{\"stage\":\"$3\",\"ok\":true}" > "$d/result-$3.json"; exit 0 ;; esac
 case "${FAKE_MODE:-ok}" in
@@ -88,7 +91,7 @@ FAKE
 chmod +x "$B/git" "$B/incus" "$B/notify.sh" "$B/bin/systemd-run" "$B/tree/scripts/dev/"*.sh
 export FAKE_DIR=$B PATH="$B/bin:$PATH"
 
-reset() { rm -rf "$B/state" "$B"/*.log "$B/state.db" "$B/jobs"/*; unset FAKE_NO_TAGS FAKE_FAIL_STAGE FAKE_BROWSER_RC FAKE_MODE FAKE_PREFLIGHT_RC FAKE_FETCH_FAIL FAKE_BUILD_FAIL; }
+reset() { rm -rf "$B/state" "$B"/*.log "$B/state.db" "$B/jobs"/*; unset FAKE_NO_TAGS FAKE_FAIL_STAGE FAKE_BROWSER_RC FAKE_MODE FAKE_PREFLIGHT_RC FAKE_FETCH_FAIL FAKE_BUILD_FAIL FAKE_ADDRESS; }
 lastrun() { ls -1 "$B/state/runs" | tail -n1; }
 res() { python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["result"])' "$B/state/runs/$(lastrun)/stage-$1.json"; }
 events() { python3 "$SCRIPTS/state-db.py" event-list 2>/dev/null | awk -F'\t' '{print $4}' | tr '\n' ' '; }
@@ -171,6 +174,7 @@ check_out "the password is pulled with incus file pull" "file pull hs-testlab-[0
 check_out "the disks are deleted afterwards" "storage volume delete default hs-testlab-[0-9-]*-p1" cat "$B/incus.log"
 check_out "the second VM is deleted" "delete -f hs-testlab-[0-9-]*-b" cat "$B/incus.log"
 check_out "the browser gets the VM address" "run --url http://10.0.0.5:8480" cat "$B/browser.log"
+check_out "the address is read on the console of the VM" "nested run --stage address --name hs-testlab-" cat "$B/nested.log"
 check_eq "the backup password is not kept" "0" "$(find "$B/state/runs" -name '*backup-pass*' | wc -l | tr -d ' ')"
 
 echo "-- one stage by name needs 1 and 2 first"
@@ -193,6 +197,13 @@ check_out "a push message names stage 3" "Stage 3 of the test-lab" cat "$B/notif
 reset; export FAKE_FAIL_STAGE=restore
 $T run --yes --foreground >/dev/null 2>&1; rc=$?
 check_eq "a failed restore fails stage 4" "failed" "$(res 4)"
+
+echo "-- the console gives no address: stage 6 is an error, the browser is not started"
+reset; export FAKE_ADDRESS=""
+$T run --stage 6 --yes --foreground >/dev/null 2>&1
+check_eq "stage 6 error" "error" "$(res 6)"
+check_eq "no browser run" "no" "$([ -s "$B/browser.log" ] && echo yes || echo no)"
+unset FAKE_ADDRESS
 
 echo "-- no browser on this server: stage 6 is skipped, not failed"
 reset; export FAKE_BROWSER_RC=3

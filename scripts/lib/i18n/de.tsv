@@ -2409,7 +2409,7 @@ no release tag (vX.Y.Z) exists yet: nothing to upgrade from	es gibt noch kein Re
    stage 6: open every page of the web interface in a headless browser (needs playwright on this server)	   Stufe 6: jede Seite der Weboberfläche in einem Browser ohne Fenster öffnen (braucht playwright auf diesem Server)
 Stage %s: %s	Stufe %s: %s
 Stage 4: a second, clean VM %s	Stufe 4: eine zweite, saubere VM %s
-The VM has no IPv4 address that Incus can see.	Die VM hat keine IPv4-Adresse, die Incus sehen kann.
+The VM answers on %s	Die VM antwortet unter %s
 this ref has no scripts/dev/testlab-browser.py	dieser Stand hat kein scripts/dev/testlab-browser.py
 usage: hs testlab run [--ref <branch|tag|commit>] [--stage 1|2|3|4|5|6|7|<name>|all] [--from <vX.Y.Z>] [--dry-run] [--yes] [--background|--foreground]	Aufruf: hs testlab run [--ref <branch|tag|commit>] [--stage 1|2|3|4|5|6|7|<name>|all] [--from <vX.Y.Z>] [--dry-run] [--yes] [--background|--foreground]
 3. build the installer ISO of the RELEASE (nix, long) and install it in a throwaway VM	3. das Installer-ISO des RELEASES bauen (nix, dauert lange) und in einer Wegwerf-VM installieren
