@@ -637,6 +637,21 @@ in
 
 
 
+  # EXPERIMENTAL, hidden, not tested on hardware (docs/PLAN-app-lifecycle.md step 13): apps whose update policy is "automatic" update themselves in the
+  # quiet window. The script does nothing unless the setting appsAutoupdateEnabled is true (default false) and the time is inside appsAutoupdateWindow,
+  # so the timer ticking every half hour is harmless. A failed app never fails the unit: the push message says so.
+  systemd.services.hs-apps-autoupdate = lib.mkIf (!isEdge) {
+    description = "Automatic app updates (experimental, off unless appsAutoupdateEnabled is true)";
+    path = [ "/run/current-system/sw" pkgs.python3 ];
+    serviceConfig.Type = "oneshot";
+    script = "bash ${./scripts}/apps-autoupdate.sh";
+  };
+  systemd.timers.hs-apps-autoupdate = lib.mkIf (!isEdge) {
+    description = "Timer of hs-apps-autoupdate";
+    wantedBy = [ "timers.target" ];
+    timerConfig = { OnCalendar = "*:00,30"; Persistent = false; };
+  };
+
   # Old system generations pile up and fill the root disk. Weekly: delete the ones older than
   # 30 days (the newer ones stay for `hs system rollback`).
   systemd.services.hs-system-gc = {
