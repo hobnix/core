@@ -1,6 +1,6 @@
-# Plan: optional capabilities as packages in hobnix/capabilities (draft, 2026-11-16)
+# Plan: optional capabilities as packages in hobnix/capabilities (accepted 2026-11-16)
 
-Status: design only, for epic [#217](https://github.com/hobnix/server/issues/217) and its children #225, #221, #224, #228, #229, #177, #235
+Status: **Accepted 2026-11-16**: the owner accepted every recommended answer O1 to O11 (table at the end). Design record, for epic [#217](https://github.com/hobnix/server/issues/217) and its children #225, #221, #224, #228, #229, #177, #235
 and #615. Nothing is built by this page. It turns ADR 0017 (`docs/adr/0017-capabilities-repository-and-channels.md`, accepted 2026-11-10)
 into issue scopes, acceptance criteria and an ordered step list, checks its facts against the code of 2026-11-16 (branch `0.5`), and names
 the points where the code now disagrees with the record. Owner decisions are in the table at the end. This plan changes no storage, network or
@@ -292,6 +292,8 @@ above it. Steps 4 and 12 both edit `configuration.nix` or `capabilities/` and mu
 - New PLAN pages must be listed in docs/categories.tsv and docs/README.md (tests/docs.sh); this page is not listed yet.
 
 ## Decisions for the owner
+
+Accepted on 2026-11-16: all recommended answers, O1 to O11. The "Recommended" column is the decision. O1 replaces decision 1 of ADR 0017 (the pilot is `testlab`, not `network`).
 
 | Id | Question | Options | Recommended |
 | --- | --- | --- | --- |
