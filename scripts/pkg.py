@@ -579,7 +579,7 @@ def main(argv):
                             print("\t".join([n, e["version"], w]))
                     elif not w:
                         print("\t".join([n, have["version"], e["version"]]))
-    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove"):
+    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

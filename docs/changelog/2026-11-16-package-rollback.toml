@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "A package update that breaks the rebuild can be put back"
+body  = """After `hs pkg update` replaced a package with a Nix module and the rebuild failed, `hs rebuild` offers to put the previous release and its lock line back. You type the package name to confirm. Without a terminal, nothing changes and the command is printed: `hs pkg rollback <name>`.
+
+Not tested on hardware yet."""
