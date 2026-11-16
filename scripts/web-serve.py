@@ -1596,6 +1596,16 @@ def parse_change(out, rc):
             d["fixes"].append(v)       # a refused plan: the command that makes it possible
         elif k == "needs":
             d["needs"].append(v)
+        elif k in ("package", "kind", "repo", "version", "tag", "commit", "title", "description"):
+            d[k] = v               # the plan of One Install (apps-change.sh)
+        elif k == "creates":
+            d.setdefault("creates", []).append(v)
+        elif k == "need":
+            d.setdefault("needl", []).append((v.split("\t") + ["", "", "", ""])[:4])        # name, present|missing|recipe, text, long yes|no
+        elif k == "ask":
+            d.setdefault("asks", []).append((v.split("\t") + ["-"] * 7)[:7])                # key, label, kind, choices, default, pattern, when (dash kept)
+        elif k == "jobstep":
+            d.setdefault("jobsteps", []).append((v.split("\t", 1) + [""])[:2])               # name, text
         elif k == "option":
             d["options"].append(v)
         elif k == "long":

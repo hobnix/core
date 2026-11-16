@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "One Install dialog for every app and package in the web interface"
+body  = """Installing an app, an extension or a part now opens the same dialog: it shows what will be created and what is needed, asks your questions, lets you review the answers and then follows the install step by step. When it is done you see what was set up and an Open button for the app. You can close the window at any time; the install keeps running and the Jobs page opens it again."""
