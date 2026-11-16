@@ -8,6 +8,7 @@
 # push message), and back to running when the step got its answer. A question not answered for $HS_ASK_TIMEOUT seconds (setting
 # recipeQuestionHours, default 24 h) cancels the run cleanly: the sub-job is stopped, the record ends cancelled with error input_timeout.
 # Stopping the orchestrator (hs job stop) stops the sub-job too. The folder is removed on every way out.
+# Called from the Install job (scripts/apps-change.sh) it reports the phases as steps of that job's record: HS_STEP_BASE, HS_STEP_TOTAL, HS_STEP_PREFIX (`run:`).
 # Test knobs: HS_ASK_NOUNITCHECK (do not ask systemd whether the sub-job unit lives), HS_RECIPE (stand-in for recipe.sh), HS_RUN_DIR, HS_ASK_POLL, HS_ASK_TIMEOUT, HS_SYSTEMCTL, HS_NOTIFY (stand-in for notify.sh).
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -94,7 +95,8 @@ rc=0; n=0
 for phase in "${phase_list[@]}"; do
   n=$((n + 1))
   [[ "$phase" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { fail "$(t "'%s' is not a phase name." "$phase")"; rc=1; break; }
-  hs_job_step "$n" "$total" "$phase"
+  # inside the Install job (apps-change.sh) the phases are steps of ONE record: HS_STEP_BASE = steps before them, HS_STEP_TOTAL = all steps, the text is run:<phase>
+  hs_job_step "$((${HS_STEP_BASE:-0} + n))" "${HS_STEP_TOTAL:-$total}" "${HS_STEP_PREFIX:-}$phase"
   cmd=(bash "$recipe" "$name"); [ -z "$ct" ] || cmd+=(--name "$ct")
   penv=$job_env; [ "$phase" = run ] && [ "$total" -eq 1 ] || penv+="RECIPE_PHASE=$phase"$'\n'
   # a sub-job is an ordinary job (own unit, record, log) that names its parent; it asks through HS_ASK_DIR

@@ -257,8 +257,11 @@ class Repos:
         if not pkg.SEMVER.match(str(entry.get("version", ""))):
             raise Refused("%s: the version in the index is not semver" % name)
 
-    def install(self, name, repo=None):
+    def install(self, name, repo=None, want_tag=None):
         r_name, entry, tag, commit = self.choose(name, repo)
+        if want_tag and tag != want_tag:
+            # the person saw the plan of one release (docs/PLAN-app-lifecycle.md D4): a newer or different verified tag is not installed behind their back
+            raise Refused("%s: the plan was made for %s but the newest verified release is %s now: read the plan again" % (name, want_tag, tag))
         r = self.all()[r_name]
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
@@ -712,7 +715,8 @@ def run(pkg, cmd, rest):
             return 1 if bad else 0
         elif cmd == "install":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
-            v, r_name, tag = R.install(rest[0], repo)
+            want = rest[rest.index("--tag") + 1] if "--tag" in rest else None
+            v, r_name, tag = R.install(rest[0], repo, want)
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(R.last_permissions))
         elif cmd == "update":

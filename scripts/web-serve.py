@@ -1306,6 +1306,12 @@ CHANGES = {
             {"fixed": [r"^check-draft$"], "document": True}],
     # the Optional parts step of the first-run wizard (pkg-bundle.sh): install, switch on, rebuild as one job; one comma list of names
     "pkg/bundle": [[r"^[a-z0-9][a-z0-9-]{0,40}(,[a-z0-9][a-z0-9-]{0,40}){0,15}$"]],
+    # One Install (apps-change.sh, docs/PLAN-app-lifecycle.md Q2): `apps plan|start install <package>`; --tag is the release the plan showed (the job refuses another),
+    # answers are `--set KEY=value`, ONE secret answer is a line on stdin, --from is a step of the job (the retry of step 9); --by/--role are added by the server
+    "apps": [{"fixed": [r"^install$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+              "opts": {"--repo": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--tag": (r"^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]{1,20})?$", False),
+                       "--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--ask": (None, False),
+                       "--from": (r"^(read|needs|ask|run|check|done|on|rebuild)$", False)}, "stdin": True}],
     # an answer is `--set KEY=value` (no control characters); the one secret answer of a recipe is a single line on stdin
     "recipes": [{"fixed": [r"^[a-z0-9][a-z0-9-]{0,40}$", r"^run$"],
                  "opts": {"--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--interactive": (None, False)}, "stdin": True}],
@@ -3051,7 +3057,7 @@ def make_handler(app):
             cmd = [cfg.hs, "sys"] + area.split("/") + [verb] + args      # "ext/games" = the words `ext games` (an extension package)
             if verb == "start" and confirm:
                 cmd += ["--confirm", confirm]
-            if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args):
+            if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args) or (area == "apps" and verb == "start"):
                 # ADR 0018 rule 11: who answers / who started the run. Roles (ADR 0012) are not built: every signed-in person is an administrator today
                 cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), "--role", "admin"]
             if area == "fm" and verb == "start":

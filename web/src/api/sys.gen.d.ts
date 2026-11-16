@@ -70,6 +70,28 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, kind: Field, stage: "available" | "installed" | "on" | "running", flags: Field, repo: Field, available: Field, installed: Field, instances: Field, title: Field])[];
   };
+  "apps.plan.by_action": {
+    /** what installing an app (or extension) would do, read from its newest verified release, as data: status, plan lines with the tag the job will install, the needs and the questions (hs sys apps plan install <name> [--repo R] [--set KEY=value]...; never asks, nothing is installed; exit 0 ok, 1 refused) */
+    words: ["apps", "plan", "<action>"];
+    path: "/apps/plan/{action}";
+    method: "post";
+    class: "plan";
+    params: { action: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "apps.start.by_action": {
+    /** install it as one guided job: read needs ask run check done (hs sys apps start install <name> --tag <tag from the plan> [--set KEY=value]... [--ask] [--from <step>]): status started, unit, job; a secret answer is one line on stdin; a package of an added repository needs --confirm <name> */
+    words: ["apps", "start", "<action>"];
+    path: "/apps/start/{action}";
+    method: "post";
+    class: "start";
+    params: { action: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
   "audit": {
     /** who did what: the commands that changed the server; id, time (epoch seconds), actor, result ok|failed, exit, command (hs sys audit [N]) */
     words: ["audit"];

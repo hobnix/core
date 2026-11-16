@@ -16,7 +16,7 @@
 #   fetch [<repo>]         update the local clones, find the newest release tag whose signature verifies
 #   available              what the repositories offer (from the last fetch)
 #   install --core         fetch every package the core refers to by name (core = true in the index) or that was applied here, when it is not there yet
-#   install <name>         fetch a package at the verified tag into /var/lib/hs/packages/current (read-only, root-owned)
+#   install <name> [--repo R] [--tag T]  fetch a package at the verified tag (T: only that one, else refused) into /var/lib/hs/packages/current (read-only, root-owned)
 #   update <name> [--yes]  show what changed since the installed tag (it is code that runs as root), then install the new one
 #   remove <name> [--dry-run] [--yes|--confirm-name <name>]
 #                          uninstall a repository package: refused while it is switched on or another package that is on `requires` it
