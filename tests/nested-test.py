@@ -219,7 +219,7 @@ class ScenarioTests(unittest.TestCase):
     def test_the_pool_and_backup_stages_build_the_full_configuration_first(self):
         P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})
         for st in ("backup", "restore", "pool"):
-            self.assertIn("hs rebuild --yes", " ".join(s["text"] for s in n.build_scenario(st, P)), st)
+            self.assertIn("hs rebuild --foreground", " ".join(s["text"] for s in n.build_scenario(st, P)), st)
 
     def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
         P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2"})

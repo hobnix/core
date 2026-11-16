@@ -27,7 +27,7 @@ def step(kind, text, **kw):
 def full_system():
     """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic, mkfs, SnapRAID come
     with it): the same step every real install is followed by."""
-    return [step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --yes",
+    return [step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --foreground",
                  timeout=3000, what="the full configuration is built (hs rebuild)")]
 
 
