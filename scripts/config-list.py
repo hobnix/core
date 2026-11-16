@@ -72,6 +72,17 @@ def help_text(doc):
     return clean(' '.join(out))[:400]
 
 
+def overlay_items():
+    """the options of the installed capability packages (schema.overlay.json) in the shape of the core items; their section is the package"""
+    out = []
+    for o in sg.generated_options():
+        if 'default' not in o and o.get('store', 'machine') == 'machine':
+            continue
+        out.append({'kind': 'section', 'title': 'Package ' + o['capability']})
+        out.append(dict(o, kind='option', example=o.get('default', ''), settable=bool(o.get('settable')), secret=bool(o.get('secret'))))
+    return out
+
+
 def main(argv):
     sys.stdout.reconfigure(newline='\n', encoding='utf-8')
     path = argv[1]
@@ -79,14 +90,14 @@ def main(argv):
     if os.path.exists(path):
         _, values = mt.load_file(path)
     section = ''
-    for it in sg.load():
+    for it in sg.load() + overlay_items():
         if it['kind'] == 'section':
             section = it['title']
             continue
         if it['kind'] != 'option':
             continue
         k = it['key']
-        ex = tomllib.loads(it['value'])[k]
+        ex = it['example'] if 'example' in it else tomllib.loads(it['value'])[k]
         store = it.get('store', 'machine')
         sv = setting_value(k, it.get('legacy', '')) if store == 'settings' else None
         if it['secret']:
@@ -96,7 +107,7 @@ def main(argv):
         else:
             cur = show(values[k]) if (store == 'machine' and k in values) else (sv or '')
             dflt = show(ex)
-        print('\t'.join([section, k, clean(cur), clean(dflt), kind(ex), help_text(it['doc']),
+        print('\t'.join([section, k, clean(cur), clean(dflt), kind(ex), help_text(it['doc']) if 'doc' in it else clean(it.get('description', '')),
                          'yes' if it['settable'] else 'no', store]))
     return 0
 

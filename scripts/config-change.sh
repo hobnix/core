@@ -32,6 +32,7 @@ here=$(dirname "$0")
 . "$here/lib/admin.sh"
 adm="$(admin_user)"
 . "$here/lib/config-keys.sh"
+config_keys_extend
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 

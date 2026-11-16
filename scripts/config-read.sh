@@ -21,6 +21,7 @@ set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/machine.sh"
 . "$here/lib/config-keys.sh"
+config_keys_extend
 machine=$(machine_file)
 example=$(machine_example)
 py=${HS_PYTHON:-python3}; command -v "$py" >/dev/null 2>&1 || py=python
