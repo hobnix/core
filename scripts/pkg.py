@@ -537,7 +537,7 @@ def main(argv):
             for r_name, e, _, _ in cat.get(n, []):
                 if r_name == have["repo"] and semver_key(e["version"]) > semver_key(have["version"]):
                     print("\t".join([n, have["version"], e["version"]]))
-    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove"):
+    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

@@ -212,6 +212,30 @@ vendor_check() {
   fail "$(t 'Nothing was built: a part that is switched on is not in place.')"
 }
 
+# The rebuild failed after `hs pkg update` replaced a vendored package: offer (plan first, then the name) to put the previous copy and lock back
+# (docs/PLAN-capabilities-repo.md, Q6). Only when the lock.previous is newer than the last good rebuild, so an old one never comes up again.
+rollback_offer() {
+  local pk lp stamp cands name now before
+  pk="$(dirname "$0")/pkg.py"; [ -f "$pk" ] || return 0
+  lp="${HS_NIXOS_DIR:-/etc/nixos}/vendor/capabilities.lock.previous"
+  [ -f "$lp" ] || return 0
+  stamp="${HS_STATE_DIR:-/var/lib/hs}/last-rebuild-seconds"
+  [ ! -f "$stamp" ] || [ "$lp" -nt "$stamp" ] || return 0
+  cands=$(python3 -I "$pk" rollback-candidates 2>/dev/null) || return 0
+  [ -n "$cands" ] || return 0
+  warn "$(t 'The build failed after a package update. Put the previous release back?')"
+  while IFS=$'	' read -r name now before; do
+    [ -n "$name" ] || continue
+    note "$(t '%s: %s goes back to %s (its copy in vendor/ and the lock line)' "$name" "$now" "$before")"
+  done <<< "$cands"
+  [ -t 0 ] || { note "$(t 'No terminal: nothing was changed. Run: hs pkg rollback <name>')"; return 0; }
+  while IFS=$'	' read -r name now before; do
+    [ -n "$name" ] || continue
+    confirm_name "$name" "$(t 'the package')" || { note "$(t 'Left as it is.')"; continue; }
+    python3 -I "$pk" rollback "$name" >/dev/null && ok "$(t '%s is back at %s: run hs rebuild' "$name" "$before")" || warn "$(t '%s could not be put back.' "$name")"
+  done <<< "$cands"
+}
+
 generation() { { readlink /nix/var/nix/profiles/system 2>/dev/null || true; } | sed -n 's/^system-\([0-9]*\)-link$/\1/p'; }
 
 config_check
@@ -237,6 +261,7 @@ SPIN_TAIL=60 spin "Building the system and switching to it (after big changes: m
       note "Nothing was switched: the system runs as before."
     fi
   fi
+  rollback_offer || true
   next_step "hs rebuild --verbose"
   exit 1
 }
