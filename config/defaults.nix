@@ -24,6 +24,8 @@
   recipeQuestionHours = 24;
   webTerminalIdleMinutes = 30;
   webTerminalMaxHours = 8;
+  appsAutoupdateEnabled = false;
+  appsAutoupdateWindow = "03:00-05:00";
   dhcpRange = [ 100 199 ];
   incusUi = true;
   incusInternalSubnet = "10.99.0.0/29";

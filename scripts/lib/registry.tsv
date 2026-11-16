@@ -562,3 +562,4 @@ user	testlab results	testlab.sh	results {rest}	the last test-lab runs, one line 
 sys	sys testlab results	testlab.sh	results --list {rest}	the last test-lab runs as data: run, stage (1 to 7), result (ok|failed|skipped|error), exit, ref, commit, started, ended; empty: no run yet	-	topic:system,capability:testlab
 sys	sys testlab plan <action>	testlab-change.sh	plan {1} {rest}	what a test-lab run would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-	topic:system,capability:testlab
 sys	sys testlab start <action>	testlab-change.sh	start {1} {rest}	start it (hs sys testlab start run [--ref R] [--stage 1|2|3|4|5|6|<name>|all]) as a background job; status started + unit	-	topic:system,capability:testlab
+user	apps autoupdate	apps-autoupdate.sh	{rest}	EXPERIMENTAL, hidden: update the apps whose policy is automatic (run by a timer; off unless appsAutoupdateEnabled is true)	-	nohelp,topic:instances,changes,capability:incus

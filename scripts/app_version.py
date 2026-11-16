@@ -129,6 +129,16 @@ def top_lines(text):
     return out
 
 
+def autoupdate_enabled():
+    """The hidden, experimental switch appsAutoupdateEnabled (docs/PLAN-app-lifecycle.md step 13): only the word true turns it on."""
+    d = os.environ.get("HS_SETTINGS_DIR") or os.path.join(state_dir(), "settings")
+    try:
+        with open(os.path.join(d, "appsAutoupdateEnabled"), encoding="utf-8") as f:
+            return f.readline().strip() == "true"
+    except OSError:
+        return False
+
+
 def policy_of(inst, default="notify"):
     try:
         with open(record_path(inst), encoding="utf-8") as f:
@@ -294,10 +304,10 @@ def cmd_policy(args):
         owner = next((n for n, i in instances() if i == inst), "")
         sys.stdout.write(policy_of(inst, default_policy(manifest(owner))) + "\n")
         return 0
-    if args[1] == "automatic":
+    if args[1] == "automatic" and not autoupdate_enabled():
         print("automatic updates are not available yet (notify or pinned)", file=sys.stderr)
         return 1
-    if args[1] not in POLICIES:
+    if args[1] not in POLICIES and args[1] != "automatic":
         print("the policy is notify or pinned", file=sys.stderr)
         return 1
     set_policy(inst, args[1])
