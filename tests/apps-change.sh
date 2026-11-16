@@ -181,7 +181,7 @@ run plan install demo --set 'NAME=a
 b';                                        check_eq "a control character is refused" 1 "$rc"
 run plan install nosuch;                   check_eq "an unknown package is refused" 1 "$rc"
 run plan install 'Bad Name';               check_eq "a bad name is refused" 1 "$rc"
-run plan remove demo;                      check_eq "only install exists" 1 "$rc"
+run plan remove demo;                      check_eq "removing an app that is not there is refused" 1 "$rc"
 run plan install demo --bogus;             check_eq "an unknown option is refused" 1 "$rc"
 run plan install demo --from needs;        if [ "$rc" = 1 ] && has "not a step of demo"; then pass "--from a step the package does not have is refused"; else fail "from needs: $out"; fi
 run start install demo --confirm demo;     if [ "$rc" = 1 ] && has "start needs --tag"; then pass "start without --tag is refused"; else fail "no tag: $out"; fi
@@ -328,5 +328,58 @@ CREATED_APP=failapp bash -c ". $SCRIPTS/lib/created.sh; created container failap
 run plan cleanup "$FJ";                     if [ "$rc" = 1 ] && has "another run"; then pass "a later good install is not cleaned away"; else fail "later: $out"; fi
 run plan cleanup "$RJ";                     if [ "$rc" = 1 ] && has "did not fail"; then pass "a job that did not fail has nothing to clean"; else fail "ok job: $out"; fi
 check "recipe-orchestrate.sh knows --from-phase" grep -q -- '--from-phase' "$SCRIPTS/recipe-orchestrate.sh"
+
+echo "-- remove: keep the data (default) or delete it, a typed name, an older app without a ledger (step 11, #466)"
+export HS_SHARE_DELETE=$WORK/share-delete.sh
+printf '#!/usr/bin/env bash\nmv "%s/keepshare" "%s/keepshare.deleted"\n' "$WORK" "$WORK" > "$HS_SHARE_DELETE"; chmod +x "$HS_SHARE_DELETE"
+mkdir -p "$HS_STATE_DIR/packages/current/keepapp"
+cat > "$HS_STATE_DIR/packages/current/keepapp/package.toml" <<'TOML'
+name = "keepapp"
+version = "1.0.0"
+kind = "recipe"
+[app.remove]
+keeps = ["the photo share"]
+data = ["/var/lib/keepapp"]
+TOML
+mkapp() {   # an installed app with a ledger: instance, service description, UniFi address, a share with a file in it
+  touch "$WORK/ct-keepapp" "$WORK/resv"; : > "$HS_SERVICES_DIR/keepapp.toml"; mkdir -p "$WORK/keepshare"; echo photo > "$WORK/keepshare/photo.jpg"
+  CREATED_APP=keepapp bash -c ". $SCRIPTS/lib/created.sh; created container keepapp container; created reservation 10.0.0.9 aa:bb:cc:dd:ee:09; created service keepapp; created share photos $WORK/keepshare"
+}
+mkapp
+run plan remove keepapp
+if [ "$rc" = 0 ] && has "^source${tab}ledger" && has "^keeps${tab}the photo share" && has "^data${tab}yes" && has "^question${tab}delete_data.*${tab}keep" && has "^confirm_name${tab}keepapp"; then pass "remove plan: the ledger, what stays, the data question (default keep), the typed name"; else fail "remove plan: $out"; fi
+if has "^item${tab}share${tab}photos${tab}there${tab}keep" && has "^item${tab}container${tab}keepapp${tab}there${tab}remove" && ! has "^confirm_data"; then pass "keep: the share is kept, the instance goes, no second name"; else fail "keep items: $out"; fi
+run start remove keepapp;                         if [ "$rc" = 1 ] && has "type the name (keepapp)"; then pass "remove without the typed name is refused"; else fail "no name: $out"; fi
+run start remove keepapp --confirm demo;          check_eq "the package name instead of the instance is refused" 1 "$rc"
+: > "$LOG"; run start remove keepapp --confirm keepapp
+if [ "$rc" = 0 ] && has "^status${tab}started" && grep -q "apps-remove.sh run remove keepapp" "$LOG"; then pass "remove start: a background job"; else fail "remove start: $out $(cat "$LOG")"; fi
+rc=0; out=$(bash "$SCRIPTS/apps-remove.sh" run remove keepapp 2>&1 </dev/null) || rc=$?
+check_eq "the remove job ends well" 0 "$rc"
+check "the instance, the description and the address are gone" test ! -e "$WORK/ct-keepapp" -a ! -e "$HS_SERVICES_DIR/keepapp.toml" -a ! -e "$WORK/resv"
+check "keep: the share and the data in it are still there" test -f "$WORK/keepshare/photo.jpg"
+check "the ledger is empty, so a later install finds the share as one that was there before" test ! -e "$(CREATED_APP=keepapp bash -c ". $SCRIPTS/lib/created.sh; created_file")"
+check "what was not on the list is untouched" test -e "$WORK/ct-other" -a -e "$HS_SERVICES_DIR/other.toml"
+
+mkapp
+run plan remove keepapp --delete-data
+if [ "$rc" = 0 ] && has "^confirm_name${tab}keepapp" && has "^confirm_data${tab}keepapp" && has "^item${tab}share${tab}photos${tab}there${tab}remove"; then pass "delete plan: the share goes, the name is asked a second time"; else fail "delete plan: $out"; fi
+run start remove keepapp --delete-data --confirm keepapp
+if [ "$rc" = 1 ] && has "second time"; then pass "deleting the data needs the typed name again"; else fail "delete without name: $out"; fi
+run start remove keepapp --delete-data --confirm keepapp --confirm-data wrong; check_eq "a wrong second name is refused" 1 "$rc"
+: > "$LOG"; run start remove keepapp --delete-data --confirm keepapp --confirm-data keepapp
+if [ "$rc" = 0 ] && grep -q "apps-remove.sh run remove keepapp --delete-data" "$LOG"; then pass "delete start: a background job"; else fail "delete start: $out"; fi
+rc=0; out=$(bash "$SCRIPTS/apps-remove.sh" run remove keepapp --delete-data 2>&1 </dev/null) || rc=$?
+check_eq "the delete job ends well" 0 "$rc"
+check "delete: the share is taken away (its folder kept under the new name)" test ! -e "$WORK/keepshare" -a -f "$WORK/keepshare.deleted/photo.jpg"
+
+touch "$WORK/ct-oldapp"; : > "$HS_SERVICES_DIR/oldapp.toml"; mkdir -p "$WORK/oldshare"
+run plan remove oldapp
+if [ "$rc" = 0 ] && has "^source${tab}discovered" && has "^item${tab}container${tab}oldapp" && has "^item${tab}service${tab}oldapp" && ! has "^item${tab}share" && ! has "^question"; then pass "an app without a ledger: a read-only discovered list, instance and description only"; else fail "discovered: $out"; fi
+check "planning changed nothing" test -e "$WORK/ct-oldapp" -a -e "$HS_SERVICES_DIR/oldapp.toml"
+run plan remove oldapp --delete-data;             if [ "$rc" = 1 ] && has "no data to delete"; then pass "nothing is deleted that is on no list"; else fail "discovered delete: $out"; fi
+run plan remove nosuchapp;                        if [ "$rc" = 1 ] && has "no app called"; then pass "an unknown instance is refused"; else fail "unknown: $out"; fi
+rc=0; out=$(bash "$SCRIPTS/apps-remove.sh" run remove oldapp 2>&1 </dev/null) || rc=$?
+check "the discovered instance and description go, the rest stays" test ! -e "$WORK/ct-oldapp" -a ! -e "$HS_SERVICES_DIR/oldapp.toml" -a -d "$WORK/oldshare" -a -e "$WORK/ct-other"
+
 
 finish

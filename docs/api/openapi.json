@@ -665,6 +665,59 @@
     }
    }
   },
+  "/apps/remove/{verb}/{instance}": {
+   "get": {
+    "operationId": "apps.remove.by_verb.by_instance",
+    "summary": "remove an app instance, data kept or deleted (called by sys apps plan|start remove <instance>): hs sys apps remove plan|start <instance> [--delete-data] [--confirm <instance>] [--confirm-data <instance>]; the same lines as plan|start",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "remove",
+      "<verb>",
+      "<instance>"
+     ],
+     "script": "apps-remove.sh",
+     "args": "{1} remove {2} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "verb",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "instance",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/apps/start/{action}": {
    "post": {
     "operationId": "apps.start.by_action",

@@ -1314,7 +1314,10 @@ CHANGES = {
                        "--from": (r"^(read|needs|ask|run(:[a-z0-9][a-z0-9-]{0,30})?|check|done|on|rebuild)$", False)}, "stdin": True},
              # a failed install (apps-recover.sh, step 9, #466): retry from its step, or remove what the run created (the job id of the failed install)
              {"fixed": [r"^(retry|cleanup)$", r"^[0-9A-Za-z][0-9A-Za-z-]{6,100}$"],
-              "opts": {"--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--delete-data": (None, False)}, "stdin": True}],
+              "opts": {"--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--delete-data": (None, False)}, "stdin": True},
+             # Remove with keep/delete data (apps-remove.sh, step 11): the instance; the second typed name for deleting the data is --confirm-data
+             {"fixed": [r"^remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+              "opts": {"--delete-data": (None, False), "--confirm-data": (r"^[a-z0-9][a-z0-9-]{0,40}$", False)}}],
     # an answer is `--set KEY=value` (no control characters); the one secret answer of a recipe is a single line on stdin
     "recipes": [{"fixed": [r"^[a-z0-9][a-z0-9-]{0,40}$", r"^run$"],
                  "opts": {"--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--interactive": (None, False)}, "stdin": True}],

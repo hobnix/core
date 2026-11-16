@@ -47,7 +47,8 @@ steps_all=(read needs ask run check done on rebuild)
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start|run) ;; *) echo "usage: apps-change.sh plan|start install <package> [--repo R] [--tag T] [--name <container>] [--set KEY=value]... [--ask] [--from <step>]" >&2; exit 1 ;; esac
 case "$action" in retry|cleanup) exec bash "${HS_APPS_RECOVER:-$here/apps-recover.sh}" "$verb" "$action" "${@:3}" ;; esac   # a failed install (step 9, #466)
-[ "$action" = install ] || refuse "unknown action (install, retry, cleanup)"
+case "$action" in remove) exec bash "${HS_APPS_REMOVE:-$here/apps-remove.sh}" "$verb" remove "${@:3}" ;; esac   # Remove with keep/delete data (step 11, #466)
+[ "$action" = install ] || refuse "unknown action (install, retry, cleanup, remove)"
 [[ "$name" =~ $word ]] || refuse "not a package name (lower case letters, digits and dashes)"
 shift 3 || true
 
