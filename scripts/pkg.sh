@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --repos | list [--all] [--kind recipe|extension] | updates | validate | new <name> --template recipe|extension [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | repo list|add|remove | --list
+# args: --market | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -207,5 +207,5 @@ case "${1:-list}" in
       remove) shift; pkg_changed; py repo remove "${1:-}" && ok "$(t 'Repository removed.')" ;;
       *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>"; exit 1 ;;
     esac ;;
-  *) say "usage: hs pkg list [--all] [--kind recipe|extension] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
+  *) say "usage: hs pkg list [--all] [--kind recipe|extension|capability] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
 esac
