@@ -224,6 +224,14 @@ class ScenarioTests(unittest.TestCase):
             else:
                 os.environ["HS_NESTED_ROLE"] = old
 
+    def test_the_rollback_stage_puts_etc_nixos_back(self):
+        # stages 4 and 5 run on the same VM: the bad commit must not stay in /etc/nixos
+        text = [s["text"] for s in n.build_scenario("rollback", self.P)]
+        i_upd = next(i for i, t in enumerate(text) if "hs update --yes" in t)
+        i_rst = next(i for i, t in enumerate(text) if "reset -q --hard {orig}" in t)
+        self.assertGreater(i_rst, i_upd)
+        self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
+
     def test_nested_sh_plans_every_stage(self):
         # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
         for st in n.STAGES:

@@ -75,6 +75,10 @@ def rollback(params):
     bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
     return login_root(params) + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
+        # the rollback goes back to the generation, not to the files: the bad commit stays in /etc/nixos and the next rebuild would apply it again
+        # (stages 4 and 5 run on this VM afterwards), so the stage puts the checkout back where it was
+        step("capture", "git -C /etc/nixos rev-parse HEAD", var="orig", strip=True, what="the commit of /etc/nixos before the stage"),
+        step("capture", "git -C /etc/nixos remote get-url origin", var="origin", strip=True, what="the address of origin before the stage"),
         # the ISO of a ref that is not in develop leaves /etc/nixos on a detached HEAD (scripts/lib/checkout.sh): the stage needs a branch to push
         step("run", "git -C /etc/nixos symbolic-ref -q HEAD >/dev/null || git -C /etc/nixos switch -q -c hs-testlab", what="/etc/nixos is on a branch"),
         step("capture", "git -C /etc/nixos symbolic-ref --short HEAD", var="branch", strip=True, what="the name of the branch"),
@@ -98,6 +102,9 @@ def rollback(params):
         step("run", "systemctl is-active sshd", timeout=120, what="sshd runs again after the update"),
         step("run_var", "test \"$(readlink /run/current-system)\" = {before}", what="the system is on the generation from before the update"),
         step("run", "test ! -e /etc/nixos/hs-testlab-bad.nix || ! systemctl is-active sshd | grep -qv '^active$'", what="the bad change is not live"),
+        step("run_var", "git -C /etc/nixos reset -q --hard {orig} && git -C /etc/nixos remote set-url origin {origin} && "
+                        "rm -rf /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work && test ! -e /etc/nixos/hs-testlab-bad.nix",
+             what="/etc/nixos is back at its commit, without the bad module"),
     ]
 
 
