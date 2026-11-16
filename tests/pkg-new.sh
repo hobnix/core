@@ -27,6 +27,15 @@ check_out "the dry run names the container" "demo-app" env state="$WORK/state" H
 check_out "the closing text names its guide" 'docs_hint demo-app' cat "$P/run.sh"
 check_eq "the guide has one H1" "1" "$(grep -c '^# ' "$P/guide.md")"
 check_eq "the guide has no raw HTML" "0" "$(grep -cE '<(p|br|div|span|details|summary|img|a|table|b|i|small|center)[ >/]' "$P/guide.md" || true)"
+check_eq "the manifest is at the current API level" "requires_core = \">=$(cat "$SCRIPTS/lib/api-level")\"" "$(grep '^requires_core' "$P/package.toml")"
+for k in description description_de icon category app_version; do check "the recipe manifest has $k" grep -q "^$k = " "$P/package.toml"; done
+check "the default category is on the list of config/package-categories.toml" grep -q '^category = "tools"' "$P/package.toml"
+for t in app app.health app.backup app.update app.remove app.uses; do check "the recipe manifest has [$t]" grep -q "^\[$t\]" "$P/package.toml"; done
+check_eq "the index carries icon, category and app_version" "3" "$(sed -n '/^\[package.demo-app\]/,/^$/p' "$R/index.toml" | grep -cE '^(icon|category|app_version) = ')"
+check_out "options write the fields" "New package demo-opt" $NEW demo-opt --template recipe --dir "$R" --description "Photos." --description-de "Fotos." --icon ph:image --category media --app-version 1.2.3 --instances many
+check_eq "the fields are in the manifest" 'icon = "ph:image" category = "media" app_version = "1.2.3" instances = "many"' "$(grep -E '^(icon|category|app_version|instances) = ' "$R/recipes/demo-opt/package.toml" | paste -sd' ')"
+check "repo-check passes with the options" $PKG repo-check "$R"
+check "validate passes with the options" env HS_PACKAGES_ROOT="$WORK/rtree" $PKG validate
 check_out "the default folder is the current one" "Created run.sh" bash -c "cd '$R' && $NEW demo-two --template recipe"
 check "repo-check passes with two new packages" $PKG repo-check "$R"
 
@@ -72,7 +81,29 @@ else
   skip "hs ext demo-ext list shows them (column is not installed)"
 fi
 
+echo "-- the capability template"
+C=$WORK/capabilities; repo "$C" capabilities
+check_out "hs pkg new writes a capability" "Created package.toml" $NEW demo-cap --template capability --dir "$C"
+Y=$C/capabilities/demo-cap
+for f in package.toml guide.md; do check "the capability has $f" test -s "$Y/$f"; done
+check "the capability stays at level 1" grep -q '^requires_core = ">=1"' "$Y/package.toml"
+check_eq "and carries no store field" "0" "$(grep -cE '^(description|icon|category|app_version)' "$Y/package.toml" || true)"
+T=$WORK/ctree; mkdir -p "$T"; ln -s "$C/capabilities" "$T/capabilities"
+check "pkg.py validate passes" env HS_PACKAGES_ROOT="$T" $PKG validate
+check "pkg.py repo-check passes" $PKG repo-check "$C"
+
+echo "-- the store fields of the extension"
+check_eq "the extension manifest has all four store fields" "4" "$(grep -cE '^(description|icon|category|app_version) = ' "$X/package.toml")"
+check_eq "the extension is at the current API level" "requires_core = \">=$(cat "$SCRIPTS/lib/api-level")\"" "$(grep '^requires_core' "$X/package.toml")"
+
 echo "-- refusals"
+check_out "an unknown category is refused" "category" $NEW demo-c1 --template recipe --dir "$R" --category nonsense
+check_out "an icon that is no Phosphor name is refused" "icon" $NEW demo-c2 --template recipe --dir "$R" --icon "<x>"
+check_out "an app version with a space is refused" "app-version" $NEW demo-c3 --template recipe --dir "$R" --app-version "1 2"
+check_out "instances other than one or many are refused" "instances" $NEW demo-c4 --template recipe --dir "$R" --instances two
+check_out "instances on an extension are refused" "instances" $NEW demo-c5 --template extension --dir "$E" --instances many
+check_out "store fields on a capability are refused" "description" $NEW demo-c6 --template capability --dir "$C" --description x
+check "nothing was written for those" bash -c "[ ! -e '$R/recipes/demo-c1' ] && [ ! -e '$R/recipes/demo-c4' ] && [ ! -e '$C/capabilities/demo-c6' ] && [ ! -e '$E/extensions/demo-c5' ]"
 before="$(cksum < "$P/package.toml") $(cksum < "$R/index.toml")"
 check_out "the same name again is refused" "already" $NEW demo-app --template recipe --dir "$R"
 check_eq "and nothing changed" "$before" "$(cksum < "$P/package.toml") $(cksum < "$R/index.toml")"
@@ -83,7 +114,7 @@ check_out "a name ending in a newline is refused" "not allowed" $NEW $'demo\n' -
 check_out "a title holding a placeholder is written literally" "New package demo-ph" $NEW demo-ph --template recipe --title '{title_de}' --title-de 'x"y' --dir "$R"
 check "the manifest of that package is valid TOML" python3 -c "import tomllib,sys;tomllib.load(open(sys.argv[1],'rb'))" "$R/recipes/demo-ph/package.toml"
 check_out "the message names the package, not an option" "New package demo-ph2" $NEW --template recipe demo-ph2 --dir "$R"
-check_out "the capability template is not there yet" "#238" $NEW demo-cap --template capability --dir "$E"
+check_out "an unknown template is refused" "Unknown template" $NEW demo-cap --template service --dir "$E"
 check_out "a folder that is no package repository is refused" "not a checkout" $NEW demo-x --template recipe --dir "$HS_STATE_DIR"
 check_out "a recipe in an extensions checkout is refused" "not a checkout" $NEW demo-x --template recipe --dir "$E"
 check_out "a title with a tab is refused" "one line" $NEW demo-y --template recipe --dir "$R" --title "a${tab}b"
