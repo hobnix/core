@@ -380,7 +380,7 @@ stage_backup() {
   res[4]=$(worst "$a" "$b")
 }
 stage_pool() {
-  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB && fast_disks "$vm" || { res[5]=error; return; }
+  vdisk_add "$vm" p1 10GiB && vdisk_add "$vm" p2 10GiB && fast_disks "$vm" || { res[5]=error; return; }
   res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2 fast1=f1 fast2=f2" "$pwfile")
 }
 stage_browser() {
