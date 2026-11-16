@@ -34,6 +34,8 @@
   "recipeQuestionHours": "access",
   "webTerminalIdleMinutes": "access",
   "webTerminalMaxHours": "access",
+  "appsAutoupdateEnabled": "general",
+  "appsAutoupdateWindow": "general",
   "nic": "network",
   "smbAllow": "network",
   "vlans": "network",

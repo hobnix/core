@@ -435,6 +435,37 @@ value = '''
 webTerminalMaxHours = 8'''
 
 [[item]]
+kind = "option"
+key = "appsAutoupdateEnabled"
+type = "bool"
+required = false
+settable = false
+secret = false
+store = "settings"
+default = 'false'
+doc = '''
+# EXPERIMENTAL and hidden, not tested on hardware: lets an app whose update policy is "automatic" update itself
+# inside the quiet window (patch and minor releases of apps from the default repositories only). Off by default;
+# nothing runs and "hs apps policy <app> automatic" is refused while it is false.'''
+value = '''
+appsAutoupdateEnabled = false'''
+
+[[item]]
+kind = "option"
+key = "appsAutoupdateWindow"
+type = "string"
+required = false
+settable = false
+secret = false
+store = "settings"
+default = '"03:00-05:00"'
+doc = '''
+# EXPERIMENTAL: the quiet window (local time, HH:MM-HH:MM, may pass midnight) in which automatic app
+# updates may run. Only used when appsAutoupdateEnabled is true. Default "03:00-05:00".'''
+value = '''
+appsAutoupdateWindow = "03:00-05:00"'''
+
+[[item]]
 kind = "section"
 title = "Network"
 page = "network"
