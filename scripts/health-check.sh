@@ -399,7 +399,7 @@ for k in "${keys[@]}"; do
     zfs:*:*) triggers+=("$k") ;;
     bulk:*:*) triggers+=("$k") ;;
     forecast:*:urgent) triggers+=("$k") ;;     # a pool that is full in less than the urgent forecast
-    space:*) [ -z "${over_full[$k]:-}" ] || triggers+=("$k") ;;   # a pool or the bulk disk above 95 %
+    space:*) [ -z "${over_full[$k]:-}" ] || triggers+=("$k") ;;   # a pool or a mounted volume above 95 %
   esac
 done
 if ! $dry; then
