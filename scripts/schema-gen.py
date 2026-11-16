@@ -8,10 +8,11 @@
   schema-gen.py settings   key<TAB>legacy file in /etc/hs (or empty), for every option with store = "settings"
   schema-gen.py defaults   key<TAB>nix expression, for every option that has a default
   schema-gen.py pages      key<TAB>page, in file order (the settings page each option is shown on, besides Advanced)
-  schema-gen.py overlay [write|check|list] [--packages DIR] [--out DIR]
+  schema-gen.py overlay [write|check|list|keys] [--packages DIR] [--out DIR]
                            the same kind of derived file for the capability packages installed on a machine (docs/PLAN-capabilities-on-machine.md):
                            reads DIR/<name>/capability.toml (default $HS_PACKAGES_DIR or /var/lib/hs/packages/current) and writes
-                           capabilities.tsv into OUT (default $HS_STATE_DIR/generated or /var/lib/hs/generated); a package named like a core
+                           capabilities.tsv, schema.overlay.json and config-keys.overlay (the options.toml of kind = "capability"
+                           packages; a key of the core or of another package is refused) into OUT (default $HS_STATE_DIR/generated or /var/lib/hs/generated); a package named like a core
                            capability is refused. Never touches the checkout. `list` prints the rows without writing.
   schema-gen.py rule KEY   type<TAB>choices<TAB>min<TAB>pattern<TAB>hint of one option (what hs sys config set checks); exit 1 if unknown
 
@@ -258,7 +259,9 @@ def overlay_rows(pkgdir):
         for name in sorted(os.listdir(pkgdir)):
             f = os.path.join(pkgdir, name, 'capability.toml')
             if not os.path.isfile(f):
-                continue
+                f = os.path.join(pkgdir, name, 'package.toml')     # a capability package (kind = "capability") has only the one manifest
+                if not os.path.isfile(f) or not _is_capability_pkg(f):
+                    continue
             try:
                 with open(f, 'rb') as fh:
                     m = tomllib.load(fh)
@@ -280,30 +283,125 @@ def render_overlay_tsv(pkgdir):
                       '# name<TAB>implied_by (runtime settings that switch it on, comma separated)<TAB>title'] + overlay_rows(pkgdir)) + '\n'
 
 
+OPTION_FIELDS = ('key', 'type', 'store', 'default', 'description', 'settable', 'secret', 'choices', 'min', 'pattern', 'hint', 'page', 'legacy')
+KEY_RE = re.compile(r'[a-z][A-Za-z0-9]*')
+
+
+def _is_capability_pkg(path):
+    try:
+        with open(path, 'rb') as fh:
+            return tomllib.load(fh).get('kind') == 'capability'
+    except (tomllib.TOMLDecodeError, OSError):
+        return False
+
+
+def overlay_options(pkgdir):
+    """Options of the installed capability packages (options.toml named by package.toml): a list of normalised dicts, sorted by package name and
+    file order. The key of an option may not exist in the core schema nor in another package, and every [[item]] carries capability = <package>:
+    anything else makes the whole run fail with the reason (install then leaves the package inactive and the previous overlay in place)."""
+    core = {o['key'] for o in options(load())}
+    out, owner = [], {}
+    if not os.path.isdir(pkgdir):
+        return out
+    for name in sorted(os.listdir(pkgdir)):
+        f = os.path.join(pkgdir, name, 'package.toml')
+        if not os.path.isfile(f):
+            continue
+        try:
+            with open(f, 'rb') as fh:
+                m = tomllib.load(fh)
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            die('%s: %s' % (f, e))
+        if m.get('kind') != 'capability' or not m.get('options'):
+            continue
+        of = os.path.join(pkgdir, name, str(m['options']))
+        try:
+            with open(of, 'rb') as fh:
+                items = tomllib.load(fh).get('item', [])
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            die('%s: %s' % (of, e))
+        for it in items:
+            key = it.get('key') if isinstance(it, dict) else None
+            where = '%s: %s' % (name, key)
+            if not isinstance(key, str) or not KEY_RE.fullmatch(key):
+                die('%s: option key must look like gatewayPort (got %r)' % (name, key))
+            if it.get('capability') != name:
+                die('%s: capability must be "%s"' % (where, name))
+            if key in core:
+                die('%s: the key is an option of the core; package %s is not activated' % (where, name))
+            if key in owner:
+                die('%s: the key is also an option of package %s; package %s is not activated' % (where, owner[key], name))
+            if it.get('type') not in TYPES:
+                die('%s: type must be one of %s' % (where, '|'.join(TYPES)))
+            if it.get('store', 'machine') not in ('machine', 'settings'):
+                die('%s: store must be machine or settings' % where)
+            for b in ('settable', 'secret'):
+                if b in it and not isinstance(it[b], bool):
+                    die('%s: %s must be true or false' % (where, b))
+            if it.get('settable') and it.get('secret'):
+                die('%s: a secret option cannot be settable from the web' % where)
+            if 'choices' in it and not (isinstance(it['choices'], list) and it['choices']):
+                die('%s: choices must be a non-empty list' % where)
+            if 'pattern' in it:
+                if it['type'] != 'string' or not it.get('hint'):
+                    die('%s: pattern needs type string and a hint' % where)
+                try:
+                    re.compile(it['pattern'])
+                except re.error as e:
+                    die('%s: bad pattern: %s' % (where, e))
+            owner[key] = name
+            row = {k: it[k] for k in OPTION_FIELDS if k in it}
+            row.setdefault('store', 'machine')
+            row.setdefault('settable', False)
+            row.setdefault('secret', False)
+            row['capability'] = name
+            out.append(row)
+    return out
+
+
+def render_overlay_schema(pkgdir):
+    """schema.overlay.json: the same inputs give the same bytes (sorted keys, fixed separators, no time stamp)"""
+    return json.dumps({'items': overlay_options(pkgdir)}, sort_keys=True, separators=(',', ':'), ensure_ascii=False) + '\n'
+
+
+def render_overlay_keys(pkgdir):
+    """config-keys.overlay: key<TAB>settable|-<TAB>secret|-<TAB>store<TAB>capability, one line per option"""
+    rows = ['# GENERATED on this machine by `schema-gen.py overlay` from the options.toml of the installed capability packages: never edit.',
+            '# key<TAB>settable (yes|-)<TAB>secret (yes|-)<TAB>store<TAB>capability']
+    for o in overlay_options(pkgdir):
+        rows.append('\t'.join([o['key'], 'yes' if o['settable'] else '-', 'yes' if o['secret'] else '-', o['store'], o['capability']]))
+    return '\n'.join(rows) + '\n'
+
+
 def overlay_main(rest):
     def opt(flag, default):
         return rest[rest.index(flag) + 1] if flag in rest and rest.index(flag) + 1 < len(rest) else default
     pkgdir = opt('--packages', os.environ.get('HS_PACKAGES_DIR') or '/var/lib/hs/packages/current')
     out = opt('--out', os.path.join(os.environ.get('HS_STATE_DIR') or '/var/lib/hs', 'generated'))
     mode = rest[0] if rest and not rest[0].startswith('--') else 'write'
-    want = render_overlay_tsv(pkgdir)
+    files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
+             ('config-keys.overlay', render_overlay_keys(pkgdir))]
     if mode == 'list':
-        print(''.join(l for l in want.splitlines(True) if not l.startswith('#')), end='')
+        print(''.join(l for l in files[0][1].splitlines(True) if not l.startswith('#')), end='')
         return 0
-    path = os.path.join(out, 'capabilities.tsv')
-    stale = not os.path.exists(path) or read(path) != want
+    if mode == 'keys':
+        print(''.join(l for l in files[2][1].splitlines(True) if not l.startswith('#')), end='')
+        return 0
+    stale = [(n, w) for n, w in files if not os.path.exists(os.path.join(out, n)) or read(os.path.join(out, n)) != w]
     if mode == 'check':
         if stale:
-            print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + path)
+            print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + '\n  '.join(os.path.join(out, n) for n, _ in stale))
         return 1 if stale else 0
     if mode != 'write':
-        print('overlay: write, check or list', file=sys.stderr)
+        print('overlay: write, check, list or keys', file=sys.stderr)
         return 2
     if stale:
         os.makedirs(out, exist_ok=True)
+    for n, w in stale:
+        path = os.path.join(out, n)
         tmp = path + '.tmp'
         with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(want)
+            f.write(w)
         os.replace(tmp, path)
         print('wrote ' + path)
     return 0
