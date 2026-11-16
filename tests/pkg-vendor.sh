@@ -109,4 +109,39 @@ $PKG fetch >/dev/null 2>&1
 check_out "a module from an added repository is refused" "only the default repositories may ship" bash -c "$PKG install addedmod --repo other 2>&1; true"
 check "and nothing was vendored" test ! -e "$V"
 
+echo "-- a release that waits for a newer core"
+mkdir -p "$HS_STATE_DIR/packages/current/fixmod"; printf 'name = "fixmod"
+version = "1.1.0"
+kind = "capability"
+requires_core = ">=1"
+' > "$HS_STATE_DIR/packages/current/fixmod/package.toml"
+printf '[package.fixmod]
+version = "1.1.0"
+repo = "other"
+commit = "abc"
+tag = "v1.1.0"
+' > "$HS_STATE_DIR/packages/installed.toml"
+cd "$R"; release 1.5.0 1.5.0 fixmod
+printf '[package.fixmod]
+version = "1.5.0"
+kind = "capability"
+path = "capabilities/fixmod"
+requires_core = ">=1"
+requires_nix_api = 9
+' > index.toml
+git add -A && git commit -q -m "needs 9" && git -c user.signingkey="$WORK/good.pub" tag -s v1.5.1 -m r; cd "$ROOT"
+$PKG fetch >/dev/null 2>&1
+check_out "updates --waits names the release and what it needs" "^fixmod${tab}1[.]5[.]0${tab}Nix API level 9" bash -c "$PKG updates --waits"
+check "updates does not list what cannot be taken" bash -c "! $PKG updates | grep -q fixmod"
+check_out "the market marks it as waits" "fixmod${tab}capability${tab}other${tab}1[.]5[.]0${tab}1[.]1[.]0${tab}waits" bash -c "$PKG market"
+check "core-check is quiet for a package without a module" $PKG core-check
+printf 'name = "fixmod"
+version = "1.1.0"
+kind = "capability"
+module = "module.nix"
+requires_core = ">=1"
+requires_nix_api = 9
+' > "$HS_STATE_DIR/packages/current/fixmod/package.toml"
+check_out "core-check names an installed module package the core does not suit" "^fixmod${tab}needs Nix API level 9" bash -c "$PKG core-check; true"
+
 finish

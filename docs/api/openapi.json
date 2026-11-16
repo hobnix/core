@@ -7515,7 +7515,7 @@
   "/pkg/market": {
    "get": {
     "operationId": "pkg.market",
-    "summary": "every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|orphan), core (yes|no), audience, title",
+    "summary": "every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|waits|orphan; waits = the release needs a newer core), core (yes|no), audience, title",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
