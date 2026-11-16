@@ -235,7 +235,10 @@ class Console:
         self.send("%s; echo \"__%s__ rc=$?\"" % (cmd, tag))
         got = self.expect(r"__%s__ rc=(\d+)" % tag, timeout)
         rc = int(re.search(r"__%s__ rc=(\d+)" % tag, got).group(1))
-        out = got.split("\n", 1)[1] if "\n" in got else ""
+        # the output starts after the line that echoes the typed command (its `$?` is still unexpanded); a prompt left in the buffer by the
+        # command before would otherwise be the first line and end up in the output
+        echo = re.search(r"__%s__ rc=\$\?\"[^\n]*\n" % tag, got)
+        out = got[echo.end():] if echo else (got.split("\n", 1)[1] if "\n" in got else "")
         out = re.sub(r"\n?[^\n]*__%s__ rc=\d+$" % tag, "", out)
         return rc, out
 

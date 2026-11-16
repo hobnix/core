@@ -58,6 +58,14 @@ class ConsoleTests(unittest.TestCase):
         c = n.Console(FakeTransport(outputs={"lsblk": "sda 100\n"}))
         self.assertEqual(c.run("lsblk"), (0, "sda 100"))
 
+    def test_output_of_the_second_command_has_no_prompt_in_front(self):
+        # the prompt printed after the first command is still in the buffer when the second command is typed; it is not output of the second
+        t = FakeTransport(outputs={"first": "one\n", "second": "two\n"})
+        c = n.Console(t)
+        self.assertEqual(c.run("first"), (0, "one"))
+        t.queue.append("[root@nested-test:~]# ")
+        self.assertEqual(c.run("second"), (0, "two"))
+
     def test_run_nonzero_rc(self):
         c = n.Console(FakeTransport(rc_for=lambda cmd: 3))
         self.assertEqual(c.run("false")[0], 3)

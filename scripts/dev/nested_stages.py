@@ -44,17 +44,23 @@ def disk_by_name(params, key, var):
 
 # ---------------------------------------------------------------- stage 3: a bad update rolls back by itself
 def rollback(params):
-    """Put a bad commit on a local origin of /etc/nixos (it switches sshd off after the switch), run `hs update --yes`, and expect that the
+    """Put a bad commit on a local origin of /etc/nixos (it makes sshd fail to start after the switch), run `hs update --yes`, and expect that the
     update goes back to the previous generation by itself and sshd runs again (scripts/update.sh, scripts/rebuild.sh rollback_now)."""
-    bad = "{ lib, ... }: { services.openssh.enable = lib.mkForce false; }"
+    # sshd must exist and fail to start: with services.openssh.enable = false the unit is gone after the switch, and post_check in
+    # scripts/rebuild.sh (it only looks at an sshd unit that exists) finds nothing wrong, so no rollback would be due
+    bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
     return login_root(params) + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
-        step("capture", "git -C /etc/nixos rev-parse --abbrev-ref HEAD", var="branch", strip=True, what="/etc/nixos is on a branch"),
-        step("run_var", "test {branch} != HEAD", what="not a detached checkout"),
+        # the ISO of a ref that is not in develop leaves /etc/nixos on a detached HEAD (scripts/lib/checkout.sh): the stage needs a branch to push
+        step("run", "git -C /etc/nixos symbolic-ref -q HEAD >/dev/null || git -C /etc/nixos switch -q -c hs-testlab", what="/etc/nixos is on a branch"),
+        step("capture", "git -C /etc/nixos symbolic-ref --short HEAD", var="branch", strip=True, what="the name of the branch"),
         step("run", "rm -rf /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work && git init -q --bare /var/tmp/hs-lab-origin.git", what="a local origin for /etc/nixos"),
         step("run_var", "git -C /etc/nixos push -q /var/tmp/hs-lab-origin.git HEAD:refs/heads/{branch}", what="the current state goes to the local origin"),
         step("run", "git -C /etc/nixos remote set-url origin /var/tmp/hs-lab-origin.git && git -C /etc/nixos fetch -q origin", what="/etc/nixos follows the local origin"),
         step("run_var", "git -C /etc/nixos branch -q --set-upstream-to=origin/{branch}", what="the branch tracks it"),
+        # the stable channel follows the newest release tag, and the VM knows v0.1.0 from the ISO's checkout: `hs update` would never look at the
+        # bad commit. Without a tag it follows the current branch (scripts/update.sh).
+        step("run", "git -C /etc/nixos tag -l | xargs -r git -C /etc/nixos tag -d >/dev/null", what="no release tag: the update follows the branch"),
         step("run_var", "git clone -q -b {branch} /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work", what="a work copy for the bad commit"),
         step("run", "printf '%%s\\n' %s > /var/tmp/hs-lab-work/hs-testlab-bad.nix" % _q(bad), what="the bad module (sshd off)"),
         step("run", "sed -i 's|imports = \\[ ./hardware-configuration.nix \\]|imports = [ ./hardware-configuration.nix ./hs-testlab-bad.nix ]|' "
