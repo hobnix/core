@@ -141,6 +141,9 @@ case "${1:-list}" in
         fail "$(t 'Removing needs a person at a terminal, --yes or --confirm-name <name>.')"; exit 1
       fi
     fi
+    # the keys of its options become "retired" (hs config check says "unused", not "unknown"): written before the folder is gone
+    PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay retire "$name" --packages "$st/packages/current" --out "$st/generated" >/dev/null \
+      || warn "$(t 'The options of this package could not be remembered.')"
     py remove "$name"
     for o in on off; do
       f=$st/capabilities-$o
