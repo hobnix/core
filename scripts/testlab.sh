@@ -350,7 +350,12 @@ worst() {   # worst <result>...: the first that is not ok
 }
 
 stage_rollback() {
-  res[3]=$(xrun rollback "$vm" "" "$pwfile")
+  local d=""
+  if [ "${HS_NESTED_ROLE:-}" = homeserver ]; then   # the full configuration needs the pool fast (see stage_backup)
+    fast_disks "$vm" || { res[3]=error; return; }
+    d="fast1=f1 fast2=f2"
+  fi
+  res[3]=$(xrun rollback "$vm" "$d" "$pwfile")
 }
 fast_on=
 fast_disks() {   # fast_disks <vm>: two small virtual disks for the pool `fast` (the full configuration of the storage part always imports it)
@@ -375,7 +380,7 @@ stage_backup() {
   res[4]=$(worst "$a" "$b")
 }
 stage_pool() {
-  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB && fast_disks "$vm" || { res[5]=error; return; }
+  vdisk_add "$vm" p1 14GiB && vdisk_add "$vm" p2 14GiB && fast_disks "$vm" || { res[5]=error; return; }
   res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2 fast1=f1 fast2=f2" "$pwfile")
 }
 stage_browser() {

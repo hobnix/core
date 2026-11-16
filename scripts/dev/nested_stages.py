@@ -47,10 +47,20 @@ def login_root(params):
     user, pw = "adminuser", params["password"]
     return [
         step("login", "", user=user, secret=pw, timeout=420, what="the console is logged in as adminuser"),
+        step("run", "sudo -k", what="sudo forgets an earlier password (it would not ask again, and the password would be typed into the root shell)"),
         step("send", "sudo -i"),
-        step("wait", r"(?:\[sudo\] password for %s: ?|\[root@[^\]]*\]# )$" % user, timeout=30, what="sudo asks for the password or gives a root shell"),
+        step("wait", r"\[sudo\] password for %s: ?$" % user, timeout=30, what="sudo asks for the password"),
         step("send_secret", pw),
-        step("wait", r"\[root@[^\]]*\]# ", timeout=30, what="a root shell"),
+        # what is typed while sudo still checks the password is thrown away (sudo flushes the terminal input): wait for root's first prompt,
+        # the plain bash one or the two-line starship prompt (its first line is "root <host> <dir>")
+        step("wait", r"(?:\[root@[^\]]*\]# |root nested-test )", timeout=60, what="sudo gave a root shell"),
+        # after the full configuration (hs rebuild) root's shell is zsh with a two-line starship prompt: the harness cannot wait for it. A plain
+        # bash with a prompt of its own shape is the same on every system
+        step("send", "PS1='[root@nested-test:\\w]# ' exec bash --norc --noprofile"),
+        step("wait", r"\[root@[^\]]*\]# ", timeout=60, what="a root shell"),
+        # the serial console is 80 columns wide: a long command line wraps, and the redraw of the line editor puts a space or a prompt into the
+        # middle of the end marker (seen as "__ HSN9__" in run 20)
+        step("run", "stty cols 500", what="the console is wide enough for a long command line"),
     ]
 
 
@@ -73,7 +83,10 @@ def rollback(params):
     # sshd must exist and fail to start: with services.openssh.enable = false the unit is gone after the switch, and post_check in
     # scripts/rebuild.sh (it only looks at an sshd unit that exists) finds nothing wrong, so no rollback would be due
     bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
-    return login_root(params) + [
+    # on a homeserver VM (disks for the pool fast given) the full configuration comes first: without the pool fast the switch of the update fails
+    # for that reason, and the bad sshd module would never be reached
+    prep = full_system(params) if "fast1" in params.get("disks", {}) else []
+    return login_root(params) + prep + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
         # the rollback goes back to the generation, not to the files: the bad commit stays in /etc/nixos and the next rebuild would apply it again
         # (stages 4 and 5 run on this VM afterwards), so the stage puts the checkout back where it was
@@ -117,9 +130,9 @@ def backup(params):
         step("run_var", "test -b {dev}", what="the backup disk is a block device"),
         step("run_var", "HS_BACKUP_YES=1 hs backup init {dev}", timeout=300, what="hs backup init makes the disk the backup disk"),
         step("run", "mkdir -p /var/lib/hs && echo hs-testlab-marker > /var/lib/hs/testlab-marker", what="a marker file in the state folder"),
-        step("run", "hs backup now", timeout=1800, what="hs backup now finishes"),
+        step("run", "hs backup now --foreground", timeout=1800, what="hs backup now finishes"),
         step("run", "hs backup list | grep -q .", what="a snapshot is listed"),
-        step("run", "hs backup verify", timeout=900, what="hs backup verify passes"),
+        step("run", "hs backup verify --foreground", timeout=900, what="hs backup verify passes"),
         step("run", "sync && umount /var/lib/hs-backup 2>/dev/null; sync", expect_rc=None, what="the disk is quiet before it is moved"),
     ]
 
@@ -152,18 +165,31 @@ def pool(params):
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
         # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
-        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk",
+        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk | tr '\\n\\t' '  '; echo",   # echo: tr drops the last newline, and the marker of the harness must not share the line
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
-        step("run", "for i in $(seq 1 180); do mountpoint -q /bulk && break; sleep 5; done", timeout=1800, what="the pool job finishes (/bulk shows up)"),
+        # the job has to be over first; then bulk-mount.service brings /bulk up the way boot does. WORKAROUND for hobnix/server#699: the mergerfs
+        # that the job started lives in the job's unit and ends with it, so /bulk is not mounted after the job
+        step("run", "for i in $(seq 1 120); do systemctl list-units 'hs-job-pool-add-bulk-*' --state=active,activating --no-legend | grep -q . || break; sleep 3; done",
+             timeout=600, what="the pool job is over"),
+        step("run", "systemctl restart bulk-mount.service", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
+        step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="/bulk shows up", expect_rc=None),
+        # what the console log needs when /bulk does not show up (not a check)
+        step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "
+                    "systemctl status bulk-mount.service --no-pager | head -n 12 | cut -c1-200; grep -E 'bulk|data' /proc/mounts | cut -c1-150; ls /var/lib/hs/disks 2>&1 | head",
+             expect_rc=None, what="the state of the pool job and the mounts is shown"),
         step("run", "hs pool bulk | grep -q data", what="hs pool bulk lists the data disks"),
         step("run", "mountpoint -q /bulk", what="/bulk is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
         step("run", "hs sys fm locations | grep -q 'disk:data-01' && hs sys fm locations | grep -q 'disk:data-02'", what="the file manager sees both data disks"),
-        step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
+        step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab /var/lib/hs/disks/data-02/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
         step("run", "hs sys fm ls disk:data-01 --path testlab | grep -q a.txt", what="the file manager lists it"),
-        step("run", "printf 'a.txt\\0' | hs sys fm start copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab | grep -q 'status.*done'",
+        # the plan and the answer of start stay in the console log (a refusal says why)
+        step("run", "printf 'a.txt\\0' | HS_CALLER=test hs sys fm plan copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab; true",
+             what="the plan of the copy is shown"),
+        step("run", "out=$(printf 'a.txt\\0' | HS_CALLER=test hs sys fm start copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab); "
+                    "echo \"$out\"; echo \"$out\" | grep -q 'status.*done'",
              timeout=300, what="the file manager copies it to the second data disk"),
         step("run", "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do [ -f /var/lib/hs/disks/data-02/testlab/a.txt ] && break; sleep 5; done; "
                     "grep -qx hs-testlab /var/lib/hs/disks/data-02/testlab/a.txt", timeout=120, what="the copy arrived with the same content"),
@@ -215,7 +241,7 @@ def upgrade_steps(params):
         step("run", "sudo -n git -C /etc/nixos remote set-url origin %s" % _q(repo), what="origin is the Hobnix repository"),
         step("run", "sudo -n git -C /etc/nixos fetch origin %s" % _q(cand), timeout=600, what="the candidate branch is fetched"),
         step("run", "sudo -n git -C /etc/nixos branch -u origin/%s" % _q(cand), what="the current branch follows the candidate"),
-        step("run", "sudo -n hs update --yes", timeout=3600, what="hs update moves the server to the candidate"),
+        step("run", "sudo -n hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the updated system is running"),
