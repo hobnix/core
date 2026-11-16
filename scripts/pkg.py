@@ -12,6 +12,8 @@
   pkg.py api                                               the API level of the core helpers
   pkg.py perms-check <folder> [name]                       exit 1 and the reasons when the declared permissions do not cover what the package uses (hs ext enable refuses it)
   pkg.py perms <name>                                      the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
+  pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
+  pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
 
 Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work is `git`, signatures are SSH signatures on release tags:
@@ -51,6 +53,16 @@ def _load_pkg_events():
 
 
 pkg_events = _load_pkg_events()
+
+
+def _load_pkg_vendor():
+    spec = importlib.util.spec_from_file_location("pkg_vendor", os.path.join(HERE, "lib", "pkg_vendor.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_vendor = _load_pkg_vendor()
 
 
 def _load_pkg_perms():
@@ -454,6 +466,9 @@ def main(argv):
     cmd, rest = argv[0], argv[1:]
     if cmd == "api":
         print(api_level())
+    elif cmd in ("vendor", "unvendor", "vendor-check"):
+        # vendor --from <package folder> --to <checkout> [--repo R --tag T --commit C --tree X] | unvendor <name> --to <checkout> | vendor-check --to <checkout>
+        return pkg_vendor.main([{"vendor-check": "check"}.get(cmd, cmd)] + rest)
     elif cmd == "nix-api":
         print(nix_api_level())
     elif cmd == "list":
