@@ -20,6 +20,9 @@
 #   - no rust:<subcommand> script (Rust implementations are core rows, docs/adr/0001-rust-strangler.md).
 #   - no `legacy:` flag (the old words of a moved command are rows of the core registry), no second row for the same words.
 #   - the names list, enable and disable are reserved (they are the core commands `hs ext list|enable|disable`).
+#   - a CAPABILITY package (package.toml kind = "capability", docs/PLAN-capabilities-repo.md, decision O4) that was installed from a DEFAULT
+#     repository may also own its name as the first word: user rows `<name> <command...>`, sys rows `sys <name> <command...>`. A row whose
+#     first word is also the first word of a core row is refused (no shadowing). Packages from an added repository keep `ext <name>` only.
 # Test knobs: HS_REGISTRY (core file), HS_PACKAGES_DIR (the folder that holds the packages; only that one is read).
 . "${BASH_SOURCE[0]%/*}/capability.sh"
 
@@ -46,7 +49,37 @@ _ext_roots() {
 }
 
 # A package folder: an extension (capability.toml) or a recipe that brings commands (package.toml with kind = "recipe" and a commands.tsv).
-_ext_is_package() { [ -f "$1/capability.toml" ] || { [ -f "$1/package.toml" ] && [ -f "$1/commands.tsv" ] && grep -qE '^kind[[:space:]]*=[[:space:]]*"recipe"' "$1/package.toml"; }; }
+_ext_is_package() { [ -f "$1/capability.toml" ] || { [ -f "$1/package.toml" ] && [ -f "$1/commands.tsv" ] && grep -qE '^kind[[:space:]]*=[[:space:]]*"(recipe|capability)"' "$1/package.toml"; }; }
+
+# A package of the kind capability (no capability.toml, its fields are in package.toml).
+_ext_is_cap_package() { [ ! -f "$1/capability.toml" ] && [ -f "$1/package.toml" ] && grep -qE '^kind[[:space:]]*=[[:space:]]*"capability"' "$1/package.toml"; }
+
+# The repository a package was installed from (installed.toml), empty when unknown.
+_ext_installed_repo() {
+  awk -v sec="[package.$1]" '
+    /^\[/ { on = ($0 == sec); next }
+    on && /^repo[[:space:]]*=/ { v = $0; sub(/^[^"]*"/, "", v); sub(/".*$/, "", v); print v; exit }'     "${HS_STATE_DIR:-/var/lib/hs}/packages/installed.toml" 2>/dev/null
+}
+
+# Is repository <name> one of the default ones (config/package-repos.toml of the checkout)?
+_ext_repo_is_default() {
+  local f base
+  base=$(cd "$(dirname "$(ext_core_file)")/../.." 2>/dev/null && pwd)
+  for f in "${HS_PACKAGE_REPOS_FILE:-}" "$base/config/package-repos.toml" /etc/nixos/config/package-repos.toml; do
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    grep -qxF "name = \"$1\"" "$f" && return 0
+    return 1
+  done
+  return 1
+}
+
+# May the package <name> in <dir> own its name as the first command word? Capability kind, installed from a default repository.
+_ext_owns_name() {
+  local r
+  _ext_is_cap_package "$2" || return 1
+  r=$(_ext_installed_repo "$1")
+  [ -n "$r" ] && _ext_repo_is_default "$r"
+}
 
 ext_package_dir() {   # ext_package_dir <name>
   local r
@@ -73,22 +106,37 @@ ext_package_names() {
 ext_package_on() {
   local d
   d=$(ext_package_dir "$1") || return 1
-  if [ -f "$d/capability.toml" ]; then capability_on "$1"; return; fi
+  if [ -f "$d/capability.toml" ] || _ext_is_cap_package "$d"; then capability_on "$1"; return; fi
   grep -qxF "[package.$1]" "${HS_STATE_DIR:-/var/lib/hs}/packages/installed.toml" 2>/dev/null
 }
 
 # Reads one commands.tsv. Valid rows go to stdout, or with report=1 the refused ones as REFUSED TAB line TAB path TAB reason.
 _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   [ -f "$2/commands.tsv" ] || return 0
-  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" '
+  local own=0
+  ! _ext_owns_name "$1" "$2" || own=1
+  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v own="$own" '
+    NR == FNR {   # the core registry: which first words it uses
+      if ($0 ~ /^#/ || $0 ~ /^[ \t\r]*$/) next
+      n = split($2, cw, " ")
+      if ($1 == "user" && n >= 1) corefirst["user " cw[1]] = 1
+      else if ($1 == "sys" && n >= 2) corefirst["sys " cw[2]] = 1
+      next
+    }
     /^#/ || /^[ \t\r]*$/ { next }
     {
       sub(/\r$/, "")
       kind = $1; path = $2; script = $3; reason = ""
       nw = split(path, w, " ")
       if (name == "list" || name == "enable" || name == "disable") reason = "the name " name " is reserved (hs ext " name ")"
-      else if (kind == "user") { if (w[1] != "ext" || w[2] != name || nw < 3) reason = "a user row must be: ext " name " <command>" }
-      else if (kind == "sys")  { if (w[1] != "sys" || w[2] != "ext" || w[3] != name || nw < 4) reason = "a sys row must be: sys ext " name " <command>" }
+      else if (kind == "user") {
+        if (own == 1 && w[1] == name && nw >= 2) { if (("user " name) in corefirst) reason = "the word " name " is also a core command" }
+        else if (w[1] != "ext" || w[2] != name || nw < 3) reason = "a user row must be: ext " name " <command>" (own == 1 ? " or " name " <command>" : "")
+      }
+      else if (kind == "sys")  {
+        if (own == 1 && w[1] == "sys" && w[2] == name && nw >= 3) { if (("sys " name) in corefirst) reason = "the word " name " is also a core command" }
+        else if (w[1] != "sys" || w[2] != "ext" || w[3] != name || nw < 4) reason = "a sys row must be: sys ext " name " <command>" (own == 1 ? " or sys " name " <command>" : "")
+      }
       else reason = "the kind must be user or sys"
       if (reason == "" && NF < 6) reason = "a row has at least 6 columns (kind path script args help help.de)"
       if (reason == "" && (script == "" || script ~ /(^|\/)\.\.(\/|$)/ || (script ~ /^\// ))) reason = "the script must be a path under scripts/ or @/file in the package, without .."
@@ -96,12 +144,12 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       if (reason == "" && script ~ /^rust:/) reason = "rust: rows belong to the core registry"
       if (reason == "" && $7 ~ /(^|,)legacy:/) reason = "a legacy: flag belongs to the core registry"
       if (reason == "" && (path in seen)) reason = "the words are used twice"
-      if (reason != "") { if (report == 1) print "REFUSED", NR, path, reason; next }
+      if (reason != "") { if (report == 1) print "REFUSED", FNR, path, reason; next }
       seen[path] = 1
       if (report == 1) next
       if (script ~ /^@\//) $3 = dir "/" substr(script, 3)
       print
-    }' "$2/commands.tsv"
+    }' "$(ext_core_file)" "$2/commands.tsv"
 }
 
 registry_rows() {
