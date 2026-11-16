@@ -23,6 +23,7 @@ Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work i
   pkg.py fetch [<repo>]                                    update the local clones and find the newest tag whose signature verifies
   pkg.py available                                         packages in the repositories (cache): repo, name, kind, version, installed
   pkg.py market                                            everything installable as data: name, kind, repo, version, installed, state (new|current|update|orphan), core, audience, title
+  pkg.py capabilities                                      the capability packages of the repositories: name, repo, version, installed, state, requires, type, title
   pkg.py install <name> [--repo <repo>]                    fetch the package at the verified tag into <state>/packages/current/<name>
   pkg.py update <name> [--yes] [--accept-permissions]     show the diff and the permissions, ask, install the new tag; NEW permissions need the typed name (or the flag)
   pkg.py remove <name>                                     forget an installed repository package (a recipe's container is never touched)
@@ -579,6 +580,41 @@ def main(argv):
                             print("\t".join([n, e["version"], w]))
                     elif not w:
                         print("\t".join([n, have["version"], e["version"]]))
+    elif cmd == "capabilities":
+        # the capability packages the repositories offer (hs sys pkg capabilities): name, repo, available version, installed version (- = none),
+        # state (new|current|update), requires (comma list, - = none), type (feature|provider, - = not given), title. requires and type come from
+        # package.toml at the verified tag of the cached clone (hs pkg fetch refreshes it); a package.toml that cannot be read gives - for both.
+        spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        R = mod.Repos(MAIN)
+        have = installed()
+        cur = os.path.join(R.state, "current")
+        for pname, found in sorted(R.catalog().items()):
+            for r_name, e, tag, _ in found:
+                path = str(e.get("path", ""))
+                if e.get("kind") != "capability" or not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
+                    continue
+                ver = str(e.get("version"))
+                inst = str(have.get(pname, {}).get("version", "?")) if os.path.isdir(os.path.join(cur, pname)) else "-"
+                if inst == "-":
+                    state = "new"
+                elif inst == ver:
+                    state = "current"
+                else:
+                    try:
+                        state = "update" if semver_key(ver) > semver_key(inst) else "current"
+                    except ValueError:
+                        state = "update"
+                try:
+                    m = tomllib.loads(mod.git("show", "%s:%s/package.toml" % (tag, path), cwd=R.clone_dir(r_name)).decode("utf-8"))
+                except Exception:
+                    m = {}
+                req = m.get("requires") if isinstance(m.get("requires"), list) else []
+                req = [x for x in req if isinstance(x, str) and NAME.match(x)]
+                typ = m.get("type") if m.get("type") in ("feature", "provider") else "-"
+                title = (e.get("title") or m.get("title") or "-").replace("\t", " ")
+                print("\t".join([pname, r_name, ver, inst, state, ",".join(req) or "-", typ, title]))
     elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)

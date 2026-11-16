@@ -432,8 +432,9 @@ useless, and it is only ever printed on the console, never sent anywhere. You ar
 After the password the page leads you through the **first-run wizard** (`/setup/first-run`):
 
 1. **Account:** your administrator name, the server name (read only; a rename needs `hs config set hostName` and a rebuild) and the language of the interface.
-2. **Preset:** pick what the server is for. A preset fills in only what is not set yet and never overwrites a value. Single capabilities are shown greyed out; choosing them comes in a later version. Skip keeps the minimal setup.
-3. **Done:** lists what is still open. Machine settings of a preset take effect with `hs rebuild`; the wizard does not start it.
+2. **Preset:** pick what the server is for. A preset fills in only what is not set yet and never overwrites a value. Skip keeps the minimal setup.
+3. **Optional parts:** the capability packages of the signed repositories. The ones you tick are installed with what they require, switched on and built in one background job after a plan. It needs the network; without it the step says so and **Next** moves on.
+4. **Done:** lists what is still open. Machine settings of a preset take effect with `hs rebuild`; the wizard does not start it.
 
 Network and storage steps are reserved places and are not shown yet. **Finish** closes the wizard for good; the **Setup** page keeps the
 checklist (below). A server set up before the wizard existed never shows it. Not tested on hardware yet.
@@ -455,6 +456,14 @@ for each item:
 ```bash
 hs first-run
 ```
+
+### Optional parts
+
+```bash
+hs first-run --parts <a,b>
+```
+
+Installs the named capability packages of the signed repositories with what they require, switches them on and rebuilds, as one background job after a plan (`--yes` skips the question, `--parts none` skips the step). It needs the network. Not tested on hardware yet.
 
 The same list is the **Setup** page of the web interface. Each open item leads to the page where it is done:
 

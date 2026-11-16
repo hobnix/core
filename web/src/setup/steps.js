@@ -5,6 +5,7 @@ export const FIRST_RUN_STEPS = [
   { id: 'network', slot: '#179', question: 'Network', help: '', primary: 'Next' },   // SLOT: Network step, built in #179 (web/src/setup/NetworkStep.svelte)
   { id: 'storage', question: 'Storage', help: 'The disks this server found. Import a pool that is on them, or make one from empty disks. Nothing changes until you confirm a plan.', primary: 'Next' },
   { id: 'preset', question: 'What is this server for?', help: 'A preset fills in what is not set yet; it never overwrites a value.', primary: 'Next' },
+  { id: 'parts', question: 'Optional parts', help: 'Parts from the signed repositories of the project. The ones you tick are installed with what they need, switched on and built in one job. Needs the network.', primary: 'Next' },
   { id: 'done', question: 'Done', help: 'What is still open stays on the Setup page.', primary: 'Finish' },
 ];
 export const active = (steps, built) => steps.filter((s) => built.includes(s.id));
