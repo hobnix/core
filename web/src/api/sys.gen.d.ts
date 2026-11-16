@@ -109,6 +109,17 @@ export interface SysOperations {
       | [tag: "command", text: Field]
       | [tag: "long", text: Field])[];
   };
+  "apps.remove.by_verb.by_instance": {
+    /** remove an app instance, data kept or deleted (called by sys apps plan|start remove <instance>): hs sys apps remove plan|start <instance> [--delete-data] [--confirm <instance>] [--confirm-data <instance>]; the same lines as plan|start */
+    words: ["apps", "remove", "<verb>", "<instance>"];
+    path: "/apps/remove/{verb}/{instance}";
+    method: "get";
+    class: "read";
+    params: { verb: string; instance: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "apps.start.by_action": {
     /** install it as one guided job: read needs ask run check done (hs sys apps start install <name> --tag <tag from the plan> [--set KEY=value]... [--ask] [--from <step>]): status started, unit, job; a secret answer is one line on stdin; a package of an added repository needs --confirm <name> */
     words: ["apps", "start", "<action>"];
