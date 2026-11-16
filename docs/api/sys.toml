@@ -191,3 +191,15 @@ kind = "tsv"
 columns = ["name", "health"]
 enums = { health = ["healthy", "unhealthy", "stopped"] }
 note = "One row per app whose package.toml declares [app.health]: the check (container, tcp or http) run against the instance. No row for an app without a declared check."
+["apps plan <action>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], heading = ["text"], package = ["name"], kind = ["kind"], repo = ["repo"], version = ["version"], tag = ["tag"], commit = ["commit"], title = ["text"], description = ["text"], creates = ["text"], need = ["name", "state", "text", "yes_no"], ask = ["key", "label", "type", "choices", "default", "pattern", "when"], jobstep = ["name", "text"], step = ["text"], note = ["text"], warn = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["yes_no"] }
+enums = { status = ["ok", "refused"], long = ["yes", "no"], kind = ["recipe", "extension", "capability"] }
+note = "hs sys apps plan install <name> [--repo R] [--tag T] [--set KEY=value]... [--name <container>]: what installing would do, read from the newest verified release (nothing is installed). tag and version are what the job installs; start --tag refuses another. need state is present, missing or recipe (the recipe handles it); a missing need with long yes needs a rebuild. jobstep lines are the steps of the job (read, needs, ask, run, check, done; on and rebuild for an extension or capability). confirm_name is the typed name for a package of an added repository. Exit 0 ok, 1 refused."
+
+["apps start <action>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"] }
+enums = { status = ["started", "refused"] }
+note = "hs sys apps start install <name> --tag <tag of the plan> [--repo R] [--name <container>] [--set KEY=value]... [--ask] [--from <step>] [--confirm <name>]: one orchestration job whose record steps are read, needs, ask, run:<phase>, check, done (on, rebuild for an extension or capability) and whose result holds package, kind, version, tag, instance, open, data and backup. A secret answer is one line on standard input; the questions the recipe asks while it runs wait in the record (hs sys jobs answer). Refused: status refused and a reason, exit 1."
+

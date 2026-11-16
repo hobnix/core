@@ -6,7 +6,7 @@
 # The names are ONE comma list. What a package requires is added in front of it (installed, or switched on when it is a part already).
 # plan: key<TAB>value lines as pkg-change.sh (status ok|refused, reason, heading|step|note|command, long yes); exit 0 = allowed, 1 = refused.
 # start: the same checks, then `status started` and `unit <name>`: ONE background job installs, switches on and rebuilds, and stops at the first failure.
-# `run <install-csv|-> <enable-csv|->` is what the job runs (never called by a person).
+# `run <install-csv|-> <enable-csv|->` is what the job runs (never called by a person); it uses scripts/lib/install-steps.sh, as does the Install job of apps-change.sh.
 # Only the default repositories: a package of an added repository is installed from the Marketplace. Needs the network (O7).
 # Test knobs: HS_PKG (pkg.sh), HS_PARTS (parts.sh), HS_PART_CHANGE (part-change.sh), HS_REBUILD (rebuild.sh), HS_JOB_LIB (lib/job.sh),
 # HS_BUNDLE_NET (ok|fail: stands in for the network check), HS_LOCKED_MARKER, HS_MACHINE_FILE.
@@ -32,26 +32,16 @@ if [ "$verb" = run ]; then
   done
   . "$here/lib/ui.sh"
   inst_csv=$2; en_csv=$3
+  . "$here/lib/install-steps.sh"   # the same code the Install job of hs sys apps start install runs
   if [ "$inst_csv" != - ]; then
     IFS=, read -ra todo <<<"$inst_csv"
-    for n in "${todo[@]}"; do
-      step "Install $n"
-      bash "$pkg" install "$n" </dev/null || fail "Installing $n failed: nothing after it was done."
-      ok "$n installed"
-    done
+    for n in "${todo[@]}"; do inst_fetch "$n" || exit 1; done
   fi
   if [ "$en_csv" != - ]; then
     IFS=, read -ra todo <<<"$en_csv"
-    for n in "${todo[@]}"; do
-      step "Switch $n on"
-      out=$(bash "$partchange" start enable "$n" </dev/null 2>&1) || true
-      grep -q $'^status\tdone' <<<"$out" || fail "Switching $n on failed: $(awk -F'\t' '$1=="reason"{print $2}' <<<"$out")"
-      ok "$n is switched on"
-    done
+    for n in "${todo[@]}"; do inst_enable "$n" || exit 1; done
   fi
-  step "Rebuild"
-  bash "$rebuild" </dev/null || fail "The rebuild failed: the parts are switched on in machine.toml; hs rebuild tries again."
-  ok "Done"
+  inst_rebuild || exit 1
   exit 0
 fi
 

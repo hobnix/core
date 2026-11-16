@@ -29,6 +29,7 @@
 conf="$state/recipe-${app:-$ct}.conf"
 ASK=false
 for a in "$@"; do [ "$a" != --ask ] || ASK=true; done
+[ "${RECIPE_ASK:-}" != 1 ] || ASK=true   # the Install/retry job (apps-change.sh --ask) asks every preference again, also on an existing app
 export CREATED_APP=${app:-$ct}   # the ledger record of this app; helpers in other scripts (create-share.sh) read it
 existed=false
 if incus info "${app:-$ct}" >/dev/null 2>&1; then existed=true; fi

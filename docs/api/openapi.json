@@ -280,6 +280,150 @@
     }
    }
   },
+  "/apps/plan/{action}": {
+   "post": {
+    "operationId": "apps.plan.by_action",
+    "summary": "what installing an app (or extension) would do, read from its newest verified release, as data: status, plan lines with the tag the job will install, the needs and the questions (hs sys apps plan install <name> [--repo R] [--set KEY=value]...; never asks, nothing is installed; exit 0 ok, 1 refused)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "plan",
+      "<action>"
+     ],
+     "script": "apps-change.sh",
+     "args": "plan {1} {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/apps/start/{action}": {
+   "post": {
+    "operationId": "apps.start.by_action",
+    "summary": "install it as one guided job: read needs ask run check done (hs sys apps start install <name> --tag <tag from the plan> [--set KEY=value]... [--ask] [--from <step>]): status started, unit, job; a secret answer is one line on stdin; a package of an added repository needs --confirm <name>",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "apps",
+      "start",
+      "<action>"
+     ],
+     "script": "apps-change.sh",
+     "args": "start {1} {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/audit": {
    "get": {
     "operationId": "audit",
