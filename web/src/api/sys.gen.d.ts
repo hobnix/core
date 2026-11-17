@@ -913,7 +913,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "fm.plan.by_op": {
-    /** file manager: what copy|move|delete|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; never asks */
+    /** file manager: what copy|move|delete|restore|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; delete means: into the trash (a rename, kept 14 days), --permanent means for good; restore puts trash items back; never asks */
     words: ["fm", "plan", "<op>"];
     path: "/fm/plan/{op}";
     method: "post";
@@ -935,7 +935,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "fm.start.by_op": {
-    /** file manager: do it as a background job (status done + unit); delete and an overwrite choice need --confirm <confirm_name> from the plan */
+    /** file manager: do it as a background job (status done + unit); delete --permanent (for good) and an overwrite choice need --confirm <confirm_name> from the plan */
     words: ["fm", "start", "<op>"];
     path: "/fm/start/{op}";
     method: "post";
@@ -944,6 +944,17 @@ export interface SysOperations {
     stdin: "none";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "fm.trash.by_location": {
+    /** file manager: what is in the trash of a place (kept 14 days): days, then row lines (item, date, origin, bytes, type d|f, days left); give an item to sys fm plan restore */
+    words: ["fm", "trash", "<location>"];
+    path: "/fm/trash/{location}";
+    method: "get";
+    class: "read";
+    params: { location: string; };
+    stdin: "none";
+    exit: number;
+    lines: string[][];
   };
   "gateway.certs": {
     /** the certificate of each directly served host as host, state (staging|default|none|ok), valid until (- when empty) */

@@ -182,6 +182,17 @@ in
     onFailure = notifyFailure;
   };
 
+  # The file manager's trash (docs/PLAN-storage-nas.md, D2): delete moves into <file system>/.hn-trash/<date>/; this empties the date folders
+  # older than 14 days. Name and days live in scripts/lib/fm.sh. No whenUnlocked: it exits quietly while the storage is locked.
+  systemd.services.hs-fm-trash-empty = {
+    description = "Empty the file manager's trash after 14 days (hs sys fm trash-empty)";
+    path = [ "/run/current-system/sw" pkgs.python3 ];
+    serviceConfig.Type = "oneshot";
+    script = "bash ${scripts}/fm.sh trash-empty";
+    startAt = "*-*-* 03:35:00";    # maintenance window (starts 03:00)
+    onFailure = notifyFailure;
+  };
+
   # (With diskSpindownMinutes > 0 these self-tests DO wake a sleeping disk and keep it busy; that is wanted. The list, the monitor and the
   # smartctl exporter read with -n standby and leave sleeping disks alone.)
   # SMART self-tests inside the disks (they stay usable): a short one every week, a long one

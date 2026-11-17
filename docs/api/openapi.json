@@ -4383,7 +4383,7 @@
   "/fm/plan/{op}": {
    "post": {
     "operationId": "fm.plan.by_op",
-    "summary": "file manager: what copy|move|delete|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; never asks",
+    "summary": "file manager: what copy|move|delete|restore|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; delete means: into the trash (a rename, kept 14 days), --permanent means for good; restore puts trash items back; never asks",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -4493,7 +4493,7 @@
   "/fm/start/{op}": {
    "post": {
     "operationId": "fm.start.by_op",
-    "summary": "file manager: do it as a background job (status done + unit); delete and an overwrite choice need --confirm <confirm_name> from the plan",
+    "summary": "file manager: do it as a background job (status done + unit); delete --permanent (for good) and an overwrite choice need --confirm <confirm_name> from the plan",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -4548,6 +4548,56 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/fm/trash/{location}": {
+   "get": {
+    "operationId": "fm.trash.by_location",
+    "summary": "file manager: what is in the trash of a place (kept 14 days): days, then row lines (item, date, origin, bytes, type d|f, days left); give an item to sys fm plan restore",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "trash",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "trash {1}",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/trash/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": []
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }

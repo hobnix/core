@@ -468,6 +468,21 @@ Before step 6 all files are still there and a folder can be moved back with `mv`
 the disks and SnapRAID protects them after the first sync. Later, replace small old disks one by one with `hs pool bulk replace data-NN
 --disks <new-disk>`; it rebuilds from parity.
 
+## The trash of the file manager
+
+Delete in the file manager does not remove files at once: it moves them into a trash folder at the root of the same file system
+(`.hn-trash/<date>/<old path>`). That is a rename, never a copy, so it is instant and works for a whole folder.
+
+- **The trash keeps the space used.** Free space grows only when the trash is emptied or when you choose "delete for good".
+  `hs sys fm locations` shows the real free space, trash included.
+- **14 days.** Every night at 03:35 (inside the maintenance window) the date folders older than 14 days are removed.
+- **Put back:** the file manager lists the trash of a place (`hs sys fm trash <place>`) and restores an item to where it came from
+  (`restore`). An item is never put over a file that is at its old place now; it stays in the trash.
+- **Delete for good** skips the trash and still needs the typed confirmation ("delete N files").
+- The trash is hidden from the file manager's listing, from Samba (`veto files`) and from the backup.
+
+Not tested on hardware yet.
+
 ## Snapshots of shares (ZFS only)
 A snapshot is a frozen state of a share that costs almost nothing while little changes. Take one before a big clean-up.
 

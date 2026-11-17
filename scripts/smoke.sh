@@ -98,6 +98,7 @@ default_probes() {
     $'hs sys preset list\tsys preset list\t0' \
     $'hs sys net check\tsys net check\t0 1' \
     $'hs sys fm locations\tsys fm locations\t0 1' \
+    $'hs sys fm trash\tsys fm trash disk:data-01\t0 1' \
     $'hs user list\tuser list\t0' \
     $'hs user show\tuser Administrator show\t0 1' \
     $'hs group list\tgroup list\t0' \

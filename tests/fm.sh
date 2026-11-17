@@ -332,24 +332,86 @@ rm -f "$WORK/stub/cp"; export HS_FM_SYNC=1
 
 echo "-- delete"
 rm -rf "$D4/shares/media/d1"; mkdir -p "$D4/shares/media/d1/sub"; for i in 1 2 3; do echo x > "$D4/shares/media/d1/f$i"; done; echo y > "$D4/shares/media/d1/sub/g"
-fmsel d1 -- plan delete --from disk:data-04 --path shares/media
+fmsel d1 -- plan delete --from disk:data-04 --path shares/media --permanent
 check_eq "plan delete: confirm_name is the count" "delete 4 files" "$(kv confirm_name)"; check_eq "plan delete: parity yes" yes "$(kv parity)"
-has "^warn${T}Delete is permanent" && pass "plan delete: a warning, permanent" || fail "delete warn: $out"
-fmsel d1 -- start delete --from disk:data-04 --path shares/media
+has "^warn${T}Delete for good is permanent" && pass "plan delete for good: a warning, permanent" || fail "delete warn: $out"
+fmsel d1 -- start delete --from disk:data-04 --path shares/media --permanent
 check_eq "start delete without confirmation: refused" 1 "$rc"; [ -d "$D4/shares/media/d1" ] && pass "nothing deleted" || fail "deleted without confirm"
-fmsel d1 -- start delete --from disk:data-04 --path shares/media --confirm "delete 3 files"
+fmsel d1 -- start delete --from disk:data-04 --path shares/media --permanent --confirm "delete 3 files"
 check_eq "start delete with a wrong count: refused" 1 "$rc"; [ -d "$D4/shares/media/d1" ] && pass "still there" || fail "deleted with wrong confirm"
-fmsel d1 -- start delete --from disk:data-04 --path shares/media --confirm "delete 4 files"
+fmsel d1 -- start delete --from disk:data-04 --path shares/media --permanent --confirm "delete 4 files"
 check_eq "start delete with the confirmation: ok" 0 "$rc"; [ ! -e "$D4/shares/media/d1" ] && pass "deleted" || fail "not deleted"
 unit=$(kv unit); fm progress "$unit"; check_eq "delete: files_done" 4 "$(kv files_done)"; check_eq "delete: done" done "$(kv result)"
 printf 'x ' > "$WORK/outside.sel"
-fm plan delete --from disk:data-04 --path shares/media --sel-file "$HS_FM_DIR/jobs/../../outside.sel"
+fm plan delete --from disk:data-04 --path shares/media --permanent --sel-file "$HS_FM_DIR/jobs/../../outside.sel"
 check_eq "a selection file path with .. is refused" 1 "$rc"; grep -q "bad selection file" <<<"$out" && pass "..: bad selection file" || fail "sel-file ..: $out"
 echo z > "$D4/shares/media/one.txt"
-fmsel one.txt -- plan delete --from disk:data-04 --path shares/media; check_eq "one file" "delete 1 file" "$(kv confirm_name)"
+fmsel one.txt -- plan delete --from disk:data-04 --path shares/media --permanent; check_eq "one file" "delete 1 file" "$(kv confirm_name)"
 printf 'a\n' > "$D6/shares/media/r.txt"
 fmsel r.txt -- plan delete --from disk:data-06 --path shares/media; check_eq "delete on a closed disk is allowed (it frees room)" 0 "$rc"
 fmsel r.txt -- plan delete --from disk:data-07 --path shares/media; check_eq "delete on a disk out for recovery: refused" 1 "$rc"
+
+echo "-- delete moves into the trash (D2), restore puts it back, the trash empties after 14 days"
+export HS_NOW=$(date -u -d 2026-11-01 +%s)
+TR=.hn-trash
+grep -q '^FM_TRASH_NAME=\.hn-trash$' "$SCRIPTS/lib/fm.sh" && pass "the trash folder name is one constant in scripts/lib/fm.sh" || fail "FM_TRASH_NAME"
+[ "$(grep -rl -- '\.hn-trash' "$SCRIPTS" --include=*.sh --include=*.py | grep -v 'scripts/dev/' | sort | tr '\n' ' ')" = "$SCRIPTS/lib/fm.sh " ] && pass "no other script spells the trash name" || fail "the trash name is spelled in more than one script: $(grep -rl -- '\.hn-trash' "$SCRIPTS" --include=*.sh --include=*.py | tr '\n' ' ')"
+grep -q 'veto files" = "/\.hn-trash/\.hs-trash/"' "$ROOT/capabilities/samba/module.nix" && pass "Samba vetoes the trash names of lib/fm.sh" || fail "samba veto files"
+(. "$SCRIPTS/lib/fm.sh"; fm_trash_excludes | tr '\n' ' ') | grep -q -- '--exclude .hn-trash --exclude .hs-trash' && grep -q 'fm_trash_excludes' "$SCRIPTS/backup.sh" && pass "the backup excludes the trash names" || fail "backup exclude"
+rm -rf "$D4/shares/media/d1"; mkdir -p "$D4/shares/media/d1/sub"; for i in 1 2 3; do echo x$i > "$D4/shares/media/d1/f$i"; done; echo y > "$D4/shares/media/d1/sub/g"
+fmsel d1 -- plan delete --from disk:data-04 --path shares/media
+check_eq "plan delete (trash): exit 0" 0 "$rc"; check_eq "plan delete (trash): no typed confirmation" "" "$(kv confirm_name)"
+has "there is no trash" && fail "the plan still says there is no trash" || pass "the plan does not say there is no trash"
+has "^note${T}The trash keeps the space used" && pass "the plan says the trash keeps the space used" || fail "trash note: $out"
+fmsel d1 -- start delete --from disk:data-04 --path shares/media
+check_eq "start delete (trash): ok without a confirmation" 0 "$rc"; unit=$(kv unit); fm progress "$unit"; check_eq "trash: done" done "$(kv result)"; check_eq "trash: files_done" 4 "$(kv files_done)"
+[ ! -e "$D4/shares/media/d1" ] && [ -f "$D4/$TR/2026-11-01/shares/media/d1/sub/g" ] && [ "$(cat "$D4/$TR/2026-11-01/shares/media/d1/f2")" = x2 ] && pass "delete moved the folder into <root>/.hn-trash/<date>/<path>" || fail "not in the trash"
+grep -q "^shares/media/d1${T}shares/media/d1$" "$D4/$TR/2026-11-01/.origin" && pass "the .origin list of that date names the old place" || fail ".origin: $(cat "$D4/$TR/2026-11-01/.origin" 2>/dev/null)"
+fm ls disk:data-04; has "${TR}" && fail "the trash is listed: $out" || pass "the trash is hidden from the listing"
+fmsel "$TR" -- plan delete --from disk:data-04 --path ""; check_eq "the trash folder cannot be selected" 1 "$rc"
+fmsel 2026-11-01 -- plan delete --from disk:data-04 --path "$TR"; check_eq "a path inside the trash is refused" 1 "$rc"
+fm trash disk:data-04; check_eq "trash listing: ok" 0 "$rc"; check_eq "trash listing: days" 14 "$(kv days)"
+has "^row${T}$TR/2026-11-01/shares/media/d1${T}2026-11-01${T}shares/media/d1${T}[0-9]*${T}d${T}14$" && pass "trash listing: item, date, origin, bytes, type, days left" || fail "trash rows: $out"
+fmsel "$TR/2026-11-01/shares/media/d1" -- plan restore --from disk:data-04; check_eq "plan restore: exit 0" 0 "$rc"; check_eq "plan restore: files" 4 "$(kv files)"; check_eq "plan restore: no conflicts" 0 "$(kv conflicts)"
+fmsel "$TR/2026-11-01/shares/media/d1" -- start restore --from disk:data-04; check_eq "start restore: ok" 0 "$rc"; unit=$(kv unit); fm progress "$unit"; check_eq "restore: done" done "$(kv result)"
+[ "$(cat "$D4/shares/media/d1/f1")" = x1 ] && [ "$(cat "$D4/shares/media/d1/sub/g")" = y ] && [ ! -e "$D4/$TR/2026-11-01" ] && pass "restore put the folder back and left no empty trash folder" || fail "restore: $(find "$D4/$TR" 2>/dev/null | tr '\n' ' ')"
+fmsel "$TR/2026-11-01/shares/media/d1" -- plan restore --from disk:data-04; check_eq "restore of an item that is gone: refused" 1 "$rc"
+fmsel "../x/2026-11-01/a" -- plan restore --from disk:data-04; check_eq "restore of a path with ..: refused" 1 "$rc"
+# a name taken meanwhile: the item stays in the trash
+fmsel d1 -- start delete --from disk:data-04 --path shares/media; mkdir -p "$D4/shares/media/d1"; echo new > "$D4/shares/media/d1/mine"
+fmsel "$TR/2026-11-01/shares/media/d1" -- plan restore --from disk:data-04; check_eq "plan restore: one conflict" 1 "$(kv conflicts)"
+fmsel "$TR/2026-11-01/shares/media/d1" -- start restore --from disk:data-04; unit=$(kv unit); fm progress "$unit"; check_eq "restore onto a taken name: skipped" 1 "$(kv skipped)"
+[ -f "$D4/$TR/2026-11-01/shares/media/d1/f1" ] && [ "$(cat "$D4/shares/media/d1/mine")" = new ] && pass "restore never overwrites; the item stays in the trash" || fail "restore conflict"
+rm -rf "$D4/shares/media/d1"
+# the same name deleted twice on one day gets a free name
+mkdir -p "$D4/shares/media/d1"; echo again > "$D4/shares/media/d1/f1"
+fmsel d1 -- start delete --from disk:data-04 --path shares/media
+fm trash disk:data-04; [ "$(grep -c "^row${T}" <<<"$out")" = 2 ] && pass "two items of one name on one day are both kept" || fail "second item: $out"
+# empty after 14 days, with the fake clock
+mkdir -p "$D4/$TR/2026-10-25/old" "$D4/.hs-trash/2026-10-20/x"; echo o > "$D4/$TR/2026-10-25/old/f"
+export HS_NOW=$(date -u -d 2026-11-15 +%s)
+fm trash-empty; check_eq "trash-empty: ok" 0 "$rc"
+[ -d "$D4/$TR/2026-11-01" ] && [ ! -e "$D4/$TR/2026-10-25" ] && [ ! -e "$D4/.hs-trash" ] && pass "after 14 days: older date folders go (also under the old name .hs-trash), 2026-11-01 (14 days) stays" || fail "empty (day 14): $(find "$D4/$TR" "$D4/.hs-trash" -maxdepth 1 2>/dev/null | tr '\n' ' ')"
+export HS_NOW=$(date -u -d 2026-11-16 +%s)
+fm trash-empty; check_eq "trash-empty (day 15): ok" 0 "$rc"
+[ ! -e "$D4/$TR" ] && pass "after 15 days the trash of 2026-11-01 is emptied and the folder is gone" || fail "empty (day 15): $(find "$D4/$TR" 2>/dev/null | tr '\n' ' ')"
+# delete for good stays: typed confirmation, no trash
+rm -rf "$D4/shares/media/d2"; mkdir -p "$D4/shares/media/d2"; echo q > "$D4/shares/media/d2/a"; echo q > "$D4/shares/media/d2/b"
+fmsel d2 -- plan delete --from disk:data-04 --path shares/media --permanent
+check_eq "plan delete for good: confirm_name is the count" "delete 2 files" "$(kv confirm_name)"
+has "^warn${T}Delete for good is permanent" && pass "plan delete for good: warns, no trash" || fail "permanent warn: $out"
+fmsel d2 -- start delete --from disk:data-04 --path shares/media --permanent; check_eq "delete for good without the confirmation: refused" 1 "$rc"
+fmsel d2 -- start delete --from disk:data-04 --path shares/media --permanent --confirm "delete 2 files"; check_eq "delete for good with the confirmation: ok" 0 "$rc"
+[ ! -e "$D4/shares/media/d2" ] && [ ! -e "$D4/$TR" ] && pass "deleted for good: nothing in the trash" || fail "permanent delete left something"
+fmsel d2 -- plan copy --from disk:data-04 --path shares/media --to disk:data-05 --to-path shares/media --permanent; check_eq "--permanent belongs to delete only" 1 "$rc"
+# a share location: the trash is at the root of the pool, the item comes back from the share view
+fmsel Heat -- start delete --from share:media --path movies; check_eq "delete in a share: ok" 0 "$rc"
+[ -d "$P/$TR/$(date -u -d @"$HS_NOW" +%F)/shares/media/movies/Heat" ] && [ ! -e "$P/shares/media/movies/Heat" ] && pass "a share's trash is at the root of its file system" || fail "share trash: $(find "$P/$TR" 2>/dev/null | tr '\n' ' ')"
+fm trash share:media; has "${T}movies/Heat${T}" && pass "the share's trash shows the path below the share" || fail "share trash rows: $out"
+item=$(awk -F'\t' '$1 == "row" { print $2; exit }' <<<"$out")
+fmsel "$item" -- start restore --from share:media; check_eq "restore into a share: ok" 0 "$rc"
+[ -d "$P/shares/media/movies/Heat" ] && pass "restored into the share" || fail "share restore"
+unset HS_NOW
 
 echo "-- rename and new folder"
 fmsel one.txt -- plan rename --from disk:data-04 --path shares/media --newname two.txt; check_eq "plan rename" 0 "$rc"
@@ -406,10 +468,10 @@ else skip "python3 is missing"; fi
 echo "-- audit and the pieces around it"
 [ -s "$HS_FM_DIR/audit.log" ] && grep -q "^[0-9T:+-]*${T}ui${T}delete${T}disk:data-04:/shares/media${T}" "$HS_FM_DIR/audit.log" && pass "audit.log: one line per operation (time, who, op, source)" || fail "audit: $(tail -n3 "$HS_FM_DIR/audit.log" 2>/dev/null)"
 grep -q "result" /dev/null; grep -q "${T}done$" "$HS_FM_DIR/audit.log" && grep -q "${T}failed$" "$HS_FM_DIR/audit.log" && grep -q "${T}cancelled$" "$HS_FM_DIR/audit.log" && pass "audit.log: results done, failed and cancelled" || fail "audit results"
-for w in locations "pair <left> <right>" "ls <location>" "progress <unit>" "plan <op>" "start <op>"; do
+for w in locations "pair <left> <right>" "ls <location>" "trash <location>" "progress <unit>" "plan <op>" "start <op>"; do
   grep -q "^sys${T}sys fm $w${T}fm.sh${T}" "$SCRIPTS/lib/registry.tsv" || fail "registry row sys fm $w"
 done
-grep -c "^sys${T}sys fm " "$SCRIPTS/lib/registry.tsv" | grep -q '^6$' && pass "registry rows" || fail "registry rows count"
+grep -c "^sys${T}sys fm " "$SCRIPTS/lib/registry.tsv" | grep -q '^7$' && pass "registry rows" || fail "registry rows count"
 grep -q '("fm", "locations")' "$SCRIPTS/web-serve.py" && grep -q '"fm": \[' "$SCRIPTS/web-serve.py" && pass "web READS and CHANGES entries" || fail "web allowlists"
 
 echo "-- pools of machine.toml: tank (data) and ssd (apps)"

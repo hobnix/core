@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: file manager backend (two panes): locations, listings, and copy/move/delete/rename/new folder as plan + background job
-# help.de: Dateimanager-Backend (zwei Fenster): Orte, Listen, und Kopieren/Verschieben/Löschen/Umbenennen/Neuer Ordner als Plan + Hintergrundjob
-# args: locations | pair <a> <b> | ls <loc> [--path P] [--cursor C] [--limit N] | plan|start <op> --from <loc> --path P [--to <loc> --to-path Q] [--conflict ...] [--verify ...] [--parity-after] [--newname N] [--conflicts] [--confirm T] | progress <unit>
+# help.de: Dateimanager-Backend (zwei Fenster): Orte, Listen, Papierkorb, und Kopieren/Verschieben/Löschen (in den Papierkorb)/Wiederherstellen/Umbenennen/Neuer Ordner als Plan + Hintergrundjob
+# args: locations | pair <a> <b> | ls <loc> [--path P] [--cursor C] [--limit N] | trash <loc> | plan|start <op> --from <loc> --path P [--to <loc> --to-path Q] [--conflict ...] [--verify ...] [--parity-after] [--newname N] [--conflicts] [--permanent] [--confirm T] | progress <unit> | trash-empty
 #
 # docs/PLAN-storage-nas.md. The interface reads and changes only through `hs sys fm ...`; every rule below is enforced HERE, never only in the UI.
 #
@@ -11,10 +11,14 @@
 #   ls <loc> [--path P] [--cursor C] [--limit N]
 #                         status ok, row<TAB>type(d|f|l)<TAB>bytes<TAB>mtime<TAB>name<TAB>disks<TAB>flags<TAB>busy, then cursor<TAB>X or end. Folders first, then by name.
 #                         The cursor is an offset into that order. Bytes of a folder are 0 (sizes of folders are not measured here).
-#   plan <op> ...         op = copy|move|delete|rename|mkdir. The selection (names below --path) arrives on stdin, NUL separated. Key<TAB>value lines:
+#   trash <loc>           status ok, days<TAB>14, then row<TAB>item<TAB>date<TAB>origin<TAB>bytes<TAB>type(d|f)<TAB>days_left per trashed item of the location
+#                         (item = the name to give `plan restore`, origin = where it was, below the location). The trash is hidden from ls.
+#   trash-empty           the timer job (03:35): removes the date folders older than 14 days in every file system's trash; status ok, removed<TAB>N
+#   plan <op> ...         op = copy|move|delete|restore|rename|mkdir. delete = move to the trash of that file system (a rename, kept 14 days); delete --permanent = for good
+#                         (needs --confirm); restore: the selection holds items from `trash` (slashes allowed) and puts them back where they came from. The selection (names below --path) arrives on stdin, NUL separated. Key<TAB>value lines:
 #                         status ok|refused, reason, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long
 #                         (+ conflict<TAB>path<TAB>src_bytes<TAB>dst_bytes<TAB>src_mtime<TAB>dst_mtime with --conflicts)
-#   start <op> ...        the same arguments and stdin; starts a background job: status done + unit. delete and an overwrite choice need --confirm <confirm_name>.
+#   start <op> ...        the same arguments and stdin; starts a background job: status done + unit. delete --permanent and an overwrite choice need --confirm <confirm_name>.
 #   progress <unit>       the job's state: files_done files_total bytes_done bytes_total speed eta current phase result(running|done|cancelled|failed) skipped failed
 #                         (+ skip/fail rows). Cancel = `hs sys jobs stop <unit>`: copied files stay, nothing unverified is removed.
 #
@@ -39,15 +43,13 @@ grab() { local p=$1 v; for v in ID KIND LABEL ROOT FS SIZE FREE ADD MOD REASON P
 sanitize_confirm() { local s; s=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._ -' '_'); printf '%s\n' "${s:0:64}"; }
 
 verb=${1:-}
-case "$verb" in locations|pair|ls|plan|start|progress) shift ;; *) echo "usage: fm.sh locations|pair|ls|plan|start|progress ..." >&2; exit 1 ;; esac
+case "$verb" in locations|pair|ls|trash|trash-empty|plan|start|progress) shift ;; *) echo "usage: fm.sh locations|pair|ls|trash|trash-empty|plan|start|progress ..." >&2; exit 1 ;; esac
 
 # ======================================================================= locations
-cmd_locations() {
-  gate
-  if storage_locked; then printf 'status\tok\nlocked\tyes\n'; return 0; fi
-  echo "status	ok"
-  if write_on; then printf 'write\tyes\n'; else printf 'write\tno\n'; fi
-  local ids=() d n p sr; sr=$(fm_snapraid_pool || true)
+ids=()
+collect_ids() {   # fills ids: every location id
+  local d n p sr; sr=$(fm_snapraid_pool || true)
+  ids=()
   if [ -n "$sr" ]; then
     local m; local -A seen=()
     for d in "$(disks_root)"/data-[0-9]* "${HS_DETACHED_ROOT:-/mnt/bulk}"/data-[0-9]* "$fm_state_dir"/recovering/data-[0-9]*; do
@@ -81,6 +83,13 @@ cmd_locations() {
     n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || continue
     fm_ismnt "${d%/}" && ids+=("temp:$n") || true
   done
+}
+cmd_locations() {
+  gate
+  if storage_locked; then printf 'status\tok\nlocked\tyes\n'; return 0; fi
+  echo "status	ok"
+  if write_on; then printf 'write\tyes\n'; else printf 'write\tno\n'; fi
+  collect_ids
   local id w r m
   for id in "${ids[@]}"; do
     fm_resolve "$id" || continue
@@ -157,6 +166,7 @@ cmd_ls() {
   fi
   echo "status	ok"
   local fmt='%y\001%s\001%T@\001%f\0' y s t name n=0 more=no
+  local -a hide=(); while IFS= read -r name; do hide+=(! -name "$name"); done < <(fm_trash_names)   # the trash is not listed
   while IFS=$'\001' read -r -d '' y s t name; do
     n=$((n + 1))
     if [ "$n" -gt "$limit" ]; then more=yes; break; fi
@@ -178,17 +188,17 @@ cmd_ls() {
     [ -z "${busy_par[$a]:-}" ] || flags+=(busyparent)
     local fl="-"; [ "${#flags[@]}" -eq 0 ] || fl=$(IFS=,; echo "${flags[*]}")
     printf 'row\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$typ" "$bytes" "${t%.*}" "$shown" "${disks:--}" "$fl" "$b"
-  done < <( { find -P "$real" -mindepth 1 -maxdepth 1 -type d -printf "$fmt" 2>/dev/null | LC_ALL=C sort -z -t $'\001' -k4
-              find -P "$real" -mindepth 1 -maxdepth 1 ! -type d -printf "$fmt" 2>/dev/null | LC_ALL=C sort -z -t $'\001' -k4
+  done < <( { find -P "$real" -mindepth 1 -maxdepth 1 "${hide[@]}" -type d -printf "$fmt" 2>/dev/null | LC_ALL=C sort -z -t $'\001' -k4
+              find -P "$real" -mindepth 1 -maxdepth 1 "${hide[@]}" ! -type d -printf "$fmt" 2>/dev/null | LC_ALL=C sort -z -t $'\001' -k4
             } | tail -z -n +$((cursor + 1)) )
   if [ "$more" = yes ]; then printf 'cursor\t%s\n' "$((cursor + limit))"; else echo end; fi
 }
 
 # ======================================================================= plan / start
-op="" from="" path="" to="" topath="" policy=skip verify=size parity_after=no newname="" want_conflicts=no confirm="" now=no selfile="" jobid="" by=""
+op="" from="" path="" to="" topath="" policy=skip verify=size parity_after=no newname="" want_conflicts=no confirm="" now=no permanent=no selfile="" jobid="" by=""
 parse_args() {
   op=${1:-}; [ $# -eq 0 ] || shift
-  case "$op" in copy|move|delete|rename|mkdir) ;; *) refuse "unknown operation '$op' (copy, move, delete, rename, mkdir)" ;; esac
+  case "$op" in copy|move|delete|restore|rename|mkdir) ;; *) refuse "unknown operation '$op' (copy, move, delete, restore, rename, mkdir)" ;; esac
   while [ $# -gt 0 ]; do
     case "$1" in
       --from)      [ $# -ge 2 ] || refuse "--from needs a value"; from=$2; shift 2 ;;
@@ -205,9 +215,11 @@ parse_args() {
       --parity-after) parity_after=yes; shift ;;
       --conflicts) want_conflicts=yes; shift ;;
       --now)       now=yes; shift ;;
+      --permanent) permanent=yes; shift ;;
       *) refuse "unknown option $1" ;;
     esac
   done
+  [ "$permanent" != yes ] || [ "$op" = delete ] || refuse "--permanent belongs to delete only"
   case "$policy" in skip|rename|newer|overwrite) ;; *) refuse "--conflict is skip, rename, newer or overwrite" ;; esac
   case "$verify" in size|checksum) ;; *) refuse "--verify is size or checksum" ;; esac
   [ -n "$from" ] || refuse "--from <location> is needed"
@@ -226,7 +238,7 @@ valid_newname() {   # a single new name: no slash, no control characters, not . 
 
 SEL=()
 read_selection() {
-  local nm src=/dev/stdin
+  local nm nm_ok src=/dev/stdin
   if [ -n "$selfile" ]; then
     case "$selfile" in *..*) refuse "bad selection file" ;; "$fm_dir"/jobs/*.sel) ;; *) refuse "bad selection file" ;; esac     # a * also matches / : no .. may climb out of the folder
     [ -f "$selfile" ] || refuse "the selection is gone"
@@ -234,7 +246,12 @@ read_selection() {
   elif [ -t 0 ]; then refuse "the selection comes on stdin, NUL separated"; fi
   while IFS= read -r -d '' nm || [ -n "$nm" ]; do
     [ -n "$nm" ] || refuse "an empty name in the selection"
+    if [ "$op" = restore ]; then   # <trash folder>/<date>/<path>: the items of `trash`, with slashes
+      nm_ok=$(fm_clean_path "$nm") || refuse "'$(fm_esc "$nm")' is not an item of the trash"
+      [ "$nm_ok" = "$nm" ] && [[ $nm =~ ^([^/]+)/[0-9]{4}-[0-9]{2}-[0-9]{2}/[^/].*$ ]] && fm_is_trash_name "${BASH_REMATCH[1]}" || refuse "'$(fm_esc "$nm")' is not an item of the trash"
+    else
     case "$nm" in */*) refuse "'$nm': names in the selection are relative to --path and hold no slash" ;; .|..) refuse "'$nm' is not a name" ;; esac
+    fi
     [ "${#nm}" -le 255 ] || refuse "a name in the selection is too long"
     if fm_badname "$nm"; then refuse "'$(fm_esc "$nm")' has control characters or is not valid UTF-8: it cannot be selected here"; fi
     SEL+=("$nm")
@@ -291,6 +308,8 @@ do_plan() {
   srcdir=$(readlink -f -- "$sdir")
   case "$srcdir/" in "$S_ROOT"/*) ;; *) refuse "that path leaves the location" ;; esac
   srel=${srcdir#"$S_ROOT"}; srel=${srel#/}
+  if [ -n "$srel" ] && fm_is_trash_name "${srel%%/*}"; then refuse "That is the trash: put items back with restore; it is emptied after $FM_TRASH_DAYS days."; fi
+  fm_trash_base; tbase=$TBASE; trel=$TREL   # the trash folder lives at the root of the file system
   if [ -n "$srel" ]; then
     LTOP=$S_TOP; LKIND=$S_KIND
     fm_protected "" "${srel%%/*}"
@@ -427,7 +446,7 @@ do_plan() {
 
   # confirmation
   confirm_name=""
-  if [ "$op" = delete ]; then
+  if [ "$op" = delete ] && [ "$permanent" = yes ]; then
     if [ "$files" -eq 1 ]; then confirm_name="delete 1 file"; else confirm_name="delete $files files"; fi
   elif [ "$has_dst" = yes ] && { [ "$policy" = newer ] || [ "$policy" = overwrite ]; }; then
     local tn=${dtdir##*/}; [ -n "$tn" ] || tn=$D_LABEL
@@ -451,7 +470,55 @@ do_plan() {
 
   long=no
   if [ "$rename_ok" != yes ] && { [ "$bytes" -gt $((20 * 1024 * 1024 * 1024)) ] || [ "$files" -gt 20000 ]; }; then long=yes; fi
+  if [ "$op" = delete ] && [ "$permanent" != yes ]; then long=no; fi   # a rename into the trash is instant
   if [ "$partial" = yes ]; then long=yes; fi
+}
+
+# restore: put items of the trash back. The selection holds <trash folder>/<date>/<path> (the items of `trash`); srcdir is the file system root
+# (the folder that holds the trash), so run_job scans and counts the items like any other source.
+do_plan_restore() {
+  gate
+  fm_resolve "$from" || refuse "$LERR"
+  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  grab S_
+  [ "$S_ADD" = yes ] || refuse "${S_LABEL}: ${S_REASON}; nothing can be put back there."
+  fm_trash_base; tbase=$TBASE; trel=$TREL
+  srcdir=$tbase; srel=""; has_dst=no; dtdir=""; drel=""; rename_ok=no
+  read_selection
+  [ "${#SEL[@]}" -gt 0 ] || refuse "nothing is selected"
+  local nm origin fold date tp
+  restore_origin=(); conflicts=0
+  for nm in "${SEL[@]}"; do
+    [ -e "$srcdir/$nm" ] || [ -L "$srcdir/$nm" ] || refuse "'$nm' is not in the trash"
+    fold=${nm%%/*}; date=${nm#*/}; date=${date%%/*}; tp=${nm#*/*/}
+    origin=$(awk -F'\t' -v t="$tp" '$1 == t { print $2; exit }' "$srcdir/$fold/$date/.origin" 2>/dev/null || true)
+    [ -n "$origin" ] || refuse "'$nm' has no entry in the list of the trash, so nobody knows where it came from"
+    if [ -n "$trel" ]; then case "$origin/" in "$trel"/*) ;; *) refuse "'$nm' came from another place than ${S_LABEL}" ;; esac; fi
+    restore_origin+=("$origin")
+    if [ -e "$tbase/$origin" ] || [ -L "$tbase/$origin" ]; then conflicts=$((conflicts + 1)); fi
+  done
+  local -a paths=(); for nm in "${SEL[@]}"; do paths+=("$srcdir/$nm"); done
+  scan_timeout=${FM_SCAN_TIMEOUT:-60}
+  fm_scan "$scan_timeout" "${paths[@]}"
+  files=$S_FILES; folders=$S_DIRS; bytes=$S_BYTES; links=$S_LINKS; others=$S_OTHER; partial=$S_PARTIAL
+  free_after=""; confirm_name=""; long=no; lock_any=no; parity=no
+  if [ "$S_SNAP" = yes ] && [ "$S_KIND" != cache ]; then parity=yes; fi
+  [ "$S_LOCK" != yes ] || lock_any=yes
+  if claim_alive "$S_ID"; then refuse "Another file job is working on ${S_LABEL} already; wait until it is done."; fi
+  if [ "$now" != yes ] && [ "$lock_any" = yes ]; then
+    if ! ( exec 9>"$bulk_lock"; flock -n 9 ) 2>/dev/null; then refuse "$(lock_holder) is running and holds the pool lock; try again when it is done."; fi
+  fi
+}
+plan_lines_restore() {
+  local n=${#SEL[@]}
+  echo "status	ok"
+  printf 'heading\trestore %s item(s) (%s) from the trash of %s\n' "$n" "$(fm_human "$bytes")" "$S_LABEL"
+  printf 'step\t~ put %s files in %s folders back where they came from: a rename (instant)\n' "$files" "$folders"
+  [ "$conflicts" -eq 0 ] || printf 'step\t~ %s item(s) have something at their old place already: they stay in the trash (skipped)\n' "$conflicts"
+  write_on || printf 'warn\tThe file manager is read only (fileManagerWrite is off): this plan shows what would happen, Start is refused until you allow it in Settings.\n'
+  if [ "$parity" = yes ]; then echo "note	The SnapRAID parity is out of date afterwards: files put back on a data disk count as new until the next sync (hs pool <name> sync)."; fi
+  printf 'files\t%s\nfolders\t%s\nbytes\t%s\n' "$files" "$folders" "$bytes"
+  printf 'conflicts\t%s\nparity\t%s\nconfirm_name\t%s\nlong\t%s\n' "$conflicts" "$parity" "" "no"
 }
 
 plan_lines() {
@@ -480,7 +547,9 @@ plan_lines() {
         printf 'step\t~ check every copied file (%s)\n' "$([ "$verify" = checksum ] && echo 'size, modification time and content' || echo 'size and modification time')"
         printf 'step\t- remove each file from %s only after it is checked; anything unchecked stays\n' "$src_txt"
       fi ;;
-    delete) printf 'step\t- delete %s files and %s folders (%s) from %s\n' "$files" "$folders" "$hb" "$src_txt" ;;
+    delete)
+      if [ "$permanent" = yes ]; then printf 'step\t- delete %s files and %s folders (%s) from %s FOR GOOD\n' "$files" "$folders" "$hb" "$src_txt"
+      else printf 'step\t~ move %s files and %s folders (%s) into the trash of this file system: a rename (instant), kept %s days, then emptied\n' "$files" "$folders" "$hb" "$FM_TRASH_DAYS"; fi ;;
     rename) printf 'step\t~ rename %s to %s\n' "${SEL[0]}" "$newname" ;;
     mkdir)  printf 'step\t+ make the folder %s\n' "$newname" ;;
   esac
@@ -493,7 +562,10 @@ plan_lines() {
     esac
   fi
   write_on || printf 'warn\tThe file manager is read only (fileManagerWrite is off): this plan shows what would happen, Start is refused until you allow it in Settings.\n'
-  [ "$op" != delete ] || echo "warn	Delete is permanent: there is no trash. The backup and ZFS snapshots are the only way back."
+  if [ "$op" = delete ]; then
+    if [ "$permanent" = yes ]; then echo "warn	Delete for good is permanent: the files do not go to the trash. The backup and ZFS snapshots are the only way back."
+    else echo "note	The trash keeps the space used: free space grows only when it is emptied ($FM_TRASH_DAYS days) or you delete for good. Items come back with restore."; fi
+  fi
   if [ "$has_dst" = yes ] && { [ "$policy" = newer ] || [ "$policy" = overwrite ]; }; then echo "warn	Overwriting replaces files at the target for good. Type the target name to confirm."; fi
   [ "$links" -eq 0 ] && [ "$others" -eq 0 ] || { [ "$op" = delete ] && printf 'note\t%s link(s) and %s special file(s) are removed as they are, never followed.\n' "$links" "$others" || printf 'warn\t%s link(s) and %s special file(s) in the selection are skipped: links are never followed or copied.\n' "$links" "$others"; }
   [ "$partial" != yes ] || echo "note	The folders are very big: the counts are a first part only; the job checks the room as it goes."
@@ -696,7 +768,51 @@ job_copy_move() {
   done
 }
 
+# a rename and nothing else: a copy across file systems must never happen here
+fm_rename_only() { python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$1" "$2" 2>/dev/null; }
+
+job_trash() {
+  local i name src origin dest tdir
+  tdir=$tbase/$FM_TRASH_NAME/$(fm_today)
+  if ! mkdir -p -- "$tdir" 2>/dev/null; then j_fail "$FM_TRASH_NAME" "the trash folder could not be made"; return 0; fi
+  for ((i = 0; i < ${#SEL[@]}; i++)); do
+    [ "$cancelled" = 0 ] || break
+    name=${SEL[i]}; src=$srcdir/$name; current=$name
+    origin=${trel:+$trel/}${srel:+$srel/}$name
+    dest=$tdir/$origin
+    if [ -e "$dest" ] || [ -L "$dest" ]; then dest=$(fm_free_name "$dest"); fi
+    if [ "$(stat -c %d -- "$src" 2>/dev/null)" != "$(stat -c %d -- "$tdir" 2>/dev/null)" ]; then
+      j_fail "$name" "is on another file system than the trash; it was not moved"
+    elif mkdir -p -- "${dest%/*}" 2>/dev/null && fm_rename_only "$src" "$dest"; then
+      printf '%s\t%s\n' "${dest#"$tdir"/}" "$origin" >> "$tdir/.origin"
+      files_done=$((files_done + ifiles[i])); bytes_done=$((bytes_done + ibytes[i])); idone[i]=${ibytes[i]}
+    else j_fail "$name" "could not be moved to the trash"; fi
+    idone_flag[i]=1
+    st_write
+  done
+}
+
+job_restore() {
+  local i nm fold date tp origin target od tdir
+  for ((i = 0; i < ${#SEL[@]}; i++)); do
+    [ "$cancelled" = 0 ] || break
+    nm=${SEL[i]}; current=$nm; origin=${restore_origin[i]}
+    fold=${nm%%/*}; date=${nm#*/}; date=${date%%/*}; tp=${nm#*/*/}
+    tdir=$srcdir/$fold/$date; od=$tdir/.origin; target=$tbase/$origin
+    if [ -e "$target" ] || [ -L "$target" ]; then j_skip "$origin" "something is at its old place already"
+    elif mkdir -p -- "${target%/*}" 2>/dev/null && fm_rename_only "$srcdir/$nm" "$target"; then
+      files_done=$((files_done + ifiles[i])); bytes_done=$((bytes_done + ibytes[i])); idone[i]=${ibytes[i]}
+      awk -F'\t' -v t="$tp" '$1 != t' "$od" > "$od.tmp" 2>/dev/null && mv -f "$od.tmp" "$od" 2>/dev/null || true
+      find -P "$tdir" -depth -mindepth 1 -type d -empty -delete 2>/dev/null || true
+      if [ ! -s "$od" ]; then rm -f -- "$od"; rmdir -- "$tdir" 2>/dev/null || true; rmdir -- "$srcdir/$fold" 2>/dev/null || true; fi
+    else j_fail "$origin" "could not be put back"; fi
+    idone_flag[i]=1
+    st_write
+  done
+}
+
 job_delete() {
+  [ "$permanent" = yes ] || { job_trash; return 0; }
   local i name src y s t p rel
   for ((i = 0; i < ${#SEL[@]}; i++)); do
     [ "$cancelled" = 0 ] || break
@@ -756,6 +872,7 @@ run_job() {
   case "$op" in
     copy|move) job_copy_move ;;
     delete) job_delete ;;
+    restore) job_restore ;;
     rename)
       current=${SEL[0]}
       if [ -e "$srcdir/$newname" ] || [ -L "$srcdir/$newname" ]; then j_fail "$newname" "exists already"
@@ -783,6 +900,7 @@ run_job() {
 
 cmd_plan() {
   parse_args "$@"
+  if [ "$op" = restore ]; then do_plan_restore; plan_lines_restore; return 0; fi
   do_plan
   plan_lines
 }
@@ -790,7 +908,7 @@ cmd_plan() {
 cmd_start() {
   parse_args "$@"
   write_on || refuse "$WRITE_OFF_REASON"
-  do_plan
+  if [ "$op" = restore ]; then do_plan_restore; else do_plan; fi
   if [ -n "$confirm_name" ] && [ "$confirm" != "$confirm_name" ]; then refuse "type the confirmation to go on: $confirm_name"; fi
   if [ "$now" = yes ]; then
     run_job
@@ -810,6 +928,7 @@ cmd_start() {
   [ -z "$newname" ] || args+=(--newname "$newname")
   [ -z "$confirm" ] || args+=(--confirm "$confirm")
   [ "$parity_after" != yes ] || args+=(--parity-after)
+  [ "$permanent" != yes ] || args+=(--permanent)
   if [ "${HS_FM_SYNC:-0}" = 1 ]; then
     unit=hs-job-fm-test-$id
     printf '%s\n' "$id" > "$fm_dir/jobs/$unit.alias"
@@ -879,7 +998,65 @@ for k, v in (("files_done", f[0]), ("files_total", f[1]), ("bytes_done", b[0]), 
   done
 }
 
+# ======================================================================= trash
+cmd_trash() {
+  gate
+  [ $# -eq 1 ] || refuse "usage: trash <location>"
+  fm_resolve "$1" || refuse "$LERR"
+  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  fm_trash_base
+  local tf d fold tp o abs bytes typ age left now_day dd
+  now_day=$(( $(fm_now) / 86400 ))
+  echo "status	ok"
+  printf 'days\t%s\n' "$FM_TRASH_DAYS"
+  while IFS= read -r fold; do
+    tf=$TBASE/$fold
+    [ -d "$tf" ] && [ ! -L "$tf" ] || continue
+    for d in "$tf"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]; do
+      [ -d "$d" ] && [ -f "$d/.origin" ] || continue
+      dd=${d##*/}; age=$(( now_day - $(date -u -d "$dd" +%s) / 86400 )); left=$((FM_TRASH_DAYS - age)); [ "$left" -ge 0 ] || left=0
+      while IFS=$'\t' read -r tp o; do
+        [ -n "$tp" ] && [ -n "$o" ] || continue
+        if [ -n "$TREL" ]; then case "$o/" in "$TREL"/*) o=${o#"$TREL"/} ;; *) continue ;; esac; fi
+        abs=$d/$tp
+        [ -e "$abs" ] || [ -L "$abs" ] || continue
+        if [ -d "$abs" ] && [ ! -L "$abs" ]; then typ=d; bytes=$(du -sb -- "$abs" 2>/dev/null | cut -f1) || bytes=0
+        else typ=f; bytes=$(stat -c %s -- "$abs" 2>/dev/null || echo 0); fi
+        printf 'row\t%s\t%s\t%s\t%s\t%s\t%s\n' "$fold/$dd/$tp" "$dd" "$o" "${bytes:-0}" "$typ" "$left"
+      done < "$d/.origin"
+    done
+  done < <(fm_trash_names)
+}
+
+# the timer job (03:35, inside the maintenance window): remove the date folders older than FM_TRASH_DAYS days from every file system's trash
+cmd_trash_empty() {
+  gate
+  if storage_locked; then printf 'status\tok\nlocked\tyes\n'; return 0; fi
+  if ! ( exec 9>"$bulk_lock"; flock -n 9 ) 2>/dev/null; then printf 'status\tok\nskipped\t%s is running and holds the pool lock; the trash is emptied the next night\n' "$(lock_holder)"; return 0; fi
+  collect_ids
+  local id fold tf d removed=0; local -A seen=()
+  for id in "${ids[@]}"; do
+    fm_resolve "$id" || continue
+    [ "$LUSABLE" = yes ] || continue
+    fm_trash_base
+    [ -z "${seen[$TBASE]:-}" ] || continue
+    seen[$TBASE]=1
+    while IFS= read -r fold; do
+      tf=$TBASE/$fold
+      [ -d "$tf" ] && [ ! -L "$tf" ] || continue
+      while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        rm -rf --one-file-system -- "${tf:?}/$d" && removed=$((removed + 1)) || true
+      done < <(fm_trash_expired "$tf")
+      rmdir -- "$tf" 2>/dev/null || true
+    done < <(fm_trash_names)
+  done
+  printf 'status\tok\nremoved\t%s\n' "$removed"
+}
+
 case "$verb" in
+  trash)     cmd_trash "$@" ;;
+  trash-empty) cmd_trash_empty "$@" ;;
   locations) cmd_locations "$@" ;;
   pair)      cmd_pair "$@" ;;
   ls)        cmd_ls "$@" ;;

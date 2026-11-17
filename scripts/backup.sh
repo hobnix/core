@@ -397,6 +397,9 @@ cmd_now() {
   # restic shows its own progress line on a terminal; in a job or a log (no terminal) one line a minute
   [ -t 1 ] || export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-0.0167}
   local fail=0 b=(--host "$(hostname)" --exclude-caches)
+  # the file manager's trash is not backed up (names from scripts/lib/fm.sh, read in a subshell so nothing of it leaks into this script)
+  mapfile -t tx < <(. "$(dirname "$0")/lib/fm.sh" && fm_trash_excludes)
+  b+=("${tx[@]}")
   mount_disk
   [ -f "$REPO/config" ] || die "$(t 'No backup repository in %s. Run: hs backup init <device>' "$REPO")"
   clear_locks

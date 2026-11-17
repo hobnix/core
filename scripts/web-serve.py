@@ -1011,6 +1011,7 @@ READS = {
     ("fm", "pair"): {"kind": "tsv", "ttl": 5, "args": [FM_LOC, FM_LOC]},
     ("fm", "ls"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path"), "cursor": (r"^[0-9]{1,9}$", "--cursor"),
                                                                         "limit": (r"^[0-9]{1,4}$", "--limit")}},
+    ("fm", "trash"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC]},
     ("fm", "progress"): {"kind": "tsv", "ttl": 0, "args": [UNIT]},
     ("disk", "ls"): {"kind": "tsv", "ttl": 5,"args": [r"^data-[0-9]{1,3}$"], "query": {"path": (r"^(?!.*(^|/)\.\.(/|$))(shares|sensitive)(/[^/\x00-\x1f]{1,255}){0,20}$", "--path")}},
     ("state", "smart"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
@@ -1209,8 +1210,8 @@ CHANGES = {
              {"fixed": [r"^answer$", r"^[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]{1,60}-[a-z]{4}$"], "opts": {"--seq": (r"^[0-9]{1,9}$", False), "--key": (r"^[A-Za-z][A-Za-z0-9_]{0,40}$", False)}, "need": ["--seq", "--key"], "stdin": True}],
     # the file manager (fm.sh): copy, move, delete, rename, mkdir. The selection (names below --path) is NOT an argument: the body field `selection` (a list of names,
     # at most FM_SELECTION_MAX) goes to the script on stdin, NUL separated, never argv. The script enforces every rule itself; --by (who) is added here, not by the client.
-    "fm": [{"fixed": [r"^(copy|move|delete|rename|mkdir)$"],
-            "opts": {"--from": (FM_LOC, False), "--to": (FM_LOC, False), "--path": (FM_PATH, False), "--to-path": (FM_PATH, False),
+    "fm": [{"fixed": [r"^(copy|move|delete|restore|rename|mkdir)$"],
+            "opts": {"--permanent": (None, False), "--from": (FM_LOC, False), "--to": (FM_LOC, False), "--path": (FM_PATH, False), "--to-path": (FM_PATH, False),
                      "--conflict": (r"^(skip|rename|newer|overwrite)$", False), "--verify": (r"^(size|checksum)$", False), "--parity-after": (None, False),
                      "--newname": (r"^[^\x00-\x1f/]{1,255}$", False), "--conflicts": (None, False)},
             "selection": True}],
