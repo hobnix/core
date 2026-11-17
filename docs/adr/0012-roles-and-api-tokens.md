@@ -1,6 +1,6 @@
 # 0012: Roles and API tokens: viewer, app manager, admin
 
-Status: Accepted (2026-11-10)
+Status: Accepted (2026-11-10); open points on group names and token lockout answered 2026-11-18 (below)
 Issue: hobnix/server#257 (part of #195). The owner decides; nothing here is built.
 
 ## Context
@@ -34,7 +34,7 @@ Issue: hobnix/server#257 (part of #195). The owner decides; nothing here is buil
 | | A. Local accounts and tokens only | B. Roles are AD groups | C. AD groups for people, tokens owned by a person (recommended) |
 | --- | --- | --- | --- |
 | Identity | a table of web users on the server | the Samba/AD user | the Samba/AD user |
-| Role stored in | the same table | membership of three groups, for example `hs-viewers`, `hs-app-managers`, Domain Admins | the same groups |
+| Role stored in | the same table | membership of three groups, for example `hn-viewers`, `hn-app-managers`, Domain Admins | the same groups |
 | Change a role | `hs` command | `hs users` group membership, the tool people already use | same as B |
 | Works while the DC is down | yes | no, except for the local account | local account (admin) only; tokens keep working, see decision 6 |
 | A second user database | yes, to keep in line with Samba | no | no |
@@ -85,7 +85,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 3. **The check is one function in `scripts/web-serve.py`** that runs after the session or token is known and before the allowlist entry is run.
    A refused call is a 403 with the required role in the body; it runs nothing and is not an audit line. The page asks `GET /api/session` for the
    role and hides what the person cannot use; the 403 is the guard, the hiding is only help.
-4. **API tokens belong to a person and carry a role.** Format `hst_` + 32 random bytes in base64url, shown once, stored as sha256 hash with an
+4. **API tokens belong to a person and carry a role.** Format `hn_` + 32 random bytes in base64url, shown once, stored as sha256 hash with an
    id, the owner, the role, a label, the creation time and the expiry. The role of a token is at most the role its owner has now: a lowered role
    lowers the token, a disabled account kills it. Sent as `Authorization: Bearer`. A token never needs a CSRF header and never gets a cookie.
    Default lifetime 90 days, at most 1 year, no token without an expiry. A token cannot create tokens, change roles or use `users`, `secrets`
@@ -123,6 +123,14 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 - **The audit log is `admin` only** (it names people).
 - **`app-manager` sees an app's logs, never the console of an instance.**
 - **Three global roles first;** no per-object scope (this app, this share).
-- **Still open, as follow-up issues once accepted:** the names of the AD groups and how `hs users` creates them without surprising an
-  existing domain; a rate limit and lockout for token use (AD lockout does not apply to a token); the role field and its test, the check in
+- **Still open, as follow-up issues once accepted:** the role field and its test, the check in
   `web-serve.py`, `HS_ACTOR` from the web server, `hs token` (create, list, revoke) with its `sys` rows, the role-aware web interface, extension manifests.
+
+## Decided by the owner (2026-11-18)
+
+- **Group names (D2 of docs/PLAN-extensions-access.md).** `hn-viewers` and `hn-app-managers`, plus Domain Admins; the names are configurable in
+  machine.toml. `hn` is the future command and prefix (the rename from `hs` is a later milestone), and names that live in the domain, on user
+  disks or in token strings carry the final prefix now; any visible token prefix is `hn_` (this record's earlier `hst_` is replaced). `hs users`
+  creates the groups only after a plan and a typed name, and never into an existing domain without asking.
+- **Token rate limit and lockout (D4).** Both: per token id (60 failures in a minute lock that id for 5 minutes) and per address, on top of the
+  existing address throttle. AD lockout does not apply to a token, so this is the only brake.
