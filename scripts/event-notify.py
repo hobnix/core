@@ -176,8 +176,18 @@ def write_cursor(n):
 # ── the spool: events that a container left in a shared folder ──
 def spool_packages():
     """The packages whose events a container may leave in the spool: the ones that have a declaration file (installed or the core's
-    transition copy). Only root writes those (`hs pkg` from a signed package, or the core); a container cannot add a name."""
-    return set(pkg_events.declarations())
+    transition copy) or a pkg.* row in event-kinds.tsv (old form). Only root writes those (`hs pkg` from a signed package, or the core); a container cannot add a name."""
+    names = set(pkg_events.declarations())
+    # old form: a pkg.<package>.<event> row in the core event-kinds.tsv (accepted until the recipes declare their events)
+    try:
+        with open(os.path.join(HERE, "lib", "event-kinds.tsv"), encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"pkg\.([a-z][a-z0-9-]{0,40})\.[a-z0-9][a-z0-9-]{0,39}\t", line)
+                if m:
+                    names.add(m.group(1))
+    except OSError:
+        pass
+    return names
 
 
 def clean_row(raw):
