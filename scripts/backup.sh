@@ -102,6 +102,9 @@ RESULT=$STATE/backup.state       # read by hs health
 DC=$(dc_name)
 INCUS_ROOT=${HS_INCUS_ROOT:-/var/lib/incus/storage-pools/default/containers}
 BROWSE=/mnt/backup-browse
+OFFDEV=${HS_BACKUP_OFFSITE_DEV:-/dev/disk/by-label/backup-offsite}   # the rotating off-site disk (step 14, D18): a folder repository on it
+OFFMNT=${HS_BACKUP_OFFSITE_MOUNT:-/mnt/backup-offsite}                # mounted only while a command needs it
+EXPIRY_NAME=offline-backup-disk
 export RESTIC_CACHE_DIR=${HS_BACKUP_CACHE:-/var/cache/restic}
 
 dry=false
@@ -152,11 +155,16 @@ set_up() { [ "$(pass_state)" != missing ]; }
 
 # ── The backup disk: mounted only while something needs it ──
 mounted_by_us=false
+off_mounted=false
 cleanup() {
   if declare -F drill_cleanup >/dev/null; then drill_cleanup || true; fi   # the throwaway instance of `drill ct`
   if $mounted_by_us; then
     sync
     umount "$MNT" 2>/dev/null || warn "$(t 'Could not unmount %s (still in use)' "$MNT")" >&2
+  fi
+  if $off_mounted; then
+    sync
+    umount "$OFFMNT" 2>/dev/null || warn "$(t 'Could not unmount %s (still in use)' "$OFFMNT")" >&2
   fi
 }
 trap cleanup EXIT
@@ -566,7 +574,9 @@ cmd_now() {
   fi
 
   offsite_adopt_old
-  if [ -s "$OFFSITE" ]; then
+  if [ -s "$OFFSITE" ] && offsite_is_disk; then
+    note "The off-site disk is copied by hand, not by the nightly run: hs backup offsite now"
+  elif [ -s "$OFFSITE" ]; then
     step "Off-site copy"
     if offsite_copy; then
       note_state "offsite_ok=$(date +%s)"
@@ -721,7 +731,29 @@ offsite_ready() {   # for --repo offsite: set, unlocked and openable
   [ "$(secret_state "$OFFSITE")" != locked ] || secret_locked_exit
   offsite_adopt_old
   [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
+  ! offsite_is_disk || offsite_disk_mount
   R_off cat config >/dev/null 2>&1 || die "$(t 'The off-site repository cannot be opened (not reachable, or wrong credentials or password).')"
+}
+# The rotating disk: a folder target under $OFFMNT. Only a person copies to it (hs backup offsite now); the nightly run skips it.
+offsite_is_disk() { local a; a=$(cat "$OFFSITE" 2>/dev/null || true); [ "$a" = "$OFFMNT" ] || [[ "$a" == "$OFFMNT"/* ]]; }
+offsite_disk_mount() {   # mount the disk labelled backup-offsite for this command (no-op for another target)
+  [ -z "${HS_BACKUP_NO_MOUNT:-}" ] || return 0
+  mountpoint -q "$OFFMNT" && return 0
+  [ -e "$OFFDEV" ] || die "$(t "The off-site disk is not plugged in (no disk with the label 'backup-offsite'). Plug it in and run again.")"
+  mkdir -p "$OFFMNT"
+  mount -o noatime "$OFFDEV" "$OFFMNT" || die "Could not mount the off-site disk."
+  off_mounted=true
+}
+offsite_renew_expiry() {   # after a copy to the rotating disk: the swap reminder moves to today + offsiteDiskDays (hs expiry)
+  local days base until
+  days=$(setting_get offsiteDiskDays 2>/dev/null || true)
+  [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -ge 1 ] || days=30
+  base=${HS_EXPIRY_TODAY:-$(date +%F)}
+  until=$(date -u -d "$base +$days days" +%F 2>/dev/null) || { warn "Could not work out the new date of the swap reminder."; return 0; }
+  bash "$(dirname "$0")/expiry.sh" add "$EXPIRY_NAME" "$until" "plug in the disk labelled backup-offsite and run: hs backup offsite now" >/dev/null ||
+    warn "The swap reminder could not be renewed (hs expiry add $EXPIRY_NAME $until)."
+  note_state "offsite_disk_until=$until"
+  note "$(t 'Swap reminder renewed: %s' "$until")"
 }
 offsite_copy() {
   R_off copy --from-repo "$REPO" --from-password-file "$PASSFILE" >/dev/null
@@ -756,8 +788,10 @@ cmd_offsite() {
       [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
       need_repo
       step "$(t 'Off-site copy to %s' "$(offsite_masked)")"
+      ! offsite_is_disk || offsite_disk_mount
       offsite_copy || die "The off-site copy failed."
       note_state "offsite_ok=$(date +%s)"
+      ! offsite_is_disk || offsite_renew_expiry
       ok "Copied." ;;
     off)
       rm -f "$OFFSITE_OLD"; secret_rm "$OFFSITE"; secret_rm "$OFFSITE_CRED"
@@ -882,6 +916,7 @@ offsite_set() {   # offsite set <repo> | --kind s3|rest|sftp|folder [fields]
     printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$sec" | secret_write "$OFFSITE_CRED" ||
       { fail_cleanup; die "Could not store the S3 keys."; }
   fi
+  ! offsite_is_disk || offsite_disk_mount
   if R_off cat config >/dev/null 2>&1; then
     # an existing repository keeps the password it has (the backup disk's)
     $machine || ok "$(t 'Using the existing repository %s (it keeps its password)' "$(offsite_masked)")"
@@ -910,7 +945,8 @@ offsite_set() {   # offsite set <repo> | --kind s3|rest|sftp|folder [fields]
       note "The off-site password is in $OFFSITE_PASS (root only). Read it once and write it down."
     fi
   fi
-  note "Every nightly run copies new backups there. Now: hs backup offsite now"
+  if offsite_is_disk; then note "This is the rotating disk: plug it in and copy by hand with hs backup offsite now (never by the nightly run)."
+  else note "Every nightly run copies new backups there. Now: hs backup offsite now"; fi
 }
 
 # ── Does a restore really work? Random files out of the newest backup, compared with the originals ──
@@ -1195,7 +1231,7 @@ cmd_report() {
   fi
   if [ -n "$(get drill_vm_ok)" ]; then check_age "$(t 'Virtual machine drill')" drill_vm_ok 90 "($(get drill_vm_name))"; fi
   if incus info "$DC" >/dev/null 2>&1 </dev/null || [ -n "$(get drill_dc_ok)" ]; then check_age "$(t 'Domain controller backup file')" drill_dc_ok 90; fi
-  if [ -s "$OFFSITE" ]; then check_age "$(t 'Off-site copy')" offsite_ok 3; fi
+  if [ -s "$OFFSITE" ] && ! offsite_is_disk; then check_age "$(t 'Off-site copy')" offsite_ok 3; fi   # the rotating disk is warned about by its expiry entry
   # tries that failed lately (the container drills keep a list)
   if [ -s "$CTDRILL" ]; then
     # only containers that are in the backup now (switching one off is a choice; its old failures do not count)

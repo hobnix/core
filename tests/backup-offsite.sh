@@ -129,4 +129,33 @@ check "migrate moves S3 keys into a credentials file" hsb offsite migrate
 check_out "with the keys in it" "aws_access_key_id = AKIAOLD" cat "$HS_STATE_DIR/backup-offsite.credentials"
 check "and the env file is gone" test ! -e "$HS_STATE_DIR/backup-offsite.env"
 
+echo "-- the rotating disk (step 14): copy by a person, the swap reminder moves, never by the nightly run"
+disk=$WORK/offdisk; export HS_BACKUP_OFFSITE_MOUNT=$disk HS_BACKUP_OFFSITE_DEV=$WORK/by-label-backup-offsite HS_EXPIRY_TODAY=2026-11-17
+mkdir -p "$disk"
+check "set a folder target on the disk" hsb offsite set --kind folder --path "$disk/restic"
+rm -f "$disk/restic/copied"
+check "offsite now copies to the disk" hsb offsite now
+check "the copy reached the disk" test -f "$disk/restic/copied"
+check_out "the swap reminder is today + 30 days (default)" "^offline-backup-disk.2026-12-17" cat "$HS_STATE_DIR/expiry"
+check_out "hs expiry sees it" "offline-backup-disk.2026-12-17.30.soon" bash "$SCRIPTS/expiry.sh" --list
+mkdir -p "$HS_STATE_DIR/settings"; echo 10 > "$HS_STATE_DIR/settings/offsiteDiskDays"   # the setting: 10 days
+HS_EXPIRY_TODAY=2027-01-01 hsb offsite now >/dev/null 2>&1
+check_out "a second copy renews the date" "^offline-backup-disk.2027-01-11" cat "$HS_STATE_DIR/expiry"
+echo "-- the disk is not plugged in: no copy, the reminder stays"
+: > "$FAKELOG"; rm -f "$disk/restic/copied"
+FB=$WORK/fakebin; mkdir -p "$FB"; : > "$WORK/mount.log"
+{ echo '#!/bin/sh'; echo "[ \"\$2\" != \"$disk\" ]"; } > "$FB/mountpoint"   # everything is mounted but the off-site disk
+{ echo '#!/bin/sh'; echo "echo \"mount \$*\" >> \"$WORK/mount.log\""; } > "$FB/mount"
+{ echo '#!/bin/sh'; echo "echo \"umount \$*\" >> \"$WORK/mount.log\""; } > "$FB/umount"
+chmod +x "$FB"/*
+check_out "says so" "not plugged in" bash -c "PATH='$FB':\$PATH; env -u HS_BACKUP_NO_MOUNT HS_BACKUP_YES=1 bash '$SCRIPTS/backup.sh' offsite now 2>&1"
+check "nothing was copied" test ! -e "$disk/restic/copied"
+check_out "the date did not move" "^offline-backup-disk.2027-01-11" cat "$HS_STATE_DIR/expiry"
+: > "$WORK/fake-dev"
+check "plugged in: mounted for the copy, unmounted after" bash -c "PATH='$FB':\$PATH; HS_BACKUP_OFFSITE_DEV='$WORK/fake-dev' env -u HS_BACKUP_NO_MOUNT HS_BACKUP_YES=1 bash '$SCRIPTS/backup.sh' offsite now >/dev/null 2>&1 && grep -q 'mount -o noatime $WORK/fake-dev $disk' '$WORK/mount.log' && grep -q 'umount $disk' '$WORK/mount.log'"
+check "and copied" test -f "$disk/restic/copied"
+echo "-- the nightly run skips the disk"
+check_out "the nightly step says it is a hand step" "copied by hand, not by the nightly run" grep -o "copied by hand, not by the nightly run" "$SCRIPTS/backup.sh"
+hsb offsite off >/dev/null 2>&1
+
 finish

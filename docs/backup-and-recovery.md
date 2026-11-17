@@ -200,6 +200,23 @@ itself (run `restic forget --prune` with the same rule on the target, from a tim
 
 Read from it with the same commands: `hs backup list|find|restore|drill --repo offsite`.
 
+### A rotating disk as the off-site copy
+
+A second disk, labelled `backup-offsite`, that you swap by hand (one at your home, one elsewhere) is a folder target. It is never offered as a free
+disk and the nightly run never copies to it; a person starts every copy.
+
+```bash
+sudo hs backup offsite set --kind folder --path /mnt/backup-offsite/restic     # once, with the disk plugged in (it is mounted for the command only)
+sudo hs backup offsite now                                                      # every time you swap: mounts the disk, copies, unmounts
+hs expiry list                                                                  # offline-backup-disk: the date of the next swap
+```
+
+The routine: plug the disk in. The server sends the message "plugged in: copy now?" and does nothing else. Run `hs backup offsite now` (or press
+the button on the Backup page), wait for "Copied", take the disk out and keep it elsewhere. After each copy the `hs expiry` entry
+`offline-backup-disk` moves to today plus `offsiteDiskDays` days (default 30; `hs config set offsiteDiskDays 14`). The health check warns 30 and
+7 days before that date, so a disk that was never swapped shows up as a problem. A disk that is not plugged in gives "not plugged in" and the date
+stays. Not tested on hardware yet.
+
 Not tested on hardware yet.
 
 ## Databases and VMs

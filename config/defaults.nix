@@ -44,6 +44,7 @@
   setupDone = false;
   backupNewShares = false;
   backupNewInstances = true;
+  offsiteDiskDays = 30;
   adDomain = null;
   adminUser = "adminuser";
   notifyUrl = null;
