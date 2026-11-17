@@ -9,6 +9,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib/diskpath.sh"
 . "$(dirname "$0")/lib/diskused.sh"
 . "$(dirname "$0")/lib/bulkpath.sh"
+. "$(dirname "$0")/lib/adopt-check.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/pools.sh"
 . "$(dirname "$0")/lib/pools-write.sh"
@@ -321,17 +322,18 @@ adopt_fs() {   # adopt_fs <by-id name>  ->  "device fstype luksdevice|-"  (LUKS:
     # probe the device itself: lsblk only knows what udev has noticed so far
     fstype=$(blkid -p -o value -s TYPE "$path" 2>/dev/null || true)
     case "$fstype" in
-      xfs|ext4|btrfs) found+=("$path $fstype -") ;;
+      xfs|ext4|btrfs) adopt_refusal "$path" "$fstype" >&2 || return 1; found+=("$path $fstype -") ;;
+      zfs_member) echo "$1 is formatted with ZFS (an Unraid 6.12 ZFS array disk): it can not be adopted as it is, adopting needs xfs, ext4 or btrfs. Import its ZFS pool instead." >&2; return 1 ;;
       crypto_LUKS)
         # already open (unlocked at boot, or through the twin path of a dual-port disk): no passphrase needed, the mapper has the same name
         if [ ! -e "/dev/mapper/$(luks_name "$path")" ]; then
           crypt_get_pass || { echo "No passphrase for $1." >&2; return 1; }
         fi
-        if ! luks_open "$path"; then echo "$1: the passphrase does not open $path (is it the passphrase of these disks?)." >&2; return 1; fi
+        if ! luks_open "$path"; then echo "$1: the passphrase does not open $path (is it the passphrase of these disks? A disk that is opened with a key file only can not be adopted: copy it with hs disk temp)." >&2; return 1; fi
         mapper="/dev/mapper/$(luks_name "$path")"
         inner=$(blkid -p -o value -s TYPE "$mapper" 2>/dev/null || true)
         case "$inner" in
-          xfs|ext4|btrfs) found+=("$mapper $inner $path") ;;
+          xfs|ext4|btrfs) adopt_refusal "$mapper" "$inner" >&2 || return 1; found+=("$mapper $inner $path") ;;
           *) echo "$1 is encrypted and holds '${inner:-nothing}' inside: adopting needs xfs, ext4 or btrfs." >&2; return 1 ;;
         esac ;;
       ntfs|exfat|vfat) echo "$1 holds $fstype: copy it with hs disk temp instead, adopting needs xfs, ext4 or btrfs." >&2; return 1 ;;

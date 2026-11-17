@@ -222,6 +222,36 @@ def poolzfs(params):
       + write_checks("sp", "share:hslab1", "", SHARES + "/hslab1", "pool:" + POOL, "shares/hslab2/zz-in", SHARES + "/hslab2/zz-in", "zz-in")
 
 
+def unraid(params):
+    """Stage `unraid` (docs/PLAN-storage-nas.md step 7, #460 a): three still empty virtual disks are made the way Unraid makes them (one partition from
+    sector 64, xfs in it, files owned 99:100, the same top folder on both data disks; a parity disk with a partition and no file system), then only
+    the read-only side runs: `hs migrate check` and the adopt `--dry-run` plan. The checksum of each partition before and after proves nothing was
+    written. Keys of HS_NESTED_DISKS: unraid1, unraid2 (data), unraidp (parity, smaller). Not tested on hardware yet."""
+    fxp = "fxp() { lsblk -nrpo PATH,TYPE $1 | awk '$2==\"part\"{print $1; exit}'; }"
+    mk = ("mkunraid() { d=$1; printf 'label: gpt\\nfirst-lba: 34\\nstart=64\\n' | sfdisk -q $d && partprobe $d && udevadm settle; p=$(fxp $d); "
+          "mkfs.xfs -q -f $p && mkdir -p /mnt/unraid-fx && mount $p /mnt/unraid-fx && mkdir -p /mnt/unraid-fx/Media /mnt/unraid-fx/Shared /mnt/unraid-fx/Own-$2 && "
+          "echo film-$2 > /mnt/unraid-fx/Media/$2.mkv && echo shared-$2 > /mnt/unraid-fx/Shared/$2.txt && chown -R 99:100 /mnt/unraid-fx/Media /mnt/unraid-fx/Shared /mnt/unraid-fx/Own-$2 && "
+          "umount /mnt/unraid-fx; }")
+    return login_root(params) + [
+        disk_by_name(params, "unraid1", "u1"),
+        disk_by_name(params, "unraid2", "u2"),
+        disk_by_name(params, "unraidp", "up"),
+        step("run_var", "test -b {u1} && test -b {u2} && test -b {up}", what="the three virtual disks are block devices"),
+        step("run", "command -v mkfs.xfs sfdisk partprobe >/dev/null", what="the tools to build the fixtures are installed"),
+        step("run", fxp, what="a helper that names the partition of a disk"),
+        step("run", mk, what="a helper that builds one Unraid data disk"),
+        step("run_var", "mkunraid {u1} one && mkunraid {u2} two", timeout=300, what="two data disks: partition 1, xfs, files 99:100, the same top folder"),
+        step("run_var", "printf 'label: gpt\\nfirst-lba: 34\\nstart=64\\n' | sfdisk -q {up} && partprobe {up}", what="a parity disk: a partition, no file system"),
+        step("run_var", "for d in {u1} {u2}; do blkid -p -o export $(fxp $d); done | sha256sum > /tmp/unraid-before", what="the superblocks are noted"),
+        step("run", "hs migrate check --parity $(basename {up}) | tee /tmp/unraid-check.out | grep -q xfs", what="migrate check lists the xfs disks"),
+        step("run", "grep -q 'can be adopted' /tmp/unraid-check.out", what="migrate check: they can be adopted"),
+        step("run_var", "hs pool %s add --role adopt --disks $(basename {u1}),$(basename {u2}) --merge --dry-run | tee /tmp/unraid-plan.out | grep -q Own-one" % POOL,
+             what="the adopt plan lists the folder of the first disk"),
+        step("run", "grep -q 'merged with folders of the same name' /tmp/unraid-plan.out && grep -q Shared /tmp/unraid-plan.out", what="the plan merges the shared top folder"),
+        step("run_var", "for d in {u1} {u2}; do blkid -p -o export $(fxp $d); done | sha256sum | cmp - /tmp/unraid-before", what="nothing was written to the data disks"),
+    ]
+
+
 def upgrade_steps(params):
     """Stage upgrade (#435): the system installed from the LAST release ISO is set up (a share, one app), `hs update` moves it to the candidate
     (a branch of the Hobnix repository that the old checkout is pointed at), and it must still be healthy with its shares, state.db and app.
@@ -278,5 +308,6 @@ SCENARIOS = {
     "restore": restore,
     "pool": pool,
     "poolzfs": poolzfs,
+    "unraid": unraid,
     "upgrade": upgrade_steps,
 }
