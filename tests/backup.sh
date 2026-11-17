@@ -144,11 +144,11 @@ echo "-- off-site copy"
 off=$WORK/offsite-repo
 check "offsite set creates the second repository" hsb offsite set "$off"
 check "offsite now copies" hsb offsite now
-check_out "the second repository holds the snapshots" "shares" restic -r "$off" --password-file "$WORK/state/restic-password" snapshots --compact
+check_out "the second repository holds the snapshots" "shares" restic -r "$off" --password-file "$WORK/state/restic-offsite-password" snapshots --compact
 check "the next nightly run copies as well" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" now
 check_out "status shows the off-site copy" "Off-site copy" hsb status
 hsb offsite off >/dev/null 2>&1
-check "offsite off removes the setting" test ! -s "$WORK/state/backup-offsite"
+check "offsite off removes the setting" test ! -e "$WORK/state/backup-offsite.repo"
 
 echo "-- health"
 export HS_BACKUP_STATE=$WORK/state/backup.state HS_HEALTH_STATE=$WORK/h.state
