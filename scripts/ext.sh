@@ -46,7 +46,7 @@ manifest_list() {   # manifest_list <dir> <key>: the names of a one-line array `
 perms_of() {   # perms_of <name>: the declared permissions, comma separated; "not declared" when the manifest has none (ADR 0014: shown, not enforced)
   local out
   out=$(python3 "$here/pkg.py" perms "$1" 2>/dev/null) || out=-
-  if [ "$out" = "-" ]; then t "not declared"; else printf '%s' "$out" | paste -sd, - | sed 's/,/, /g'; fi
+  if [ "$out" = "-" ]; then t "not declared"; elif [ -z "$out" ]; then t "none"; else printf '%s' "$out" | paste -sd, - | sed 's/,/, /g'; fi
 }
 core_level() { cat "$here/lib/api-level" 2>/dev/null || echo 0; }
 compat_problem() {   # compat_problem <name> <dir>: prints why the package cannot be switched on (a capability it requires is off, or it needs a newer core); nothing when fine
@@ -145,6 +145,9 @@ cmd_enable() {
   if [ -n "$why" ]; then fail_fix "$(t "'%s' %s." "$n" "$why")" "hs ext list"; fi
   why=$(python3 "$here/pkg.py" perms-check "$d" "$n" 2>&1 | head -n1) || true
   if [ -n "$why" ]; then fail_fix "$(t "'%s' uses more than it declares in permissions: %s" "$n" "$why")" "hs ext list"; fi
+  if ! grep -q '^permissions[[:space:]]*=' "$d/package.toml" 2>/dev/null; then
+    warn "$(t "'%s' does not declare permissions. Today it still turns on; a later release will refuse it." "$n")"
+  fi
   mapfile -t cur < <(caps_list)
   for x in ${cur[@]+"${cur[@]}"}; do [ "$x" != "$n" ] || found=1; done
   if has_nix "$d"; then effect_say rebuild; else effect_say now; fi

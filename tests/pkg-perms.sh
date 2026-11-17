@@ -65,6 +65,7 @@ cd "$ROOT"
 $PKG repo add test "$R" --key "$WORK/signers" >/dev/null
 $PKG fetch test >/dev/null
 check_out "install shows that nothing is declared and that it is not enforced" "not declared" bash -c "$PKG install demo 2>&1"
+check_out "D5: install warns for a release without permissions (one release, no refusal)" "warning: permissions is missing" bash -c "$PKG install demo 2>&1"
 check_out "the installed copy says the same through perms" "^-$" bash -c "HS_PACKAGES_ROOT=$WORK/none $PKG perms demo"
 cd "$R"; release v1.1.0 1.1.0 'permissions = ["host:incus"]'; cd "$ROOT"
 $PKG fetch test >/dev/null
@@ -82,6 +83,14 @@ check_out "a typed wrong name does not accept (terminal not available: refused)"
 cd "$R"; release v1.4.0 1.4.0 'permissions = ["root"]'; cd "$ROOT"
 $PKG fetch test >/dev/null
 check_out "a release with an invalid permission is refused at install" "unknown permission" bash -c "$PKG update demo --yes --accept-permissions </dev/null 2>&1; true"
+echo "-- D5: required in a repository, a warning in hs for one release"
+RC=$WORK/rcheck; mkdir -p "$RC/extensions/nodecl"
+printf 'name = "nodecl"\nversion = "1.0.0"\nkind = "extension"\ntitle = "No decl"\nrequires_core = ">=1"\naudience = "generic"\n' > "$RC/extensions/nodecl/package.toml"
+printf '[package.nodecl]\nversion = "1.0.0"\nkind = "extension"\npath = "extensions/nodecl"\nrequires_core = ">=1"\n' > "$RC/index.toml"
+check_out "repo-check names a package without permissions" "nodecl: permissions is missing" bash -c "$PKG repo-check $RC; true"
+check "and fails" bash -c "! $PKG repo-check $RC >/dev/null"
+printf 'permissions = []\n' >> "$RC/extensions/nodecl/package.toml"
+check "an empty list is a declaration: repo-check passes" $PKG repo-check "$RC"
 echo "-- enforcement: a package may not use more than it declared (ADR 0014 step 1b)"
 E=$WORK/enf/permx; mkdir -p "$E"
 printf 'name = "permx"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n[[web.reads]]\nwords = "list"\nkind = "tsv"\nttl = 30\n' > "$E/capability.toml"
@@ -107,6 +116,8 @@ check_out "perms-check names what is missing" "web.read" bash -c "$PKG perms-che
 check "perms-check exits 1" bash -c "! $PKG perms-check '$E' permx >/dev/null"
 check_eq "web reads are NOT registered when the declaration does not cover them" "0" "$(webreads | sed -n "s/^reads //p")"
 check_out "hs ext enable refuses it" "uses more than it declares" bash -c "HS_PACKAGES_DIR=$WORK/enf HS_CAPABILITIES_FILE=$WORK/enf/caps2 HS_STATE_DIR=$WORK/enf/state bash $SCRIPTS/ext.sh enable permx 2>&1; true"
+pk ''
+check_out "hs ext enable warns about an undeclared package and turns it on" "does not declare permissions" bash -c "HS_PACKAGES_DIR=$WORK/enf HS_CAPABILITIES_FILE=$WORK/enf/caps3 HS_STATE_DIR=$WORK/enf/state bash $SCRIPTS/ext.sh enable permx 2>&1; true"
 pk 'permissions = ["host:incus", "web.read"]'
 check_eq "fixing the declaration loads the reads again" "1" "$(webreads | sed -n "s/^reads //p")"
 finish

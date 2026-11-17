@@ -719,6 +719,8 @@ def run(pkg, cmd, rest):
             v, r_name, tag = R.install(rest[0], repo, want)
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(R.last_permissions))
+            if R.last_permissions is None:
+                print("warning: %s" % pkg.pkg_perms.missing_text(rest[0]), file=sys.stderr)
         elif cmd == "update":
             res = R.diff(rest[0])
             if res is None:

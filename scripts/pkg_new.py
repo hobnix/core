@@ -31,6 +31,7 @@ title = {q_title}
 title_de = {q_title_de}
 requires_core = ">=9"
 audience = "generic"
+permissions = []
 needs = []
 uses = []
 runs = ["lxc"]
@@ -131,6 +132,7 @@ title = {q_title}
 title_de = {q_title_de}
 requires_core = ">=9"
 audience = "generic"
+permissions = ["web.read"]
 {store}'''
 
 X_CAP = '''# Manifest of the extension (docs/PLAN-extensions.md of the core): the commands are in commands.tsv, the scripts in this folder (@/file).
@@ -238,6 +240,7 @@ title = {q_title}
 title_de = {q_title_de}
 requires_core = ">=1"
 audience = "generic"
+permissions = []
 requires = []
 provides = []
 # Add module = "module.nix" and requires_nix_api = 1 for a NixOS module, options = "options.toml" for its settings.
