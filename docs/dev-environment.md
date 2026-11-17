@@ -76,6 +76,14 @@ data is whole in one place). On SnapRAID this runs disk to disk and share to sha
 `refused` and a `start` with that pair refuses. On ZFS it runs share to share and share to the pool view (a ZFS pool has no data disks).
 `nested.sh plan pool` and `plan poolzfs` print the steps. Not tested on hardware yet: the stages have not run against a real VM.
 
+**Unraid fixtures (`tests/lib-unraid.sh`, #460 a).** The helper builds loop disks the way Unraid makes them: one GPT partition from sector 64 (`loop -P`
+needs partition devices on loop), xfs or btrfs in it (or LUKS with xfs/btrfs inside, opened with `$UNRAID_PASS`), a parity disk with the partition and
+no file system, files owned 99:100, and the same top folder (`Shared`) on every data disk. For the refusals of the plan (D8) it also makes a ZFS array
+disk, a two-device btrfs, a LUKS disk that only a key file opens, and an xfs with a dirty log. `tests/adopt.sh` uses it (adoptable cases and refusals,
+dry run only); a case whose tool or kernel support is missing says `skip` with the reason (xfs and ZFS are often absent in a sandbox or WSL2; CI fails
+a skip). The nested stage `unraid` (`HS_NESTED_DISKS="unraid1=<dev> unraid2=<dev> unraidp=<dev>"`, empty disks) builds the same disks inside the VM
+and runs only the read-only side: `hs migrate check` and `hs pool <pool> add --role adopt --dry-run`, then compares the superblocks. Not tested on hardware yet.
+
 Limits: nested virtualization must be enabled on the host. Where it is not (exit 3, a WSL2 without it, many CI runners) use `scripts/dev/t vm`
 on a machine with Incus; that tests our scripts on Ubuntu VMs, not the ISO. The rebuild rehearsal is not part of it yet. CI: the manual
 workflow `nested` (Actions, "Run workflow", give an ISO URL).

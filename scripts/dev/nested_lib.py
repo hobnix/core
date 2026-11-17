@@ -388,7 +388,7 @@ def main(argv):
     if a.cmd == "plan":
         try:
             steps = build_scenario(a.stage, {"password": "<password>", "pubkey": "<pubkey>", "backup_pass": "<backup-password>",
-                                             "disks": {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2")}})
+                                             "disks": {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2", "unraid1", "unraid2", "unraidp")}})
         except KeyError:
             print("unknown stage %r (stages: %s)" % (a.stage, ", ".join(STAGES)), file=sys.stderr)
             return EXIT_USAGE
