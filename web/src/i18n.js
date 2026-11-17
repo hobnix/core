@@ -36,6 +36,9 @@ const de = {
   // Settings, Releases (settings/Releases.svelte, settings/releases.js)
   Releases: 'Versionen', 'Which version this server follows when it updates.': 'Welcher Version dieser Server beim Aktualisieren folgt.',
   'This server': 'Dieser Server', 'Installed version': 'Installierte Version', 'Next update': 'Nächstes Update', Signature: 'Signatur', valid: 'gültig', 'not valid': 'ungültig',
+  'Update channel': 'Versionskanal', 'Choose which version this server follows': 'Wählen, welcher Version dieser Server folgt',
+  'Beta can break things. Use it on a second server or a test machine, not on the one that holds your data. Updates are never applied by themselves.': 'Beta kann etwas kaputt machen. Nutze sie auf einem zweiten Server oder einer Testmaschine, nicht auf dem, der deine Daten hält. Updates werden nie von selbst eingespielt.',
+  'Edge is the development branch and can break at any time. Use it only on a server whose data may be lost. Updates are never applied by themselves.': 'Edge ist der Entwicklungszweig und kann jederzeit kaputtgehen. Nutze ihn nur auf einem Server, dessen Daten verloren gehen dürfen. Updates werden nie von selbst eingespielt.',
   Stable: 'Stabil', Beta: 'Beta', Edge: 'Edge', current: 'aktuell', 'Would install': 'Würde installieren', 'Switch to': 'Wechseln zu', 'Loading…': 'Lädt…',
   'Shows the plan first; nothing is installed': 'Zeigt zuerst den Plan; es wird nichts installiert', 'The release channel could not be read.': 'Der Versionskanal konnte nicht gelesen werden.',
   'The newest signed release. The right one for every server that holds data.': 'Die neueste signierte Version. Die richtige für jeden Server mit Daten.',
@@ -61,7 +64,7 @@ const de = {
   // Test-lab (pages/TestLab.svelte)
   'Test-lab': 'Testlabor', 'Run on develop': 'Auf develop ausführen', Stage: 'Stufe', Result: 'Ergebnis', Ref: 'Stand', Commit: 'Commit',
   error: 'Fehler', skipped: 'übersprungen',
-  'Builds the installer ISO of a Hobnix branch and checks it in a virtual machine (stages 1 and 2).': 'Baut die Installer-ISO eines Hobnix-Zweigs und prüft sie in einer virtuellen Maschine (Stufen 1 und 2).',
+  'Builds the installer ISO of a Hobnix branch and checks it in a virtual machine (stages 1 to 6).': 'Baut die Installer-ISO eines Hobnix-Zweigs und prüft sie in einer virtuellen Maschine (Stufen 1 bis 6).',
   'The test-lab is off. Turn on the capability testlab under Settings > Capabilities to use it here.': 'Das Testlabor ist aus. Schalte die Funktion testlab unter Einstellungen > Funktionen ein, um es hier zu nutzen.',
   'The runs could not be read.': 'Die Läufe konnten nicht gelesen werden.', 'No test-lab run yet.': 'Noch kein Testlabor-Lauf.',
   // Live state (pages/LiveState.svelte)

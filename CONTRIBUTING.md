@@ -18,7 +18,9 @@ the loaders, `scripts/lib/api-level`) belongs here, and its pull request says wh
 
 - Branches are named `feature/<topic>` and start from `develop`; open the pull request against `develop` (`main` holds releases only). CI runs
   on pull requests; a pull request is merged only when the check `ci-ok` is green.
-- A change that needs a decision record (`docs/adr/`) is merged after the record is Accepted, or behind a switch that is off by default.
+- Code for a decision record (`docs/adr/`) is merged only when the record is Accepted, or when the code is behind a switch that is off by
+  default (an option in `config/schema.toml`, or a feature a command refuses without). The pull request names the record and says which of
+  the two applies. Code merged before its record was accepted stays behind its switch; nothing is built on it until the owner decides.
 - Development and testing are two steps on the board. In Review: the pull request is open. Testing: the code is merged but was not run on a
   real server; the issue stays open. Done: the boxes under "Hardware test" in the issue are ticked, a comment says what was seen, the
   "Not tested on hardware yet." lines of that change are gone, and the issue is closed. A change with nothing to run on a server (a decision

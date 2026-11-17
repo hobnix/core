@@ -89,9 +89,9 @@ def private_client(ip):
     return any(addr in net for net in PRIVATE_NETS if net.version == addr.version)
 
 
-def board_host_ok(host_header):
-    """The Host header of a request without a session must name this server: an IP literal, the host name, <host>.local, a name below the
-    gateway's local domain (<site>.<realm>, scripts/lib/localdomain.sh) or <host>.<tailnet>.ts.net. A foreign name (DNS rebinding) is refused."""
+def board_host_ok(host_header, secure=False):
+    """The Host header of EVERY request must name this server (checked in do_GET/do_POST; the open dashboard uses the same rule): an IP literal, the host name, <host>.local, a name below the
+    gateway's local domain (<site>.<realm>, scripts/lib/localdomain.sh) or <host>.<tailnet>.ts.net or a name in the setting webAllowedHosts. A foreign name (DNS rebinding) is refused."""
     h = (host_header or "").strip().lower()
     if h.startswith("["):
         h = h[1:].split("]", 1)[0]
@@ -111,8 +111,11 @@ def board_host_ok(host_header):
         names.add(name.lower())
     if h in names or any(h == n + ".local" for n in names):
         return True
-    if h.endswith(".ts.net") and h.split(".", 1)[0] in names:
-        return True
+    if h.endswith(".ts.net") and (secure or h.split(".", 1)[0] in names):
+        return True       # behind `tailscale serve` any *.ts.net name is ours: Tailscale owns that DNS, and the machine name there can differ from hostName
+    extra = (runtime_setting("webAllowedHosts") or env("HS_WEB_ALLOWED_HOSTS", "")).lower().replace(" ", "")
+    if extra == "*" or h in [x.rstrip(".") for x in extra.split(",") if x]:
+        return True       # the documented escape: machine.toml-free runtime setting webAllowedHosts, `*` = no check
     dom = local_domain()
     return bool(dom) and (h == dom or h.endswith("." + dom))
 
@@ -286,6 +289,7 @@ class Config:
         self.hs = env("HS_WEB_HS", "hs")
         self.idle = int(env("HS_WEB_IDLE_MINUTES", "480")) * 60
         self.max_age = int(env("HS_WEB_MAX_HOURS", "12")) * 3600
+        self.shadow = env("HS_WEB_SHADOW", "/etc/shadow")            # the local password field is fingerprinted from here (a changed password ends the local sessions)
         self.fail_delay = float(env("HS_WEB_FAIL_DELAY", "1.0"))     # seconds every failed login waits (tests set 0)
         self.facts_ttl = int(env("HS_WEB_FACTS_TTL", "20"))
         self.changes_seen_file = env("HS_WEB_CHANGES_SEEN_FILE", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "web-changes-seen.json"))   # {user: last revision seen in What's new}; "" = memory only
@@ -498,6 +502,7 @@ class Auth:
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self._fp_cache, self._fp_warned = {}, False
 
     def storage_locked(self):
         return os.path.exists(self.cfg.locked_marker)
@@ -543,7 +548,31 @@ class Auth:
     def set_local_password(self, user, password):
         """First setup only. chpasswd reads "user:password" from stdin (never an argument); True when it accepted."""
         rc, _ = _run([self.cfg.chpasswd], stdin=("%s:%s\n" % (user, password)).encode())
+        self._fp_cache.pop(user, None)
         return rc == 0
+
+    def local_fingerprint(self, user, fresh=False):
+        """sha256 of the password field of the user's /etc/shadow line; it changes when the password changes. "" when it cannot be read
+        (then nothing is compared: fail open, logged once). Cached 30 s per user; fresh=True reads the file now (a new sign-in stores it)."""
+        now = time.time()
+        hit = self._fp_cache.get(user)
+        if hit and not fresh and now - hit[0] < 30:
+            return hit[1]
+        fp = ""
+        try:
+            with open(self.cfg.shadow, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    parts = line.split(":")
+                    if parts[0] == user and len(parts) > 1:
+                        fp = hashlib.sha256(parts[1].encode()).hexdigest()
+                        break
+        except OSError:
+            pass
+        if not fp and not self._fp_warned:
+            self._fp_warned = True
+            print("web sessions: the password of %s cannot be read from %s; a password change will not end its sessions" % (user, self.cfg.shadow), flush=True)
+        self._fp_cache[user] = (now, fp)
+        return fp
 
 
 # ─────────────────────────── state: sessions, throttle, facts ───────────────────────────
@@ -560,8 +589,11 @@ class Sessions:
     """Sessions live in memory; with cfg.session_file they are also written (only sha256 of the cookie token, user, realm, times) so that a
     restart of hs-web does not sign everybody out. The CSRF token is derived from the cookie token (csrf_for), so nothing secret is stored."""
 
+    KEYS = ("user", "realm", "created", "seen", "ip", "ua", "fp")      # what is written; fp = fingerprint of the local password at sign-in (local sessions only)
+
     def __init__(self, cfg):
         self.cfg, self.lock, self.items, self.restored, self.saved_at = cfg, threading.Lock(), {}, {}, 0.0
+        self.fp_of = None       # App sets this to Auth.local_fingerprint; tests may leave it None (no password check)
         self._load()
 
     def _load(self):
@@ -573,7 +605,7 @@ class Sessions:
                 data = json.load(f)
             for h, r in data.items():
                 if re.fullmatch(r"[0-9a-f]{64}", h) and isinstance(r, dict) and all(k in r for k in ("user", "realm", "created", "seen")):
-                    self.restored[h] = {k: r[k] for k in ("user", "realm", "created", "seen", "ip") if k in r}
+                    self.restored[h] = {k: r[k] for k in self.KEYS if k in r}
         except (OSError, ValueError, AttributeError):
             pass
 
@@ -585,7 +617,7 @@ class Sessions:
         now = self.saved_at = time.time()
         data = dict(self.restored)
         for t, s in self.items.items():
-            data[_h(t)] = {k: s.get(k) for k in ("user", "realm", "created", "seen", "ip")}
+            data[_h(t)] = {k: s[k] for k in self.KEYS if k in s}
         data = {h: r for h, r in data.items() if now - r["seen"] <= self.cfg.idle and now - r["created"] <= self.cfg.max_age}
         tmp = path + ".tmp"
         try:
@@ -596,12 +628,60 @@ class Sessions:
         except OSError:
             pass
 
-    def create(self, user, realm, ip):
+    def create(self, user, realm, ip, ua=""):
         token, now = secrets.token_urlsafe(32), time.time()
+        s = {"user": user, "realm": realm, "csrf": csrf_for(token), "created": now, "seen": now, "ip": ip, "ua": ua[:24]}
+        fp = self.fp_of(user, fresh=True) if realm == "local" and self.fp_of else ""      # never the cached one: a password just changed
+        if fp:
+            s["fp"] = fp
         with self.lock:
-            self.items[token] = {"user": user, "realm": realm, "csrf": csrf_for(token), "created": now, "seen": now, "ip": ip}
+            self.items[token] = s
             self._save()
         return token
+
+    @staticmethod
+    def sid(token):
+        """The public name of a session: 16 hex characters of the token's hash. Never the token."""
+        return _h(token)[:16]
+
+    def listing(self, current_token):
+        """Every live or restored session that has not expired, newest activity first (no token, no full hash)."""
+        now, cur, rows = time.time(), self.sid(current_token) if current_token else "", []
+        with self.lock:
+            recs = [(_h(t), s) for t, s in self.items.items()] + list(self.restored.items())
+        for h, s in recs:
+            if now - s["seen"] > self.cfg.idle or now - s["created"] > self.cfg.max_age:
+                continue
+            rows.append({"id": h[:16], "user": s["user"], "realm": s["realm"], "created": s["created"], "seen": s["seen"],
+                         "ip": s.get("ip", ""), "ua": s.get("ua", ""), "current": h[:16] == cur})
+        return sorted(rows, key=lambda r: r["seen"], reverse=True)
+
+    def end(self, sid):
+        """End the session with this id; the number ended (0 = no such session)."""
+        n = 0
+        with self.lock:
+            for t in [t for t in self.items if self.sid(t) == sid]:
+                del self.items[t]
+                n += 1
+            for h in [h for h in self.restored if h[:16] == sid]:
+                del self.restored[h]
+                n += 1
+            if n:
+                self._save()
+        return n
+
+    def end_others(self, current_token):
+        cur, n = self.sid(current_token), 0
+        with self.lock:
+            for t in [t for t in self.items if self.sid(t) != cur]:
+                del self.items[t]
+                n += 1
+            for h in [h for h in self.restored if h[:16] != cur]:
+                del self.restored[h]
+                n += 1
+            if n:
+                self._save()
+        return n
 
     def _find(self, token):
         """Caller holds the lock. The session record; a restored one becomes a live one when its cookie shows up."""
@@ -612,12 +692,26 @@ class Sessions:
                 s = self.items[token] = dict(r, csrf=csrf_for(token), ip=r.get("ip", ""))
         return s
 
-    def get(self, token, locked):
+    def fp_changed(self, s, fp_of=None):
+        """True when a local session's password changed since sign-in. Caller holds the lock. An unreadable fingerprint ("") is no evidence."""
+        fp_of = fp_of or self.fp_of
+        if s["realm"] == "local" and s.get("fp") and fp_of:
+            cur = fp_of(s["user"])
+            return bool(cur) and cur != s["fp"]
+        return False
+
+    def get(self, token, locked, fp_of=None):
         if not token:
             return None
+        fp_of = fp_of or self.fp_of
         with self.lock:
             s, now = self._find(token), time.time()
             if s is None:
+                return None
+            # a local session ends when the password changed since sign-in (an unreadable fingerprint, "", is no evidence)
+            if self.fp_changed(s, fp_of):
+                del self.items[token]
+                self._save()
                 return None
             # dc1 is down while the storage is locked: a domain session cannot be trusted any more
             if now - s["seen"] > self.cfg.idle or now - s["created"] > self.cfg.max_age or (locked and s["realm"] == "domain"):
@@ -642,7 +736,9 @@ class Sessions:
 
 
 class Throttle:
-    """Five failures in ten minutes lock a key (client address, or user name) for 30 s, doubling each further failure, up to 15 minutes."""
+    """Five failures in ten minutes lock a key (client address, setup, unlock) for 30 s, doubling each further failure, up to 15 minutes.
+    The sign-in does NOT refuse on the user name key (#502): a stranger who guesses wrong for "anna" must not lock anna out. That key only
+    records failures and slows the WRONG answers (slow()); the right password is never delayed by it."""
 
     def __init__(self):
         self.lock, self.fails = threading.Lock(), {}
@@ -656,9 +752,32 @@ class Throttle:
                     longest = max(longest, e["until"] - now)
         return math.ceil(longest)
 
+    def slow(self, key, fail_delay):
+        """Extra seconds a wrong answer for this key waits: 0 below 3 failures in ten minutes, then doubling, at most 4 s (0 when fail_delay is 0)."""
+        now = time.time()
+        with self.lock:
+            e = self.fails.get(key)
+            n = len([t for t in e["times"] if now - t < 600]) if e else 0
+        if n < 3:
+            return 0
+        return min(4.0 * (fail_delay > 0), fail_delay * 2 ** (n - 3))
+
+    MAX_KEYS = 4096    # user names come from the network: the table must not grow without a bound
+
+    def _prune(self, now):
+        """Caller holds the lock. Forget keys that are not locked and have no failure in the last ten minutes; if the table is still full, the oldest go."""
+        for k in [k for k, e in self.fails.items() if e["until"] <= now and not [t for t in e["times"] if now - t < 600]]:
+            del self.fails[k]
+        # still full: the oldest keys that are not locked go (a locked key stays, so a flood of made-up names cannot free an address)
+        free = sorted((k for k, e in self.fails.items() if e["until"] <= now), key=lambda k: self.fails[k]["times"][-1] if self.fails[k]["times"] else 0)
+        for k in free[:max(0, len(self.fails) - self.MAX_KEYS * 9 // 10)]:      # down to 90 %: the next prunes are far apart
+            del self.fails[k]
+
     def failed(self, *keys):
         now = time.time()
         with self.lock:
+            if len(self.fails) >= self.MAX_KEYS:
+                self._prune(now)
             for k in keys:
                 e = self.fails.setdefault(k, {"times": [], "until": 0})
                 e["times"] = [t for t in e["times"] if now - t < 600] + [now]
@@ -914,13 +1033,13 @@ FULL_NAME = r"^\w[\w .'-]{0,63}$"                                     # a full n
 CHANGE = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9._ -]{0,63}=(add|remove)$"     # <user>:<group>=add|remove
 # settings the web UI may change (machine.toml keys); everything else (keys, host name, addresses, secrets) stays a terminal job
 # schema:begin CONFIG_KEYS (generated by scripts/schema-gen.py; edit config/schema.toml)
-CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAccent|webTerminal|recipeQuestionHours|"
-               "webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|incusUi|isoDir|"
-               "syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|backupNewShares|"
-               "backupNewInstances|notifySecondMinPriority|notifications|quietHours|autoMitigate|metrics|metricsDays|"
-               "metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|"
-               "gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|"
-               "gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
+CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webAccent|webTerminal|"
+               "recipeQuestionHours|webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|"
+               "incusUi|isoDir|syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|"
+               "backupNewShares|backupNewInstances|notifySecondMinPriority|notifications|quietHours|autoMitigate|"
+               "metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|"
+               "gatewayPublicHttp|gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|"
+               "gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS
 CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one --set key=value of `config apply` (hand-written, outside the generated block)
 # share forms: a folder name inside the instance (absolute) and inside a share (relative or absolute, both without ..), a SID with its level, a kept folder
@@ -970,7 +1089,7 @@ def area_refresh(area):
 
 
 # the keys of the docker steps (capabilities/docker/capability.toml; scripts/docker-setup.sh accepts the same ones)
-DOCKER_REGISTRY_HOST = r"^[a-z0-9.-]{1,100}(:[0-9]{1,5})?$"
+DOCKER_REGISTRY_HOST = r"^[a-z0-9][a-z0-9.-]{0,99}(:[0-9]{1,5})?$"
 DOCKER_SET = r"^(dockerManager=(webui|arcane|portainer|none)|dockerSize=[sml])$"
 CHANGES = {
     "jobs": [[r"^(run|stop)$", UNIT],
@@ -1035,7 +1154,7 @@ CHANGES = {
     "secrets": [[r"^(header-backup|close|secrets-fix)$"], [r"^move$"], [r"^move$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$"]],
     # small chores (admin-change.sh): a test push message, pin the MACs, move the upload cache now, clean the fans
     # the test-lab (testlab-change.sh, the capability testlab): start a run as a job; the ref is a branch, tag or commit name (testlab.sh checks it again and the allowlist of repositories)
-    "testlab": [{"fixed": [r"^run$"], "opts": {"--ref": (r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$", False), "--stage": (r"^(1|2|all)$", False)}}],
+    "testlab": [{"fixed": [r"^run$"], "opts": {"--ref": (r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$", False), "--stage": (r"^([1-6]|install|smoke|rollback|backup|pool|browser|all)$", False)}}],
     "admin": [[r"^(test-push|pin-macs|cache-mover)$"], {"fixed": [r"^fans-clean$"], "opts": {"--seconds": (r"^[0-9]{1,2}$", False)}}],
     # the certificates of the domain controller (dc-change.sh): make the CA once, renew the certificate of a controller on this server (red: Samba restarts)
     "dc": [[r"^ca$"], {"fixed": [r"^renew$"], "opts": {"--dc": (r"^[A-Za-z0-9][A-Za-z0-9-]{0,62}$", False)}}],
@@ -2202,6 +2321,8 @@ class App:
         self.cfg = cfg or Config()
         self.auth = auth or Auth(self.cfg)
         self.sessions, self.throttle, self.facts, self.reads = Sessions(self.cfg), Throttle(), Facts(self.cfg), Reads(self.cfg)
+        # looked up at call time: tests swap self.auth methods; a stand-in auth without the method means "no password check" (fail open, as an unreadable shadow)
+        self.sessions.fp_of = lambda user, fresh=False: getattr(self.auth, "local_fingerprint", lambda u, fresh=False: "")(user, fresh=fresh)
         self.plans = Plans(self.cfg.plan_ttl)
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
@@ -2303,16 +2424,38 @@ def make_handler(app):
             """The address the throttle counts. Behind the local proxy (tailscale serve) every request comes from 127.0.0.1: then the proxy's X-Forwarded-For names the client."""
             ip = self.client_address[0]
             if cfg.trust_proxy and ip in ("127.0.0.1", "::1"):
-                fwd = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                # The LAST entry: the one our own proxy added (tailscale serve and Traefik set the header from the peer they saw; a proxy that appends
+                # keeps what the client sent in front). The first entry is whatever the client wrote.
+                fwd = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
                 if re.fullmatch(r"[0-9a-fA-F:.]{3,45}", fwd):
                     return fwd
             return ip
 
+        def _ua(self):
+            """A short browser name from the User-Agent header (shown in the session list); never the header itself."""
+            ua = self.headers.get("User-Agent", "")
+            for needle, name in (("Firefox/", "Firefox"), ("Edg/", "Edge"), ("Chrome/", "Chrome"), ("Safari/", "Safari"), ("curl/", "curl")):
+                if needle in ua:
+                    return name
+            return "other"
+
         # --- GET
+        def _host_refused(self):
+            """DNS rebinding: a page on the attacker's name that resolves to this server would be same-origin with it (Origin == Host holds). Refuse a Host that
+            is not ours, for every request; the answer names the setting that lets another name in."""
+            host = self.headers.get("Host", "")
+            if board_host_ok(host, cfg.secure):
+                return False
+            sys.stderr.write("web: refused Host %r (add it to the setting webAllowedHosts)\n" % host[:100])
+            self._json(421, {"error": "unknown host name", "hint": "set webAllowedHosts (hs config set webAllowedHosts <name>) to let this name in"})
+            return True
+
         def do_HEAD(self):
             self.do_GET()
 
         def do_GET(self):
+            if self._host_refused():
+                return
             path = urllib.parse.urlsplit(self.path).path
             if path == "/api/hello":
                 return self._hello()
@@ -2325,6 +2468,10 @@ def make_handler(app):
                 if not s:
                     return self._json(401, {"error": "not signed in"})
                 return self._json(200, {"user": s["user"], "realm": s["realm"], "csrf": s["csrf"], "features": features(cfg)})
+            if path == "/api/sessions":
+                if not self._session():
+                    return self._json(401, {"error": "not signed in"})
+                return self._json(200, {"sessions": app.sessions.listing(self._token())})
             if path == "/theme.css":
                 data = theme_css(cfg.accent).encode()
                 self._headers(200, "text/css; charset=utf-8", len(data), (("Cache-Control", "no-cache"),))
@@ -2429,7 +2576,7 @@ def make_handler(app):
                     return self._json(403, {"error": "open dashboard is off: hs config set dashboardOpen true"})
                 if not private_client(self._client()):
                     return self._json(403, {"error": "only from the home network or Tailscale"})
-                if not board_host_ok(self.headers.get("Host", "")):
+                if not board_host_ok(self.headers.get("Host", ""), cfg.secure):
                     return self._json(403, {"error": "unknown host name"})
             if app.auth.storage_locked():
                 return self._json(200, {"schema": 1, "locked": True, "tiles": [], "incus_ui": False})
@@ -2610,12 +2757,24 @@ def make_handler(app):
 
         # --- POST
         def do_POST(self):
+            if self._host_refused():
+                self._read(4096)
+                self.close_connection = True
+                return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
-            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/setup"):
+            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             if not self._same_origin():
                 return self._json(403, {"error": "origin"})
+            # One gate for every changing request: a session and its CSRF token, checked before any handler runs, so a handler added later cannot
+            # forget it. Only the requests that start a session (login, setup) and logout (which is harmless without a session) are exempt.
+            if path not in ("/api/login", "/api/setup", "/api/logout"):
+                gate = self._session()
+                if not gate:
+                    return self._json(401, {"error": "not signed in"})
+                if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), gate["csrf"]):
+                    return self._json(403, {"error": "csrf"})
             body = self._json_body(raw)
             if body is None:
                 return self._json(400, {"error": "need a JSON body"})
@@ -2629,6 +2788,8 @@ def make_handler(app):
                 return self._vmconsole_ticket(body)
             if path == "/api/changes/seen":
                 return self._changes_seen(body)
+            if path in ("/api/sessions/end", "/api/sessions/end-others"):
+                return self._sessions_end(path, body, gate)
             if path == "/api/live/refresh":
                 return self._live_refresh(body)
             if path in ("/api/plan", "/api/start"):
@@ -2640,6 +2801,24 @@ def make_handler(app):
                 app.sessions.drop(self._token())
                 return self._json(200, {"ok": True}, (self._cookie("", 0),))
             return self._login(body)
+
+        def _sessions_end(self, path, body, s):
+            """End one session by its id, or all but this one. The gate in do_POST has checked the session and the CSRF token already."""
+            ip, actor, token = self._client(), s["user"], self._token()
+            if path == "/api/sessions/end-others":
+                n = app.sessions.end_others(token)
+                print("web session ended: %s ended %d other sessions from %s" % (actor, n, ip), flush=True)
+                return self._json(200, {"ok": True, "ended": n})
+            sid = body.get("id")
+            if not isinstance(sid, str) or not re.fullmatch(r"[0-9a-f]{16}", sid):
+                return self._json(404, {"error": "no such session"})
+            who = next((r["user"] for r in app.sessions.listing(token) if r["id"] == sid), "")
+            if not app.sessions.end(sid):
+                return self._json(404, {"error": "no such session"})
+            print("web session ended: %s ended %s (%s) from %s" % (actor, sid, who, ip), flush=True)
+            if sid == app.sessions.sid(token):
+                return self._json(200, {"ok": True, "ended": 1, "current": True}, (self._cookie("", 0),))
+            return self._json(200, {"ok": True, "ended": 1})
 
         def _changes_seen(self, body):
             s = self._session()
@@ -2808,7 +2987,8 @@ def make_handler(app):
                 return False
             with app.sessions.lock:
                 s, now = app.sessions._find(token), time.time()
-                return bool(s) and not (now - s["seen"] > cfg.idle or now - s["created"] > cfg.max_age or (locked and s["realm"] == "domain"))
+                return bool(s) and not (now - s["seen"] > cfg.idle or now - s["created"] > cfg.max_age or (locked and s["realm"] == "domain")
+                                        or app.sessions.fp_changed(s))
 
         def _terminal_ws(self, query):
             self.close_connection = True
@@ -2859,7 +3039,7 @@ def make_handler(app):
             pw = body.get("passphrase")
             if not isinstance(pw, str) or not pw or len(pw) > 256 or any(ord(c) < 32 or ord(c) == 127 for c in pw):
                 return self._json(400, {"status": "failed", "reason": "Enter the passphrase (one line, up to 256 characters)."})
-            ip = self.client_address[0]
+            ip = self._client()
             keys = ("unlock-ip:" + ip, "unlock")
             wait = app.throttle.wait(*keys)
             if wait:
@@ -2914,7 +3094,8 @@ def make_handler(app):
             if result == fr.OK:
                 app.throttle.ok(*keys)
                 locked = app.auth.storage_locked()
-                st = app.sessions.create(user, "local", ip)
+                app.sessions.drop(self._token())
+                st = app.sessions.create(user, "local", ip, self._ua())
                 app.warmer.wake.set()
                 s = app.sessions.get(st, locked)
                 print("web setup done: %s from %s" % (user, ip), flush=True)      # never the token or the password
@@ -2942,13 +3123,14 @@ def make_handler(app):
                 return self._json(400, {"error": "Enter a user name and a password."})
             ip = self._client()
             keys = ("ip:" + ip, "user:%s:%s" % (realm, user.lower()))
-            wait = app.throttle.wait(*keys)
+            wait = app.throttle.wait(keys[0])      # only the address refuses; the user name key never does (#502: a stranger cannot lock the admin out)
             if wait:
                 return self._json(429, {"error": "Too many tries. Wait %d seconds." % wait, "retry_after": wait}, (("Retry-After", str(wait)),))
 
             def deny(message, code=401):
+                extra = app.throttle.slow(keys[1], cfg.fail_delay)
                 app.throttle.failed(*keys)
-                time.sleep(cfg.fail_delay)
+                time.sleep(cfg.fail_delay + extra)
                 print("web login refused: %s %s from %s" % (realm, user, ip), flush=True)
                 return self._json(code, {"error": message})
 
@@ -2971,7 +3153,8 @@ def make_handler(app):
                     return deny("Wrong user name or password.")
                 name = user
             app.throttle.ok(*keys)
-            token = app.sessions.create(name, realm, ip)
+            app.sessions.drop(self._token())      # a cookie that came with the login is not kept alive (no session fixation)
+            token = app.sessions.create(name, realm, ip, self._ua())
             app.warmer.wake.set()
             s = app.sessions.get(token, locked)
             print("web login: %s from %s" % (name, ip), flush=True)

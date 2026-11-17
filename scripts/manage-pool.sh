@@ -1132,7 +1132,9 @@ if [ "$pool" = bulk ] && [ "$bulk_type" = snapraid ]; then
   done
   udevadm settle 2>/dev/null || true
   bash "$here/bulk-mount.sh"
-  df -h /bulk "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null | sed 's/^/      /'
+  # (df exits 1 for the parity-* that matches nothing while there is no parity disk yet: under pipefail that ended the job right here, with /bulk
+  # just mounted; tests/pool-add-df.sh)
+  { df -h /bulk "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null || true; } | sed 's/^/      /'
   if fancy; then ok "$(t '%s disk(s) added to the array' "${#todo[@]}")"; fi
   say "New data is protected after the next sync (every night, or now: hs pool bulk sync)."
   done_refresh

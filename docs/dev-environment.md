@@ -55,8 +55,10 @@ The runner copies the working tree into `~/hobnix-test` in the WSL (ext4, much f
 ## Hobnix-in-Hobnix (nested VM from the ISO)
 
 `scripts/dev/nested.sh run` boots the installer ISO in a nested Incus VM, runs an unattended `hs-install`, boots the installed system and
-checks it (issue #262, docs/adr/0023-nested-test-harness.md). **Not tested on hardware yet: the harness has never been run against a real
-VM.** Only its logic is tested (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
+checks it (issue #262, docs/adr/0023-nested-test-harness.md). Run on 2026-11-15 on a real Incus
+server (KVM, nested virtualization) with the `v0.1.0-beta.1` release ISO, stage `all`: the ISO booted, the unattended `hs-install` finished,
+the installed system booted and every check passed (exit 0). Not tested on hardware yet: a physical machine; the web wizard and the rebuild
+rehearsal are not part of the run. Its logic is also tested without a VM (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
 
 | Command | What |
 | --- | --- |
@@ -82,7 +84,7 @@ The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
 
 1. Start a worktree from `origin/develop`, name the branch `feature/<topic>`, open the pull request against `develop`. CI runs on every
    pull request, whatever its target.
-2. To release, cut `release/X.Y` from `develop` (`scripts/dev/release-core.sh branch X.Y`), open a pull request from it into `main` and merge it with a **merge commit** (no squash, so `develop` stays an
+2. To release, open a pull request from `develop` into `main` (there is no `release/*` branch: `develop` is the release candidate) and merge it with a **merge commit** (no squash, so `develop` stays an
    ancestor of `main`). Then, on `main`, tag it: core `git tag -s vX.Y.Z`, package repositories `bash <core>/scripts/dev/release.sh`
    (it refuses unless you are on `main`, clean and equal to `origin/main`). The tag on the core builds the installer ISO. The core's tag:
    `scripts/dev/release-core.sh tag vX.Y.Z`. Steps, hotfixes, the milestone branch (`0.2`) and the ruleset proposals: docs/RELEASE-PROCESS.md.
@@ -98,25 +100,49 @@ The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
    "Not tested on hardware yet." lines of that change are removed, the issue is closed. A change with nothing to run on a server (a
    decision record, CI, a text) goes from In Review to Done. The Testing column is the queue for the next session at the server;
    `python3 scripts/dev/untested.py --steps` lists the same from the guides' side (every marker with its heading).
-8. One milestone at a time, and at most three issues In Progress. Work for a later milestone waits until the current one is released.
+8. One milestone is *released* at a time, and at most three issues are In Progress. The next milestone may be built on its own long-lived
+   branch (now `0.2`; `develop` is merged into it after every change). Right after the release tag, `main` is merged back into `develop` and
+   the milestone branch is merged into `develop` (docs/RELEASE-PROCESS.md).
 9. A pull request opened by an AI session carries the label `agent-pr` from the start (`gh pr create --label agent-pr`); the DCO job is
    skipped for it and the maintainer who merges it takes the responsibility (CONTRIBUTING.md).
+
+### Release rhythm
+
+There is no fixed rhythm and there are no due dates (owner decision 2026-11-10; maybe after 1.0). **What is verified ships, what is not moves
+on.** A release holds only what ran on a real server or VM, with the date recorded; anything else is behind a switch that is off, or says
+"Not tested on hardware yet." On release day an issue with every "Done when" box ticked is closed; one that is merged but not run stays open
+(In Review) and moves to the next milestone, listed in the release notes as not verified; one that is not merged moves on with its branch.
 
 ### What CI runs (.github/workflows/ci.yml)
 
 | Job | What | When |
 | --- | --- | --- |
 | `changes` | decides which jobs can be affected | always (not on a draft pull request) |
-| `scripts` | `bash -n`, shellcheck (errors), the changelog warning | always |
-| `tests` | the tests that need no root, in four parts on four runners (`tests/run-all.sh --shard I/4`) | always |
+| `scripts` | `bash -n`, shellcheck (errors; only the changed files on a pull request), the changelog warning | always |
+| `tests` | the tests that need no root, in one to four parts on separate runners (`tests/run-all.sh --shard I/N`). A pull request runs the tests that mention its files (`scripts/dev/tests-for.sh`, the local cousin is `t changed`); everything else runs all | always (skipped when no test matches) |
 | `rust` | format, clippy, tests of the Cargo workspace | Rust files or the scripts they stand in for changed |
-| `packages` | hobnix/recipes and hobnix/extensions against this core | not for web-only or docs-only changes |
+| `packages` | hobnix/recipes and hobnix/extensions against this core | the package helpers, `scripts/lib/`, `packages/`, `capabilities/` or their tests changed |
 | `integration` | the root tests on loop devices | not for web-only or docs-only changes |
 | `nixos` | evaluates the system, builds the Rust program and the web frontend, evaluates the ISO | not for docs-only or tests-only changes |
 | `ci-ok` | fails when one of the jobs above failed or was cancelled | always |
 | `iso` | builds the ISO and the release | a tag `v*`, after every job above |
 
-A push to `develop`, a tag and a manual run always run every job. A new test needs no entry in the workflow.
+A push to `develop` or `0.2`, the merge queue, the nightly run on `develop` (02:17 UTC), a tag and a manual run always run every job and every
+test: a pull request gets the quick answer (the tests are picked by the file names a change touches, not by a call graph), the full set runs
+before and after the merge. A change to `scripts/lib/`, `tests/lib*.sh`, `config/` or a workflow runs every test even in a pull request.
+A new test needs no entry in the workflow. A test never hard-codes a TCP port: `free_port` in tests/lib.sh asks the kernel for one.
+
+### The nixpkgs pin
+
+`config/nixpkgs-pin.toml` is the one place that names nixpkgs: the `channel` the servers follow and the `rev` CI evaluates and builds
+(job `nixos`) and the ISO is built from (job `iso`). Nothing else may hard-code a revision (`scripts/dev/nixpkgs-pin.sh check` runs in the
+`scripts` job). Servers follow their channel, not the revision: the revision only decides which store paths CI puts in the binary cache.
+
+- **Who moves it:** the workflow `nixpkgs-bump` (Mondays, or by hand) opens a pull request that moves `rev` to the head of the channel;
+  the normal CI runs on it and a maintainer merges it when green. Without a bump the pin stays; a stale pin costs cache hits, not correctness.
+- **By hand:** `bash scripts/dev/nixpkgs-pin.sh bump` (head of the channel) or `bump --rev <sha>`, then commit the file.
+- **A NixOS release change** changes `channel` too and is a project decision, not a bump: [Move to a new NixOS release](operations.md#move-to-a-new-nixos-release).
+- The bump workflow needs repository settings that only the owner can change (see the comment at the top of `.github/workflows/nixpkgs-bump.yml`).
 
 Update channels (Stable, Beta, Edge) are designed in docs/PLAN-channels.md; they build on these branches and tags.
 Not tested on hardware yet.

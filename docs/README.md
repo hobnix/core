@@ -36,6 +36,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-capabilities-on-machine](PLAN-capabilities-on-machine.md) | Derived files of an installed capability package |
 | [PLAN-recipe-orchestrator](PLAN-recipe-orchestrator.md) | Interactive recipe runs: the orchestrator and its API contract |
 | [PLAN-web-backend](PLAN-web-backend.md) | The web interface backend |
+| [THREAT-MODEL-web](THREAT-MODEL-web.md) | Who can reach the web service, what each sign-in can start, protections and open findings |
 | [PLAN-disk-health](PLAN-disk-health.md) | Daily SMART baseline, and a disk and pool checklist |
 | [PLAN-hardware-runbook](PLAN-hardware-runbook.md) | Runbook for four checks only the owner can run: auto-rollback, rebuild rehearsal, drill report, installer ISO (none run yet) |
 | [PLAN-events](PLAN-events.md) | Event sources, consumers and delivery (audit #141 for the event architecture) |
@@ -47,8 +48,11 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
+| [RELEASE-0.2-checklist](RELEASE-0.2-checklist.md) | The steps to release 0.2.0, what the test-lab has and has not passed |
+| [RELEASE-NOTES-0.2](RELEASE-NOTES-0.2.md) | Draft release notes of 0.2.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |
+| [PLAN-web-auth](PLAN-web-auth.md) | Sign-in and sessions for the web interface |
 | [roadmap](roadmap.md) | Milestones and open work, a snapshot of the GitHub project board and TODO.md |
 | [Architecture decisions](adr/README.md) | Decision records (ADRs), starting with Rust behind the `hs sys` contract |
 | [CLI-DESIGN](CLI-DESIGN.md) | The look of every `hs` command |
