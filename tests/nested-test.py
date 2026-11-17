@@ -122,11 +122,13 @@ class ScenarioTests(unittest.TestCase):
     def test_upgrade_scenario(self):
         steps = n.build_scenario("upgrade", dict(self.P, candidate="develop", app="whoami"))
         text = "\n".join(s["text"] for s in steps if s["kind"] != "send_secret")
-        self.assertLess(text.index("hs share add"), text.index("hs update --yes"))     # set up first, then update
+        self.assertLess(text.index("hs config set timeZone"), text.index("hs update --yes"))     # a setting first, then update
         self.assertLess(text.index("hs update --yes"), text.index("hs smoke"))        # checked after
         self.assertIn("pkg install 'whoami'", text)
         self.assertNotIn("pw1", text)                                                  # the password is only sent as a secret
         self.assertNotIn("pkg install", "\n".join(s["text"] for s in n.build_scenario("upgrade", dict(self.P, candidate="develop"))))
+        self.assertIn("candidate.git", text)                                           # the candidate is develop of a local repository (channel edge)
+        self.assertIn("updateChannel edge", text)
         self.assertIn("upgrade", n.STAGES)
 
     def test_shq(self):
