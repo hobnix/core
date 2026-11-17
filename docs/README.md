@@ -51,6 +51,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
 | [PLAN-app-lifecycle](PLAN-app-lifecycle.md) | Design for milestone 0.6: one lifecycle for apps and packages, one Install job, app contract, store fields, update policy |
 | [PLAN-storage-nas](PLAN-storage-nas.md) | Design for milestone 0.7: file manager write and trash, spin-down, Unraid takeover, partial container backup, off-site copy, further capacity levels |
+| [PLAN-extensions-access](PLAN-extensions-access.md) | Design for milestone 0.8: extension protocol and SDK, enforced permissions, package events, roles and API tokens, two-factor login and single sign-on |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
