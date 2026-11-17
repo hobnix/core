@@ -2454,3 +2454,10 @@ SnapRAID refuses: too many disks have changed UUIDs since the last sync (the dis
 If you replaced or rebuilt the disks on purpose and every disk in 'hs pool bulk' is the right one, run once: hs pool bulk sync --force-uuid	Wenn du die Platten absichtlich ersetzt oder neu aufgebaut hast und jede Platte in 'hs pool bulk' die richtige ist, führe einmal aus: hs pool bulk sync --force-uuid
 If you did not change any disk, stop: a disk may be mounted in the wrong place.	Wenn du keine Platte geändert hast, höre auf: eine Platte könnte am falschen Ort eingehängt sein.
 Disks were replaced or formatted again and you said so (--force-uuid). Syncing again with --force-uuid.	Platten wurden ersetzt oder neu formatiert und du hast es mit --force-uuid bestätigt. Synchronisiere erneut mit --force-uuid.
+Golden copy of %s kept (a later run of a stage from 3 on starts from it)	Goldene Kopie von %s behalten (ein späterer Lauf einer Stufe ab 3 startet davon)
+No ISO build and no install: stages 1 and 2 passed on this commit before	Kein ISO-Bau und keine Installation: die Stufen 1 und 2 waren auf diesem Commit schon bestanden
+The golden copy could not be copied; installing from the ISO.	Die goldene Kopie ließ sich nicht kopieren; es wird von der ISO installiert.
+The golden copy was not made (incus copy failed).	Die goldene Kopie wurde nicht angelegt (incus copy ist fehlgeschlagen).
+The golden copy was not made (the VM did not stop).	Die goldene Kopie wurde nicht angelegt (die VM hielt nicht an).
+The golden copy was not made (the password could not be kept).	Die goldene Kopie wurde nicht angelegt (das Passwort ließ sich nicht aufbewahren).
+The installed system of %s comes from the golden copy	Das installierte System von %s kommt aus der goldenen Kopie
