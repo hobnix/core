@@ -598,8 +598,9 @@ Delete in the file manager does not remove files at once: it moves them into a t
 - **The trash keeps the space used.** Free space grows only when the trash is emptied or when you choose "delete for good".
   `hs sys fm locations` shows the real free space, trash included.
 - **14 days.** Every night at 03:35 (inside the maintenance window) the date folders older than 14 days are removed.
-- **Put back:** the file manager lists the trash of a place (`hs sys fm trash <place>`) and restores an item to where it came from
-  (`restore`). An item is never put over a file that is at its old place now; it stays in the trash.
+- **Put back:** `hs sys fm trash <place>` lists the trash of a place and the `restore` operation of `hs sys fm` puts an item back where it came
+  from. An item is never put over a file that is at its old place now; it stays in the trash. The Files page has no trash view yet, and
+  `hs fm` has no restore command (`hs fm delete` moves into the trash too).
 - **Delete for good** skips the trash and still needs the typed confirmation ("delete N files").
 - The trash is hidden from the file manager's listing, from Samba (`veto files`) and from the backup.
 
