@@ -350,6 +350,46 @@ if [ "$sel" = 7 ]; then
 fi
 
 if sel_has 4 || sel_has 5; then export HS_NESTED_ROLE=homeserver; fi   # restic, mkfs and SnapRAID come with the homeserver role (after `hs rebuild`)
+# ---- the golden VM: $state/golden/<sha>-<role>/ (password, vm) and the stopped Incus VM hs-golden-<sha12>-<role> are the installed system as it is after
+# stages 1 and 2 passed. A later run of stage 3 or higher on the same commit copies it instead of building the ISO and installing again (about
+# 30 minutes less). HS_TESTLAB_GOLDEN=0 turns it off, HS_TESTLAB_GOLDEN_KEEP (2) is the number kept.
+golden_dir=$state/golden
+gold_on=true; [ "${HS_TESTLAB_GOLDEN:-1}" != 0 ] || gold_on=false
+[[ "$commit" =~ ^[0-9a-f]{40}$ ]] || gold_on=false
+gold_key=$commit-${HS_NESTED_ROLE:-default}
+gold_vm=hs-golden-${commit:0:12}-${HS_NESTED_ROLE:-default}
+gold_keep=${HS_TESTLAB_GOLDEN_KEEP:-2}; [[ "$gold_keep" =~ ^[0-9]{1,2}$ ]] && [ "$gold_keep" -ge 1 ] || gold_keep=2
+golden_prune() {   # the newest $gold_keep stay (by the time of last use); the others lose their VM and folder
+  local d n=0 name
+  [ -d "$golden_dir" ] || return 0
+  while IFS= read -r name; do
+    [ -d "$golden_dir/$name" ] || continue
+    n=$((n + 1))
+    [ "$n" -le "$gold_keep" ] && continue
+    "$incus" delete -f "$(cat "$golden_dir/$name/vm" 2>/dev/null || echo hs-golden-none)" >/dev/null 2>&1 || true
+    rm -rf "${golden_dir:?}/${name:?}"
+  done < <(ls -1t "$golden_dir" 2>/dev/null || true)
+}
+golden_make() {   # the VM is stopped (the console log then starts at the login, as after any boot) and copied; nested.sh starts it again
+  "$incus" stop "$vm" --timeout 120 >/dev/null 2>&1 || "$incus" stop "$vm" --force >/dev/null 2>&1 || { warn "$(t 'The golden copy was not made (the VM did not stop).')"; return 0; }
+  "$incus" delete -f "$gold_vm" >/dev/null 2>&1 || true
+  if "$incus" copy "$vm" "$gold_vm" >/dev/null 2>&1; then
+    mkdir -p "$golden_dir/$gold_key"; chmod 700 "$golden_dir" "$golden_dir/$gold_key"
+    ( umask 077; cp "$ndir/password" "$golden_dir/$gold_key/password" && printf '%s' "$gold_vm" > "$golden_dir/$gold_key/vm" )       && { ok "$(t 'Golden copy of %s kept (a later run of a stage from 3 on starts from it)' "$commit")"; golden_prune; }       || { warn "$(t 'The golden copy was not made (the password could not be kept).')"; "$incus" delete -f "$gold_vm" >/dev/null 2>&1 || true; rm -rf "${golden_dir:?}/${gold_key:?}"; }
+  else warn "$(t 'The golden copy was not made (incus copy failed).')"; fi
+}
+golden_used=false
+if $gold_on && [ -n "$extras" ] && [ -f "$golden_dir/$gold_key/password" ] && "$incus" info "$gold_vm" >/dev/null 2>&1; then
+  step "$(t 'The installed system of %s comes from the golden copy' "$commit")"
+  if "$incus" copy "$gold_vm" "$vm" >/dev/null 2>&1; then
+    golden_used=true; touch "$golden_dir/$gold_key"
+    ok "$(t 'No ISO build and no install: stages 1 and 2 passed on this commit before')"
+  else warn "$(t 'The golden copy could not be copied; installing from the ISO.')"; fi
+fi
+
+if $golden_used; then
+  nrc=0; ndir=$golden_dir/$gold_key; pwfile=$ndir/password
+else
 hs_job_step 3 4 "Building the installer ISO"; hs_job_progress 2 4 steps
 step "$(t 'Building the installer ISO (this takes a long time)')"
 iso_get "$src" "$commit" "$ref" || fail_run 4 2 "the ISO build failed (see run.log)"
@@ -364,19 +404,22 @@ ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
 [ -z "$ndir" ] || cp -r "$ndir" "$rundir/harness" 2>/dev/null || true
 [ -z "$ndir" ] || rm -f "$rundir/harness/key" "$rundir/harness/password"   # a throwaway key and password of the VM: not kept
 pwfile=$ndir/password   # the password of the installed VM: the later stages log in with it (the copy in the run folder is deleted)
+fi
 
 stage_res() {   # stage_res <iso|smoke>: ok|failed|skipped|error from the harness result file, else from its exit code
   local f=$ndir/result-$1.json
   if [ -n "$ndir" ] && [ -f "$f" ]; then json_ok "$f"; return; fi
   case "$nrc" in 0) echo ok ;; 3) echo skipped ;; *) echo error ;; esac
 }
-r1=$(stage_res iso)
+if $golden_used; then r1=ok; else r1=$(stage_res iso); fi
 write_stage 1 "$r1" "$nrc"
 if sel_has 2; then
-  if [ "$r1" = ok ]; then r2=$(stage_res smoke); else r2=skipped; fi   # no installed system without stage 1
+  if $golden_used; then r2=ok
+  elif [ "$r1" = ok ]; then r2=$(stage_res smoke); else r2=skipped; fi   # no installed system without stage 1
   write_stage 2 "$r2" "$nrc"
 else r2=-; fi
 hs_job_progress 4 4 steps
+if ! $golden_used && $gold_on && [ -n "$extras" ] && [ "$r1" = ok ] && [ "${r2:--}" = ok ]; then golden_make; fi
 
 # ---- stages 3 to 6 on the installed VM. res[n] = ok|failed|skipped|error
 declare -A res

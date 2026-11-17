@@ -32,6 +32,11 @@ default `/var/lib/hs/testlab`). A later run on the same commit, and stage 7 on a
 `ISO of <sha> from the cache`; any other commit is built (`ISO of <sha> built`). The last 3 ISOs (about 1.5 GiB each) are kept, older ones are deleted;
 `HS_TESTLAB_ISO_KEEP` changes the number. To force a rebuild delete the folder of that sha.
 
+## The golden copy
+Not tested on hardware yet.
+
+After stages 1 and 2 passed on a commit and a later stage (3 and up) is part of the run, the installed VM is stopped and copied to a VM named `hs-golden-<12 characters of the sha>-<role>`; its password is kept under `golden/<sha>-<role>/` in the test-lab folder. A later run of a stage from 3 on for the same commit (for example `hs testlab run --stage pool` after a harness fix on the same ref) copies it and starts the stage at once: no ISO build, no install, no smoke check. Stages 1 and 2 are then written as ok without having run again. The last 2 copies are kept (`HS_TESTLAB_GOLDEN_KEEP`), each takes the disk of one VM (20 GiB at most); `HS_TESTLAB_GOLDEN=0` turns the copy off. A change of the commit means a new install, as before.
+
 ## Run it
 Not tested on hardware yet.
 
