@@ -40,13 +40,13 @@ docs/PLAN-*.md. Per-area folders carry their own CLAUDE.md (web/, packages/, cap
 Run tests through the quiet runner, never raw: `scripts/dev/t quick [name...]` prints only failures and one summary line per test
 (`scripts/dev/t list` names them, `t root` runs the root tests on loop devices, `t vm` the throwaway VM; see docs/dev-environment.md). Before
 a commit: `t quick` for the tests of the files you changed, `bash -n` for scripts, `python3 scripts/pkg.py validate` for manifests.
-`tests/i18n.sh` and root tests need Linux (WSL); on Windows Git Bash many tests are slow.
+Root tests need Linux (WSL); on Windows Git Bash many tests are slow.
 
 ## Working with agents (save context)
-The main session orchestrates: it picks a task from TODO.md, delegates, and reads only short reports. Agents in `.claude/agents/`:
+The main session orchestrates: it picks an issue from the board (`scripts/dev/board.sh open`), delegates, and reads only short reports. Agents in `.claude/agents/`:
 `architect` (design, read-only, Opus), `coder` (implements one spec, Sonnet), `implementer` (mechanical edits from an exact spec, Haiku),
 `tester` (runs tests, reports failures only, Haiku), `reviewer` (diff against the spec, read-only, Opus), `docs-writer` (guides, Sonnet).
-`/work <id>` runs the loop for one TODO task: spec, code, test, review. Specs and reports are files in `.work/<id>/` (git-ignored), not chat;
+`/work <issue number>` runs the loop for one board issue: spec, code, test, review. Specs and reports are files in `.work/<id>/` (git-ignored), not chat;
 an agent's final message is at most 150 words: status, files changed, checks run, open questions.
 - Ask before building when a request is unclear, has several designs, or touches storage, network or the firewall.
 - Read less: Grep/Glob, then Read with offset/limit; do not re-read a file you just edited; never dump command output (`| tail`, `--stat`).

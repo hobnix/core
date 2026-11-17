@@ -424,11 +424,10 @@ home network only.
 
 ## Work through the first-run checklist
 
-The first-run command does four things in this order: it asks for the language of the messages (the rest of the run is already in that
-language), asks for a notification address (`--notify none` removes it), fetches the **core packages** and lists what is still open, with
-the command for each item. The core packages are the few apps the core refers to by name (`hs pkg install --core`); they come from the
-package repositories, so the server needs internet. If that fails, the command says so and the rest still runs; try again later with
-`hs pkg install --core`.
+The first-run command asks for the default language of the web interface and a notification address (`--notify none` removes it), fetches the
+**core packages** and lists what is still open, with the command for each item. The core packages are the few apps the core refers to by name
+(`hs pkg install --core`); they come from the package repositories, so the server needs internet. If that fails, the command says so and the
+rest still runs; try again later with `hs pkg install --core`.
 
 ```bash
 hs first-run
@@ -442,7 +441,7 @@ done:
 
 | Item | What it is for | Command |
 | --- | --- | --- |
-| Language | The language of the messages (`en` or `de`) | `hs config set language de` |
+| Language | The default language of the web interface (`en` or `de`); the `hs` commands print English only | `hs config set language de` |
 | Time zone | Without it times in messages are UTC | `hs config set timeZone Europe/Berlin` |
 | Notifications | A push address, so you hear about a disk problem | `hs config set notifications true` |
 | Storage pool | A pool, if you skipped it | `hs pool bulk add` |
