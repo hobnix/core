@@ -103,7 +103,13 @@ if [ "$(pool_role "$tier")" = apps ]; then
 elif [ "$bulk_type" = snapraid ]; then
   if [ "$(pools_source)" = legacy ]; then mroot=/$tier; else mroot=$(pool_root "$tier"); fi
   mountpoint -q "$mroot" || fail "$mroot is not mounted. Add disks first: hs pool $tier add"
-  mkdir -p "$dir"
+  if ! mk_err=$(mkdir -p "$dir" 2>&1); then
+    # mergerfs refuses to create anything when every data disk has less free space than minfreespace (10 GiB): small test disks
+    case "$mk_err" in
+      *"No space left"*) fail "$(t "Cannot create the share folder: no data disk has more free space than the reserve (minfreespace, 10 GiB), so the pool refuses new folders. Free space or add a bigger disk: hs pool $tier add")" ;;
+    esac
+    fail "$mk_err"
+  fi
 else
   # -p also creates <pool>/sensitive the first time it's needed
   zfs create -p "$tier/$parent/$name"

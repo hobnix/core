@@ -83,4 +83,13 @@ out=$($C d5 --pool nosuch 2>&1 || true)
 check_out "--pool nosuch is refused and lists the pools" "Pools for shares: ssd, tank" echo "$out"
 check_eq "nothing was created" "0" "$(grep -c 'zfs create' "$CALLS" || true)"
 unset HS_MACHINE_FILE HS_POOLS_ROOT
+echo "-- SnapRAID, no space for a folder: the message says why (minfreespace)"
+echo snapraid > "$WORK/bulk-type"
+mkdir -p "$WORK/bin2"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/bin2/mountpoint"
+printf '#!/usr/bin/env bash\necho "mkdir: cannot create directory: No space left on device" >&2\nexit 1\n' > "$WORK/bin2/mkdir"
+/usr/bin/chmod +x "$WORK/bin2"/*
+rc=0; out=$(PATH=$WORK/bin2:$PATH $C tiny 2>&1) || rc=$?
+check_eq "exit 1" 1 "$rc"
+grep -q "minfreespace" <<<"$out" && pass "names minfreespace" || fail "no reason: $out"
 finish

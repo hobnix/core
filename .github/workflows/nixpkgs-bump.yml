@@ -59,4 +59,4 @@ jobs:
           git push origin "$branch"
           gh pr create --base "$BASE" --head "$branch" --title "chore: move the nixpkgs pin of $channel to ${new:0:7}" --body "The weekly job moved \`rev\` in config/nixpkgs-pin.toml from \`$old\` to \`$new\` (head of \`$channel\`).
 
-Merge when CI is green: the \`nixos\` job evaluates the system and builds the Rust program and the web frontend with this revision. After the merge the binary cache fills on the next CI run on the branch. Servers follow their channel and are not changed by this pull request."
+          Merge when CI is green: the \`nixos\` job evaluates the system and builds the Rust program and the web frontend with this revision. After the merge the binary cache fills on the next CI run on the branch. Servers follow their channel and are not changed by this pull request."
