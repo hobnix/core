@@ -4568,6 +4568,12 @@
      "class": "read",
      "rest": false
     },
+    "x-hs-web": {
+     "path": "/api/sys/fm/trash/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": []
+    },
     "parameters": [
      {
       "name": "location",
@@ -4583,7 +4589,7 @@
      "0": {
       "description": "ok",
       "content": {
-       "text/plain": {
+       "text/tab-separated-values": {
         "schema": {
          "type": "string"
         }

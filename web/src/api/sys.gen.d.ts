@@ -954,7 +954,7 @@ export interface SysOperations {
     params: { location: string; };
     stdin: "none";
     exit: number;
-    lines: string;
+    lines: string[][];
   };
   "gateway.certs": {
     /** the certificate of each directly served host as host, state (staging|default|none|ok), valid until (- when empty) */
