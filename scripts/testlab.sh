@@ -11,7 +11,7 @@
 #            Stage 5 (pool): a pool and the file manager on virtual disks. Stage 6 (browser): a headless browser opens every web page.
 #            Stage 7 (upgrade, #435; never part of `all`, it needs no stages 1 and 2): builds the ISO of the LAST release (--from vX.Y.Z, default the
 #            newest tag), installs it, sets up a share (and an app, HS_NESTED_UPGRADE_APP), runs `hs update` to --ref (a BRANCH of the Hobnix repository)
-#            and checks health, shares, state.db and the app. Takes two ISO builds. Not tested on hardware yet.
+#            and checks health, shares, state.db and the app. Takes two ISO builds (an ISO of a commit already built is taken from $state/iso-cache: the last 3 are kept, HS_TESTLAB_ISO_KEEP). Not tested on hardware yet.
 #            A stage is a number or its name (install smoke rollback backup pool browser); stages 3 to 6 need 1 and 2 and run them first.
 #   results  the last runs, one line per run and stage; --list: machine-readable (run, stage, result, exit, ref, commit, started, ended; `-` = empty)
 #
@@ -21,7 +21,7 @@
 # (14) are kept. The VM is deleted at the end (also after a failure or a cancel). A failure or error sends a push message and the event testlab.failed.
 # Exit codes: 0 passed, 1 a stage failed, 2 usage or refused, 3 cannot run here (skipped, no push message), 4 infrastructure error (fetch, build, Incus).
 # Test knobs: HS_TESTLAB_DIR, HS_TESTLAB_REPO (still checked against the allowlist), HS_TESTLAB_GIT, HS_TESTLAB_BUILD_TIMEOUT, HS_TESTLAB_RUN_TIMEOUT,
-# HS_TESTLAB_KEEP, HS_TESTLAB_STORAGE (Incus storage pool for the virtual disks, default "default"), HS_NESTED_INCUS, HS_NOTIFY (stand-in for notify.sh), HS_GUIDED_TTY=1 (there is a terminal; answers on stdin).
+# HS_TESTLAB_KEEP, HS_TESTLAB_ISO_KEEP (ISOs kept in $state/iso-cache, default 3), HS_TESTLAB_STORAGE (Incus storage pool for the virtual disks, default "default"), HS_NESTED_INCUS, HS_NOTIFY (stand-in for notify.sh), HS_GUIDED_TTY=1 (there is a terminal; answers on stdin).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -147,7 +147,7 @@ if [ "$sel" = 7 ]; then
 fi
 note "1. fetch the ref from the Hobnix repository (shallow, into $state/src)"
 note "2. check that this machine can run nested VMs (KVM, Incus)"
-note "3. build the installer ISO (nix, can take a long time and needs tens of GiB)"
+note "3. build the installer ISO (nix, can take a long time and needs tens of GiB; skipped when the ISO of this commit is in the cache)"
 note "4. $([ "$sel" = 1 ] && echo 'boot the ISO in a throwaway VM and install unattended' || echo 'install in a throwaway VM, boot the result and run the smoke check')"
 sel_has 3 && note "   stage 3: break an update on purpose and check that it goes back by itself"
 sel_has 4 && note "   stage 4: back up onto a virtual disk, install a second clean VM and restore there"
@@ -266,6 +266,48 @@ xrun() {   # xrun <stage> <vm> "<name=device ...>": a console scenario of the ha
   case "$rc" in 0) echo ok ;; 3) echo skipped ;; *) echo error ;; esac
 }
 
+# ---- the ISO cache: $state/iso-cache/<full commit sha>/ holds the ISO built from exactly that commit (about 1.5 GB), the last HS_TESTLAB_ISO_KEEP (3)
+# are kept. The key is the full sha of the checkout; a folder counts only with its .complete file that names the same sha (an interrupted copy is never served).
+iso_cache=$state/iso-cache
+iso_keep=${HS_TESTLAB_ISO_KEEP:-3}; [[ "$iso_keep" =~ ^[0-9]{1,3}$ ]] && [ "$iso_keep" -ge 1 ] || iso_keep=3
+iso_find() {   # iso_find <folder>: the one .iso file in it
+  local f; for f in "$1"/*.iso; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 1
+}
+iso_prune() {   # the newest $iso_keep complete folders stay; everything else (older, or a leftover of an interrupted copy) goes
+  local d n=0 name
+  [ -d "$iso_cache" ] || return 0
+  for d in "$iso_cache"/.tmp-*; do [ ! -e "$d" ] || rm -rf "${d:?}"; done
+  while IFS= read -r name; do
+    [[ "$name" =~ ^[0-9a-f]{40}$ ]] || continue
+    n=$((n + 1))
+    [ "$n" -le "$iso_keep" ] || rm -rf "${iso_cache:?}/${name:?}"
+  done < <(ls -1t "$iso_cache" 2>/dev/null || true)
+}
+iso_get() {   # iso_get <checkout> <sha> <what>: sets $isofile (the ISO of that commit), from the cache or built; fails when the build fails
+  local dir=$1 sha=$2 what=$3 hit built tmp
+  isofile=
+  if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    hit=$iso_cache/$sha
+    if [ -f "$hit/.complete" ] && [ "$(cat "$hit/.complete" 2>/dev/null)" = "$sha" ] && isofile=$(iso_find "$hit"); then
+      touch "$hit"; iso_prune
+      ok "$(t 'ISO of %s from the cache (%s)' "$sha" "$what")"
+      return 0
+    fi
+    isofile=
+  fi
+  (cd "$dir" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh) || return 1
+  built=$(iso_find "$dir/result-iso/iso") || return 2
+  if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then   # no sha (git failed): built, but not cached
+    tmp=$iso_cache/.tmp-$sha
+    rm -rf "${tmp:?}"; mkdir -p "$tmp"
+    if cp -L "$built" "$tmp/" && printf '%s' "$sha" > "$tmp/.complete" && rm -rf "${iso_cache:?}/${sha:?}" && mv "$tmp" "$iso_cache/$sha"; then
+      isofile=$(iso_find "$iso_cache/$sha") || isofile=$built
+      iso_prune
+    else rm -rf "${tmp:?}"; warn "$(t 'The ISO could not be put in the cache (disk full?); it is used from the build.')"; isofile=$built; fi
+  else isofile=$built; fi
+  ok "$(t 'ISO of %s built (%s)' "$sha" "$what")"
+}
+
 if [ "$sel" = 7 ]; then
   # ---- stage 7: the harness (and the scenario) is the candidate's (src); the ISO is the last release's (src-old). Own path: needs no stage 1 and 2.
   hs_job_step 3 4 "Building the ISO of the last release"; hs_job_progress 2 4 steps
@@ -282,8 +324,9 @@ if [ "$sel" = 7 ]; then
   gitc -C "$old" fetch -q --depth 1 origin "refs/tags/$from" || up_fail "could not fetch the release $from"
   gitc -C "$old" checkout -q -f --detach FETCH_HEAD || up_fail "could not check out $from"
   gitc -C "$old" clean -q -fdx -e result-iso >/dev/null 2>&1 || true
-  (cd "$old" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh) || up_fail "the ISO build of $from failed (see run.log)"
-  oldiso=$(ls "$old"/result-iso/iso/*.iso 2>/dev/null | head -n 1 || true)
+  oldsha=$(gitc -C "$old" rev-parse HEAD 2>/dev/null || echo -)
+  iso_get "$old" "$oldsha" "release $from" || up_fail "the ISO build of $from failed (see run.log)"
+  oldiso=$isofile
   [ -n "$oldiso" ] || up_fail "the ISO of $from is missing after the build"
   stopped
   hs_job_step 4 4 "Install $from, update to $ref"; hs_job_progress 3 4 steps
@@ -309,14 +352,14 @@ fi
 if sel_has 4 || sel_has 5; then export HS_NESTED_ROLE=homeserver; fi   # restic, mkfs and SnapRAID come with the homeserver role (after `hs rebuild`)
 hs_job_step 3 4 "Building the installer ISO"; hs_job_progress 2 4 steps
 step "$(t 'Building the installer ISO (this takes a long time)')"
-if ! (cd "$src" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh); then fail_run 4 2 "the ISO build failed (see run.log)"; fi
+iso_get "$src" "$commit" "$ref" || fail_run 4 2 "the ISO build failed (see run.log)"
 stopped
 
 hs_job_step 4 4 "Running the nested harness (stages $(echo $sel | tr ' ' ','))"; hs_job_progress 3 4 steps
 step "$(t 'Running the nested harness, VM %s' "$vm")"
 nrc=0
 keepvm=(); [ -z "$extras" ] || keepvm=(--keep)   # stages 3 to 6 work on the installed VM: it stays until the end (cleanup deletes it)
-(cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage "$nested_stage" --name "$vm" ${keepvm[@]+"${keepvm[@]}"}) || nrc=$?
+(cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage "$nested_stage" --iso "$isofile" --name "$vm" ${keepvm[@]+"${keepvm[@]}"}) || nrc=$?
 ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
 [ -z "$ndir" ] || cp -r "$ndir" "$rundir/harness" 2>/dev/null || true
 [ -z "$ndir" ] || rm -f "$rundir/harness/key" "$rundir/harness/password"   # a throwaway key and password of the VM: not kept
