@@ -6,6 +6,11 @@
   pkg.py updates                                           packages whose tree version is newer than the recorded one
   pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py validate [--warn]                                 check every manifest (--warn: also print what is only advised, on stderr) (and that a recipe's header agrees); exit 1 on a problem
+    return out
+
+
+  pkg.py repo-unbumped <tag> [<folder>]                    packages of a repository checkout whose folder changed since <tag> without a version rise (package.toml AND index.toml); exit 1 when any
+  pkg.py validate                                          check every manifest (and that a recipe's header agrees); exit 1 on a problem
   pkg.py check-draft                                       a package.toml draft on stdin: level, where, text per finding; exit 1 on an error (web package builder)
   pkg.py convert <recipe-script>                           print the package.toml for a recipe written with header lines
   pkg.py record <name> [--applied]                         remember the tree's version as installed (installed.toml); --applied: a run applied it
@@ -482,6 +487,51 @@ def vendor_verify(enabled, nixos=None):
     return out
 
 
+def _git_show(folder, rev, path):
+    r = subprocess.run(["git", "-C", folder, "show", f"{rev}:{path}"], capture_output=True)
+    return tomllib.loads(r.stdout.decode("utf-8", "replace")) if r.returncode == 0 else None
+
+
+def _ver(v):
+    return tuple(int(x) for x in str(v).split(".")) if SEMVER.match(str(v)) else None
+
+
+def repo_unbumped(folder, since):
+    """Packages whose folder changed since the tag `since` while the version did not rise in package.toml AND index.toml (CI of the package repositories, release PRs).
+    A package that is new since the tag, or gone, is not listed; neither is a change outside the package folders."""
+    old_idx = _git_show(folder, since, "index.toml")
+    if old_idx is None:
+        raise ValueError(f"no index.toml at {since}")
+    old_idx = old_idx.get("package", {})
+    try:
+        with open(os.path.join(folder, "index.toml"), "rb") as f:
+            idx = tomllib.load(f).get("package", {})
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise ValueError(f"index.toml: {e}")
+    out = []
+    for name, e in sorted(idx.items()):
+        old = old_idx.get(name)
+        if old is None:
+            continue
+        path, oldpath = str(e.get("path", "")), str(old.get("path", ""))
+        d = subprocess.run(["git", "-C", folder, "diff", "--name-only", since, "--", path, oldpath], capture_output=True, text=True)
+        if d.returncode != 0:
+            raise ValueError(f"git diff against {since} failed")
+        if not d.stdout.strip():
+            continue
+        try:
+            with open(os.path.join(folder, path, "package.toml"), "rb") as f:
+                now_pkg = tomllib.load(f).get("version")
+        except (OSError, tomllib.TOMLDecodeError):
+            now_pkg = None
+        old_pkg = (_git_show(folder, since, f"{oldpath}/package.toml") or {}).get("version")
+        rose_pkg = _ver(now_pkg) is not None and _ver(old_pkg) is not None and _ver(now_pkg) > _ver(old_pkg)
+        rose_idx = _ver(e.get("version")) is not None and _ver(old.get("version")) is not None and _ver(e.get("version")) > _ver(old.get("version"))
+        if not (rose_pkg and rose_idx):
+            out.append(f"{name}: changed since {since}, version {old_pkg} -> package.toml {now_pkg}, index.toml {old.get('version')} -> {e.get('version')}")
+    return out
+
+
 def repo_check(folder, warnings=None):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
@@ -684,6 +734,18 @@ def main(argv):
             print(t)
         for t in warns:
             print("warning: " + t, file=sys.stderr)
+        return 1 if p else 0
+    elif cmd == "repo-unbumped":    # repo-unbumped <tag> [<folder>]: changed since the tag without a version rise (exit 1)
+        if not rest:
+            print("usage: pkg.py repo-unbumped <tag> [<folder>]", file=sys.stderr)
+            return 2
+        try:
+            p = repo_unbumped(rest[1] if len(rest) > 1 else ".", rest[0])
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 2
+        for t in p:
+            print(t)
         return 1 if p else 0
     elif cmd == "check-draft":
         # a package.toml draft on stdin -> level<TAB>where<TAB>text per finding; exit 1 when there is an error

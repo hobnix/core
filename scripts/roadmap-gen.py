@@ -20,7 +20,7 @@ BOARD_CMD = ["gh", "project", "item-list", "1", "--owner", "hobnix", "--limit", 
 BLOCKS = {
     "board": ("<!-- BEGIN board (python3 scripts/roadmap-gen.py write) -->", "<!-- END board -->"),
 }
-ORDER = ["In Progress", "In Review", "Ready", "Backlog", "Done"]
+ORDER = ["In Progress", "In Review", "Testing", "Ready", "Backlog", "Done"]
 
 
 def cell(text):

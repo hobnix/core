@@ -29,15 +29,43 @@ def step(kind, text, **kw):
     return d
 
 
+def full_system(params):
+    """A system installed as `homeserver` has only the base until `hs rebuild` has built the full configuration (restic and SnapRAID come with
+    it). That configuration always imports a ZFS pool named `fast`, so, as on a real server (docs/install.md), the pool comes first: a mirror
+    of two small virtual disks (`hs pool fast add`), then `hs rebuild`. (The VM was installed with --bulk-type snapraid: nested_lib.py.) Safe to run twice."""
+    return [
+        disk_id_by_name(params, "fast1", "f1"),
+        disk_id_by_name(params, "fast2", "f2"),
+        # the plan first: its text (and a refusal's reason) stays in the console log
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks {f1},{f2} --confirm fast",
+             timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
+        step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
+             timeout=900, what="the pool fast exists"),
+        step("run", "command -v restic >/dev/null && command -v mkfs.ext4 >/dev/null && command -v snapraid >/dev/null || hs rebuild --foreground",
+             timeout=3000, what="the full configuration is built (hs rebuild)"),
+    ]
+
+
 def login_root(params):
     """Reach a root shell on the console of an installed VM: log in as adminuser when a login prompt is shown, then `sudo -i`."""
     user, pw = "adminuser", params["password"]
     return [
         step("login", "", user=user, secret=pw, timeout=420, what="the console is logged in as adminuser"),
+        step("run", "sudo -k", what="sudo forgets an earlier password (it would not ask again, and the password would be typed into the root shell)"),
         step("send", "sudo -i"),
-        step("wait", r"(?:\[sudo\] password for %s: ?|\[root@[^\]]*\]# )$" % user, timeout=30, what="sudo asks for the password or gives a root shell"),
+        step("wait", r"\[sudo\] password for %s: ?$" % user, timeout=30, what="sudo asks for the password"),
         step("send_secret", pw),
-        step("wait", r"\[root@[^\]]*\]# ", timeout=30, what="a root shell"),
+        # what is typed while sudo still checks the password is thrown away (sudo flushes the terminal input): wait for root's first prompt,
+        # the plain bash one or the two-line starship prompt (its first line is "root <host> <dir>")
+        step("wait", r"(?:\[root@[^\]]*\]# |root nested-test )", timeout=60, what="sudo gave a root shell"),
+        # after the full configuration (hs rebuild) root's shell is zsh with a two-line starship prompt: the harness cannot wait for it. A plain
+        # bash with a prompt of its own shape is the same on every system
+        step("send", "PS1='[root@nested-test:\\w]# ' exec bash --norc --noprofile"),
+        step("wait", r"\[root@[^\]]*\]# ", timeout=60, what="a root shell"),
+        # the serial console is 80 columns wide: a long command line wraps, and the redraw of the line editor puts a space or a prompt into the
+        # middle of the end marker (seen as "__ HSN9__" in run 20)
+        step("run", "stty cols 500", what="the console is wide enough for a long command line"),
     ]
 
 
@@ -47,19 +75,38 @@ def disk_by_name(params, key, var):
     return step("capture", "readlink -f /dev/disk/by-id/*incus_%s | head -n1" % name, var=var, strip=True, what="the virtual disk %s is visible" % key)
 
 
+def disk_id_by_name(params, key, var):
+    """The /dev/disk/by-id name of the virtual disk: `hs pool ... --disks` takes by-id names (manage-pool.sh), not sdX."""
+    name = params["disks"][key]
+    return step("capture", "ls /dev/disk/by-id/ | grep 'incus_%s$' | head -n1" % name, var=var, strip=True, what="the by-id name of the virtual disk %s" % key)
+
+
 # ---------------------------------------------------------------- stage 3: a bad update rolls back by itself
 def rollback(params):
-    """Put a bad commit on a local origin of /etc/nixos (it switches sshd off after the switch), run `hs update --yes`, and expect that the
+    """Put a bad commit on a local origin of /etc/nixos (it makes sshd fail to start after the switch), run `hs update --yes`, and expect that the
     update goes back to the previous generation by itself and sshd runs again (scripts/update.sh, scripts/rebuild.sh rollback_now)."""
-    bad = "{ lib, ... }: { services.openssh.enable = lib.mkForce false; }"
-    return login_root(params) + [
+    # sshd must exist and fail to start: with services.openssh.enable = false the unit is gone after the switch, and post_check in
+    # scripts/rebuild.sh (it only looks at an sshd unit that exists) finds nothing wrong, so no rollback would be due
+    bad = '{ lib, pkgs, ... }: { systemd.services.sshd.serviceConfig.ExecStart = lib.mkForce "${pkgs.coreutils}/bin/false"; }'
+    # on a homeserver VM (disks for the pool fast given) the full configuration comes first: without the pool fast the switch of the update fails
+    # for that reason, and the bad sshd module would never be reached
+    prep = full_system(params) if "fast1" in params.get("disks", {}) else []
+    return login_root(params) + prep + [
         step("capture", "readlink /run/current-system", var="before", strip=True, what="the generation before the update"),
-        step("capture", "git -C /etc/nixos rev-parse --abbrev-ref HEAD", var="branch", strip=True, what="/etc/nixos is on a branch"),
-        step("run_var", "test {branch} != HEAD", what="not a detached checkout"),
+        # the rollback goes back to the generation, not to the files: the bad commit stays in /etc/nixos and the next rebuild would apply it again
+        # (stages 4 and 5 run on this VM afterwards), so the stage puts the checkout back where it was
+        step("capture", "git -C /etc/nixos rev-parse HEAD", var="orig", strip=True, what="the commit of /etc/nixos before the stage"),
+        step("capture", "git -C /etc/nixos remote get-url origin", var="origin", strip=True, what="the address of origin before the stage"),
+        # the ISO of a ref that is not in develop leaves /etc/nixos on a detached HEAD (scripts/lib/checkout.sh): the stage needs a branch to push
+        step("run", "git -C /etc/nixos symbolic-ref -q HEAD >/dev/null || git -C /etc/nixos switch -q -c hs-testlab", what="/etc/nixos is on a branch"),
+        step("capture", "git -C /etc/nixos symbolic-ref --short HEAD", var="branch", strip=True, what="the name of the branch"),
         step("run", "rm -rf /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work && git init -q --bare /var/tmp/hs-lab-origin.git", what="a local origin for /etc/nixos"),
         step("run_var", "git -C /etc/nixos push -q /var/tmp/hs-lab-origin.git HEAD:refs/heads/{branch}", what="the current state goes to the local origin"),
         step("run", "git -C /etc/nixos remote set-url origin /var/tmp/hs-lab-origin.git && git -C /etc/nixos fetch -q origin", what="/etc/nixos follows the local origin"),
         step("run_var", "git -C /etc/nixos branch -q --set-upstream-to=origin/{branch}", what="the branch tracks it"),
+        # the stable channel follows the newest release tag, and the VM knows v0.1.0 from the ISO's checkout: `hs update` would never look at the
+        # bad commit. Without a tag it follows the current branch (scripts/update.sh).
+        step("run", "git -C /etc/nixos tag -l | xargs -r git -C /etc/nixos tag -d >/dev/null", what="no release tag: the update follows the branch"),
         step("run_var", "git clone -q -b {branch} /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work", what="a work copy for the bad commit"),
         step("run", "printf '%%s\\n' %s > /var/tmp/hs-lab-work/hs-testlab-bad.nix" % _q(bad), what="the bad module (sshd off)"),
         step("run", "sed -i 's|imports = \\[ ./hardware-configuration.nix \\]|imports = [ ./hardware-configuration.nix ./hs-testlab-bad.nix ]|' "
@@ -73,6 +120,9 @@ def rollback(params):
         step("run", "systemctl is-active sshd", timeout=120, what="sshd runs again after the update"),
         step("run_var", "test \"$(readlink /run/current-system)\" = {before}", what="the system is on the generation from before the update"),
         step("run", "test ! -e /etc/nixos/hs-testlab-bad.nix || ! systemctl is-active sshd | grep -qv '^active$'", what="the bad change is not live"),
+        step("run_var", "git -C /etc/nixos reset -q --hard {orig} && git -C /etc/nixos remote set-url origin {origin} && "
+                        "rm -rf /var/tmp/hs-lab-origin.git /var/tmp/hs-lab-work && test ! -e /etc/nixos/hs-testlab-bad.nix",
+             what="/etc/nixos is back at its commit, without the bad module"),
     ]
 
 
@@ -80,14 +130,14 @@ def rollback(params):
 def backup(params):
     """On the first VM: set up the backup disk (a virtual disk), write a marker file into /var/lib/hs, back up, check the snapshot, and keep the
     restic password stays in the VM: testlab.sh pulls /var/lib/hs/restic-password with `incus file pull`, never through the console log."""
-    return login_root(params) + [
+    return login_root(params) + full_system(params) + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is a block device"),
         step("run_var", "HS_BACKUP_YES=1 hs backup init {dev}", timeout=300, what="hs backup init makes the disk the backup disk"),
         step("run", "mkdir -p /var/lib/hs && echo hs-testlab-marker > /var/lib/hs/testlab-marker", what="a marker file in the state folder"),
-        step("run", "hs backup now", timeout=1800, what="hs backup now finishes"),
+        step("run", "hs backup now --foreground", timeout=1800, what="hs backup now finishes"),
         step("run", "hs backup list | grep -q .", what="a snapshot is listed"),
-        step("run", "hs backup verify", timeout=900, what="hs backup verify passes"),
+        step("run", "hs backup verify --foreground", timeout=900, what="hs backup verify passes"),
         step("run", "sync && umount /var/lib/hs-backup 2>/dev/null; sync", expect_rc=None, what="the disk is quiet before it is moved"),
     ]
 
@@ -96,7 +146,7 @@ def restore(params):
     """On the second, clean VM (a fresh install): the backup disk was moved here. Read the host snapshot from the disk with only the backup
     password (hs backup config restore --from-disk) and expect the marker file of the first VM back."""
     pw = params["backup_pass"]
-    return login_root(params) + [
+    return login_root(params) + full_system(params) + [
         disk_by_name(params, "backup", "dev"),
         step("run_var", "test -b {dev}", what="the backup disk is attached to the second VM"),
         step("run", "test ! -e /var/lib/hs/testlab-marker", what="the second VM is clean: no marker yet"),
@@ -176,9 +226,12 @@ def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
 
 def _bulk_steps(params, kind):
     extra = " --role data --fs ext4" if kind == "snapraid" else ""
-    return login_root(params) + [
+    return login_root(params) + full_system(params) + [
+        step("run", "export HS_CALLER=test", what="hs sys commands typed by hand do not ask (scripts/lib/hs.sh sys_guard)"),
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
+        disk_id_by_name(params, "pool1", "i1"),
+        disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
         step("capture", "hs sys pool start %s add --disks $(basename {d1}),$(basename {d2}) --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start",
              timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
@@ -252,6 +305,18 @@ def unraid(params):
     ]
 
 
+# ---------------------------------------------------------------- stage 6 (browser): the address of the VM
+def address(params):
+    """Read the IPv4 address of the VM from its own serial console. `incus list` shows none (no incus agent in the installed system, and the VM
+    sits on a LAN bridge Incus does not manage), so testlab.sh stage_browser reads the value recorded here from result-address.json."""
+    return [
+        step("login", "", user="adminuser", secret=params["password"], timeout=420, what="the console is logged in as adminuser"),
+        step("capture", "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1", var="ip", strip=True, record=True,
+             what="the VM has a global IPv4 address"),
+        step("run_var", "echo {ip} | grep -Eq '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'", what="it looks like an IPv4 address"),
+    ]
+
+
 def upgrade_steps(params):
     """Stage upgrade (#435): the system installed from the LAST release ISO is set up (a share, one app), `hs update` moves it to the candidate
     (a branch of the Hobnix repository that the old checkout is pointed at), and it must still be healthy with its shares, state.db and app.
@@ -263,42 +328,39 @@ def upgrade_steps(params):
     db = "/var/lib/hs/state.db"
     ver = "python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute(\"PRAGMA user_version\").fetchone()[0])' " + db
     rows = ("python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute(\"SELECT count(*) FROM events\").fetchone()[0])' " + db)
-    steps = [
-        step("wait", LOGIN, timeout=420, what="the old release boots to a login prompt"),
-        step("send", user),
-        step("wait", r"[Pp]assword: ?$", timeout=30, what="the password prompt"),
-        step("send_secret", pw),
-        step("wait", r"\[%s@[^\]]*\]\$ " % user, timeout=60, what="adminuser is logged in"),
-        step("run", "sudo -n true", what="adminuser may use sudo without a password"),
+    # adminuser has to type the password for sudo (as on a real server): the stage works in a root shell, like the others
+    steps = login_root(params) + [
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the old release finished starting"),
         # set up what a server in the field has
-        step("run", "sudo -n hs share add %s" % share, timeout=300, what="a share is created on the old release"),
-        step("run", "sudo -n hs sys shares list > /var/tmp/upgrade-shares-before && grep -q %s /var/tmp/upgrade-shares-before" % share, what="the share is listed"),
+        step("run", "hs config set timeZone Europe/Vienna", timeout=300, what="a setting is changed on the old release (a share needs the storage pool, a minimal system has none)"),
+        step("run", "grep -q Vienna /etc/nixos/machine.toml", what="the setting is in machine.toml"),
     ]
     if app:
-        steps += [step("run", "sudo -n hs pkg install %s --yes" % _q(app), timeout=1800, what="one app is installed on the old release")]
+        steps += [step("run", "hs pkg install %s --yes" % _q(app), timeout=1800, what="one app is installed on the old release")]
     steps += [
         step("run", "git -C /etc/nixos rev-parse HEAD > /var/tmp/upgrade-rev-before", what="the revision of the old release is noted"),
         step("run", "cp /etc/nixos/machine.toml /var/tmp/upgrade-machine-before", what="machine.toml of the old release is kept"),
         step("run", "%s > /var/tmp/upgrade-schema-before && %s > /var/tmp/upgrade-events-before" % (ver, rows), what="the state.db schema version and event count are noted"),
-        # point the old checkout at the candidate branch: update.sh follows the upstream of the current branch while no newer signed tag exists
-        step("run", "sudo -n git -C /etc/nixos remote set-url origin %s" % _q(repo), what="origin is the Hobnix repository"),
-        step("run", "sudo -n git -C /etc/nixos fetch origin %s" % _q(cand), timeout=600, what="the candidate branch is fetched"),
-        step("run", "sudo -n git -C /etc/nixos branch -u origin/%s" % _q(cand), what="the current branch follows the candidate"),
-        step("run", "sudo -n hs update --yes", timeout=3600, what="hs update moves the server to the candidate"),
+        # The stable channel follows the newest signed release tag (v0.1.0 is the newest: "already the latest"), and a candidate is no tag yet. The
+        # channel edge follows origin/develop: the candidate becomes `develop` of a bare repository in the VM, and origin points there (no network needed)
+        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/candidate" % _q(cand), timeout=600, what="the candidate branch is fetched"),
+        step("run", "git init -q --bare /var/tmp/candidate.git && git -C /etc/nixos push -q /var/tmp/candidate.git refs/remotes/origin/candidate:refs/heads/develop --tags", what="the candidate is `develop` of a local repository"),
+        step("run", "chown -R \"$(stat -c %U /etc/nixos)\" /var/tmp/candidate.git && git -C /etc/nixos remote set-url origin /var/tmp/candidate.git", what="origin is that repository"),
+        step("run", "hs config set updateChannel edge", what="the update channel is edge"),
+        step("run", "hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),
         step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300, what="the updated system is running"),
-        step("run", "sudo -n hs sys shares list | grep -q %s" % share, what="the share survived the update"),
-        step("run", "diff <(sudo -n hs sys shares list | grep %s) <(grep %s /var/tmp/upgrade-shares-before)" % (share, share), what="the share lists the same"),
+        step("run", "grep -q Vienna /etc/nixos/machine.toml", what="the setting survived the update"),
         step("run", "test -s /etc/nixos/machine.toml && grep -q . /var/tmp/upgrade-machine-before", what="machine.toml is still there and not empty"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-schema-before)\"" % ver, what="the state.db schema version did not go back"),
         step("run", "test \"$(%s)\" -ge \"$(cat /var/tmp/upgrade-events-before)\"" % rows, what="state.db kept its events"),
-        step("run", "sudo -n hs smoke", timeout=300, what="hs smoke passes on the updated system"),
-        step("run", "sudo -n hs health", timeout=120, what="hs health reports no problem"),
+        # a minimal system has no incus, ZFS, restic ...: smoke reports those as failed checks (18 of 97 in run 35), so the exit code says nothing here. What an upgrade can break is a script: smoke has to run through without script errors
+        step("run", "hs smoke > /var/tmp/upgrade-smoke 2>&1; grep -q 'Checks:' /var/tmp/upgrade-smoke && ! grep -Eq 'syntax error|Traceback|unbound variable|bad substitution' /var/tmp/upgrade-smoke", timeout=900, what="hs smoke runs through on the updated system without a script error"),
+        step("run", "hs health", timeout=120, what="hs health reports no problem"),
     ]
     if app:
-        steps += [step("run", "sudo -n hs pkg list | grep -q %s" % _q(app), what="the app is still installed")]
+        steps += [step("run", "hs pkg list | grep -q %s" % _q(app), what="the app is still installed")]
     return steps
 
 
@@ -309,5 +371,6 @@ SCENARIOS = {
     "pool": pool,
     "poolzfs": poolzfs,
     "unraid": unraid,
+    "address": address,
     "upgrade": upgrade_steps,
 }
