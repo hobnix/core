@@ -55,8 +55,10 @@ The runner copies the working tree into `~/hobnix-test` in the WSL (ext4, much f
 ## Hobnix-in-Hobnix (nested VM from the ISO)
 
 `scripts/dev/nested.sh run` boots the installer ISO in a nested Incus VM, runs an unattended `hs-install`, boots the installed system and
-checks it (issue #262, docs/adr/0023-nested-test-harness.md). **Not tested on hardware yet: the harness has never been run against a real
-VM.** Only its logic is tested (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
+checks it (issue #262, docs/adr/0023-nested-test-harness.md). Run on 2026-11-15 on a real Incus
+server (KVM, nested virtualization) with the `v0.1.0-beta.1` release ISO, stage `all`: the ISO booted, the unattended `hs-install` finished,
+the installed system booted and every check passed (exit 0). Not tested on hardware yet: a physical machine; the web wizard and the rebuild
+rehearsal are not part of the run. Its logic is also tested without a VM (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
 
 | Command | What |
 | --- | --- |
