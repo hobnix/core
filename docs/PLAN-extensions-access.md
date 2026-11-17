@@ -1,6 +1,6 @@
 # Plan: extensions and access (milestone 0.8)
 
-Status: **Proposed 2026-11-17.** Every decision D1 to D20 below is marked Proposed; the owner accepts or changes them later. Design record for
+Status: **Decisions D1 to D20 Accepted 2026-11-18** (recommended options, except D2: the group names carry the prefix `hn-`); the steps are not built yet. Proposed 2026-11-17. Design record for
 epic [#197](https://github.com/hobnix/server/issues/197) (Extension Protocol and SDK) and its open children
 [#239](https://github.com/hobnix/server/issues/239), [#313](https://github.com/hobnix/server/issues/313),
 [#434](https://github.com/hobnix/server/issues/434) and [#462](https://github.com/hobnix/server/issues/462). It checks the facts of the issues against the
@@ -121,7 +121,7 @@ Build what the ADR decides, in this order:
    change through the web server and finds the person in `hs sys audit`.
 4. **Role source.** Three AD groups for domain people (names: D2), the local account is `admin`; cached for the session; tokens re-read hourly; refused
    above `viewer` after one day without a domain controller (ADR 0012 decision 6).
-5. **Tokens.** `hs token create|list|revoke` with `sys token ...` rows (a token never creates tokens), format `hst_` + 32 random bytes base64url, sha256
+5. **Tokens.** `hs token create|list|revoke` with `sys token ...` rows (a token never creates tokens), format `hn_` + 32 random bytes base64url, sha256
    in a 0600 file under `/var/lib/hs`, expiry 90 days default and 1 year at most, `Authorization: Bearer`, no cookie, no CSRF need. Rate limit per
    token id and per address, on top of the existing address throttle (D4).
 6. **Sessions page** narrows "all sessions" to own sessions for non-admins (PLAN-web-auth, parts 2 and 3) in the same function.
@@ -221,32 +221,36 @@ Everything else is checked by tests with fakes (`t quick`) and, for units, in th
   is frozen.
 - **Machine-readable contracts.** No existing `sys` row changes shape; new facts get new rows (`sys ext status`, `sys token list`, `sys web sso`).
 
+## Naming
+
+`hn` is the future command and prefix (a rename milestone, `hs` to `hn`, is planned later; `hs` stays as an alias). Names that live in the domain, on user disks or in token strings carry the final prefix now: the AD groups `hn-viewers` and `hn-app-managers`, and any visible token prefix `hn_`. Paths under `/var/lib/hs`, unit names and `hs` commands stay as they are and move together in the rename milestone.
+
 ## Decisions for the owner
 
-All Proposed. The "Proposed" answer is first in each row. "Hard to change later" says what a wrong choice costs after release.
+All Accepted by the owner on 2026-11-18. The accepted answer is the "Proposed" column, except D2 (changed, see its row). The recommended option is first in each Options cell. "Hard to change later" says what a wrong choice costs after release.
 
 | Id | Question | Options | Proposed | Hard to change later |
 | --- | --- | --- | --- | --- |
-| D1 | ADR 0012 status (#434) | confirm Accepted and settle the open points below in the ADR text; keep as is; rework | Confirm, record the answers to D2 and D4 in the ADR, regenerate the rows table | Medium: the role per row is a promise to scripts |
-| D2 | Names of the AD groups | `hs-viewers`, `hs-app-managers`, Domain Admins; configurable names in machine.toml (default the same); prefix `hobnix-` | Configurable, defaults `hs-viewers` and `hs-app-managers` + Domain Admins; `hs users` creates them only after a plan and a typed name, never into an existing domain without asking | Medium: group names live in the domain |
-| D3 | SDK languages | Rust (done) + shell + Python helpers + Go example; Rust only; a Go library too | Rust, shell, Python helpers; Go as an example | Low |
-| D4 | Token rate limit and lockout | per token id (60 failures a minute locks the id 5 min) + per address; only per address; none | Both, on top of the existing address throttle | Low |
-| D5 | `permissions` required? | required for packages in a repository (CI fails), warning at install for older ones; always optional; required at once | Required in CI, warning in `hs` for one release, then refuse to enable | Medium: third-party manifests |
-| D6 | Meaning of `net = lan\|internet` | declared only; systemd `IPAddressAllow` for services; firewall rule per service | Declared only in 0.8; the owner decides the firewall meaning later (touches network and firewall) | Medium |
-| D7 | Confining commands (ADR 0014 steps 2/3) | opt-in `confine = true` with `systemd-run`; none until a broker exists; broker + unprivileged user now | Opt-in confinement, documented as partial; broker only if third-party packages become a goal (also ADR 0015 trigger a) | High: it decides what a package may ever do |
-| D8 | Per-call check of `events.emit` | enforce at the core on every emit; manifest only (today) | Enforce on every emit | Low |
-| D9 | When may a manifest use `protocol = [1]` | any package after step 1; only packages that raise `requires_core`/api level; behind a setting | Any package that requires api level >= the one step 2 bumps (`scripts/lib/api-level`, now 9) | Medium: api level is a promise |
-| D10 | Service state names and unit shape (ADR 0011) | as in the ADR; add `paused`; | As in the ADR | Medium |
-| D11 | Service restart policy | the ADR's `Restart=on-failure`, 5 starts in 10 minutes; unlimited with backoff | The ADR's | Low |
-| D12 | Event cursor storage | files in `/var/lib/hs/ext-cursors/<name>` (the ADR); rows in state.db | Files | Medium |
-| D13 | Role of a package read or change | `role` per entry (default admin); one role per package; none | Per entry, default admin | High: it is a manifest format (public) |
-| D14 | TOTP secret storage | root-owned 0600 file per user in `/var/lib/hs/web-totp/`; sealed in the vault (needs unlock after boot); in the session file | The 0600 file: the vault is locked after boot and the local account needs the page then | High: a stored secret format |
-| D15 | Who must use a second factor | setting `webTotp = off\|admins\|everyone`, default off; always for admins; per user | The setting, default off | Low |
-| D16 | Lost second factor | `hs web totp reset <user>` as root over SSH or the console, typed user name, audit line; recovery codes only; a second admin may reset | Reset command + recovery codes; no web reset by another admin | Medium |
-| D17 | SSO scope | OpenID Connect only, one provider; OIDC plus SAML; a bundled provider package | One OIDC provider, authorization code with PKCE | Medium |
-| D18 | Role from SSO | a configured claim or group list per role, else `viewer`; every SSO user is admin; role chosen by an admin per user | Claim/group mapping, else `viewer` (least privilege) | High |
-| D19 | Password sign-in after SSO | stays on; may be switched off with a typed word, local account always kept; forced off | Stays on; may be switched off, local account kept | Medium |
-| D20 | Security review (#433) as a gate | steps 19 and 20 wait for it; build and merge to `0.8` without releasing; no gate | Build now, release 0.8 only after #433 ends | Low |
+| D1 | ADR 0012 status (#434) | confirm Accepted and settle the open points below in the ADR text; keep as is; rework | **Accepted 2026-11-18:** Confirm, record the answers to D2 and D4 in the ADR, regenerate the rows table | Medium: the role per row is a promise to scripts |
+| D2 | Names of the AD groups | `hs-viewers`, `hs-app-managers`, Domain Admins; configurable names in machine.toml (default the same); prefix `hobnix-` | **Accepted 2026-11-18, changed:** configurable in machine.toml, defaults `hn-viewers` and `hn-app-managers` + Domain Admins (see Naming); `hs users` creates them only after a plan and a typed name, never into an existing domain without asking | Medium: group names live in the domain |
+| D3 | SDK languages | Rust (done) + shell + Python helpers + Go example; Rust only; a Go library too | **Accepted 2026-11-18:** Rust, shell, Python helpers; Go as an example | Low |
+| D4 | Token rate limit and lockout | per token id (60 failures a minute locks the id 5 min) + per address; only per address; none | **Accepted 2026-11-18:** Both, on top of the existing address throttle | Low |
+| D5 | `permissions` required? | required for packages in a repository (CI fails), warning at install for older ones; always optional; required at once | **Accepted 2026-11-18:** Required in CI, warning in `hs` for one release, then refuse to enable | Medium: third-party manifests |
+| D6 | Meaning of `net = lan\|internet` | declared only; systemd `IPAddressAllow` for services; firewall rule per service | **Accepted 2026-11-18:** Declared only in 0.8; the owner decides the firewall meaning later (touches network and firewall) | Medium |
+| D7 | Confining commands (ADR 0014 steps 2/3) | opt-in `confine = true` with `systemd-run`; none until a broker exists; broker + unprivileged user now | **Accepted 2026-11-18:** Opt-in confinement, documented as partial; broker only if third-party packages become a goal (also ADR 0015 trigger a) | High: it decides what a package may ever do |
+| D8 | Per-call check of `events.emit` | enforce at the core on every emit; manifest only (today) | **Accepted 2026-11-18:** Enforce on every emit | Low |
+| D9 | When may a manifest use `protocol = [1]` | any package after step 1; only packages that raise `requires_core`/api level; behind a setting | **Accepted 2026-11-18:** Any package that requires api level >= the one step 2 bumps (`scripts/lib/api-level`, now 9) | Medium: api level is a promise |
+| D10 | Service state names and unit shape (ADR 0011) | as in the ADR; add `paused`; | **Accepted 2026-11-18:** As in the ADR | Medium |
+| D11 | Service restart policy | the ADR's `Restart=on-failure`, 5 starts in 10 minutes; unlimited with backoff | **Accepted 2026-11-18:** The ADR's | Low |
+| D12 | Event cursor storage | files in `/var/lib/hs/ext-cursors/<name>` (the ADR); rows in state.db | **Accepted 2026-11-18:** Files | Medium |
+| D13 | Role of a package read or change | `role` per entry (default admin); one role per package; none | **Accepted 2026-11-18:** Per entry, default admin | High: it is a manifest format (public) |
+| D14 | TOTP secret storage | root-owned 0600 file per user in `/var/lib/hs/web-totp/`; sealed in the vault (needs unlock after boot); in the session file | **Accepted 2026-11-18:** The 0600 file: the vault is locked after boot and the local account needs the page then | High: a stored secret format |
+| D15 | Who must use a second factor | setting `webTotp = off\|admins\|everyone`, default off; always for admins; per user | **Accepted 2026-11-18:** The setting, default off | Low |
+| D16 | Lost second factor | `hs web totp reset <user>` as root over SSH or the console, typed user name, audit line; recovery codes only; a second admin may reset | **Accepted 2026-11-18:** Reset command + recovery codes; no web reset by another admin | Medium |
+| D17 | SSO scope | OpenID Connect only, one provider; OIDC plus SAML; a bundled provider package | **Accepted 2026-11-18:** One OIDC provider, authorization code with PKCE | Medium |
+| D18 | Role from SSO | a configured claim or group list per role, else `viewer`; every SSO user is admin; role chosen by an admin per user | **Accepted 2026-11-18:** Claim/group mapping, else `viewer` (least privilege) | High |
+| D19 | Password sign-in after SSO | stays on; may be switched off with a typed word, local account always kept; forced off | **Accepted 2026-11-18:** Stays on; may be switched off, local account kept | Medium |
+| D20 | Security review (#433) as a gate | steps 19 and 20 wait for it; build and merge to `0.8` without releasing; no gate | **Accepted 2026-11-18:** Build now, release 0.8 only after #433 ends | Low |
 
 ## Check that it worked
 
