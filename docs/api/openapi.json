@@ -1101,6 +1101,17 @@
       }
      }
     ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
     "responses": {
      "0": {
       "description": "allowed",
@@ -1347,7 +1358,7 @@
   "/backup/start/{action}": {
    "post": {
     "operationId": "backup.start.by_action",
-    "summary": "do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off)",
+    "summary": "do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off | offsite-config --kind s3|rest|sftp|folder|typed [--endpoint E --bucket B | --url U --user N | --host H --user N --path P | --path P | --repo R]: the secrets are lines on stdin, answers status done, secret password once for a new repository)",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -1371,6 +1382,17 @@
       }
      }
     ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
     "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
     "responses": {
      "0": {

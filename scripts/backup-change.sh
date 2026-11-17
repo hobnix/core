@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change the backup without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: das Backup ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-now|offsite-off|init> [--name <share|instance>] [--set include=<path>|exclude=<glob>|reset=<path>|reset=all]... [--kind shares|sensitive|ct] [--to on|off] [--count <N>] [--repo <restic repository>] [--disk <id>] [--confirm <disk name>]
+# args: plan|start <toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-config|offsite-now|offsite-off|init> [--name <share|instance>] [--set include=<path>|exclude=<glob>|reset=<path>|reset=all]... [--kind shares|sensitive|ct] [--to on|off] [--count <N>] [--repo <restic repository>] [--endpoint E --bucket B --prefix P --url U --user U --host H --port N --path P] [--disk <id>] [--confirm <disk name>]
 # System command (hs sys backup plan|start): for the interface, timers and tests. It never asks and prints plain key<TAB>value lines like
 # pool-change.sh and share-change.sh.
 #   toggle --name <n> --kind shares|sensitive|ct --to on|off   put a share or an instance into the nightly backup or leave it out
@@ -14,6 +14,10 @@
 #                                                              reset=<path> (forget one rule) or reset=all (the whole instance again); applied in the order given
 #   offsite-set --repo <restic repository>                     also copy every backup to a second repository (sftp:user@host:/path, b2:bucket:path, a folder ...); the
 #                                                              credentials stay in /var/lib/hs/backup-offsite.env, written by hand, never passed through here
+#   offsite-config --kind s3|rest|sftp|folder|typed [fields]   guided off-site target (hs backup offsite set --kind ...): s3 --endpoint --bucket [--prefix]; rest --url [--user];
+#                                                              sftp --host --user [--port] --path; folder --path; typed --repo. The secrets (s3: access key id, secret key; rest: the
+#                                                              password) are lines on STDIN, never arguments. `start` does it at once (no job: creating the repository is quick) and
+#                                                              answers status done, address, created yes|no and, once, `secret<TAB>password<TAB>...` (the new repository's own password: "write it down")
 #   offsite-now                                                copy the new backups to the off-site repository now
 #   offsite-off                                                stop copying (what is there stays there)
 #   init --disk <id>                                           RED: make a free disk (its name under /dev/disk/by-id, see `hs sys pool disks`) the backup disk: it is ERASED,
@@ -32,10 +36,10 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: backup-change.sh plan|start <toggle|now|verify|drill|browse> [options]" >&2; exit 1 ;; esac
-case "$action" in toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-now|offsite-off|init) ;; *) refuse "unknown action (toggle, now, verify, drill, browse, offsite-set|now|off or init)" ;; esac
+case "$action" in toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-config|offsite-now|offsite-off|init) ;; *) refuse "unknown action (toggle, now, verify, drill, browse, offsite-set|config|now|off or init)" ;; esac
 shift 2
 sets=()
-name="" kind="" to="" count=5 repo="" disk="" confirm=""
+name="" kind="" to="" count=5 repo="" disk="" confirm="" endpoint="" bucket="" prefix="" url="" user="" host="" port="" path=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --name)    name=${2:-}; shift 2 ;;
@@ -45,6 +49,14 @@ while [ $# -gt 0 ]; do
     --count)   count=${2:-}; shift 2 ;;
     --repo)    repo=${2:-}; shift 2 ;;
     --disk)    disk=${2:-}; shift 2 ;;
+    --endpoint) endpoint=${2:-}; shift 2 ;;
+    --bucket)  bucket=${2:-}; shift 2 ;;
+    --prefix)  prefix=${2:-}; shift 2 ;;
+    --url)     url=${2:-}; shift 2 ;;
+    --user)    user=${2:-}; shift 2 ;;
+    --host)    host=${2:-}; shift 2 ;;
+    --port)    port=${2:-}; shift 2 ;;
+    --path)    path=${2:-}; shift 2 ;;
     --confirm) confirm=${2:-}; shift 2 ;;
     *) refuse "unknown option $1" ;;
   esac
@@ -56,6 +68,15 @@ case "$action" in
   browse) [ -n "$to" ] || needs+=(to) ;;
   rules) [ -n "$name" ] || needs+=(name); [ ${#sets[@]} -gt 0 ] || needs+=(set) ;;
   offsite-set) [ -n "$repo" ] || needs+=(repo) ;;
+  offsite-config)
+    [ -n "$kind" ] || needs+=(kind)
+    case "$kind" in
+      s3) [ -n "$endpoint" ] || needs+=(endpoint); [ -n "$bucket" ] || needs+=(bucket) ;;
+      rest) [ -n "$url" ] || needs+=(url) ;;
+      sftp) [ -n "$host" ] || needs+=(host); [ -n "$user" ] || needs+=(user); [ -n "$path" ] || needs+=(path) ;;
+      folder) [ -n "$path" ] || needs+=(path) ;;
+      typed) [ -n "$repo" ] || needs+=(repo) ;;
+    esac ;;
   init) [ -n "$disk" ] || needs+=(disk) ;;
 esac
 if [ ${#needs[@]} -gt 0 ]; then
@@ -81,6 +102,12 @@ case "$action" in
       esac
     done ;;
   offsite-set) { [[ "$repo" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$repo" != -* ]] && [[ "$repo" != *..* ]]; } || refuse "that is not a restic repository address (for example sftp:user@host:/path, b2:bucket:path or a folder)" ;;
+  offsite-config)
+    case "$kind" in s3|rest|sftp|folder|typed) ;; *) refuse "--kind is s3, rest, sftp, folder or typed" ;; esac
+    # every field is a plain word: no option look-alike, no .. (backup.sh checks the shape of each kind again)
+    for f in "$endpoint" "$bucket" "$prefix" "$url" "$user" "$host" "$port" "$path" "$repo"; do
+      { [[ "$f" =~ ^[A-Za-z0-9/@:._+=,~%-]*$ ]] && [[ "$f" != -* ]] && [[ "$f" != *..* ]]; } || refuse "a field of the target has characters that do not belong in an address"
+    done ;;
   init)   [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || refuse "that is not a disk id (see hs sys pool disks)" ;;
   drill)  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 1 ] && [ "$count" -le 100 ] || refuse "--count is a number from 1 to 100" ;;
 esac
@@ -132,6 +159,14 @@ case "$action" in
     fi
     cmd=(bash "$backup" init "$dev" --yes) ;;
   offsite-set) needs_disk; cmd=(bash "$backup" offsite set "$repo") ;;
+  offsite-config)
+    needs_disk
+    if [ "$kind" = typed ]; then cmd=(bash "$backup" offsite set "$repo"); else cmd=(bash "$backup" offsite set --kind "$kind"); fi
+    if [ "$kind" != typed ]; then
+      for pair in endpoint:"$endpoint" bucket:"$bucket" prefix:"$prefix" url:"$url" user:"$user" host:"$host" port:"$port" path:"$path"; do
+        [ -z "${pair#*:}" ] || cmd+=("--${pair%%:*}" "${pair#*:}")
+      done
+    fi ;;
   offsite-now)
     [ -n "$(st offsite)" ] || refuse "There is no off-site repository yet: set one first."
     needs_disk; cmd=(bash "$backup" offsite now) ;;
@@ -149,6 +184,19 @@ case "$action" in
     fi ;;
 esac
 
+if [ "$verb" = start ] && [ "$action" = offsite-config ]; then
+  # no job: the secrets are lines on stdin and must not travel through a unit; creating the repository takes seconds
+  errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+  rc=0
+  out=$("${cmd[@]}" --machine 2>"$errf") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'status\trefused\n'
+    sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^[[:space:]]*//' "$errf" | awk 'NF { sub(/^[^A-Za-z0-9]+/, ""); print "reason\t" $0; exit }'
+    exit 1
+  fi
+  printf '%s\n' "$out"
+  exit 0
+fi
 if [ "$verb" = start ]; then
   if [ "$action" = init ] && [ "$confirm" != "$diskname" ]; then refuse "type the name of the disk to confirm: $diskname"; fi
   . "$here/lib/job.sh"
@@ -222,6 +270,16 @@ case "$action" in
     esac
     if [ -n "$(st offsite)" ] && [ "$(st offsite)" != "$repo" ]; then printf 'warn\tThe current off-site repository (%s) is replaced; what is there stays there.\n' "$(st offsite)"; fi
     printf 'note\tThe first copy sends the whole backup: that can take a long time and a lot of traffic.\n' ;;
+  offsite-config)
+    printf 'heading\tcopy every backup to a second repository (%s)\nstep\twrite the repository address and the keys into root-only files (inside the vault when there is one)\nstep\tcreate the repository when it does not exist yet, with its OWN password\nstep\tcopy every new backup there after each nightly run\n' "$kind"
+    case "$kind" in
+      s3) printf 'note\tThe access key id and the secret key are asked for next; they are not part of any command line.\n' ;;
+      rest) [ -z "$user" ] || printf 'note\tThe password of the REST server is asked for next. The server should run as: rest-server --append-only (this server then cannot delete there; the target prunes itself).\n' ;;
+      sftp) printf 'note\tSFTP uses the ssh key of root on this server: put it on the target first (no password).\n' ;;
+    esac
+    case "$kind" in rest) ;; *) printf 'note\tOld backups there are forgotten (7 daily, 4 weekly, 6 monthly) and pruned on Sundays from this server.\n' ;; esac
+    if [ -n "$(st offsite)" ]; then printf 'warn\tThe current off-site repository (%s) is replaced; what is there stays there.\n' "$(st offsite)"; fi
+    printf 'note\tA new repository gets its own password: write it down when it is shown (once). The first copy is a separate step: Copy off-site now.\n' ;;
   offsite-now)
     printf 'heading\tcopy to the off-site repository now\nstep\tcopy the backups the off-site repository does not have yet to %s\nnote\tA failed copy only warns: the backup itself is fine.\n' "$(st offsite)" ;;
   offsite-off)
@@ -237,5 +295,5 @@ printf 'command\t%s\n' "${cmd[*]}"
 if [ "$action" = init ]; then
   printf 'danger\tThis ERASES everything on %s and makes it the backup disk.\nconfirm_name\t%s\n' "$diskname" "$diskname"
 fi
-case "$action" in toggle|browse|rules|offsite-off|init) printf 'long\tno\n' ;; *) printf 'long\tyes\n' ;; esac
+case "$action" in toggle|browse|rules|offsite-off|offsite-config|init) printf 'long\tno\n' ;; *) printf 'long\tyes\n' ;; esac
 exit 0

@@ -168,20 +168,39 @@ It deletes the leftovers of a run that ran out of space, clears stale locks, app
 only on Sundays, so this is the way to free space at once. `hs backup verify` checks part of the stored data.
 
 ## A second copy outside the house
-The backup disk usually sits in the same case as the server: fire, theft or a power surge takes both. Add a second repository with the
-same password: a folder on another disk (which you can carry away), another computer over SFTP, or a cloud bucket.
+The backup disk usually sits in the same case as the server: fire, theft or a power surge takes both. Add a second repository: a cloud
+bucket (S3-compatible), a restic REST server, another computer over SFTP, or a folder on another disk (which you can carry away).
+In the web interface use Backup > Set up off-site copy; on the server pick the kind and `hs` asks for its fields and writes the restic
+address itself:
 
 ```bash
-sudo hs backup offsite set /mnt/usb/hs-backup
-sudo hs backup offsite set sftp:user@host:/path
-sudo hs backup offsite set b2:my-bucket:homeserver
+sudo hs backup offsite set --kind s3 --endpoint s3.example.org --bucket my-bucket --prefix hobnix   # asks for the access key id and the secret key
+sudo hs backup offsite set --kind rest --url https://nas.example:8000/hobnix --user bob           # asks for the password
+sudo hs backup offsite set --kind sftp --host nas.example --user bob --path /backups/hobnix
+sudo hs backup offsite set --kind folder --path /mnt/offsite-disk/hobnix
+sudo hs backup offsite set b2:my-bucket:homeserver                                                 # a typed restic address stays possible
 sudo hs backup offsite now
 sudo hs backup offsite off
 ```
 
-Put credentials (`B2_ACCOUNT_ID=...`, `B2_ACCOUNT_KEY=...`, one per line) in `/var/lib/hs/backup-offsite.env`, readable by root only
-(`chmod 600`; the vault keeps it when a vault exists). Every nightly run then copies the new state along, for the shares and
-containers that are switched on.
+Where the secrets go: the address is in `/var/lib/hs/backup-offsite.repo` (restic reads it with `--repository-file`); S3 keys are in
+`/var/lib/hs/backup-offsite.credentials`, which restic reads by path; a REST password is part of the address in the repository file. All
+are root-only (mode 0600) and live inside the vault when there is one. You type them at the prompt (or the web form sends them on standard
+input); they are never part of a command line. SFTP logs in with the ssh key of root on the server (put it on the target first), because
+restic cannot hand a password to ssh. Kinds that restic reads only from the environment (B2, Azure, Google) keep using
+`/var/lib/hs/backup-offsite.env` (`KEY=VALUE` lines, never run as shell); `hs backup offsite migrate` turns S3 keys in an old env file into the
+credentials file.
+
+**A new off-site repository gets its own password**, different from the backup disk's. It is shown once when the repository is created:
+write it down and keep it with the address in your password manager. A repository that existed before keeps the password it has.
+
+**Old backups there:** for S3, SFTP and a folder, every nightly run forgets what is older than 7 daily, 4 weekly and 6 monthly backups and
+prunes on Sundays. A REST server is expected to run `rest-server --append-only`, so this server cannot delete there; the target prunes
+itself (run `restic forget --prune` with the same rule on the target, from a timer). Setting up such a target is not part of Hobnix yet.
+
+Read from it with the same commands: `hs backup list|find|restore|drill --repo offsite`.
+
+Not tested on hardware yet.
 
 ## Databases and VMs
 A running database cannot be backed up by copying its files. Each container has a dump description, `/var/lib/hs/backup-dump/<container>`,
@@ -485,15 +504,22 @@ purpose, and `hs update` and `hs rebuild` end with an error. `hs unlock --status
    server name).
 
 ### Case C: the server and the backup disk are both gone
-Only the off-site copy is left. Do Case A with a new vault, but read the host files from the off-site repository:
+Only the off-site copy is left. You need its address and its OWN password (written down when it was created; the backup disk's password does
+not open it, unless the repository is an old one). Do Case A with a new vault, but read the host files from the off-site repository:
 
 ```bash
 export RESTIC_REPOSITORY='<address from the password manager, e.g. sftp:user@host:restic>'
-export RESTIC_PASSWORD='<same password>'
+export RESTIC_PASSWORD='<the off-site password>'
+export AWS_ACCESS_KEY_ID='<only for S3>' AWS_SECRET_ACCESS_KEY='<only for S3>'
 restic snapshots
 ```
 
+The address, the S3 keys and the off-site password are deliberately NOT in any backup (a copy of the key inside the repository it protects would
+be worthless). On a rebuilt server, set the off-site target again with `hs backup offsite set ...` (type the saved password into
+`/var/lib/hs/restic-offsite-password`, root-only), then `hs backup restore latest <path> --repo offsite` and
+`hs backup find <name> --repo offsite` work.
 Afterwards set up a new backup disk with `hs backup init` and the off-site copy again with `hs backup offsite set ...`.
+Not tested on hardware yet.
 
 ### After a rebuild
 - [ ] `hs doctor` is green and `hs health` reports nothing.

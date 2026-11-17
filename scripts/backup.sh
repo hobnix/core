@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: back up shares, chosen containers, the domain controller and the host config with restic to the disk labelled "backup"
 # help.de: sichert Freigaben, ausgewählte Container, den Domänencontroller und die Server-Einstellungen mit restic auf die Platte mit dem Etikett "backup"
-# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | restore ct <name> [--recipe <app>] | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|now|off | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
+# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | restore ct <name> [--recipe <app>] | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|--kind s3|rest|sftp|folder ...|now|off|migrate | restore|find|list|drill ... --repo offsite | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
 set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/dc.sh"
@@ -52,9 +52,14 @@ usage: hs backup [status]                    what is in the backup, last run, sp
                                              domain controller backup file and the export file of one virtual machine
        hs backup report [--dry-run]          the report of the restore drills as a push message (it goes out
                                              every month by itself, on the 25th)
-       hs backup offsite set <repo>          also copy every backup to a second repository (a folder on another
-                                             disk, sftp:user@host:/path, b2:bucket:path ...); keys in
-                                             /var/lib/hs/backup-offsite.env. offsite now / off
+       hs backup offsite set [<repo> | --kind s3|rest|sftp|folder ...]
+                                             also copy every backup to a second repository. By kind it asks the fields
+                                             (s3: --endpoint --bucket [--prefix], keys asked; rest: --url [--user], password
+                                             asked; sftp: --host --user [--port] --path; folder: --path) and writes the restic
+                                             address itself; a typed <repo> (b2:bucket:path ...) stays possible. Secrets are asked
+                                             for or read from stdin, never taken as arguments. offsite now / off / migrate
+       hs backup restore|find|list|drill --repo offsite
+                                             the same on the off-site repository instead of the backup disk
        hs backup init [<device>] [--dry-run] FORMAT a disk as the backup disk (erases it) and create the repository;
                                              without a device the free disks are listed to pick from
 
@@ -88,8 +93,11 @@ ON=$STATE/backup-on              # shares included on purpose, one per line (onl
 NEW_SHARES=${HS_BACKUP_NEW_SHARES:-$(case "$(setting_get backupNewShares 2>/dev/null)" in false|off) echo off ;; *) echo on ;; esac)}
 CTS=$STATE/backup-instances      # containers included, one per line
 DUMPS=$STATE/backup-dump         # one file per container: the command that writes its database dump
-OFFSITE=$STATE/backup-offsite    # second repository (restic address), optional
-OFFSITE_ENV=$STATE/backup-offsite.env
+OFFSITE=$STATE/backup-offsite.repo          # second repository: the restic address (may carry a REST password), 0600, restic --repository-file
+OFFSITE_OLD=$STATE/backup-offsite           # the address before 0.7: moved to $OFFSITE once
+OFFSITE_PASS=$STATE/restic-offsite-password # its own password (absent: an older off-site repository that shares the backup disk's)
+OFFSITE_CRED=$STATE/backup-offsite.credentials   # S3 keys as an AWS credentials file; restic reads it by path (AWS_SHARED_CREDENTIALS_FILE)
+OFFSITE_ENV=$STATE/backup-offsite.env       # old way: KEY=VALUE lines for restic's environment; parsed, never sourced, until migrated
 RESULT=$STATE/backup.state       # read by hs health
 DC=$(dc_name)
 INCUS_ROOT=${HS_INCUS_ROOT:-/var/lib/incus/storage-pools/default/containers}
@@ -97,15 +105,26 @@ BROWSE=/mnt/backup-browse
 export RESTIC_CACHE_DIR=${HS_BACKUP_CACHE:-/var/cache/restic}
 
 dry=false
+want_off=false   # --repo offsite: every restic call of this command goes to the off-site repository
+machine=false    # offsite set --machine: plain key<TAB>value lines for the web interface
 args=()
+prev=""
 for a in "$@"; do
+  if [ "$prev" = --repo ]; then
+    prev=""
+    case "$a" in offsite) want_off=true ;; local) ;; *) usage ;; esac
+    continue
+  fi
   case "$a" in
+    --repo) prev=--repo ;;
+    --machine) machine=true ;;
     --dry-run) dry=true ;;
     --yes)     export HS_BACKUP_YES=1 ;;   # init: the typed confirmation was asked before (the interface's review)
     -h|--help) usage ;;
     *) args+=("$a") ;;
   esac
 done
+[ -z "$prev" ] || usage
 set -- "${args[@]+"${args[@]}"}"
 cmd=${1:-status}
 [ $# -gt 0 ] && shift
@@ -113,7 +132,9 @@ cmd=${1:-status}
 # --from-disk (config restore on a fresh install): the typed passphrase is in a private temp file and the disk is read-only, so no lock is taken
 R_PASSFILE=$PASSFILE
 R_EXTRA=()
-R() { restic -r "$REPO" --password-file "$R_PASSFILE" "${R_EXTRA[@]}" "$@"; }
+R() {
+  if $want_off; then R_off "$@"; else restic -r "$REPO" --password-file "$R_PASSFILE" "${R_EXTRA[@]}" "$@"; fi
+}
 
 # Remove locks a dead run left behind. `restic unlock` only removes a lock whose process is gone, and a reused PID (or a
 # reboot) keeps it for days ("already locked by PID ... 85h ago"); when no restic runs on this host any more nothing can
@@ -150,6 +171,7 @@ mount_disk() {
 }
 
 need_repo() {
+  if $want_off; then offsite_ready; return; fi
   [ "$(pass_state)" != locked ] || secret_locked_exit
   [ -f "$PASSFILE" ] || die "Not set up yet. Run: hs backup init <device>"
   mount_disk
@@ -510,7 +532,7 @@ cmd_now() {
   mapfile -t hf < <(host_files)
   if [ ${#hf[@]} -gt 0 ]; then
     mapfile -t hx < <(host_excludes)
-    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" "${hf[@]}" || fail=1
+    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" --exclude "$OFFSITE_PASS" --exclude "$OFFSITE_CRED" --exclude "$OFFSITE" --exclude "$VAULT_SECRETS/${OFFSITE_PASS##*/}" --exclude "$VAULT_SECRETS/${OFFSITE_CRED##*/}" --exclude "$VAULT_SECRETS/${OFFSITE##*/}" "${hf[@]}"   # none of the off-site secrets goes into a backup (least of all into the off-site repository it protects) || fail=1
   fi
 
   for name in "${cts[@]+"${cts[@]}"}"; do
@@ -543,9 +565,15 @@ cmd_now() {
     R check --read-data-subset=5% >/dev/null || { warn "restic check found a problem"; fail=1; }
   fi
 
+  offsite_adopt_old
   if [ -s "$OFFSITE" ]; then
     step "Off-site copy"
-    if offsite_copy; then note_state "offsite_ok=$(date +%s)"; else warn "The off-site copy failed (the backup itself is fine)"; fi
+    if offsite_copy; then
+      note_state "offsite_ok=$(date +%s)"
+      # the same 7/4/6 rule there; REST targets run append-only and prune themselves (offsite_retention skips them)
+      if [ "$(date +%u)" = 7 ]; then offsite_retention prune || warn "The off-site prune failed (the copy itself is fine)"
+      else offsite_retention || warn "The off-site retention failed (the copy itself is fine)"; fi
+    else warn "The off-site copy failed (the backup itself is fine)"; fi
   fi
 
   local used
@@ -628,7 +656,7 @@ cmd_status() {
     fi
   fi
   if [ -s "$OFFSITE" ]; then
-    kv "Off-site copy" "$(t '%s, last copied %s' "$(cat "$OFFSITE")" "$(ago "$(sed -n 's/^offsite_ok=//p' "$RESULT" 2>/dev/null || true)")")"
+    kv "Off-site copy" "$(t '%s, last copied %s' "$(offsite_masked)" "$(ago "$(sed -n 's/^offsite_ok=//p' "$RESULT" 2>/dev/null || true)")")"
   fi
   if [ -n "${HS_BACKUP_NO_MOUNT:-}" ] || [ -b "$DEV" ] || mountpoint -q "$MNT"; then
     mount_disk
@@ -639,42 +667,248 @@ cmd_status() {
   fi
 }
 
-# ── Second copy: another restic repository, same password ──
-R_off() {   # restic on the off-site repository (credentials from the env file)
-  [ "$(secret_state "$OFFSITE_ENV")" != locked ] || { vault_locked_note >&2; return 1; }
-  ( set -a; [ ! -f "$OFFSITE_ENV" ] || . "$OFFSITE_ENV"; set +a
-    restic -r "$(cat "$OFFSITE")" --password-file "$PASSFILE" "$@" )
+# ── Second copy: another restic repository (own password, secrets in files restic reads by path) ──
+# What restic gets, per kind of target (restic 0.18 docs; each backend checked, none of them takes a secret on argv):
+#   s3      address s3:https://host/bucket/prefix; keys in an AWS credentials file, restic (minio-go) reads the file named
+#           by AWS_SHARED_CREDENTIALS_FILE. The environment carries only that PATH, not a key.
+#   rest    address rest:https://user:password@host:port/path/ inside the repository file (--repository-file).
+#   sftp    address sftp:user@host:/path; restic runs ssh, which logs in with the key of root (a password cannot be given
+#           to ssh without a helper, so SFTP is key-only).
+#   folder  a path. No secret.
+#   typed   any address (b2:, azure:, gs:, swift:, rclone:): keys that restic reads ONLY from the environment stay in the old
+#           /var/lib/hs/backup-offsite.env. It is parsed as KEY=VALUE (never sourced) and its variables are set in restic's own
+#           child process only (off_env runs in a subshell that exec's restic): not in this script's environment, not on argv.
+secret_write() {   # secret_write <path>: the content comes on stdin; created through secret_prepare (vault), mode 0600
+  local p=$1
+  secret_prepare "${p##*/}" "$STATE" || return 1
+  ( umask 077; cat > "$p" ) && chmod 600 "$p" 2>/dev/null || true
+}
+secret_rm() {      # secret_rm <path>: also the file in the vault the link points to
+  local p=$1 t=""
+  secret_in_vault "$p" && t=$(readlink "$p") || true
+  rm -f "$p"
+  [ -z "$t" ] || rm -f "$t"
+}
+off_env() {   # runs in the subshell of the restic call: the variables of the old env file, read strictly as KEY=VALUE
+  local line k v
+  [ ! -e "$OFFSITE_CRED" ] || export AWS_SHARED_CREDENTIALS_FILE=$OFFSITE_CRED
+  [ -s "$OFFSITE_ENV" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    k=${BASH_REMATCH[2]}; v=${BASH_REMATCH[3]}
+    case "$k" in AWS_*|AZURE_*|B2_*|GOOGLE_*|OS_*|ST_*|SWIFT_*|OSS_*|RCLONE_*|RESTIC_*) ;; *) continue ;; esac
+    case "$v" in \"*\") v=${v#\"}; v=${v%\"} ;; \'*\') v=${v#\'}; v=${v%\'} ;; esac
+    export "$k=$v"
+  done < "$OFFSITE_ENV"
+}
+offsite_adopt_old() {   # the address of before: into the repository file, once
+  [ -s "$OFFSITE_OLD" ] && [ ! -e "$OFFSITE" ] || return 0
+  [ "$(secret_state "$OFFSITE")" != locked ] || return 0
+  secret_write "$OFFSITE" < "$OFFSITE_OLD" && rm -f "$OFFSITE_OLD" || true
+}
+offsite_pass_file() { if [ -e "$OFFSITE_PASS" ]; then echo "$OFFSITE_PASS"; else echo "$PASSFILE"; fi; }
+R_off() {   # restic on the off-site repository
+  local s
+  for s in "$OFFSITE" "$OFFSITE_PASS" "$OFFSITE_CRED" "$OFFSITE_ENV"; do
+    [ "$(secret_state "$s")" != locked ] || { vault_locked_note >&2; return 1; }
+  done
+  offsite_adopt_old
+  [ -s "$OFFSITE" ] || { echo "No off-site repository" >&2; return 1; }
+  ( off_env; exec restic --repository-file "$OFFSITE" --password-file "$(offsite_pass_file)" "$@" )
+}
+offsite_ready() {   # for --repo offsite: set, unlocked and openable
+  [ "$(secret_state "$OFFSITE")" != locked ] || secret_locked_exit
+  offsite_adopt_old
+  [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
+  R_off cat config >/dev/null 2>&1 || die "$(t 'The off-site repository cannot be opened (not reachable, or wrong credentials or password).')"
 }
 offsite_copy() {
   R_off copy --from-repo "$REPO" --from-password-file "$PASSFILE" >/dev/null
 }
+# Retention on the off-site repository: the same 7/4/6 rule. REST targets run `rest-server --append-only` (this server may
+# not delete there), so forget and prune are the target's job; the other kinds prune from here on Sundays.
+offsite_is_rest() { case "$(cat "$OFFSITE" 2>/dev/null || true)" in rest:*) return 0 ;; *) return 1 ;; esac; }
+offsite_retention() {   # offsite_retention [prune]
+  offsite_is_rest && return 0
+  local f=(--group-by tags --keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+  [ "${1:-}" = prune ] && f+=(--prune)
+  R_off forget --quiet "${f[@]}"
+}
+offsite_enc() { printf '%s' "$1" | jq -sRr @uri; }
+offsite_read() {   # offsite_read <question> secret|plain: one line, from the terminal when there is one, else from stdin
+  local v
+  if [ -t 0 ]; then
+    if [ "$2" = secret ]; then v=$(ask_secret "$1"); else v=$(ask "$1"); fi
+  else
+    IFS= read -r v || true
+  fi
+  printf '%s' "$v"
+}
 cmd_offsite() {
-  local sub=${1:-} repo
+  local sub=${1:-}
+  [ $# -gt 0 ] && shift
   case "$sub" in
     set)
-      repo=${2:-}; [ -n "$repo" ] || usage
-      need_repo
-      printf '%s\n' "$repo" > "$OFFSITE"
-      if ! R_off cat config >/dev/null 2>&1; then
-        R_off init --from-repo "$REPO" --from-password-file "$PASSFILE" --copy-chunker-params >/dev/null ||
-          { rm -f "$OFFSITE"; die "$(t 'Could not create the repository %s (credentials in %s?)' "$repo" "$OFFSITE_ENV")"; }
-        ok "$(t 'Created the repository %s (same password as the backup disk)' "$repo")"
-      else
-        ok "$(t 'Using the existing repository %s' "$repo")"
-      fi
-      note_state "offsite=1"
-      note "Every nightly run copies new backups there. Now: hs backup offsite now" ;;
+      offsite_set "$@" ;;
     now)
-      [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set <repo>"
+      offsite_adopt_old
+      [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
       need_repo
-      step "$(t 'Off-site copy to %s' "$(cat "$OFFSITE")")"
+      step "$(t 'Off-site copy to %s' "$(offsite_masked)")"
       offsite_copy || die "The off-site copy failed."
       note_state "offsite_ok=$(date +%s)"
       ok "Copied." ;;
     off)
-      rm -f "$OFFSITE"; note_state "offsite=0"; ok "Off-site copy switched off (what is there stays there)." ;;
+      rm -f "$OFFSITE_OLD"; secret_rm "$OFFSITE"; secret_rm "$OFFSITE_CRED"
+      note_state "offsite=0"; ok "Off-site copy switched off (what is there stays there; its password file stays: $OFFSITE_PASS)." ;;
+    migrate)
+      offsite_migrate ;;
     *) usage ;;
   esac
+}
+offsite_masked() { sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#' "$OFFSITE" 2>/dev/null || true; }
+offsite_migrate() {   # the old env file: AWS keys become a credentials file; anything else stays, and says so
+  local k id="" sec="" other=0 line
+  [ -s "$OFFSITE_ENV" ] || { note "Nothing to migrate: there is no $OFFSITE_ENV."; return 0; }
+  offsite_adopt_old
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    k=${BASH_REMATCH[2]}
+    case "$k" in
+      AWS_ACCESS_KEY_ID) id=${BASH_REMATCH[3]} ;;
+      AWS_SECRET_ACCESS_KEY) sec=${BASH_REMATCH[3]} ;;
+      *) other=1 ;;
+    esac
+  done < "$OFFSITE_ENV"
+  id=${id#[\"\']}; id=${id%[\"\']}; sec=${sec#[\"\']}; sec=${sec%[\"\']}
+  if [ -n "$id" ] && [ -n "$sec" ]; then
+    printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$sec" | secret_write "$OFFSITE_CRED" ||
+      die "Could not write the credentials file."
+    ok "S3 keys moved to $OFFSITE_CRED"
+  fi
+  if [ "$other" -eq 0 ]; then
+    secret_rm "$OFFSITE_ENV"; ok "The old env file is gone."
+  else
+    note "$OFFSITE_ENV keeps variables that restic reads only from the environment (b2, azure, ...): they are set in restic's own process only."
+  fi
+}
+offsite_set() {   # offsite set <repo> | --kind s3|rest|sftp|folder [fields]
+  local kind="" endpoint="" bucket="" prefix="" url="" user="" host="" port="" path="" typed="" addr="" id="" sec="" pw="" new=false pass_new=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --kind) kind=${2:-}; shift 2 || usage ;;
+      --endpoint) endpoint=${2:-}; shift 2 || usage ;;
+      --bucket) bucket=${2:-}; shift 2 || usage ;;
+      --prefix) prefix=${2:-}; shift 2 || usage ;;
+      --url) url=${2:-}; shift 2 || usage ;;
+      --user) user=${2:-}; shift 2 || usage ;;
+      --host) host=${2:-}; shift 2 || usage ;;
+      --port) port=${2:-}; shift 2 || usage ;;
+      --path) path=${2:-}; shift 2 || usage ;;
+      -*) usage ;;
+      *) [ -z "$typed" ] || usage; typed=$1; shift ;;
+    esac
+  done
+  [ -n "$typed" ] && [ -z "$kind" ] && kind=typed
+  if [ -z "$kind" ]; then
+    if [ -t 0 ] && [ -z "${HS_BACKUP_YES:-}" ]; then
+      kind=$(choose "Where does the copy go?" s3 rest sftp folder typed)
+    else usage; fi
+  fi
+  need_repo
+  local re_host='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$' re_path='^/[A-Za-z0-9/._+=,~%@:-]*$'
+  case "$kind" in
+    s3)
+      [ -n "$endpoint" ] || endpoint=$(ask "S3 endpoint (host[:port], for example s3.eu-central-1.amazonaws.com)")
+      [ -n "$bucket" ] || bucket=$(ask "Bucket")
+      [[ "$endpoint" =~ ^(https?://)?[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "That is not an S3 endpoint (host or host:port)."
+      [[ "$bucket" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$ ]] || die "That is not a bucket name."
+      [[ "$prefix" =~ ^[A-Za-z0-9/._-]*$ ]] && [[ "$prefix" != *..* ]] || die "That is not a prefix (letters, digits, / . _ -)."
+      case "$endpoint" in http*) ;; *) endpoint=https://$endpoint ;; esac
+      addr="s3:$endpoint/$bucket${prefix:+/${prefix#/}}"
+      id=$(offsite_read "Access key id" plain); sec=$(offsite_read "Secret access key" secret)
+      [ -n "$id" ] && [ -n "$sec" ] || die "The access key id and the secret key are needed (stdin: two lines)."
+      ;;
+    rest)
+      [ -n "$url" ] || url=$(ask "REST server address (https://host:8000/path)")
+      [[ "$url" =~ ^(https?)://([A-Za-z0-9.-]+(:[0-9]+)?)(/[A-Za-z0-9/._-]*)?$ ]] || die "That is not a REST server address (https://host[:port]/path)."
+      [[ "$url" != *..* ]] || die "No .. in the path."
+      local scheme=${BASH_REMATCH[1]} hp=${BASH_REMATCH[2]} rp=${BASH_REMATCH[4]:-/}
+      if [ -n "$user" ]; then
+        [[ "$user" =~ ^[A-Za-z0-9._@+-]{1,64}$ ]] || die "That is not a user name."
+        pw=$(offsite_read "Password of the REST server" secret)
+        [ -n "$pw" ] || die "The password is needed (stdin: one line)."
+        addr="rest:$scheme://$(offsite_enc "$user"):$(offsite_enc "$pw")@$hp$rp"
+      else
+        addr="rest:$scheme://$hp$rp"
+      fi ;;
+    sftp)
+      [ -n "$host" ] || host=$(ask "SFTP host")
+      [ -n "$user" ] || user=$(ask "SFTP user")
+      [ -n "$path" ] || path=$(ask "Path on the host (absolute)")
+      [[ "$host" =~ $re_host ]] || die "That is not a host name."
+      [[ "$user" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "That is not a user name."
+      [[ "$path" =~ $re_path ]] && [[ "$path" != *..* ]] || die "That is not an absolute path."
+      if [ -n "$port" ]; then
+        [[ "$port" =~ ^[0-9]{1,5}$ ]] || die "That is not a port."
+        addr="sftp://$user@$host:$port/$path"   # restic: sftp://user@host:port//abs/path
+      else
+        addr="sftp:$user@$host:$path"
+      fi
+      note "SFTP uses the ssh key of root on this server (no password): ssh-copy-id $user@$host first." ;;
+    folder)
+      [ -n "$path" ] || path=$(ask "Folder (absolute path, for example the mounted offsite disk)")
+      [[ "$path" =~ $re_path ]] && [[ "$path" != *..* ]] || die "That is not an absolute path."
+      addr=$path ;;
+    typed)
+      [ -n "$typed" ] || typed=$(ask "restic repository address")
+      [[ "$typed" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$typed" != -* ]] && [[ "$typed" != *..* ]] || die "That is not a restic repository address."
+      addr=$typed ;;
+    *) usage ;;
+  esac
+
+  # Everything is written through secret_prepare (vault when there is one), mode 0600; a failure takes it all away again.
+  # The same address again keeps the password it has; replacing another address starts without one.
+  local old_addr=""
+  [ ! -s "$OFFSITE" ] || old_addr=$(cat "$OFFSITE")
+  fail_cleanup() { secret_rm "$OFFSITE"; secret_rm "$OFFSITE_CRED"; [ -z "$pass_new" ] || secret_rm "$OFFSITE_PASS"; }
+  [ -z "$old_addr" ] || [ "$old_addr" = "$addr" ] || secret_rm "$OFFSITE_PASS"   # no old address: a password put there by hand (Case C) stays
+  secret_rm "$OFFSITE_CRED"; rm -f "$OFFSITE_OLD"
+  printf '%s\n' "$addr" | secret_write "$OFFSITE" || { fail_cleanup; die "Could not store the address (is the vault open?)."; }
+  if [ "$kind" = s3 ]; then
+    printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$sec" | secret_write "$OFFSITE_CRED" ||
+      { fail_cleanup; die "Could not store the S3 keys."; }
+  fi
+  if R_off cat config >/dev/null 2>&1; then
+    # an existing repository keeps the password it has (the backup disk's)
+    $machine || ok "$(t 'Using the existing repository %s (it keeps its password)' "$(offsite_masked)")"
+  else
+    pass_new=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    printf '%s\n' "$pass_new" | secret_write "$OFFSITE_PASS" || { fail_cleanup; die "Could not store the off-site password."; }
+    if ! R_off init --from-repo "$REPO" --from-password-file "$PASSFILE" --copy-chunker-params >/dev/null 2>&1; then
+      fail_cleanup
+      die "$(t 'Could not create the repository %s (reachable? credentials right? does one with another password exist there?)' "$(printf '%s' "$addr" | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')")"
+    fi
+    new=true
+  fi
+  note_state "offsite=1"
+  if $machine; then
+    printf 'status\tdone\naddress\t%s\n' "$(offsite_masked)"
+    # `secret<TAB>password<TAB>...` is the line the web interface shows once (parse_change); `created` says whether the repository is new
+    if $new; then printf 'created\tyes\nsecret\tpassword\t%s\n' "$pass_new"; else printf 'created\tno\n'; fi
+    return 0
+  fi
+  if $new; then
+    ok "$(t 'Created the repository %s' "$(offsite_masked)")"
+    if [ -t 1 ] && ! secret_batch; then
+      warn "This repository has its OWN password. Write it down now; it is not shown again."
+      kv "Off-site password" "$pass_new"
+    else
+      note "The off-site password is in $OFFSITE_PASS (root only). Read it once and write it down."
+    fi
+  fi
+  note "Every nightly run copies new backups there. Now: hs backup offsite now"
 }
 
 # ── Does a restore really work? Random files out of the newest backup, compared with the originals ──
@@ -1191,7 +1425,7 @@ SAMBA_DIR=${HS_SAMBA_DIR:-/var/lib/samba/private}
 # Files of $STATE that describe THIS disk set or the backup itself: never restored, even with --with-state.
 state_skip() {  # state_skip <path relative to $STATE>
   case "$1" in
-    restic-password|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
+    restic-password|restic-offsite-password|backup-offsite.credentials|backup-offsite.repo|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
   esac
   return 1
 }
@@ -1550,6 +1784,7 @@ cmd_state_kv() {
   fi
   if mountpoint -q "$BROWSE" 2>/dev/null; then printf 'browse\ton\n'; else printf 'browse\toff\n'; fi
   # the address may carry user:password (rest:https://u:pw@host/); this output lands in Redis, so the password is masked
+  offsite_adopt_old
   printf 'offsite\t%s\n' "$({ cat "$OFFSITE" 2>/dev/null || true; } | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')"
   printf 'offsite_ok\t%s\n' "$(get offsite_ok)"
   printf 'last_drill\t%s\n' "$(get last_drill)"

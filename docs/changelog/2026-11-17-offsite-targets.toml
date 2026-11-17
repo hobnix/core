@@ -1,0 +1,5 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Guided off-site backup targets with their own password and retention"
+docs  = "backup-and-recovery#a-second-copy-outside-the-house"
+body  = """Choose S3, a REST server, SFTP or a folder in Backup > Set up off-site copy (or hs backup offsite set --kind ...). Keys and passwords go into root-only files, never onto a command line. A new off-site repository gets its own password, shown once. Old backups there are thinned out (7 daily, 4 weekly, 6 monthly) and pruned on Sundays; REST targets run append-only. hs backup list, find, restore and drill take --repo offsite. Not tested on hardware yet."""

@@ -1169,6 +1169,7 @@ def area_refresh(area):
 
 
 # the keys of the docker steps (capabilities/docker/capability.toml; scripts/docker-setup.sh accepts the same ones)
+OFFW = r"^[A-Za-z0-9/@:._+=,~%-]{1,200}$"   # one word of an off-site target (backup-change.sh checks it again)
 DOCKER_REGISTRY_HOST = r"^[a-z0-9][a-z0-9.-]{0,99}(:[0-9]{1,5})?$"
 DOCKER_SET = r"^(dockerManager=(webui|arcane|portainer|none)|dockerSize=[sml])$"
 def _config_entries(extra):
@@ -1358,7 +1359,12 @@ CHANGES = {
                [r"^drill$", r"^--count$", r"^[0-9]{1,2}$"],
                [r"^browse$", r"^--to$", ONOFF],
                [r"^toggle$", r"^--name$", NAME, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
-               [r"^offsite-now$"], [r"^offsite-off$"]],     # offsite-set stays a terminal job: an address can carry a password (rest:https://user:pw@host)
+               [r"^offsite-now$"], [r"^offsite-off$"],
+               # the guided off-site target (backup-change.sh offsite-config): keys and passwords are lines on stdin, never an argument
+               {"fixed": [r"^offsite-config$"], "stdin": True,
+                "opts": {"--kind": (r"^(s3|rest|sftp|folder|typed)$", False), "--endpoint": (OFFW, False), "--bucket": (OFFW, False), "--prefix": (OFFW, False),
+                         "--url": (OFFW, False), "--user": (OFFW, False), "--host": (OFFW, False), "--port": (r"^[0-9]{1,5}$", False),
+                         "--path": (OFFW, False), "--repo": (OFFW, False)}}],
     "shares": [[SHARE, r"^(snapshot|repair)$"],
                [SHARE, r"^snapshot$", r"^--label$", LABEL],
                [SHARE, r"^(backup|cache|auto)$", r"^--to$", ONOFF],

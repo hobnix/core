@@ -193,7 +193,7 @@ export interface SysOperations {
     method: "post";
     class: "plan";
     params: { action: string; };
-    stdin: "none";
+    stdin: "no";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
@@ -253,13 +253,13 @@ export interface SysOperations {
     lines: string[][];
   };
   "backup.start.by_action": {
-    /** do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off) */
+    /** do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off | offsite-config --kind s3|rest|sftp|folder|typed [--endpoint E --bucket B | --url U --user N | --host H --user N --path P | --path P | --repo R]: the secrets are lines on stdin, answers status done, secret password once for a new repository) */
     words: ["backup", "start", "<action>"];
     path: "/backup/start/{action}";
     method: "post";
     class: "start";
     params: { action: string; };
-    stdin: "none";
+    stdin: "no";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };

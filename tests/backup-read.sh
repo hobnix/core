@@ -20,16 +20,16 @@ has "configured${T}yes" && has "last_ok${T}1000" && has "snapshots${T}12" && has
 has "offsite${T}" && has "offsite_ok${T}900" && has "last_drill${T}800" && has "drill_ok${T}800" && pass "off-site and drill are in the state" || fail "state new keys: $out"
 has "used_bytes${T}" && has "size_bytes${T}" && pass "the byte figures are keys of their own" || fail "bytes: $out"
 has "next${T}" && pass "next run is a key (empty without systemd)" || fail "next: $out"
-printf 'sftp:me@nas:/backup\n' > "$WORK/state/backup-offsite"
+printf 'sftp:me@nas:/backup\n' > "$WORK/state/backup-offsite.repo"
 out=$(b --state)
 has "offsite${T}sftp:me@nas:/backup" && pass "the off-site repository is named" || fail "offsite: $out"
 printf 'rest:https://bob:hunter2@nas.example:8000/repo
-' > "$WORK/state/backup-offsite"
+' > "$WORK/state/backup-offsite.repo"
 out=$(b --state)
 has "offsite${T}rest:https://bob:***@nas.example:8000/repo" && pass "an off-site address with a password is masked" || fail "offsite mask: $out"
 case "$out" in *hunter2*) fail "the off-site password is in the state output" ;; *) pass "the off-site password never appears in the state output" ;; esac
 printf 'sftp:me@nas:/backup
-' > "$WORK/state/backup-offsite"
+' > "$WORK/state/backup-offsite.repo"
 
 echo "-- overview"
 out=$(b --overview)
