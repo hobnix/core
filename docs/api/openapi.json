@@ -13706,7 +13706,7 @@
   "/system/config": {
    "get": {
     "operationId": "system.config",
-    "summary": "read and change the common settings in machine.toml (language, gpu, notifyUrl, metrics, backupNewShares, incusUi, loginMessage, shareSnapshots, syncEveryHours, timeZone)",
+    "summary": "the common settings of machine.toml",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -13714,7 +13714,7 @@
       "config"
      ],
      "script": "config.sh",
-     "args": "listthe common settings of machine.toml",
+     "args": "list",
      "class": "read",
      "rest": false
     },

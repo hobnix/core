@@ -3,7 +3,8 @@
 Where Hobnix is going and what is open now. For people who want to help or to know what comes next.
 
 **The source is the GitHub project board** ([Hobnix Roadmap](https://github.com/orgs/hobnix/projects/1)), not this page. This page is a
-snapshot of it, made with `python3 scripts/roadmap-gen.py write` (it runs `gh project item-list`), and can be behind. Nothing between the markers is edited by hand. Status and priority of an issue are changed on the board.
+snapshot of it, made with `python3 scripts/roadmap-gen.py write` (it runs `gh project item-list`), and can be behind. The second table is made
+from `TODO.md` in the same way. Nothing between the markers is edited by hand. Status and priority of an issue are changed on the board.
 
 ## Positioning
 
@@ -19,6 +20,14 @@ The milestones are releases in order of work, not dates. An issue without a mile
 
 <!-- BEGIN board (python3 scripts/roadmap-gen.py write) -->
 
+### Documentation
+
+1 issues, 0 done.
+
+| Issue | Status | Priority | Title |
+| --- | --- | --- | --- |
+| [#416](https://github.com/hobnix/server/issues/416) | Backlog | - | Work through every guide on a real server and record the date |
+
 ### Later â€” after 1.0
 
 2 issues, 0 done.
@@ -30,92 +39,89 @@ The milestones are releases in order of work, not dates. An issue without a mile
 
 ### 0.1 â€” Trustworthy Foundation
 
-68 issues, 39 done.
+71 issues, 45 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
 | [#128](https://github.com/hobnix/server/issues/128) | In Progress | P0 | Epic: Unified Job System |
 | [#139](https://github.com/hobnix/server/issues/139) | In Progress | P0 | Epic: Event Architecture |
+| [#147](https://github.com/hobnix/server/issues/147) | In Progress | P0 | Epic: Reactive Live-state |
+| [#159](https://github.com/hobnix/server/issues/159) | In Progress | P0 | Epic: Reliability and Recovery |
 | [#163](https://github.com/hobnix/server/issues/163) | In Progress | P0 | Rebuild rehearsal in a VM from backup disk and passphrase (TODO A5) |
-| [#171](https://github.com/hobnix/server/issues/171) | In Review | P0 | Disk and pool failure handling review |
-| [#385](https://github.com/hobnix/server/issues/385) | In Review | - | Jobs page: show job records (history, step, progress, error) |
-| [#386](https://github.com/hobnix/server/issues/386) | In Review | - | File manager jobs: progress on the job record instead of own state files |
-| [#387](https://github.com/hobnix/server/issues/387) | In Review | - | Job record for orchestrated recipe runs: waiting state, parent/kind fields, job.waiting events (ADR 0018) |
-| [#388](https://github.com/hobnix/server/issues/388) | In Review | - | Long operations that are not jobs: update, rebuild, vault move, pkg fetch |
-| [#389](https://github.com/hobnix/server/issues/389) | In Review | - | Report step and progress from the long jobs |
-| [#390](https://github.com/hobnix/server/issues/390) | In Review | - | Domain events from backup, update/rebuild, health, UPS and power |
-| [#391](https://github.com/hobnix/server/issues/391) | In Review | - | Web: an Events view of the event log |
-| [#392](https://github.com/hobnix/server/issues/392) | In Review | - | Incus lifecycle watcher (incus monitor) as an event source |
-| [#393](https://github.com/hobnix/server/issues/393) | In Review | - | Restore the settings onto a clean install without the manual restic steps |
-| [#397](https://github.com/hobnix/server/issues/397) | In Review | - | CI: the ISO and release job must wait for the test jobs |
-| [#398](https://github.com/hobnix/server/issues/398) | In Review | - | CI: build the release ISO from the pinned nixpkgs revision |
-| [#399](https://github.com/hobnix/server/issues/399) | In Review | - | CI: release asset checksum with a bare file name, release notes from a file |
-| [#520](https://github.com/hobnix/server/issues/520) | In Review | - | Release the core from GitHub in 0.1 (bring the release workflow of #515 to develop, prove it with a beta tag) |
-| [#521](https://github.com/hobnix/server/issues/521) | In Review | - | Trust the CI release keys before v0.1.0 (release-ci in all allowed_signers files, environments and secrets) |
+| [#430](https://github.com/hobnix/server/issues/430) | In Progress | - | Test-lab: run the install, update and restore checks in an Incus VM on the server |
+| [#520](https://github.com/hobnix/server/issues/520) | In Progress | - | Release the core from GitHub in 0.1 (bring the release workflow of #515 to develop, prove it with a beta tag) |
+| [#523](https://github.com/hobnix/server/issues/523) | In Progress | - | CI check: a package that changed since the last tag must have a raised version |
+| [#534](https://github.com/hobnix/server/issues/534) | In Progress | - | VM and domain controller restore: missing guide steps, --tag host, wrong messages |
+| [#607](https://github.com/hobnix/server/issues/607) | In Progress | - | Jobs panel: a job that ended stays running until the page is reloaded |
+| [#165](https://github.com/hobnix/server/issues/165) | Testing | P0 | Run the first monthly restore-drill report |
+| [#171](https://github.com/hobnix/server/issues/171) | Testing | P0 | Disk and pool failure handling review |
+| [#385](https://github.com/hobnix/server/issues/385) | Testing | - | Jobs page: show job records (history, step, progress, error) |
+| [#386](https://github.com/hobnix/server/issues/386) | Testing | - | File manager jobs: progress on the job record instead of own state files |
+| [#387](https://github.com/hobnix/server/issues/387) | Testing | - | Job record for orchestrated recipe runs: waiting state, parent/kind fields, job.waiting events (ADR 0018) |
+| [#388](https://github.com/hobnix/server/issues/388) | Testing | - | Long operations that are not jobs: update, rebuild, vault move, pkg fetch |
+| [#389](https://github.com/hobnix/server/issues/389) | Testing | - | Report step and progress from the long jobs |
+| [#390](https://github.com/hobnix/server/issues/390) | Testing | - | Domain events from backup, update/rebuild, health, UPS and power |
+| [#391](https://github.com/hobnix/server/issues/391) | Testing | - | Web: an Events view of the event log |
+| [#392](https://github.com/hobnix/server/issues/392) | Testing | - | Incus lifecycle watcher (incus monitor) as an event source |
+| [#393](https://github.com/hobnix/server/issues/393) | Testing | - | Restore the settings onto a clean install without the manual restic steps |
+| [#414](https://github.com/hobnix/server/issues/414) | Testing | - | Interactive recipe runs: orchestrator job, question/answer protocol, wizard questions (ADR 0018 stage 3) |
+| [#417](https://github.com/hobnix/server/issues/417) | Testing | - | Run the backup additions on a server: app database dumps and VM export |
+| [#521](https://github.com/hobnix/server/issues/521) | Testing | - | Trust the CI release keys before v0.1.0 (release-ci in all allowed_signers files, environments and secrets) |
+| [#161](https://github.com/hobnix/server/issues/161) | Ready | P0 | Run the auto-rollback on the real server and record the result |
 | [#522](https://github.com/hobnix/server/issues/522) | Ready | - | Release the package repositories from GitHub (shared workflow for recipes, extensions, capabilities) |
-| [#523](https://github.com/hobnix/server/issues/523) | Ready | - | Package versions are raised by the release, not by hand (PR label, prepare-release workflow, CI check) |
-| [#147](https://github.com/hobnix/server/issues/147) | Backlog | P0 | Epic: Reactive Live-state |
-| [#159](https://github.com/hobnix/server/issues/159) | Backlog | P0 | Epic: Reliability and Recovery |
-| [#161](https://github.com/hobnix/server/issues/161) | Backlog | P0 | Run the auto-rollback on the real server and record the result |
-| [#165](https://github.com/hobnix/server/issues/165) | Backlog | P0 | Run the first monthly restore-drill report |
-| [#169](https://github.com/hobnix/server/issues/169) | Backlog | P0 | Config backup and restore as a documented, tested flow |
-| [#415](https://github.com/hobnix/server/issues/415) | Backlog | - | Run the root and VM tests and record the result |
-| [#416](https://github.com/hobnix/server/issues/416) | Backlog | - | Work through every guide on a real server and record the date |
-| [#417](https://github.com/hobnix/server/issues/417) | Backlog | - | Run the backup additions on a server: app database dumps and VM export |
-| [#430](https://github.com/hobnix/server/issues/430) | Backlog | - | Test-lab: run the install, update and restore checks in an Incus VM on the server |
 
-Done: [#121](https://github.com/hobnix/server/issues/121), [#122](https://github.com/hobnix/server/issues/122), [#123](https://github.com/hobnix/server/issues/123), [#124](https://github.com/hobnix/server/issues/124), [#125](https://github.com/hobnix/server/issues/125), [#126](https://github.com/hobnix/server/issues/126), [#127](https://github.com/hobnix/server/issues/127), [#129](https://github.com/hobnix/server/issues/129), [#131](https://github.com/hobnix/server/issues/131), [#133](https://github.com/hobnix/server/issues/133), [#135](https://github.com/hobnix/server/issues/135), [#137](https://github.com/hobnix/server/issues/137), [#141](https://github.com/hobnix/server/issues/141), [#143](https://github.com/hobnix/server/issues/143), [#145](https://github.com/hobnix/server/issues/145), [#149](https://github.com/hobnix/server/issues/149), [#151](https://github.com/hobnix/server/issues/151), [#153](https://github.com/hobnix/server/issues/153), [#155](https://github.com/hobnix/server/issues/155), [#157](https://github.com/hobnix/server/issues/157), [#167](https://github.com/hobnix/server/issues/167), [#252](https://github.com/hobnix/server/issues/252), [#253](https://github.com/hobnix/server/issues/253), [#286](https://github.com/hobnix/server/issues/286), [#288](https://github.com/hobnix/server/issues/288), [#289](https://github.com/hobnix/server/issues/289), [#290](https://github.com/hobnix/server/issues/290), [#291](https://github.com/hobnix/server/issues/291), [#292](https://github.com/hobnix/server/issues/292), [#293](https://github.com/hobnix/server/issues/293), [#294](https://github.com/hobnix/server/issues/294), [#295](https://github.com/hobnix/server/issues/295), [#296](https://github.com/hobnix/server/issues/296), [#297](https://github.com/hobnix/server/issues/297), [#298](https://github.com/hobnix/server/issues/298), [#322](https://github.com/hobnix/server/issues/322), [#323](https://github.com/hobnix/server/issues/323), [#324](https://github.com/hobnix/server/issues/324), [#396](https://github.com/hobnix/server/issues/396)
+Done: [#121](https://github.com/hobnix/server/issues/121), [#122](https://github.com/hobnix/server/issues/122), [#123](https://github.com/hobnix/server/issues/123), [#124](https://github.com/hobnix/server/issues/124), [#125](https://github.com/hobnix/server/issues/125), [#126](https://github.com/hobnix/server/issues/126), [#127](https://github.com/hobnix/server/issues/127), [#129](https://github.com/hobnix/server/issues/129), [#131](https://github.com/hobnix/server/issues/131), [#133](https://github.com/hobnix/server/issues/133), [#135](https://github.com/hobnix/server/issues/135), [#137](https://github.com/hobnix/server/issues/137), [#141](https://github.com/hobnix/server/issues/141), [#143](https://github.com/hobnix/server/issues/143), [#145](https://github.com/hobnix/server/issues/145), [#149](https://github.com/hobnix/server/issues/149), [#151](https://github.com/hobnix/server/issues/151), [#153](https://github.com/hobnix/server/issues/153), [#155](https://github.com/hobnix/server/issues/155), [#157](https://github.com/hobnix/server/issues/157), [#167](https://github.com/hobnix/server/issues/167), [#169](https://github.com/hobnix/server/issues/169), [#252](https://github.com/hobnix/server/issues/252), [#253](https://github.com/hobnix/server/issues/253), [#286](https://github.com/hobnix/server/issues/286), [#288](https://github.com/hobnix/server/issues/288), [#289](https://github.com/hobnix/server/issues/289), [#290](https://github.com/hobnix/server/issues/290), [#291](https://github.com/hobnix/server/issues/291), [#292](https://github.com/hobnix/server/issues/292), [#293](https://github.com/hobnix/server/issues/293), [#294](https://github.com/hobnix/server/issues/294), [#295](https://github.com/hobnix/server/issues/295), [#296](https://github.com/hobnix/server/issues/296), [#297](https://github.com/hobnix/server/issues/297), [#298](https://github.com/hobnix/server/issues/298), [#322](https://github.com/hobnix/server/issues/322), [#323](https://github.com/hobnix/server/issues/323), [#324](https://github.com/hobnix/server/issues/324), [#396](https://github.com/hobnix/server/issues/396), [#397](https://github.com/hobnix/server/issues/397), [#398](https://github.com/hobnix/server/issues/398), [#399](https://github.com/hobnix/server/issues/399), [#415](https://github.com/hobnix/server/issues/415), [#567](https://github.com/hobnix/server/issues/567)
 
 ### 0.2 â€” Safe Updates
 
-14 issues, 3 done.
+14 issues, 8 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#231](https://github.com/hobnix/server/issues/231) | In Review | P0 | Update channels: stable (tags), beta (release candidates), edge (develop); `hs update` follows the channel; web setting |
-| [#233](https://github.com/hobnix/server/issues/233) | In Review | P0 | Release process: develop -> release/* -> main + tag; branch protection on main and develop |
-| [#432](https://github.com/hobnix/server/issues/432) | In Review | - | Test-lab: rollback, restore, pool and web page stages |
-| [#433](https://github.com/hobnix/server/issues/433) | In Review | - | Security review of the web service: threat model, sessions, request forgery, rate limits |
-| [#435](https://github.com/hobnix/server/issues/435) | In Review | - | Upgrade test: install the previous release, update to the new one |
-| [#436](https://github.com/hobnix/server/issues/436) | In Review | - | Policy for the nixpkgs pin and NixOS release changes |
-| [#437](https://github.com/hobnix/server/issues/437) | In Review | - | Decide the ADRs that already have merged code |
-| [#438](https://github.com/hobnix/server/issues/438) | In Review | - | Decide how far the Rust migration goes per release |
-| [#458](https://github.com/hobnix/server/issues/458) | In Review | - | Write down the positioning: who Hobnix is for, and what is out of scope before 1.0 |
-| [#464](https://github.com/hobnix/server/issues/464) | In Review | - | Decide a release rhythm (a release every few weeks with what is verified) |
+| [#231](https://github.com/hobnix/server/issues/231) | Testing | P0 | Update channels: stable (tags), beta (release candidates), edge (develop); `hs update` follows the channel; web setting |
+| [#233](https://github.com/hobnix/server/issues/233) | Testing | P0 | Release process: develop -> release/* -> main + tag; branch protection on main and develop |
+| [#432](https://github.com/hobnix/server/issues/432) | Testing | - | Test-lab: rollback, restore, pool and web page stages |
+| [#435](https://github.com/hobnix/server/issues/435) | Testing | - | Upgrade test: install the previous release, update to the new one |
+| [#436](https://github.com/hobnix/server/issues/436) | Testing | - | Policy for the nixpkgs pin and NixOS release changes |
 | [#439](https://github.com/hobnix/server/issues/439) | Blocked | - | CI: test develop after each merge, faster quick tests, required checks |
 
-Done: [#185](https://github.com/hobnix/server/issues/185), [#219](https://github.com/hobnix/server/issues/219), [#254](https://github.com/hobnix/server/issues/254)
+Done: [#185](https://github.com/hobnix/server/issues/185), [#219](https://github.com/hobnix/server/issues/219), [#254](https://github.com/hobnix/server/issues/254), [#433](https://github.com/hobnix/server/issues/433), [#437](https://github.com/hobnix/server/issues/437), [#438](https://github.com/hobnix/server/issues/438), [#458](https://github.com/hobnix/server/issues/458), [#464](https://github.com/hobnix/server/issues/464)
 
 ### 0.3 â€” Foundations
 
-9 issues, 1 done.
+10 issues, 4 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
+| [#560](https://github.com/hobnix/server/issues/560) | In Review | - | Live state: measure SQLite write load and changed latency on a real server |
+| [#423](https://github.com/hobnix/server/issues/423) | Testing | - | Web: remove the old routes that still redirect |
+| [#482](https://github.com/hobnix/server/issues/482) | Testing | - | Every read has a topic or a written reason to poll (a check that only allows fewer timers) |
+| [#491](https://github.com/hobnix/server/issues/491) | Testing | - | The `hs` commands print English only: remove the German catalog |
 | [#420](https://github.com/hobnix/server/issues/420) | Backlog | - | Notifications: run channels, routing and the web page on a server; choose the next providers |
-| [#423](https://github.com/hobnix/server/issues/423) | Backlog | - | Web: remove the old routes that still redirect |
-| [#431](https://github.com/hobnix/server/issues/431) | Backlog | - | Retire TODO.md: /work, the session hook and the roadmap page read the board |
-| [#443](https://github.com/hobnix/server/issues/443) | Backlog | - | Web: ratchet test, raw form elements and own styles may only go down |
-| [#444](https://github.com/hobnix/server/issues/444) | Backlog | - | Web: form field components (Field, text input, select, textarea, checkbox) |
 | [#481](https://github.com/hobnix/server/issues/481) | Backlog | - | Live state on by default, one mode, one store (decide: Redis or the state database) |
-| [#482](https://github.com/hobnix/server/issues/482) | Backlog | - | Every read has a topic or a written reason to poll (a check that only allows fewer timers) |
-| [#491](https://github.com/hobnix/server/issues/491) | Backlog | - | The `hs` commands print English only: remove the German catalog |
 
-Done: [#442](https://github.com/hobnix/server/issues/442)
+Done: [#431](https://github.com/hobnix/server/issues/431), [#442](https://github.com/hobnix/server/issues/442), [#443](https://github.com/hobnix/server/issues/443), [#444](https://github.com/hobnix/server/issues/444)
 
 ### 0.4 â€” Install and Onboarding
 
-7 issues, 0 done.
+14 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
+| [#183](https://github.com/hobnix/server/issues/183) | In Review | P0 | First-run web wizard with a one-time console token |
+| [#489](https://github.com/hobnix/server/issues/489) | In Review | - | A public website: landing page and the documentation outside the repository |
+| [#573](https://github.com/hobnix/server/issues/573) | In Review | - | Pools: any number and any name, instead of bulk and fast |
+| [#574](https://github.com/hobnix/server/issues/574) | In Review | - | A server without an SSD pool: boot, Incus and messages |
+| [#576](https://github.com/hobnix/server/issues/576) | In Review | - | Single-disk install: say what is missing, keep apps usable |
+| [#581](https://github.com/hobnix/server/issues/581) | In Review | - | First-run checklist without fixed pool names |
+| [#181](https://github.com/hobnix/server/issues/181) | Testing | P0 | Storage discovery and disk adoption in the wizard |
+| [#577](https://github.com/hobnix/server/issues/577) | Testing | - | Leftover author names: ad.home.lan in hs-nss-warm, CA subject |
+| [#580](https://github.com/hobnix/server/issues/580) | Testing | - | Minimal installed system serves the web interface |
 | [#173](https://github.com/hobnix/server/issues/173) | Backlog | P0 | Epic: Installation and Onboarding |
 | [#175](https://github.com/hobnix/server/issues/175) | Backlog | P0 | Boot the ISO on real hardware or a VM, record what breaks |
 | [#179](https://github.com/hobnix/server/issues/179) | Backlog | P0 | Network setup and validation step |
-| [#181](https://github.com/hobnix/server/issues/181) | Backlog | P0 | Storage discovery and disk adoption in the wizard |
-| [#183](https://github.com/hobnix/server/issues/183) | Backlog | P0 | First-run web wizard with a one-time console token |
 | [#459](https://github.com/hobnix/server/issues/459) | Backlog | - | Epic: Works on a machine that is not the author's |
-| [#489](https://github.com/hobnix/server/issues/489) | Backlog | - | A public website: landing page and the documentation outside the repository |
+| [#575](https://github.com/hobnix/server/issues/575) | Backlog | - | Local users and Samba without a domain controller |
 
 ### 0.5 â€” Capabilities Repository
 
@@ -305,6 +311,58 @@ Done: [#256](https://github.com/hobnix/server/issues/256)
 Done: [#209](https://github.com/hobnix/server/issues/209), [#211](https://github.com/hobnix/server/issues/211), [#213](https://github.com/hobnix/server/issues/213), [#216](https://github.com/hobnix/server/issues/216), [#270](https://github.com/hobnix/server/issues/270), [#315](https://github.com/hobnix/server/issues/315), [#316](https://github.com/hobnix/server/issues/316), [#317](https://github.com/hobnix/server/issues/317)
 
 <!-- END board -->
+
+## Open work from TODO.md
+
+`TODO.md` is the working list of the maintainers: bigger pieces than one issue, with the history of what was merged and what was run on a
+real server. An item can appear here and on the board.
+
+<!-- BEGIN todo (python3 scripts/roadmap-gen.py write) -->
+
+| Section | Done | Items |
+| --- | --- | --- |
+| A. Make what exists trustworthy | 1 | 7 |
+| B. Features that fit the design | 0 | 9 |
+| C. Recipes (when one is needed, we do it) | 0 | 0 |
+| D. Nodes: every server is a node of one repo (design agreed 2026-10-27) | 0 | 4 |
+| E. Notifications as a capability (decided 2026-10-27) | 0 | 3 |
+| F. Web interface: one source of truth per object (decided 2026-10-27) | 2 | 5 |
+| G. File manager (description 2026-10-28) | 2 | 5 |
+
+Not done yet:
+
+| Item | State | What |
+| --- | --- | --- |
+| A1 | in progress | CI on pull requests only (action minutes ran out when every push ran) |
+| A2 | needs a decision | Work through the guides on the real server (steps marked "Not tested on hardware yet.") in blocks (first hs... |
+| A3 | needs a decision | Run the recipes never run on the server, in this order |
+| A5 | open | Rebuild rehearsal in a VM from only the backup disk and the passphrase (turns docs/backup-and-recovery.md f... |
+| A6 | in progress | Monthly restore-drill report pushed to ntfy (the drills exist |
+| A7 | open | Housekeeping |
+| B8 | in progress | hs update with auto-rollback |
+| B9 | in progress | One interface for app-database dumps (Postgres for Immich / Synapse / Authentik, SQLite for the arr apps) s... |
+| B10 | in progress | VM coverage in hs backup ct (Incus VMs, not only the domain controller) |
+| B11 | open | Later: a cloud (or other) backup target next to the local disk. Not needed now. (The backup to the other se... |
+| B12 | in progress | Capacity and trend alerts (pool fill forecast, SSD wear, cache-mover backlog, backup growth, from state.db... |
+| B13 | in progress | Notification routing |
+| B14 | in progress | Web: the proxyserver pages need the keys the status document still lacks (mail, watcher, game_ports, certif... |
+| B15 | in progress | arr: Recycling Bin in Radarr and Sonarr (set by hand now), Remove Completed on the SABnzbd client, the Jell... |
+| B16 | open | Investigate the sudo stall of 3 to 5 s (winbind group lookup suspected; sampler log /tmp/slowsudo.log) |
+| D1 | in progress | Node registry (hs node add\|list\|remove, local node first), web tree with nodes at the top, the proxyserver... |
+| D2 | open | The cousin's server as a read-only node (reuses hs sys deck, the one-read status document) |
+| D3 | in progress | A minimal base profile (users, SSH, hs, Tailscale, health, notify) and the edge capabilities (mail, game po... |
+| D4 | open | Cut over side by side (the VPS carries the MX and the public ports) |
+| E1 | in progress | Plan and step 1 (channel store, provider interface, ntfy as provider #1, hs notify channel ...) |
+| E2 | in progress | The Notifications web page |
+| E3 | in progress | A second provider (Matrix or email), then the rest as needed |
+| F3 | in progress | ; not run in a browser against the real server) Redesign, then retire the duplicated routes |
+| F4 | in progress | Game streaming and Posters are capabilities games and posters, off by default (nothing in the tree on a fre... |
+| F5 | in progress | Extensions: a package manifest with a [web] section (page as data: reads, actions, a fixed layout; no JavaS... |
+| G1 | open | Design from the owner, answers to the open questions at the end of the plan |
+| G4 | open | Safety switch: fileManagerWrite is off by default. Run the file manager checks in a VM (copy, move, delete,... |
+| G5 | open | Not built: fm du and Calculate size, pause, trash, hs fm ... user commands, the editable path field, owner... |
+
+<!-- END todo -->
 
 ## How to take part
 
