@@ -1135,6 +1135,50 @@
     }
    }
   },
+  "/backup/rules/{ct}": {
+   "get": {
+    "operationId": "backup.rules.by_ct",
+    "summary": "which parts of an instance are in the backup, as data: partial yes|no, include path and bytes, exclude glob, dump path and bytes (- when the size is unknown)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "backup",
+      "rules",
+      "<ct>"
+     ],
+     "script": "backup.sh",
+     "args": "--rules {1}",
+     "class": "read",
+     "rest": false
+    },
+    "parameters": [
+     {
+      "name": "ct",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/backup/scheduled": {
    "post": {
     "operationId": "backup.scheduled",

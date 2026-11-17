@@ -197,6 +197,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "backup.rules.by_ct": {
+    /** which parts of an instance are in the backup, as data: partial yes|no, include path and bytes, exclude glob, dump path and bytes (- when the size is unknown) */
+    words: ["backup", "rules", "<ct>"];
+    path: "/backup/rules/{ct}";
+    method: "get";
+    class: "read";
+    params: { ct: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "backup.scheduled": {
     /** nightly backup (systemd) */
     words: ["backup", "scheduled"];

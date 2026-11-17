@@ -129,6 +129,11 @@ user	backup config restore	backup.sh	config restore	put machine.toml and machine
 user	backup browse	backup.sh	browse	look through the backup read-only	das Backup schreibgeschützt durchsehen	nohelp,topic:backup,changes,capability:backup
 user	backup init	backup.sh	init	make a disk the backup disk: hs backup init <device>	eine Platte zur Backup-Platte machen: hs backup init <Gerät>	nohelp,topic:backup,changes,capability:backup
 user	backup offsite	backup.sh	offsite	second copy elsewhere: hs backup offsite set <repo>|now|off	zweite Kopie woanders: hs backup offsite set <Repo>|now|off	nohelp,topic:backup,changes,capability:backup
+user	backup ct <ct> paths	backup.sh	ct {1} paths	which parts of an instance are in the backup (in and out, with sizes); no rules = the whole instance	welche Teile einer Instanz im Backup sind (drin und draußen, mit Größen); ohne Regeln die ganze Instanz	nohelp,topic:backup,reads,capability:backup
+user	backup ct <ct> include <path>	backup.sh	ct {1} include {2}	back up only chosen parts of an instance: add an absolute path inside it (a partial backup; the database dump stays in)	nur ausgewählte Teile einer Instanz sichern: einen absoluten Pfad darin hinzufügen (Teil-Backup; der Datenbank-Dump bleibt dabei)	nohelp,topic:backup,changes,capability:backup
+user	backup ct <ct> exclude <glob>	backup.sh	ct {1} exclude {2}	leave a part out of a partial backup (a restic pattern; a leading / is the root of the instance)	einen Teil aus einem Teil-Backup ausnehmen (restic-Muster; ein führendes / ist die Wurzel der Instanz)	nohelp,topic:backup,changes,capability:backup
+user	backup ct <ct> reset <path>	backup.sh	ct {1} reset {2}	forget the rule for one path	die Regel für einen Pfad vergessen	nohelp,topic:backup,changes,capability:backup
+user	backup ct <ct> reset	backup.sh	ct {1} reset	forget all rules: the whole instance is backed up again	alle Regeln vergessen: wieder die ganze Instanz sichern	nohelp,topic:backup,changes,capability:backup
 user	backup <share> on	backup.sh	{1} on	put a share into the backup	eine Freigabe ins Backup aufnehmen	nohelp,topic:backup,changes,capability:backup
 user	backup <share> off	backup.sh	{1} off	take a share out of the backup	eine Freigabe aus dem Backup nehmen	nohelp,topic:backup,changes,capability:backup
 user	backup ct <ct> on	backup.sh	ct {1} on	put an instance into the backup	eine Instanz ins Backup aufnehmen	nohelp,topic:backup,changes,capability:backup
@@ -363,6 +368,7 @@ sys	sys shares undelete <share>	share-undelete.sh	{1} {rest}	bring a kept folder
 sys	sys backup overview	backup.sh	--overview	every share, instance and always-included part with its backup switch and size	-
 sys	sys backup plan <action>	backup-change.sh	plan {1} {rest}	what switching a share or instance, backing up now, a check, a restore drill or browsing would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused, 2 something missing)	-
 sys	sys backup start <action>	backup-change.sh	start {1} {rest}	do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off)	-
+sys	sys backup rules <ct>	backup.sh	--rules {1}	which parts of an instance are in the backup, as data: partial yes|no, include path and bytes, exclude glob, dump path and bytes (- when the size is unknown)	-
 sys	sys backup snapshots <tag>	backup.sh	--snapshots {1}	the snapshots with one tag (shares, host or ct:<name>)	-
 sys	sys backup snapshots	backup.sh	--snapshots	the snapshots of the shares in the backup (id, time, tags)	-
 sys	sys shares plan <share> <action>	share-change.sh	plan {1} {2} {rest}	what a change of a share would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
