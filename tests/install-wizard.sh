@@ -36,6 +36,13 @@ check_out "hostId is a new 8-digit hex value (no CHANGEME)" '^"[0-9a-f]{8}"$' ec
 check "the preset was applied (runtime setting written)" test -f "$T/var/lib/hs/settings/backupNewShares"
 check_eq "a new home server gets an empty pools line" "{}" "$(get pools)"
 
+echo "-- the bulk type"
+T2=$WORK/target-snapraid
+$W --disk sda --hostname myserver --key "$KEY" --preset minimal --bulk-type snapraid --target "$T2" --repo "$REPO" >/dev/null 2>&1 || true
+check_eq "--bulk-type snapraid is written to machine.toml" '"snapraid"' "$(HS_MACHINE_FILE=$T2/etc/nixos/machine.toml python3 "$SCRIPTS/machine-toml.py" get "$T2/etc/nixos/machine.toml" bulkType --json 2>/dev/null)"
+out=$($W --dry-run --disk sda --hostname myserver --key "$KEY" --bulk-type ext4 --target "$T" --repo "$REPO" 2>&1 || true)
+check_out "a bulk type that does not exist is refused" "is not a bulk type" echo "$out"
+
 echo "-- what it refuses"
 out=$($W --dry-run --disk sda --hostname "bad name" --key "$KEY" --target "$T" --repo "$REPO" 2>&1 || true)
 check_out "a server name with a space" "not a usable server name" echo "$out"
