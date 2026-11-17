@@ -207,4 +207,36 @@ check_out "a core recipe at level 9 without the contract is an error" 'missing: 
 echo "-- check-draft sees the fields"
 check_out "a draft with a bad category is an error" "error${tab}category${tab}category is not one of" bash -c "sed 's/tools/stuff/' $AF/packages/fixstore/package.toml | $PKG check-draft; true"
 
+echo "-- protocol, service and timeout keys (0.8 step 1: parse and validate only)"
+PT=$WORK/prototree; mkdir -p "$PT/capabilities"
+protocase() {   # protocase <label> <expected text | ""> <lines appended to package.toml> [commands.tsv flags for the row]
+  rm -rf "$PT/capabilities/fixext"; cp -r "$FIX/capabilities/fixext" "$PT/capabilities/fixext"
+  printf '%b' "$3" >> "$PT/capabilities/fixext/package.toml"
+  if [ -n "$4" ]; then printf 'user\text fixext one\t@/one.sh\t-\thelp\t-\t%s\n' "$4" >> "$PT/capabilities/fixext/commands.tsv"; fi
+  if [ -z "$2" ]; then check "$1" bash -c "HS_PACKAGES_ROOT=$PT $PKG validate"
+  else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$PT $PKG validate; true"; fi
+}
+protocase "an old manifest validates unchanged" "" ''
+protocase "protocol [1] below the required level is named" 'protocol needs requires_core = ">=10"' 'protocol = [1]\n'
+protocase "protocol [2] is refused" 'protocol must be \[1\]' 'protocol = [2]\n'
+protocase "protocol [1, 2] is refused" 'protocol must be \[1\]' 'protocol = [1, 2]\n'
+protocase "protocol that is a string is refused" 'protocol must be a list of numbers' 'protocol = "1"\n'
+protocase "an empty protocol list is refused" 'protocol must be a list of numbers' 'protocol = []\n'
+protocase "a service without exec is named" 'service: exec missing' '[service]\nsubscribe = []\n'
+protocase "a service exec that leaves the package is refused" 'service: exec must be' '[service]\nexec = "@/../x.sh"\n'
+protocase "a service with an unknown key is refused" 'service: unknown key restart' '[service]\nexec = "@/s.py"\nrestart = true\n'
+protocase "a health_interval out of range is refused" 'health_interval must be' '[service]\nexec = "@/s.py"\nhealth_interval = 1\n'
+protocase "a subscribe that is not a list of globs is refused" 'subscribe must be a list' '[service]\nexec = "@/s.py"\nsubscribe = "all"\n'
+protocase "a service below the required level is named" '\[service\] needs requires_core = ">=10"' '[service]\nexec = "@/s.py"\n'
+protocase "a service that is not a table is refused" 'service must be a' 'service = 3\n'
+protocase "a timeout of 0 is refused" 'timeout must be a whole number' '' 'reads,timeout:0'
+protocase "a timeout of 3601 is refused" 'timeout must be a whole number' '' 'reads,timeout:3601'
+protocase "a timeout that is not a number is refused" 'timeout must be a whole number' '' 'timeout:soon'
+protocase "a timeout twice on one row is refused" 'timeout is given twice' '' 'timeout:5,timeout:6'
+protocase "a timeout of 3600 is valid" "" '' 'reads,timeout:3600'
+check_eq "a valid protocol and service pass at the level that allows them" "" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_protocol.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.manifest_problems({'requires_core': '>=10', 'protocol': [1], 'service': {'exec': '@/s.py', 'subscribe': ['pkg.*'], 'health_interval': 30}}))" | sed 's/^\[\]$//')"
+
 finish
