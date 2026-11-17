@@ -315,9 +315,50 @@ adopt_entries=()
 adopt_loose=0
 # the folder an adopted folder becomes inside shares/: per disk by default
 # ("Media" on data-02 -> data-02-media: lowercase, spaces to dashes), or the same name (merge)
+# a folder with a name the share code keeps for itself is renamed with a suffix when merged (docs/PLAN-storage-nas.md D10)
+adopt_reserved() { case "$(tr 'A-Z' 'a-z' <<<"$1")" in shares|sensitive|global|homes|printers) return 0 ;; esac; return 1; }
 adopt_target() {   # adopt_target <label> <folder>
-  if $merge_folders; then printf '%s\n' "$2"
+  if $merge_folders; then
+    if adopt_reserved "$2"; then printf '%s-adopted\n' "$2"; else printf '%s\n' "$2"; fi
   else printf '%s-%s\n' "${1#bulk-}" "$(tr 'A-Z ' 'a-z-' <<<"$2")"; fi
+}
+# Encrypted Unraid disks (D11). HS_UNRAID_PASSPHRASE_FILE holds the Unraid passphrase (0600, read once, deleted). When this server has no encrypted
+# disk yet, that passphrase becomes the server's; otherwise it only opens the disk and a key slot with this server's passphrase is added after the
+# header backup, once the parity is complete (adopt_luks_slot), because it writes to the disk.
+unraid_pass=""
+adopt_slots=()   # LUKS partitions opened with the Unraid passphrase only
+adopt_unraid_pass() {
+  [ -z "$unraid_pass" ] || return 0
+  if [ -n "${HS_UNRAID_PASSPHRASE_FILE:-}" ] && [ -f "$HS_UNRAID_PASSPHRASE_FILE" ]; then
+    unraid_pass=$(cat "$HS_UNRAID_PASSPHRASE_FILE"); rm -f "$HS_UNRAID_PASSPHRASE_FILE"
+  fi
+  [ -n "$unraid_pass" ]
+}
+adopt_luks_open() {   # adopt_luks_open <luks partition>: 0 when it is open afterwards (crypt_pass or unraid_pass opened it)
+  local p=$1
+  if adopt_unraid_pass && [ -z "$crypt_pass" ] && [ -z "${HS_DISK_PASSPHRASE:-}" ] && [ -z "${HS_DISK_PASSPHRASE_FILE:-}" ]      && [ ! -f "$crypt_keyfile" ] && [ ! -s "$crypt_uuids" ] && [ ! -s "$crypt_state/vault-uuid" ]; then
+    crypt_pass=$unraid_pass          # the first encrypted disk: the Unraid passphrase becomes this server's
+    luks_open "$p"; return
+  fi
+  if crypt_get_pass && luks_open "$p"; then return 0; fi
+  adopt_unraid_pass || return 1
+  printf %s "$unraid_pass" | cryptsetup open --key-file - "$p" "$(luks_name "$p")" 2>/dev/null || return 1
+  adopt_slots+=("$p")
+}
+adopt_luks_slot() {   # adopt_luks_slot <luks partition>: header backup, then this server's passphrase as one more key slot
+  local p=$1 hdr=${HS_LUKS_HEADERS:-$crypt_state/luks-headers} f k1 k2 u
+  case " ${adopt_slots[*]} " in *" $p "*) ;; *) return 0 ;; esac
+  u=$(cryptsetup luksUUID "$p")
+  mkdir -p "$hdr"; chmod 700 "$hdr"
+  f=$hdr/$u.img
+  [ -e "$f" ] || (umask 077; cryptsetup luksHeaderBackup "$p" --header-backup-file "$f") || { echo "Header backup of $p failed: nothing was changed on it." >&2; return 1; }
+  crypt_get_pass || return 1
+  mkdir -p "$crypt_run"; chmod 700 "$crypt_run"
+  k1=$(mktemp "$crypt_run/slot-old.XXXXXX"); k2=$(mktemp "$crypt_run/slot-new.XXXXXX")
+  printf %s "$unraid_pass" > "$k1"; printf %s "$crypt_pass" > "$k2"
+  cryptsetup luksAddKey --batch-mode --key-file "$k1" "$p" "$k2" >/dev/null 2>&1; local rc=$?
+  rm -f "$k1" "$k2"
+  [ "$rc" -eq 0 ] || { echo "Could not add this server's passphrase to $p (header backup: $f)." >&2; return 1; }
 }
 adopt_fs() {   # adopt_fs <by-id name>  ->  "device fstype luksdevice|-"  (LUKS: the opened /dev/mapper device)
   local dev="/dev/disk/by-id/$1" path type fstype found=() luks="-" mapper inner
@@ -331,7 +372,9 @@ adopt_fs() {   # adopt_fs <by-id name>  ->  "device fstype luksdevice|-"  (LUKS:
       crypto_LUKS)
         # already open (unlocked at boot, or through the twin path of a dual-port disk): no passphrase needed, the mapper has the same name
         if [ ! -e "/dev/mapper/$(luks_name "$path")" ]; then
-          crypt_get_pass || { echo "No passphrase for $1." >&2; return 1; }
+          if ! adopt_luks_open "$path"; then
+            echo "$1: neither this server's passphrase nor the Unraid passphrase opens $path (a disk that is opened with a key file only can not be adopted: copy it with hs disk temp)." >&2; return 1
+          fi
         fi
         if ! luks_open "$path"; then echo "$1: the passphrase does not open $path (is it the passphrase of these disks? A disk that is opened with a key file only can not be adopted: copy it with hs disk temp)." >&2; return 1; fi
         mapper="/dev/mapper/$(luks_name "$path")"
@@ -1089,7 +1132,8 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       for d in "${disks[@]}"; do [ "${d%%$'\t'*}" = "$c" ] && line="$d"; done
       [ -n "$line" ] || { echo "'$c' is not a free disk (unknown, mounted, or already in use)."; exit 1; }
       IFS=$'\t' read -r id size _ _ <<<"$line"
-      part_fs=$(adopt_fs "$id") || exit 1
+      # not in $(...): the passphrases and the key-slot list it learns must stay in this shell
+      fsout=$(mktemp); adopt_fs "$id" >"$fsout" || { rm -f "$fsout"; exit 1; }; part_fs=$(<"$fsout"); rm -f "$fsout"
       read -r part fs luksdev <<<"$part_fs"
       adopt_inspect "$part" "$fs" || exit 1
       next_data_label
@@ -1106,10 +1150,17 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
         fi
       fi
       for e in "${adopt_entries[@]}"; do
-        case "$(adopt_target "$label" "$e" | tr A-Z a-z)" in shares|sensitive|global|homes|printers)
-          pl "      note: '$e' is a reserved share name, hs share repair will not publish it" ;;
-        esac
+        if adopt_reserved "$e"; then
+          if $merge_folders; then pl "      renamed: '$e' is a reserved share name, it becomes '$(adopt_target "$label" "$e")'"
+          else pl "      note: '$e' is a reserved share name, hs share repair will not publish it"; fi
+        fi
       done
+      if [ "$luksdev" != - ]; then
+        case " ${adopt_slots[*]} " in
+          *" $luksdev "*) pl "      encryption: this server's passphrase is added as a key slot after the header backup (a write to the disk header, after the parity is complete)" ;;
+          *) pl "      encryption: the passphrase of this server opens it" ;;
+        esac
+      fi
       [ "$adopt_loose" -eq 0 ] || pl "      $adopt_loose loose file(s) in the top folder stay where they are"
       todo+=("$part"$'\t'"$fs"$'\t'"$label"$'\t'"$luksdev")
     done
@@ -1195,6 +1246,7 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
 
     for t in "${todo[@]}"; do
       IFS=$'\t' read -r part fs label luksdev <<<"$t"
+      if [ "$luksdev" != - ]; then adopt_luks_slot "$luksdev" || exit 1; fi
       mp=$(disk_dir "$label")
       u=$(blkid -p -o value -s UUID "$part" 2>/dev/null || true)
       adopt_label "$part" "$fs" "$label" || { rc=$?

@@ -1,0 +1,7 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Take over an Unraid server in one guided step: hs migrate unraid"
+docs  = "storage-and-disks"
+body  = """
+`hs migrate unraid` (web: Pools, Take over Unraid) shows one plan for the data disks, the old Unraid parity disk and an optional spare disk, then runs as a background job. Folders of the same name become one share, reserved names get the suffix -adopted, files keep their owner, the old parity disks become parity only after the first sync, and encrypted disks get this server's passphrase as an extra key slot after a header backup. Not tested on hardware yet.
+"""

@@ -7602,6 +7602,130 @@
     }
    }
   },
+  "/migrate/plan/unraid": {
+   "post": {
+    "operationId": "migrate.plan.unraid",
+    "summary": "what taking over an Unraid server would do, as data: status, candidate (disks to pick, when none is given), disk, plan lines, confirm_name, long, option (never asks; exit 0 ok, 1 refused, 2 something is missing; with --unlock one JSON line with the passphrases on stdin)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "migrate",
+      "plan",
+      "unraid"
+     ],
+     "script": "migrate-unraid.sh",
+     "args": "plan {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin: the secret or the document, never in argv or the environment"
+    },
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/migrate/start/unraid": {
+   "post": {
+    "operationId": "migrate.start.unraid",
+    "summary": "take over an Unraid server as a background job; needs --confirm <name> (the passphrases of encrypted disks as one JSON line on stdin with --unlock)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "migrate",
+      "start",
+      "unraid"
+     ],
+     "script": "migrate-unraid.sh",
+     "args": "start {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/monitor/disks": {
    "get": {
     "operationId": "monitor.disks",

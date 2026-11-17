@@ -15,6 +15,7 @@
   import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
+  import MigrateUnraid from '../forms/storage/MigrateUnraid.svelte';
   import ReplaceMember from '../forms/storage/ReplaceMember.svelte';
   import RemoveMember from '../forms/storage/RemoveMember.svelte';
   import ConvertPool from '../forms/storage/ConvertPool.svelte';
@@ -169,6 +170,7 @@
       <Button tooltip={'Back to the list of pools'} onclick={() => go('/storage/pools')}><i class="ph ph-caret-left"></i>All pools</Button>
       <Button disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>
       {#if snap}<Button disabled={why('') !== ''} tooltip={why('Bring a disk that already holds files into the pool')} onclick={() => addPool('adopt')}><i class="ph ph-hand-arrow-down"></i>Adopt disks</Button>{/if}
+      {#if snap}<Button disabled={why('') !== ''} tooltip={why('Take over the disks of an Unraid server: merged shares, the old parity disk becomes parity')} onclick={() => openCreate(MigrateUnraid, { pool })}><i class="ph ph-arrow-bend-down-right"></i>Take over Unraid</Button>{/if}
       <Button variant="primary" icon={snap ? 'arrows-clockwise' : 'broom'} disabled={unavailable || notCreated} busy={snap ? jobRunning('system', ['sync']) : jobRunning('system', ['scrub', '--pool', pool])} tooltip={runTitle}
         onclick={() => (snap ? openPlan('system', ['sync'], 'Sync parity') : openPlan('system', ['scrub', '--pool', pool], `Scrub ${pool}`))}>{snap ? 'Sync parity now' : 'Scrub now'}</Button>
     {/snippet}

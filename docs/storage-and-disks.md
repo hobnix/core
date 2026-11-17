@@ -496,6 +496,40 @@ erased.
 
    Leave out `--encrypt` if the disks are not encrypted.
 
+### One guided flow: `hs migrate unraid`
+
+The steps above as one command. It looks at the disks, shows **one plan**, asks you to type one name and then runs as a background job.
+In the web interface it is Pools, **Take over Unraid**. Not tested on hardware yet.
+
+```bash
+hs migrate unraid --dry-run        # asks which disks, shows the plan, changes nothing
+sudo hs migrate unraid --disks <data-disk>,<data-disk> --parity <old-parity-disk> --spare <spare-disk>
+```
+
+- `--disks` are the Unraid data disks (xfs, btrfs, or either inside LUKS). `--parity` is the old Unraid parity disk or disks, typed by
+  their `/dev/disk/by-id` name; a disk that holds a file system is refused as parity, so a mistyped data disk is never erased.
+  `--spare` is optional (see below). `hs migrate check` looks at the disks first.
+- **Shares are merged**, as in Unraid: a folder that exists on several disks becomes one share. `--per-disk` gives every folder its own
+  share `<disk>-<folder>` instead. A folder with a reserved name (`shares`, `sensitive`, `global`, `homes`, `printers`) is renamed with the
+  suffix `-adopted`; the plan lists each rename.
+- **Ownership:** files keep their owner `nobody:users` (99:100); Samba reads them through the share owner. `--chown` hands them over (slow on
+  big disks).
+- **With a spare disk** (at least as large as the largest data disk): the data disks are mounted read-only and nothing is written to them
+  until the parity on the spare disk is complete. You type the name of the spare disk. **Without one:** labels are written and folders move
+  first, the old parity disk is erased and added as the first parity, and the plan says the data is not protected until its sync ends. You
+  then type the name of the old parity disk.
+- **The old parity disks become parity only after the first sync has finished**, one after the other, each followed by a sync. They are
+  erased then, and the plan names each of them in red. There is no way back to Unraid afterwards.
+- **Encrypted disks:** the passphrase of the Unraid disks opens them. If this server has no encrypted disk yet, that passphrase becomes this
+  server's. Otherwise this server's passphrase is added to each disk as a **key slot** after a backup of its header
+  (`/var/lib/hs/luks-headers/<uuid>.img`, readable by root only; it still contains the Unraid key slot, so keep it as secret as the
+  passphrase). That is a write to the disk header; with a spare disk it happens only after the parity is complete. A disk that only a key
+  file opens is refused. In the web interface both passphrases travel on their own, never in the command.
+- Refused with a reason: ZFS array disks, a btrfs over several devices, a disk whose log was not replayed (an unclean stop), a data disk
+  larger than the parity disk.
+
+When it is done, publish the shares with `sudo hs share repair`.
+
 ### With a spare disk: nothing is written to your data disks until the parity is finished
 
 If you have a spare disk at least as large as your largest data disk, use it instead of steps 4 and 6. **Adopted disks stay read-only

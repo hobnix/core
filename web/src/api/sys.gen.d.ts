@@ -1454,6 +1454,28 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "migrate.plan.unraid": {
+    /** what taking over an Unraid server would do, as data: status, candidate (disks to pick, when none is given), disk, plan lines, confirm_name, long, option (never asks; exit 0 ok, 1 refused, 2 something is missing; with --unlock one JSON line with the passphrases on stdin) */
+    words: ["migrate", "plan", "unraid"];
+    path: "/migrate/plan/unraid";
+    method: "post";
+    class: "plan";
+    params: { };
+    stdin: "yes";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "migrate.start.unraid": {
+    /** take over an Unraid server as a background job; needs --confirm <name> (the passphrases of encrypted disks as one JSON line on stdin with --unlock) */
+    words: ["migrate", "start", "unraid"];
+    path: "/migrate/start/unraid";
+    method: "post";
+    class: "start";
+    params: { };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
   "monitor.disks": {
     /** disk table of the overview */
     words: ["monitor", "disks"];

@@ -1242,6 +1242,10 @@ CHANGES = {
              # convert: a SnapRAID data disk is emptied and formatted again (--fs, --encrypt); ZFS has nothing to convert, so only a SnapRAID pool (pool_change_ok)
              {"fixed": [POOL_NAME, r"^convert$", r"^--member$", DISKID],
               "opts": {"--fs": (FSTYPE, False), "--encrypt": (None, False), "--discard": (None, False)}, "stdin": True}],
+    # taking over an Unraid server (migrate-unraid.sh plan|start): disks named by id, the passphrases of encrypted disks as ONE JSON line on stdin (--unlock)
+    "migrate": [{"fixed": [r"^unraid$"],
+                 "opts": {"--disks": (DISKIDS, False), "--parity": (DISKIDS, False), "--spare": (DISKID, False), "--pool": (POOL_NAME, False),
+                          "--per-disk": (None, False), "--chown": (None, False), "--unlock": (None, False)}, "stdin": True}],
     # the storage incident workflow: freeze the apps that write to an affected share, thaw them again (storage-incident.sh plan|start)
     "incident": [[r"^(pause|resume)$"]],
     "disk": [[DISKID, r"^test$", r"^(short|long)$"],
