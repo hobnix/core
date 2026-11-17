@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 is not reviewed.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -55,7 +55,7 @@ An arrow is a link that every page shows, in both directions.
 
 ### 1.3 Rules
 
-1. One object, one address, one page. The address survives a reload and can be shared.
+1. One object, one address. The address survives a reload and can be shared. Five objects have a page of their own, the others open as a quick look in their list (3.6).
 2. A list shows rows of one kind of object. A row opens a quick look (#454) or the page.
 3. An object page always shows its state, its links to other objects, its running or last job and its actions.
 4. A name is data. No page, route or filter names a specific pool or disk.
@@ -198,10 +198,12 @@ All three read the same job records (jobs and events, #480) and follow events; n
 | about 20 hand-built plain pages | Object, Feed or Group, decided per page in the matrix (#774) |
 | `Files` | exempt |
 
-### 3.6 Open questions for review
+### 3.6 Decisions
 
-- Does every object get an Object page, or only the five in #453 (disk, pool, share, instance, user)? A group or a certificate has little to show beyond its quick look.
-- Tabs on an Object page: a fixed Overview, then at most how many? Where does History go: a tab, or the job strip?
-- Is Health problems a Feed or its own page shape (it has severity, acknowledge and undo)?
-- Do the Settings pages stay generated forms, or do some become Object pages (for example Updates)?
-- Where do the destructive actions sit on an Object page: a section at the bottom, or in the More menu only?
+Decided 2026-11-18:
+
+- **Five objects get an Object page:** disk, pool, share, instance, user (#453). Every other object (group, certificate, service, backup job, node, app and so on) has an address and a quick look, and its page is the List with `?sel=`. An object moves up to an Object page when its quick look no longer fits; that is a change to this document. The table in 1.1 lists the shape each object had before this decision; read "object" there as "address and quick look" for everything but the five.
+- **At most four tabs** on an Object page: Overview plus up to three of its own. History is the job strip, not a tab.
+- **Health problems is a Feed.** Severity, acknowledge and undo are features of a Feed entry.
+- **Settings pages stay generated forms.** No Settings page becomes an Object page.
+- **Destructive actions sit in a marked section at the bottom** of the Object page, each through a plan that asks for the name.
