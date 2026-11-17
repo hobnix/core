@@ -6,4 +6,5 @@
 if ! have python3; then skip "python3 missing"; finish; exit 0; fi
 echo "-- nested harness"
 if out=$(python3 -I "$ROOT/tests/nested-test.py" 2>&1); then pass "nested harness tests ($(grep -E '^Ran ' <<<"$out"))"; else fail "nested harness tests: $(tail -n 30 <<<"$out")"; fi
+if out=$(python3 -I "$ROOT/tests/nested-check-test.py" 2>&1); then pass "nested dry check of the stage commands ($(grep -E '^Ran ' <<<"$out"))"; else fail "nested dry check: $(tail -n 30 <<<"$out")"; fi
 finish

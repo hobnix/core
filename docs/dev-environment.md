@@ -64,7 +64,10 @@ rehearsal are not part of the run. Its logic is also tested without a VM (`scrip
 | --- | --- |
 | `scripts/dev/nested.sh preflight` | can this machine do it? (`/dev/kvm`, nested virtualization, `incus`, `ssh-keygen`) |
 | `scripts/dev/nested.sh plan [stage]` | the steps, without running anything |
+| `scripts/dev/nested.sh check [stage]` | the dry check: every `hs` command line of the stages against the repository, no VM (below) |
 | `scripts/dev/nested.sh run [--iso <file>] [--stage iso\|smoke\|all] [--keep]` | the run; the ISO defaults to `result-iso/iso/homeserver-installer.iso` (`scripts/dev/build-iso.sh`) |
+
+**Dry check (`scripts/dev/nested.sh check`, `scripts/dev/nested_check.py`).** Takes every `hs ...` command line of every stage and checks it against the real repository in under a second, without a VM, so a wrong assumption fails before a 20 to 40 minute run, not in it. It checks that the words are a row of `scripts/lib/registry.tsv`; that every `--flag` is in the script's `# args:` line (or is a `case` pattern of the script; `rebuild --yes` fails, `rebuild --foreground` does not); that a `long` command carries `--foreground`; that a `hs sys ...` command typed by hand sets `HS_CALLER`; that a changing command that asks on a terminal carries `--yes` or `--confirm`; that `--disks` gets `/dev/disk/by-id` names; and that nothing uses `sudo -n`. A command whose output is piped, redirected or captured has no terminal, so the dispatcher does not ask there and the check lets it be. It reads text only: what a command does on a real system (a missing folder, no `zfs` on a minimal system, a detached HEAD) still shows only in a run. `scripts/dev/t quick nested` runs it (tests/nested-check-test.py, which also feeds it the mistakes of earlier runs); Not tested on hardware yet (it needs none).
 
 Exit codes: 0 passed, 1 a check failed, 2 usage, 3 this machine cannot run it, 4 harness or Incus error. Logs: `.work/nested/<run-id>/`
 (`run.log`, `console-<stage>.log`, `result-<stage>.json`; `.work/nested/latest`).
