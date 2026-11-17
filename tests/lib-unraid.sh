@@ -8,10 +8,10 @@
 #   unraid_disk <name> <size>                  a loop disk with one empty partition; /dev/disk/by-id/ata-TEST_<name> points at it
 #   unraid_data <name> <xfs|btrfs> [luks]      a data disk with its files (unraid_fill); luks: inside LUKS, opened with $UNRAID_PASS
 #   unraid_parity <name>                       a parity disk: the partition, no file system
-#   unraid_zfs <name>                          an array disk formatted with ZFS (Unraid 6.12): refused as it is
+#   unraid_zfs <name>                          an array disk formatted with ZFS (Unraid 6.12): refused as it is (staged with a fake blkid)
 #   unraid_btrfs_multi <name1> <name2>         two disks that are one btrfs file system (raid1)
 #   unraid_keyfile_luks <name>                 LUKS that only a key file opens ($UNRAID_KEYFILE), xfs inside
-#   unraid_dirty_xfs <name>                    xfs whose log was not replayed (an array that was not stopped properly)
+#   unraid_dirty_xfs <name>                    xfs whose log was not replayed (staged with a fake blkid and xfs_repair)
 #   unraid_fill <mount point> <tag>            the shared top folders (Media, Shared) and one of its own (Own-<tag>), owner 99:100
 # Each helper leaves the whole device in $UNRAID_DEV (call it plainly, not in $(...): the reason would be lost in the subshell).
 # $UNRAID_PASS is the passphrase of this "server" (export it as HS_DISK_PASSPHRASE for the script under test).
@@ -53,7 +53,7 @@ unraid_disk() {   # unraid_disk <name> <size> -> sets UNRAID_DEV (the partition 
   mkdir -p /dev/disk/by-id
   ln -sf "$dev" "/dev/disk/by-id/ata-TEST_$1"; echo "/dev/disk/by-id/ata-TEST_$1" >> "$LINKS"
   printf 'label: gpt\nfirst-lba: 34\nstart=64, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4\n' | sfdisk -q --no-reread "$dev" >/dev/null 2>&1 || true
-  udevadm settle 2>/dev/null || true
+  udevadm settle --timeout=5 2>/dev/null || true
   [ -b "${dev}p1" ] || partx -a "$dev" 2>/dev/null || true
   [ -b "${dev}p1" ] || { UNRAID_WHY="this kernel makes no partition devices on loop devices (loop max_part=0, as in WSL2)"; return 1; }
   UNRAID_DEV=$dev
@@ -89,13 +89,29 @@ unraid_data() {   # unraid_data <name> <xfs|btrfs> [luks]
 
 unraid_parity() { unraid_disk "$1" "${2:-$UNRAID_SIZE}"; }
 
-unraid_zfs() {
-  local dev
-  _unraid_need zpool || return 1
-  unraid_disk "$1" "$UNRAID_SIZE" || return 1; dev=$UNRAID_DEV
-  zpool create -f -m none "unraidz-$1" "${dev}p1" >/dev/null 2>&1 || { UNRAID_WHY="zpool create failed (no ZFS module?)"; return 1; }
-  zpool export "unraidz-$1" >/dev/null 2>&1
-  UNRAID_DEV=$dev
+# A ZFS member or a dirty log needs no real ZFS or a kernel that leaves a log dirty: a fake blkid (and xfs_repair) on PATH tells the script under
+# test what the partition holds (chmod +x). The detection the script runs is real, only the probe answer is staged.
+_unraid_fake() {   # _unraid_fake <partition> <type> [xfs_repair exit code]
+  local d=$WORK/fakebin real
+  mkdir -p "$d"
+  if [ -f "$d/real" ]; then real=$(cat "$d/real")   # the first call found the real one; later PATH has the fake first
+  else real=$(command -v blkid) || { UNRAID_WHY="blkid is not installed"; return 1; }; echo "$real" > "$d/real"; fi
+  [ -f "$d/real-xfs_repair" ] || command -v xfs_repair > "$d/real-xfs_repair" || echo /bin/false > "$d/real-xfs_repair"
+  echo "$1 $2 ${3:-0}" >> "$d/map"
+  printf '#!/usr/bin/env bash
+for a in "$@"; do t=$(awk -v p="$a" '"'"'$1==p{print $2}'"'"' "%s/map"); [ -z "$t" ] || { echo "$t"; exit 0; }; done
+exec "%s" "$@"
+' "$d" "$real" > "$d/blkid"
+  printf '#!/usr/bin/env bash
+for a in "$@"; do r=$(awk -v p="$a" '"'"'$1==p{print $3}'"'"' "%s/map"); [ -z "$r" ] || exit "$r"; done
+exec "%s" "$@"
+' "$d" "$(cat "$d/real-xfs_repair")" > "$d/xfs_repair"
+  chmod +x "$d/blkid" "$d/xfs_repair"
+  case ":$PATH:" in *":$d:"*) ;; *) export PATH=$d:$PATH ;; esac
+}
+unraid_zfs() {   # an array disk formatted with ZFS: the partition answers zfs_member
+  unraid_disk "$1" "$UNRAID_SIZE" || return 1
+  _unraid_fake "${UNRAID_DEV}p1" zfs_member || return 1
 }
 
 unraid_btrfs_multi() {
@@ -121,17 +137,7 @@ unraid_keyfile_luks() {
   UNRAID_DEV=$dev
 }
 
-unraid_dirty_xfs() {
-  local dev m=$WORK/m-$1 rc=0
-  _unraid_fs_ok xfs || return 1
-  _unraid_need xfs_io xfs_repair || return 1
-  unraid_disk "$1" "$UNRAID_SIZE" || return 1; dev=$UNRAID_DEV
-  _unraid_mkfs "${dev}p1" xfs
-  mkdir -p "$m"; mount "${dev}p1" "$m" || { UNRAID_WHY="cannot mount xfs"; return 1; }
-  unraid_fill "$m" "$1"
-  xfs_io -x -c 'shutdown' "$m" >/dev/null 2>&1   # stops the file system without writing a clean log
-  umount "$m" 2>/dev/null
-  xfs_repair -n "${dev}p1" >/dev/null 2>&1 || rc=$?
-  [ "$rc" -eq 2 ] || { UNRAID_WHY="this kernel left the xfs log clean after a forced shutdown (cannot make a dirty log)"; return 1; }
-  UNRAID_DEV=$dev
+unraid_dirty_xfs() {   # xfs whose log was not replayed: the partition answers xfs, xfs_repair -n answers 2 (dirty log)
+  unraid_disk "$1" "$UNRAID_SIZE" || return 1
+  _unraid_fake "${UNRAID_DEV}p1" xfs 2 || return 1
 }

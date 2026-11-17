@@ -53,7 +53,7 @@ if unraid_data ux1 xfs && unraid_data ux2 xfs; then
   sum=$(dev_sum "$UNRAID_DEV")
   out=$(pool bulk --role adopt --disks ata-TEST_ux1,ata-TEST_ux2 --merge --dry-run 2>&1 || true)
   check_out "xfs in a partition is adoptable: the plan lists its own folder" "Own-ux1" echo "$out"
-  check_out "the same top folder on two disks is merged" "merged with folders of the same name: .*Shared" echo "$out"
+  check_out "the same top folder on two disks is merged" "merged with folders of the same name\): .*Shared" echo "$out"
   check_eq "the dry run changed nothing on the disk" "$sum" "$(dev_sum "$UNRAID_DEV")"
   m=$WORK/m-own; mkdir -p "$m"; mount -o ro,norecovery "$p" "$m"
   check_eq "the files belong to 99:100" "99:100" "$(stat -c %u:%g "$m/Media/Movies/ux2.mkv" 2>/dev/null || stat -c %u:%g "$m/Media/Movies/ux1.mkv")"
@@ -105,6 +105,7 @@ if unraid_dirty_xfs ud1; then
   check_out "a dirty xfs log is refused in the plan" "dirty log" echo "$out"
   check_out "migrate check names the dirty log" "ata-TEST_ud1.*dirty log" bash "$SCRIPTS/migrate-check.sh"
   check_eq "the dirty disk was not written to" "$sum" "$(dev_sum "$UNRAID_DEV")"
+  rm -rf "$WORK/fakebin"
 else skip "dirty xfs log: $UNRAID_WHY"; fi
 unset HS_DISK_PASSPHRASE
 
