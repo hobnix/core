@@ -99,6 +99,11 @@ default_probes() {
     $'hs sys net check\tsys net check\t0 1' \
     $'hs sys fm locations\tsys fm locations\t0 1' \
     $'hs sys fm trash\tsys fm trash disk:data-01\t0 1' \
+    $'hs sys fm du\tsys fm du disk:data-01 --path /\t0 1' \
+    $'hs sys fm stat\tsys fm stat disk:data-01 --path /x\t0 1' \
+    $'hs fm locations\tfm locations\t0 1' \
+    $'hs fm ls\tfm ls disk:data-01\t0 1' \
+    $'hs fm du\tfm du disk:data-01\t0 1' \
     $'hs user list\tuser list\t0' \
     $'hs user show\tuser Administrator show\t0 1' \
     $'hs group list\tgroup list\t0' \

@@ -4272,6 +4272,231 @@
     }
    }
   },
+  "/fm/du/{location}": {
+   "get": {
+    "operationId": "fm.du.by_location",
+    "summary": "file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "du",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "du {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/du/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": [
+      "path"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "cached"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "pending"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "unit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "unit"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "files"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "folders"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "bytes"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "bytes"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "partial"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mtime"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "time"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/fm/locations": {
    "get": {
     "operationId": "fm.locations",
@@ -4592,6 +4817,225 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/fm/stat/{location}": {
+   "get": {
+    "operationId": "fm.stat.by_location",
+    "summary": "file manager: owner, group and mode of one item (--path), read from stat: type, owner, group, uid, gid, mode, perms, bytes, mtime; changes nothing",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "stat",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "stat {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/stat/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": [
+      "path"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "type"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "type",
+              "enum": [
+               "d",
+               "f",
+               "l"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "owner"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "group"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "uid"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "id"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "gid"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "id"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mode"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "octal"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "perms"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "rwx"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "bytes"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "bytes"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mtime"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }

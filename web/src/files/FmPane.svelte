@@ -6,6 +6,8 @@
   import UsageBar from '../shell/UsageBar.svelte';
   import Switch from '../ui/Switch.svelte';
   import Chip from '../ui/Chip.svelte';
+  import TextInput from '../ui/TextInput.svelte';
+  import Button from '../ui/Button.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import FmPicker from './FmPicker.svelte';
@@ -21,6 +23,18 @@
   const totals = $derived(S.totals(p.rows, p.sel));
   const crumbs = $derived(S.crumbs(p.path));
   const jobHere = $derived(fm.jobHere(side));
+  // the path above the pane is an input: a typed path is checked by the server (`ls` answers with its reason), the browser never resolves it
+  let typed = $state(null);          // null = not editing: the input shows the pane's path
+  let pathErr = $state('');
+  let pathBusy = $state(false);
+  async function goTyped() {
+    if (pathBusy) return;
+    pathBusy = true;
+    try {
+      pathErr = await fm.tryPath(side, typed ?? p.path);
+      if (!pathErr) typed = null;
+    } finally { pathBusy = false; }
+  }
   const phone = () => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 860px)').matches;
 
   const columns = $derived([
@@ -122,6 +136,12 @@
       <button class="crumbbtn" class:last={!crumbs.length} onclick={() => fm.goPath(side, '/')}>{loc?.label ?? '/'}</button>
       {#each crumbs as c, i (c.path)}<span class="sep" aria-hidden="true">/</span><button class="crumbbtn" class:last={i === crumbs.length - 1} onclick={() => fm.goPath(side, c.path)}>{c.name}</button>{/each}
     </div>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="fmpathf" onsubmit={(e) => { e.preventDefault(); goTyped(); }} onkeydown={(e) => { if (e.key === 'Escape') { typed = null; pathErr = ''; e.stopPropagation(); } else if (e.key !== 'Tab') e.stopPropagation(); }}>
+      <TextInput ariaLabel="Path in this location" placeholder="/shares/media" autocomplete="off" spellcheck={false} value={typed ?? p.path} oninput={(e) => { typed = e.currentTarget.value; pathErr = ''; }} />
+      <Button type="submit" size="sm" icon="arrow-right" busy={pathBusy} tooltip="Open this path (the server checks it)">Go</Button>
+    </form>
+    {#if pathErr}<div class="fmnote bad pe"><i class="ph ph-warning-octagon"></i><span>{pathErr}</span></div>{/if}
     {#if loc && loc.size > 0}
       <div class="fmfree"><UsageBar free={Number.isFinite(loc.free) ? loc.free : null} size={loc.size} width={170} /></div>
     {/if}
@@ -213,6 +233,9 @@
   .crumbbtn { all: unset; cursor: pointer; padding: 2px 5px; color: var(--fg-2); font: 12.5px var(--mono); }
   .crumbbtn:hover { background: var(--panel-2); color: var(--fg); }
   .crumbbtn.last { color: var(--fg); font-weight: 600; }
+  .fmpathf { display: flex; gap: 6px; align-items: center; }
+  .fmpathf :global(.input) { flex: 1; min-width: 0; min-height: 28px; height: 28px; padding: 2px 8px; font: 12.5px var(--mono); }
+  .pe { padding: 0; border: 0; }
   .fmfree { display: flex; align-items: center; gap: 10px; }
   .fmsel { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 12px; border-bottom: 1px solid var(--line); color: var(--fg-2); font-size: 12.5px; background: color-mix(in oklch, var(--accent) 6%, transparent); }
   .fmnote { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--warn-ink); font-size: 12.5px; }

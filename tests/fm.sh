@@ -468,11 +468,69 @@ else skip "python3 is missing"; fi
 echo "-- audit and the pieces around it"
 [ -s "$HS_FM_DIR/audit.log" ] && grep -q "^[0-9T:+-]*${T}ui${T}delete${T}disk:data-04:/shares/media${T}" "$HS_FM_DIR/audit.log" && pass "audit.log: one line per operation (time, who, op, source)" || fail "audit: $(tail -n3 "$HS_FM_DIR/audit.log" 2>/dev/null)"
 grep -q "result" /dev/null; grep -q "${T}done$" "$HS_FM_DIR/audit.log" && grep -q "${T}failed$" "$HS_FM_DIR/audit.log" && grep -q "${T}cancelled$" "$HS_FM_DIR/audit.log" && pass "audit.log: results done, failed and cancelled" || fail "audit results"
-for w in locations "pair <left> <right>" "ls <location>" "trash <location>" "progress <unit>" "plan <op>" "start <op>"; do
+for w in locations "pair <left> <right>" "ls <location>" "trash <location>" "du <location>" "stat <location>" "progress <unit>" "plan <op>" "start <op>"; do
   grep -q "^sys${T}sys fm $w${T}fm.sh${T}" "$SCRIPTS/lib/registry.tsv" || fail "registry row sys fm $w"
 done
-grep -c "^sys${T}sys fm " "$SCRIPTS/lib/registry.tsv" | grep -q '^7$' && pass "registry rows" || fail "registry rows count"
+grep -c "^sys${T}sys fm " "$SCRIPTS/lib/registry.tsv" | grep -q '^9$' && pass "registry rows" || fail "registry rows count"
 grep -q '("fm", "locations")' "$SCRIPTS/web-serve.py" && grep -q '"fm": \[' "$SCRIPTS/web-serve.py" && pass "web READS and CHANGES entries" || fail "web allowlists"
+
+echo "-- du (a background job, kept per folder with its mtime) and stat (owner and mode)"
+DU=$B/temp/usb/duf
+mkdir -p "$DU/sub"; head -c 100 /dev/zero > "$DU/a"; head -c 50 /dev/zero > "$DU/sub/b"; touch -d '2 hours ago' "$DU"
+fm du temp:usb --path duf
+check_eq "du: no answer yet starts the job" "yes" "$(kv pending)"
+has "^unit${T}hs-job-fm-test-du-" && pass "du: the job unit is named" || fail "du unit: $out"
+fm du temp:usb --path duf
+check_eq "du: the answer is kept" "yes" "$(kv cached)"
+check_eq "du: bytes" 150 "$(kv bytes)"; check_eq "du: files" 2 "$(kv files)"; check_eq "du: folders" 1 "$(kv folders)"; check_eq "du: partial" no "$(kv partial)"
+check_eq "du: the mtime is the folder's" "$(stat -c %Y "$DU")" "$(kv mtime)"
+head -c 1000 /dev/zero > "$DU/c"
+fm du temp:usb --path duf
+check_eq "du: a changed folder is measured again" "yes" "$(kv pending)"
+fm du temp:usb --path duf
+check_eq "du: the new size" 1150 "$(kv bytes)"
+[ -z "$(ls "$HS_FM_DIR"/du/*.run 2>/dev/null)" ] && pass "du: no marker stays after the job" || fail "du marker left"
+fm du temp:usb --path ../x; check_eq "du: .. refused" 1 "$rc"
+fm du temp:usb --path nothing; check_eq "du: no such folder refused" 1 "$rc"
+fm du disk:data-04 --path shares/media/movies; check_eq "du: a folder of a disk is measured" 0 "$rc"
+fm du nope:x --path /; check_eq "du: unknown location refused" 1 "$rc"
+chmod 640 "$DU/a"
+fm stat temp:usb --path duf/a
+check_eq "stat: status" ok "$(kv status)"; check_eq "stat: type" f "$(kv type)"; check_eq "stat: owner" "$(id -un)" "$(kv owner)"
+check_eq "stat: group" "$(id -gn)" "$(kv group)"; check_eq "stat: mode" 640 "$(kv mode)"; check_eq "stat: perms" rw-r----- "$(kv perms)"; check_eq "stat: bytes" 100 "$(kv bytes)"
+fm stat temp:usb --path duf; check_eq "stat: a folder" d "$(kv type)"
+fm stat temp:usb --path duf/missing; check_eq "stat: missing refused" 1 "$rc"
+fm stat temp:usb --path ../etc; check_eq "stat: .. refused" 1 "$rc"
+fm stat temp:usb; check_eq "stat: a path is needed" 1 "$rc"
+
+echo "-- continue after a stop: a new job with --conflict skip --verify size over the same selection"
+mkdir -p "$D4/shares/media/cont" "$D5/shares/media/cont"
+for f in f1 f2 f3; do head -c 2000 /dev/urandom > "$D4/shares/media/cont/$f"; done
+cp -a "$D4/shares/media/cont/f1" "$D5/shares/media/cont/f1"     # what the stopped job had copied
+fmsel cont -- start copy --from disk:data-04 --path shares/media --to disk:data-05 --to-path shares/media --conflict skip --verify size
+has "^status${T}done" && pass "continue: started" || fail "continue: $out"
+for f in f1 f2 f3; do cmp -s "$D4/shares/media/cont/$f" "$D5/shares/media/cont/$f" || fail "continue: $f differs or is missing"; done; pass "continue: every file is at the target"
+fm progress "$(kv unit)"
+check_eq "continue: the copied file is skipped, not copied again" 1 "$(kv skipped)"; check_eq "continue: result" done "$(kv result)"
+( exec 8>"$HS_LOCK"; flock -n 8 ) && pass "continue: the bulk lock is free after the job" || fail "the bulk lock is still held"
+
+echo "-- hs fm (scripts/fm-cmd.sh): thin wrappers over sys fm"
+fmc() { rc=0; out=$(timeout 60 bash "$SCRIPTS/fm-cmd.sh" "$@" </dev/null 2>&1) || rc=$?; }
+fmc locations; check_eq "hs fm locations: exit 0" 0 "$rc"; has "disk:data-04" && has "pool:bulk" && pass "hs fm locations lists the places" || fail "hs fm locations: $out"
+fmc ls disk:data-04 --path shares/media; check_eq "hs fm ls: exit 0" 0 "$rc"; has "readme.txt" && pass "hs fm ls lists the folder" || fail "hs fm ls: $out"
+fmc ls disk:data-04 --path nothing; check_eq "hs fm ls: a refusal ends with its reason" 1 "$rc"; has "no such folder" && pass "hs fm ls shows the reason" || fail "ls reason: $out"
+fmc du temp:usb --path duf; check_eq "hs fm du: exit 0" 0 "$rc"; has "1.2KB" && pass "hs fm du shows the size" || fail "hs fm du: $out"
+fmc copy disk:data-04 disk:data-05 readme.txt --path shares/media --to-path shares/media; check_eq "hs fm copy without a terminal: refused" 1 "$rc"; has "no terminal" && pass "copy asks for --confirm when there is no terminal" || fail "copy no tty: $out"
+[ ! -e "$D5/shares/media/readme.txt" ] && pass "nothing was copied without the confirmation" || fail "copied without confirmation"
+fmc copy disk:data-04 disk:data-05 readme.txt --path shares/media --to-path shares/media --confirm yes
+check_eq "hs fm copy --confirm: exit 0" 0 "$rc"; has "Started as a background job" && [ -e "$D5/shares/media/readme.txt" ] && pass "hs fm copy shows the plan, starts the job" || fail "hs fm copy: $out"
+has "copy 1 item" && pass "the plan is shown first" || fail "no plan: $out"
+fmc delete disk:data-05 readme.txt --path shares/media --confirm "delete 5 items"; check_eq "hs fm delete: a wrong confirmation refused" 1 "$rc"; has "does not match" && pass "typed text must match" || fail "delete confirm: $out"
+[ -e "$D5/shares/media/readme.txt" ] && pass "nothing was deleted" || fail "deleted on a wrong confirmation"
+fmc delete disk:data-05 readme.txt --path shares/media --confirm "delete 1 item(s)"; check_eq "hs fm delete: exit 0" 0 "$rc"
+[ ! -e "$D5/shares/media/readme.txt" ] && pass "hs fm delete moved it to the trash" || fail "hs fm delete: $out"
+fmc bogus; check_eq "hs fm: unknown word shows usage" 1 "$rc"
+awk -F'\t' '$1 == "user" && $2 ~ /^fm / { print $2 }' "$SCRIPTS/lib/registry.tsv" | grep -c . | grep -q '^6$' && pass "registry: six hs fm rows" || fail "hs fm registry rows"
 
 echo "-- pools of machine.toml: tank (data) and ssd (apps)"
 printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }

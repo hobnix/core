@@ -476,6 +476,39 @@ Before step 6 all files are still there and a folder can be moved back with `mv`
 the disks and SnapRAID protects them after the first sync. Later, replace small old disks one by one with `hs pool bulk replace data-NN
 --disks <new-disk>`; it rebuilds from parity.
 
+## The file manager: sizes, owner, paths, pause, `hs fm`
+
+Storage > Files shows two panes. A few things in it work differently from what you may expect:
+
+- **The path above a pane is an input.** Type a path and press Enter. The server checks it (the same check as opening a folder); if it
+  refuses, the reason is shown under the input and the pane stays where it was. `..` and links are never resolved by the browser.
+- **Info (F3)** shows owner, group and mode of the item, read from `stat`. You cannot change them in the file manager.
+- **The size of a folder is measured only when you ask** ("Calculate size" in Info). It reads every file entry below the folder and can
+  wake sleeping disks, so it runs as a background job. The answer is kept for that folder together with its modification time: asking again
+  while the folder has not changed answers at once. Changes deeper down do not change the time of the top folder: use "Measure again".
+- **Pause and Continue** (copy and move). Pause stops the job cleanly and keeps its list: what was copied stays, nothing unverified is removed,
+  and the pool lock is released (a paused job holds nothing; the parity sync or the cache mover may run meanwhile). Continue starts a
+  **new** job over the same selection with "skip what exists, size check", so it goes on where the first stopped. A file that was copied but
+  whose source had not been removed yet stays at the source and is listed as skipped.
+- Buttons that start a job show a spinner and ignore a second click while the job starts.
+
+On the command line the same thing is `hs fm`:
+
+```bash
+hs fm locations
+hs fm ls disk:data-04 --path /shares/media
+hs fm du disk:data-04 --path /shares/media
+hs fm copy disk:data-04 pool:tank film.mkv --path /shares/media --to-path /shares/media
+hs fm delete disk:data-04 film.mkv --path /shares/media
+```
+
+`locations`, `ls` and `du` only read (`du` waits for the measurement unless you add `--no-wait`). `copy`, `move` and `delete` show the plan
+first, ask you to type the confirmation, then start a background job (`hs job log <unit>` follows it). Without a terminal, pass the typed
+text with `--confirm`. The same rules as in the web interface apply, because `hs fm` only calls `hs sys fm`: nothing is changed while
+`fileManagerWrite` is off.
+
+Not tested on hardware yet.
+
 ## The trash of the file manager
 
 Delete in the file manager does not remove files at once: it moves them into a trash folder at the root of the same file system

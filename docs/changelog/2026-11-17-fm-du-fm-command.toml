@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "File manager: folder sizes, owner and mode, typed paths, pause, hs fm"
+body  = """The file manager can measure a folder (a background job, asked for in Info; the answer is kept until the folder changes) and shows owner, group and mode of an item. The path above each pane is an input that the server checks. A copy or move can be paused and continued as a new job that skips what is copied. The command line has `hs fm locations|ls|du|copy|move|delete`: copy, move and delete show the plan and ask for the typed confirmation first. Not tested on hardware yet."""

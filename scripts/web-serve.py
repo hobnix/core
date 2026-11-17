@@ -1012,6 +1012,8 @@ READS = {
     ("fm", "ls"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path"), "cursor": (r"^[0-9]{1,9}$", "--cursor"),
                                                                         "limit": (r"^[0-9]{1,4}$", "--limit")}},
     ("fm", "trash"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC]},
+    ("fm", "du"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path")}},
+    ("fm", "stat"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{1,1024}$", "--path")}},
     ("fm", "progress"): {"kind": "tsv", "ttl": 0, "args": [UNIT]},
     ("disk", "ls"): {"kind": "tsv", "ttl": 5,"args": [r"^data-[0-9]{1,3}$"], "query": {"path": (r"^(?!.*(^|/)\.\.(/|$))(shares|sensitive)(/[^/\x00-\x1f]{1,255}){0,20}$", "--path")}},
     ("state", "smart"): {"kind": "tsv", "ttl": 30, "args": [NAME]},

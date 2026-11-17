@@ -219,3 +219,15 @@ kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"], heading = ["text"], package = ["name"], instance = ["name"], failed_step = ["text"], tail = ["text"], retry_from = ["text"], item = ["text"], data = ["text"], question = ["text"], note = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["text"] }
 enums = { status = ["ok", "refused", "started"] }
 note = "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly."
+
+["fm du <location>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], cached = ["answer"], pending = ["answer"], unit = ["unit"], files = ["count"], folders = ["count"], bytes = ["bytes"], partial = ["answer"], mtime = ["epoch"], time = ["epoch"] }
+enums = { "status.status" = ["ok", "refused"], "cached.answer" = ["yes", "no"], "pending.answer" = ["yes"], "partial.answer" = ["yes", "no"] }
+note = "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks."
+
+["fm stat <location>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], type = ["type"], owner = ["name"], group = ["name"], uid = ["id"], gid = ["id"], mode = ["octal"], perms = ["rwx"], bytes = ["bytes"], mtime = ["epoch"] }
+enums = { "status.status" = ["ok", "refused"], "type.type" = ["d", "f", "l"] }
+note = "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing."
