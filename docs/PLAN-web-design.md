@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft, section 1 only, decisions in 1.4 made. Epic: hobnix/server#768, milestone 0.8.5. Read from the code and issues on `develop` (2026-11-18), not seen in a browser.
+Status: draft. Section 1 has its decisions (1.4); section 2 is not reviewed. Epic: hobnix/server#768, milestone 0.8.5. Read from the code and issues on `develop` (2026-11-18), not seen in a browser.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -70,4 +70,85 @@ Decided 2026-11-18:
 - **A backup target is a field of the backup job**, not an object.
 - **One user object.** Directory users (capability `ad`) use the same page with a read-only marker.
 - **A remote node shows instances only** (assumed, not yet decided by the user; revisit in section 2).
-- **No Jobs page exists today.** `nav.js` and `routes.js` have no entry; #385 adds it.
+- **No Jobs page exists today.** `nav.js` and `routes.js` have no entry; #385 adds it. The shell already has a Jobs and Logs drawer at the bottom (web/design/HANDOFF.md, "Shell"); the question for the templates is how that drawer and a Jobs page relate.
+
+## 2. Navigation tree (#770)
+
+Draft, not reviewed. Builds on the visual handoff of phase 1 (web/design/HANDOFF.md and the boards next to it). Look, tokens, the shell (top bar, tree, content, bottom drawer) and the states every page handles stay as they are. This document changes what is in the tree and how pages are shaped.
+
+### 2.1 What counts as a place
+
+A place is a page the user comes back to, to see the state of one kind of object or of one concern, and that has a short noun for a name. These are not places and leave the tree:
+
+| Not a place | Why | Goes to |
+|---|---|---|
+| Incident | a one-time flow | an action on Pools and on the Health page |
+| Setup | a checklist that ends | a banner on Summary while open; the page stays reachable by address |
+| What's new | content, not state | the Updates page |
+| Releases | a view of updates | a tab of Updates |
+| Docs | a link out of the interface | the top bar |
+| Nodes | the list of servers | the node switcher in the top bar, with the list as its page |
+| Registries | a setting of Docker apps | a tab of Apps |
+| Pool names `bulk`, `fast` | data (#456) | children come from the pool list |
+
+### 2.2 The tree
+
+Per node. Nine entries instead of twelve, and the three groups that each answer "is my server fine" become one.
+
+| Group | Entries | Replaces |
+|---|---|---|
+| Summary | (the page itself) | Summary |
+| Storage | Pools, Disks, Shares, Files, Encryption, Vault | Storage minus Incident |
+| Instances | Instances, ISO images | Instances group, Docker list for instances |
+| Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
+| Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
+| People | Users, Groups, Certificates | Identity |
+| Health | Health, Events, Notifications, Hardware, Diagnostics, Live state, Test-lab | Monitoring, Operations |
+| Backup | Backup, Expiry dates | Protection |
+| Settings | General, Network and DNS, Storage, Backups, Users and access, Updates, Capabilities, Advanced | Settings minus Releases |
+
+Extension pages (`/extensions/<name>`) are placed by a `group` key in the package's `[web.page]`, default Apps. Nothing is shown while no extension declares a page.
+
+### 2.3 Every current entry
+
+| Current entry | New place |
+|---|---|
+| Summary | Summary |
+| Storage > Pools, bulk, fast | Storage > Pools; its children are the pools |
+| Storage > Disks, Shares, Files, Encryption, Vault | unchanged |
+| Storage > Incident | action on Pools and Health |
+| Instances > Instances | Instances > Instances |
+| Instances > ISO images | Instances > ISO images |
+| Instances > Apps | Apps > Installed |
+| Instances > Services | Network > Services |
+| Instances > Docker, Registries | Apps > Installed (kind Docker), Apps > Registries |
+| Marketplace | Apps > Marketplace |
+| Network | Network |
+| Identity > Groups, Users, Certificates | People > Groups, Users, Certificates |
+| Monitoring > Hardware, Diagnostics, Live state, Test-lab | Health > same |
+| Operations > Health, Notifications, Events | Health > same |
+| Operations > What's new | Settings > Updates |
+| Protection > Backup, Expiry dates | Backup > same |
+| Docs | top bar |
+| Nodes | top bar node switcher |
+| Setup | banner on Summary |
+| Settings > General ... Advanced | unchanged |
+| Settings > Releases | Settings > Updates, tab |
+| proxyserver and peer pages | unchanged for now; section 3 covers remote nodes |
+
+### 2.4 Rules
+
+1. A group has at least two places, or it is a place itself (Summary, Network).
+2. No group page that only lists its children: a group page shows the state of the group and one or two actions (#457).
+3. A capability that is off hides its entry, as today. A page opened by address still works.
+4. Names are nouns for what the user sees; no entry is named after a task.
+5. Pools, disks and other data never appear as fixed entries.
+
+### 2.5 Open questions for review
+
+- Is nine entries few enough, or should Instances and Apps become one group?
+- Expiry dates covers certificates and more: Backup, People or Health?
+- Certificates: People, or Network?
+- Services (public and private routes) in Network: does that match how you think of it?
+- Does the Jobs drawer stay, and does #385 add a page beside it or replace it?
+- The Setup banner: shown until every check is done, or until dismissed?
