@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "The test-lab starts stages 3 and up from a golden copy of the installed system"
+body  = """hs testlab run keeps a stopped copy of the installed VM after stages 1 and 2 passed on a commit. A later run of a stage from 3 on for the same commit copies it instead of building the ISO and installing again, which saves about half an hour per rerun. The last 2 copies are kept (HS_TESTLAB_GOLDEN_KEEP), HS_TESTLAB_GOLDEN=0 turns it off. Not tested on hardware yet."""
