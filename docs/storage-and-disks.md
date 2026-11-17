@@ -495,6 +495,29 @@ erased.
 
    Leave out `--encrypt` if the disks are not encrypted.
 
+### With a spare disk: nothing is written to your data disks until the parity is finished
+
+If you have a spare disk at least as large as your largest data disk, use it instead of steps 4 and 6. **Adopted disks stay read-only
+and unlabelled until the parity is complete**, so a failure while the parity is built loses nothing. Not tested on hardware yet.
+
+```bash
+sudo hs pool bulk add --role adopt --disks <data-disk>,<data-disk> --spare <spare-disk> --dry-run
+sudo hs pool bulk add --role adopt --disks <data-disk>,<data-disk> --spare <spare-disk>
+```
+
+The plan lists the order. You type the name of the **spare disk** (it is erased and becomes the parity disk):
+
+1. Every data disk is mounted read-only by its file system UUID (a record `/var/lib/hs/adopting/<uuid>`); no label is written and an
+   xfs log is not replayed. SnapRAID keeps its content files on the system disk (`/var/lib/snapraid`), never on an adopted disk.
+2. The spare disk is formatted as the parity disk and the parity is built from the read-only disks. This takes hours to a day.
+3. Only after the sync has finished: the labels are written, the folders move into `shares/`, the records are removed and the disks
+   join `/bulk` for writing. One more short sync then follows.
+4. Your old Unraid parity disk is free afterwards; add it as a second parity with `sudo hs pool bulk add --role parity`.
+
+If the sync fails, no data disk has been written to: the records keep the disks read-only, and after the cause is fixed
+`hs pool bulk sync` finishes the parity. Without a spare disk the order above (steps 4 to 6) applies: labels first, parity last, and the
+data is **not** protected until that parity is synced.
+
 Before step 6 all files are still there and a folder can be moved back with `mv`. Afterwards the old parity is gone, but the files are on
 the disks and SnapRAID protects them after the first sync. Later, replace small old disks one by one with `hs pool bulk replace data-NN
 --disks <new-disk>`; it rebuilds from parity.

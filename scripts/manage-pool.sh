@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: menu to create the pools "fast" and "bulk" from mirror pairs, or add pairs to them
 # help.de: Menü, um die Pools "fast" und "bulk" aus Spiegelpaaren anzulegen oder Paare hinzuzufügen
-# args: [pool] [--dry-run] [--plain] [--disks <id,...>] [--use data|apps] [--role data|parity|adopt] [--encrypt] [--chown] [--merge] [--replace [member]] [--remove [member]] [--convert [member] [--discard]] [--close [member] [--drain]] [--open [member]]
+# args: [pool] [--dry-run] [--plain] [--disks <id,...>] [--use data|apps] [--role data|parity|adopt] [--encrypt] [--chown] [--merge] [--spare <id>] [--replace [member]] [--remove [member]] [--convert [member] [--discard]] [--close [member] [--drain]] [--open [member]]
 # Bare use (a terminal): --replace/--remove/--convert without a member ask which one (the registry rows "hs pool <pool> replace|remove|convert" are guided).
 # Stand-in for tests: HS_GUIDED_TTY=1 = "there is a terminal" (answers on stdin).
 set -euo pipefail
@@ -37,6 +37,8 @@ usage() {
   say "  --chown     with --role adopt: hand the files over to adminuser:users (slow on big disks)"
   say "  --merge     with --role adopt: put the folders of all disks into one shares/<name> (default: one"
   say "              share per disk and folder, shares/<disk>-<name>, e.g. data-02-media)"
+  say "  --spare     with --role adopt: a spare disk (at least as large as the largest adopted disk) that becomes the parity disk: the"
+  say "              adopted disks stay read-only and unlabelled until the parity is built (it ERASES the spare disk)"
   say "  --replace   swap a member (name as shown by --members) for the disk given with --disks"
   say "  --mode      ZFS remove of a disk in a 2-disk mirror: detach (the other disk stays alone) or vdev (whole mirror, data moves)"
   say "              snapraid remove of a data disk: move (default, files go to the other disks) or nomove (files stay on the disk)"
@@ -59,6 +61,7 @@ kind=""   # --kind zfs|snapraid: the layout of a NEW data pool
 plain=false
 chown_files=false
 merge_folders=false
+spare=""   # --role adopt --spare <by-id>: parity is built on it before the adopted disks are touched
 drain=false   # --close: also move the files off the disk onto the others
 discard=false   # --convert: erase the disk without moving its files (the data is not needed any more)
 encrypt=false
@@ -82,6 +85,7 @@ while [ $# -gt 0 ]; do
     --plain)   plain=true; shift ;;
     --chown)   chown_files=true; shift ;;
     --merge)   merge_folders=true; shift ;;
+    --spare)   [ $# -ge 2 ] || usage; spare="$2"; shift 2 ;;
     --mode)    [ $# -ge 2 ] || usage; zfs_how="$2"; shift 2 ;;
     --encrypt) encrypt=true; shift ;;
     --fs)      [ $# -ge 2 ] || usage; fs_type="$2"; shift 2
@@ -1114,7 +1118,26 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       warn "$(t 'Not possible: a data disk (%s) would be larger than a parity disk (%s).' "$(human "$max_data")" "$(human "$min_parity")")"
       exit 1
     fi
-    [ "$min_parity" -gt 0 ] || pnote "no parity disk yet. Add one afterwards: hs pool $pool add --role parity (it ERASES that disk)."
+    if [ -n "$spare" ]; then
+      [ "$min_parity" -eq 0 ] || { echo "--spare is for an array without a parity disk (this one has one)."; exit 1; }
+      case ",$(IFS=,; echo "${chosen[*]}")," in *",$spare,"*) echo "--spare: $spare is also in --disks."; exit 1 ;; esac
+      line=""
+      for d in "${disks[@]}"; do [ "${d%%$'	'*}" = "$spare" ] && line="$d"; done
+      [ -n "$line" ] || { echo "--spare: '$spare' is not a free disk (unknown, mounted, or already in use)."; exit 1; }
+      IFS=$'	' read -r _ spare_size _ _ <<<"$line"
+      if [ "$max_data" -gt "$spare_size" ]; then
+        warn "$(t 'Not possible: the spare disk (%s) is smaller than the largest data disk (%s).' "$(human "$spare_size")" "$(human "$max_data")")"
+        exit 1
+      fi
+      plt "  Order (no write to an adopted disk until the parity is finished):"
+      pl "    1. the adopted disks are mounted read-only; no label is written"
+      pl "    2. $spare ($(human "$spare_size")) is ERASED and becomes the parity disk; the parity is built from the read-only disks"
+      pl "    3. only after the sync has finished: the labels are written and the folders move into shares/"
+      pl "    4. then the old parity disk of the other system, if any, is free"
+    else
+      pnote "no parity disk yet. Add one afterwards: hs pool $pool add --role parity (it ERASES that disk)."
+      pnote "Without a spare disk the labels are written and the folders move first; until a parity disk is added and synced, the data is NOT protected."
+    fi
     if $newname; then
       pnote "This is a NEW pool '$pool' with role data (SnapRAID). It is added to the pools line of machine.toml when it is created."
       pblank
@@ -1123,15 +1146,61 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       pdry
       exit 0
     fi
-    say "The disks keep all their files. Their label is written and their folders are renamed."
-    $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
+    if [ -n "$spare" ]; then
+      say "The spare disk is erased. The adopted disks are not written to until the parity is finished."
+      $assume_yes || confirm_name "$spare" "the spare disk" || fail "cancelled"   # the disk that is erased; --yes: a job, the typed name was checked before
+    else
+      say "The disks keep all their files. Their label is written and their folders are renamed."
+      $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
+    fi
+
+    adoptdir=${HS_ADOPTING_DIR:-/var/lib/hs/adopting}
+    if [ -n "$spare" ]; then
+      # 1. a record per file system (the mount script mounts it read-only by UUID, its label to come is the content); nothing is written to the disks
+      mkdir -p "$adoptdir"
+      for t in "${todo[@]}"; do
+        IFS=$'	' read -r part fs label luksdev <<<"$t"
+        u=$(blkid -p -o value -s UUID "$part" 2>/dev/null || true)
+        [ -n "$u" ] || fail "$(t 'No file system UUID on %s: nothing was changed.' "$part")"
+        printf '%s
+' "$label" > "$adoptdir/$u"
+      done
+      # 2. the parity on the spare disk, built from the read-only disks
+      here=$(dirname "$0")
+      clean_disk "$spare"
+      format_member "$spare" "${label%%-*}-parity-1"
+      udevadm settle 2>/dev/null || true
+      snap_new_pool; newname=false   # the row is written once
+      if [ -z "${HS_ADOPT_SKIP_MERGE:-}" ]; then
+        snap_mount
+        for t in "${todo[@]}"; do
+          IFS=$'	' read -r part fs label luksdev <<<"$t"
+          mountpoint -q "$(disk_dir "$label")" || fail "$(t '%s is not mounted read-only. Nothing was written to it; the record in %s stays, fix the cause and run this again.' "${label#*-}" "$adoptdir")"
+        done
+      fi
+      sync_script=${HS_BULK_SYNC:-$here/bulk-sync.sh}
+      bash "$sync_script" --no-mover --force || fail "$(t 'The parity sync did not finish. No adopted disk was written to (no label, no folder moved); the records in %s keep them read-only.' "$adoptdir")"
+      ok "The parity is complete. Now the adopted disks are labelled."
+      # 3. let go of the read-only mounts (out of the merge first), then label them below
+      for t in "${todo[@]}"; do
+        IFS=$'	' read -r part fs label luksdev <<<"$t"
+        d=$(disk_dir "$label")
+        mountpoint -q "$d" 2>/dev/null || continue
+        while read -r m; do   # every merge that has it as a branch (the pool, its view without caches)
+          setfattr -n user.mergerfs.branches -v "-$d" "$m/.mergerfs" 2>/dev/null || true
+        done < <(findmnt -rn -t fuse.mergerfs -o TARGET 2>/dev/null || true)
+        umount "$d" || fail "$(t 'Could not release %s. Nothing was written to it.' "$d")"
+      done
+    fi
 
     for t in "${todo[@]}"; do
       IFS=$'\t' read -r part fs label luksdev <<<"$t"
       mp=$(disk_dir "$label")
+      u=$(blkid -p -o value -s UUID "$part" 2>/dev/null || true)
       adopt_label "$part" "$fs" "$label" || { rc=$?
         [ "$rc" = 2 ] || echo "Could not write the label on $part. A filesystem that was not unmounted cleanly needs a repair first." >&2
         exit 1; }
+      [ -z "$u" ] || rm -f "${adoptdir:?}/$u"           # labelled: the record is not needed any more
       [ "$luksdev" = - ] || crypt_record "$luksdev"      # from now on hs unlock opens it at every boot
       udevadm settle 2>/dev/null || true
       mkdir -p "$mp"
@@ -1159,7 +1228,12 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
     else pdone "Done. Every folder is now its own share /bulk/shares/<disk>-<name>. Move what belongs together by hand on the server, e.g.  mv /bulk/shares/data-02-media/Movies /bulk/shares/media/  (a rename on the same disk, copies nothing; always inside /bulk, never from /mnt/bulk/data-NN: those are the same files and a copy empties them); rename a share with: hs share <share> rename <new>"; fi
     say "Publish them over Samba: hs share repair (new shares start closed to Domain Admins; open them in hs share <share> perm)."
     $chown_files || echo "Files still belong to their old owner (Unraid: nobody:users). To make them adminuser's: sudo chown -R adminuser:users /bulk/shares (slow on big disks), or use --chown next time."
-    say "Parity is only written by the next sync: hs pool $pool sync."
+    if [ -n "$spare" ]; then
+      # the moved folders and the content files on the disks: one more (short) sync, the parity itself is already complete
+      [ -n "${HS_ADOPT_SKIP_MERGE:-}" ] || bash "$sync_script" --no-mover --force || warn "The sync after the move did not finish: run hs pool $pool sync."
+    else
+      say "Parity is only written by the next sync: hs pool $pool sync."
+    fi
     done_refresh
   fi
 
