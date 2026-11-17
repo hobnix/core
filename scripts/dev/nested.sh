@@ -6,6 +6,7 @@
 #   scripts/dev/nested.sh run [--iso <file>] [--stage iso|smoke|all|<extra>] [--keep] [--name <vm>]
 #   scripts/dev/nested.sh preflight       can this machine run it? (exit 3: no, fall back to `scripts/dev/t vm`)
 #   scripts/dev/nested.sh plan [stage]    print the steps without running anything
+#   scripts/dev/nested.sh check [stage]   check every `hs` command line of the stages against the repository, without a VM (nested_check.py)
 #
 # Exit codes: 0 passed, 1 a check failed, 2 usage, 3 cannot run here (no KVM/nested virtualization/incus), 4 harness or Incus error.
 # Logs: .work/nested/<run-id>/ (run.log, console-<stage>.log, result-<stage>.json); .work/nested/latest points at the newest run.
@@ -22,7 +23,7 @@ py=${HS_PYTHON:-python3}
 cmd=${1:-}
 [ $# -eq 0 ] || shift
 
-usage() { echo "usage: scripts/dev/nested.sh run [--iso <file>] [--stage iso|smoke|all|<extra>] [--keep] [--name <vm>] | preflight | plan [stage]" >&2; }
+usage() { echo "usage: scripts/dev/nested.sh run [--iso <file>] [--stage iso|smoke|all|<extra>] [--keep] [--name <vm>] | preflight | plan [stage] | check [stage]" >&2; }
 
 case "$cmd" in
   preflight) exec "$py" -I "$lib" preflight ;;
@@ -30,6 +31,7 @@ case "$cmd" in
     if [ $# -gt 0 ]; then exec "$py" -I "$lib" plan "$1"; fi
     for s in iso smoke; do echo "== $s"; "$py" -I "$lib" plan "$s" || exit $?; done
     exit 0 ;;
+  check) exec "$py" -I "$root/scripts/dev/nested_check.py" "$@" ;;
   run) ;;
   *) usage; exit 2 ;;
 esac
