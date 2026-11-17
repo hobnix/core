@@ -114,6 +114,26 @@ next = { change: 'start-write-off' };
 s = await api.start({ op: 'rename', from: 'disk:data-04', path: '/shares/media', names: ['x'] }, { newname: 'y' }, '');
 eq('refused while the switch is off, with the way to switch it on', [s.ok, /fileManagerWrite/.test(s.reason)], [false, true]);
 
+console.log('-- du and stat');
+next = { read: 'du-pending' };
+let u = await api.du('disk:data-04', '/shares/media/movies');
+eq('du url', last().url, '/api/sys/fm/du/disk:data-04?path=%2Fshares%2Fmedia%2Fmovies');
+eq('du: no answer yet is pending with a unit', [u.ok, u.pending, /^hs-job-fm-test-du-/.test(u.unit), u.cached], [true, true, true, false]);
+next = { read: 'du-cached' };
+u = await api.du('disk:data-04', '/shares/media/movies');
+eq('du: a kept answer', [u.pending, u.cached, u.files, u.folders, u.bytes, u.partial], [false, true, 3, 2, 301007, false]);
+next = { read: 'du-refused' };
+u = await api.du('disk:data-04', '/nope');
+eq('du: a refusal has its reason', [u.ok, u.reason], [false, 'no such folder']);
+next = { read: 'stat-file' };
+let st = await api.stat('disk:data-04', '/shares/media/readme.txt');
+eq('stat url', last().url, '/api/sys/fm/stat/disk:data-04?path=%2Fshares%2Fmedia%2Freadme.txt');
+eq('stat: type, mode, perms, bytes', [st.ok, st.type, st.mode, st.perms, st.bytes], [true, 'f', '644', 'rw-r--r--', 5]);
+eq('stat: owner and group are names', [st.owner.length > 0, st.group.length > 0, /^[0-9]+$/.test(st.uid)], [true, true, true]);
+next = { read: 'stat-refused' };
+st = await api.stat('disk:data-04', '/shares/media/nope');
+eq('stat: a refusal has its reason', [st.ok, st.reason], [false, 'no such item']);
+
 console.log('-- progress');
 next = { read: 'progress-done' };
 let g = await api.progress('hs-job-fm-test-1');

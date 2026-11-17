@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: file manager backend (two panes): locations, listings, and copy/move/delete/rename/new folder as plan + background job
 # help.de: Dateimanager-Backend (zwei Fenster): Orte, Listen, Papierkorb, und Kopieren/Verschieben/Löschen (in den Papierkorb)/Wiederherstellen/Umbenennen/Neuer Ordner als Plan + Hintergrundjob
-# args: locations | pair <a> <b> | ls <loc> [--path P] [--cursor C] [--limit N] | trash <loc> | plan|start <op> --from <loc> --path P [--to <loc> --to-path Q] [--conflict ...] [--verify ...] [--parity-after] [--newname N] [--conflicts] [--permanent] [--confirm T] | progress <unit> | trash-empty
+# args: locations | pair <a> <b> | ls <loc> [--path P] [--cursor C] [--limit N] | du <loc> --path P | stat <loc> --path P | trash <loc> | plan|start <op> --from <loc> --path P [--to <loc> --to-path Q] [--conflict ...] [--verify ...] [--parity-after] [--newname N] [--conflicts] [--permanent] [--confirm T] | progress <unit> | trash-empty
 #
 # docs/PLAN-storage-nas.md. The interface reads and changes only through `hs sys fm ...`; every rule below is enforced HERE, never only in the UI.
 #
@@ -11,6 +11,10 @@
 #   ls <loc> [--path P] [--cursor C] [--limit N]
 #                         status ok, row<TAB>type(d|f|l)<TAB>bytes<TAB>mtime<TAB>name<TAB>disks<TAB>flags<TAB>busy, then cursor<TAB>X or end. Folders first, then by name.
 #                         The cursor is an offset into that order. Bytes of a folder are 0 (sizes of folders are not measured here).
+#   du <loc> --path P     the size of one folder (it reads every file entry below it and can wake sleeping disks, so it is a background job): a fresh answer from the cache
+#                         (kept per folder together with the mtime of that folder) is status ok, cached yes, files, folders, bytes, partial yes|no, mtime, time; otherwise the
+#                         job is started and the answer is status ok, pending yes, unit (ask again later). --now measures in this process (what the job runs); no pool lock.
+#   stat <loc> --path P   owner, group and mode of one item (read from stat): status ok, type d|f|l, owner, group, uid, gid, mode (octal), perms (rwxr-xr-x), bytes, mtime. Changes nothing.
 #   trash <loc>           status ok, days<TAB>14, then row<TAB>item<TAB>date<TAB>origin<TAB>bytes<TAB>type(d|f)<TAB>days_left per trashed item of the location
 #                         (item = the name to give `plan restore`, origin = where it was, below the location). The trash is hidden from ls.
 #   trash-empty           the timer job (03:35): removes the date folders older than 14 days in every file system's trash; status ok, removed<TAB>N
@@ -43,7 +47,7 @@ grab() { local p=$1 v; for v in ID KIND LABEL ROOT FS SIZE FREE ADD MOD REASON P
 sanitize_confirm() { local s; s=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._ -' '_'); printf '%s\n' "${s:0:64}"; }
 
 verb=${1:-}
-case "$verb" in locations|pair|ls|trash|trash-empty|plan|start|progress) shift ;; *) echo "usage: fm.sh locations|pair|ls|trash|trash-empty|plan|start|progress ..." >&2; exit 1 ;; esac
+case "$verb" in locations|pair|ls|du|stat|trash|trash-empty|plan|start|progress) shift ;; *) echo "usage: fm.sh locations|pair|ls|du|stat|trash|trash-empty|plan|start|progress ..." >&2; exit 1 ;; esac
 
 # ======================================================================= locations
 ids=()
@@ -128,6 +132,25 @@ load_busy() {   # load_busy <array key>: items of live jobs
   done
 }
 
+# open_dir <loc> <path>: resolves the location and the folder below it; sets L* (fm_resolve), real (the real path) and rel (below the root); refuses otherwise.
+# The caller declares `local real rel`.
+open_dir() {
+  local p dir top
+  fm_resolve "$1" || refuse "$LERR"
+  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  p=$(fm_clean_path "$2") || refuse "the path must not contain .. , empty parts or control characters"
+  dir=$LROOT${p:+/$p}
+  [ -d "$dir" ] || refuse "no such folder"
+  real=$(readlink -f -- "$dir")
+  case "$real/" in "$LROOT"/*) ;; *) refuse "that path leaves the location" ;; esac
+  rel=${real#"$LROOT"}; rel=${rel#/}
+  if [ -n "$rel" ]; then
+    top=${rel%%/*}
+    fm_protected "" "$top"
+    [ "$PROT" != system ] || refuse "$top belongs to the array and cannot be opened"
+  fi
+}
+
 cmd_ls() {
   gate
   [ $# -ge 1 ] || refuse "usage: ls <location>"
@@ -143,20 +166,8 @@ cmd_ls() {
   [[ $cursor =~ ^[0-9]{1,9}$ ]] || refuse "the cursor is a number"
   [[ $limit =~ ^[0-9]{1,5}$ ]] && [ "$limit" -ge 1 ] || refuse "the limit is a number from 1"
   [ "$limit" -le 2000 ] || limit=2000
-  fm_resolve "$loc" || refuse "$LERR"
-  [ "$LUSABLE" = yes ] || refuse "$LERR"
-  local p dir real rel top
-  p=$(fm_clean_path "$path") || refuse "the path must not contain .. , empty parts or control characters"
-  dir=$LROOT${p:+/$p}
-  [ -d "$dir" ] || refuse "no such folder"
-  real=$(readlink -f -- "$dir")
-  case "$real/" in "$LROOT"/*) ;; *) refuse "that path leaves the location" ;; esac
-  rel=${real#"$LROOT"}; rel=${rel#/}
-  if [ -n "$rel" ]; then
-    top=${rel%%/*}
-    fm_protected "" "$top"
-    [ "$PROT" != system ] || refuse "$top belongs to the array and cannot be opened"
-  fi
+  local real rel
+  open_dir "$loc" "$path"
   load_busy "$LAK"
   local -a dlist=()
   if [ "$LKIND" = pool ] || [ "$LKIND" = share ]; then
@@ -998,6 +1009,87 @@ for k, v in (("files_done", f[0]), ("files_total", f[1]), ("bytes_done", b[0]), 
   done
 }
 
+# ======================================================================= du and stat
+cmd_stat() {
+  gate
+  [ $# -ge 1 ] || refuse "usage: stat <location> --path P"
+  local loc=$1 path="" real rel name parent c; shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --path) [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
+      *) refuse "unknown option $1" ;;
+    esac
+  done
+  c=$(fm_clean_path "$path") || refuse "the path must not contain .. , empty parts or control characters"
+  [ -n "$c" ] || refuse "--path names the item"
+  name=${c##*/}; parent=""; case "$c" in */*) parent=${c%/*} ;; esac
+  if fm_badname "$name"; then refuse "this name has odd characters and cannot be looked at here"; fi
+  open_dir "$loc" "$parent"
+  [ -e "$real/$name" ] || [ -L "$real/$name" ] || refuse "no such item"
+  local line typ u g uid gid m a s t
+  line=$(stat -c '%F|%U|%G|%u|%g|%a|%A|%s|%Y' -- "$real/$name" 2>/dev/null) || refuse "the item cannot be read"
+  IFS='|' read -r typ u g uid gid m a s t <<<"$line"
+  a=${a:1}   # %A starts with the type letter
+  case $typ in directory) typ=d ;; "symbolic link") typ=l ;; *) typ=f ;; esac
+  u=$(printf '%s' "${u:--}" | tr -c 'A-Za-z0-9._@$-' '_'); g=$(printf '%s' "${g:--}" | tr -c 'A-Za-z0-9._@$ -' '_')
+  printf 'status\tok\ntype\t%s\nowner\t%s\ngroup\t%s\nuid\t%s\ngid\t%s\nmode\t%s\nperms\t%s\nbytes\t%s\nmtime\t%s\n' "$typ" "${u:--}" "${g:--}" "$uid" "$gid" "$m" "$a" "$s" "$t"
+}
+
+du_key() { printf '%s' "$1:$2" | cksum | cut -d' ' -f1; }
+cmd_du() {
+  gate
+  [ $# -ge 1 ] || refuse "usage: du <location> --path P"
+  local loc=$1 path="" now=no real rel; shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --path) [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
+      --now)  now=yes; shift ;;
+      *) refuse "unknown option $1" ;;
+    esac
+  done
+  open_dir "$loc" "$path"
+  local ddir=$fm_dir/du key cf mt run unit
+  key=$(du_key "$LID" "$rel"); cf=$ddir/$key.res; run=$ddir/$key.run
+  mt=$(stat -c %Y -- "$real" 2>/dev/null || echo 0)
+  local cm cfiles cdirs cbytes cpart ctime
+  if [ -f "$cf" ] && IFS=$'\t' read -r cm cfiles cdirs cbytes cpart ctime < "$cf" && [ "$cm" = "$mt" ] && [ -n "$ctime" ]; then
+    printf 'status\tok\ncached\tyes\nfiles\t%s\nfolders\t%s\nbytes\t%s\npartial\t%s\nmtime\t%s\ntime\t%s\n' "$cfiles" "$cdirs" "$cbytes" "$cpart" "$mt" "$ctime"
+    return 0
+  fi
+  mkdir -p "$ddir" 2>/dev/null || refuse "$fm_dir is not writable"
+  if [ "$now" = yes ]; then
+    # inside the job: no pool lock (a measurement changes nothing); the answer goes to the cache and is printed
+    trap "rm -f -- $(printf '%q' "$run")" EXIT   # the path now: $run is local to this function and gone when the trap runs
+    fm_scan 600 "$real"
+    mt=$(stat -c %Y -- "$real" 2>/dev/null || echo 0)
+    local t dirs; t=$(fm_now); dirs=$((S_DIRS > 0 ? S_DIRS - 1 : 0))
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$mt" "$S_FILES" "$dirs" "$S_BYTES" "$S_PARTIAL" "$t" > "$cf.tmp" && mv -f "$cf.tmp" "$cf"
+    printf 'status\tok\ncached\tno\nfiles\t%s\nfolders\t%s\nbytes\t%s\npartial\t%s\nmtime\t%s\ntime\t%s\n' "$S_FILES" "$dirs" "$S_BYTES" "$S_PARTIAL" "$mt" "$t"
+    return 0
+  fi
+  # no fresh answer: one background job per folder (a marker names it; a marker older than 15 minutes is a dead job)
+  chmod 700 "$fm_dir" 2>/dev/null || true
+  if [ -f "$run" ] && [ -z "$(find "$run" -mmin +15 2>/dev/null)" ]; then
+    printf 'status\tok\npending\tyes\nunit\t%s\n' "$(cat "$run" 2>/dev/null || echo -)"
+    return 0
+  fi
+  local -a args=(du "$loc" --path "$path" --now)
+  unit=hs-job-fm-test-du-$key
+  if [ "${HS_FM_SYNC:-0}" = 1 ]; then
+    printf '%s\n' "$unit" > "$run"
+    bash "$here/fm.sh" "${args[@]}" >/dev/null 2>&1 || true
+  elif [ "$fm_test" = 1 ]; then
+    printf '%s\n' "$unit" > "$run"
+    nohup bash "$here/fm.sh" "${args[@]}" >/dev/null 2>&1 &
+  else
+    . "$here/lib/job.sh"
+    printf -- '-\n' > "$run"   # before the start: a quick job removes it again
+    unit=$(hs_job "fm-du" "measure the size of ${LLABEL}:/${rel}" -- nice -n 19 bash "$here/fm.sh" "${args[@]}") || { rm -f -- "$run"; refuse "the job could not be started"; }
+    [ ! -f "$run" ] || printf '%s\n' "$unit" > "$run"
+  fi
+  printf 'status\tok\npending\tyes\nunit\t%s\n' "$unit"
+}
+
 # ======================================================================= trash
 cmd_trash() {
   gate
@@ -1060,6 +1152,8 @@ case "$verb" in
   locations) cmd_locations "$@" ;;
   pair)      cmd_pair "$@" ;;
   ls)        cmd_ls "$@" ;;
+  du)        cmd_du "$@" ;;
+  stat)      cmd_stat "$@" ;;
   plan)      cmd_plan "$@" ;;
   start)     cmd_start "$@" ;;
   progress)  cmd_progress "$@" ;;

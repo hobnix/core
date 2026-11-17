@@ -879,6 +879,27 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "fm.du.by_location": {
+    /** file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later */
+    words: ["fm", "du", "<location>"];
+    path: "/fm/du/{location}";
+    method: "get";
+    class: "read";
+    params: { location: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused"]
+      | [tag: "reason", text: Field]
+      | [tag: "cached", answer: "yes" | "no"]
+      | [tag: "pending", answer: "yes"]
+      | [tag: "unit", unit: Field]
+      | [tag: "files", count: Field]
+      | [tag: "folders", count: Field]
+      | [tag: "bytes", bytes: Field]
+      | [tag: "partial", answer: "yes" | "no"]
+      | [tag: "mtime", epoch: Field]
+      | [tag: "time", epoch: Field])[];
+  };
   "fm.locations": {
     /** file manager: the places a pane can show (disks of the array, pools, upload cache, shares, temporary disks) as loc rows: id, kind, label, filesystem, size, free, writable, reason, pool, disk */
     words: ["fm", "locations"];
@@ -944,6 +965,27 @@ export interface SysOperations {
     stdin: "none";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "fm.stat.by_location": {
+    /** file manager: owner, group and mode of one item (--path), read from stat: type, owner, group, uid, gid, mode, perms, bytes, mtime; changes nothing */
+    words: ["fm", "stat", "<location>"];
+    path: "/fm/stat/{location}";
+    method: "get";
+    class: "read";
+    params: { location: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused"]
+      | [tag: "reason", text: Field]
+      | [tag: "type", type: "d" | "f" | "l"]
+      | [tag: "owner", name: Field]
+      | [tag: "group", name: Field]
+      | [tag: "uid", id: Field]
+      | [tag: "gid", id: Field]
+      | [tag: "mode", octal: Field]
+      | [tag: "perms", rwx: Field]
+      | [tag: "bytes", bytes: Field]
+      | [tag: "mtime", epoch: Field])[];
   };
   "fm.trash.by_location": {
     /** file manager: what is in the trash of a place (kept 14 days): days, then row lines (item, date, origin, bytes, type d|f, days left); give an item to sys fm plan restore */
