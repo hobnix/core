@@ -293,7 +293,7 @@ if [ "$sel" = 7 ]; then
   ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
   ur=error
   if [ "$nrc" = 0 ]; then
-    export HS_NESTED_CANDIDATE=$ref
+    export HS_NESTED_CANDIDATE=${HS_TESTLAB_CANDIDATE:-$ref}   # a release tag to update to (the harness of --ref still runs): the channel beta, as a user updates
     ur=$(xrun upgrade "$vm" "" "$ndir/password")
   elif [ "$nrc" = 3 ]; then ur=skipped
   elif [ -n "$ndir" ] && [ -f "$ndir/result-iso.json" ] && [ "$(json_ok "$ndir/result-iso.json")" = failed ]; then ur=failed; fi
