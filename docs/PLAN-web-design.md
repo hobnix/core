@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Section 1 has its decisions (1.4); section 2 has its decisions (2.5). Epic: hobnix/server#768, milestone 0.8.5. Read from the code and issues on `develop` (2026-11-18), not seen in a browser.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 is not reviewed.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -153,3 +153,55 @@ Decided 2026-11-18:
 - **Certificates are in People, Services in Network.**
 - **The Jobs drawer stays and the Jobs page (#385) sits beside it.** How the two relate (what each shows) is for the page templates, section 3.
 - **The Setup banner shows until every check is done.**
+
+## 3. Page templates (#771)
+
+Draft, not reviewed. Six shapes cover every page of the tree. A page picks one; it does not invent a seventh. What exists today: `shell/PageFrame` (storage locked, part off, node unreachable), `shell/PageHeader` (crumb, title, subtitle, actions), `shell/PageState` (loading, empty, error with old data), `ui/Split` + `ui/Drawer` (list and side panel), `ui/Wizard` (one question per step), `pages/Section` (group overview). The states themselves are decided in web/design/HANDOFF.md and stay.
+
+### 3.1 The frame every page shares
+
+Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), the page body. Actions: at most two primary ones in the header, everything else in a More menu (#457, menu component #447). An action never runs directly: it opens a plan, and the job shows in the drawer. A destructive plan makes the user type the name of the thing.
+
+### 3.2 The six templates
+
+| Template | Used for | Body | Address |
+|---|---|---|---|
+| **Group** | Storage, Instances, Apps, Network, People, Health, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
+| **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes | filter tabs, `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
+| **Object** | one disk, pool, share, instance, app, user, backup job | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
+| **Feed** | Events, Notifications, Jobs, Health problems | time-ordered entries with filters; each entry links to the object it is about; acknowledge where it applies (#619) | `/<group>/<kind>`, filters in the address |
+| **Flow** | first-run wizard, app wizard, storage incident, capability setup | `Wizard` steps with progress, a way out that loses nothing, a last step that opens the object page | `/<group>/<kind>/new` or `/setup` |
+| **Settings** | Settings pages | form built from `layout.gen.json`, grouped by section, saved through a plan | `/settings/<page>` |
+
+Two pages are exempt from a template and use only the frame: **Files** (two-pane file manager, web/design/HANDOFF.md "Files") and the **browser terminal**. Summary is a Group page of its own kind: status lines that each open their owner page, a usage bar per pool, shortcuts that open plans.
+
+### 3.3 Quick look
+
+The quick look replaces the drawer. It is an overlay above the list (component from #447, `ui/Drawer` is the starting point), so selecting a row never narrows or moves the list. It shows the object's Overview, the linked objects and the main actions, plus "Open page". The row stays in the address (`?sel=`), so a reload or a shared link opens the same quick look. On a phone it is full screen.
+
+### 3.4 Jobs: drawer and page
+
+- **Drawer** (bottom, on every page): jobs running now and those finished since this session opened; one line each, with progress and Cancel. For watching what you started.
+- **Page** (Health > Jobs, #385): history with filters, per node, a record per job with its steps and result. For finding out what happened.
+- **Strip on an object page**: the jobs of that object, last first, each linking to its record on the Jobs page.
+
+All three read the same job records (jobs and events, #480) and follow events; none polls.
+
+### 3.5 What changes for today's pages
+
+| Today | Becomes |
+|---|---|
+| 9 pages with `Split` + `Drawer` | List, with the drawer as quick look |
+| `Section` (6 routes) | Group, with state per place |
+| `AppWizardPage`, `SettingsPage` wizard steps, CapabilitySettings wizard | Flow |
+| `SettingsPage` and `CapabilitySettings` | Settings |
+| about 20 hand-built plain pages | Object, Feed or Group, decided per page in the matrix (#774) |
+| `Files` | exempt |
+
+### 3.6 Open questions for review
+
+- Does every object get an Object page, or only the five in #453 (disk, pool, share, instance, user)? A group or a certificate has little to show beyond its quick look.
+- Tabs on an Object page: a fixed Overview, then at most how many? Where does History go: a tab, or the job strip?
+- Is Health problems a Feed or its own page shape (it has severity, acknowledge and undo)?
+- Do the Settings pages stay generated forms, or do some become Object pages (for example Updates)?
+- Where do the destructive actions sit on an Object page: a section at the bottom, or in the More menu only?
