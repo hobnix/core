@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "change"
+title = "The installer can choose the layout of /bulk"
+body  = """hs-install takes --bulk-type zfs|snapraid (home server role) and writes it to machine.toml before the system is built. A rebuild refuses to change the layout later, so until now a server could only be set up as SnapRAID by editing machine.toml before the install. Not tested on hardware yet."""

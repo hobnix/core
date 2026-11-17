@@ -58,6 +58,14 @@ class ConsoleTests(unittest.TestCase):
         c = n.Console(FakeTransport(outputs={"lsblk": "sda 100\n"}))
         self.assertEqual(c.run("lsblk"), (0, "sda 100"))
 
+    def test_output_of_the_second_command_has_no_prompt_in_front(self):
+        # the prompt printed after the first command is still in the buffer when the second command is typed; it is not output of the second
+        t = FakeTransport(outputs={"first": "one\n", "second": "two\n"})
+        c = n.Console(t)
+        self.assertEqual(c.run("first"), (0, "one"))
+        t.queue.append("[root@nested-test:~]# ")
+        self.assertEqual(c.run("second"), (0, "two"))
+
     def test_run_nonzero_rc(self):
         c = n.Console(FakeTransport(rc_for=lambda cmd: 3))
         self.assertEqual(c.run("false")[0], 3)
@@ -111,6 +119,18 @@ class ScenarioTests(unittest.TestCase):
         self.assertIsNone(n.pick_disk(""))
         self.assertIsNone(n.pick_disk("garbage\n"))
 
+    def test_upgrade_scenario(self):
+        steps = n.build_scenario("upgrade", dict(self.P, candidate="develop", app="whoami"))
+        text = "\n".join(s["text"] for s in steps if s["kind"] != "send_secret")
+        self.assertLess(text.index("hs config set timeZone"), text.index("hs update --yes"))     # a setting first, then update
+        self.assertLess(text.index("hs update --yes"), text.index("hs smoke"))        # checked after
+        self.assertIn("pkg install 'whoami'", text)
+        self.assertNotIn("pw1", text)                                                  # the password is only sent as a secret
+        self.assertNotIn("pkg install", "\n".join(s["text"] for s in n.build_scenario("upgrade", dict(self.P, candidate="develop"))))
+        self.assertIn("candidate.git", text)                                           # the candidate is develop of a local repository (channel edge)
+        self.assertIn("updateChannel edge", text)
+        self.assertIn("upgrade", n.STAGES)
+
     def test_shq(self):
         self.assertEqual(n.shq("a'b"), "'a'\\''b'")
 
@@ -152,6 +172,149 @@ class ScenarioTests(unittest.TestCase):
     def test_unknown_stage(self):
         with self.assertRaises(KeyError):
             n.build_scenario("nope", self.P)
+
+    def test_extra_stages_are_registered_and_build(self):
+        P = dict(self.P, backup_pass="BKPASS", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        for st in ("rollback", "backup", "restore", "pool"):
+            self.assertIn(st, n.STAGES)
+            steps = n.build_scenario(st, P)
+            self.assertGreater(len(steps), 5, st)
+            for s in steps:
+                self.assertIn(s["kind"], ("login", "send", "send_var", "send_secret", "wait", "run", "run_var", "capture", "pick_disk"), st)
+                # a secret is typed only by send_secret or the login step, never inside a command line
+                if s["kind"] != "send_secret":
+                    self.assertNotIn(P["password"], s["text"], st)
+                    self.assertNotIn("BKPASS", s["text"], st)
+
+    def test_login_step_logs_in_when_a_login_prompt_shows(self):
+        t = FakeTransport(banner="\nnested-test login: ")
+        c = n.Console(t, clock=Clock())
+        # the fake does not ask for a password after the user name: the step fails there, but it did type the user name
+        ok, _ = n.run_steps(c, [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
+        self.assertFalse(ok)
+        self.assertIn("adminuser", "".join(t.sent))
+
+    def test_login_step_accepts_a_shell_that_is_already_open(self):
+        t = FakeTransport(banner="[adminuser@nested-test:~]$ ")
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
+        self.assertTrue(ok, res)
+        self.assertNotIn("pw", "".join(t.sent))
+
+    def test_login_step_leaves_a_root_shell_from_the_stage_before(self):
+        t = FakeTransport(banner="[root@nested-test:~]# ")
+        c = n.Console(t, clock=Clock())
+        orig = t.write
+
+        def write(text):
+            orig(text)
+            if text.strip() == "exit":
+                t.queue.append("[adminuser@nested-test:~]$ ")
+        t.write = write
+        ok, res = n.run_steps(c, [n.step("login", "", user="adminuser", secret="pw", timeout=5, what="l")])
+        self.assertTrue(ok, res)
+        self.assertIn("exit\n", t.sent)
+        self.assertNotIn("pw", "".join(t.sent))
+
+    def test_address_scenario_records_the_ip(self):
+        steps = n.build_scenario("address", self.P)
+        self.assertIn("address", n.STAGES)
+        t = FakeTransport(banner="[adminuser@nested-test:~]$ ", outputs={"ip -4 -o addr": "192.168.1.77\r\n"})
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), steps)
+        self.assertTrue(ok, res)
+        self.assertEqual([r.get("value") for r in res if "value" in r], ["192.168.1.77"])
+        self.assertNotIn(self.P["password"], "".join(t.sent))
+
+    def test_address_scenario_fails_without_an_ip(self):
+        t = FakeTransport(banner="[adminuser@nested-test:~]$ ", outputs={"ip -4 -o addr": "\r\n"},
+                          rc_for=lambda cmd: 1 if "grep -Eq" in cmd else 0)   # the fake shell does not run grep: the real one rejects an empty address
+        ok, res = n.run_steps(n.Console(t, clock=Clock()), n.build_scenario("address", self.P))
+        self.assertFalse(ok)
+
+    def test_the_homeserver_install_is_snapraid(self):
+        old = os.environ.get("HS_NESTED_ROLE")
+        try:
+            os.environ["HS_NESTED_ROLE"] = "homeserver"
+            text = " ".join(s["text"] for s in n.build_scenario("iso", self.P))
+            self.assertIn("--role homeserver", text)
+            self.assertIn("--bulk-type snapraid", text)
+            os.environ["HS_NESTED_ROLE"] = "minimal"
+            self.assertNotIn("--bulk-type", " ".join(s["text"] for s in n.build_scenario("iso", self.P)))
+        finally:
+            if old is None:
+                os.environ.pop("HS_NESTED_ROLE", None)
+            else:
+                os.environ["HS_NESTED_ROLE"] = old
+
+    def test_the_rollback_stage_puts_etc_nixos_back(self):
+        # stages 4 and 5 run on the same VM: the bad commit must not stay in /etc/nixos
+        text = [s["text"] for s in n.build_scenario("rollback", self.P)]
+        i_upd = next(i for i, t in enumerate(text) if "hs update --yes" in t)
+        i_rst = next(i for i, t in enumerate(text) if "reset -q --hard {orig}" in t)
+        self.assertGreater(i_rst, i_upd)
+        self.assertTrue(any("rev-parse HEAD" in t for t in text[:i_upd]))
+
+    def test_output_after_a_command_that_was_echoed_twice(self):
+        # typed ahead of a starting shell, a line is echoed by the tty and again by the line editor: the output starts after the last echo
+        class T(FakeTransport):
+            def write(self, text):
+                line = text.rstrip("\n")
+                self.sent.append(text)
+                self.queue.append(line + "\r\n")
+                self.queue.append("[root@nested-test:~]# " + line + "\r\n")
+                import re as _re
+                m = _re.search(r'__(\w+)__ rc=\$\?"$', line)
+                self.queue.append("value-1\r\n__%s__ rc=0\r\n" % m.group(1))
+        c = n.Console(T(), clock=Clock())
+        self.assertEqual(c.run("readlink x"), (0, "value-1"))
+
+    def test_rollback_builds_the_full_system_first_on_a_homeserver_vm(self):
+        P = dict(self.P, disks={"fast1": "f1", "fast2": "f2"})
+        text = [s["text"] for s in n.build_scenario("rollback", P)]
+        self.assertLess(next(i for i, t in enumerate(text) if "hs rebuild --foreground" in t), next(i for i, t in enumerate(text) if "hs update --yes" in t))
+        self.assertFalse(any("hs rebuild" in s["text"] for s in n.build_scenario("rollback", self.P)))   # a minimal VM: no rebuild
+
+    def test_root_login_does_not_depend_on_the_prompt_of_the_system(self):
+        # after the full configuration root's shell has a starship prompt; sudo may also still know the password from the stage before
+        text = [s["text"] for s in n.build_scenario("rollback", self.P)]
+        self.assertLess(text.index("sudo -k"), text.index("sudo -i"))
+        self.assertTrue(any("exec bash --norc --noprofile" in t and "PS1=" in t for t in text))
+
+    def test_long_hs_commands_run_in_the_foreground(self):
+        # a long command on a terminal asks "Run it in the background as a job?" and waits for a key: it left the console stuck in run 12
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        text = [s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P)]
+        for cmd in ("hs backup now", "hs backup verify", "hs rebuild"):
+            self.assertTrue(all("--foreground" in t for t in text if cmd in t and "command -v" not in t.split(cmd)[0]), cmd)
+            self.assertTrue(any(cmd in t for t in text), cmd)
+
+    def test_nested_sh_plans_every_stage(self):
+        # nested.sh refuses a stage it cannot plan ("usage: ..."): a disk the scenario names but the plan does not know ended run 8
+        for st in n.STAGES:
+            if st == "upgrade":
+                continue
+            r = subprocess.run([sys.executable, "-I", LIB, "plan", st], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, "%s: %s" % (st, r.stderr))
+
+    def test_capture_with_fmt_fills_in_the_variables(self):
+        t = FakeTransport(outputs={"basename": "sdc\n"})
+        c = n.Console(t, clock=Clock())
+        ok, res = n.run_steps(c, [n.step("capture", "basename {d1}", var="x", fmt=True, what="c")], params_vars={"d1": "/dev/sdc"})
+        self.assertTrue(ok, res)
+        self.assertIn("basename /dev/sdc;", "".join(t.sent))
+
+    def test_the_pool_and_backup_stages_build_the_full_configuration_first(self):
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        for st in ("backup", "restore", "pool"):
+            text = " ".join(s["text"] for s in n.build_scenario(st, P))
+            self.assertIn("hs rebuild --foreground", text, st)
+            self.assertLess(text.index("pool start fast add"), text.index("hs rebuild --foreground"), st)   # the pool fast comes first
+            self.assertIn("incus_f1", text)
+
+    def test_the_stage_scenarios_do_not_touch_a_disk_they_were_not_given(self):
+        P = dict(self.P, backup_pass="x", disks={"backup": "bk", "pool1": "p1", "pool2": "p2", "fast1": "f1", "fast2": "f2"})
+        text = " ".join(s["text"] for st in ("backup", "restore", "pool") for s in n.build_scenario(st, P))
+        self.assertNotIn("/dev/sda", text)
+        self.assertIn("incus_bk", text)
 
     def test_full_iso_stage_against_fake(self):
         t = FakeTransport(banner="[nixos@nixos:~]$ ", outputs={"lsblk": "sda 21474836480\n"})
@@ -288,7 +451,7 @@ class RunTests(unittest.TestCase):
         # a copy of the scripts so .work/ lands in the temp dir, not in the repository
         self.repo = os.path.join(d, "repo")
         os.makedirs(os.path.join(self.repo, "scripts/dev"))
-        for f in ("nested.sh", "nested_lib.py"):
+        for f in ("nested.sh", "nested_lib.py", "nested_stages.py"):
             shutil.copy(os.path.join(ROOT, "scripts/dev", f), os.path.join(self.repo, "scripts/dev", f))
         self.iso = os.path.join(d, "x.iso")
         with open(self.iso, "wb") as f:
@@ -316,6 +479,8 @@ class RunTests(unittest.TestCase):
         self.assertEqual(self.run_sh("run", "--bogus").returncode, 2)
         self.assertEqual(self.run_sh("run", "--stage", "smoke").returncode, 2)
         self.assertEqual(self.run_sh("plan", "nope").returncode, 2)
+        self.assertEqual(self.run_sh("plan", "rollback").returncode, 0)
+        self.assertEqual(self.run_sh("run", "--stage", "rollback").returncode, 2)   # needs --name of an installed VM
 
     def test_plan_prints_steps_without_secrets(self):
         r = self.run_sh("plan")

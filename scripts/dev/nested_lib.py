@@ -19,11 +19,14 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # python -I does not add the script folder (nested_stages)
+
 EXIT_OK, EXIT_FAIL, EXIT_USAGE, EXIT_NOHOST, EXIT_INFRA = 0, 1, 2, 3, 4
 
 ANSI = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1bP[^\x1b]*\x1b\\")
 PROMPT_ISO = r"\[nixos@[^\]]*\]\$ "      # the auto-login shell of the NixOS installer image
 LOGIN = r"\n[^\n]*login: $"
+LOGIN_OR_SHELL = r"(?:login: $|\[%s@[^\]]*\][$#] $|\[root@[^\]]*\]# $)"   # a root shell is left over from the stage before: the login step exits it
 
 
 # ---------------------------------------------------------------- preflight
@@ -112,8 +115,15 @@ def build_scenario(stage, params):
     host = params.get("hostname", "nested-test")
     if stage == "iso":      # ISO boot check (#175) and the unattended install (needs the flags of hs-install; the answers file is not read yet)
         pw, key = params["password"], params["pubkey"]
-        install = ("HS_INSTALL_PASSWORD=%s hs-install --role minimal --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal"
-                   % (shq(pw), shq(host), shq(key)))
+        # minimal: only the base (fast). The backup and pool stages need the tools of the homeserver role (restic, mkfs, SnapRAID): the test-lab
+        # sets HS_NESTED_ROLE=homeserver for them, and those stages run `hs rebuild` once, as after every real install.
+        role = os.environ.get("HS_NESTED_ROLE", "minimal")
+        if role not in ("minimal", "homeserver"):
+            role = "minimal"
+        # homeserver: SnapRAID for /bulk (hs-install --bulk-type), so the full configuration imports only the pool fast; a rebuild cannot change it later
+        bulk = " --bulk-type snapraid" if role == "homeserver" else ""
+        install = ("HS_INSTALL_PASSWORD=%s hs-install --role %s --disk {disk} --confirm-disk {disk} --hostname %s --key %s --timezone UTC --preset minimal%s"
+                   % (shq(pw), role, shq(host), shq(key), bulk))
         return [
             step("wait", PROMPT_ISO, timeout=420, what="the installer ISO boots to its shell"),
             step("send", "sudo -i"),
@@ -139,10 +149,19 @@ def build_scenario(stage, params):
             step("run", "systemctl is-system-running --wait | grep -Eq '^(running|degraded)$'", timeout=300,
                  what="systemd finished starting (running or degraded)"),
         ]
-    raise KeyError(stage)
+    import nested_stages   # stages 3 to 5 (#432) live in their own module: one entry in SCENARIOS adds a stage
+    fn = nested_stages.SCENARIOS.get(stage)
+    if fn is None:
+        raise KeyError(stage)
+    return fn(params)
 
 
-STAGES = ("iso", "smoke")
+def _extra_stages():
+    import nested_stages
+    return tuple(nested_stages.SCENARIOS)
+
+
+STAGES = ("iso", "smoke") + _extra_stages()
 
 
 # ---------------------------------------------------------------- console driver
@@ -223,7 +242,11 @@ class Console:
         self.send("%s; echo \"__%s__ rc=$?\"" % (cmd, tag))
         got = self.expect(r"__%s__ rc=(\d+)" % tag, timeout)
         rc = int(re.search(r"__%s__ rc=(\d+)" % tag, got).group(1))
-        out = got.split("\n", 1)[1] if "\n" in got else ""
+        # the output starts after the line that echoes the typed command (its `$?` is still unexpanded); a prompt left in the buffer by the
+        # command before would otherwise be the first line and end up in the output
+        # (the last one: a command typed ahead of a starting shell is echoed twice, by the tty and by the line editor)
+        echos = list(re.finditer(r"__%s__ rc=\$\?\"[^\n]*\n" % tag, got))
+        out = got[echos[-1].end():] if echos else (got.split("\n", 1)[1] if "\n" in got else "")
         out = re.sub(r"\n?[^\n]*__%s__ rc=\d+$" % tag, "", out)
         return rc, out
 
@@ -237,7 +260,19 @@ def run_steps(console, steps, params_vars=None, report=None):
         rec = {"step": what, "kind": s["kind"], "ok": False}
         try:
             k = s["kind"]
-            if k == "wait":
+            if k == "login":   # an installed VM: the console is at a login prompt or still in a shell
+                console.send("")
+                got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
+                if re.search(r"\[root@[^\]]*\]# $", got):   # left-over `sudo -i` shell: back to adminuser (or to the login prompt)
+                    console.send("exit")
+                    got = console.expect(LOGIN_OR_SHELL % s["user"], s.get("timeout", 60))
+                if re.search(r"login: $", got):
+                    console.send(s["user"])
+                    console.expect(r"[Pp]assword: ?$", 30)
+                    console.send(s["secret"])
+                    console.expect(r"\[%s@[^\]]*\]\$ " % s["user"], 60)
+                rec["ok"] = True
+            elif k == "wait":
                 console.expect(s["text"], s.get("timeout", 60))
                 rec["ok"] = True
             elif k == "send":
@@ -246,13 +281,20 @@ def run_steps(console, steps, params_vars=None, report=None):
             elif k == "send_secret":
                 console.send(s["text"])
                 rec["ok"] = True
+            elif k == "send_var":
+                console.send(s["text"].format(**vars_))
+                rec["ok"] = True
             elif k in ("run", "run_var", "capture"):
-                cmd = s["text"].format(**vars_) if k == "run_var" else s["text"]
+                cmd = s["text"].format(**vars_) if k == "run_var" or s.get("fmt") else s["text"]
                 rc, out = console.run(cmd, s.get("timeout", 60))
                 want = s.get("expect_rc", 0)
                 rec["rc"] = rc
                 if k == "capture":
-                    vars_[s["var"]] = out
+                    vars_[s["var"]] = out.strip() if s.get("strip") else out
+                    if s.get("record"):   # the value goes into result-<stage>.json for the caller (testlab.sh reads the address of the VM there)
+                        # one value: the last line (an echoed command line or a prompt may stand before it in the console stream)
+                        lines = [x.strip() for x in out.splitlines() if x.strip()]
+                        rec["value"] = vars_[s["var"]] = lines[-1] if lines else ""
                 rec["ok"] = want is None or rc == want
             elif k == "pick_disk":
                 d = pick_disk(vars_.get(s["src"], ""))
@@ -307,10 +349,10 @@ class PtyTransport:
             self.proc.kill()
 
 
-def drive(stage, vm, logdir, password, pubkey, hostname, incus):
-    steps = build_scenario(stage, {"password": password, "pubkey": pubkey, "hostname": hostname})
+def drive(stage, vm, logdir, password, pubkey, hostname, incus, backup_pass="", disks=None):
+    steps = build_scenario(stage, {"password": password, "pubkey": pubkey, "hostname": hostname, "backup_pass": backup_pass, "disks": disks or {}})
     os.makedirs(logdir, exist_ok=True)
-    redact = Redactor([password])
+    redact = Redactor([x for x in (password, backup_pass) if x])
     with open(os.path.join(logdir, "console-%s.log" % stage), "w") as log:
         try:
             transport = PtyTransport([incus, "console", vm])
@@ -344,6 +386,7 @@ def main(argv):
     p.add_argument("--vm", required=True)
     p.add_argument("--logdir", required=True)
     p.add_argument("--hostname", default="nested-test")
+    p.add_argument("--disk", action="append", default=[], help="name=<Incus device name> of a virtual disk the stage may use")
     p.add_argument("--incus", default=os.environ.get("HS_NESTED_INCUS", "incus"))
     a = ap.parse_args(argv)
     if a.cmd == "preflight":
@@ -357,7 +400,8 @@ def main(argv):
         return EXIT_OK if ok else EXIT_FAIL
     if a.cmd == "plan":
         try:
-            steps = build_scenario(a.stage, {"password": "<password>", "pubkey": "<pubkey>"})
+            steps = build_scenario(a.stage, {"password": "<password>", "pubkey": "<pubkey>", "backup_pass": "<backup-password>",
+                                             "disks": {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2", "fast1", "fast2")}})
         except KeyError:
             print("unknown stage %r (stages: %s)" % (a.stage, ", ".join(STAGES)), file=sys.stderr)
             return EXIT_USAGE
@@ -372,7 +416,8 @@ def main(argv):
     if a.stage not in STAGES:
         print("unknown stage %r" % a.stage, file=sys.stderr)
         return EXIT_USAGE
-    return drive(a.stage, a.vm, a.logdir, pw, key, a.hostname, a.incus)
+    disks = dict(x.split("=", 1) for x in a.disk if "=" in x)
+    return drive(a.stage, a.vm, a.logdir, pw, key, a.hostname, a.incus, os.environ.get("HS_NESTED_BACKUP_PASS", ""), disks)
 
 
 if __name__ == "__main__":

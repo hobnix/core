@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "fix"
+title = "Adding the first data disks of a SnapRAID pool no longer ends as a failed job"
+body  = """hs pool bulk add finished with exit 1 when no parity disk existed yet: the closing table of the disks looked for parity disks that were not there, and the job was reported as failed right after /bulk had been mounted. The table is shown without them now and the job ends cleanly. Not tested on hardware yet."""
