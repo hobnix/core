@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6).
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 is not reviewed.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -207,3 +207,34 @@ Decided 2026-11-18:
 - **Health problems is a Feed.** Severity, acknowledge and undo are features of a Feed entry.
 - **Settings pages stay generated forms.** No Settings page becomes an Object page.
 - **Destructive actions sit in a marked section at the bottom** of the Object page, each through a plan that asks for the name.
+
+## 4. Behaviours that cross pages (#772)
+
+Draft, not reviewed. Each behaviour is decided once, here, and carried by one component or store. A page that needs it uses that; it does not build its own. Read from the issues and `web/` on `develop` (2026-11-18), not seen in a browser. Nothing of the live state ran on a server yet.
+
+| # | Behaviour | Rule | Carried by | Issues |
+|---|---|---|---|---|
+| 4.1 | Pending state | A row, card or header shows "installing", "stopping" and so on from the job record at once, and switches to the real state when the topic changes. A failed job puts the row back and says why. No page reads again on a timer "to be sure" after an action. | one shared place keyed by `web/src/jobkey.js`; the chip in `ui` | #483, #448 |
+| 4.2 | Live data | The interface follows events. Polling is only the fallback while the event stream is down. The top bar shows the age of the data. | `data.svelte.js`, `shell/Fresh` | #480, #486 |
+| 4.3 | Actions | An action opens a plan listing each step; it never runs directly. A destructive plan makes the user type the name of the thing. The result shows in the Jobs drawer. | `shell/PlanDialog`, `ui/Button` | web/design/HANDOFF.md |
+| 4.4 | Errors | Every error says what happened, the likely reason and one next step, with a stable code, a link to the guide section, and the English text for a code the web does not know. The same shape for a refused plan, a failed job and a page that cannot read. A page error keeps the old data visible with its age. | one error component (a `Banner` variant) and `PageState` | #488 |
+| 4.5 | Problems and notifications | Health problems can be acknowledged (quiet until the problem resolves and fails again, optionally for a time). An acknowledged problem is dimmed, is not in the red count and sends no push. A notification inbox lives in the top bar. | Feed template, bell in the top bar | #619 |
+| 4.6 | State in the address | The selected row (`?sel=`), the tab and the filters are in the address. Back closes the quick look, forward opens it again. A shared link opens the same view. | route helper next to `route.svelte.js` | #455 |
+| 4.7 | Keyboard and screen reader | Every action is reachable and startable by keyboard. Focus is visible. A dialog traps focus and returns it. A state is said in words, never only by a colour dot. Contrast holds in both themes. An automatic check runs in the browser stage of the test-lab. | every `ui` component; `StatusDot` takes a label | #487, #447 |
+| 4.8 | Phone | Up to 860 px: the tree is a slide-in drawer, optional columns are hidden, the quick look and plans are full screen, a wizard shows one question per screen. | the shell, `Table`, overlays | #427, web/design/HANDOFF.md |
+| 4.9 | Roles | An action the user may not start is shown, disabled, with the reason. The server enforces the role; the web only explains. A viewer sees every page without a plan. | `ui/Button` takes "not allowed" with a reason | #434 |
+| 4.10 | Trust | A package says "Official, signed" or "Community" on its card and its page, and "Tested on a real server" with a date, or "Not tested". The same words are used for extensions. | one chip in the Marketplace and app pages | #477 |
+
+### 4.1 Details that the table leaves out
+
+- **Pending versus real state.** The row shows pending while a job for its key runs, and the real state afterwards. If the job fails, the row shows the real state and a coded error (4.4) until the user dismisses it.
+- **Stream down.** The top bar shows that live updates are off and the data age keeps counting. Pages start polling at the slow fallback rate; the polling and its ratchet (`timed-reads.max`) stay as they are.
+- **Acknowledge.** The entry stays in the Feed, dimmed, with who acknowledged it and until when. Undo is always offered. The count in the bell and in Summary leaves acknowledged entries out.
+
+### 4.11 Open questions for review
+
+- What does the bell count: unacknowledged problems only, or problems plus unread notifications?
+- Is the read-only status page (#427) the viewer role seeing the normal pages, or a separate public page with its own address?
+- Does a failed job's coded error stay on the row until dismissed, or fade out after the next successful read?
+- Should the interface warn when the event stream is down for long (for example after one minute), or only show it in the top bar?
+- Does an acknowledge ask for a duration each time, or default to "until it resolves" with a snooze in the More menu?
