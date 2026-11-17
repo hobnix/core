@@ -176,6 +176,30 @@ FAKE_DISK=absent run start init --disk ata-ST4000_X --confirm sdz
 check_eq "start with the disk name" 0 "$rc"
 grep -q 'backup init .*ata-ST4000_X --yes' "$WORK/jobcalls" && pass "the job formats with --yes" || fail "init job: $(cat "$WORK/jobcalls")"
 
+echo "-- rules: back up chosen parts of an instance"
+run plan rules --name web
+check_eq "rules without a change asks for it" "2 status${T}needs
+needs${T}set" "$rc $out"
+run plan rules --name web --set include=/var/lib/app --set exclude='*.tmp'
+check_eq "a plan is allowed" 0 "$rc"
+has "^step${T}back up /var/lib/app" && has "^step${T}leave out \*.tmp" && has "partial backup" && has "^command${T}bash .*backup ct web apply include=/var/lib/app exclude=\*.tmp$" && has "^long${T}no$" && pass "the plan names each change and the command" || fail "rules plan: $out"
+run plan rules --name web --set reset=all
+has "^step${T}forget all rules" && pass "reset=all in the plan" || fail "reset plan: $out"
+run plan rules --name web --set include=var/lib
+check_eq "a relative include is refused" 1 "$rc"
+run plan rules --name web --set include=/a/../etc
+check_eq "an include with .. is refused" 1 "$rc"
+run plan rules --name web --set 'exclude=!keep'
+check_eq "an exclude with ! is refused" 1 "$rc"
+run plan rules --name web --set bogus=1
+check_eq "an unknown change is refused" 1 "$rc"
+run plan rules --name nosuch --set reset=all
+check_eq "an instance that does not exist is refused" 1 "$rc"
+rm -f "$WORK/jobcalls"
+run start rules --name web --set include=/var/lib/app
+check_eq "start" 0 "$rc"
+grep -q 'backup ct web apply include=/var/lib/app' "$WORK/jobcalls" && pass "the job applies the changes" || fail "rules job: $(cat "$WORK/jobcalls" 2>/dev/null)"
+
 echo "-- the usual refusals"
 run plan fly
 check_eq "an unknown action" 1 "$rc"

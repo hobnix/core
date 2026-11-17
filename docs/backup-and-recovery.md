@@ -200,6 +200,25 @@ To restore, put a `.pgdump` back with `pg_restore -d <database>` (inside the Doc
 `docker compose exec -T <service> pg_restore -U <user> -d <database> < file`), and copy SQLite files back into place while the
 application is stopped.
 
+### Back up only parts of an instance
+By default an instance is backed up as a whole. For one with a lot of replaceable data, or an app that says in its manifest
+(`[app.backup] mode = "paths"`) where its data lives, only chosen paths go into the backup. The choice is the rule file
+`/var/lib/hs/backup-rules/<instance>`: lines `include <absolute path in the instance>` and `exclude <restic pattern>` (a pattern that starts
+with `/` is read from the instance's root; no `!`). No file means the whole instance. A recipe writes the file once when it is set up; if the
+file exists already it is left alone, so your edit wins.
+
+```bash
+hs backup ct <name> paths              # what is in and what is out, with sizes
+hs backup ct <name> include /var/lib/app
+hs backup ct <name> exclude '*.tmp'
+hs backup ct <name> reset              # the whole instance again (reset <path> forgets one rule)
+```
+
+The nightly run then saves only those paths, tagged `ct:<name>` and `partial`; the database dump files (`/var/backups/hs`) are always part
+of it. A partial backup **holds** the chosen paths and the dump files, nothing else. It **gives back** those paths only: the instance
+cannot boot from it. To restore, run the recipe of the app again from its package (it creates the instance), stop the app, then put the
+paths back (`hs backup find` shows them below the instance's `rootfs` folder; restore them into a temporary folder with `hs backup restore latest <path> --tag ct:<name> --to <folder>` and copy them in). Not tested on hardware yet.
+
 `hs backup ct <name> on` also accepts a **VM**. restic cannot read a running VM disk, so the whole machine is exported to one file each
 night. That needs about the used size of the VM as free space in `/var/tmp` (or `HS_VM_EXPORT_DIR`); with too little space the run warns,
 skips the VM and counts as failed. The nightly backup waits for the export.

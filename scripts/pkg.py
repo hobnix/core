@@ -12,7 +12,8 @@
   pkg.py applied                                           name, version the last successful run applied
   pkg.py api                                               the API level of the core helpers
   pkg.py perms-check <folder> [name]                       exit 1 and the reasons when the declared permissions do not cover what the package uses (hs ext enable refuses it)
-  pkg.py perms <name>                                      the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
+  pkg.py backup-paths <name>                               the paths of [app.backup] mode = "paths", one per line (the recipe run seeds the backup rules from them)
+  pkg.py perms <name>                                     the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
   pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
   pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
@@ -661,6 +662,12 @@ def main(argv):
             print("unknown package", file=sys.stderr)
             return 1
         for x in pkg_perms.of(found[0]) or ["-"]:
+            print(x)
+    elif cmd == "backup-paths":     # backup-paths <name>: the paths of [app.backup] mode = "paths", one per line (nothing for another mode); exit 1 for an unknown package
+        found = [m for _, m in manifests() if m.get("name") == (rest[0] if rest else "")]
+        if not found:
+            return 1
+        for x in pkg_app.backup_paths(found[0]):
             print(x)
     elif cmd == "perms-check":      # perms-check <folder> [name]: what the declared permissions do not cover (exit 1), used by hs ext enable (ADR 0014)
         if not rest:

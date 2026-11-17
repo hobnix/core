@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change the backup without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: das Backup ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <toggle|now|verify|prune|drill|browse|offsite-set|offsite-now|offsite-off|init> [--name <share|instance>] [--kind shares|sensitive|ct] [--to on|off] [--count <N>] [--repo <restic repository>] [--disk <id>] [--confirm <disk name>]
+# args: plan|start <toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-now|offsite-off|init> [--name <share|instance>] [--set include=<path>|exclude=<glob>|reset=<path>|reset=all]... [--kind shares|sensitive|ct] [--to on|off] [--count <N>] [--repo <restic repository>] [--disk <id>] [--confirm <disk name>]
 # System command (hs sys backup plan|start): for the interface, timers and tests. It never asks and prints plain key<TAB>value lines like
 # pool-change.sh and share-change.sh.
 #   toggle --name <n> --kind shares|sensitive|ct --to on|off   put a share or an instance into the nightly backup or leave it out
@@ -10,6 +10,8 @@
 #   prune                                                      give space back now: delete leftovers of a run that ran out of space, apply the retention, prune
 #   drill [--count N]                                         restore N random files (default 5) and compare them with the originals
 #   browse --to on|off                                         publish the whole backup read-only as the share backup-browse, or stop that
+#   rules --name <instance> --set <change>...                  back up only chosen parts of an instance: --set include=<absolute path in it>, exclude=<restic glob>,
+#                                                              reset=<path> (forget one rule) or reset=all (the whole instance again); applied in the order given
 #   offsite-set --repo <restic repository>                     also copy every backup to a second repository (sftp:user@host:/path, b2:bucket:path, a folder ...); the
 #                                                              credentials stay in /var/lib/hs/backup-offsite.env, written by hand, never passed through here
 #   offsite-now                                                copy the new backups to the off-site repository now
@@ -30,14 +32,16 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: backup-change.sh plan|start <toggle|now|verify|drill|browse> [options]" >&2; exit 1 ;; esac
-case "$action" in toggle|now|verify|prune|drill|browse|offsite-set|offsite-now|offsite-off|init) ;; *) refuse "unknown action (toggle, now, verify, drill, browse, offsite-set|now|off or init)" ;; esac
+case "$action" in toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-now|offsite-off|init) ;; *) refuse "unknown action (toggle, now, verify, drill, browse, offsite-set|now|off or init)" ;; esac
 shift 2
+sets=()
 name="" kind="" to="" count=5 repo="" disk="" confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --name)    name=${2:-}; shift 2 ;;
     --kind)    kind=${2:-}; shift 2 ;;
     --to)      to=${2:-}; shift 2 ;;
+    --set)     sets+=("${2:-}"); shift 2 ;;
     --count)   count=${2:-}; shift 2 ;;
     --repo)    repo=${2:-}; shift 2 ;;
     --disk)    disk=${2:-}; shift 2 ;;
@@ -50,6 +54,7 @@ needs=()
 case "$action" in
   toggle) [ -n "$name" ] || needs+=(name); [ -n "$kind" ] || needs+=(kind); [ -n "$to" ] || needs+=(to) ;;
   browse) [ -n "$to" ] || needs+=(to) ;;
+  rules) [ -n "$name" ] || needs+=(name); [ ${#sets[@]} -gt 0 ] || needs+=(set) ;;
   offsite-set) [ -n "$repo" ] || needs+=(repo) ;;
   init) [ -n "$disk" ] || needs+=(disk) ;;
 esac
@@ -64,6 +69,17 @@ case "$action" in
     case "$kind" in shares|sensitive|ct) ;; *) refuse "--kind is shares, sensitive or ct" ;; esac
     [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
   browse) [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
+  rules)
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid name"
+    . "$here/lib/backup-rules.sh"
+    for s in "${sets[@]}"; do
+      case "$s" in
+        include=*) rules_path_ok "${s#include=}" || refuse "an include is an absolute path inside the instance, without .. in it" ;;
+        exclude=*) rules_glob_ok "${s#exclude=}" || refuse "an exclude is a restic pattern: not empty, no ! in front" ;;
+        reset=*) [ "${s#reset=}" = all ] || [ -n "${s#reset=}" ] || refuse "reset needs a path or all" ;;
+        *) refuse "--set is include=<path>, exclude=<glob>, reset=<path> or reset=all" ;;
+      esac
+    done ;;
   offsite-set) { [[ "$repo" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$repo" != -* ]] && [[ "$repo" != *..* ]]; } || refuse "that is not a restic repository address (for example sftp:user@host:/path, b2:bucket:path or a folder)" ;;
   init)   [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || refuse "that is not a disk id (see hs sys pool disks)" ;;
   drill)  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 1 ] && [ "$count" -le 100 ] || refuse "--count is a number from 1 to 100" ;;
@@ -93,6 +109,9 @@ case "$action" in
       awk -F'\t' -v n="$name" '$1 != "ct" && $1 != "always" && $2 == n { f = 1 } END { exit !f }' <<<"$overview" || refuse "There is no share called '$name'."
       cmd=(bash "$backup" "$name" "$to")
     fi ;;
+  rules)
+    ${HS_INCUS:-incus} info "$name" >/dev/null 2>&1 || refuse "There is no instance called '$name'."
+    cmd=(bash "$backup" ct "$name" apply "${sets[@]}") ;;
   now)    needs_disk; cmd=(bash "$backup" now) ;;
   verify) needs_disk; cmd=(bash "$backup" verify) ;;
   prune)  needs_disk; cmd=(bash "$backup" prune) ;;
@@ -152,6 +171,23 @@ case "$action" in
     else
       printf 'heading\ttake %s out of the backup\nstep\tleave %s out of the nightly backup (existing backups stay until they age out)\n' "$name" "$name"
     fi ;;
+  rules)
+    printf 'heading	choose what of %s is backed up
+' "$name"
+    for s in "${sets[@]}"; do
+      case "$s" in
+        include=*) printf 'step	back up %s
+' "${s#include=}" ;;
+        exclude=*) printf 'step	leave out %s
+' "${s#exclude=}" ;;
+        reset=all) printf 'step	forget all rules: the whole instance is backed up again
+' ;;
+        reset=*)   printf 'step	forget the rule for %s
+' "${s#reset=}" ;;
+      esac
+    done
+    printf 'note	With rules the instance is backed up as a partial backup: only the chosen paths (and its database dump files). It cannot boot from its backup: a restore runs the recipe again and puts the paths back.
+' ;;
   now)
     shares=$(awk -F'\t' '$1 != "ct" && $1 != "always" && $3 == "on" { n++ } END { print n + 0 }' <<<"$overview")
     cts=$(awk -F'\t' '$1 == "ct" && $3 == "on" { n++ } END { print n + 0 }' <<<"$overview")
@@ -201,5 +237,5 @@ printf 'command\t%s\n' "${cmd[*]}"
 if [ "$action" = init ]; then
   printf 'danger\tThis ERASES everything on %s and makes it the backup disk.\nconfirm_name\t%s\n' "$diskname" "$diskname"
 fi
-case "$action" in toggle|browse|offsite-off|init) printf 'long\tno\n' ;; *) printf 'long\tyes\n' ;; esac
+case "$action" in toggle|browse|rules|offsite-off|init) printf 'long\tno\n' ;; *) printf 'long\tyes\n' ;; esac
 exit 0

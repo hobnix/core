@@ -19,6 +19,10 @@ usage: hs backup [status]                    what is in the backup, last run, sp
        hs backup ct <name> on|off            same for a container (needs to be running) or a virtual machine
                                              (the whole machine as one export file every night, needs that much
                                              free space in /var/tmp or HS_VM_EXPORT_DIR)
+       hs backup ct <name> paths             which parts of the instance are in the backup (in and out, with sizes)
+       hs backup ct <name> include <path>    back up only chosen parts of the instance: add a path inside it
+       hs backup ct <name> exclude <glob>    leave a part out (restic pattern, a leading / is the instance root)
+       hs backup ct <name> reset [<path>]    forget one rule, or all of them: the whole instance again
        hs backup list                        snapshots (id, time, tag, size)
        hs backup find <name>                 which snapshots contain a file name
        hs backup restore <snapshot|latest> <path> [--tag T] [--to DIR] [--keep-owner]
@@ -75,6 +79,7 @@ ON=$STATE/backup-on              # shares included on purpose, one per line (onl
 # "off" = a share is in the backup only when it was switched on; "on" = in unless switched off.
 # Without the file (a server that was not rebuilt yet) nothing changes: "on".
 . "$(dirname "$0")/lib/sharepath.sh"
+. "$(dirname "$0")/lib/backup-rules.sh"   # rule file per instance: which parts of it are backed up (hs backup ct <ct> paths)
 . "$(dirname "$0")/lib/event.sh"   # event_emit: backup.ok, backup.failed, backup.report (best effort)
 . "$(dirname "$0")/lib/setting.sh"   # backupNewShares is a runtime setting now (true|false); the old /etc/hs file (on|off) is its fallback
 NEW_SHARES=${HS_BACKUP_NEW_SHARES:-$(case "$(setting_get backupNewShares 2>/dev/null)" in false|off) echo off ;; *) echo on ;; esac)}
@@ -223,6 +228,67 @@ cmd_toggle_ct() {
   esac
 }
 
+# ── Which parts of an instance are backed up (hs backup ct <ct> paths|include|exclude|reset, hs sys backup rules <ct>) ──
+rules_size() {   # rules_size <ct> <path inside the instance>: bytes on the SSD (rootfs), or - when it is not mounted or not there
+  local f=$INCUS_ROOT/$1/rootfs$2 n
+  if [ -e "$f" ] && n=$(du -sb -- "$f" 2>/dev/null | cut -f1) && [ -n "$n" ]; then echo "$n"; else echo -; fi
+}
+cmd_rules_kv() {   # --rules <ct>: partial<TAB>yes|no, include<TAB>path<TAB>bytes, exclude<TAB>glob<TAB>-, dump<TAB>path<TAB>bytes
+  local ct=${1:-} p
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "usage: backup.sh --rules <instance>" >&2; exit 1; }
+  if rules_has "$ct"; then printf 'partial\tyes\n'; else printf 'partial\tno\n'; fi
+  while IFS= read -r p; do if [ -n "$p" ]; then printf 'include\t%s\t%s\n' "$p" "$(rules_size "$ct" "$p")"; fi; done < <(rules_list "$ct" include)
+  while IFS= read -r p; do if [ -n "$p" ]; then printf 'exclude\t%s\t-\n' "$p"; fi; done < <(rules_list "$ct" exclude)
+  if rules_has "$ct" && [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then printf 'dump\t/var/backups/hs\t%s\n' "$(rules_size "$ct" /var/backups/hs)"; fi
+}
+cmd_ct_paths() {   # hs backup ct <ct> paths
+  local ct=$1 p b kind sz
+  if ! rules_has "$ct"; then
+    note "$(t '%s: the whole instance is backed up (no rules). Choose parts: hs backup ct %s include <path>' "$ct" "$ct")"
+    return 0
+  fi
+  step "$(t 'In the backup of %s' "$ct")"
+  while IFS=$'\t' read -r kind p b; do
+    case "$kind" in include|dump) ;; *) continue ;; esac
+    if [ "$b" = - ]; then sz=$(t '(size unknown: the instance is not running)'); else sz=$(human "$b"); fi
+    if [ "$kind" = dump ]; then sz="$sz $(t '(dump files, always)')"; fi
+    say "  $p  $sz"
+  done < <(cmd_rules_kv "$ct")
+  step "$(t 'Left out')"
+  while IFS= read -r p; do if [ -n "$p" ]; then say "  $p"; fi; done < <(rules_list "$ct" exclude)
+  say "  $(t 'everything else in the instance: a restore runs the recipe again and puts these paths back')"
+}
+cmd_ct_rule_apply() {   # cmd_ct_rule_apply <ct> include|exclude|reset <arg>
+  local ct=$1 verb=$2 arg=${3:-}
+  case "$verb" in
+    include) rules_path_ok "$arg" || die "$(t 'An include is an absolute path inside the instance (no .. in it): %s' "$arg")"
+             rules_add "$ct" include "$arg"; ok "$(t '%s: %s is in the backup' "$ct" "$arg")" ;;
+    exclude) rules_glob_ok "$arg" || die "$(t 'An exclude is a restic pattern, not empty, no ! in front: %s' "$arg")"
+             rules_has "$ct" || die "$(t '%s has no include yet: choose what is in first (hs backup ct %s include <path>)' "$ct" "$ct")"
+             rules_add "$ct" exclude "$arg"; ok "$(t '%s: %s is left out' "$ct" "$arg")" ;;
+    reset)   if [ -n "$arg" ] && [ "$arg" != all ]; then rules_drop "$ct" "$arg"; ok "$(t '%s: rule %s removed' "$ct" "$arg")"
+             else rules_reset "$ct"; ok "$(t '%s: no rules, the whole instance is backed up again' "$ct")"; fi ;;
+  esac
+}
+cmd_ct_rules() {   # hs backup ct <ct> paths|include|exclude|reset|apply ...
+  local ct=$1 verb=$2 s
+  shift 2
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "$(t 'That is not an instance name: %s' "$ct")"
+  case "$verb" in
+    paths)   [ $# -eq 0 ] || usage; cmd_ct_paths "$ct" ;;
+    include|exclude) [ $# -eq 1 ] || usage
+             incus info "$ct" >/dev/null 2>&1 </dev/null || die "$(t 'No instance called %s' "$ct")"
+             cmd_ct_rule_apply "$ct" "$verb" "$1" ;;
+    reset)   [ $# -le 1 ] || usage; cmd_ct_rule_apply "$ct" reset "${1:-}" ;;
+    apply)   # the interface: include=<path> exclude=<glob> reset=<path>|all, in this order
+             incus info "$ct" >/dev/null 2>&1 </dev/null || die "$(t 'No instance called %s' "$ct")"
+             for s in "$@"; do
+               case "$s" in include=*|exclude=*|reset=*) cmd_ct_rule_apply "$ct" "${s%%=*}" "${s#*=}" ;; *) die "$(t 'Unknown rule change: %s' "$s")" ;; esac
+             done ;;
+    *) usage ;;
+  esac
+}
+
 host_files() {
   local f
   if [ -n "${HS_BACKUP_HOST_FILES:-}" ]; then
@@ -359,6 +425,29 @@ ct_excludes() {  # ct_excludes <rootfs>
   done
 }
 
+# An instance with backup rules (scripts/lib/backup-rules.sh): only the included paths below its rootfs, tagged partial, with the
+# usual excludes and the rule excludes. The dump files (/var/backups/hs) are always part of it when the instance has a dump descriptor.
+# ct_partial_backup <name> <rootfs> <restic backup options...> -- <ct_excludes...>
+ct_partial_backup() {
+  local name=$1 root=$2 inc=() ex=() opts=() paths=() p g
+  shift 2
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do opts+=("$1"); shift; done
+  shift
+  ex=("$@")
+  while IFS= read -r p; do if [ -n "$p" ]; then inc+=("$p"); fi; done < <(rules_list "$name" include)
+  if [ -n "$(dump_cmds "$DUMPS/$name")" ]; then inc+=(/var/backups/hs); fi
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    case "$g" in /*) ex+=(--exclude "$root$g") ;; *) ex+=(--exclude "$g") ;; esac
+  done < <(rules_list "$name" exclude)
+  for p in "${inc[@]}"; do
+    if [ -e "$root$p" ]; then paths+=("$root$p"); else warn "$(t '%s: %s is not in the instance, skipped' "$name" "$p")"; fi
+  done
+  if [ ${#paths[@]} -eq 0 ]; then warn "$(t '%s: none of its backup paths exist, nothing backed up' "$name")"; return 1; fi
+  note "$(t '%s: only the chosen parts are backed up (hs backup ct %s paths)' "$name" "$name")"
+  R backup "${opts[@]}" --tag "ct:$name" --tag partial "${ex[@]}" "${paths[@]}"
+}
+
 cmd_now() {
   local scheduled=false
   [ "${1:-}" = --scheduled ] && scheduled=true
@@ -435,7 +524,11 @@ cmd_now() {
     step "$(t 'Container %s' "$name")"
     dump_hook "$name" || fail=1
     mapfile -t ex < <(ct_excludes "$root")
-    R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || fail=1
+    if rules_has "$name"; then
+      ct_partial_backup "$name" "$root" "${b[@]}" -- "${ex[@]}" || fail=1
+    else
+      R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || fail=1
+    fi
   done
 
   # Keep 7 daily, 4 weekly, 6 monthly per kind of snapshot. Space is only
@@ -1428,6 +1521,7 @@ case "$cmd" in
   --find)  cmd_find_kv "$@" ;;
   --snapshots) cmd_snapshots_kv "$@" ;;
   --overview)  cmd_overview_kv ;;
+  --rules)  cmd_rules_kv "$@" ;;
   --state)  cmd_state_kv ;;
   --shares) cmd_shares_kv ;;
   status)  cmd_status ;;
@@ -1443,7 +1537,9 @@ case "$cmd" in
   drill)  cmd_drill "$@" ;;
   offsite) cmd_offsite "$@" ;;
   init)    cmd_init "$@" ;;
-  ct)      [ $# -eq 2 ] || usage; cmd_toggle_ct "$@" ;;
+  ct)      if [ $# -eq 2 ] && { [ "$2" = on ] || [ "$2" = off ]; }; then cmd_toggle_ct "$@"
+           elif [ $# -ge 2 ]; then cmd_ct_rules "$@"
+           else usage; fi ;;
   *)
     # hs backup <share> on|off
     if [ $# -eq 1 ] && { [ "$1" = on ] || [ "$1" = off ]; }; then

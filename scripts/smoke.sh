@@ -163,7 +163,7 @@ default_probes() {
     printf '%s\t%s\t%s\n' "hs share $first_share show" "share $first_share show" "0" "hs share $first_share snapshots" "share $first_share snapshots" "0 1"
   fi
   if [ -n "$first_ct" ]; then
-    printf '%s\t%s\t%s\n' "hs ct $first_ct snapshots" "ct $first_ct snapshots" "0 1" "hs ct $first_ct storage list" "ct $first_ct storage list" "0 1" "hs ct $first_ct logs" "ct $first_ct logs 5" "0 1" "hs ct $first_ct device list" "ct $first_ct device list" "0 1"
+    printf '%s\t%s\t%s\n' "hs ct $first_ct snapshots" "ct $first_ct snapshots" "0 1" "hs ct $first_ct storage list" "ct $first_ct storage list" "0 1" "hs ct $first_ct logs" "ct $first_ct logs 5" "0 1" "hs ct $first_ct device list" "ct $first_ct device list" "0 1" "hs sys backup rules $first_ct" "sys backup rules $first_ct" "0" "hs backup ct $first_ct paths" "backup ct $first_ct paths" "0"
   fi
   if [ -n "$first_disk" ]; then
     printf '%s\t%s\t%s\t%s\n' "hs disk $first_disk health" "disk $first_disk health" "0 1" 120 "hs disk $first_disk results" "disk $first_disk results" "0 1" ""

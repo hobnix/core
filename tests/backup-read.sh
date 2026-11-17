@@ -39,6 +39,25 @@ has "sensitive${T}immich${T}on${T}-" && pass "an unmeasured share has - as size"
 has "ct${T}web${T}on${T}-" && has "ct${T}jellyfin${T}on${T}-" && pass "the instances in the backup" || fail "ct: $out"
 has "always${T}domain controller${T}on" && has "always${T}host files${T}on" && pass "the parts that are always in" || fail "always: $out"
 
+echo "-- the overview does not change with rules (byte-equal)"
+before=$out
+mkdir -p "$WORK/state/backup-rules" "$WORK/incus/web/rootfs/var/lib/app" "$WORK/incus/web/rootfs/var/log"
+echo data > "$WORK/incus/web/rootfs/var/lib/app/db"
+export HS_INCUS_ROOT=$WORK/incus
+out=$(b --rules web); has "partial${T}no" && pass "no rule file: not partial" || fail "rules none: $out"
+printf 'include /var/lib/app
+exclude *.tmp
+' > "$WORK/state/backup-rules/web"
+out=$(b --rules web)
+has "partial${T}yes" && has "include${T}/var/lib/app${T}5" && has "exclude${T}*.tmp${T}-" && pass "rules: partial, include with its size, exclude" || fail "rules: $out"
+printf 'include /nowhere
+' > "$WORK/state/backup-rules/web"
+out=$(b --rules web); has "include${T}/nowhere${T}-" && pass "a path that is not there has - as size" || fail "rules gone path: $out"
+out=$(b --overview)
+check_eq "sys backup overview is byte-equal with rules" "$before" "$out"
+out=$(b --rules 'a;b' 2>&1 || true); has "usage" && pass "no shell characters in an instance name" || fail "rules name: $out"
+rm -rf "$WORK/state/backup-rules"
+
 echo "-- snapshots"
 out=$(b --snapshots 'bad tag' 2>&1 || true)
 has "unknown tag" && pass "a tag that is not shares, host or ct:<name> is refused" || fail "tag: $out"
