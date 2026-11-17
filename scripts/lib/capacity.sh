@@ -55,6 +55,22 @@ capacity_record() {
 
 _cap_human_days() { if [ "$1" -ge 90 ]; then echo "$(( $1 / 30 )) months"; else echo "$1 days"; fi; }
 
+# Pools that will be full in less than one day (level 2 of the automatic reaction): one pool name per line.
+capacity_imminent() {
+  local v used size pct hist days
+  while IFS=$'	' read -r v used size; do
+    case "$v" in zfs:*) ;; *) continue ;; esac
+    [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null || continue
+    pct=$(( used * 100 / size ))
+    [ "$pct" -ge "${HS_CAP_MIN_FILL:-60}" ] || continue
+    hist=$(_cap_state usage "$v" 30 2>/dev/null || true)
+    days=$(_cap_fc days-to-full --min-days "${HS_CAP_MIN_DAYS:-3}" --min-samples "${HS_CAP_MIN_SAMPLES:-6}" <<<"$hist" || echo -)
+    [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -lt 1 ] && printf '%s
+' "${v#zfs:}"
+  done < <(_cap_volumes)
+  return 0
+}
+
 capacity_problems() {
   local warn=${HS_CAP_WARN_DAYS:-30} minfill=${HS_CAP_MIN_FILL:-60}
   local v used size days growth pct label hist fix key urgent=${HS_CAP_URGENT_DAYS:-7}

@@ -338,7 +338,18 @@ appeared, or many reallocated sectors, is `failing`; small changes and cable (CR
 the server sends a push message. `sudo hs disk baseline run` does the check now. Not tested on hardware yet.
 
 A `failing` disk also pauses the parity sync, the scrub and the cache mover when `autoMitigate` is on (`hs health resume` lifts the pause);
-`watch` never does. A long self-test runs every night in ONE disk, ordered by serial, so a disk is tested every N nights. A disk that cannot be
+`watch` never does.
+
+The automatic reaction has three levels, each its own switch in the machine settings, all off by default. None of them deletes, formats or
+moves anything. Not tested on hardware yet.
+
+| Level | Setting | When | What happens |
+| --- | --- | --- | --- |
+| 1 | `autoMitigate` | a failing disk, a degraded pool, a pool above 95 % or full within a week | the parity sync, the scrub and the cache mover pause; `hs health resume` lifts it |
+| 2 | `autoMitigateFreeze` | a pool above 98 % or full within a day | the apps that write to its shares are frozen (`incus pause`), Samba stays as it is; one push message names the apps; `hs storage incident resume` lets them run |
+| 3 | `autoMitigateBackup` | a disk turns `failing` and the newest backup is older than 24 hours | `hs backup now` runs once (it only reads the pools and writes the backup disk); a copy from disk to disk is never automatic, the message names `hs disk <disk> move` |
+
+A long self-test runs every night in ONE disk, ordered by serial, so a disk is tested every N nights. A disk that cannot be
 tested that night (still busy with its last test, or no self-test support) is skipped and the next one is tried; a long test that takes more
 than a day can overlap the next night's test of another disk. Disks in a ZFS mirror or raidz get a short error recovery time (7 seconds) at every boot (`hs disk erc list` shows them);
 single disks and SnapRAID disks keep the default. Not tested on hardware yet.

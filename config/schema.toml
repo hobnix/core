@@ -997,6 +997,36 @@ value = '''
 autoMitigate = true'''
 
 [[item]]
+kind = "option"
+key = "autoMitigateFreeze"
+type = "bool"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = 'false'
+doc = '''
+# Level 2 of the automatic reaction: when a pool is above 98 % full or will be full within a day, freeze the apps that write to it (Samba stays as it is)
+# and say so in one message. Nothing is deleted. Off by default; let the apps run again with: hs storage incident resume'''
+value = '''
+autoMitigateFreeze = true'''
+
+[[item]]
+kind = "option"
+key = "autoMitigateBackup"
+type = "bool"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = 'false'
+doc = '''
+# Level 3 of the automatic reaction: when a disk turns failing and the newest backup is older than 24 hours, start hs backup now (it only reads the pools and
+# writes the backup disk). A copy from disk to disk is never automatic: the message names hs disk <disk> move. Off by default.'''
+value = '''
+autoMitigateBackup = true'''
+
+[[item]]
 kind = "section"
 title = "History and status"
 page = "general"

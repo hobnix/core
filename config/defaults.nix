@@ -52,6 +52,8 @@
   notifications = false;
   quietHours = null;
   autoMitigate = false;
+  autoMitigateFreeze = false;
+  autoMitigateBackup = false;
   metrics = false;
   metricsDays = 30;
   metricsMaxGB = 5;

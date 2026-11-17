@@ -216,8 +216,11 @@ collect() {
     done
     local ph=${pool_health[$pool]}
     case "$ph" in ONLINE|SNAPRAID) ph="" ;; DEGRADED) ;; *) worst=error ;; esac
-    [ -n "$down$failing$ph" ] || continue
+    # a pool the health check reports as nearly full (HS_INCIDENT_FULL, level 2 of the automatic reaction) counts as affected for `pause`
+    local full=false; case " ${HS_INCIDENT_FULL:-} " in *" $pool "*) full=true ;; esac
+    [ -n "$down$failing$ph" ] || $full || continue
     pools_hit+="$pool "
+    ! $full || rec incident "$pool:full" "$pool" pool-full warn "pool $pool is almost full: writes would fail"
     if [ -n "$ph" ] || { [ -n "$down" ] && [ "${pool_health[$pool]}" != SNAPRAID ]; }; then
       rec incident "$pool:degraded" "$pool" pool-degraded "$worst" "pool $pool is ${ph:-degraded}: ${down:-no member named}$( [ -n "$down" ] || true)"
     fi

@@ -1116,9 +1116,10 @@ CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAll
                "recipeQuestionHours|webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|"
                "incusUi|isoDir|syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|"
                "backupNewShares|backupNewInstances|notifySecondMinPriority|notifications|quietHours|autoMitigate|"
-               "metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|"
-               "gatewayPublicHttp|gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|"
-               "gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
+               "autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|"
+               "dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
+               "gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|"
+               "gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS
 CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one --set key=value of `config apply` (hand-written, outside the generated block)
 # share forms: a folder name inside the instance (absolute) and inside a share (relative or absolute, both without ..), a SID with its level, a kept folder
