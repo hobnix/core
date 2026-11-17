@@ -764,6 +764,8 @@ cmd_offsite() {
       note_state "offsite=0"; ok "Off-site copy switched off (what is there stays there; its password file stays: $OFFSITE_PASS)." ;;
     migrate)
       offsite_migrate ;;
+    retention)   # what the nightly run does after the copy: forget (7/4/6), with `prune` also prune; nothing for a REST target
+      offsite_ready; offsite_retention "${1:-}" ;;
     *) usage ;;
   esac
 }
