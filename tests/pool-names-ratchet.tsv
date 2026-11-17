@@ -10,7 +10,7 @@ install.nix	1
 scripts/admin-change.sh	2
 scripts/backup.sh	14
 scripts/bulk-mount.sh	36
-scripts/bulk-sync.sh	9
+scripts/bulk-sync.sh	12
 scripts/cache-mover.sh	4
 scripts/create-share.sh	15
 scripts/ct-bindings.sh	8
@@ -18,7 +18,8 @@ scripts/ct-change.sh	5
 scripts/ct-guided.sh	6
 scripts/ct-pools.sh	7
 scripts/deck-status.sh	16
-scripts/dev/nested_stages.py	7
+scripts/dev/nested_lib.py	5
+scripts/dev/nested_stages.py	29
 scripts/dev/nix-matrix.sh	2
 scripts/dev/reads-inventory.py	2
 scripts/dev/sysdisk-encrypt.sh	1
@@ -35,6 +36,7 @@ scripts/fm.sh	8
 scripts/health-change.sh	2
 scripts/health-check.sh	24
 scripts/health.sh	3
+scripts/install-wizard.sh	2
 scripts/lib/bulklock.sh	3
 scripts/lib/bulkpath.sh	9
 scripts/lib/capacity.sh	7
@@ -57,7 +59,7 @@ scripts/peer-change.sh	1
 scripts/pool-state.sh	5
 scripts/power.sh	3
 scripts/read-timing.sh	4
-scripts/rebuild.sh	9
+scripts/rebuild.sh	16
 scripts/remote.sh	2
 scripts/report.sh	1
 scripts/share-cache.sh	10
@@ -74,6 +76,7 @@ scripts/snapshots-auto.sh	7
 scripts/state-db.py	2
 scripts/system-change.sh	7
 scripts/temp-disk.sh	3
+scripts/testlab.sh	2
 scripts/web-serve.py	19
 scripts/web_terminal.py	1
 web/src/editor/volumes.js	4

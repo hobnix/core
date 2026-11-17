@@ -381,7 +381,9 @@ a small partition for the vault, so a new one is built the same way, and the ser
     hs ct list
     ```
 
-    In a VM rehearsal the containers came back (`hs ct list`, they start, checksums equal). The recover dialog asks for the pool: name
+    In a VM rehearsal the containers came back (`hs ct list`, they start, checksums equal), and so did a virtual machine (it was listed as
+    stopped, started, and the file inside had the same checksum; the default profile was empty after the recover, as below, but the VM
+    still started because it carries its own root disk). The recover dialog asks for the pool: name
     `default`, driver `zfs`, dataset `fast/incus`. Afterwards the default profile was empty, and
     `hs ct add` said "No root device could be found". `sudo systemctl restart incus-preseed` fixed that. Not tested on hardware yet.
 
@@ -430,6 +432,18 @@ purpose, and `hs update` and `hs rebuild` end with an error. `hs unlock --status
 
    Then `sudo hs share <share> perm` for permissions, and `sudo hs pool bulk sync`. Only one share or file: `hs share <share> restore
    [<path>]` puts it into the share `restored`.
+
+   **SnapRAID: the first sync after new disks.** The disks are formatted again, so their UUIDs differ from the ones SnapRAID remembers,
+   and `sudo hs pool bulk sync` stops with "Too many disks have changed UUIDs since the last 'sync'". Nothing is wrong with the
+   restored data. SnapRAID has this check to catch a disk mounted in the wrong place, so `hs` never overrides it by itself. Check
+   with `hs pool bulk` that every data disk and the parity disk are the ones you just added, then run once:
+
+   ```bash
+   sudo hs pool bulk sync --force-uuid
+   ```
+
+   Do not use it when you did not change any disk: then a disk may be mounted in the wrong place. Not tested on hardware yet (a VM
+   rehearsal found the message).
 4. **Containers.** Not tested on hardware yet. Create a container of the same kind (`hs ct add <name>`), restore the files from the snapshot
    `ct:<name>` and copy them in:
 
@@ -448,9 +462,48 @@ purpose, and `hs update` and `hs rebuild` end with an error. `hs unlock --status
 
    Docker applications: restore the project folders and load the databases from the dumps in `/var/lib/hs/backup-dump/<container>`.
    `hs backup drill ct` proves each month that a container boots from its snapshot; restoring into a new container is not covered by it.
-5. **Domain controller.** Not tested on hardware yet. Make a new `dc1` VM with the recipe `domain`, then apply the backup file
-   `/var/lib/hs/backup-dc/*.tar.bz2` with `samba-tool domain backup restore` (see the Samba documentation for `--targetdir` and the new
-   server name).
+5. **Domain controller.** Ran in a VM with a test domain (a user and a group came back, `samba-ad-dc` answered); not tested on
+   hardware, with a real router or with a Windows client yet.
+
+   1. Get the backup file out of the host snapshot. `--tag host` and `--to` are required; the full original path is recreated below
+      the folder:
+
+      ```bash
+      sudo hs backup restore latest /var/lib/hs/backup-dc --tag host --to /var/tmp/dc-restore
+      sudo hs backup restore latest /var/lib/samba/private --tag host --to /var/tmp/dc-restore
+      ```
+
+      The file is `/var/tmp/dc-restore/var/lib/hs/backup-dc/domain-backup.tar.bz2`. It holds the keys of your domain: keep it private
+      and delete the folder when you are done.
+   2. Install the recipe if the system does not have it yet (`sudo hs pkg fetch`, then `sudo hs pkg install domain`), and make a new `dc1`
+      VM with it: `sudo hs recipe domain`. This builds a new, empty domain and joins this server to it. The first run of the recipe can
+      stop with a failed rebuild (`samba-winbindd`) or a failed join; start it again, it continues.
+   3. Put the host's own domain secrets back. The join in 2 replaced them with those of the empty domain, and the server is no longer
+      a member of the real one until you do:
+
+      ```bash
+      sudo install -m 600 -o root -g root /var/tmp/dc-restore/var/lib/samba/private/secrets.tdb /var/lib/samba/private/secrets.tdb
+      ```
+
+   4. Copy the backup file into `dc1` and restore it there. The target folder must not exist yet, so the new, empty domain of 2 is
+      moved aside first. The name must be a new one: the old name (`DC1`) is still in the domain data and Samba refuses it ("already
+      exists"). The restored controller then answers as `dc1new.<domain>` and `dc1.<domain>` does not resolve any more:
+
+      ```bash
+      incus file push /var/tmp/dc-restore/var/lib/hs/backup-dc/domain-backup.tar.bz2 dc1/root/
+      incus exec dc1 -- systemctl stop samba-ad-dc
+      incus exec dc1 -- mv /var/lib/samba /var/lib/samba.fresh
+      incus exec dc1 -- samba-tool domain backup restore --backup-file=/root/domain-backup.tar.bz2 --targetdir=/var/lib/samba --newservername=DC1NEW
+      incus exec dc1 -- sh -c 'cp /var/lib/samba/etc/smb.conf /etc/samba/smb.conf; cp /var/lib/samba/private/krb5.conf /etc/krb5.conf'
+      incus exec dc1 -- systemctl restart samba-ad-dc
+      ```
+
+      Samba says "check the smb.conf settings": that is what the `cp` line is for; it worked in the rehearsal.
+   5. Check: `incus exec dc1 -- samba-tool user list` shows your users, `wbinfo -u` on the server lists them, and
+      `sudo hs backup now` makes a backup of the restored controller. Because the name changed, point the router's DNS entry at the
+      new address and check the name your clients use.
+
+   The rehearsal did not cover a client domain join, a reboot or the real router.
 
 ### Case C: the server and the backup disk are both gone
 Only the off-site copy is left. Do Case A with a new vault, but read the host files from the off-site repository:

@@ -64,31 +64,11 @@ else
 fi
 
 step "What is still to do"
-check() {   # check <label> <command to run when open> <test...>
-  local label=$1 cmd=$2; shift 2
-  if "$@" >/dev/null 2>&1; then printf '%s\t%s\t%s\n' "$label" "$(_tr 'done')" "-"; else printf '%s\t%s\t%s\n' "$label" "$(_tr 'open')" "$cmd"; fi
-}
-main_pool=$(pool_default data 2>/dev/null || pool_default apps 2>/dev/null || true)
-pools_ready() {
-  local set n
-  set=$(pool_names data); [ -n "$set" ] || set=$(pool_names)
-  [ -n "$set" ] || return 1
-  while IFS= read -r n; do pool_mounted "$n" || return 1; done <<<"$set"
-}
-has_share() {
-  local n
-  for n in $(pool_names data); do ls "$(pool_root "$n")/shares" 2>/dev/null | grep -q . && return 0; done
-  return 1
-}
-rows=$(
-  check "Storage pools"        "hs pool ${main_pool:-<name>} add" pools_ready
-  check "A first share"        "hs share add <name>"         has_share
-  check "Domain users"         "hs recipe domain"            machine_has adDomain
-  check "Backup disk"          "hs backup init <device>"     bash -c '[ -s "$1" ] || [ -L "$1" ]' _ "${HS_STATE_DIR:-/var/lib/hs}/restic-password"
-  # with a vault (secrets of this server) it has to be open for backup, UniFi and the like
-  if vault_configured; then check "Vault (secrets)"  "hs unlock"                      vault_is_open; fi
-  check "Notifications"       "hs config set notifyUrl <url>" test -s "${HS_STATE_DIR:-/var/lib/hs}/notify-url" -o -s /etc/hs/notify-url
-)
+# i18n: Set up notifications|Storage pool|A first share|Setup finished|Vault (secrets)|Optional parts (capabilities)|Wildcard DNS for the gateway proxy
+# the same list as the Setup page and `hs sys setup list` (one source: setup-list.sh); "finished" is the person's own decision
+rows=$(bash "$here/setup-list.sh" --list | awk -F'\t' '$1 != "finished" { print $3 "\t" $2 "\t" $4 }' | while IFS=$'\t' read -r label state cmd; do
+  printf '%s\t%s\t%s\n' "$(_tr "$label")" "$(_tr "$state")" "$cmd"
+done)
 open=$(awk -F'	' '$3 != "-"' <<<"$rows" | grep -c . || true)
 if [ "$open" -eq 0 ]; then status_line "Setup" "Complete" ok; else status_line "Setup" "$(t '%s item(s) still open' "$open")" warn; fi
 { thead 'What' 'State' 'Command'; printf '%s

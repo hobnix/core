@@ -87,8 +87,7 @@ case "$cmd" in
       if $remove; then note "$(t 'settings: %s removed' "$key")"; else note "$(t 'settings: %s = %s' "$key" "$val")"; fi
       effect_say now
       $dry && { note "Dry run: nothing changed."; exit 0; }
-      if $remove; then setting_unset "$key"; else setting_set "$key" "$val"; fi
-      ok "$(t '%s is set.' "$key")"
+      if $remove; then setting_unset "$key"; ok "$(t '%s is removed.' "$key")"; else setting_set "$key" "$val"; ok "$(t '%s is set.' "$key")"; fi
       exit 0
     fi
     [ -n "$row" ] || fail "$(t "'%s' is not a key hs config handles." "$key")"
@@ -134,8 +133,7 @@ case "$cmd" in
       if $remove; then note "$(t 'settings: %s removed' "$key")"; else note "$(t 'settings: %s = %s' "$key" "${val}")"; fi
       effect_say now
       $dry && { note "Dry run: nothing changed."; exit 0; }
-      if $remove; then setting_unset "$key"; else setting_set "$key" "$val"; fi
-      ok "$(t '%s is set.' "$key")"
+      if $remove; then setting_unset "$key"; ok "$(t '%s is removed.' "$key")"; else setting_set "$key" "$val"; ok "$(t '%s is set.' "$key")"; fi
       exit 0
     fi
     [ -f "$machine" ] || fail "$(t 'No %s.' "$machine")"
@@ -147,7 +145,7 @@ case "$cmd" in
     # the tool re-reads the result and refuses to write when it does not parse
     if $remove; then machine_unset "$key" config || fail "The result would not parse. Nothing was changed."
     else machine_set "$key" "$tomlval" config || fail "The result would not parse. Nothing was changed."; fi
-    ok "$(t '%s is set.' "$key")"
+    if $remove; then ok "$(t '%s is removed.' "$key")"; else ok "$(t '%s is set.' "$key")"; fi
     note "$(t 'The old file: %s' "$state/machine.toml.before-config")"
     next_step "hs rebuild" ;;
   migrate-settings)
