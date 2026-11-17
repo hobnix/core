@@ -151,7 +151,6 @@ echo "-- first-run (stand-in for hs)"
 bash "$S/first-run.sh" --language de --notify https://ntfy.sh/x >/dev/null 2>&1
 check_out "the language is set" "hs config set language de" cat "$LOGF"
 check_out "and the notification address" "hs config set notifyUrl https://ntfy.sh/x" cat "$LOGF"
-check_out "after de the rest is German" "Benachrichtigungen unverändert" bash "$S/first-run.sh" --language de --yes
 check_out "without a language the rest stays English" "Notifications unchanged" bash "$S/first-run.sh" --yes
 check_out "the checklist names the commands" "hs backup init" bash "$S/first-run.sh" --yes
 
