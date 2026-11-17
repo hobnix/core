@@ -10,6 +10,7 @@ Incus device names of the virtual disks a stage may use: dict name -> device nam
 """
 
 import os
+import re
 
 LOGIN = r"\n[^\n]*login: $"
 
@@ -208,6 +209,22 @@ def address(params):
     ]
 
 
+def _candidate_route(cand):
+    """How the old release reaches the candidate. A release tag (vX.Y.Z or vX.Y.Z-beta.N) is the real way: the channel beta follows the newest
+    signed tag of GitHub (`hs update` verifies the signature with the key of the OLD checkout). A branch is no tag: the stable channel follows the
+    newest release tag (v0.1.0 is the newest: "already the latest"), the channel edge follows origin/develop, so the candidate becomes `develop` of
+    a bare repository in the VM and origin points there (no network needed)."""
+    if re.match(r"^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$", cand):
+        return [step("run", "hs config set updateChannel %s" % ("beta" if "-beta." in cand else "stable"), what="the update channel follows the release tags")]
+
+    return [
+        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/candidate" % _q(cand), timeout=600, what="the candidate branch is fetched"),
+        step("run", "git init -q --bare /var/tmp/candidate.git && git -C /etc/nixos push -q /var/tmp/candidate.git refs/remotes/origin/candidate:refs/heads/develop --tags", what="the candidate is `develop` of a local repository"),
+        step("run", "chown -R \"$(stat -c %U /etc/nixos)\" /var/tmp/candidate.git && git -C /etc/nixos remote set-url origin /var/tmp/candidate.git", what="origin is that repository"),
+            step("run", "hs config set updateChannel edge", what="the update channel is edge"),
+    ]
+
+
 def upgrade_steps(params):
     """Stage upgrade (#435): the system installed from the LAST release ISO is set up (a share, one app), `hs update` moves it to the candidate
     (a branch of the Hobnix repository that the old checkout is pointed at), and it must still be healthy with its shares, state.db and app.
@@ -232,12 +249,7 @@ def upgrade_steps(params):
         step("run", "git -C /etc/nixos rev-parse HEAD > /var/tmp/upgrade-rev-before", what="the revision of the old release is noted"),
         step("run", "cp /etc/nixos/machine.toml /var/tmp/upgrade-machine-before", what="machine.toml of the old release is kept"),
         step("run", "%s > /var/tmp/upgrade-schema-before && %s > /var/tmp/upgrade-events-before" % (ver, rows), what="the state.db schema version and event count are noted"),
-        # The stable channel follows the newest signed release tag (v0.1.0 is the newest: "already the latest"), and a candidate is no tag yet. The
-        # channel edge follows origin/develop: the candidate becomes `develop` of a bare repository in the VM, and origin points there (no network needed)
-        step("run", "git -C /etc/nixos fetch origin +refs/heads/%s:refs/remotes/origin/candidate" % _q(cand), timeout=600, what="the candidate branch is fetched"),
-        step("run", "git init -q --bare /var/tmp/candidate.git && git -C /etc/nixos push -q /var/tmp/candidate.git refs/remotes/origin/candidate:refs/heads/develop --tags", what="the candidate is `develop` of a local repository"),
-        step("run", "chown -R \"$(stat -c %U /etc/nixos)\" /var/tmp/candidate.git && git -C /etc/nixos remote set-url origin /var/tmp/candidate.git", what="origin is that repository"),
-        step("run", "hs config set updateChannel edge", what="the update channel is edge"),
+        ] + _candidate_route(cand) + [
         step("run", "hs update --yes --foreground", timeout=3600, what="hs update moves the server to the candidate"),
         # the checks
         step("run", "test \"$(git -C /etc/nixos rev-parse HEAD)\" != \"$(cat /var/tmp/upgrade-rev-before)\"", what="the checkout moved to a new revision"),

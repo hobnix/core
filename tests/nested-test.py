@@ -131,6 +131,11 @@ class ScenarioTests(unittest.TestCase):
         self.assertIn("updateChannel edge", text)
         self.assertIn("upgrade", n.STAGES)
 
+    def test_upgrade_to_a_release_tag_uses_the_beta_channel(self):
+        text = "\n".join(s["text"] for s in n.build_scenario("upgrade", dict(self.P, candidate="v0.2.0-beta.1")))
+        self.assertIn("updateChannel beta", text)
+        self.assertNotIn("candidate.git", text)                                        # the real tag of GitHub, no local repository
+
     def test_shq(self):
         self.assertEqual(n.shq("a'b"), "'a'\\''b'")
 
