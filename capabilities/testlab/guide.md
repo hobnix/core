@@ -24,6 +24,14 @@ For the nightly run on `develop` add the line `testlabNightly = true` to `machin
 sudo hs rebuild
 ```
 
+## The ISO cache
+Not tested on hardware yet.
+
+The ISO build is the longest step (about 17 minutes). A built ISO is kept under `iso-cache/<full commit sha>/` in the test-lab folder (`HS_TESTLAB_DIR`,
+default `/var/lib/hs/testlab`). A later run on the same commit, and stage 7 on a release tag that has not moved, takes it from there and prints
+`ISO of <sha> from the cache`; any other commit is built (`ISO of <sha> built`). The last 3 ISOs (about 1.5 GiB each) are kept, older ones are deleted;
+`HS_TESTLAB_ISO_KEEP` changes the number. To force a rebuild delete the folder of that sha.
+
 ## Run it
 Not tested on hardware yet.
 
