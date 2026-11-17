@@ -25,4 +25,7 @@ printf 'channel = "nixos-26.05"\n' > "$T/pin.toml"
 if $P get rev >/dev/null 2>&1; then fail "a missing revision was accepted"; else pass "a missing revision is refused"; fi
 unset HS_NIXPKGS_PIN_FILE
 check "the real pin file is well formed and written in one place only" $P check
+# a line at column 0 inside a `run: |` block ends the block and becomes a top-level key; GitHub then rejects the whole file
+stray=$(grep -nvE '^($|#|---|(name|run-name|on|permissions|env|defaults|concurrency|jobs):|[[:space:]])' .github/workflows/*.yml || true)
+if [ -z "$stray" ]; then pass "every workflow file has only workflow keys at the top"; else printf '%s\n' "$stray"; fail "a workflow file has a stray line at column 0"; fi
 finish

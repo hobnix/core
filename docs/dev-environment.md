@@ -55,8 +55,10 @@ The runner copies the working tree into `~/hobnix-test` in the WSL (ext4, much f
 ## Hobnix-in-Hobnix (nested VM from the ISO)
 
 `scripts/dev/nested.sh run` boots the installer ISO in a nested Incus VM, runs an unattended `hs-install`, boots the installed system and
-checks it (issue #262, docs/adr/0023-nested-test-harness.md). **Not tested on hardware yet: the harness has never been run against a real
-VM.** Only its logic is tested (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
+checks it (issue #262, docs/adr/0023-nested-test-harness.md). Run on 2026-11-15 on a real Incus
+server (KVM, nested virtualization) with the `v0.1.0-beta.1` release ISO, stage `all`: the ISO booted, the unattended `hs-install` finished,
+the installed system booted and every check passed (exit 0). Not tested on hardware yet: a physical machine; the web wizard and the rebuild
+rehearsal are not part of the run. Its logic is also tested without a VM (`scripts/dev/t quick nested`, a fake console and a fake `incus`).
 
 | Command | What |
 | --- | --- |
@@ -93,12 +95,16 @@ The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
 5. A pull request is merged only when the check `ci-ok` is green (it is the one check the branch rule asks for). CI also runs on `develop`
    after each merge: two pull requests that pass alone can fail together. A red `develop` is fixed before anything else is merged.
 6. Code for a decision record (`docs/adr/`) is merged after the record is Accepted, or behind a switch that is off by default.
-7. An issue is closed when every box under "Done when" is ticked. Merged but not run: it stays open, in the board column In Review.
+7. Development and testing are two columns of the board. In Review: the pull request is open. Testing: merged, not run on a real server
+   yet; the issue stays open. Done: the "Hardware test" boxes of the issue are ticked, a comment says what was seen, the
+   "Not tested on hardware yet." lines of that change are removed, the issue is closed. A change with nothing to run on a server (a
+   decision record, CI, a text) goes from In Review to Done. The Testing column is the queue for the next session at the server;
+   `python3 scripts/dev/untested.py --steps` lists the same from the guides' side (every marker with its heading).
 8. One milestone is *released* at a time, and at most three issues are In Progress. The next milestone may be built on its own long-lived
    branch (now `0.2`; `develop` is merged into it after every change). Right after the release tag, `main` is merged back into `develop` and
    the milestone branch is merged into `develop` (docs/RELEASE-PROCESS.md).
-9. Every commit, also one made by an AI session, carries `Signed-off-by` of the configured git user: `git commit -s`, or let the hook
-   from `bash scripts/dev/install-guards.sh` add it. The DCO job has no exemption (CONTRIBUTING.md).
+9. A pull request opened by an AI session carries the label `agent-pr` from the start (`gh pr create --label agent-pr`); the DCO job is
+   skipped for it and the maintainer who merges it takes the responsibility (CONTRIBUTING.md).
 
 ### Release rhythm
 
