@@ -225,6 +225,21 @@ sudo hs config set webAccent '#4fb286'
 The logo, buttons and highlights follow the accent; light colours read better on the dark theme. The theme toggle in the top bar switches
 dark and light (it follows your system by default). No rebuild is needed.
 
+## Pages for storage and backup
+
+- **Disks** has a **Sleep** column (asleep or spinning) and, in the detail of a disk, since when it sleeps and how often it woke today; the numbers
+  come from `hs sys disk power`. How to set the sleep time: [Storage and disks](storage-and-disks.md).
+- **Pools** has **Take over Unraid**, the dialog behind `hs migrate unraid`: pick the data disks, the old Unraid parity disk and, if you have
+  one, a spare disk; the dialog shows the plan, asks for the passphrase of encrypted Unraid disks and runs a background job. The same page shows
+  a banner when the health check paused the parity sync, the scrub and the cache mover.
+- **Files** (Storage > Files) shows two panes with a path input, owner and mode in Info, "Calculate size" for a folder, and Pause and Continue
+  for copy and move. Delete does not pass the permanent option, so the server moves the items into the trash (the dialog still words it as
+  "Delete permanently", and the page has no trash view yet; see [Storage and disks](storage-and-disks.md)).
+- **Backup** shows the off-site copy ("Set up off-site copy" for S3, a REST server, SFTP or a folder), copies to it now and can stop it. A new
+  off-site repository gets its own password, shown once: write it down. The same page shows the restore points and restores files.
+
+Not tested on hardware yet.
+
 ## Read the guides in the page
 
 The **Docs** page shows these guides and the generated command reference without fetching anything. `hs docs build` writes them (`hs update`
@@ -233,8 +248,8 @@ the `docs/` folder of the repository.
 
 ## What only works in the terminal
 
-Some things stay in the terminal on purpose: setting up the backup disk (`hs backup init`, it erases a disk) and the off-site copy, restoring
-the whole system, the recipe `domain`, creating the vault (`hs vault init`), offering a share to another server (`hs remote offer`, it shows a
+Some things stay in the terminal on purpose: setting up the backup disk (`hs backup init`, it erases a disk), restoring
+the whole system, the per-instance backup rules (`hs backup ct <name> paths|include|exclude|reset`), the restore of one instance with its paths (`hs backup restore ct <name>`), restoring items from the file manager's trash, the recipe `domain`, creating the vault (`hs vault init`), offering a share to another server (`hs remote offer`, it shows a
 password once), the sign-in to the reverse proxy, anything that asks questions, and the `machine.toml` keys the Settings page does not offer
 (for example `sshKeys`, `hostName`, addresses).
 
