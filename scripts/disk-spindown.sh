@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# help: let the spinning bulk, parity and backup disks go to sleep after machine.toml diskSpindownMinutes (0 = never)
+# help: let the spinning bulk, parity and backup disks go to sleep after machine.toml diskSpindownMinutes (0 = never); `log` measures wake-ups
 # help.de: lässt die drehenden Bulk-, Parity- und Backup-Platten nach diskSpindownMinutes (machine.toml) schlafen (0 = nie)
-# args: apply | status
+# args: apply | status | log [hours]
 # apply: set the standby timer (hdparm -S) on every rotational disk that is a bulk/parity/backup member. SSDs, NVMe, the system disk and
 # the `fast` pool are never touched. 0/unset = hdparm -S 0 (timer off). status: plain tab separated lines
 # (dev, rotational, member, state, minutes); `hdparm -C` reads the power state without waking the disk.
 # Test knobs: HS_SPINDOWN_SYSFS (default /sys/block), HS_SPINDOWN_MEMBERS (file with member disk names; replaces the lookup),
 # HS_SPINDOWN_MINUTES (replaces machine.toml).
+# log [hours] (root, default 24): every minute read /sys/block/<d>/stat (kernel counters, no disk access) and `hdparm -C` of each spinning member
+# disk; a minute in which a disk did I/O or came out of standby is written to the log file (default /var/log/hs-spindown.log) with the systemd
+# units that started in that minute (journal). Test knobs: HS_SPINDOWN_LOGFILE, HS_SPINDOWN_INTERVAL (seconds between samples, default 60),
+# HS_SPINDOWN_SAMPLES (number of samples; replaces hours), HS_SPINDOWN_NOROOT.
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/machine.sh"
 
-usage() { say "usage: hs disk spindown [apply|status]"; exit 1; }
+usage() { say "usage: hs disk spindown [apply|status|log [hours]]"; exit 1; }
 mode=${1:-status}
-case "$mode" in apply|status|--value) ;; *) usage ;; esac
+case "$mode" in apply|status|log|--value) ;; *) usage ;; esac
 
 minutes=${HS_SPINDOWN_MINUTES:-$(machine_get diskSpindownMinutes 2>/dev/null || echo 0)}
 case "$minutes" in ''|*[!0-9]*) minutes=0 ;; esac
@@ -60,6 +64,49 @@ sysdisk() {   # is this disk the one under / or /boot?
 }
 
 mem=$(members | sort -u)
+if [ "$mode" = log ]; then
+  [ "$(id -u)" = 0 ] || [ -n "${HS_SPINDOWN_NOROOT:-}" ] || fail "$(t 'Measuring the spin-down needs root. Run it as: sudo hs disk spindown log')"
+  hours=${2:-24}
+  case "$hours" in ''|*[!0-9]*|0) fail "$(t 'The number of hours must be a whole number above 0.')" ;; esac
+  interval=${HS_SPINDOWN_INTERVAL:-60}
+  samples=${HS_SPINDOWN_SAMPLES:-$(( hours * 3600 / interval ))}
+  logfile=${HS_SPINDOWN_LOGFILE:-/var/log/hs-spindown.log}
+  disks=$(for d in $mem; do is_rot "$d" && ! sysdisk "$d" && echo "$d"; done || true)
+  [ -n "$disks" ] || fail "$(t 'No spinning pool member disk found.')"
+  # I/O counters: reads completed + writes completed (fields 1 and 5 of the stat file)
+  ios() { awk '{print $1 + $5}' "$sysfs/$1/stat" 2>/dev/null || echo 0; }
+  declare -A prev_io prev_st
+  for d in $disks; do prev_io[$d]=$(ios "$d"); prev_st[$d]=$(hdparm -C "/dev/$d" 2>/dev/null | awk '/drive state is:/ {print $NF}'); done
+  printf '# %s: hs disk spindown log, %s samples every %s s, disks: %s
+' "$(date '+%F %T')" "$samples" "$interval" "$(echo $disks)" >> "$logfile"
+  step "$(t 'Measuring for %s hours (every %s s); log: %s' "$hours" "$interval" "$logfile")"
+  t0=$(date +%s); wakes=0
+  for ((i = 0; i < samples; i++)); do
+    sleep "$interval"
+    t1=$(date +%s)
+    units=""
+    for d in $disks; do
+      io=$(ios "$d"); st=$(hdparm -C "/dev/$d" 2>/dev/null | awk '/drive state is:/ {print $NF}'); [ -n "$st" ] || st=unknown
+      delta=$(( io - ${prev_io[$d]} ))
+      if [ "$delta" -gt 0 ] || { [ "${prev_st[$d]}" = standby ] && [ "$st" != standby ]; }; then
+        if [ -z "$units" ]; then
+          units=$(journalctl -q --no-pager -o cat --since "@$t0" --until "@$t1" 2>/dev/null             | awk '/^(Started|Starting) / {print $2}' | grep -E '\.(service|timer|mount|scope)$' | sort -u | paste -sd, - || true)
+          [ -n "$units" ] || units=-
+        fi
+        wake=io; [ "${prev_st[$d]}" = standby ] && [ "$st" != standby ] && wake=woke
+        printf '%s	%s	%s	%s	io+%s	%s
+' "$(date -d "@$t1" '+%F %T')" "$d" "$wake" "$st" "$delta" "$units" >> "$logfile"
+        wakes=$((wakes + 1))
+      fi
+      prev_io[$d]=$io; prev_st[$d]=$st
+    done
+    t0=$t1
+  done
+  ok "$(t '%s disk events written to %s' "$wakes" "$logfile")"
+  { printf 'time	disk	event	state	io	units
+'; grep -v '^#' "$logfile" | tail -n 40; } | table
+  exit 0
+fi
 value=$(spindown_value "$minutes")
 
 case "$mode" in
