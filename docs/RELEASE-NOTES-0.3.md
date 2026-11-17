@@ -6,7 +6,9 @@ pull request and of the GitHub release.
 
 **Read this first.** 0.3.0 is a small foundation release. In a virtual machine on the real test-lab server the stages install, smoke check, rollback,
 backup and restore, pool, and the upgrade from v0.2.0 passed on the tip of `0.3` (2026-11-17). The browser stage (6) was skipped there (no
-playwright on the server). Nothing ran on physical hardware, and nobody has looked at the web interface of this version. Items marked
+playwright on the server). The owner then updated the real server to v0.3.0-beta.1 and looked at the web interface (2026-11-17): the old page
+addresses show "Page not found", the language switch of the web interface works while `hs help` stays English, and the forms with the new field
+components look right. Live updates, the jobs panel, the events view and sign out everywhere also worked. Items marked
 **UNVERIFIED** were written and tested only with fakes, fixtures and unit tests.
 
 ## What 0.3.0 is
@@ -34,6 +36,6 @@ measurement path are.
 - A real-server check that a terminal change shows in the open page (#566) and the notification channels on a server (#420).
 
 ## Not verified
-- The web interface of this version (stage 6 skipped).
-- Everything on physical hardware.
+- The unlock page of the web interface on this version (until the next reboot of the real server).
+- The headless browser stage (6) never ran (no playwright on the test-lab server).
 - `liveState = "db"` on a real server.
