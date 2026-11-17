@@ -593,6 +593,18 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "disk.power": {
+    /** sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package) */
+    words: ["disk", "power"];
+    path: "/disk/power";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "disk", dev: Field, state: "asleep" | "spinning" | "unknown", since: Field, wakes: Field]
+      | [tag: "power", source: "ups" | "rapl", what: Field, watts: Field])[];
+  };
   "disk.results.by_disk": {
     /** outcome of the last self-tests of a disk */
     words: ["disk", "results", "<disk>"];

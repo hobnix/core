@@ -183,6 +183,12 @@ vlans = { home = { id = 95, default = true } }
 # Applies after `hs rebuild`; `hs disk spindown status` shows the power state.
 # diskSpindownMinutes = 30
 
+# Sleep time per pool, in minutes, instead of `diskSpindownMinutes`: the key is a pool name (or `backup` for the
+# backup disk), 0 = never. One value per pool, none per disk. A raidz pool wakes all its disks at once, a mirror one
+# after the other, and hourly `shareSnapshots` on ZFS keeps the pool awake (`hs config check` warns about that pair).
+# Applies after `hs rebuild`; `hs disk spindown status` shows the state.
+# diskSpindownPools = { backup = 10, bulk = 30 }
+
 # ═══ Accounts ═════════════════════════════════════════════════════════════
 
 # The Active Directory domain this server joins as a file server; share logins and groups then

@@ -53,6 +53,7 @@
   "shareSnapshots": "storage",
   "zfsArcMaxGB": "storage",
   "diskSpindownMinutes": "storage",
+  "diskSpindownPools": "storage",
   "fileManagerWrite": "storage",
   "setupDone": "general",
   "backupNewShares": "backups",

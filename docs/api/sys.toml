@@ -231,3 +231,9 @@ kind = "tsv"
 records = { status = ["status"], reason = ["text"], type = ["type"], owner = ["name"], group = ["name"], uid = ["id"], gid = ["id"], mode = ["octal"], perms = ["rwx"], bytes = ["bytes"], mtime = ["epoch"] }
 enums = { "status.status" = ["ok", "refused"], "type.type" = ["d", "f", "l"] }
 note = "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing."
+
+["disk power"]
+kind = "tsv"
+records = { disk = ["dev", "state", "since", "wakes"], power = ["source", "what", "watts"] }
+enums = { "disk.state" = ["asleep", "spinning", "unknown"], "power.source" = ["ups", "rapl"] }
+note = "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured."
