@@ -44,6 +44,58 @@ for fs in ext4 xfs btrfs; do
   check "$fs: nothing is left of Media in the root" test ! -e "$mp/Media"
 done
 
+# ── With a spare disk (D9, step 8): the parity is built before an adopted disk is written to ──
+# The sync is a fake that looks at the disks at the moment it runs: what it sees is what a real sync would see.
+echo "-- adopting with a spare disk: no write to a data disk until the parity is synced"
+export HS_ADOPTING_DIR=$WORK/adopting
+cat > "$WORK/fake-sync.sh" <<'FAKE'
+#!/usr/bin/env bash
+d=$(readlink -f /dev/disk/by-id/ata-TEST_spd$FAKE_N)
+md5sum < "$d" > "$FAKE_OUT/sum"
+blkid -s LABEL -o value "$d" > "$FAKE_OUT/label" 2>/dev/null
+ls "$HS_ADOPTING_DIR" > "$FAKE_OUT/records" 2>/dev/null
+blkid -s LABEL -o value /dev/disk/by-id/ata-TEST_sps$FAKE_N > "$FAKE_OUT/spare" 2>/dev/null
+exit "${FAKE_SYNC_RC:-0}"
+FAKE
+chmod +x "$WORK/fake-sync.sh"
+devsum() { md5sum < "$(readlink -f "/dev/disk/by-id/ata-TEST_$1")"; }
+for n in 1 2; do
+  # the spare of the run before is a parity disk now: wipe it, so that the array has none again
+  for p in 1 2; do [ -e "/dev/disk/by-id/ata-TEST_sps$p" ] && wipefs -a -q "/dev/disk/by-id/ata-TEST_sps$p"; done
+  make_disk "spd$n" ext4; mkloop "sps$n" 400M >/dev/null
+  export FAKE_N=$n FAKE_OUT=$WORK/fake$n; mkdir -p "$FAKE_OUT"
+  before=$(devsum "spd$n")
+  out=$(HS_BULK_SYNC=$WORK/fake-sync.sh pool bulk --role adopt --disks "ata-TEST_spd$n" --spare "ata-TEST_sps$n" --dry-run 2>&1 || true)
+  check_out "n=$n: the plan states the order" "only after the sync has finished" echo "$out"
+  check_eq "n=$n: the dry run wrote nothing to either disk" "$before" "$(devsum "spd$n")"
+  check_eq "n=$n: the dry run left the spare alone" "" "$(blkid -s LABEL -o value "/dev/disk/by-id/ata-TEST_sps$n" 2>/dev/null)"
+  if [ "$n" = 1 ]; then
+    echo "ata-TEST_sps$n" | HS_BULK_SYNC=$WORK/fake-sync.sh pool bulk --role adopt --disks "ata-TEST_spd$n" --spare "ata-TEST_sps$n" >"$WORK/spare$n.log" 2>&1
+    check_eq "n=$n: at sync time the data disk was byte for byte untouched" "$before" "$(cat "$FAKE_OUT/sum" 2>/dev/null)"
+    check_eq "n=$n: at sync time it had no label" "" "$(cat "$FAKE_OUT/label" 2>/dev/null)"
+    check_eq "n=$n: at sync time its record existed" "1" "$(wc -l < "$FAKE_OUT/records" 2>/dev/null | tr -d ' ')"
+    check_eq "n=$n: at sync time the spare was already the parity disk" "bulk-parity-1" "$(cat "$FAKE_OUT/spare" 2>/dev/null)"
+    case "$(blkid -s LABEL -o value "$(readlink -f "/dev/disk/by-id/ata-TEST_spd$n")" 2>/dev/null)" in bulk-data-*) pass "n=$n: after the sync the label is written" ;; *) fail "n=$n: no label after the sync ($(tail -n 3 "$WORK/spare$n.log" | tr '
+' ' '))" ;; esac
+    check_eq "n=$n: the record is gone after the label" "0" "$(ls "$HS_ADOPTING_DIR" 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    # a sync that fails: nothing may have been written to the data disk, the record keeps it read-only
+    if echo "ata-TEST_sps$n" | FAKE_SYNC_RC=1 HS_BULK_SYNC=$WORK/fake-sync.sh pool bulk --role adopt --disks "ata-TEST_spd$n" --spare "ata-TEST_sps$n" >"$WORK/spare$n.log" 2>&1; then fail "n=$n: a failed sync must stop the command"; else pass "n=$n: a failed sync stops the command"; fi
+    check_eq "n=$n: no write to the data disk after a failed sync" "$before" "$(devsum "spd$n")"
+    check_eq "n=$n: no label after a failed sync" "" "$(blkid -s LABEL -o value "$(readlink -f "/dev/disk/by-id/ata-TEST_spd$n")" 2>/dev/null)"
+    check_eq "n=$n: the record stays" "1" "$(ls "$HS_ADOPTING_DIR" 2>/dev/null | wc -l | tr -d ' ')"
+    rm -f "$HS_ADOPTING_DIR"/*
+  fi
+done
+echo "n=3 spare smaller than the data disk"
+wipefs -a -q /dev/disk/by-id/ata-TEST_sps2
+make_disk spd3 ext4; mkloop sps3 100M >/dev/null
+out=$(pool bulk --role adopt --disks ata-TEST_spd3 --spare ata-TEST_sps3 --dry-run 2>&1 || true)
+check_out "a spare smaller than the data disk is refused" "smaller than the largest data disk" echo "$out"
+out=$(pool bulk --role adopt --disks ata-TEST_spd3 --dry-run 2>&1 || true)
+check_out "no spare: the unprotected window is stated" "data is NOT protected" echo "$out"
+unset HS_ADOPTING_DIR FAKE_N FAKE_OUT
+
 # ── Unraid disks (docs/PLAN-storage-nas.md D8, step 7): the plan only, nothing is written ──
 export HS_DISK_PASSPHRASE=$UNRAID_PASS
 dev_sum() { blkid -p -o export "${1}p1" 2>/dev/null | md5sum; }
