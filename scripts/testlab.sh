@@ -260,7 +260,7 @@ xrun() {   # xrun <stage> <vm> "<name=device ...>": a console scenario of the ha
   local st=$1 on=$2 disks=$3 rc=0 d
   (cd "$src" && HS_NESTED_PASSWORD_FILE=$4 HS_NESTED_DISKS=$disks HS_NESTED_BACKUP_PASS_FILE=${5:-} timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" \
      bash scripts/dev/nested.sh run --stage "$st" --name "$on" --keep) || rc=$?
-  d=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+  d=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
   [ -z "$d" ] || { mkdir -p "$rundir/harness-$st"; cp "$d"/*.log "$d"/result-*.json "$rundir/harness-$st/" 2>/dev/null || true; }
   if [ -n "$d" ] && [ -f "$d/result-$st.json" ]; then json_ok "$d/result-$st.json"; return; fi
   case "$rc" in 0) echo ok ;; 3) echo skipped ;; *) echo error ;; esac
@@ -290,7 +290,7 @@ if [ "$sel" = 7 ]; then
   step "$(t 'Installing %s in VM %s' "$from" "$vm")"
   nrc=0
   (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage iso --iso "$oldiso" --name "$vm" --keep) || nrc=$?
-  ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+  ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
   ur=error
   if [ "$nrc" = 0 ]; then
     export HS_NESTED_CANDIDATE=$ref
@@ -306,6 +306,7 @@ if [ "$sel" = 7 ]; then
   case "$ur" in ok) finish 0 7 "" ;; failed) finish 1 7 "the upgrade from $from failed" ;; skipped) finish 3 7 "the harness cannot run here" ;; *) finish 4 7 "upgrade $ur" ;; esac
 fi
 
+if sel_has 4 || sel_has 5; then export HS_NESTED_ROLE=homeserver; fi   # restic, mkfs and SnapRAID come with the homeserver role (after `hs rebuild`)
 hs_job_step 3 4 "Building the installer ISO"; hs_job_progress 2 4 steps
 step "$(t 'Building the installer ISO (this takes a long time)')"
 if ! (cd "$src" && SPIN_STREAM=1 timeout "${HS_TESTLAB_BUILD_TIMEOUT:-5400}" bash scripts/dev/build-iso.sh); then fail_run 4 2 "the ISO build failed (see run.log)"; fi
@@ -316,7 +317,7 @@ step "$(t 'Running the nested harness, VM %s' "$vm")"
 nrc=0
 keepvm=(); [ -z "$extras" ] || keepvm=(--keep)   # stages 3 to 6 work on the installed VM: it stays until the end (cleanup deletes it)
 (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage "$nested_stage" --name "$vm" ${keepvm[@]+"${keepvm[@]}"}) || nrc=$?
-ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd || true)
+ndir=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P || true)
 [ -z "$ndir" ] || cp -r "$ndir" "$rundir/harness" 2>/dev/null || true
 [ -z "$ndir" ] || rm -f "$rundir/harness/key" "$rundir/harness/password"   # a throwaway key and password of the VM: not kept
 pwfile=$ndir/password   # the password of the installed VM: the later stages log in with it (the copy in the run folder is deleted)
@@ -349,32 +350,49 @@ worst() {   # worst <result>...: the first that is not ok
 }
 
 stage_rollback() {
-  res[3]=$(xrun rollback "$vm" "" "$pwfile")
+  local d=""
+  if [ "${HS_NESTED_ROLE:-}" = homeserver ]; then   # the full configuration needs the pool fast (see stage_backup)
+    fast_disks "$vm" || { res[3]=error; return; }
+    d="fast1=f1 fast2=f2"
+  fi
+  res[3]=$(xrun rollback "$vm" "$d" "$pwfile")
+}
+fast_on=
+fast_disks() {   # fast_disks <vm>: two small virtual disks for the pool `fast` (the full configuration of the storage part always imports it)
+  case " $fast_on " in *" $1 "*) return 0 ;; esac
+  vdisk_add "$1" f1 2GiB && vdisk_add "$1" f2 2GiB && fast_on="$fast_on $1"
 }
 stage_backup() {
   local a b
-  vdisk_add "$vm" bk 2GiB || { res[4]=error; return; }
-  a=$(xrun backup "$vm" "backup=bk" "$pwfile")
+  vdisk_add "$vm" bk 2GiB && fast_disks "$vm" || { res[4]=error; return; }
+  a=$(xrun backup "$vm" "backup=bk fast1=f1 fast2=f2" "$pwfile")
   [ "$a" = ok ] || { res[4]=$a; return; }
   ( umask 077; "$incus" file pull "$vm/var/lib/hs/restic-password" "$rundir/.backup-pass" ) || { res[4]=error; return; }
   vm2=$vm-b
   step "$(t 'Stage 4: a second, clean VM %s' "$vm2")"
   (cd "$src" && timeout "${HS_TESTLAB_RUN_TIMEOUT:-2700}" bash scripts/dev/nested.sh run --stage all --name "$vm2" --keep) || { res[4]=error; return; }
-  local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd)
+  local d2; d2=$(cd "$src/.work/nested/latest" 2>/dev/null && pwd -P)
   "$incus" config device remove "$vm" bk >/dev/null || { res[4]=error; return; }
   "$incus" config device add "$vm2" bk disk "pool=$spool" "source=$vm-bk" >/dev/null || { res[4]=error; return; }
-  b=$(xrun restore "$vm2" "backup=bk" "$d2/password" "$rundir/.backup-pass")
+  fast_disks "$vm2" || { res[4]=error; return; }
+  b=$(xrun restore "$vm2" "backup=bk fast1=f1 fast2=f2" "$d2/password" "$rundir/.backup-pass")
   rm -f "$rundir/.backup-pass"
   res[4]=$(worst "$a" "$b")
 }
 stage_pool() {
-  vdisk_add "$vm" p1 4GiB && vdisk_add "$vm" p2 4GiB || { res[5]=error; return; }
-  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2" "$pwfile")
+  vdisk_add "$vm" p1 14GiB && vdisk_add "$vm" p2 14GiB && fast_disks "$vm" || { res[5]=error; return; }
+  res[5]=$(xrun pool "$vm" "pool1=p1 pool2=p2 fast1=f1 fast2=f2" "$pwfile")
 }
 stage_browser() {
-  local ip rc=0
-  ip=$("$incus" list "$vm" -f csv -c 4 2>/dev/null | head -n1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
-  if [ -z "$ip" ]; then warn "The VM has no IPv4 address that Incus can see."; res[6]=error; return; fi
+  local ip rc=0 ar
+  # the VM has no incus agent and sits on a LAN bridge, so `incus list` shows no address: ask the VM on its serial console (scenario address)
+  ar=$(xrun address "$vm" "" "$pwfile")
+  ip=$(python3 -I -c 'import json,re,sys
+for s in json.load(open(sys.argv[1])).get("steps", []):
+    v = s.get("value", "")
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+", v): print(v); break' "$rundir/harness-address/result-address.json" 2>/dev/null || true)
+  if [ -z "$ip" ]; then warn "Could not read an IPv4 address from the VM's console (scenario address: $ar)."; res[6]=error; return; fi
+  note "$(t 'The VM answers on %s' "$ip")"
   [ -f "$src/scripts/dev/testlab-browser.py" ] || { warn "this ref has no scripts/dev/testlab-browser.py"; res[6]=error; return; }
   mkdir -p "$rundir/harness-browser"
   HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" run --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}" \

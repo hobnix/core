@@ -3,8 +3,8 @@
 Draft for the release "0.1 Trustworthy Foundation", built from the 155 entries in `docs/changelog/` (2026-10-28 to 2026-11-09). Re-read before the
 tag. The same text is the body of the release pull request and of the GitHub release.
 
-**Read this first.** Hobnix 0.1.0 has not been run on real hardware as a whole. The installer ISO has never been booted, a restore from
-backup has never been run, and the Hobnix-in-Hobnix test harness has never run against a real VM. Items below marked **UNVERIFIED** were
+**Read this first.** Hobnix 0.1.0 has not been run on real hardware as a whole. The installer ISO was booted and installed once in a VM
+(beta.1, unattended install, first boot; not on a physical machine), and a restore from backup has not been run as a whole. Items below marked **UNVERIFIED** were
 written and tested only with fakes, fixtures and unit tests. Do not trust this release with the only copy of your data.
 
 ## What 0.1.0 is
@@ -18,7 +18,7 @@ Open issues that ask for a run on real hardware, still open at the time of writi
 - #163 rebuild rehearsal in a VM from backup disk and passphrase
 - #165 first monthly restore-drill report
 - #171 disk and pool failure handling review (the written runbook `docs/reviews/disk-failure-handling.md` and the guide have never been followed on a real failing disk)
-- #175 boot the ISO on real hardware or a VM (milestone 0.2)
+- #175 boot the ISO on real hardware (done once in a VM, 2026-11-15; milestone 0.2)
 
 Merged work that says UNVERIFIED in its pull request or changelog entry:
 - Installer restore from backup disk and password, `hs-restore` (issue #254, PR #362). Only a fake `restic` was used.
@@ -82,6 +82,6 @@ Docker app actions, "not installed from a repository" on update, Domain Admins p
 
 ## Known gaps
 - `main` has never held a release; this is the first tag. No tag, no release exists before it.
-- The beta mode of `release.sh` and a beta ISO are not built.
+- A beta ISO is built only by a manual run of `ci.yml` on the beta tag; the release workflow skips it for betas.
 - Open P0 issues of the milestone are listed in `docs/RELEASE-0.1-checklist.md`.
 - Languages: the documentation is English only; terminal output has German texts for most commands.
