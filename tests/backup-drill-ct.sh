@@ -21,6 +21,10 @@ cmd=$1; shift
 echo "restic $cmd $*" >> "$LOG"
 case "$cmd" in
   snapshots)
+    if [ -n "${FAKE_PARTIAL:-}" ]; then
+      printf '[{"id":"ppp0","time":"2026-09-01T00:00:00Z","tags":["ct:part"]},{"id":"ppp1","time":"2026-10-02T00:00:00Z","tags":["ct:part","partial"]}]
+'; exit 0
+    fi
     if [ -n "${FAKE_AGE:-}" ]; then
       t=$(date -u -d "$FAKE_AGE days ago" +%Y-%m-%dT%H:%M:%S.123456789+00:00)
       printf '[{"id":"aaa1","time":"%s","tags":["ct:big"]},{"id":"aaa2","time":"%s","tags":["ct:small"]}]\n' "$t" "$t"; exit 0
@@ -35,6 +39,13 @@ case "$cmd" in
     while [ $# -gt 0 ]; do case "$1" in --target) target=$2; shift 2 ;; --tag) tag=$2; shift 2 ;; --include) shift 2 ;; *) shift ;; esac; done
     [ -z "${FAKE_RESTORE_FAIL:-}" ] || exit 1
     case "$id" in
+      ppp1)
+        # a partial snapshot: only the included path and the dump files, no etc, no boot
+        root=$target$HS_INCUS_ROOT/part/rootfs
+        mkdir -p "$root/var/backups/hs"
+        [ -n "${FAKE_MISSING:-}" ] || { mkdir -p "$root/srv/app/sub"; echo conf > "$root/srv/app/conf"; echo more > "$root/srv/app/sub/f"; }
+        [ -z "${FAKE_EMPTYPATH:-}" ] || { : > "$root/srv/app/conf"; rm -f "$root/srv/app/sub/f"; }
+        [ -n "${FAKE_NODUMP:-}" ] || { echo "create table t;" > "$root/var/backups/hs/db.sql"; [ -z "${FAKE_EMPTYDUMP:-}" ] || : > "$root/var/backups/hs/db.sql"; } ;;
       aaa1|aaa2)
         name=small; [ "$id" = aaa1 ] && name=big
         root=$target$HS_INCUS_ROOT/$name/rootfs
@@ -211,5 +222,65 @@ check_eq "the newest snapshot per container" "big	aaa1
 small	aaa2" "$(printf '[{"id":"a","time":"1","tags":["ct:small"]},{"id":"b","time":"2","tags":["ct:small"]},{"id":"c","time":"1","tags":["ct:big","x"]}]' | python3 "$SCRIPTS/lib/ct-image.py" newest | sed 's/\tb$/\taaa2/; s/\tc$/\taaa1/')"
 check_eq "the snapshot time as epoch (Z and offset)" "a	1000000000
 b	1000000000" "$(printf '[{"id":"a","time":"2001-09-09T01:46:40Z","tags":["ct:a"]},{"id":"b","time":"2001-09-09T03:46:40.5+02:00","tags":["ct:b"]}]' | python3 "$SCRIPTS/lib/ct-image.py" newest ct --time | cut -f1,3)"
+
+echo "-- a partial container: the drill checks the paths and the dumps, it does not boot"
+mkdir -p "$HS_STATE_DIR/backup-rules" "$HS_STATE_DIR/backup-dump"
+printf 'include /srv/app
+' > "$HS_STATE_DIR/backup-rules/part"
+printf '# dump:db
+hs-dump db
+' > "$HS_STATE_DIR/backup-dump/part"
+: > "$LOG"
+export FAKE_PARTIAL=1
+check "a partial container passes the drill" hsb drill ct part
+check_eq "its drill is recorded" part "$(st drill_ct_name)"
+check_eq "and marked partial" part "$(st drill_ct_partial)"
+check "nothing was booted: no image imported, no instance made or started" bash -c "! grep -q '^incus \(image import\|init\|start\)' '$LOG'"
+check "and nothing is left" clean
+check_out "the drill says it is partial" "partial backup" hsb drill ct part
+check_out "--state carries the new row" "^drill_ct_partial	part" hsb --state
+check_out "the report says partial" "partial: paths and dumps" hsb report --dry-run
+check_eq "an included path that is not in the backup fails" 1 "$(FAKE_MISSING=1 hsb drill ct part >/dev/null 2>&1; echo $?)"
+check "and leaves nothing" clean
+check_eq "an included file that came back empty fails" 1 "$(FAKE_EMPTYPATH=1 hsb drill ct part >/dev/null 2>&1; echo $?)"
+check_eq "a missing dump fails" 1 "$(FAKE_NODUMP=1 hsb drill ct part >/dev/null 2>&1; echo $?)"
+check_out "an empty dump file is said" "dump file came back empty" env FAKE_EMPTYDUMP=1 bash "$SCRIPTS/backup.sh" drill ct part
+check_eq "an empty dump file fails" 1 "$(FAKE_EMPTYDUMP=1 hsb drill ct part >/dev/null 2>&1; echo $?)"
+check "and leaves nothing" clean
+
+echo "-- restore of a partial container: the recipe again, then the paths"
+cat > "$BIN/recipe-stub" <<'FAKE'
+#!/usr/bin/env bash
+echo "recipe $*" >> "$LOG"
+[ -z "${FAKE_RECIPE_FAIL:-}" ]
+FAKE
+chmod +x "$BIN/recipe-stub"
+export HS_BACKUP_RECIPE_CMD=$BIN/recipe-stub HS_BACKUP_RESTORE_TARGET=$WORK/live
+mkdir -p "$WORK/live"
+: > "$LOG"
+check_out "the dry run shows the plan and changes nothing" "run the recipe part again" hsb restore ct part --dry-run
+check "no recipe, no restore in a dry run" bash -c "! grep -q '^recipe\|^restic restore' '$LOG'"
+check_eq "without the typed name nothing happens" 1 "$(echo wrong | hsb restore ct part >/dev/null 2>&1; echo $?)"
+check "and nothing ran" bash -c "! grep -q '^recipe\|^restic restore' '$LOG'"
+check "with the typed name it restores" bash -c "echo part | HS_BACKUP_NO_MOUNT=1 bash '$SCRIPTS/backup.sh' restore ct part"
+rl=$(grep -n '^recipe part$' "$LOG" | head -n1 | cut -d: -f1); sl=$(grep -n '^restic restore ppp1 ' "$LOG" | head -n1 | cut -d: -f1)
+check "the recipe ran first, then the paths" test -n "$rl" -a -n "$sl" -a "${rl:-9}" -lt "${sl:-0}"
+check "the app was stopped between them and started after" bash -c "grep -n '^incus \(stop\|start\) part' '$LOG' | cut -d: -f2 | tr '
+' ' ' | grep -q 'incus stop part incus start part'"
+check "the included path is back" test -s "$WORK/live$HS_INCUS_ROOT/part/rootfs/srv/app/conf"
+check "the dump is back" test -s "$WORK/live$HS_INCUS_ROOT/part/rootfs/var/backups/hs/db.sql"
+: > "$LOG"
+check "--yes skips the typed name" hsb restore ct part --recipe part --yes
+: > "$LOG"
+hsb restore ct part --recipe other --yes >/dev/null 2>&1
+check "another app name runs its recipe for this container" grep -q '^recipe other --name part$' "$LOG"
+: > "$LOG"
+check_eq "a failing recipe stops before anything is put back" 1 "$(FAKE_RECIPE_FAIL=1 hsb restore ct part --yes >/dev/null 2>&1; echo $?)"
+check "no restore ran" bash -c "! grep -q '^restic restore' '$LOG'"
+rm -rf "$WORK/live"; mkdir -p "$WORK/live"
+check_eq "a path that did not come back fails the restore" 1 "$(FAKE_MISSING=1 hsb restore ct part --yes >/dev/null 2>&1; echo $?)"
+unset FAKE_PARTIAL
+check_out "a container without a partial backup is told so" "no partial backup" hsb restore ct small --yes
+unset HS_BACKUP_RECIPE_CMD HS_BACKUP_RESTORE_TARGET
 
 finish

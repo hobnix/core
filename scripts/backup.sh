@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: back up shares, chosen containers, the domain controller and the host config with restic to the disk labelled "backup"
 # help.de: sichert Freigaben, ausgewählte Container, den Domänencontroller und die Server-Einstellungen mit restic auf die Platte mit dem Etikett "backup"
-# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|now|off | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
+# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | restore ct <name> [--recipe <app>] | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|now|off | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
 set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/dc.sh"
@@ -41,7 +41,10 @@ usage: hs backup [status]                    what is in the backup, last run, sp
                                              the Samba secrets only with --with-samba
        hs backup browse [--off]              show the whole backup read-only as share "backup-browse"
        hs backup verify                      check part of the stored data
-       hs backup prune [--dry-run]           give space back now: delete leftovers of a run that ran out of space, apply the
+       hs backup restore ct <name> [--recipe <app>] [--dry-run]
+                                             a partial container (only some parts in the backup): run its recipe again, then put
+                                             the backed-up parts back while the app is stopped (plan first, you type the name)
+       hs backup prune [--dry-run]         give space back now: delete leftovers of a run that ran out of space, apply the
                                              retention (7 daily, 4 weekly, 6 monthly) and prune
        hs backup drill [N]                   restore N random files (default 5) into a temp folder and compare them
        hs backup drill ct [<name>]           restore a container (the one drilled longest ago, smallest first) into a
@@ -738,6 +741,35 @@ drill_pick() {   # drill_pick [<name>] [ct|vm]
   printf '%s' "$rows" | sort -t$'\t' -k1,1n -k2,2n | awk -F'\t' 'NR == 1 { print $3, $4, $2, $5 }'
 }
 
+# A partial container (backup rules) cannot boot: each included path and each dump file must have come back, non-empty.
+# The paths are the ones in the rule file now (a rule changed since the snapshot shows up as missing: the next backup fixes it).
+drill_ct_partial() {   # drill_ct_partial <name> <restored rootfs>
+  local name=$1 root=$2 p bad=0 n=0 what=""
+  note "$(t '%s is a partial backup (only chosen parts): checking the paths and the dumps, not booting' "$name")"
+  ok "$(t '%s: files restored' "$name")"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    n=$((n + 1))
+    if [ -f "$root$p" ]; then
+      if [ ! -s "$root$p" ]; then warn "$(t '%s: %s came back empty' "$name" "$p")"; bad=$((bad + 1)); fi
+    elif [ -d "$root$p" ]; then
+      if [ -z "$(find "$root$p" -type f -size +0 -print -quit 2>/dev/null)" ]; then warn "$(t '%s: %s came back with no file that holds data' "$name" "$p")"; bad=$((bad + 1)); fi
+    else
+      warn "$(t '%s: %s is not in the backup' "$name" "$p")"; bad=$((bad + 1))
+    fi
+  done < <(rules_list "$name" include)
+  if [ -n "$(dump_cmds "$DUMPS/$name")" ]; then
+    what=" and dump"
+    if [ -z "$(find "$root/var/backups/hs" -type f -print -quit 2>/dev/null)" ]; then warn "$(t '%s: the backup holds no dump file' "$name")"; bad=$((bad + 1))
+    elif [ -n "$(find "$root/var/backups/hs" -type f -size 0 -print -quit 2>/dev/null)" ]; then warn "$(t '%s: a dump file came back empty' "$name")"; bad=$((bad + 1)); fi
+  fi
+  if [ "$n" -eq 0 ]; then warn "$(t '%s: no backup rules now, nothing to check' "$name")"; bad=$((bad + 1)); fi
+  drill_cleanup
+  [ "$bad" -eq 0 ] || return 1
+  ok "$(t '%s: every backed-up path%s is back and holds data' "$name" "$what")"
+  note_state "drill_ct_partial=$name"
+}
+
 # One container. Returns 1 with a warning (never exits), so the domain controller check still runs.
 drill_ct_one() {   # drill_ct_one <name> <snapshot id> <bytes> <snapshot epoch>
   local name=$1 id=$2 size=$3 when=${4:-0} root avail i st="" wait=${HS_DRILL_WAIT:-90} age
@@ -767,6 +799,9 @@ drill_ct_one() {   # drill_ct_one <name> <snapshot id> <bytes> <snapshot epoch>
   fi
   R restore "$id" --target "$drill_tmp/restore" >/dev/null || { warn "$(t '%s: the restore itself failed' "$name")"; drill_cleanup; return 1; }
   root=$drill_tmp/restore$INCUS_ROOT/$name/rootfs
+  if [ "$(R snapshots --json 2>/dev/null | python3 "$CTIMG" partial "$id" 2>/dev/null | tr -d '\r' || true)" = yes ]; then
+    drill_ct_partial "$name" "$root"; return
+  fi
   if [ ! -d "$root/etc" ]; then warn "$(t '%s: the snapshot holds no root file system (no etc folder)' "$name")"; drill_cleanup; return 1; fi
   ok "$(t '%s: files restored' "$name")"
   python3 "$CTIMG" build "$root" "$drill_tmp/image.tar.gz" "$name" || { warn "$(t '%s: could not pack the image' "$name")"; drill_cleanup; return 1; }
@@ -914,6 +949,7 @@ cmd_report() {
       [ "$cage" -gt 3 ] || cage=""
     fi
     if [ -n "$cage" ]; then cname="${cname:+$cname, }$(t 'snapshot %s days old' "$cage")"; fi
+    if [ -n "$cname" ] && [ "$(get drill_ct_partial)" = "$(get drill_ct_name)" ]; then cname="$cname, $(t 'partial: paths and dumps')"; fi
     check_age "$(t 'Container restore drill')" drill_ct_ok 90 "$([ -z "$cname" ] || echo "($cname)")"
   fi
   # containers were backed up once, none is in the backup now (the newest container snapshot was noted by the container drill)
@@ -1053,8 +1089,70 @@ restore_make_datasets() {   # restore_make_datasets <snapshot> <tag> <path>
   ok "$(t 'Created %s share datasets. After the restore: sudo hs share repair' "${#want[@]}")"
 }
 
+# A partial container (backup rules, D12/D13) cannot boot from its snapshot: the snapshot holds only the chosen paths and the dump files.
+# Its restore = run the recipe again from its package (container, app, wiring), then put the paths back while the app is stopped.
+# HS_BACKUP_RECIPE_CMD replaces `bash recipe.sh` and HS_BACKUP_RESTORE_TARGET the target "/" (tests/backup-drill-ct.sh).
+cmd_restore_ct() {   # hs backup restore ct <ct> [--recipe <app>] [--dry-run] [--yes]
+  local ct="" recipe="" id size p target=${HS_BACKUP_RESTORE_TARGET:-/} root rc=0 here unit
+  local recipe_cmd=() rargs=()
+  here=$(dirname "$0")
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --recipe) [ $# -ge 2 ] || usage; recipe=$2; shift 2 ;;
+      -*)       usage ;;
+      *)        [ -z "$ct" ] || usage; ct=$1; shift ;;
+    esac
+  done
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage
+  recipe=${recipe:-$ct}
+  [[ "$recipe" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || die "$(t "'%s' is not the name of an app (recipe)." "$recipe")"
+  if [ -n "${HS_BACKUP_RECIPE_CMD:-}" ]; then recipe_cmd=("$HS_BACKUP_RECIPE_CMD"); else recipe_cmd=(bash "$here/recipe.sh"); fi
+  rargs=("$recipe"); [ "$recipe" = "$ct" ] || rargs+=(--name "$ct")
+  need_repo
+  id=$(R snapshots --tag "ct:$ct" --json | jq -r 'sort_by(.time) | last // empty | select((.tags // []) | index("partial")) | .id')
+  [ -n "$id" ] || die "$(t '%s has no partial backup (only some parts). A whole container: hs backup restore latest <path> --tag ct:%s' "$ct" "$ct")"
+  root=$INCUS_ROOT/$ct/rootfs
+  size=$(R stats --mode restore-size --json "$id" 2>/dev/null | python3 "$CTIMG" field total_size 2>/dev/null | tr -d '\r' || true)
+  step "$(t 'Restore of the partial container %s' "$ct")"
+  note "$(t 'The backup holds only the chosen parts, not the whole container; it cannot boot from them.')"
+  say "  1. $(t 'run the recipe %s again (container, app, connection to this server)' "$recipe")"
+  say "  2. $(t 'stop %s' "$ct")"
+  say "  3. $(t 'put these back from the newest backup (%s):' "$(human "${size:-0}")")"
+  if rules_has "$ct"; then
+    while IFS= read -r p; do if [ -n "$p" ]; then say "       $p"; fi; done < <(rules_list "$ct" include)
+  fi
+  if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then say "       /var/backups/hs   $(t '(the database dumps)')"; fi
+  say "  4. $(t 'start %s again' "$ct")"
+  warn "$(t 'Files of these paths that are newer than the backup are overwritten; files that are not in the backup stay as the recipe made them.')"
+  if $dry; then note "$(t 'Dry run: nothing was changed.')"; return 0; fi
+  if [ -z "${HS_BACKUP_YES:-}" ]; then
+    confirm_name "$ct" "$(t 'the name of the instance')" || die "cancelled"
+    if [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ] && confirm "$(t 'Run the work as a background job? (recommended: it keeps going if the terminal closes; follow it with: hs job follow)')"; then
+      . "$here/lib/job.sh"
+      unit=$(hs_job "backup-restore-$ct" "hs backup restore ct $ct" -- bash "$here/backup.sh" restore ct "$ct" --recipe "$recipe" --yes) || exit 1
+      ok "$(t 'Started as job %s. Follow it: hs job follow %s' "$unit" "$unit")"
+      return 0
+    fi
+  fi
+  step "$(t 'Running the recipe %s' "$recipe")"
+  "${recipe_cmd[@]}" "${rargs[@]}" || die "$(t 'The recipe failed: nothing was put back. Fix that first, then run this command again.')"
+  step "$(t 'Putting the backed-up parts back')"
+  inc stop "$ct" </dev/null >/dev/null 2>&1 || true
+  R restore "$id" --target "$target" --include "$root" || rc=1
+  if [ "$rc" -eq 0 ] && rules_has "$ct"; then
+    while IFS= read -r p; do
+      if [ -n "$p" ] && [ ! -e "$target$root$p" ]; then warn "$(t '%s: not in the backup' "$p")"; rc=1; fi
+    done < <(rules_list "$ct" include)
+  fi
+  inc start "$ct" </dev/null >/dev/null 2>&1 || warn "$(t '%s did not start: hs instance start %s' "$ct" "$ct")"
+  [ "$rc" -eq 0 ] || die "$(t 'Not everything came back (see above). The container runs the recipe version of the app.')"
+  ok "$(t '%s: recipe run, backed-up parts put back.' "$ct")"
+  if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then note "$(t 'The database dumps are in /var/backups/hs inside the container; load them with the import of the app (see its guide).')"; fi
+}
+
 cmd_restore() {
   local snap="" path="" tag=shares to=$BULK/shares/restored keep=false
+  if [ "${1:-}" = ct ]; then shift; cmd_restore_ct "$@"; return; fi
   while [ $# -gt 0 ]; do
     case "$1" in
       --keep-owner) keep=true; shift ;;
@@ -1463,6 +1561,7 @@ cmd_state_kv() {
   # appended last: readers go by key and ignore keys they do not know
   printf 'used_bytes\t%s\n' "$(get used_bytes)"
   printf 'size_bytes\t%s\n' "$(get size_bytes)"
+  printf 'drill_ct_partial\t%s\n' "$(get drill_ct_partial)"   # the container of the last partial drill (paths and dumps, no boot)
 }
 
 # --overview: kind<TAB>name<TAB>on|off<TAB>bytes or -  (kind = shares | sensitive | ct | always)
