@@ -37,8 +37,8 @@ def full_system(params):
         disk_id_by_name(params, "fast1", "f1"),
         disk_id_by_name(params, "fast2", "f2"),
         # the plan first: its text (and a refusal's reason) stays in the console log
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks {f1},{f2} --confirm fast",
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --use apps --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --use apps --disks {f1},{f2} --confirm fast",
              timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
         step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
              timeout=900, what="the pool fast exists"),
