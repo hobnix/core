@@ -6,7 +6,7 @@
   import DiskPicker from './DiskPicker.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { poll, rows } from '../../data.svelte.js';
+  import { get } from '../../api.js';
   import { poolOfRole } from '../../pools.svelte.js';
   import { freeDisks } from './disks.js';
 
@@ -20,10 +20,13 @@
   let unraidPass = $state('');
   let serverPass = $state('');
 
-  const withFiles = poll(() => '/api/sys/pool/disks?role=adopt', 15000);
-  const plain = poll(() => '/api/sys/pool/disks', 15000);
-  const dataDisks = $derived(freeDisks(rows(withFiles)).filter((d) => d.hasFiles || d.notes.some((n) => /encrypted/.test(n))));
-  const emptyDisks = $derived(freeDisks(rows(plain)).filter((d) => !d.hasFiles && !d.notes.some((n) => /encrypted/.test(n)) && !data.includes(d.id)));
+  // read once when the dialog opens (the disks are plugged in before): no timer
+  let withFiles = $state({ loaded: false, rows: [] });
+  let plain = $state({ loaded: false, rows: [] });
+  const load = (path, set) => get(path, true).then((d) => set({ loaded: true, rows: d?.rows ?? [] })).catch(() => set({ loaded: true, rows: [] }));
+  $effect(() => { load('/api/sys/pool/disks?role=adopt', (v) => { withFiles = v; }); load('/api/sys/pool/disks', (v) => { plain = v; }); });
+  const dataDisks = $derived(freeDisks(withFiles.rows).filter((d) => d.hasFiles || d.notes.some((n) => /encrypted/.test(n))));
+  const emptyDisks = $derived(freeDisks(plain.rows).filter((d) => !d.hasFiles && !d.notes.some((n) => /encrypted/.test(n)) && !data.includes(d.id)));
   const encrypted = $derived(dataDisks.some((d) => data.includes(d.id) && d.notes.some((n) => /encrypted/.test(n))));
 
   const args = () => {
