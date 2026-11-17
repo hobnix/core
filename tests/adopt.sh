@@ -161,6 +161,44 @@ if unraid_dirty_xfs ud1; then
 else skip "dirty xfs log: $UNRAID_WHY"; fi
 unset HS_DISK_PASSPHRASE
 
+echo "-- Unraid (D10): a reserved folder name gets a suffix when merged"
+if unraid_disk uw1 300M; then
+  mkfs.ext4 -q -F "${UNRAID_DEV}p1" >/dev/null 2>&1
+  m=$WORK/m-uw1; mkdir -p "$m"; mount "${UNRAID_DEV}p1" "$m"
+  mkdir -p "$m/Global" "$m/Media"; echo g > "$m/Global/g.txt"; echo m > "$m/Media/m.txt"
+  umount "$m"
+  out=$(pool bulk --role adopt --disks ata-TEST_uw1 --merge --dry-run 2>&1 || true)
+  check_out "merged: the reserved name is renamed in the plan" "renamed: 'Global' is a reserved share name, it becomes 'Global-adopted'" echo "$out"
+  out=$(pool bulk --role adopt --disks ata-TEST_uw1 --dry-run 2>&1 || true)
+  check_out "per disk: only the note, no rename" "note: 'Global' is a reserved share name" echo "$out"
+else skip "reserved names: $UNRAID_WHY"; fi
+
+echo "-- Unraid (D11): an encrypted disk opened with the Unraid passphrase gets this server's passphrase as a key slot after the header backup"
+if _unraid_need cryptsetup mkfs.ext4 && dm_works && unraid_disk ue1 300M; then
+  dev=$UNRAID_DEV
+  _unraid_luks "${dev}p1" hs-unraid-ue1 pass && mkfs.ext4 -q -F /dev/mapper/hs-unraid-ue1 >/dev/null 2>&1
+  m=$WORK/m-ue1; mkdir -p "$m"; mount /dev/mapper/hs-unraid-ue1 "$m"; mkdir -p "$m/Media"; echo e > "$m/Media/e.txt"; umount "$m"
+  cryptsetup close hs-unraid-ue1
+  export HS_DISK_PASSPHRASE=server-pass-1 HS_LUKS_HEADERS=$WORK/luks-headers
+  printf %s "$UNRAID_PASS" > "$WORK/unraid-pass"; chmod 600 "$WORK/unraid-pass"
+  mkdir -p "$HS_STATE_DIR"
+  # this server already has an encrypted disk (a recorded uuid), so the Unraid passphrase is only opening
+  echo "00000000-0000-0000-0000-000000000000" > "$HS_STATE_DIR/luks-uuids"
+  cp "$WORK/unraid-pass" "$WORK/unraid-pass.dry"
+  out=$(HS_UNRAID_PASSPHRASE_FILE=$WORK/unraid-pass.dry pool bulk --role adopt --disks ata-TEST_ue1 --merge --dry-run 2>&1 || true)
+  check_out "the plan names the key slot and the header write" "key slot after the header backup" echo "$out"
+  check "the dry run wrote no header backup" test ! -e "$WORK/luks-headers"
+  if printf %s server-pass-1 | cryptsetup open --test-passphrase --key-file - "${dev}p1" 2>/dev/null; then fail "before: the server passphrase does not open the disk"; else pass "before: the server passphrase does not open the disk"; fi
+  cryptsetup close "hs-$(cryptsetup luksUUID "${dev}p1" | tr -d - | cut -c1-12)" 2>/dev/null || true   # the dry run left it open
+  HS_UNRAID_PASSPHRASE_FILE=$WORK/unraid-pass HS_DISK_PASSPHRASE=server-pass-1 pool bulk --role adopt --disks ata-TEST_ue1 --merge --yes >"$WORK/adopt-ue1.log" 2>&1 || true
+  check "a header backup exists" test -s "$WORK/luks-headers/$(cryptsetup luksUUID "${dev}p1").img"
+  if printf %s server-pass-1 | cryptsetup open --test-passphrase --key-file - "${dev}p1" 2>/dev/null; then pass "after: this server's passphrase opens the disk"; else fail "after: this server's passphrase opens the disk ($(tail -3 "$WORK/adopt-ue1.log" | tr '\n' ' '))"; fi
+  if printf %s "$UNRAID_PASS" | cryptsetup open --test-passphrase --key-file - "${dev}p1" 2>/dev/null; then pass "the Unraid passphrase still opens it"; else fail "the Unraid passphrase still opens it"; fi
+  check "the unraid passphrase file was consumed" test ! -e "$WORK/unraid-pass"
+  rm -f "$HS_STATE_DIR/luks-uuids"; unset HS_LUKS_HEADERS
+  export HS_DISK_PASSPHRASE=$UNRAID_PASS
+else skip "LUKS key slot: ${UNRAID_WHY:-device-mapper is not usable here}"; fi
+
 echo "-- the disk with a dirty or foreign filesystem is refused, not changed"
 dev=$(mkloop ntfsish 100M)
 printf 'NTFS    ' | dd of="$dev" bs=1 seek=3 conv=notrunc 2>/dev/null
