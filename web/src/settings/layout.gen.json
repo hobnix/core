@@ -66,6 +66,8 @@
   "notifications": "cap:notifications",
   "quietHours": "cap:notifications",
   "autoMitigate": "cap:notifications",
+  "autoMitigateFreeze": "cap:notifications",
+  "autoMitigateBackup": "cap:notifications",
   "metrics": "cap:metrics",
   "metricsDays": "cap:metrics",
   "metricsMaxGB": "cap:metrics",

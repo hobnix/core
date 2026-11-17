@@ -1,0 +1,6 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Automatic reaction: freeze writers on a full pool, back up before a disk drops"
+body  = """
+Two new switches next to autoMitigate, both off by default. autoMitigateFreeze freezes the apps that write to a pool above 98 % full (or full within a day) and sends one message; hs storage incident resume lets them run again. autoMitigateBackup starts one backup when a disk turns failing and the newest backup is older than 24 hours. Nothing is deleted or copied from disk to disk.
+"""
