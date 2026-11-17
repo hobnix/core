@@ -75,3 +75,22 @@ An unknown key in any `[app]` table is an error. A route that is public-ok and m
 `pkg.py validate --warn` prints the same warnings for a tree. `pkg.py check-draft` (the package builder) reports errors only.
 
 Not tested on hardware yet. The fields are validated; the server does not read them until the later steps of the lifecycle plan.
+
+## Level 10 (milestone 0.8): protocol, timeout and service keys
+
+Planned for the API level that step 2 of [PLAN-extensions-access](PLAN-extensions-access.md) raises to 10. Today the core only **reads and
+validates** these keys (`scripts/lib/pkg_protocol.py`, called by `pkg.py validate`, `repo-check` and `check-draft`); no dispatcher or service
+unit uses them yet. A package without them keeps the shell contract and validates unchanged (ADR 0010 rule 10).
+
+| Key | Value | Rule |
+| --- | --- | --- |
+| `protocol` | `[1]` | the command protocol versions the package speaks (ADR 0010); `[1]` is the only value |
+| `[service]` `exec` | `"@/<file>"` or `"scripts/..."` | the service's program, same rule as a `commands.tsv` script: a file in the package or a path under `scripts/`, no `..`, not absolute; required |
+| `[service]` `subscribe` | list of event kind globs | lower-case words, dots and `*`; may be empty (a pure collector) |
+| `[service]` `health_interval` | seconds | whole number from 5 to 300 (ADR 0011 rule 1; default 30) |
+| `timeout:<seconds>` | a flag in column 7 of a `commands.tsv` row | whole number from 1 to 3600 (ADR 0010 rule 6; the dispatcher's default is 30), at most once per row |
+
+An unknown key in `[service]`, a wrong type or a value out of range is an error. A manifest that uses `protocol` or `[service]` must state
+`requires_core = ">=10"` or higher (decision D9: the API level is the promise that the core can run it); `pkg.py validate` names the missing level.
+
+Not tested on hardware yet. The keys are validated only; nothing reads them at run time before steps 2 and 4.

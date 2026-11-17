@@ -93,6 +93,16 @@ def _load_pkg_app():
 pkg_app = _load_pkg_app()
 
 
+def _load_pkg_protocol():
+    spec = importlib.util.spec_from_file_location("pkg_protocol", os.path.join(HERE, "lib", "pkg_protocol.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_protocol = _load_pkg_protocol()
+
+
 def capability_toml(folder):
     """The parsed capability.toml beside a package.toml (an extension's [[web.*]] live there), {} when absent or invalid."""
     try:
@@ -417,6 +427,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad(t)
     for t in pkg_perms.manifest_problems(n, m, capability_toml(os.path.dirname(path)) if path else None):
         bad("permissions: " + t)
+    out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
     if warnings is not None:
@@ -571,6 +582,7 @@ def repo_check(folder, warnings=None):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
+        out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
         warnings += [f"{name}: {t}" for t in warns]
