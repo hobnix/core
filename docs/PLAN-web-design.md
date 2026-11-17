@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 is not reviewed.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -231,10 +231,12 @@ Draft, not reviewed. Each behaviour is decided once, here, and carried by one co
 - **Stream down.** The top bar shows that live updates are off and the data age keeps counting. Pages start polling at the slow fallback rate; the polling and its ratchet (`timed-reads.max`) stay as they are.
 - **Acknowledge.** The entry stays in the Feed, dimmed, with who acknowledged it and until when. Undo is always offered. The count in the bell and in Summary leaves acknowledged entries out.
 
-### 4.11 Open questions for review
+### 4.11 Decisions
 
-- What does the bell count: unacknowledged problems only, or problems plus unread notifications?
-- Is the read-only status page (#427) the viewer role seeing the normal pages, or a separate public page with its own address?
-- Does a failed job's coded error stay on the row until dismissed, or fade out after the next successful read?
-- Should the interface warn when the event stream is down for long (for example after one minute), or only show it in the top bar?
-- Does an acknowledge ask for a duration each time, or default to "until it resolves" with a snooze in the More menu?
+Decided 2026-11-18:
+
+- **The bell counts unacknowledged problems plus unread notifications.** Acknowledged problems are left out.
+- **The read-only status page is the viewer role** seeing the normal pages without plans or action buttons. It needs a sign-in. There is no separate public page, which keeps the rule that admin pages are never public.
+- **A failed job's coded error stays on the row until the user dismisses it.**
+- **Acknowledge defaults to "until it resolves"**, with a snooze in the More menu.
+- **A stream outage shows only in the top bar**, no banner.
