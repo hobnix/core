@@ -1,38 +1,46 @@
-# Hand-written shapes of `hs sys` outputs; scripts/openapi-gen.py turns them into docs/api/openapi.json.
-# Key = the row path without "sys ". Fields: kind (tsv|json|text); either columns = [...] (every line has these fields) or
+# Hand-written shapes and roles of `hs sys` rows; scripts/openapi-gen.py turns them into docs/api/openapi.json.
+# Key = the row path without "sys ". Every row needs `role` = viewer | app-manager | admin (ADR 0012; copied as x-hs-role; a plan or
+# start row cannot be viewer; a new row without a role fails tests/openapi.sh). Shape fields: kind (tsv|json|text); either columns = [...] (every line has these fields) or
 # records = {tag = [fields after the tag]} (the first field names the line); optional enums = {field = [...]}
 # (records: "tag.field" for one line kind), stdin = "line"|"bytes", note. Rows without an entry are marked x-hs-described: false.
 
 ["jobs list"]
+role = "viewer"
 kind = "tsv"
 columns = ["unit", "description", "next", "last", "result"]
 enums = { result = ["ok", "failed", "never"] }
 
 ["jobs running"]
+role = "viewer"
 kind = "tsv"
 columns = ["unit", "description", "started"]
 
 ["jobs tail <unit>"]
+role = "viewer"
 kind = "tsv"
 records = { state = ["state"], exit = ["status"], line = ["text"], next = ["count"] }
 enums = { state = ["running", "ok", "failed", "unknown"] }
 
 ["jobs record <id>"]
+role = "viewer"
 kind = "json"
 note = "One job record (docs/adr/0004-job-record.md): id, slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null."
 
 ["jobs records"]
+role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit"]
 enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
 
 ["jobs children <id>"]
+role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit"]
 enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
 note = "The sub-jobs of one orchestration job (ADR 0018), oldest first; same columns as jobs records."
 
 ["jobs answer <id>"]
+role = "app-manager"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"] }
 enums = { status = ["done", "stale", "refused"] }
@@ -40,174 +48,206 @@ stdin = "line"
 note = "Answer the question an interactive recipe run waits for (ADR 0018). The answer is one line on stdin, never an argument. status stale: the question is not waiting any more (nothing written); refused: not the initiator or an admin, or the answer does not fit the question's shape or choices (exit 1)."
 
 ["audit"]
+role = "admin"
 kind = "tsv"
 columns = ["id", "time", "actor", "result", "exit", "command"]
 enums = { result = ["ok", "failed"] }
 note = "Who did what: one line per command that changed the system, newest last. command is the words typed, never the arguments after them."
 
 ["event list"]
+role = "viewer"
 kind = "tsv"
 columns = ["id", "time", "source", "kind", "subject", "level", "text", "payload"]
 enums = { level = ["info", "warn", "error"] }
 
 ["ct list"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "type", "state", "address", "ram", "cpu", "autostart", "mac_pinned", "docker", "disk", "snapshots",
            "last_snapshot", "memory_in_use", "cpu_time", "bindings", "last_start_utc", "owner"]
 
 ["pool list"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "role", "kind", "state"]
 enums = { role = ["data", "apps"], kind = ["zfs", "snapraid"], state = ["online", "degraded", "missing", "locked", "unmounted"] }
 
 ["pool state"]
+role = "viewer"
 kind = "tsv"
 records = { lock = ["state", "text"], paused = ["state", "text"], scrub = ["pool", "state", "text"], sync = ["pool", "state", "text"] }
 enums = { "lock.state" = ["pool-change", "free", "busy", "unknown"], "paused.state" = ["yes", "no"] }
 
 ["pool state <pool>"]
+role = "viewer"
 kind = "tsv"
 records = { lock = ["state", "text"], paused = ["state", "text"], scrub = ["pool", "state", "text"], sync = ["pool", "state", "text"] }
 enums = { "lock.state" = ["pool-change", "free", "busy", "unknown"], "paused.state" = ["yes", "no"] }
 
 ["storage discover"]
+role = "viewer"
 kind = "tsv"
 columns = ["disk", "size", "bus", "model", "kind", "label", "state"]
 enums = { bus = ["sata", "nvme", "usb", "sas", "virtio", "other"], kind = ["os", "empty", "zfs", "snapraid", "backup", "luks", "foreign"], state = ["system", "free", "imported", "importable", "damaged", "mounted", "unmounted", "protected", "locked", "open", "has-data"] }
 
 ["incident state"]
+role = "viewer"
 kind = "tsv"
 records = { ok = ["scope", "text"], incident = ["id", "pool", "kind", "severity", "text"], member = ["pool", "name", "state", "group", "disk", "why"], target = ["pool", "member", "dev", "disk"], share = ["pool", "name", "path", "impact"], app = ["pool", "name", "state", "via", "writes"], progress = ["pool", "kind", "percent", "text"], paused = ["paused", "instances"], free = ["disk", "bytes", "role"], phase = ["pool", "phase"], step = ["n", "state", "title"], next = ["command", "text"] }
 enums = { "incident.kind" = ["pool-degraded", "member-down", "disk-failing"], "incident.severity" = ["warn", "error"], "share.impact" = ["unavailable", "at-risk"], "app.writes" = ["yes", "no"], "progress.kind" = ["resilver", "rebuild"], "paused.paused" = ["yes", "no"], "phase.phase" = ["detect", "ready", "running"], "step.state" = ["done", "now", "todo", "optional"] }
 
 ["release show"]
+role = "admin"
 kind = "tsv"
 records = { channel = ["channel"], installed = ["version"], offer = ["channel", "ref", "state"], ref = ["ref"], state = ["state"], signed = ["signed"] }
 enums = { "offer.state" = ["none", "unknown", "current", "kept", "update"], "state.state" = ["none", "unknown", "current", "kept", "update"], "signed.signed" = ["yes", "no", "-"] }
 
 ["live inspect"]
+role = "viewer"
 kind = "json"
 note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322)."
 
 ["live raw <topic>"]
+role = "viewer"
 kind = "json"
 note = "{topic, stored (false = no document), ts, gen, rc, err, ts_err, bytes (full size), truncated, out (at most 65536 bytes)}. Exit 2: unknown topic."
 
 ["testlab results"]
+role = "viewer"
 kind = "tsv"
 columns = ["run", "stage", "result", "exit", "ref", "commit", "started", "ended"]
 enums = { stage = ["1", "2"], result = ["ok", "failed", "skipped", "error"] }
 note = "The last test-lab runs (capability testlab), oldest first, one line per run and stage. started and ended are UTC times; empty fields are -."
 
 ["testlab plan <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], heading = ["text"], step = ["text"], note = ["text"], command = ["text"], long = ["yes"] }
 enums = { status = ["ok", "refused"] }
 note = "What a test-lab run would do: hs sys testlab plan run [--ref R] [--stage 1|2|3|4|5|6|<name>|all]. Exit 0 ok, 1 refused. Never asks."
 
 ["testlab start <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"] }
 enums = { status = ["started", "refused"] }
 note = "Start a test-lab run as a background job: hs sys testlab start run [--ref R] [--stage 1|2|3|4|5|6|<name>|all]; status started + the job unit."
 
 ["preset list"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "title", "description", "capabilities"]
 note = "The presets: name, title, description, capabilities (space separated, - = none). Never translated; a - is an empty field."
 
 ["preset plan <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], heading = ["text"], step = ["text"], note = ["text"], long = ["yes"] }
 enums = { status = ["ok", "refused"] }
 note = "What applying a preset would do: hs sys preset plan apply <name>. One step per option that would be set, one note per option kept. Exit 0 ok, 1 refused. Never asks."
 
 ["preset start <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"] }
 enums = { status = ["done", "refused"] }
 note = "Apply a preset: hs sys preset start apply <name>; fills only what is not set yet; status done."
 
 ["setup plan <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], heading = ["text"], step = ["text"], long = ["yes"] }
 enums = { status = ["ok", "refused"] }
 note = "What closing the first-run wizard would do: hs sys setup plan wizard-done. Refused unless the wizard is open. Never asks."
 
 ["setup start <action>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"] }
 enums = { status = ["done", "refused"] }
 note = "Close the first-run wizard: hs sys setup start wizard-done; status done."
 
 ["net check"]
+role = "admin"
 kind = "tsv"
 columns = ["item", "state", "value", "fix"]
 enums = { item = ["link", "wireless", "address", "route", "dns", "clock"], state = ["ok", "warn", "fail"] }
 note = "Six rows in this order. value and fix are - when empty. Exit 1 when a row is fail (the rows are still printed)."
 
 ["pkg capabilities"]
+role = "admin"
 kind = "tsv"
 columns = ["name", "repo", "available", "installed", "state", "requires", "type", "title"]
 enums = { state = ["new", "current", "update"], type = ["feature", "provider", "-"] }
 note = "The capability packages the repositories offer (read from the cached clones). installed is - when none; requires is a comma list or -; type is - when the package.toml does not give one."
 
 ["pkg bundle plan <names>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], heading = ["text"], step = ["text"], note = ["text"], command = ["text"], long = ["yes_no"] }
 enums = { status = ["ok", "refused"], long = ["yes", "no"] }
 note = "The names are one comma list (a,b). The plan puts what a package requires in front of it. Exit 0 ok, 1 refused (also without the network)."
 
 ["pkg bundle start <names>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"] }
 enums = { status = ["started", "refused"] }
 note = "One background job installs, switches on and rebuilds: hs sys pkg bundle start a,b; status started and the job unit."
 
 ["pkg show <name>"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], name = ["name"], kind = ["kind"], repo = ["repo"], version = ["version"], tag = ["tag"], commit = ["commit"], title = ["text"], description = ["text"], description_de = ["text"], audience = ["audience"], requires_core = ["text"], icon = ["text"], category = ["text"], app_version = ["text"], upstream = ["text"], needs = ["list"], input = ["input"], instances = ["text"], ram_mb = ["count"], disk_gb = ["count"], ports = ["list"], gpu = ["yes_no"], screenshot = ["path"], route = ["name", "port", "scheme", "exposure", "default"], ask = ["key", "label", "type", "choices", "default", "pattern", "when"], step = ["name", "text"] }
 enums = { status = ["ok", "refused"], gpu = ["yes", "no"], default = ["yes", "no"], step_name = ["read", "needs", "ask", "run", "on", "rebuild", "check", "done"] }
 note = "What a package is and would ask, read from the verified clone of its newest signed release (nothing is installed): hs sys pkg show <name> [--repo R]. The tag and commit are the ones the install job must use. Absent values are -; lists are comma lists; route, ask and step lines repeat. A package that is unknown, or whose release does not verify, answers status refused and a reason, exit 1."
 
 ["pkg asset <name> <file>"]
+role = "admin"
 kind = "text"
 note = "The bytes of the package icon (an svg file) or one of its screenshots (png or webp), taken from the verified tag; only the files hs sys pkg show lists. Not text: a picture. Refused with a message on stderr, exit 1."
 
 ["pkg states"]
+role = "admin"
 kind = "tsv"
 columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The lifecycle stage of every package (ADR 0027). flags is a comma list of update, waits, orphan, pending, failed, unhealthy, stopped, or -. repo, available and installed are - for a package that is only in this tree; instances (recipes) is a comma list or -."
 
 ["apps list"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The recipe rows of pkg states, same columns. An app whose declared check fails while its instances run is stage on with the flag unhealthy."
 
 ["apps versions"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "instance", "package_version", "app_offered", "app_running", "policy", "state"]
 enums = { policy = ["notify", "pinned"], state = ["current", "update", "pinned"] }
 note = "One row per installed app instance. package_version is the version of the package (package.toml), app_offered the app version the release says it ships, app_running the version read on this server (the image tag, the app's own version endpoint or a command in the instance: [app.version]); - when not known. state is update when offered and running are both known and differ, pinned when the policy is pinned (a pinned app is never offered), else current. Nothing is looked up on the internet."
 
 ["apps policy <instance>"]
+role = "viewer"
 kind = "text"
 note = "hs sys apps policy <instance>: prints notify or pinned (the default is notify). hs sys apps policy <instance> notify|pinned writes it into the app record (/var/lib/hs/apps/<instance>.toml) and prints nothing. automatic is refused (not available yet); an unknown instance is refused with a message on stderr, exit 1."
 
 ["apps health"]
+role = "viewer"
 kind = "tsv"
 columns = ["name", "health"]
 enums = { health = ["healthy", "unhealthy", "stopped"] }
 note = "One row per app whose package.toml declares [app.health]: the check (container, tcp or http) run against the instance. No row for an app without a declared check."
 ["apps plan <action>"]
+role = "app-manager"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], heading = ["text"], package = ["name"], kind = ["kind"], repo = ["repo"], version = ["version"], tag = ["tag"], commit = ["commit"], title = ["text"], description = ["text"], creates = ["text"], need = ["name", "state", "text", "yes_no"], ask = ["key", "label", "type", "choices", "default", "pattern", "when"], jobstep = ["name", "text"], step = ["text"], note = ["text"], warn = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["yes_no"], instance = ["name"], source = ["text"], item = ["text"], keeps = ["text"], datapath = ["text"], data = ["text"], question = ["text"], confirm_data = ["name"], piece = ["name", "old", "new"], package_version = ["text"], app = ["text"], policy = ["policy"] }
 enums = { status = ["ok", "refused"], policy = ["notify", "pinned"], long = ["yes", "no"], kind = ["recipe", "extension", "capability"] }
 note = "hs sys apps plan install <name> [--repo R] [--tag T] [--set KEY=value]... [--name <container>]: what installing would do, read from the newest verified release (nothing is installed). tag and version are what the job installs; start --tag refuses another. need state is present, missing or recipe (the recipe handles it); a missing need with long yes needs a rebuild. jobstep lines are the steps of the job (read, needs, ask, run, check, done; on and rebuild for an extension or capability). confirm_name is the typed name for a package of an added repository. Exit 0 ok, 1 refused. hs sys apps plan retry <job>: the same plan of the tag that failed, plus failed_step (read|needs|ask|run:<phase>|check), reason, tail, retry_from. hs sys apps plan remove <instance> [--delete-data]: what Remove would do (apps-remove.sh): source (ledger|discovered; an app without a created ledger gets a read-only list of the instance and its service description), item <kind> <id> <state> <action> <text> lines, keeps <text> and datapath <text> from the manifest [app.remove], data yes|no, question delete_data (default keep), confirm_name <instance>, with --delete-data also confirm_data <instance> (the name typed a second time); --delete-data is refused for an app without a ledger. hs sys apps plan cleanup <job>: item <kind> <id> <state> <action> <text> lines (the created ledger in reverse; state there|gone|unknown, action remove|forget|keep|skip), data yes|no, question delete_data (default keep), confirm_name <instance>. hs sys apps plan update <name>: what updating an installed app would do (nothing runs, nothing is written): status, heading, package, version, piece <name> <old> <new> per piece the recipe says would update (hs recipe <name> --check; none: a note nothing to update), package_version <installed> -> <available>, app <running> -> <offered> (- = not known), policy (notify|pinned; pinned adds a note that the update runs only if the person starts it), step lines. Exit 0 ok, 1 refused (not an app, not installed). hs sys apps start update is refused until the update step exists."
 
 ["apps start <action>"]
+role = "app-manager"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"] }
 enums = { status = ["started", "refused"] }
@@ -215,32 +255,744 @@ note = "hs sys apps start install <name> --tag <tag of the plan> [--repo R] [--n
 
 
 ["apps recover <verb> <action>"]
+role = "app-manager"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"], heading = ["text"], package = ["name"], instance = ["name"], failed_step = ["text"], tail = ["text"], retry_from = ["text"], item = ["text"], data = ["text"], question = ["text"], note = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["text"] }
 enums = { status = ["ok", "refused", "started"] }
 note = "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly."
 
 ["fm du <location>"]
+role = "viewer"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], cached = ["answer"], pending = ["answer"], unit = ["unit"], files = ["count"], folders = ["count"], bytes = ["bytes"], partial = ["answer"], mtime = ["epoch"], time = ["epoch"] }
 enums = { "status.status" = ["ok", "refused"], "cached.answer" = ["yes", "no"], "pending.answer" = ["yes"], "partial.answer" = ["yes", "no"] }
 note = "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks."
 
 ["fm stat <location>"]
+role = "viewer"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], type = ["type"], owner = ["name"], group = ["name"], uid = ["id"], gid = ["id"], mode = ["octal"], perms = ["rwx"], bytes = ["bytes"], mtime = ["epoch"] }
 enums = { "status.status" = ["ok", "refused"], "type.type" = ["d", "f", "l"] }
 note = "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing."
 
 ["disk power"]
+role = "viewer"
 kind = "tsv"
 records = { disk = ["dev", "state", "since", "wakes"], power = ["source", "what", "watts"] }
 enums = { "disk.state" = ["asleep", "spinning", "unknown"], "power.source" = ["ups", "rapl"] }
 note = "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured."
 
 ["migrate plan unraid"]
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], needs = ["input"], candidate = ["id", "size", "kind", "note"], reason = ["text"], disk = ["id", "role", "size", "filesystem"], heading = ["text"], section = ["text"], step = ["text"], note = ["text"], warn = ["text"], danger = ["text"], text = ["text"], confirm_name = ["word"], long = ["yes"], option = ["name", "values", "default"] }
 enums = { "status.status" = ["ok", "refused", "needs"], "needs.input" = ["disks", "unlock"], "candidate.kind" = ["data", "encrypted", "empty", "refused"], "disk.role" = ["data", "old-parity", "spare"] }
 stdin = "line"
 note = "Exit 0 ok, 1 refused, 2 something is missing (needs disks lists the candidates; needs unlock: pass --unlock and one JSON line {\"unraid\": ..., \"server\": ...} on stdin)."
+
+# Rows that only have a role (no output shape yet). Roles per ADR 0012; a new row needs one.
+
+["migrate start unraid"]
+role = "admin"
+
+["pool disks"]
+role = "viewer"
+
+["pool info"]
+role = "viewer"
+
+["pool members"]
+role = "viewer"
+
+["pool info <pool>"]
+role = "viewer"
+
+["pool members <pool>"]
+role = "viewer"
+
+["pool plan <pool> <action>"]
+role = "admin"
+
+["pool start <pool> <action>"]
+role = "admin"
+
+["backup state"]
+role = "viewer"
+
+["backup shares"]
+role = "viewer"
+
+["jobs show <unit>"]
+role = "viewer"
+
+["jobs log <unit>"]
+role = "viewer"
+
+["jobs plan <action>"]
+role = "admin"
+
+["jobs start <action>"]
+role = "admin"
+
+["ssh-key list"]
+role = "admin"
+
+["ssh-key plan <action>"]
+role = "admin"
+
+["ssh-key start <action>"]
+role = "admin"
+
+["recipes list"]
+role = "viewer"
+
+["apps remove <verb> <instance>"]
+role = "app-manager"
+
+["recipes versions"]
+role = "viewer"
+
+["setup list"]
+role = "viewer"
+
+["config list"]
+role = "admin"
+
+["config check"]
+role = "admin"
+
+["config plan <action>"]
+role = "admin"
+
+["config start <action>"]
+role = "admin"
+
+["logs units"]
+role = "admin"
+
+["logs show"]
+role = "admin"
+
+["jobs stop <unit>"]
+role = "admin"
+
+["disk test <disk>"]
+role = "admin"
+
+["disk plan <disk> <action>"]
+role = "admin"
+
+["disk start <disk> <action>"]
+role = "admin"
+
+["disk results <disk>"]
+role = "viewer"
+
+["disk ls <member>"]
+role = "viewer"
+
+["disk marks"]
+role = "viewer"
+
+["fm locations"]
+role = "viewer"
+
+["fm pair <left> <right>"]
+role = "admin"
+
+["fm ls <location>"]
+role = "viewer"
+
+["fm trash <location>"]
+role = "admin"
+
+["fm progress <unit>"]
+role = "viewer"
+
+["fm plan <op>"]
+role = "admin"
+
+["fm start <op>"]
+role = "admin"
+
+["disk event <action> <name>"]
+role = "admin"
+
+["disk-health list"]
+role = "viewer"
+
+["state forget <serial>"]
+role = "admin"
+
+["state collect"]
+role = "admin"
+
+["state disks"]
+role = "viewer"
+
+["state events"]
+role = "viewer"
+
+["state smart <serial>"]
+role = "viewer"
+
+["state problems"]
+role = "viewer"
+
+["state baseline"]
+role = "viewer"
+
+["state baseline-run"]
+role = "admin"
+
+["state deck-disks"]
+role = "viewer"
+
+["state inventory-json"]
+role = "viewer"
+
+["state disks-json"]
+role = "viewer"
+
+["state events-json"]
+role = "viewer"
+
+["state history"]
+role = "viewer"
+
+["state history-record"]
+role = "viewer"
+
+["temp-disk raw"]
+role = "viewer"
+
+["cache state"]
+role = "viewer"
+
+["unifi used"]
+role = "viewer"
+
+["unifi reserved"]
+role = "viewer"
+
+["unifi networks"]
+role = "viewer"
+
+["unifi clients"]
+role = "viewer"
+
+["ports list"]
+role = "viewer"
+
+["dns list"]
+role = "viewer"
+
+["services list"]
+role = "viewer"
+
+["services show <name>"]
+role = "viewer"
+
+["services plan"]
+role = "admin"
+
+["services routes"]
+role = "viewer"
+
+["services app"]
+role = "viewer"
+
+["services tiles"]
+role = "viewer"
+
+["services stats"]
+role = "viewer"
+
+["gateway status"]
+role = "admin"
+
+["gateway routes"]
+role = "admin"
+
+["gateway health"]
+role = "admin"
+
+["gateway certs"]
+role = "admin"
+
+["gateway plan <action>"]
+role = "admin"
+
+["gateway start <action>"]
+role = "admin"
+
+["services local-routes"]
+role = "viewer"
+
+["vps plan <action>"]
+role = "admin"
+
+["vps start <action>"]
+role = "admin"
+
+["node list"]
+role = "admin"
+
+["node show <name>"]
+role = "admin"
+
+["node status <name>"]
+role = "admin"
+
+["node keyline <name>"]
+role = "admin"
+
+["node plan <action>"]
+role = "admin"
+
+["net nics"]
+role = "viewer"
+
+["parts list"]
+role = "viewer"
+
+["parts pending"]
+role = "viewer"
+
+["rebuild pending"]
+role = "admin"
+
+["parts plan <action>"]
+role = "admin"
+
+["parts start <action>"]
+role = "admin"
+
+["node start <action>"]
+role = "admin"
+
+["node remote"]
+role = "admin"
+
+["edge status"]
+role = "admin"
+
+["notify channels"]
+role = "viewer"
+
+["notify channel <name>"]
+role = "viewer"
+
+["notify providers"]
+role = "viewer"
+
+["notify plan <action>"]
+role = "admin"
+
+["notify start <action>"]
+role = "admin"
+
+["users list"]
+role = "admin"
+
+["users groups"]
+role = "admin"
+
+["users access <user>"]
+role = "admin"
+
+["users group-access <group>"]
+role = "admin"
+
+["users details <user>"]
+role = "admin"
+
+["users group-details <group>"]
+role = "admin"
+
+["users plan <name> <action>"]
+role = "admin"
+
+["users start <name> <action>"]
+role = "admin"
+
+["shares list"]
+role = "viewer"
+
+["shares principals"]
+role = "viewer"
+
+["shares acl"]
+role = "viewer"
+
+["shares acl <share>"]
+role = "viewer"
+
+["shares visible <share>"]
+role = "viewer"
+
+["shares measure"]
+role = "viewer"
+
+["shares measure <share>"]
+role = "viewer"
+
+["shares overview"]
+role = "viewer"
+
+["shares mounts <share>"]
+role = "viewer"
+
+["shares history <share>"]
+role = "viewer"
+
+["shares deleted"]
+role = "viewer"
+
+["shares delete <share>"]
+role = "admin"
+
+["shares purge <share>"]
+role = "admin"
+
+["shares undelete <share>"]
+role = "admin"
+
+["backup overview"]
+role = "viewer"
+
+["backup plan <action>"]
+role = "admin"
+
+["backup start <action>"]
+role = "admin"
+
+["backup rules <ct>"]
+role = "viewer"
+
+["backup snapshots <tag>"]
+role = "viewer"
+
+["backup snapshots"]
+role = "viewer"
+
+["shares plan <share> <action>"]
+role = "admin"
+
+["shares start <share> <action>"]
+role = "admin"
+
+["ct storage"]
+role = "viewer"
+
+["ct users"]
+role = "viewer"
+
+["ct snapshots"]
+role = "viewer"
+
+["ct storage <ct>"]
+role = "viewer"
+
+["ct users <ct>"]
+role = "viewer"
+
+["ct snapshots <ct>"]
+role = "viewer"
+
+["ct profiles"]
+role = "viewer"
+
+["ct pools"]
+role = "viewer"
+
+["ct bindings <ct>"]
+role = "viewer"
+
+["ct plan <ct> <action>"]
+role = "app-manager"
+
+["ct start <ct> <action>"]
+role = "app-manager"
+
+["ct logs <ct>"]
+role = "app-manager"
+
+["monitor disks"]
+role = "viewer"
+
+["health dry-run"]
+role = "viewer"
+
+["health next"]
+role = "viewer"
+
+["health list"]
+role = "viewer"
+
+["health plan <action>"]
+role = "admin"
+
+["health start <action>"]
+role = "admin"
+
+["deck"]
+role = "viewer"
+
+["status"]
+role = "viewer"
+
+["system plan <action>"]
+role = "admin"
+
+["system start <action>"]
+role = "admin"
+
+["system doctor"]
+role = "admin"
+
+["system cleanup"]
+role = "admin"
+
+["system updates"]
+role = "admin"
+
+["system config"]
+role = "admin"
+
+["system report"]
+role = "admin"
+
+["vault list"]
+role = "admin"
+
+["unlock boot"]
+role = "admin"
+
+["unlock stdin"]
+role = "admin"
+
+["power started"]
+role = "admin"
+
+["power stopping"]
+role = "admin"
+
+["unlock alarm"]
+role = "admin"
+
+["motd status"]
+role = "viewer"
+
+["backup scheduled"]
+role = "viewer"
+
+["registry"]
+role = "viewer"
+
+["complete"]
+role = "viewer"
+
+["changes list"]
+role = "viewer"
+
+["hardware"]
+role = "viewer"
+
+["encryption list"]
+role = "viewer"
+
+["vault usage"]
+role = "admin"
+
+["vault uses"]
+role = "admin"
+
+["remote list"]
+role = "admin"
+
+["remote mount-all"]
+role = "admin"
+
+["ups status"]
+role = "viewer"
+
+["expiry list"]
+role = "viewer"
+
+["expiry plan <action>"]
+role = "admin"
+
+["expiry start <action>"]
+role = "admin"
+
+["iso list"]
+role = "viewer"
+
+["iso dir"]
+role = "viewer"
+
+["iso plan <action>"]
+role = "admin"
+
+["iso start <action>"]
+role = "admin"
+
+["recipes plan <recipe> <action>"]
+role = "app-manager"
+
+["recipes start <recipe> <action>"]
+role = "app-manager"
+
+["routes plan <action>"]
+role = "admin"
+
+["routes start <action>"]
+role = "admin"
+
+["peers plan <action>"]
+role = "admin"
+
+["peers start <action>"]
+role = "admin"
+
+["secrets plan <action>"]
+role = "admin"
+
+["secrets start <action>"]
+role = "admin"
+
+["recipes asks <recipe>"]
+role = "viewer"
+
+["recipes steps <recipe>"]
+role = "viewer"
+
+["admin plan <action>"]
+role = "admin"
+
+["admin start <action>"]
+role = "admin"
+
+["backup find <word>"]
+role = "viewer"
+
+["dc state"]
+role = "admin"
+
+["dc plan <action>"]
+role = "admin"
+
+["dc start <action>"]
+role = "admin"
+
+["net plan <action>"]
+role = "admin"
+
+["net start <action>"]
+role = "admin"
+
+["state reads"]
+role = "viewer"
+
+["state read-put <key>"]
+role = "admin"
+
+["state read-get <key>"]
+role = "viewer"
+
+["reads status"]
+role = "viewer"
+
+["live refresh"]
+role = "admin"
+
+["live status"]
+role = "viewer"
+
+["live check"]
+role = "viewer"
+
+["reads collect"]
+role = "admin"
+
+["ext list"]
+role = "admin"
+
+["pkg list"]
+role = "admin"
+
+["pkg available"]
+role = "admin"
+
+["pkg market"]
+role = "admin"
+
+["pkg repos"]
+role = "admin"
+
+["pkg plan <action>"]
+role = "admin"
+
+["pkg start <action>"]
+role = "admin"
+
+["docker status"]
+role = "viewer"
+
+["docker health"]
+role = "viewer"
+
+["docker list"]
+role = "viewer"
+
+["docker mount"]
+role = "app-manager"
+
+["docker plan <action>"]
+role = "app-manager"
+
+["docker start <action>"]
+role = "app-manager"
+
+["docker apps"]
+role = "viewer"
+
+["docker containers"]
+role = "viewer"
+
+["docker logs <app>"]
+role = "app-manager"
+
+["docker app <app>"]
+role = "viewer"
+
+["docker rev <app>"]
+role = "viewer"
+
+["docker-app plan <app> <action>"]
+role = "app-manager"
+
+["docker-app start <app> <action>"]
+role = "app-manager"
+
+["docker registries"]
+role = "viewer"
+
+["docker-registry plan <action>"]
+role = "app-manager"
+
+["docker-registry start <action>"]
+role = "app-manager"
+
+["release plan <action>"]
+role = "admin"
+
+["release start <action>"]
+role = "admin"
+
+["incident plan <action>"]
+role = "admin"
+
+["incident start <action>"]
+role = "admin"

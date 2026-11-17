@@ -32,6 +32,7 @@ export interface SysOperations {
     path: "/admin/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -43,6 +44,7 @@ export interface SysOperations {
     path: "/admin/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -54,6 +56,7 @@ export interface SysOperations {
     path: "/apps/health";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -65,6 +68,7 @@ export interface SysOperations {
     path: "/apps/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -76,6 +80,7 @@ export interface SysOperations {
     path: "/apps/plan/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -87,6 +92,7 @@ export interface SysOperations {
     path: "/apps/policy/{instance}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { instance: string; };
     stdin: "none";
     exit: number;
@@ -98,6 +104,7 @@ export interface SysOperations {
     path: "/apps/recover/{verb}/{action}";
     method: "get";
     class: "read";
+    role: "app-manager";
     params: { verb: string; action: string; };
     stdin: "none";
     exit: number;
@@ -126,6 +133,7 @@ export interface SysOperations {
     path: "/apps/remove/{verb}/{instance}";
     method: "get";
     class: "read";
+    role: "app-manager";
     params: { verb: string; instance: string; };
     stdin: "none";
     exit: number;
@@ -137,6 +145,7 @@ export interface SysOperations {
     path: "/apps/start/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -148,6 +157,7 @@ export interface SysOperations {
     path: "/apps/versions";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -159,6 +169,7 @@ export interface SysOperations {
     path: "/audit";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -170,6 +181,7 @@ export interface SysOperations {
     path: "/backup/find/{word}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { word: string; };
     stdin: "none";
     exit: number;
@@ -181,6 +193,7 @@ export interface SysOperations {
     path: "/backup/overview";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -192,6 +205,7 @@ export interface SysOperations {
     path: "/backup/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -203,6 +217,7 @@ export interface SysOperations {
     path: "/backup/rules/{ct}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -214,6 +229,7 @@ export interface SysOperations {
     path: "/backup/scheduled";
     method: "post";
     class: "change";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -225,6 +241,7 @@ export interface SysOperations {
     path: "/backup/shares";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -236,6 +253,7 @@ export interface SysOperations {
     path: "/backup/snapshots";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -247,6 +265,7 @@ export interface SysOperations {
     path: "/backup/snapshots/{tag}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { tag: string; };
     stdin: "none";
     exit: number;
@@ -258,6 +277,7 @@ export interface SysOperations {
     path: "/backup/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -269,6 +289,7 @@ export interface SysOperations {
     path: "/backup/state";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -280,6 +301,7 @@ export interface SysOperations {
     path: "/cache/state";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -291,6 +313,7 @@ export interface SysOperations {
     path: "/changes/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -302,6 +325,7 @@ export interface SysOperations {
     path: "/complete";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -313,6 +337,7 @@ export interface SysOperations {
     path: "/config/check";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -324,6 +349,7 @@ export interface SysOperations {
     path: "/config/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -335,6 +361,7 @@ export interface SysOperations {
     path: "/config/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -346,6 +373,7 @@ export interface SysOperations {
     path: "/config/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -357,6 +385,7 @@ export interface SysOperations {
     path: "/ct/bindings/{ct}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -368,6 +397,7 @@ export interface SysOperations {
     path: "/ct/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -379,6 +409,7 @@ export interface SysOperations {
     path: "/ct/logs/{ct}";
     method: "get";
     class: "read";
+    role: "app-manager";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -390,6 +421,7 @@ export interface SysOperations {
     path: "/ct/plan/{ct}/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { ct: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -401,6 +433,7 @@ export interface SysOperations {
     path: "/ct/pools";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -412,6 +445,7 @@ export interface SysOperations {
     path: "/ct/profiles";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -423,6 +457,7 @@ export interface SysOperations {
     path: "/ct/snapshots";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -434,6 +469,7 @@ export interface SysOperations {
     path: "/ct/snapshots/{ct}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -445,6 +481,7 @@ export interface SysOperations {
     path: "/ct/start/{ct}/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { ct: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -456,6 +493,7 @@ export interface SysOperations {
     path: "/ct/storage";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -467,6 +505,7 @@ export interface SysOperations {
     path: "/ct/storage/{ct}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -478,6 +517,7 @@ export interface SysOperations {
     path: "/ct/users";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -489,6 +529,7 @@ export interface SysOperations {
     path: "/ct/users/{ct}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { ct: string; };
     stdin: "none";
     exit: number;
@@ -500,6 +541,7 @@ export interface SysOperations {
     path: "/dc/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -511,6 +553,7 @@ export interface SysOperations {
     path: "/dc/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -522,6 +565,7 @@ export interface SysOperations {
     path: "/dc/state";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -533,6 +577,7 @@ export interface SysOperations {
     path: "/deck";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -544,6 +589,7 @@ export interface SysOperations {
     path: "/disk-health/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -555,6 +601,7 @@ export interface SysOperations {
     path: "/disk/event/{action}/{name}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { action: string; name: string; };
     stdin: "none";
     exit: number;
@@ -566,6 +613,7 @@ export interface SysOperations {
     path: "/disk/ls/{member}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { member: string; };
     stdin: "none";
     exit: number;
@@ -577,6 +625,7 @@ export interface SysOperations {
     path: "/disk/marks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -588,6 +637,7 @@ export interface SysOperations {
     path: "/disk/plan/{disk}/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { disk: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -599,6 +649,7 @@ export interface SysOperations {
     path: "/disk/power";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -611,6 +662,7 @@ export interface SysOperations {
     path: "/disk/results/{disk}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { disk: string; };
     stdin: "none";
     exit: number;
@@ -622,6 +674,7 @@ export interface SysOperations {
     path: "/disk/start/{disk}/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { disk: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -633,6 +686,7 @@ export interface SysOperations {
     path: "/disk/test/{disk}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { disk: string; };
     stdin: "none";
     exit: number;
@@ -644,6 +698,7 @@ export interface SysOperations {
     path: "/dns/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -655,6 +710,7 @@ export interface SysOperations {
     path: "/docker-app/plan/{app}/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { app: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -666,6 +722,7 @@ export interface SysOperations {
     path: "/docker-app/start/{app}/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { app: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -677,6 +734,7 @@ export interface SysOperations {
     path: "/docker-registry/plan/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -688,6 +746,7 @@ export interface SysOperations {
     path: "/docker-registry/start/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -699,6 +758,7 @@ export interface SysOperations {
     path: "/docker/app/{app}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { app: string; };
     stdin: "none";
     exit: number;
@@ -710,6 +770,7 @@ export interface SysOperations {
     path: "/docker/apps";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -721,6 +782,7 @@ export interface SysOperations {
     path: "/docker/containers";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -732,6 +794,7 @@ export interface SysOperations {
     path: "/docker/health";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -743,6 +806,7 @@ export interface SysOperations {
     path: "/docker/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -754,6 +818,7 @@ export interface SysOperations {
     path: "/docker/logs/{app}";
     method: "post";
     class: "change";
+    role: "app-manager";
     params: { app: string; };
     stdin: "none";
     exit: number;
@@ -765,6 +830,7 @@ export interface SysOperations {
     path: "/docker/mount";
     method: "post";
     class: "change";
+    role: "app-manager";
     params: { };
     stdin: "none";
     exit: number;
@@ -776,6 +842,7 @@ export interface SysOperations {
     path: "/docker/plan/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -787,6 +854,7 @@ export interface SysOperations {
     path: "/docker/registries";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -798,6 +866,7 @@ export interface SysOperations {
     path: "/docker/rev/{app}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { app: string; };
     stdin: "none";
     exit: number;
@@ -809,6 +878,7 @@ export interface SysOperations {
     path: "/docker/start/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -820,6 +890,7 @@ export interface SysOperations {
     path: "/docker/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -831,6 +902,7 @@ export interface SysOperations {
     path: "/edge/status";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -842,6 +914,7 @@ export interface SysOperations {
     path: "/encryption/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -853,6 +926,7 @@ export interface SysOperations {
     path: "/event/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -864,6 +938,7 @@ export interface SysOperations {
     path: "/expiry/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -875,6 +950,7 @@ export interface SysOperations {
     path: "/expiry/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -886,6 +962,7 @@ export interface SysOperations {
     path: "/expiry/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -897,6 +974,7 @@ export interface SysOperations {
     path: "/ext/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -908,6 +986,7 @@ export interface SysOperations {
     path: "/fm/du/{location}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -929,6 +1008,7 @@ export interface SysOperations {
     path: "/fm/locations";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -940,6 +1020,7 @@ export interface SysOperations {
     path: "/fm/ls/{location}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -951,6 +1032,7 @@ export interface SysOperations {
     path: "/fm/pair/{left}/{right}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { left: string; right: string; };
     stdin: "none";
     exit: number;
@@ -962,6 +1044,7 @@ export interface SysOperations {
     path: "/fm/plan/{op}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { op: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -973,6 +1056,7 @@ export interface SysOperations {
     path: "/fm/progress/{unit}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { unit: string; };
     stdin: "none";
     exit: number;
@@ -984,6 +1068,7 @@ export interface SysOperations {
     path: "/fm/start/{op}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { op: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -995,6 +1080,7 @@ export interface SysOperations {
     path: "/fm/stat/{location}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1016,6 +1102,7 @@ export interface SysOperations {
     path: "/fm/trash/{location}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1027,6 +1114,7 @@ export interface SysOperations {
     path: "/gateway/certs";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1038,6 +1126,7 @@ export interface SysOperations {
     path: "/gateway/health";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1049,6 +1138,7 @@ export interface SysOperations {
     path: "/gateway/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1060,6 +1150,7 @@ export interface SysOperations {
     path: "/gateway/routes";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1071,6 +1162,7 @@ export interface SysOperations {
     path: "/gateway/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1082,6 +1174,7 @@ export interface SysOperations {
     path: "/gateway/status";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1093,6 +1186,7 @@ export interface SysOperations {
     path: "/hardware";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1104,6 +1198,7 @@ export interface SysOperations {
     path: "/health/dry-run";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1115,6 +1210,7 @@ export interface SysOperations {
     path: "/health/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1126,6 +1222,7 @@ export interface SysOperations {
     path: "/health/next";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1137,6 +1234,7 @@ export interface SysOperations {
     path: "/health/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1148,6 +1246,7 @@ export interface SysOperations {
     path: "/health/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1159,6 +1258,7 @@ export interface SysOperations {
     path: "/incident/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1170,6 +1270,7 @@ export interface SysOperations {
     path: "/incident/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1181,6 +1282,7 @@ export interface SysOperations {
     path: "/incident/state";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1203,6 +1305,7 @@ export interface SysOperations {
     path: "/iso/dir";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1214,6 +1317,7 @@ export interface SysOperations {
     path: "/iso/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1225,6 +1329,7 @@ export interface SysOperations {
     path: "/iso/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1236,6 +1341,7 @@ export interface SysOperations {
     path: "/iso/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1247,6 +1353,7 @@ export interface SysOperations {
     path: "/jobs/answer/{id}";
     method: "get";
     class: "read";
+    role: "app-manager";
     params: { id: string; };
     stdin: "yes";
     exit: number;
@@ -1259,6 +1366,7 @@ export interface SysOperations {
     path: "/jobs/children/{id}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { id: string; };
     stdin: "none";
     exit: number;
@@ -1270,6 +1378,7 @@ export interface SysOperations {
     path: "/jobs/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1281,6 +1390,7 @@ export interface SysOperations {
     path: "/jobs/log/{unit}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { unit: string; };
     stdin: "none";
     exit: number;
@@ -1292,6 +1402,7 @@ export interface SysOperations {
     path: "/jobs/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1303,6 +1414,7 @@ export interface SysOperations {
     path: "/jobs/record/{id}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { id: string; };
     stdin: "none";
     exit: number;
@@ -1314,6 +1426,7 @@ export interface SysOperations {
     path: "/jobs/records";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1325,6 +1438,7 @@ export interface SysOperations {
     path: "/jobs/running";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1336,6 +1450,7 @@ export interface SysOperations {
     path: "/jobs/show/{unit}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { unit: string; };
     stdin: "none";
     exit: number;
@@ -1347,6 +1462,7 @@ export interface SysOperations {
     path: "/jobs/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1358,6 +1474,7 @@ export interface SysOperations {
     path: "/jobs/stop/{unit}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { unit: string; };
     stdin: "none";
     exit: number;
@@ -1369,6 +1486,7 @@ export interface SysOperations {
     path: "/jobs/tail/{unit}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { unit: string; };
     stdin: "none";
     exit: number;
@@ -1383,6 +1501,7 @@ export interface SysOperations {
     path: "/live/check";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1394,6 +1513,7 @@ export interface SysOperations {
     path: "/live/inspect";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1405,6 +1525,7 @@ export interface SysOperations {
     path: "/live/raw/{topic}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { topic: string; };
     stdin: "none";
     exit: number;
@@ -1416,6 +1537,7 @@ export interface SysOperations {
     path: "/live/refresh";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1427,6 +1549,7 @@ export interface SysOperations {
     path: "/live/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1438,6 +1561,7 @@ export interface SysOperations {
     path: "/logs/show";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1449,6 +1573,7 @@ export interface SysOperations {
     path: "/logs/units";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1460,6 +1585,7 @@ export interface SysOperations {
     path: "/migrate/plan/unraid";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { };
     stdin: "yes";
     exit: 0 | 1 | 2;
@@ -1471,6 +1597,7 @@ export interface SysOperations {
     path: "/migrate/start/unraid";
     method: "post";
     class: "start";
+    role: "admin";
     params: { };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1482,6 +1609,7 @@ export interface SysOperations {
     path: "/monitor/disks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1493,6 +1621,7 @@ export interface SysOperations {
     path: "/motd/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1504,6 +1633,7 @@ export interface SysOperations {
     path: "/net/check";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1515,6 +1645,7 @@ export interface SysOperations {
     path: "/net/nics";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1526,6 +1657,7 @@ export interface SysOperations {
     path: "/net/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1537,6 +1669,7 @@ export interface SysOperations {
     path: "/net/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1548,6 +1681,7 @@ export interface SysOperations {
     path: "/node/keyline/{name}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -1559,6 +1693,7 @@ export interface SysOperations {
     path: "/node/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1570,6 +1705,7 @@ export interface SysOperations {
     path: "/node/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1581,6 +1717,7 @@ export interface SysOperations {
     path: "/node/remote";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1592,6 +1729,7 @@ export interface SysOperations {
     path: "/node/show/{name}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -1603,6 +1741,7 @@ export interface SysOperations {
     path: "/node/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1614,6 +1753,7 @@ export interface SysOperations {
     path: "/node/status/{name}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -1625,6 +1765,7 @@ export interface SysOperations {
     path: "/notify/channel/{name}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -1636,6 +1777,7 @@ export interface SysOperations {
     path: "/notify/channels";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1647,6 +1789,7 @@ export interface SysOperations {
     path: "/notify/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1658,6 +1801,7 @@ export interface SysOperations {
     path: "/notify/providers";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1669,6 +1813,7 @@ export interface SysOperations {
     path: "/notify/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1680,6 +1825,7 @@ export interface SysOperations {
     path: "/parts/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1691,6 +1837,7 @@ export interface SysOperations {
     path: "/parts/pending";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1702,6 +1849,7 @@ export interface SysOperations {
     path: "/parts/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1713,6 +1861,7 @@ export interface SysOperations {
     path: "/parts/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -1724,6 +1873,7 @@ export interface SysOperations {
     path: "/peers/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1735,6 +1885,7 @@ export interface SysOperations {
     path: "/peers/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1746,6 +1897,7 @@ export interface SysOperations {
     path: "/pkg/asset/{name}/{file}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { name: string; file: string; };
     stdin: "none";
     exit: number;
@@ -1757,6 +1909,7 @@ export interface SysOperations {
     path: "/pkg/available";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1768,6 +1921,7 @@ export interface SysOperations {
     path: "/pkg/bundle/plan/{names}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { names: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1779,6 +1933,7 @@ export interface SysOperations {
     path: "/pkg/bundle/start/{names}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { names: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1790,6 +1945,7 @@ export interface SysOperations {
     path: "/pkg/capabilities";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1801,6 +1957,7 @@ export interface SysOperations {
     path: "/pkg/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1812,6 +1969,7 @@ export interface SysOperations {
     path: "/pkg/market";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1823,6 +1981,7 @@ export interface SysOperations {
     path: "/pkg/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1834,6 +1993,7 @@ export interface SysOperations {
     path: "/pkg/repos";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1845,6 +2005,7 @@ export interface SysOperations {
     path: "/pkg/show/{name}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -1883,6 +2044,7 @@ export interface SysOperations {
     path: "/pkg/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1894,6 +2056,7 @@ export interface SysOperations {
     path: "/pkg/states";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1905,6 +2068,7 @@ export interface SysOperations {
     path: "/pool/disks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1916,6 +2080,7 @@ export interface SysOperations {
     path: "/pool/info";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1927,6 +2092,7 @@ export interface SysOperations {
     path: "/pool/info/{pool}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { pool: string; };
     stdin: "none";
     exit: number;
@@ -1938,6 +2104,7 @@ export interface SysOperations {
     path: "/pool/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1949,6 +2116,7 @@ export interface SysOperations {
     path: "/pool/members";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -1960,6 +2128,7 @@ export interface SysOperations {
     path: "/pool/members/{pool}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { pool: string; };
     stdin: "none";
     exit: number;
@@ -1971,6 +2140,7 @@ export interface SysOperations {
     path: "/pool/plan/{pool}/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { pool: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1982,6 +2152,7 @@ export interface SysOperations {
     path: "/pool/start/{pool}/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { pool: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -1993,6 +2164,7 @@ export interface SysOperations {
     path: "/pool/state";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2007,6 +2179,7 @@ export interface SysOperations {
     path: "/pool/state/{pool}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { pool: string; };
     stdin: "none";
     exit: number;
@@ -2021,6 +2194,7 @@ export interface SysOperations {
     path: "/ports/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2032,6 +2206,7 @@ export interface SysOperations {
     path: "/power/started";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2043,6 +2218,7 @@ export interface SysOperations {
     path: "/power/stopping";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2054,6 +2230,7 @@ export interface SysOperations {
     path: "/preset/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2065,6 +2242,7 @@ export interface SysOperations {
     path: "/preset/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2076,6 +2254,7 @@ export interface SysOperations {
     path: "/preset/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2087,6 +2266,7 @@ export interface SysOperations {
     path: "/reads/collect";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2098,6 +2278,7 @@ export interface SysOperations {
     path: "/reads/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2109,6 +2290,7 @@ export interface SysOperations {
     path: "/rebuild/pending";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2120,6 +2302,7 @@ export interface SysOperations {
     path: "/recipes/asks/{recipe}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { recipe: string; };
     stdin: "none";
     exit: number;
@@ -2131,6 +2314,7 @@ export interface SysOperations {
     path: "/recipes/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2142,6 +2326,7 @@ export interface SysOperations {
     path: "/recipes/plan/{recipe}/{action}";
     method: "post";
     class: "plan";
+    role: "app-manager";
     params: { recipe: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -2153,6 +2338,7 @@ export interface SysOperations {
     path: "/recipes/start/{recipe}/{action}";
     method: "post";
     class: "start";
+    role: "app-manager";
     params: { recipe: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -2164,6 +2350,7 @@ export interface SysOperations {
     path: "/recipes/steps/{recipe}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { recipe: string; };
     stdin: "none";
     exit: number;
@@ -2175,6 +2362,7 @@ export interface SysOperations {
     path: "/recipes/versions";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2186,6 +2374,7 @@ export interface SysOperations {
     path: "/registry";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2197,6 +2386,7 @@ export interface SysOperations {
     path: "/release/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2208,6 +2398,7 @@ export interface SysOperations {
     path: "/release/show";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2224,6 +2415,7 @@ export interface SysOperations {
     path: "/release/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2235,6 +2427,7 @@ export interface SysOperations {
     path: "/remote/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2246,6 +2439,7 @@ export interface SysOperations {
     path: "/remote/mount-all";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2257,6 +2451,7 @@ export interface SysOperations {
     path: "/routes/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2268,6 +2463,7 @@ export interface SysOperations {
     path: "/routes/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2279,6 +2475,7 @@ export interface SysOperations {
     path: "/secrets/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2290,6 +2487,7 @@ export interface SysOperations {
     path: "/secrets/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2301,6 +2499,7 @@ export interface SysOperations {
     path: "/services/app";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2312,6 +2511,7 @@ export interface SysOperations {
     path: "/services/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2323,6 +2523,7 @@ export interface SysOperations {
     path: "/services/local-routes";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2334,6 +2535,7 @@ export interface SysOperations {
     path: "/services/plan";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2345,6 +2547,7 @@ export interface SysOperations {
     path: "/services/routes";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2356,6 +2559,7 @@ export interface SysOperations {
     path: "/services/show/{name}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { name: string; };
     stdin: "none";
     exit: number;
@@ -2367,6 +2571,7 @@ export interface SysOperations {
     path: "/services/stats";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2378,6 +2583,7 @@ export interface SysOperations {
     path: "/services/tiles";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2389,6 +2595,7 @@ export interface SysOperations {
     path: "/setup/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2400,6 +2607,7 @@ export interface SysOperations {
     path: "/setup/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2411,6 +2619,7 @@ export interface SysOperations {
     path: "/setup/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2422,6 +2631,7 @@ export interface SysOperations {
     path: "/shares/acl";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2433,6 +2643,7 @@ export interface SysOperations {
     path: "/shares/acl/{share}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2444,6 +2655,7 @@ export interface SysOperations {
     path: "/shares/delete/{share}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2455,6 +2667,7 @@ export interface SysOperations {
     path: "/shares/deleted";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2466,6 +2679,7 @@ export interface SysOperations {
     path: "/shares/history/{share}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2477,6 +2691,7 @@ export interface SysOperations {
     path: "/shares/list";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2488,6 +2703,7 @@ export interface SysOperations {
     path: "/shares/measure";
     method: "post";
     class: "change";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2499,6 +2715,7 @@ export interface SysOperations {
     path: "/shares/measure/{share}";
     method: "post";
     class: "change";
+    role: "viewer";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2510,6 +2727,7 @@ export interface SysOperations {
     path: "/shares/mounts/{share}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2521,6 +2739,7 @@ export interface SysOperations {
     path: "/shares/overview";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2532,6 +2751,7 @@ export interface SysOperations {
     path: "/shares/plan/{share}/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { share: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2543,6 +2763,7 @@ export interface SysOperations {
     path: "/shares/principals";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2554,6 +2775,7 @@ export interface SysOperations {
     path: "/shares/purge/{share}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2565,6 +2787,7 @@ export interface SysOperations {
     path: "/shares/start/{share}/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { share: string; action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2576,6 +2799,7 @@ export interface SysOperations {
     path: "/shares/undelete/{share}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2587,6 +2811,7 @@ export interface SysOperations {
     path: "/shares/visible/{share}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { share: string; };
     stdin: "none";
     exit: number;
@@ -2598,6 +2823,7 @@ export interface SysOperations {
     path: "/ssh-key/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2609,6 +2835,7 @@ export interface SysOperations {
     path: "/ssh-key/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2620,6 +2847,7 @@ export interface SysOperations {
     path: "/ssh-key/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2631,6 +2859,7 @@ export interface SysOperations {
     path: "/state/baseline";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2642,6 +2871,7 @@ export interface SysOperations {
     path: "/state/baseline-run";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2653,6 +2883,7 @@ export interface SysOperations {
     path: "/state/collect";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2664,6 +2895,7 @@ export interface SysOperations {
     path: "/state/deck-disks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2675,6 +2907,7 @@ export interface SysOperations {
     path: "/state/disks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2686,6 +2919,7 @@ export interface SysOperations {
     path: "/state/disks-json";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2697,6 +2931,7 @@ export interface SysOperations {
     path: "/state/events";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2708,6 +2943,7 @@ export interface SysOperations {
     path: "/state/events-json";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2719,6 +2955,7 @@ export interface SysOperations {
     path: "/state/forget/{serial}";
     method: "post";
     class: "change";
+    role: "admin";
     params: { serial: string; };
     stdin: "none";
     exit: number;
@@ -2730,6 +2967,7 @@ export interface SysOperations {
     path: "/state/history";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2741,6 +2979,7 @@ export interface SysOperations {
     path: "/state/history-record";
     method: "post";
     class: "change";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2752,6 +2991,7 @@ export interface SysOperations {
     path: "/state/inventory-json";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2763,6 +3003,7 @@ export interface SysOperations {
     path: "/state/problems";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2774,6 +3015,7 @@ export interface SysOperations {
     path: "/state/read-get/{key}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { key: string; };
     stdin: "none";
     exit: number;
@@ -2785,6 +3027,7 @@ export interface SysOperations {
     path: "/state/read-put/{key}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { key: string; };
     stdin: "none";
     exit: number;
@@ -2796,6 +3039,7 @@ export interface SysOperations {
     path: "/state/reads";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2807,6 +3051,7 @@ export interface SysOperations {
     path: "/state/smart/{serial}";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { serial: string; };
     stdin: "none";
     exit: number;
@@ -2818,6 +3063,7 @@ export interface SysOperations {
     path: "/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2829,6 +3075,7 @@ export interface SysOperations {
     path: "/storage/discover";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2840,6 +3087,7 @@ export interface SysOperations {
     path: "/system/cleanup";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2851,6 +3099,7 @@ export interface SysOperations {
     path: "/system/config";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2862,6 +3111,7 @@ export interface SysOperations {
     path: "/system/doctor";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2873,6 +3123,7 @@ export interface SysOperations {
     path: "/system/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2884,6 +3135,7 @@ export interface SysOperations {
     path: "/system/report";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2895,6 +3147,7 @@ export interface SysOperations {
     path: "/system/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2906,6 +3159,7 @@ export interface SysOperations {
     path: "/system/updates";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -2917,6 +3171,7 @@ export interface SysOperations {
     path: "/temp-disk/raw";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2928,6 +3183,7 @@ export interface SysOperations {
     path: "/testlab/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2939,6 +3195,7 @@ export interface SysOperations {
     path: "/testlab/results";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2950,6 +3207,7 @@ export interface SysOperations {
     path: "/testlab/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -2961,6 +3219,7 @@ export interface SysOperations {
     path: "/unifi/clients";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2972,6 +3231,7 @@ export interface SysOperations {
     path: "/unifi/networks";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2983,6 +3243,7 @@ export interface SysOperations {
     path: "/unifi/reserved";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -2994,6 +3255,7 @@ export interface SysOperations {
     path: "/unifi/used";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -3005,6 +3267,7 @@ export interface SysOperations {
     path: "/unlock/alarm";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3016,6 +3279,7 @@ export interface SysOperations {
     path: "/unlock/boot";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3027,6 +3291,7 @@ export interface SysOperations {
     path: "/unlock/stdin";
     method: "post";
     class: "change";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3038,6 +3303,7 @@ export interface SysOperations {
     path: "/ups/status";
     method: "get";
     class: "read";
+    role: "viewer";
     params: { };
     stdin: "none";
     exit: number;
@@ -3049,6 +3315,7 @@ export interface SysOperations {
     path: "/users/access/{user}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { user: string; };
     stdin: "none";
     exit: number;
@@ -3060,6 +3327,7 @@ export interface SysOperations {
     path: "/users/details/{user}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { user: string; };
     stdin: "none";
     exit: number;
@@ -3071,6 +3339,7 @@ export interface SysOperations {
     path: "/users/group-access/{group}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { group: string; };
     stdin: "none";
     exit: number;
@@ -3082,6 +3351,7 @@ export interface SysOperations {
     path: "/users/group-details/{group}";
     method: "get";
     class: "read";
+    role: "admin";
     params: { group: string; };
     stdin: "none";
     exit: number;
@@ -3093,6 +3363,7 @@ export interface SysOperations {
     path: "/users/groups";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3104,6 +3375,7 @@ export interface SysOperations {
     path: "/users/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3115,6 +3387,7 @@ export interface SysOperations {
     path: "/users/plan/{name}/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { name: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -3126,6 +3399,7 @@ export interface SysOperations {
     path: "/users/start/{name}/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { name: string; action: string; };
     stdin: "no";
     exit: 0 | 1 | 2;
@@ -3137,6 +3411,7 @@ export interface SysOperations {
     path: "/vault/list";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3148,6 +3423,7 @@ export interface SysOperations {
     path: "/vault/usage";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3159,6 +3435,7 @@ export interface SysOperations {
     path: "/vault/uses";
     method: "get";
     class: "read";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -3170,6 +3447,7 @@ export interface SysOperations {
     path: "/vps/plan/{action}";
     method: "post";
     class: "plan";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
@@ -3181,6 +3459,7 @@ export interface SysOperations {
     path: "/vps/start/{action}";
     method: "post";
     class: "start";
+    role: "admin";
     params: { action: string; };
     stdin: "none";
     exit: 0 | 1 | 2;
