@@ -90,6 +90,16 @@ def manifest_problems(name, m, web=None):
     return out
 
 
+def missing_text(name):
+    """D5 (docs/PLAN-extensions-access.md): the text for a package without `permissions`. repo-check fails with it; hs warns with it for one release."""
+    return "permissions is missing: declare what %s uses, permissions = [] if it needs nothing (ADR 0014)" % name
+
+
+def undeclared(m):
+    """True when the manifest `m` has no `permissions` key (an empty list is a declaration)."""
+    return "permissions" not in m
+
+
 def folder_problems(name, folder):
     """ENFORCEMENT (ADR 0014 step 1b): [text] when the package in `folder` declares `permissions` that do not cover what its manifests use.
     The loaders call this at run time (web reads/changes/pages and the live collector skip such a package) and `hs ext enable` refuses it, so a

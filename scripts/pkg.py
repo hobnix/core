@@ -570,6 +570,8 @@ def repo_check(folder, warnings=None):
         if not SEMVER.match(str(e.get("version", ""))):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
+        if pkg_perms.undeclared(m):
+            out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
@@ -711,7 +713,8 @@ def main(argv):
         if not found:
             print("unknown package", file=sys.stderr)
             return 1
-        for x in pkg_perms.of(found[0]) or ["-"]:
+        got = pkg_perms.of(found[0])
+        for x in ["-"] if got is None else got:
             print(x)
     elif cmd == "backup-paths":     # backup-paths <name>: the paths of [app.backup] mode = "paths", one per line (nothing for another mode); exit 1 for an unknown package
         found = [m for _, m in manifests() if m.get("name") == (rest[0] if rest else "")]

@@ -194,7 +194,8 @@ idx ''
 check_out "an index without the keys is named" "icon differs" bash -c "$PKG repo-check $RC; true"
 rm -rf "$RC/recipes/fixstore"; mkdir -p "$RC/recipes/fixold"
 printf '#!/usr/bin/env bash\n# recipe: Old\n# kind: generic\n# needs: -\n# uses: -\n' > "$RC/recipes/fixold/run.sh"
-printf 'name = "fixold"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Old"\nrequires_core = ">=1"\nscript = "run.sh"\n' > "$RC/recipes/fixold/package.toml"
+printf 'name = "fixold"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Old"\nrequires_core = ">=1"\npermissions = []
+script = "run.sh"\n' > "$RC/recipes/fixold/package.toml"
 printf '[package.fixold]\npath = "recipes/fixold"\nkind = "recipe"\nversion = "1.0.0"\nrequires_core = ">=1"\n' > "$RC/index.toml"
 check "an old package passes repo-check" $PKG repo-check "$RC"
 check_out "and gets a warning on stderr" 'warning: fixold: has no \[app\] contract' bash -c "$PKG repo-check $RC 2>&1"
