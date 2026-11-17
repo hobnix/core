@@ -4,7 +4,7 @@ capabilities/incus/module.nix	1
 capabilities/metrics/module.nix	1
 capabilities/samba/module.nix	2
 capabilities/storage/module.nix	14
-config/schema.toml	6
+config/schema.toml	7
 configuration.nix	15
 install.nix	1
 scripts/admin-change.sh	2
@@ -29,7 +29,7 @@ scripts/disk-health.sh	1
 scripts/disk-move.sh	12
 scripts/disk-recover.sh	7
 scripts/disk-replace.sh	3
-scripts/disk-spindown.sh	6
+scripts/disk-spindown.sh	3
 scripts/doctor.sh	1
 scripts/fm.sh	8
 scripts/health-change.sh	2

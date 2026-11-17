@@ -346,6 +346,18 @@ single disks and SnapRAID disks keep the default. Not tested on hardware yet.
 To let spinning disks sleep, set `diskSpindownMinutes` (for example 30) in `machine.toml` and run `hs rebuild`. `hs disk spindown` shows the
 state. SSDs never sleep. The first access after sleep takes 10 to 20 seconds.
 
+A pool can have its own sleep time. `diskSpindownPools = { backup = 10, bulk = 30 }` in `machine.toml` (the keys are pool names, or `backup` for
+the backup disk) replaces `diskSpindownMinutes` for the disks of that pool; `0` means never. There is one value per pool and none per disk.
+`hs config check` refuses a name that is no pool of this server. On ZFS a raidz pool wakes all its disks at once and a mirror one after the
+other; with `shareSnapshots = true` a snapshot is taken every hour, so a ZFS pool hardly sleeps, and `hs config check` warns about that pair.
+Not tested on hardware yet.
+
+`hs disk spindown power` (the interface reads it as `hs sys disk power`) shows for each spinning pool disk whether it is asleep or spinning, since
+when, and how often it woke today (counted at each reading, so a short wake between two readings counts once). The Disks page shows
+asleep or spinning for each disk in the Sleep column. The same command lists the power that is *measured*, each number with its source: the
+UPS output in watts (`hs ups`, when the UPS reports real power or a load and its nominal power) and the CPU package through RAPL
+(`/sys/class/powercap`, readable by root only). Nothing is estimated, and there is no number per disk. Not tested on hardware yet.
+
 To find out what keeps a disk awake, measure it for a night: `sudo hs disk spindown log 24` samples the kernel I/O counters of each spinning
 bulk, parity and backup disk (`/sys/block/<disk>/stat`, no disk access) and its power state (`hdparm -C`, does not wake it) every minute for 24
 hours. Each minute in which a disk did I/O or left standby is written to `/var/log/hs-spindown.log` (time, disk, `woke` or `io`, state, number of

@@ -1,0 +1,6 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Disks: a sleep time per pool, and which disk is asleep"
+body  = """
+`diskSpindownPools = { backup = 10, bulk = 30 }` in `machine.toml` gives a pool its own sleep time (0 = never); `hs config check` refuses an unknown pool and warns about ZFS with hourly snapshots. The Disks page shows asleep or spinning, and `hs disk spindown power` lists sleep state, wakes today and the measured power (UPS, CPU package) with the source of each number. Not tested on hardware yet.
+"""

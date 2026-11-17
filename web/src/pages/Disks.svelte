@@ -14,6 +14,7 @@
   import { takeSelection } from '../select.svelte.js';
   import { route, go } from '../route.svelte.js';
   import { healthDot } from '../format.js';
+  import { sleepOf, sleepText, sleepDot, parsePower, powerText } from '../disk-sleep.js';
   import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
@@ -42,6 +43,9 @@
   const health = poll('/api/sys/disk-health/list', 60000, 'disk-health');
   const inv = poll('/api/sys/state/disks', 30000, 'disk-inventory');
   // data disks that are out of the pool by hand: member, detached | recovering, since (epoch)
+  // sleep since / wakes today per disk and the measured power numbers (each with its source)
+  const powerPoll = poll('/api/sys/disk/power', 60000, 'disk-power');
+  const pw = $derived(parsePower(rows(powerPoll)));
   const marks = poll('/api/sys/disk/marks', 15000, 'disk-marks');
   const markOf = $derived(Object.fromEntries(rows(marks).map((r) => [r[0], r[1]])));
   const poolInfo = poll(() => (snapName ? `/api/sys/pool/info?pool=${snapName}` : ''), 60000, () => poolTopic('info', snapName, live.topics));
@@ -53,7 +57,7 @@
 
   // monitor disks: name, bytes, SSD/HDD, role, temp, health, hours, reallocated, pending, crc, model+serial, free, power, filesystem (xfs, ext4, zfs, ... / none / -)
   const all = $derived(rows(mon).map((r) => ({
-    name: r[0], size: Number(r[1]), kind: r[2], role: r[3], temp: r[4], smart: r[5], hours: r[6], realloc: r[7], pending: r[8], crc: r[9], model: r[10], free: r[11], fs: r[13],
+    name: r[0], size: Number(r[1]), kind: r[2], role: r[3], temp: r[4], smart: r[5], hours: r[6], realloc: r[7], pending: r[8], crc: r[9], model: r[10], free: r[11], sleep: sleepOf(r), fs: r[13],
   })));
   // disk-health list: name, size, kind, model, verdict, hours, first reason
   const verdicts = $derived(Object.fromEntries(rows(health).map((r) => [r[0], { verdict: r[4], reason: r[6] }])));
@@ -137,6 +141,7 @@
     { key: 'model', label: 'Model', value: (d) => modelOf(d), optional: true }, { key: 'size', label: 'Size', sort: 'num', value: (d) => d.size }, { key: 'fs', label: 'Format', value: (d) => fsText(d), optional: true },
     { key: 'smart', label: 'SMART', value: (d) => verdictOf(d) }, { key: 'temp', label: 'Temp', sort: 'num', value: (d) => Number(d.temp), optional: true },
     { key: 'hours', label: 'Power-on', sort: 'num', value: (d) => Number(d.hours), optional: true },
+    { key: 'sleep', label: 'Sleep', value: (d) => sleepText(d.sleep), optional: true },
   ];
   const missCols = [{ key: 'model', label: 'Disk' }, { key: 'dev', label: 'Was' }, { key: 'serial', label: 'Serial' }, { key: 'seen', label: 'Last seen', sort: 'num', value: (m) => m.lastSeen }];
 </script>
@@ -147,6 +152,7 @@
     <Button variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
   {/snippet}
 </PageHeader>
+{#if pw.power.length}<p class="mute">{#each pw.power as x, i}{i ? ' · ' : ''}{powerText(x)}{/each}</p>{/if}
 
 <div class="tabs seg" role="tablist" aria-label="Filter">
   {#each TABS as t (t.id)}
@@ -207,6 +213,7 @@
               {:else if col.key === 'fs'}<span class="nw mute">{fsText(d)}</span>
               {:else if col.key === 'smart'}<StatusDot state={stateOf(d)} label={wordOf(d)} />
               {:else if col.key === 'temp'}<span class="nw">{d.temp && d.temp !== '-' ? `${d.temp} °C` : '–'}</span>
+              {:else if col.key === 'sleep'}{#if d.sleep}<StatusDot state={sleepDot(d.sleep)} label={sleepText(d.sleep)} />{:else}<span class="mute">–</span>{/if}
               {:else}<span class="nw mute">{hoursTxt(d.hours)}</span>{/if}
             {/snippet}
           </Table>
@@ -223,6 +230,7 @@
                   { k: 'Model', v: modelOf(sel) }, { k: 'Serial', v: serialOf(sel) }, { k: 'Size', v: sizeTxt(sel.size) }, { k: 'Type', v: sel.kind }, { k: 'Format', v: fsText(sel) },
                   { k: 'Pool', v: poolText(sel) }, { k: 'Role', v: diskPool(sel.role) ? roleText(sel) : sel.role },
                   { k: 'Temperature', v: sel.temp && sel.temp !== '-' ? `${sel.temp} °C` : '' }, { k: 'Power-on', v: hoursTxt(sel.hours) },
+                  { k: 'Sleep', v: sleepText(sel.sleep) ? `${sleepText(sel.sleep)}${pw.disks[sel.name]?.wakes ? `, woke ${pw.disks[sel.name].wakes}x today` : ''}` : '' },
                   { k: 'Free space', v: sel.free && sel.free !== '-' ? sizeTxt(Number(sel.free)) : '' }, { k: 'First seen', v: rec?.first ? dateOf(rec.first) : '' },
                 ]} />
                 {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p class="pad">{verdicts[sel.name].reason}</p>{/if}

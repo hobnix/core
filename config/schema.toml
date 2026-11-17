@@ -759,6 +759,22 @@ diskSpindownMinutes = 30'''
 
 [[item]]
 kind = "option"
+key = "diskSpindownPools"
+type = "table"
+required = false
+settable = false
+secret = false
+default = 'null'
+doc = '''
+# Sleep time per pool, in minutes, instead of `diskSpindownMinutes`: the key is a pool name (or `backup` for the
+# backup disk), 0 = never. One value per pool, none per disk. A raidz pool wakes all its disks at once, a mirror one
+# after the other, and hourly `shareSnapshots` on ZFS keeps the pool awake (`hs config check` warns about that pair).
+# Applies after `hs rebuild`; `hs disk spindown status` shows the state.'''
+value = '''
+diskSpindownPools = { backup = 10, bulk = 30 }'''
+
+[[item]]
+kind = "option"
 key = "fileManagerWrite"
 type = "bool"
 required = false

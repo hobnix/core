@@ -2891,6 +2891,100 @@
     }
    }
   },
+  "/disk/power": {
+   "get": {
+    "operationId": "disk.power",
+    "summary": "sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "disk",
+      "power"
+     ],
+     "script": "disk-spindown.sh",
+     "args": "power",
+     "class": "read",
+     "rest": false
+    },
+    "description": "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "disk"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "dev"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "state",
+              "enum": [
+               "asleep",
+               "spinning",
+               "unknown"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "since"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "wakes"
+             }
+            ],
+            "minItems": 5,
+            "maxItems": 5
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "power"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "source",
+              "enum": [
+               "ups",
+               "rapl"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "what"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "watts"
+             }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/disk/results/{disk}": {
    "get": {
     "operationId": "disk.results.by_disk",

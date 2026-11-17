@@ -39,6 +39,7 @@
   shareSnapshots = false;
   zfsArcMaxGB = 12;
   diskSpindownMinutes = 0;
+  diskSpindownPools = null;
   fileManagerWrite = false;
   setupDone = false;
   backupNewShares = false;

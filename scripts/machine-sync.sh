@@ -25,6 +25,44 @@ state=${HS_STATE_DIR:-/var/lib/hs}
 
 usage() { say "usage: hs config sync [--check] | check | migrate"; exit 1; }
 
+# diskSpindownPools: the key must be a pool of this server (or `backup`), the value whole minutes; a ZFS pool that would sleep while hourly
+# shareSnapshots runs gets a warning (it is woken every hour). Prints error/warn<TAB>key<TAB>text lines like machine_tool check.
+spindown_checks() {
+  local json py=${HS_PYTHON:-python3} rows valid pairs name val pk glob snaps
+  json=$(machine_get_json diskSpindownPools 2>/dev/null) || json=
+  command -v "$py" >/dev/null 2>&1 || py=python
+  glob=$(machine_get diskSpindownMinutes 2>/dev/null || echo 0)
+  case "$glob" in ''|*[!0-9]*) glob=0 ;; esac
+  # shellcheck source=lib/pools.sh
+  . "$here/lib/pools.sh"
+  rows=$(pools_rows); valid=$(printf '%s\nbackup\n' "$(pool_names)")
+  pairs=
+  if [ -n "$json" ] && [ "$json" != null ]; then
+    pairs=$(printf '%s' "$json" | PYTHONUTF8=1 "$py" -c 'import json,sys
+d = json.load(sys.stdin)
+if not isinstance(d, dict): print("		-"); sys.exit(0)
+for k, v in d.items(): print("%s	%s" % (k, v if type(v) is int and v >= 0 else "-"))' | tr -d '') || pairs=
+  fi
+  while IFS=$'	' read -r name val; do
+    [ -n "$name" ] || continue
+    if ! grep -qx "$name" <<<"$valid"; then
+      printf 'error	diskSpindownPools	unknown pool "%s" (pools of this server: %s)\n' "$name" "$(grep . <<<"$valid" | paste -sd, - | sed 's/,/, /g')"
+    elif [ "$val" = - ]; then
+      printf 'error	diskSpindownPools	%s must be a whole number of minutes (0 = never)\n' "$name"
+    fi
+  done <<<"$pairs"
+  snaps=$(machine_get shareSnapshots 2>/dev/null || echo false)
+  [ "$snaps" = true ] || return 0
+  while IFS=$'	' read -r name _ pk; do
+    [ "$pk" = zfs ] || continue
+    val=$(awk -F'	' -v n="$name" '$1 == n && $2 != "-" { print $2 }' <<<"$pairs")
+    [ -n "$val" ] || val=$glob
+    [ "$val" -gt 0 ] || continue
+    printf 'warn	diskSpindownPools	%s is ZFS and shareSnapshots runs every hour: its disks wake every hour, so they hardly sleep\n' "$name"
+  done <<<"$rows"
+  return 0
+}
+
 cmd=${1:-sync}; [ $# -eq 0 ] || shift
 [ -f "$example" ] || fail "$(t 'No %s.' "$example")"
 
@@ -81,6 +119,11 @@ case "$cmd" in
     [ -f "$machine" ] || fail "$(t 'No %s.' "$machine")"
     out=$(machine_tool check "$example" "$machine") && rc=0 || rc=$?
     [ "$rc" -lt 2 ] || fail "$(t '%s does not parse; see the message above.' "$machine")"
+    extra=$(spindown_checks) || extra=
+    if [ -n "$extra" ]; then
+      out=$(printf '%s\n%s' "$out" "$extra" | grep .)
+      grep -q '^error	' <<<"$extra" && rc=1
+    fi
     py=${HS_PYTHON:-python3}; command -v "$py" >/dev/null 2>&1 || py=python
     moved=$(PYTHONUTF8=1 "$py" "$here/schema-gen.py" settings 2>/dev/null | cut -f1 || true)
     while IFS=$'\t' read -r kind key text; do
