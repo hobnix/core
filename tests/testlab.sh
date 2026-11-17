@@ -25,7 +25,7 @@ echo "$sub ${rest[*]}" >> "$dir/git.log"
 case "$sub" in
   init) mkdir -p "$wd/.git" ;;
   checkout) cp -r "$dir/tree/." "$wd/" ;;
-  rev-parse) echo 0123456789abcdef0123456789abcdef01234567 ;;
+  rev-parse) case "$wd" in *src-old) echo "${FAKE_OLD_SHA:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" ;; *) echo "${FAKE_SHA:-0123456789abcdef0123456789abcdef01234567}" ;; esac ;;
   fetch) [ -z "${FAKE_FETCH_FAIL:-}" ] || exit 128 ;;
   ls-remote) [ -n "${FAKE_NO_TAGS:-}" ] || printf 'aaa\trefs/tags/v0.1.0\nbbb\trefs/tags/v0.1.1\nccc\trefs/tags/v0.1.10\nddd\trefs/tags/v0.2.0-beta.1\n' ;;
 esac
@@ -74,6 +74,13 @@ FAKE
 cat > "$B/incus" <<'FAKE'
 #!/usr/bin/env bash
 echo "$*" >> "$(dirname "$0")/incus.log"
+d=$(dirname "$0")/vms; mkdir -p "$d"
+case "$1" in
+  copy) [ -z "${FAKE_COPY_FAIL:-}" ] || exit 1; : > "$d/$3" ;;
+  delete) for a in "$@"; do rm -f "$d/$a"; done ;;
+  info) [ -e "$d/$2" ] || exit 1 ;;
+  stop) [ -z "${FAKE_STOP_FAIL:-}" ] || exit 1 ;;
+esac
 case "$1 $2" in
   "list hs-testlab-"*) echo "10.0.0.5 (enp5s0)" ;;
   "file pull") echo throwaway-restic-password > "$4" ;;
@@ -91,7 +98,7 @@ FAKE
 chmod +x "$B/git" "$B/incus" "$B/notify.sh" "$B/bin/systemd-run" "$B/tree/scripts/dev/"*.sh
 export FAKE_DIR=$B PATH="$B/bin:$PATH"
 
-reset() { rm -rf "$B/state" "$B"/*.log "$B/state.db" "$B/jobs"/*; unset FAKE_NO_TAGS FAKE_FAIL_STAGE FAKE_BROWSER_RC FAKE_MODE FAKE_PREFLIGHT_RC FAKE_FETCH_FAIL FAKE_BUILD_FAIL FAKE_ADDRESS; }
+reset() { rm -rf "$B/state" "$B"/*.log "$B/state.db" "$B/jobs"/*; unset FAKE_NO_TAGS FAKE_FAIL_STAGE FAKE_BROWSER_RC FAKE_MODE FAKE_PREFLIGHT_RC FAKE_FETCH_FAIL FAKE_BUILD_FAIL FAKE_ADDRESS FAKE_SHA FAKE_OLD_SHA HS_TESTLAB_ISO_KEEP FAKE_COPY_FAIL FAKE_STOP_FAIL HS_TESTLAB_GOLDEN HS_TESTLAB_GOLDEN_KEEP; rm -rf "$B/vms"; }
 lastrun() { ls -1 "$B/state/runs" | tail -n1; }
 res() { python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["result"])' "$B/state/runs/$(lastrun)/stage-$1.json"; }
 events() { python3 "$SCRIPTS/state-db.py" event-list 2>/dev/null | awk -F'\t' '{print $4}' | tr '\n' ' '; }
@@ -319,6 +326,83 @@ check_eq "no release yet: skipped, exit 3" "3" "$rc"
 check_eq "written as skipped" "skipped" "$(res 7)"
 reset; FAKE_PREFLIGHT_RC=1 $T run --stage 7 --yes --foreground >/dev/null 2>&1; rc=$?
 check_eq "no nested VMs here: exit 3" "3" "$rc"
+
+echo "-- the ISO cache (one build per commit)"
+reset
+S1=1111111111111111111111111111111111111111; S2=2222222222222222222222222222222222222222
+S3=3333333333333333333333333333333333333333; S4=4444444444444444444444444444444444444444
+runs() { FAKE_SHA=$1 $T run --stage 1 --ref develop --yes --foreground 2>&1; }
+out=$(runs $S1); rc=$?
+check_eq "a first run builds" "1" "$(nlog build | wc -l | tr -d ' ')"
+check_out "and says so in one line" "ISO of $S1 built" echo "$out"
+check_eq "the ISO is in the cache under the full sha" "yes" "$([ -f "$B/state/iso-cache/$S1/homeserver-installer.iso" ] && [ -f "$B/state/iso-cache/$S1/.complete" ] && echo yes || echo no)"
+check_out "the harness gets the cached ISO" "stage iso --iso $B/state/iso-cache/$S1/homeserver-installer.iso" nlog nested
+out=$(runs $S1)
+check_eq "the same commit builds nothing again" "1" "$(nlog build | wc -l | tr -d ' ')"
+check_out "and says it came from the cache" "ISO of $S1 from the cache" echo "$out"
+out=$(runs $S2)
+check_eq "another commit is never served the ISO of the first" "2" "$(nlog build | wc -l | tr -d ' ')"
+check_out "it is built" "ISO of $S2 built" echo "$out"
+check_out "the harness gets the ISO of that commit" "stage iso --iso $B/state/iso-cache/$S2/" nlog nested
+echo "-- an interrupted copy is never served"
+rm -f "$B/state/iso-cache/$S2/.complete"
+runs $S2 >/dev/null
+check_eq "a folder without .complete is rebuilt" "3" "$(nlog build | wc -l | tr -d ' ')"
+echo wrong > "$B/state/iso-cache/$S2/.complete"
+runs $S2 >/dev/null
+check_eq "a .complete of another sha is rebuilt" "4" "$(nlog build | wc -l | tr -d ' ')"
+echo "-- the last 3 stay"
+runs $S3 >/dev/null; runs $S4 >/dev/null
+check_eq "three folders are kept" "3" "$(ls -1 "$B/state/iso-cache" | wc -l | tr -d ' ')"
+check_eq "the oldest is gone" "no" "$([ -e "$B/state/iso-cache/$S1" ] && echo yes || echo no)"
+check_eq "the newest is there" "yes" "$([ -d "$B/state/iso-cache/$S4" ] && echo yes || echo no)"
+HS_TESTLAB_ISO_KEEP=1 runs $S4 >/dev/null
+check_eq "HS_TESTLAB_ISO_KEEP changes the number" "1" "$(ls -1 "$B/state/iso-cache" | wc -l | tr -d ' ')"
+echo "-- a failed build caches nothing"
+reset
+FAKE_BUILD_FAIL=1 runs $S1 >/dev/null; rc=$?
+check_eq "nothing in the cache" "0" "$(ls -A "$B/state/iso-cache" 2>/dev/null | wc -l | tr -d ' ')"
+echo "-- stage 7 keys the release ISO by the sha of the tag"
+reset
+O1=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; O2=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+out=$($T run --stage 7 --ref develop --yes --foreground 2>&1)
+check_out "the release ISO is built" "ISO of $O1 built \(release v0.1.10\)" echo "$out"
+out=$($T run --stage 7 --ref develop --yes --foreground 2>&1)
+check_out "and taken from the cache the next time" "ISO of $O1 from the cache" echo "$out"
+check_eq "one build for two runs" "1" "$(nlog build | wc -l | tr -d ' ')"
+check_out "the VM installs the cached ISO" "stage iso --iso $B/state/iso-cache/$O1/" nlog nested
+FAKE_OLD_SHA=$O2 $T run --stage 7 --ref develop --yes --foreground >/dev/null 2>&1
+check_eq "a release tag that moved is built again" "2" "$(nlog build | wc -l | tr -d ' ')"
+
+echo "-- the golden VM (stages 3 and up start from a copy of the installed system)"
+reset
+G1=5555555555555555555555555555555555555555; G2=6666666666666666666666666666666666666666; G3=7777777777777777777777777777777777777777
+gruns() { FAKE_SHA=$1 $T run --stage "$2" --ref develop --yes --foreground 2>&1; }
+out=$(gruns $G1 5)
+check_out "the first run keeps a golden copy" "Golden copy of $G1 kept" echo "$out"
+check_eq "the golden VM exists" "yes" "$([ -e "$B/vms/hs-golden-555555555555-homeserver" ] && echo yes || echo no)"
+check_eq "its password is kept" "yes" "$([ -f "$B/state/golden/$G1-homeserver/password" ] && echo yes || echo no)"
+check_eq "the first run built the ISO" "1" "$(nlog build | wc -l | tr -d ' ')"
+out=$(gruns $G1 5)
+check_out "the second run starts from the golden copy" "from the golden copy" echo "$out"
+check_eq "no second ISO build" "1" "$(nlog build | wc -l | tr -d ' ')"
+check_eq "no second install" "1" "$(nlog nested | grep -c -- '--stage all' | tr -d ' ')"
+check_out "the stage ran on the copy with the kept password" "HS_NESTED_PASSWORD_FILE=$B/state/golden/$G1-homeserver/password" cat "$B/nested.env.log"
+check_eq "stages 1 and 2 are written as ok" "ok" "$(res 1)"
+out=$(gruns $G1 1)
+check_eq "stage 1 alone never uses it" "no" "$(grep -c 'golden copy' <<<"$out" | sed 's/^[1-9].*/yes/; s/^0$/no/')"
+echo "-- a failed copy installs normally"
+reset; gruns $G1 5 >/dev/null; FAKE_COPY_FAIL=1 gruns $G1 5 >/dev/null
+check_eq "the ISO came from the cache, the harness ran the install" "yes" "$([ "$(nlog nested | grep -c -- '--stage all')" -ge 2 ] && echo yes || echo no)"
+echo "-- HS_TESTLAB_GOLDEN=0 and a VM that does not stop"
+reset; HS_TESTLAB_GOLDEN=0 gruns $G1 5 >/dev/null
+check_eq "off: no golden VM" "no" "$([ -e "$B/vms/hs-golden-555555555555-homeserver" ] && echo yes || echo no)"
+reset; out=$(FAKE_STOP_FAIL=1 gruns $G1 5)
+check_out "no stop: said so" "golden copy was not made" echo "$out"
+echo "-- the last 2 stay"
+reset; gruns $G1 5 >/dev/null; gruns $G2 5 >/dev/null; gruns $G3 5 >/dev/null
+check_eq "two golden folders" "2" "$(ls -1 "$B/state/golden" | wc -l | tr -d ' ')"
+check_eq "the oldest VM is deleted too" "no" "$([ -e "$B/vms/hs-golden-555555555555-homeserver" ] && echo yes || echo no)"
 
 echo "-- the web route (testlab-change.sh)"
 reset

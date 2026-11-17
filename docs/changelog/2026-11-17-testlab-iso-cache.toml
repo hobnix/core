@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "The test-lab builds the installer ISO of a commit only once"
+body  = """hs testlab run now keeps the ISO it built under iso-cache/ in the test-lab folder, keyed by the full commit sha, and takes it from there when the same commit is tested again. Stage 7 does the same for the release tag. The last 3 ISOs are kept, older ones are deleted. Not tested on hardware yet."""
