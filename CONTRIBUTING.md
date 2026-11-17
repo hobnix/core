@@ -21,7 +21,10 @@ the loaders, `scripts/lib/api-level`) belongs here, and its pull request says wh
 - Code for a decision record (`docs/adr/`) is merged only when the record is Accepted, or when the code is behind a switch that is off by
   default (an option in `config/schema.toml`, or a feature a command refuses without). The pull request names the record and says which of
   the two applies. Code merged before its record was accepted stays behind its switch; nothing is built on it until the owner decides.
-- An issue is closed when every box under "Done when" is ticked. Code that is merged but was not run stays open, in the board column In Review.
+- Development and testing are two steps on the board. In Review: the pull request is open. Testing: the code is merged but was not run on a
+  real server; the issue stays open. Done: the boxes under "Hardware test" in the issue are ticked, a comment says what was seen, the
+  "Not tested on hardware yet." lines of that change are gone, and the issue is closed. A change with nothing to run on a server (a decision
+  record, CI, a text) goes from In Review to Done. `python3 scripts/dev/untested.py` lists the untested steps per guide.
 - Run the tests of the files you changed through the quiet runner, not raw: `scripts/dev/t quick [name...]` (`scripts/dev/t list` names
   them). Many tests need Linux (use WSL on Windows). Also `bash -n` on a script and `python3 scripts/pkg.py validate` for manifests.
 - Text printed by the `hs` commands is English only; there is no catalog to update. Web texts go into `web/src/i18n.js`.
@@ -69,8 +72,9 @@ Signed-off-by: Your Name <you@example.org>
   `scripts/dev/dco-check.sh origin/develop`.
 - **AI tools.** The sign-off is the human contributor's: you certify the change, whoever or whatever helped write it. This repository
   also forbids `Co-Authored-By` and "generated with" lines about any AI tool in commits and pull requests (`CLAUDE.md`), so do not add one.
-  The commits of an AI session are signed off with the git user of the person who runs it (`git commit -s`, or the hook from
-  `bash scripts/dev/install-guards.sh`); the DCO check has no exemption for them.
+  An AI tool never signs off.
+  A pull request opened by an AI session gets the label `agent-pr` from a maintainer; the DCO job is skipped for it, and the maintainer who
+  merges it takes the responsibility a sign-off would carry. Only maintainers can set labels.
 
 ## Community
 

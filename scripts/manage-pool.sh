@@ -1223,7 +1223,9 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
   udevadm settle 2>/dev/null || true
   snap_new_pool
   snap_mount
-  df -h "$root" "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null | sed 's/^/      /'
+  # (df exits 1 for the parity-* that matches nothing while there is no parity disk yet: under pipefail that ended the job right here, with the pool
+  # just mounted; tests/pool-add-df.sh)
+  { df -h "$root" "$(disks_root)"/data-* "$(disks_root)"/parity-* 2>/dev/null || true; } | sed 's/^/      /'
   if fancy; then ok "$(t '%s disk(s) added to the array' "${#todo[@]}")"; fi
   say "New data is protected after the next sync (three times a day, or now: hs pool $pool sync)."
   done_refresh
