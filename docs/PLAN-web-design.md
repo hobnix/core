@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Section 1 has its decisions (1.4); section 2 is not reviewed. Epic: hobnix/server#768, milestone 0.8.5. Read from the code and issues on `develop` (2026-11-18), not seen in a browser.
+Status: draft. Section 1 has its decisions (1.4); section 2 has its decisions (2.5). Epic: hobnix/server#768, milestone 0.8.5. Read from the code and issues on `develop` (2026-11-18), not seen in a browser.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -144,11 +144,12 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 4. Names are nouns for what the user sees; no entry is named after a task.
 5. Pools, disks and other data never appear as fixed entries.
 
-### 2.5 Open questions for review
+### 2.5 Decisions
 
-- Is nine entries few enough, or should Instances and Apps become one group?
-- Expiry dates covers certificates and more: Backup, People or Health?
-- Certificates: People, or Network?
-- Services (public and private routes) in Network: does that match how you think of it?
-- Does the Jobs drawer stay, and does #385 add a page beside it or replace it?
-- The Setup banner: shown until every check is done, or until dismissed?
+Decided 2026-11-18:
+
+- **Instances and Apps stay two groups.** Nine entries per node.
+- **Expiry dates stays in Backup.**
+- **Certificates are in People, Services in Network.**
+- **The Jobs drawer stays and the Jobs page (#385) sits beside it.** How the two relate (what each shows) is for the page templates, section 3.
+- **The Setup banner shows until every check is done.**
