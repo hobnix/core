@@ -164,7 +164,7 @@ FM_HELPERS = (
     # cs <dir>: one checksum over all files below a folder (names and content); fmgo <names> <start args...>: start a job, wait, succeed when it is done;
     # fmcn <names> <plan args...>: the confirm_name of a plan.
     "cs() { (cd \"$1\" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum | sha256sum | cut -c1-64); }; "
-    "fmgo() { n=$1; shift; printf '%s\\0' $n | hs sys fm start \"$@\" > /tmp/fm.out 2>&1 || return 1; "
+    "fmgo() { n=$1; shift; printf '%s\\0' $n | HS_CALLER=test hs sys fm start \"$@\" > /tmp/fm.out 2>&1 || return 1; "
     "u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); for i in $(seq 150); do r=$(hs sys fm progress $u | awk -F'\\t' '$1==\"result\"{print $2}'); "
     "[ \"$r\" = running ] || break; sleep 2; done; echo \"$r\" > /tmp/fm.result; [ \"$r\" = done ]; }; "
     "fmcn() { n=$1; shift; printf '%s\\0' $n | hs sys fm plan \"$@\" | awk -F'\\t' '$1==\"confirm_name\"{print $2}'; }"
@@ -200,7 +200,7 @@ def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
         # overwrite choice: a changed source file; without the typed confirmation the start is refused and nothing changes
         step("run", "echo changed-%s > %s/f1 && cs %s > /tmp/%s.c3 && cs %s > /tmp/%s.c4" % (tag, a, a, tag, b, tag),
              what="[%s] the source file differs from the copy now" % tag),
-        step("run", "! (printf '%s\\0' | hs sys fm start copy %s %s --conflict overwrite) && [ \"$(cs %s)\" = \"$(cat /tmp/%s.c4)\" ]" % (s, fa, to, b, tag),
+        step("run", "! (printf '%s\\0' | HS_CALLER=test hs sys fm start copy %s %s --conflict overwrite) && [ \"$(cs %s)\" = \"$(cat /tmp/%s.c4)\" ]" % (s, fa, to, b, tag),
              what="[%s] overwrite without the typed confirmation is refused, nothing changed" % tag),
         step("run", "fmgo %s copy %s %s --conflict overwrite --confirm '%s'" % (s, fa, to, confirm), timeout=400,
              what="[%s] overwrite with the confirmation" % tag),
@@ -208,14 +208,14 @@ def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
         # delete: the plan names the confirmation, a wrong one is refused, the right one deletes
         step("run", "cn=$(fmcn %s-moved delete %s); echo \"$cn\" | grep -q '^delete [0-9]* file' && echo \"$cn\" > /tmp/%s.cn" % (tag, fb, tag),
              what="[%s] the delete plan asks for 'delete N files'" % tag),
-        step("run", "! (printf '%s-moved\\0' | hs sys fm start delete %s --confirm 'delete 99 files') && [ -d %s/%s-moved ]" % (tag, fb, rb, tag),
+        step("run", "! (printf '%s-moved\\0' | HS_CALLER=test hs sys fm start delete %s --confirm 'delete 99 files') && [ -d %s/%s-moved ]" % (tag, fb, rb, tag),
              what="[%s] delete with a wrong confirmation is refused, the folder is still there" % tag),
         step("run", "fmgo %s-moved delete %s --confirm \"$(cat /tmp/%s.cn)\" && [ ! -e %s/%s-moved ]" % (tag, fb, tag, rb, tag), timeout=120,
              what="[%s] delete with the right confirmation" % tag),
         # cancel: a big move is stopped; afterwards the data is whole in one place: intact at the source, or gone from it and complete at the target
         step("run", "mkdir -p %s/%s-big && head -c 1500000000 /dev/zero > %s/%s-big/big && cs %s/%s-big > /tmp/%s.c5" % (ra, tag, ra, tag, ra, tag, tag),
              timeout=300, what="[%s] a big folder to cancel" % tag),
-        step("run", "printf '%s-big\\0' | hs sys fm start move %s %s > /tmp/fm.out; u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); sleep 1; "
+        step("run", "printf '%s-big\\0' | HS_CALLER=test hs sys fm start move %s %s > /tmp/fm.out; u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); sleep 1; "
                     "hs sys jobs stop \"$u\"; sleep 5; hs sys fm progress \"$u\" | grep -q 'result.*\\(cancelled\\|done\\)'" % (tag, fa, to), timeout=120,
              what="[%s] start a move and stop the job" % tag),
         step("run", "if [ -e %s/%s-big/big ]; then [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; else [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; fi"
@@ -236,7 +236,7 @@ def _bulk_steps(params, kind):
         step("capture", "hs sys pool start %s add --disks $(basename {d1}),$(basename {d2}) --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start",
              timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
-        step("run", "u=$(hs job list --plain 2>/dev/null | awk '/pool/ {print $1; exit}'); [ -z \"$u\" ] || while systemctl is-active --quiet \"$u\"; do sleep 5; done",
+        step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
              timeout=1800, what="the pool job finishes"),
         step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
         step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
@@ -260,7 +260,7 @@ def pool(params):
       + write_checks("ss", "share:hslab1", "", SHARES + "/hslab1", "share:hslab2", "", SHARES + "/hslab2", "hslab2") + [
         # the guard
         step("run", "hs sys fm pair disk:data-01 pool:%s | grep -q 'status.refused'" % POOL, what="the guard: a pool disk and the pool view are refused as a pair"),
-        step("run", "out=$(printf 'dd-src\\0' | hs sys fm start copy --from disk:data-01 --path shares/hslab-a --to pool:%s --to-path shares/hslab2 2>&1); rc=$?; "
+        step("run", "out=$(printf 'dd-src\\0' | HS_CALLER=test hs sys fm start copy --from disk:data-01 --path shares/hslab-a --to pool:%s --to-path shares/hslab2 2>&1); rc=$?; "
                     "[ $rc -ne 0 ] && echo \"$out\" | grep -q refused" % POOL, what="the guard: a start with that pair refuses"),
     ]
 
