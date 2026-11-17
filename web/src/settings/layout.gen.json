@@ -58,6 +58,7 @@
   "setupDone": "general",
   "backupNewShares": "backups",
   "backupNewInstances": "backups",
+  "offsiteDiskDays": "backups",
   "adDomain": "access",
   "adminUser": "access",
   "notifyUrl": "cap:notifications",

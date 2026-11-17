@@ -1115,9 +1115,9 @@ CHANGE = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9._ -]{0,63}=(ad
 CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webAccent|webTerminal|"
                "recipeQuestionHours|webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|"
                "incusUi|isoDir|syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|"
-               "backupNewShares|backupNewInstances|notifySecondMinPriority|notifications|quietHours|autoMitigate|"
-               "autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|"
-               "dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
+               "backupNewShares|backupNewInstances|offsiteDiskDays|notifySecondMinPriority|notifications|quietHours|"
+               "autoMitigate|autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|"
+               "dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
                "gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|"
                "gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS

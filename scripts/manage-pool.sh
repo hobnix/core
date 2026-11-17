@@ -287,7 +287,7 @@ candidates() {
     # a member of the snapraid array, even while it isn't mounted
     lsblk -nr -o LABEL "/dev/$name" | grep -q '^bulk-' && continue
     # the disk of hs backup is unmounted between runs: it must not look free (label "backup")
-    has_label_disk "/dev/$name" '^(bulk-.*|backup)$' && continue
+    has_label_disk "/dev/$name" '^(bulk-.*|backup|backup-offsite)$' && continue
     # stable name; prefer the readable ata-/nvme-/scsi- name over wwn-
     id=$(stable_id "$name" || true)   # a dual-port disk: udev gave the names to its other path
     [ -n "$id" ] || continue

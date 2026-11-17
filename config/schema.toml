@@ -848,6 +848,24 @@ value = '''
 backupNewInstances = false'''
 
 [[item]]
+kind = "option"
+key = "offsiteDiskDays"
+page = "backups"
+type = "int"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '30'
+min = 1
+hint = "a whole number of days, 1 or more"
+doc = '''
+# The rotating off-site disk (label `backup-offsite`): after `hs backup offsite now` copied to it, the expiry entry
+# `offline-backup-disk` moves to today plus this many days, and the health check warns before that date. Default 30.'''
+value = '''
+offsiteDiskDays = 30'''
+
+[[item]]
 kind = "section"
 title = "Accounts"
 page = "access"
