@@ -55,6 +55,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
 | [RELEASE-0.2-checklist](RELEASE-0.2-checklist.md) | The steps to release 0.2.0, what the test-lab has and has not passed |
 | [RELEASE-NOTES-0.2](RELEASE-NOTES-0.2.md) | Draft release notes of 0.2.0, with what is not verified |
+| [RELEASE-NOTES-0.3](RELEASE-NOTES-0.3.md) | Draft release notes of 0.3.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |
 | [PLAN-web-auth](PLAN-web-auth.md) | Sign-in and sessions for the web interface |
