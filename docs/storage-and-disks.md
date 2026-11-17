@@ -346,6 +346,14 @@ single disks and SnapRAID disks keep the default. Not tested on hardware yet.
 To let spinning disks sleep, set `diskSpindownMinutes` (for example 30) in `machine.toml` and run `hs rebuild`. `hs disk spindown` shows the
 state. SSDs never sleep. The first access after sleep takes 10 to 20 seconds.
 
+To find out what keeps a disk awake, measure it for a night: `sudo hs disk spindown log 24` samples the kernel I/O counters of each spinning
+bulk, parity and backup disk (`/sys/block/<disk>/stat`, no disk access) and its power state (`hdparm -C`, does not wake it) every minute for 24
+hours. Each minute in which a disk did I/O or left standby is written to `/var/log/hs-spindown.log` (time, disk, `woke` or `io`, state, number of
+I/Os) with the systemd units that started in that minute (from the journal). After a night, the lines should fall between 03:00 and about 06:30,
+the maintenance window, or on a moment when someone used a share. A line outside the window with a unit name points at the job to move or
+switch off; a line with `-` in the last column is I/O that no unit started (a person, a container or a share). Run it in a second terminal
+or in `tmux`; it stops after the given hours. Not tested on hardware yet.
+
 `hs health` lists problems with the command that helps, and the server sends a push message when the set of problems changes
 ([Operations](operations.md)).
 
