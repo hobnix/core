@@ -936,6 +936,8 @@ Dropping the removed disk(s) from the parity: %s (files that moved count as remo
 Filesystem '%s' is not supported here (NTFS, exFAT, FAT, ext4, XFS, btrfs are).	Das Dateisystem '%s' wird hier nicht unterstützt (NTFS, exFAT, FAT, ext4, XFS, btrfs schon).
 From	Von
 Hint: a disk Windows did not shut down cleanly mounts read-only only (or after a check in Windows).	Hinweis: eine Platte, die Windows nicht sauber beendet hat, lässt sich nur schreibgeschützt einhängen (oder nach einer Prüfung in Windows).
+ISO of %s built (%s)	ISO von %s gebaut (%s)
+ISO of %s from the cache (%s)	ISO von %s aus dem Cache (%s)
 If the deletions are intended: hs pool bulk sync --force	Wenn das Löschen gewollt ist: hs pool bulk sync --force
 Included	Enthalten
 Key file for the boot	Schlüsseldatei für den Start
@@ -2298,6 +2300,7 @@ Server name	Servername
 Settings that come back from the backup:	Einstellungen, die aus dem Backup zurückkommen:
 That is the backup disk. It is never erased.	Das ist die Backup-Platte. Sie wird nie gelöscht.
 That snapshot holds no machine.toml. Choose another snapshot.	Dieser Snapshot enthält keine machine.toml. Wähle einen anderen Snapshot.
+The ISO could not be put in the cache (disk full?); it is used from the build.	Die ISO konnte nicht in den Cache gelegt werden (Platte voll?); sie wird aus dem Build verwendet.
 The answers file	Die Antwortdatei
 The answers file has errors. Nothing was changed.	Die Antwortdatei hat Fehler. Es wurde nichts geändert.
 The answers file is valid	Die Antwortdatei ist gültig
@@ -2376,7 +2379,7 @@ That is not an address like 10.10.95.25.	Das ist keine Adresse wie 10.10.95.25.
 That value does not fit here.	Dieser Wert passt hier nicht.
 UniFi does not accept that address (taken, or inside the range the router hands out).	UniFi nimmt diese Adresse nicht an (schon vergeben oder im Bereich, den der Router verteilt).
        hs testlab results [--list [N]]	       hs testlab results [--list [N]]
-3. build the installer ISO (nix, can take a long time and needs tens of GiB)	3. die Installer-ISO bauen (nix, dauert lange und braucht einige zehn GiB)
+3. build the installer ISO (nix, can take a long time and needs tens of GiB; skipped when the ISO of this commit is in the cache)	3. die Installer-ISO bauen (nix, dauert lange und braucht einige zehn GiB; entfällt, wenn die ISO dieses Commits im Cache liegt)
 A failure sends a push message. Not tested on hardware yet.	Ein Fehler schickt eine Push-Nachricht. Noch nicht auf Hardware getestet.
 Building the installer ISO (this takes a long time)	Installer-ISO bauen (das dauert lange)
 Checked out %s	%s ausgecheckt
