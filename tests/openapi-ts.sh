@@ -14,6 +14,7 @@ python3 - "$ROOT/docs/api/openapi.json" "$WORK/openapi.json" <<'EOF'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 d["paths"]["/zz-test/probe"] = {"get": {"operationId": "zz-test.probe", "summary": "probe",
+    "x-hs-role": "viewer",
     "x-hs-sys": {"words": ["zz-test", "probe"], "class": "read"},
     "responses": {"0": {"description": "ok", "content": {"text/plain": {"schema": {"type": "string"}}}}}}}
 json.dump(d, open(sys.argv[2], "w", encoding="utf-8"))
