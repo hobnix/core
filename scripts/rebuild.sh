@@ -81,6 +81,7 @@ config_check() {
 bulk_type_check() {
   local now want
   [ -f "$(machine_file)" ] || return 0
+  machine_has pools && return 0   # with a pools line the kind of each pool is its own row; bulkType is not used any more
   now=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || true)
   [ -n "$now" ] || return 0
   want=$(machine_get bulkType 2>/dev/null || true)
