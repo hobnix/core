@@ -216,8 +216,19 @@ hs backup ct <name> reset              # the whole instance again (reset <path> 
 
 The nightly run then saves only those paths, tagged `ct:<name>` and `partial`; the database dump files (`/var/backups/hs`) are always part
 of it. A partial backup **holds** the chosen paths and the dump files, nothing else. It **gives back** those paths only: the instance
-cannot boot from it. To restore, run the recipe of the app again from its package (it creates the instance), stop the app, then put the
-paths back (`hs backup find` shows them below the instance's `rootfs` folder; restore them into a temporary folder with `hs backup restore latest <path> --tag ct:<name> --to <folder>` and copy them in). Not tested on hardware yet.
+cannot boot from it.
+
+```bash
+hs backup restore ct <name> --dry-run   # the plan: what runs, which paths come back
+hs backup restore ct <name>             # you type the instance name; it offers a background job
+```
+
+The restore of a partial instance does two things, in this order: it runs the recipe of the app again from its package (that creates the
+instance, installs the app and connects it to this server; `--recipe <app>` names the app when it is not called like the instance), then
+it stops the app and puts the backed-up paths and the dump files back from the newest backup, and starts it again. What you get back is the
+recipe's fresh app plus your data paths; a file in those paths that is newer than the backup is overwritten, files outside them are the
+recipe's. The database dumps arrive in `/var/backups/hs` inside the instance; loading one into the database is the app's own import (see
+its guide). Not tested on hardware yet.
 
 `hs backup ct <name> on` also accepts a **VM**. restic cannot read a running VM disk, so the whole machine is exported to one file each
 night. That needs about the used size of the VM as free space in `/var/tmp` (or `HS_VM_EXPORT_DIR`); with too little space the run warns,
@@ -240,6 +251,8 @@ sudo hs backup drill ct radarr
   is older than 3 days (the report then adds "snapshot N days old"). Without a name it picks only containers that are in the backup;
   a container you switched off is not drilled (name it to drill it anyway), and the report shows an info line, not a warning, when
   no container is in the backup.
+  A **partial** instance (see above) cannot boot, so its drill restores the paths into a temporary folder and checks that every included
+  path and every dump file came back with data; nothing is booted. The report then says "partial: paths and dumps".
   Not tested on hardware yet.
 - On the 25th of every month a push message reports the state of the drills; `sudo hs backup report` sends it now (`--dry-run` only
   shows it).
