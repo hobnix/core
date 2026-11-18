@@ -137,8 +137,9 @@ valid_host "$hostname_" || fail "$(t "'%s' is not a usable server name (letters,
 if [ -z "$admin" ] && [ -n "$restore_from" ] && [ -f "$restore_from/etc/nixos/machine.toml" ]; then
   admin=$(sed -n 's/^adminUser[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$restore_from/etc/nixos/machine.toml" | head -n1)
 fi
+# --confirm-disk on the command line means an unattended run (the test-lab, scripts): no question, the default name
 if [ -z "$admin" ]; then
-  if $tty; then admin=$(ask "Name of the admin account (lowercase letters, digits, _ and -)" adminuser); else admin=adminuser; fi
+  if $tty && [ -z "$confirm_disk" ]; then admin=$(ask "Name of the admin account (lowercase letters, digits, _ and -)" adminuser); else admin=adminuser; fi
 fi
 [[ "$admin" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || fail "$(t "'%s' is not a usable account name (lowercase letters, digits, _ and -; starts with a letter or _; at most 31 characters)." "$admin")"
 case "$admin" in root|nobody) fail "$(t "'%s' cannot be the admin account." "$admin")" ;; esac

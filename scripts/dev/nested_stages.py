@@ -37,8 +37,8 @@ def full_system(params):
         disk_id_by_name(params, "fast1", "f1"),
         disk_id_by_name(params, "fast2", "f2"),
         # the plan first: its text (and a refusal's reason) stays in the console log
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks {f1},{f2} --confirm fast",
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --use apps --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --use apps --disks {f1},{f2} --confirm fast",
              timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
         step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
              timeout=900, what="the pool fast exists"),
@@ -238,6 +238,8 @@ def _bulk_steps(params, kind):
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
              timeout=1800, what="the pool job finishes"),
+        # a SnapRAID pool needs mergerfs and its mount unit: on a server that had none, the rebuild after `hs pool` brings them (docs/install.md)
+    ] + ([step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
         step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
         step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
