@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3).
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3); section 7 (packages) is open on depth.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -366,3 +366,52 @@ Decided 2026-11-18:
 - **G5: Login and first-run setup are exempt** from the templates, like Files. The first-run wizard (#183) is a Flow after sign-in.
 - **G6: #456 is closed into #573.** The pool-name fix is done once, in 0.4.
 - **G7: one renderer** builds the manifest pages of #424, #478 and #195. It uses the Object template.
+
+## 7. Pages from capabilities and packages
+
+Draft, added after the review of the mockups. Read from docs/PLAN-extensions.md, docs/PLAN-packages.md, ADR 0016, `web/src/nav.js` and the four extensions that have a page (games, posters, passthrough, ad-selfservice); not run.
+
+### 7.1 What exists
+
+| Who | How it adds a page today | Limits |
+|---|---|---|
+| Core | a row in `web/src/nav.js`, with `capability: '<name>'` to hide it while that capability is off | the tree is fixed code |
+| A capability | `[settings]` in `capability.toml` puts one entry under Settings > Capabilities; its other pages are core rows flagged with the capability | no place outside Settings |
+| An extension or recipe | `[web.page]` in its manifest: `title`, `icon`, `crumb`, `sub`, `[[web.page.actions]]`, `[[web.page.blocks]]` (table, kv, cards, text, empty, gallery) over its declared reads | one page per package, always at `/extensions/<name>`, in an Extensions group that exists only while a package has a page; no choice of group, order or template; no detail page; no tabs |
+
+No code reaches the browser (ADR 0016, accepted). A package page is data drawn by `GenericPage`, and the server drops a declaration that reads or changes more than the package declared. Four extensions use `[web.page]`, no recipe does yet. #195 still asks whether `[web.page]` is the base or is replaced.
+
+### 7.2 What the templates need that the declaration cannot say
+
+| Need | Why |
+|---|---|
+| a group and a position | the tree has nine groups, there is no Extensions group any more (2.2) |
+| tabs, each with its own blocks | one place for a package with several pages; also the Object page (3.2) |
+| a template for the page | List, Object or Feed, so a package page has the same frame as a core page |
+| a short state for its card | the Group page shows a state per place (3.2, `StateCard`) |
+| a role for the page and for each action | #434; the action is shown disabled with its reason (4.9) |
+| a trust label | Official or Community, tested date (4.10) |
+
+### 7.3 Proposal
+
+- **Keep `[web.page]` and extend it.** New keys are additive; the four existing pages keep working and land in Apps.
+- **Placement.** `group` (the id of an existing group, default `apps`) and optional `after` (a place in that group). Core places keep their order, package places follow in alphabetical order.
+- **Tabs.** `[[web.page.tabs]]`, each with a `title` and its own `[[web.page.blocks]]`. A package with several views is one place with tabs.
+- **Template.** `template = "list" | "object" | "feed"`, default list when the first block is a table. The frame (header, actions, More menu, states) comes from the template.
+- **Card state.** An optional `state` read that returns one dot and one line, for the Group page and the Apps list.
+- **Capabilities** keep `[settings]` and the `capability` flag on core rows. A capability does not get places of its own outside Settings.
+- **No new group, no code.** A package names an existing group. ADR 0016 stands.
+
+### 7.4 Decisions
+
+Decided 2026-11-18:
+
+- **A package or capability adds places in existing groups only**, for now. A package may become a group of its own later, if real packages call for it.
+- **Extension pages land in Apps** when they name no group. There is no Extensions group.
+- **Core places keep their order, package places follow.** An optional `after` places one directly after a named place.
+
+### 7.5 Open questions for review
+
+- **Depth.** Is the tree two levels (group, place) with a package's several views as tabs of one place (recommended: the mobile tree and the generic renderer stay simple), or may a package place have children (a "mediaserver" with Radarr and Sonarr in the tree)? Not decided: the user asked to check the package definitions first, which this section does.
+- Are #195, #424 and #478 the issues that carry the new keys, or does this need an issue of its own?
+- Do capabilities need to declare places outside Settings (for example a `vps` node with its own tree), or is the node tree (peer and edge pages) a separate mechanism?
