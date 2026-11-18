@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3); section 7 (packages) is open on depth.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3); section 7 (packages) has its decisions (7.4).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -143,6 +143,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 3. A capability that is off hides its entry, as today. A page opened by address still works.
 4. Names are nouns for what the user sees; no entry is named after a task.
 5. Pools, disks and other data never appear as fixed entries.
+6. The tree has two levels, group and place. More views of one place are tabs (7.4).
 
 ### 2.5 Decisions
 
@@ -410,8 +411,9 @@ Decided 2026-11-18:
 - **Extension pages land in Apps** when they name no group. There is no Extensions group.
 - **Core places keep their order, package places follow.** An optional `after` places one directly after a named place.
 
+- **The tree is two levels, group and place.** A package with several views (a "mediaserver" with Radarr and Sonarr) is one place with a tab per view, never a third level. If real packages later need more, a package may become a group (see the first decision).
+
 ### 7.5 Open questions for review
 
-- **Depth.** Is the tree two levels (group, place) with a package's several views as tabs of one place (recommended: the mobile tree and the generic renderer stay simple), or may a package place have children (a "mediaserver" with Radarr and Sonarr in the tree)? Not decided: the user asked to check the package definitions first, which this section does.
 - Are #195, #424 and #478 the issues that carry the new keys, or does this need an issue of its own?
 - Do capabilities need to declare places outside Settings (for example a `vps` node with its own tree), or is the node tree (peer and edge pages) a separate mechanism?
