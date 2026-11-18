@@ -464,19 +464,58 @@ def write_snapshot(name, topic, data):
     return True
 
 
-def make_handler(name, limit=None, warn=None):
-    """The on_message of svc-run: `log` to the journal, `emit` into the event log under the rate limit, `snapshot` to the snapshot file."""
+def emit_globs(perms):
+    """The kind globs of `events.emit:<glob>` in a list of permissions, or None when the package declares no permissions (perms is None).
+    A declaration without events.emit is an empty list: such a package may emit nothing."""
+    if perms is None:
+        return None
+    return [p.partition(":")[2] for p in perms if p.partition(":")[0] == "events.emit"]
+
+
+def declared_perms(pkgdir):
+    """`permissions` of the package.toml (else capability.toml) in pkgdir as a list of texts, or None when it declares none."""
+    if tomllib is None:
+        return None
+    for f in ("package.toml", "capability.toml"):
+        try:
+            with open(os.path.join(pkgdir, f), "rb") as fh:
+                p = tomllib.load(fh).get("permissions")
+        except (OSError, ValueError):
+            continue
+        if isinstance(p, list):
+            return [str(x) for x in p]
+    return None
+
+
+def emit_verdict(name, perms, kind):
+    """None when `name` may emit `kind`, else the reason. Always below pkg.<name>.; with declared `permissions` also covered by one events.emit glob.
+    Without `permissions` only the prefix is checked (today's behaviour; the install warning names the missing declaration)."""
+    if not kind.startswith(f"pkg.{name}."):
+        return f"a package may only emit pkg.{name}.<what>"
+    globs = emit_globs(perms)
+    if globs is not None and not any(fnmatch.fnmatchcase(kind, g) for g in globs):
+        return "not covered by its events.emit permission"
+    return None
+
+
+def make_handler(name, limit=None, warn=None, perms=None):
+    """The on_message of svc-run: `log` to the journal, `emit` into the event log under the rate limit, `snapshot` to the snapshot file.
+    perms = the declared permissions (None = none declared). A refused kind is warned once per kind, not per call."""
     limit = limit or RateLimit()
     warn = warn or (lambda s: print(f"warn: {s}", file=sys.stderr, flush=True))
     state = {"warned": False}
+    refused = set()
 
     def handle(m):
         t = m.get("type")
         if t == "log":
             print(f"{m['level']}: {m['text']}", file=sys.stderr, flush=True)
         elif t == "emit":
-            if not m["kind"].startswith(f"pkg.{name}."):
-                warn(f"{name}: emit of {m['kind']} dropped (a service may only emit pkg.{name}.<what>)")
+            why = emit_verdict(name, perms, m["kind"])
+            if why:
+                if m["kind"] not in refused:
+                    refused.add(m["kind"])
+                    warn(f"{name}: emit of {m['kind']} dropped ({why})")
             elif limit.allow():
                 state["warned"] = False
                 emit_event(name, m)
@@ -506,7 +545,7 @@ def svc_run(name, pkgdir, state_dir):
     if subscribe and not os.path.exists(cursor_path(name)):
         write_cursor(cursor_path(name), db_latest())
     res = supervise(program_of(pkgdir, table["exec"]), name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name))
+                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir)))
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1
@@ -526,10 +565,38 @@ def status(name, state_dir, active, stopped):
     return st, why, since
 
 
+def emit_check(argv):
+    """emit-check --name N --kind K --state-dir DIR [-- PERMISSION ...]: the check `hs event emit --pkg N` runs. A lone "-" = the package declares
+    no permissions. Exit 0 = write the event; 3 = dropped (one warning on stderr per kind: a marker file in DIR/emit-warned/N/ remembers it)."""
+    ap = argparse.ArgumentParser(prog="ext_service.py emit-check")
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--kind", required=True)
+    ap.add_argument("--state-dir", required=True)
+    ap.add_argument("perms", nargs=argparse.REMAINDER)
+    a = ap.parse_args(argv)
+    if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
+        return 2
+    perms = a.perms[1:] if a.perms[:1] == ["--"] else a.perms
+    why = emit_verdict(a.name, None if perms == ["-"] else perms, a.kind)
+    if not why:
+        return 0
+    mark = os.path.join(a.state_dir, "emit-warned", a.name, re.sub(r"[^A-Za-z0-9._-]", "_", a.kind))
+    if not os.path.exists(mark):
+        try:
+            os.makedirs(os.path.dirname(mark), exist_ok=True)
+            open(mark, "w").close()
+        except OSError:
+            pass
+        print(f"{a.name}: emit of {a.kind} dropped ({why})", file=sys.stderr)
+    return 3
+
+
 def main_svc(argv):
     """The subcommands of the unit and of hs ext; None when argv is not one of them."""
     if argv[:1] == ["has-service"] and len(argv) == 2:
         return 0 if service_table(argv[1]) else 1
+    if argv[:1] == ["emit-check"]:
+        return emit_check(argv[1:])
     if argv[:1] not in (["svc-run"], ["status"], ["reset"]):
         return None
     ap = argparse.ArgumentParser(prog="ext_service.py " + argv[0])
