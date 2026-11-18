@@ -1,0 +1,50 @@
+{
+ "title": "One pool: a single SnapRAID pool called bulk, no apps pool.",
+ "locked": false,
+ "reads": {
+  "pool/list": [
+   [
+    "bulk",
+    "data",
+    "snapraid",
+    "online"
+   ]
+  ],
+  "ct/pools": [
+   [
+    "bulk",
+    "dir",
+    "bulk",
+    "12000000000000",
+    "22000000000000",
+    "-"
+   ]
+  ],
+  "deck": {
+   "schema": 1,
+   "kind": "server",
+   "host": "demo",
+   "locked": false,
+   "uptime_s": 864000,
+   "load": [
+    0.42,
+    0.38,
+    0.31
+   ],
+   "encryption": "open",
+   "problems": 0,
+   "mem": {
+    "total": 34359738368,
+    "available": 23622320128
+   },
+   "pools": {
+    "bulk": {
+     "size": 22000000000000,
+     "used": 9800000000000,
+     "free": 12000000000000,
+     "health": "online"
+    }
+   }
+  }
+ }
+}
