@@ -173,7 +173,9 @@ def pool(params):
         # that the job started lives in the job's unit and ends with it, so /bulk is not mounted after the job
         step("run", "for i in $(seq 1 120); do systemctl list-units 'hs-job-pool-add-bulk-*' --state=active,activating --no-legend | grep -q . || break; sleep 3; done",
              timeout=600, what="the pool job is over"),
-        step("run", "systemctl restart bulk-mount.service", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
+        # a server without a SnapRAID pool has no mergerfs: the rebuild after `hs pool` installs it and brings the mount unit (docs/install.md)
+        step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)"),
+        step("run", "systemctl restart bulk-mount.service || true", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
         step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="/bulk shows up", expect_rc=None),
         # what the console log needs when /bulk does not show up (not a check)
         step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "
