@@ -413,7 +413,9 @@ Decided 2026-11-18:
 
 - **The tree is two levels, group and place.** A package with several views (a "mediaserver" with Radarr and Sonarr) is one place with a tab per view, never a third level. If real packages later need more, a package may become a group (see the first decision).
 
+- **The new keys have an issue of their own:** hobnix/server#790 (milestone 0.12, part of #195). #424 and #478 build on it.
+- **Capabilities declare no places outside Settings** (assumed, not yet confirmed): the node tree of a `vps` or peer node is a separate mechanism.
+
 ### 7.5 Open questions for review
 
-- Are #195, #424 and #478 the issues that carry the new keys, or does this need an issue of its own?
-- Do capabilities need to declare places outside Settings (for example a `vps` node with its own tree), or is the node tree (peer and edge pages) a separate mechanism?
+- Does the node tree of a remote node (peer and edge pages) need the same declaration, or does it stay fixed code?
