@@ -65,7 +65,9 @@ check "no .new left behind" bash -c "! ls '$V/capabilities.lock.new' '$V/capabil
 echo "-- the check before a rebuild"
 check "an enabled vendored package and a core capability pass" $PKG vendor-verify fixmod corecap
 check_out "a name that is nowhere is named, with the way out" "^nowhere${tab}is neither a part of the core nor an installed package${tab}hs ext disable nowhere" bash -c "$PKG vendor-verify nowhere; true"
+check "a name that is nowhere does not stop the rebuild (exit 0)" bash -c "$PKG vendor-verify nowhere >/dev/null"
 mv "$V/capabilities/fixmod" "$WORK/fixmod.away"
+check "a package whose vendored folder is gone stops it (exit 1)" bash -c "! $PKG vendor-verify fixmod >/dev/null"
 check_out "a package whose vendored folder is gone is named" "^fixmod${tab}vendor/ differs from the lock: in the lock but not vendored${tab}hs pkg install fixmod" bash -c "$PKG vendor-verify fixmod; true"
 mv "$WORK/fixmod.away" "$V/capabilities/fixmod"
 cp "$V/capabilities.lock" "$WORK/lock.keep"; sed -i 's/^version = "1.0.0"/version = "0.9.0"/' "$V/capabilities.lock"
