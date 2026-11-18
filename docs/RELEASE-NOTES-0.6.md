@@ -8,8 +8,12 @@ pull request and of the GitHub release.
 of stages (available, installed, on, running), a health check per app, and a clear Remove that keeps or deletes the data. In a virtual machine on the
 real test-lab server the stages install, smoke check, rollback, backup and restore and pool passed on the tip of `0.6` (2026-11-18, commit b45c6128);
 and the upgrade from v0.5.0 passed (same commit). Stage 6 (browser) never ran there (no playwright on the server). Items marked **UNVERIFIED** were written and tested only with fakes,
-fixtures and unit tests, not with a real app on a real server: no app was installed, updated or removed through the new dialog on hardware, and the
-web interface of this version was not looked at by the owner yet. Do not trust this release with the only copy of your data.
+fixtures and unit tests, not with a real app on a real server: the items below say what the owner then looked at in the web interface of v0.6.0-beta.1 on the real server (2026-11-18): the
+Apps page (stages, health, versions, update policy), the package details before installing, the Install dialog (ntfy installed through it) and
+the Remove dialog with its "Also delete the data" box (tried on ntfy) worked. Not tried: a failed install (Retry, Remove what was created), a second
+instance of one app, a refused second copy, a reboot with Start at boot on and off (the switch shows and changes), and Remove with data on an app
+installed before 0.6 (such an app has no record of what its install created, so only the instance and its service description are listed and the data
+is kept). The Install review wrongly warns "the server is rebuilt" for an app that does not rebuild (hobnix/server#850). Do not trust this release with the only copy of your data.
 
 ## What 0.6.0 is
 Apps have a life: you see what an install will do before it runs, a failed install says where it stopped and can start again from there, an app says
@@ -18,10 +22,10 @@ whether it is healthy, and removing an app asks what to do with its data.
 ## Install
 - **One Install** (#465): the plan of an app is read from its signed release before anything is installed (what it creates, what it needs, which
   questions it asks); the install runs as one job with the steps read, needs, ask, run, check and done. The web interface has one dialog for apps,
-  extensions and parts (plan, questions, review, steps, result with an Open button). UNVERIFIED with a real app.
+  extensions and parts (plan, questions, review, steps, result with an Open button). Seen working with ntfy on the real server; the review step shows a wrong "server is rebuilt" warning (#850).
 - **See before installing**: `hs sys pkg show` reads what a package is and does from its newest signed release; the install uses exactly that release.
 - **A failed install** (#466) names the step (read, needs, ask, run, check) and the reason; Retry starts again at that step (a recipe phase runs again
-  as a whole); Remove what was created removes only what the run made, after you type the name of the app. UNVERIFIED.
+  as a whole); Remove what was created removes only what the run made, after you type the name of the app. UNVERIFIED: not tried on a real server.
 - **Several instances of one app** (#471) only where the package says `instances = "many"`: a second one takes a name like `<app>-<word>`; other
   packages refuse it in the plan.
 
