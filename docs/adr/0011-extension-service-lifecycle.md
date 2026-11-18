@@ -61,7 +61,7 @@ Issue: hobnix/server#238 (epic #197). Command extensions are ADR 0010 (#237), pe
     with one `warn` log line a minute (a stuck loop must not fill the log, whose retention is 5000 rows).
 13. **Reference and proof.** scripts/lib/ext_service.py is the supervisor of rules 4 to 9 and 11 (state changes, ready timeout, heartbeat,
     delivery with acks and the cursor file, shutdown, SIGTERM, SIGKILL) without systemd; tests/fixtures/ext-service/svc.py is a service
-    speaking the protocol; tests/ext-service.sh covers them. Rules 2, 3, 10 (the topic store) and 12 are specified, not built.
+    speaking the protocol; tests/ext-service.sh covers them. Rules 2 and 3 are built (configuration.nix `hs-ext-svc@`, `hs ext svc-run|status|start|stop`; the unit is only evaluated in CI, not tested on hardware yet) and the event `ext.service-failed` is emitted by the bridge after the fifth failure in 10 minutes. Rules 9 (delivery from the log), 10 (the topic store) and 12 are specified, not built.
 
 ## Consequences
 

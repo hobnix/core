@@ -442,6 +442,24 @@ in
     serviceConfig.Type = "oneshot";
     script = "bash ${./scripts}/ext.sh boot";
   };
+  # One supervised process per service extension (docs/adr/0011-extension-service-lifecycle.md rule 2): `hs ext svc-run <name>` is the bridge
+  # scripts/lib/ext_service.py. Restart is systemd's job: 5 starts in 10 minutes, then `failed`; the bridge emits ext.service-failed.
+  # Not started by wantedBy: `hs ext enable|start` and hs-ext-boot do that. TimeoutStopSec is above the bridge's stop (10 s + 2 s + kill).
+  systemd.services."hs-ext-svc@" = {
+    description = "Service extension %i";
+    unitConfig = {
+      StartLimitIntervalSec = 600;
+      StartLimitBurst = 5;
+    };
+    path = [ "/run/current-system/sw" ];
+    serviceConfig = {
+      ExecStart = "/run/current-system/sw/bin/bash ${./scripts}/ext.sh svc-run %i";
+      Restart = "on-failure";
+      RestartSec = 2;
+      TimeoutStopSec = 20;
+      KillMode = "mixed";
+    };
+  };
   systemd.services.hs-shutdown-notice = {
     description = "Push message: the server is going down";
     wantedBy = [ "multi-user.target" ];

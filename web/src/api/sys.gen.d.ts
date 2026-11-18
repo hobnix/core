@@ -980,6 +980,18 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "ext.status": {
+    /** the services of the extensions that are on, one per line: name, state (starting|running|degraded|stopping|stopped|failed), reason (or -), since (epoch seconds or -) */
+    words: ["ext", "status"];
+    path: "/ext/status";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, state: "starting" | "running" | "degraded" | "stopping" | "stopped" | "failed", reason: Field, since: Field])[];
+  };
   "fm.du.by_location": {
     /** file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later */
     words: ["fm", "du", "<location>"];
