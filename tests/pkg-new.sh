@@ -96,6 +96,32 @@ echo "-- the store fields of the extension"
 check_eq "the extension manifest has all four store fields" "4" "$(grep -cE '^(description|icon|category|app_version) = ' "$X/package.toml")"
 check_eq "the extension is at the current API level" "requires_core = \">=$(cat "$SCRIPTS/lib/api-level")\"" "$(grep '^requires_core' "$X/package.toml")"
 
+echo "-- the extension templates that speak the command protocol (--protocol, docs/extensions-sdk.md)"
+for lang in shell python; do
+  ext=$([ "$lang" = shell ] && echo sh || echo py)
+  PE=$WORK/pe-$lang; repo "$PE" extensions
+  check_out "hs pkg new --protocol $lang writes an extension" "Created list.$ext" $NEW demo-p$lang --template extension --protocol $lang --dir "$PE"
+  Q=$PE/extensions/demo-p$lang
+  check "$lang: package.toml says protocol = [1]" grep -q '^protocol = \[1\]' "$Q/package.toml"
+  check "$lang: the shell contract's list.sh is gone" test ! -e "$Q/list.sh" -o "$lang" = shell
+  check "$lang: the script is executable" test -x "$Q/list.$ext"
+  QT=$WORK/pt-$lang; mkdir -p "$QT"; ln -s "$PE/extensions" "$QT/capabilities"
+  check "$lang: pkg.py validate passes" env HS_PACKAGES_ROOT="$QT" $PKG validate
+  check "$lang: pkg.py repo-check passes" $PKG repo-check "$PE"
+  if command -v jq >/dev/null; then
+    mkdir -p "$WORK/st-$lang/demo-p$lang"; printf 'one	1
+two	
+' > "$WORK/st-$lang/demo-p$lang/entries"
+    out=$(HS_STATE_DIR="$WORK/st-$lang" HS_SCRIPTS=$SCRIPTS python3 -I "$SCRIPTS/lib/ext_proto.py" call --command list -- "$Q/list.$ext" 2>&1) || true
+    check_out "$lang: the generated command answers through the protocol runner" 'one","1"' printf '%s' "$out"
+    check_out "$lang: an empty value stays an empty cell" 'two",""' printf '%s' "$out"
+  else
+    echo "  skip  jq missing: the generated $lang command is not run"
+  fi
+done
+check_out "--protocol is refused for a recipe" "is not allowed" $NEW demo-pr --template recipe --protocol shell --dir "$R"
+check_out "--protocol go is refused" "is not allowed" $NEW demo-pg --template extension --protocol go --dir "$E"
+
 echo "-- refusals"
 check_out "an unknown category is refused" "category" $NEW demo-c1 --template recipe --dir "$R" --category nonsense
 check_out "an icon that is no Phosphor name is refused" "icon" $NEW demo-c2 --template recipe --dir "$R" --icon "<x>"
