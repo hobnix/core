@@ -4,6 +4,7 @@
   import { route, go } from '../route.svelte.js';
   import { lockedWhy } from '../roles.js';
   import { ui } from '../ui.svelte.js';
+  import { tip } from "../ui/tooltip.svelte.js";
   import { tree, poolItems, poolIcon } from '../nav.js';
   import { pools as poolStore } from '../pools.svelte.js';
   import { bytes } from '../format.js';
@@ -55,7 +56,7 @@
     {#each cards as c}
       {@const n = note(c)}
       <div class="card elev-sm item" class:dim={dim(c) || !!c.needs}>
-        <button class="head" title={c.needs || undefined} aria-label={c.needs ? `${c.label}. ${c.needs}` : undefined} onclick={() => c.path && go(c.path)}>
+        <button class="head" use:tip={c.needs || ""} aria-label={c.needs ? `${c.label}. ${c.needs}` : undefined} onclick={() => c.path && go(c.path)}>
           <i class="ph ph-{c.icon}"></i><span class="nm">{c.label}</span>
           {#if n}<span class="meta" class:warn={n.warn}>{shown(n)}</span>{/if}
           {#if dim(c) || c.needs}<i class="ph ph-lock-simple" style="color:var(--color-neutral-600)" aria-hidden="true"></i>{/if}
@@ -63,7 +64,7 @@
         {#each c.kids as k}
           {@const kn = note(k)}
           {@const kneeds = lockedWhy(ui.role, k.path)}
-          <button class="kid" class:grey={!!kneeds} title={kneeds || undefined} aria-label={kneeds ? `${k.label}. ${kneeds}` : undefined} onclick={() => go(k.path)}>
+          <button class="kid" class:grey={!!kneeds} use:tip={kneeds || ""} aria-label={kneeds ? `${k.label}. ${kneeds}` : undefined} onclick={() => go(k.path)}>
             <i class="ph ph-{k.icon}"></i><span>{k.label}</span>
             {#if kn}<span class="meta" class:warn={kn.warn}>{shown(kn)}</span>{/if}
           </button>
