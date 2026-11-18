@@ -987,8 +987,13 @@ for k, v in (("files_done", f[0]), ("files_total", f[1]), ("bytes_done", b[0]), 
 ' ; then return 0; fi
   fi
   if [ ! -f "$sf" ]; then
-    if systemctl is-active -q "$unit.service" 2>/dev/null || [ -f "$fm_dir/jobs/$unit.alias" ]; then
+    local act; act=$(systemctl show -p ActiveState --value "$unit.service" 2>/dev/null || true)
+    if [ "$act" = active ] || [ "$act" = activating ]; then
       printf 'status\tok\nfiles_done\t0\nfiles_total\t0\nbytes_done\t0\nbytes_total\t0\nspeed\t0\neta\t0\ncurrent\t\nphase\tstarting\nresult\trunning\nskipped\t0\nfailed\t0\n'
+      return 0
+    fi
+    if [ -f "$fm_dir/jobs/$unit.alias" ]; then   # stopped (or died) before its first state: it is not running
+      printf 'status\tok\nfiles_done\t0\nfiles_total\t0\nbytes_done\t0\nbytes_total\t0\nspeed\t0\neta\t0\ncurrent\t\nphase\tstopped before it started\nresult\tcancelled\nskipped\t0\nfailed\t0\n'
       return 0
     fi
     refuse "there is no file manager job '$unit'"
