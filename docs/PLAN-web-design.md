@@ -87,7 +87,7 @@ A place is a page the user comes back to, to see the state of one kind of object
 | What's new | content, not state | the Updates page |
 | Releases | a view of updates | a tab of Updates |
 | Docs | a link out of the interface | the top bar |
-| Nodes | the list of servers | the node switcher in the top bar, with the list as its page |
+| Nodes | the list of servers | the SERVERS header of the tree (the nodes are its roots) and the node switcher in the top bar; the list is the header's page |
 | Pool names `bulk`, `fast` | data (#456) | children come from the pool list |
 
 ### 2.2 The tree
@@ -96,7 +96,7 @@ Per node. Summary and eight groups instead of Summary and twelve entries, and th
 
 | Group | Entries | Replaces |
 |---|---|---|
-| Summary | (the page itself) | Summary |
+| (node root) | the node itself is Summary; a SERVERS header with a count above it lists the nodes | Summary, Nodes |
 | Storage | Pools, Disks, Shares, Files, Encryption, Vault | Storage minus Incident |
 | Instances | Instances, ISO images | Instances group, Docker list for instances |
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
@@ -112,7 +112,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 
 | Current entry | New place |
 |---|---|
-| Summary | Summary |
+| Summary | the node root: a click on the server opens Summary |
 | Storage > Pools, bulk, fast | Storage > Pools; the pools are rows of that list and each opens its page, not tree children |
 | Storage > Disks, Shares, Files, Encryption, Vault | unchanged |
 | Storage > Incident | action on Pools and Health |
@@ -129,7 +129,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 | Operations > What's new | Settings > Updates |
 | Protection > Backup, Expiry dates | Backup > same |
 | Docs | top bar |
-| Nodes | top bar node switcher |
+| Nodes | SERVERS header of the tree and the top bar node switcher |
 | Setup | banner on Summary |
 | Settings > General ... Advanced | unchanged |
 | Settings > Releases | Settings > Updates, tab |
@@ -220,7 +220,7 @@ Draft, not reviewed. Each behaviour is decided once, here, and carried by one co
 | 4.4 | Errors | Every error says what happened, the likely reason and one next step, with a stable code, a link to the guide section, and the English text for a code the web does not know. The same shape for a refused plan, a failed job and a page that cannot read. A page error keeps the old data visible with its age. | one error component (a `Banner` variant) and `PageState` | #488 |
 | 4.5 | Problems and notifications | Health problems can be acknowledged (quiet until the problem resolves and fails again, optionally for a time). An acknowledged problem is dimmed, is not in the red count and sends no push. A notification inbox lives in the top bar. | Feed template, bell in the top bar | #619 |
 | 4.6 | State in the address | The selected row (`?sel=`), the tab and the filters are in the address. Back closes the quick look, forward opens it again. A shared link opens the same view. | route helper next to `route.svelte.js` | #455 |
-| 4.7 | Keyboard and screen reader | Every action is reachable and startable by keyboard. Focus is visible. A dialog traps focus and returns it. A state is said in words, never only by a colour dot. Contrast holds in both themes. An automatic check is added to the browser stage of the test-lab (#487); today that stage only opens the pages. | every `ui` component; `StatusDot` takes a label | #487, #447 |
+| 4.7 | Keyboard and screen reader | Every action is reachable and startable by keyboard. Focus is visible. A dialog traps focus and returns it. A state is said in words and by shape (circle ok, diamond warning, triangle failing, ring info, hollow off), never only by a colour dot. Contrast holds in both themes. An automatic check is added to the browser stage of the test-lab (#487); today that stage only opens the pages. | every `ui` component; `StatusDot` takes a label | #487, #447 |
 | 4.8 | Phone | Up to 860 px: the tree is a slide-in drawer, optional columns are hidden, the quick look and plans are full screen, a wizard shows one question per screen. | the shell, `Table`, overlays | #427, web/design/HANDOFF.md |
 | 4.9 | Roles | An action the user may not start is shown, disabled, with the reason. The server enforces the role; the web only explains. A viewer sees every page without a plan. | `ui/Button` takes "not allowed" with a reason | #434 |
 | 4.10 | Trust | A package says "Official, signed" or "Community" on its card and its page, and "Tested on a real server" with a date, or "Not tested". The same words are used for extensions. | one chip in the Marketplace and app pages | #477 |
@@ -251,7 +251,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | Component | Today | Change | Needed by |
 |---|---|---|---|
 | `Button` | about 57 files | takes "not allowed" with a reason (4.9); icon variant with tooltip and screen-reader label (#446) | every template |
-| `StatusDot` | about 33 | takes a text label, so a state is never only a colour (4.7) | List, Object, Feed |
+| `StatusDot` | about 33 | takes a text label and has one shape per state: circle ok, diamond warning, triangle failing, ring info, hollow off (4.7) | List, Object, Feed |
 | `Chip` | about 17 | one of `Chip` and the `tag` class stays (#446); gets a kind for trust (4.10) and for the status in an Object header | List, Object, Marketplace |
 | `Banner` | about 31 | gets a coded error variant (4.4) | every template |
 | `Kv`, `EmptyState`, `Skeleton`, `Field`, `TextInput`, `Textarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `ChoiceList`, `Tooltip` | in use | none | Object, Settings, Flow |
@@ -259,7 +259,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | `Drawer` | 12 files | becomes the quick look overlay (3.3), built on `Dialog` | List |
 | `Split` | 9 pages and `GenBlock` | removed from the list pages after the quick look replaces it; `Files` and `GenBlock` keep their own layout | List |
 | `Wizard` | 2 pages | sits on a `Stepper` with progress (#448) | Flow |
-| `Table`, `UsageBar`, `Spark` (shell) | in use | `Table`: selected row in the address, row action menu; a card view of the same rows for the Marketplace (6.3) | List |
+| `Table`, `UsageBar`, `Spark` (shell) | in use | `UsageBar`: segmented cells that turn from green to amber to red with use (thresholds set once; today amber over 90 %); `Table`: selected row in the address, row action menu; a card view of the same rows for the Marketplace (6.3) | List |
 | `PageHeader` (shell) | in use | status chip beside the name, More menu for actions beyond two (3.1) | every template |
 | `PageFrame`, `PageState` (shell) | in use | none | every template |
 | `PlanDialog`, `CreateDialog` (shell) | in use | rebuilt on `Dialog` (#447) | every action |
@@ -289,7 +289,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 
 ### 5.3 Left out on purpose
 
-`GenBlock`, `GenericPage`, `Terminal`, `VmConsole`, `Halftone`, the file manager parts and `Search` have one user each or are tools. They stay where they are. A Spinner is the global `spin` class, not a component.
+`GenBlock`, `GenericPage`, `Terminal`, `VmConsole`, `Halftone`, the file manager parts and `Search` have one user each or are tools. The halftone dither that fades from a card's corner (the node card on Summary, kept from the current interface) stays a look of `Halftone` and a card variant, not a component of its own. They stay where they are. A Spinner is the global `spin` class, not a component.
 
 ### 5.4 Decisions
 
