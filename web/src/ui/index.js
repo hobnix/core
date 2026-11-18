@@ -30,6 +30,7 @@ export { default as DangerZone } from './DangerZone.svelte';   // marked section
 export { default as Progress } from './Progress.svelte';       // one bar: value/total, unknown total moves, tone, text beside it
 export { default as StepList } from './StepList.svelte';       // the steps of a job with a state word each; compact = the current step on one line
 export { default as Timeline } from './Timeline.svelte';       // Feed body: entries newest first by day, filters above, severity word, object link, acknowledge
+export { default as Stepper } from './Stepper.svelte';         // the steps of a flow with number or mark and a state word; sits under Wizard (steps prop)
 // elsewhere, kept at their old paths so pages keep working:
 //   shell/Table.svelte, shell/UsageBar.svelte, shell/Spark.svelte, shell/PlanDialog.svelte (opened with openPlan), forms/unlock/UnlockForm.svelte
 // new in shell/: Halftone, PageHeader, PageState (loading, empty, error with stale data), PageFrame (locked, off, unreachable: the shell does it)
