@@ -2,7 +2,7 @@ file	input	select	textarea	style	hex
 Login.svelte	6	0	0	1	0
 dashboard/Board.svelte	0	0	0	1	0
 dashboard/Kiosk.svelte	0	0	0	1	0
-files/FmJob.svelte	0	0	0	1	2
+files/FmJob.svelte	0	0	0	1	0
 files/FmKeys.svelte	0	0	0	1	0
 files/FmPane.svelte	1	0	0	1	2
 files/FmPicker.svelte	0	0	0	1	2
