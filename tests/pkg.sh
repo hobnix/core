@@ -154,7 +154,7 @@ PY
   else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate; true"; fi
 }
 appcase "the good fixture package passes" "" 'pass'
-check_eq "the API level is 9" "9" "$($PKG api)"
+check_eq "the API level is 10" "10" "$($PKG api)"
 appcase "an old manifest (requires >=1, no app fields) is unchanged" "" 't = "name = \"fixstore\"\nversion = \"1.0.0\"\nkind = \"recipe\"\ntitle = \"x\"\nrequires_core = \">=1\"\nscript = \"run.sh\"\n"'
 appcase "app fields on an older requires_core are named" 'need requires_core' 't = t.replace(">=9", ">=8")'
 appcase "an unknown category is named" 'category is not one of' 't = t.replace("tools", "stuff")'

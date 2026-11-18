@@ -75,6 +75,16 @@ elif cmd == "huge":
     sys.stdout.write("x" * (2 << 20))
     sys.stdout.flush()
     time.sleep(5)
+elif cmd == "rows":           # the protocol twin of tests/fixtures/ext-proto/rows.sh (dispatcher test)
+    say(type="progress", text="working")
+    say(type="result", ok=True, data=[["alpha", "b c", ""], ["x", 3, None]], text="two rows")
+elif cmd == "kv":
+    say(type="result", ok=True, data={"name": "demo", "args": req["argv"], "empty": ""})
+elif cmd == "spawn":          # a child in the same process group (argv[0] = file for its pid), then wait: a timeout must stop both
+    import subprocess
+    c = subprocess.Popen(["sleep", "60"])
+    open(req["argv"][0], "w").write(str(c.pid))
+    time.sleep(60)
 else:
     say(type="result", ok=False, error={"code": "not_found", "message": "no such command"})
     sys.exit(1)

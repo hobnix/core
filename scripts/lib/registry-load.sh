@@ -20,6 +20,7 @@
 #   - no rust:<subcommand> script (Rust implementations are core rows, docs/adr/0001-rust-strangler.md).
 #   - no `legacy:` flag (the old words of a moved command are rows of the core registry), no second row for the same words.
 #   - the names list, enable, disable, status, start, stop and svc-run are reserved (they are core commands of `hs ext`).
+#   - a package whose package.toml says `protocol = [1]` gets the flag `proto` on every row (docs/PLAN-extensions-access.md step 2).
 #   - a CAPABILITY package (package.toml kind = "capability", docs/PLAN-capabilities-repo.md, decision O4) that was installed from a DEFAULT
 #     repository may also own its name as the first word: user rows `<name> <command...>`, sys rows `sys <name> <command...>`. A row whose
 #     first word is also the first word of a core row is refused (no shadowing). Packages from an added repository keep `ext <name>` only.
@@ -113,9 +114,11 @@ ext_package_on() {
 # Reads one commands.tsv. Valid rows go to stdout, or with report=1 the refused ones as REFUSED TAB line TAB path TAB reason.
 _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   [ -f "$2/commands.tsv" ] || return 0
-  local own=0
+  local own=0 proto=0
   ! _ext_owns_name "$1" "$2" || own=1
-  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v own="$own" '
+  # a package that says `protocol = [1]` has its rows run through scripts/lib/ext_proto.py: the row gets the flag `proto` (hs.sh)
+  ! grep -qE '^protocol[[:space:]]*=' "$2/package.toml" 2>/dev/null || proto=1
+  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v own="$own" -v proto="$proto" '
     NR == FNR {   # the core registry: which first words it uses
       if ($0 ~ /^#/ || $0 ~ /^[ \t\r]*$/) next
       n = split($2, cw, " ")
@@ -148,6 +151,7 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       seen[path] = 1
       if (report == 1) next
       if (script ~ /^@\//) $3 = dir "/" substr(script, 3)
+      if (proto == 1) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
       print
     }' "$(ext_core_file)" "$2/commands.tsv"
 }

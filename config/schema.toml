@@ -262,6 +262,42 @@ webAllowedHosts = ""'''
 
 [[item]]
 kind = "option"
+key = "webViewerGroup"
+page = "access"
+type = "string"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '"hn-viewers"'
+pattern = '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'
+hint = "a group name of the domain"
+doc = '''
+# The domain group whose members sign in to the web interface as viewer (ADR 0012): they may look at everything that shows no secret. Domain Admins are admins.
+# `hs group roles` creates the groups. Default "hn-viewers". No rebuild.'''
+value = '''
+webViewerGroup = "hn-viewers"'''
+
+[[item]]
+kind = "option"
+key = "webAppManagerGroup"
+page = "access"
+type = "string"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '"hn-app-managers"'
+pattern = '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'
+hint = "a group name of the domain"
+doc = '''
+# The domain group whose members sign in to the web interface as app manager (ADR 0012): they may also change instances and apps. Domain Admins are admins.
+# `hs group roles` creates the groups. Default "hn-app-managers". No rebuild.'''
+value = '''
+webAppManagerGroup = "hn-app-managers"'''
+
+[[item]]
+kind = "option"
 key = "webAccent"
 type = "string"
 required = false

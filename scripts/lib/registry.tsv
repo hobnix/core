@@ -126,6 +126,7 @@ user	group list	users-show.sh	groups	groups of the domain with their members	Gru
 user	group <group> show	users-show.sh	groups {1}	one group with its members	eine Gruppe mit ihren Mitgliedern	topic:users,reads
 user	group add	user-guided.sh	group-add {rest}	create a group: hs group add [name]	Gruppe anlegen: hs group add [Name]	guided,topic:users,changes
 user	group <group> remove	manage-users.sh	--group-delete {1}	delete a group	Gruppe löschen	guided,topic:users,changes
+user	group roles	users-roles.sh	{rest}	create the groups of the web interface roles (hn-viewers, hn-app-managers) in the domain: plan first, then the typed domain name	die Gruppen der Rollen der Weboberfläche (hn-viewers, hn-app-managers) in der Domäne anlegen: erst der Plan, dann der getippte Domänenname	topic:users,changes,capability:ad
 user	backup status	backup.sh	status	what is in the backup, how big, how old	was im Backup ist, wie groß, wie alt	nohelp,topic:backup,reads,cheat:backup,capability:backup
 user	backup list	backup.sh	list	list the snapshots	die Schnappschüsse auflisten	nohelp,topic:backup,reads,capability:backup
 user	backup find	backup.sh	find	find a file in the snapshots: hs backup find <name>	eine Datei in den Schnappschüssen suchen: hs backup find <Name>	nohelp,topic:backup,reads,capability:backup

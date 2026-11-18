@@ -77,6 +77,64 @@ check_eq "a bad --lang is refused, not sent" 1 "$([ "$rc" -ne 0 ] && echo 1 || e
 rc=0; out=$($RUN call --command Bad -- true 2>&1) || rc=$?
 check_eq "a bad command word is refused" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
 
+echo "-- the dispatcher: hs ext / hs sys ext run a protocol row"
+export HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$WORK/state HS_CAPABILITIES_FILE=$WORK/caps HS_MACHINE_FILE=$WORK/machine.toml
+mkdir -p "$HS_STATE_DIR"; echo fixproto > "$HS_CAPABILITIES_FILE"; printf 'hostName = "t"
+' > "$HS_MACHINE_FILE"
+tab=$'	'; PK=$WORK/packages; mkdir -p "$PK/fixproto"
+cp "$EXT" "$PK/fixproto/ext.py"; cp "$ROOT/tests/fixtures/ext-proto/rows.sh" "$PK/fixproto/rows.sh"
+cat > "$PK/fixproto/capability.toml" <<'TOML'
+name = "fixproto"
+title = "Fixture"
+title_de = "Fixture"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
+TOML
+printf 'name = "fixproto"
+version = "1.0.0"
+kind = "capability"
+requires_core = ">=10"
+protocol = [1]
+' > "$PK/fixproto/package.toml"
+row() {   # row <kind> <words> <script> <fixed args> <flags>
+  printf '%s	%s	%s	%s	x	x	%s
+' "$@"
+}
+{
+  row user "ext fixproto rows" @/ext.py "-" "topic:system,reads"
+  row sys "sys ext fixproto rows" @/ext.py "-" "-"
+  row sys "sys ext fixproto kv <x>" @/ext.py "{1}" "-"
+  row sys "sys ext fixproto slow" @/ext.py "-" "timeout:1"
+  row sys "sys ext fixproto spawn" @/ext.py "$WORK/childpid" "timeout:1"
+  row sys "sys ext fixproto fail" @/ext.py "-" "-"
+} > "$PK/fixproto/commands.tsv"
+HS="bash $SCRIPTS/lib/hs.sh"
+export HS_PACKAGES_DIR=$PK
+check "a protocol package's rows carry the flag proto" bash -c ". $SCRIPTS/lib/registry-load.sh; registry_rows | grep -q \"^sys.sys ext fixproto rows.*proto\$\""
+$HS sys ext fixproto rows > "$WORK/proto.out" 2> "$WORK/proto.err"; rc=$?
+bash "$PK/fixproto/rows.sh" > "$WORK/twin.out" 2>&1
+check_eq "the protocol row exits 0" 0 "$rc"
+check "the protocol row prints the same bytes as its shell twin" cmp "$WORK/proto.out" "$WORK/twin.out"
+check_eq "a sys row prints no progress text" "" "$(cat "$WORK/proto.err")"
+check_eq "a user row prints the extension's text" "two rows" "$($HS ext fixproto rows 2>/dev/null)"
+check_eq "a user row shows progress on stderr" "working" "$($HS ext fixproto rows 2>&1 >/dev/null)"
+check_eq "an object is key TAB value, empty is -" "name${tab}demo
+args${tab}[\"one\"]
+empty${tab}-" "$($HS sys ext fixproto kv one)"
+rc=0; err=$($HS sys ext fixproto fail 2>&1 >/dev/null) || rc=$?
+check_eq "ok=false: exit 1 and the message on stderr" "1 it broke" "$rc $err"
+s=$SECONDS; rc=0; $HS sys ext fixproto slow >/dev/null 2>&1 || rc=$?
+check_eq "the row's timeout flag applies" 124 "$rc"
+[ $((SECONDS - s)) -le 6 ] && pass "the timeout is quick" || fail "the timeout took $((SECONDS - s)) s"
+rc=0; $HS sys ext fixproto spawn >/dev/null 2>&1 || rc=$?
+check_eq "a timeout exits 124" 124 "$rc"
+cp_pid=$(cat "$WORK/childpid" 2>/dev/null || echo 0)
+sleep 0.3
+if [ "$cp_pid" -gt 1 ] && ! kill -0 "$cp_pid" 2>/dev/null; then pass "a timeout stops the whole process group"; else fail "the child $cp_pid of the extension still runs"; [ "$cp_pid" -gt 1 ] && kill -9 "$cp_pid" 2>/dev/null; fi
+
 echo "-- version and schema"
 rc=0
 out=$(printf '{"v":2,"type":"request","id":"x","command":["echo"],"argv":[],"lang":"en","caller":"cli","timeout_ms":1000}\n' | python3 -I "$EXT") || rc=$?
