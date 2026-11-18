@@ -9,8 +9,14 @@ the core moved yet: the first optional parts are installed from that repository 
 test-lab server the stages install, smoke check, rollback, backup and restore, pool and the upgrade from v0.4.0 passed on the tip of `0.5`
 (2026-11-18). Stage 6 (browser) never ran there (no playwright on the server). The first run of stage 5 failed once because the server had no
 internet for a while (a name lookup of cache.nixos.org); it passed on the rerun without a change. Items marked **UNVERIFIED** were written and tested
-only with fakes, fixtures and unit tests. The web interface of this version was not looked at by the owner yet. Do not trust this release with the only
-copy of your data.
+only with fakes, fixtures and unit tests. The owner then updated the real server to v0.5.0-beta.2 and looked at the web interface (2026-11-18):
+every page opens and works, the pools still show the classic `bulk` and `fast`, Settings > Capabilities lists the built-in parts, and the language
+switch and forms work. No capability package exists in the repository yet, so nothing of the package machinery could be tried on that server
+(`hs pkg list --kind capability` says "No packages"). Do not trust this release with the only copy of your data.
+
+**Found on the real server:** updating to v0.5.0-beta.1 stopped with "games is neither a part of the core nor an installed package. Nothing was built".
+The server still had the removed extension `games` switched on; the new rebuild pre-check treated it as a blocker although the build ignores such a
+name (hobnix/server#829). Beta 2 only warns about it and goes on; `hs ext disable <name>` now also removes such a leftover name.
 
 ## What 0.5.0 is
 Optional parts (a third package kind, `capability`) that live in hobnix/capabilities, are fetched with `hs pkg`, copied into the checkout and
@@ -55,6 +61,6 @@ machine.toml has a `pools` line. The DCO check exempts the `agent-pr` label.
 - Live state on by default (see the 0.3 notes).
 
 ## Not verified
-- Installing, rolling back and removing a capability on a real server; the wizard step; the settings pages in a browser.
+- Installing, rolling back and removing a capability on a real server (none exists yet); the wizard step; the settings pages of an installed package.
 - The headless browser stage (6) never ran.
 - The unlock page of this version.
