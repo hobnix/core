@@ -14,6 +14,7 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import Search from './Search.svelte';
   import Fresh from './Fresh.svelte';
+  import Inbox from './Inbox.svelte';
 
   // Update, Reboot and Shutdown open the plan dialog; Reboot and Shutdown are red there (the word is typed). They act on this server only.
   const here = $derived(node === host);
@@ -62,6 +63,7 @@
     <i class="ph ph-{locked ? 'lock-simple' : 'lock-simple-open'}"></i><span class="lbl">{locked ? 'Storage locked' : 'Storage open'}</span>
   </span>
   <span class="vr hide-s"></span>
+  <Inbox />
   <button class="ib" aria-label={theme.dark ? 'Switch to the light look' : 'Switch to the dark look'} use:tip={{ text: theme.dark ? 'Light look' : 'Dark look', side: 'bottom' }} onclick={toggleTheme}>
     <i class="ph ph-{theme.dark ? 'sun' : 'moon'}" style="font-size:16px"></i>
   </button>

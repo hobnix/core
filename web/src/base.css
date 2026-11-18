@@ -198,3 +198,19 @@ input[type='checkbox']:disabled, input[type='radio']:where(:not(.radio input, .s
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; }
 
 .lighten { mix-blend-mode: lighten; background-color: transparent; }
+
+/* Inbox (shell/Inbox.svelte): the list under the bell in the top bar */
+.inbox-list { max-height: min(60vh, 420px); overflow-y: auto; display: flex; flex-direction: column; }
+.inbox-list a { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; text-decoration: none; color: var(--fg); }
+.inbox-list a:hover { background: var(--panel-2); }
+.inbox-list a.acked { opacity: 0.55; }
+.inbox-list a.unread { background: color-mix(in oklch, var(--accent) 8%, transparent); }
+.inbox-list .tx { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.inbox-list .sub { font-size: 11.5px; color: var(--fg-3); }
+.inbox-empty { padding: 14px 10px; color: var(--fg-3); }
+.inbox { position: relative; }
+.inbox-bell { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--fg-2); padding: 0; }
+.inbox-bell:hover { background: var(--panel-2); border-color: var(--line); color: var(--fg); }
+.inbox-count { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; font: 600 10px var(--mono); background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
+.inbox-pop { position: absolute; top: calc(100% + 6px); right: 0; width: min(360px, 90vw); z-index: 40; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: var(--shadow); padding: 6px; }
+.inbox-head { padding: 8px 10px 6px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }

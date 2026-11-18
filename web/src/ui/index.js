@@ -31,3 +31,4 @@ export { default as DangerZone } from './DangerZone.svelte';   // marked section
 export { default as Tooltip } from './Tooltip.svelte';   // mounted once in App.svelte; a control asks for it: <button use:tip={'text'}>
 export { tip } from './tooltip.svelte.js';
 export { backdropClose } from './backdrop.js';           // read-only dialogs only: <div class="dialog-backdrop" use:backdropClose={close}>
+export { default as ErrorNote } from './ErrorNote.svelte';       // coded error: code, what, why, one next step, guide link (#488)
