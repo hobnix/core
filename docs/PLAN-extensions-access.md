@@ -10,7 +10,7 @@ pull request, in lanes that can run in parallel. Steps 15 to 17 and 20 change wh
 
 See also: [PLAN-extensions.md](PLAN-extensions.md) (package folder, web declaration, boot hook), [PLAN-packages.md](PLAN-packages.md),
 [PLAN-selfservice.md](PLAN-selfservice.md) (the first extension with its own service and its own sign-in), [PLAN-web-backend.md](PLAN-web-backend.md),
-[PLAN-web-auth.md](PLAN-web-auth.md) (lockout and sessions, built in 0.2), [PLAN-events.md](PLAN-events.md), [PLAN-storage-nas.md](PLAN-storage-nas.md)
+[PLAN-web-auth.md](PLAN-web-auth.md) (lockout and sessions, built in 0.2), [PLAN-events.md](PLAN-events.md), PLAN-web-design.md (the web design record, section 4.9, 6 and 7; the file arrives in 0.8 when `develop` is merged), [PLAN-storage-nas.md](PLAN-storage-nas.md)
 (the style of this page), ADR 0004 (job record), ADR 0005 (events), ADR 0006 (API in front of the CLI), ADR 0008 (packages and trust), ADR 0010 (command
 protocol), ADR 0011 (service lifecycle), ADR 0012 (roles and tokens), ADR 0014 (permissions), ADR 0015 (Wasm: deferred), ADR 0022 (first-run console
 token), ADR 0023 (nested test harness).
@@ -185,6 +185,16 @@ lane E steps rebase after each of them; 1, 4, 9 and 18 touch `scripts/pkg.py` or
 `sys` rows, so openapi.json and sys.gen.d.ts are **regenerated on every rebase, never merged by hand**; 19 changes `config/schema.toml` (regenerate
 after each rebase). 8 and 13 are PRs in other repositories (recipes, extensions): they merge after the core step they depend on, because CI runs the
 recipes' tests against the core. Step 22 comes last.
+
+## Design alignment
+
+Checked against docs/PLAN-web-design.md (sections 4.9, 6 and 7) on 2026-11-18. The design record is a draft; where it and this plan meet, this is how they fit. Nothing here was run; Not tested on hardware yet.
+
+1. **Roles in the web follow behaviour 4.9.** An action the user may not start is shown disabled with the reason; the server still enforces the role (step 15), the web only explains. A viewer sees every page without a plan. The merged step 16 hides what a role cannot use, so a new step **16b** changes it: disabled with a reason instead of hidden, and no page is dropped for a viewer.
+2. **Package roles.** This plan puts `role` on each `[[web.reads]]` and `[[web.changes]]` entry (D13, step 18). The design (7.3, issue #790, milestone 0.12) puts `role` on the page and on each `[[web.page.actions]]`, default admin. Rule: the effective role of an action is the higher of the action's or the page's role and the role of the read or change it calls, so the new keys can only raise it. Step 18 stays as planned.
+3. **Placement.** The Tokens page (step 17), and the two-factor and SSO settings (steps 19 and 20), live under Settings > Users and access (6.1; the design marks these pages as inferred). The login page is outside the page templates (G5) and uses the shared `Field` and `TextInput` components. A package or service page lands in Apps when it names no group (7.4). One renderer, `GenericPage`, serves #424, #478 and #195 (G7).
+4. **#776** (thin slice of a disk page) waits for 0.4 and 0.8 to leave the Disks page free. 0.8 does not touch the Disks page.
+5. **Trust labels** (Official, Community, tested date) are derived by the core from the repository and the index, not a manifest key (7.3). No 0.8 work.
 
 ## What only runs on hardware (or in the nested VM)
 
