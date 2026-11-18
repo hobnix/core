@@ -66,6 +66,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_terminal as wt      # the in-browser terminal (WebSocket, tickets, pty shell)
 import web_vmconsole as vc    # the graphical VM console (Incus VGA console relayed over a WebSocket, ADR 0021)
 import live_state as ls        # live state: the RESP client for Redis (mode redis)
+import token_store as tk      # API tokens: the store, the per token rate limit, the hourly owner re-check (ADR 0012, step 17)
 import first_run as fr         # first-run flag and the one-time console token (docs/adr/0022-first-run-console-token.md)
 from hs_ext import (env, runtime_setting, capabilities, applied_recipes, ext_roots, ext_sys_rows, ext_packages, ext_manifest,  # noqa: F401,E402
                     ext_read, ext_load_web, EXT_NAME, EXT_KINDS, EXT_BLOCKS)
@@ -499,6 +500,8 @@ class RoleTable:
         return self.match(words)[0]
 
 
+TOKEN_DENIED = frozenset(("token", "users", "secrets", "unlock", "vault", "terminal", "vmconsole"))      # words a bearer token never gets, whatever its role
+
 _actor = threading.local()      # who a command runs for: _run hands it to the command as HS_ACTOR (the audit line, scripts/lib/audit.sh)
 
 
@@ -644,6 +647,10 @@ class Auth:
             return False
         rc, out = _run([self.cfg.wbinfo, "-r", "%s\\%s" % (wg, user)])
         return rc == 0 and parts[2] in out.split()
+
+    def domain_reachable(self):
+        """True when winbind can reach a domain controller (`wbinfo -t`). A token owner who is in no group while this is False is not gone, the answer is only missing."""
+        return not self.storage_locked() and _run([self.cfg.wbinfo, "-t"])[0] == 0
 
     def domain_is_admin(self, user):
         return self.domain_in_group(user, self.cfg.admin_group)
@@ -1069,6 +1076,7 @@ READS = {
     ("jobs", "tail"): {"kind": "tsv", "ttl": 0, "args": [UNIT], "query": {"from": (r"^[0-9]{1,7}$", "")}},
     ("system", "updates"): {"kind": "tsv", "ttl": 30, "topic": "system-updates"},
     ("release", "show"): {"kind": "tsv", "ttl": 30},        # the update channel and what the next update does (release-channel.sh)
+    ("token", "list"): {"kind": "tsv", "ttl": 5, "query": {"owner": (r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$", "--owner")}},      # a non-admin gets their own (server side, _sys)
     ("ssh-key", "list"): {"kind": "tsv", "ttl": 30, "topic": "ssh-keys"},
     ("node", "list"): {"kind": "tsv", "ttl": 15, "topic": "node-list"},
     ("node", "show"): {"kind": "tsv", "ttl": 15, "args": [NAME]},
@@ -1322,6 +1330,9 @@ CHANGES = {
                      "--newname": (r"^[^\x00-\x1f/]{1,255}$", False), "--conflicts": (None, False)},
             "selection": True}],
     # one public key line (type, base64 body, optional comment; no newline: fullmatch + the character classes) / the id column of `ssh-key list`
+    # API tokens (token-change.sh): --by (who asks) and --cap (their role) are added by the server, never by the client; the token comes back once as `secret token`
+    "token": [{"fixed": [r"^create$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"], "opts": {"--role": (r"^(viewer|app-manager|admin)$", False), "--days": (r"^[0-9]{1,3}$", False)}},
+              [r"^revoke$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"]],
     "ssh-key": [[r"^add$", r"(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) "
                            r"[A-Za-z0-9+/]{16,700}={0,3}( [A-Za-z0-9@._:+=, -]{1,100})?"],
                 [r"^remove$", r"[A-Za-z0-9][A-Za-z0-9@._:+/= -]{0,100}"]],
@@ -1747,7 +1758,7 @@ def parse_change(out, rc):
             d["job"] = v           # the job record of an interactive recipe run (ADR 0018): the page follows it
         elif k == "secret":
             name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer): login, domain, host, password
-            if name in ("login", "domain", "host", "password"):
+            if name in ("login", "domain", "host", "password", "token"):
                 d.setdefault("secret", {})[name] = val
         elif k in ("file", "color", "seed", "size"):
             d[k] = v           # what a poster drawing reports
@@ -2638,6 +2649,20 @@ class ChangesSeen:
 
 
 class App:
+    def _token_owner(self, owner, realm):
+        """The role of the owner of a token now (tk.TokenAuth reads it at most once an hour): ("role", r), ("gone", None) or ("down", None).
+        A domain owner is a name WORKGROUP_user (the audit form); the groups are asked as the plain user."""
+        if realm == "local":
+            return ("role", "admin") if owner == self.cfg.local_user else ("gone", None)
+        wg = self.cfg.workgroup
+        user = owner[len(wg) + 1:] if wg and owner.startswith(wg + "_") else owner
+        if not wg or not USER_RE.fullmatch(user):
+            return ("gone", None)
+        role = self.auth.domain_role(user)
+        if role:
+            return ("role", role)
+        return ("gone", None) if self.auth.domain_reachable() else ("down", None)
+
     def __init__(self, cfg=None, auth=None):
         self.cfg = cfg or Config()
         self.auth = auth or Auth(self.cfg)
@@ -2646,6 +2671,7 @@ class App:
         self.sessions.fp_of = lambda user, fresh=False: getattr(self.auth, "local_fingerprint", lambda u, fresh=False: "")(user, fresh=fresh)
         self.plans = Plans(self.cfg.plan_ttl)
         self.roles = RoleTable(self.cfg.roles_file)
+        self.tokens = tk.TokenAuth(tk.Store(), self._token_owner)
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
@@ -2704,7 +2730,40 @@ def make_handler(app):
             return ""
 
         def _session(self):
+            """The signed-in person: a bearer token (verified once per request by _bearer_refused, never a cookie) or the session of the cookie."""
+            if self.headers.get("Authorization", "")[:7].lower() == "bearer ":
+                bc = getattr(self, "_bc", None)
+                return bc[1] if bc and bc[0] is self.headers else None
             return app.sessions.get(self._token(), app.auth.storage_locked())
+
+        def _csrf_ok(self, s):
+            """A cookie session needs its CSRF token; a bearer token has no cookie, so there is nothing to forge (ADR 0012 decision 4)."""
+            return bool(s.get("via")) or secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"])
+
+        def _bearer_refused(self):
+            """`Authorization: Bearer <token>` (ADR 0012 decisions 4 to 6, D4): answers the request itself and returns True when the token is refused
+            (401, or 429 while the address or the token id is locked). Sets self._bc = (headers, session) for _session when it is good. The address is
+            counted like a wrong password (the same Throttle, key tok:<address>); the token id by the limiter of the token store."""
+            h = self.headers.get("Authorization", "")
+            if h[:7].lower() != "bearer ":
+                return False
+            ip = self._client()
+            wait = app.throttle.wait("tok:" + ip)
+            if wait:
+                self._json(429, {"error": "Too many tries. Wait %d seconds." % wait, "retry_after": wait}, (("Retry-After", str(wait)),))
+                return True
+            res = app.tokens.check(h)
+            if res[0] == "ok":
+                i = res[1]
+                self._bc = (self.headers, {"user": i["owner"], "realm": i["realm"], "role": i["role"], "csrf": "", "via": i["id"], "created": 0, "seen": 0})
+                return False
+            _, code, text, tid, count = res
+            if count:
+                app.throttle.failed("tok:" + ip)
+            print("web token refused: %s from %s" % (tid or "-", ip), flush=True)      # the id, never the token
+            extra = (("Retry-After", "300"),) if code == 429 else ()
+            self._json(code, {"error": text}, extra + (("WWW-Authenticate", "Bearer"),))
+            return True
 
         @staticmethod
         def _role(s):
@@ -2717,6 +2776,10 @@ def make_handler(app):
             """The one role check (ADR 0012 decision 3): after the session is known, before the command runs. `words` are the words after `hs sys`.
             A refused call is a 403 that names both roles, runs nothing and writes no audit line (the web log has it)."""
             need, have = app.roles.need(words), self._role(s)
+            if s.get("via") and words[:1] and words[0] in TOKEN_DENIED:      # a token never manages tokens, people, secrets or the unlock, whatever its role
+                print("web refused: token %s may not %s" % (s["via"], " ".join(words[:2])), flush=True)
+                self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
+                return False
             if role_ok(have, need):
                 return True
             print("web refused: %s (%s) may not %s, needs %s" % (s["user"], have, " ".join(words[:3]), need), flush=True)
@@ -2793,7 +2856,7 @@ def make_handler(app):
             self.do_GET()
 
         def do_GET(self):
-            if self._host_refused():
+            if self._host_refused() or self._bearer_refused():
                 return
             path = urllib.parse.urlsplit(self.path).path
             if path == "/api/hello":
@@ -2908,7 +2971,10 @@ def make_handler(app):
             if not s:
                 return self._json(401, {"error": "not signed in"})
             fresh = bool(query.pop("fresh", None))      # ?fresh=1: the refresh button of a page (not part of the allowlisted query)
-            hit = app.reads.resolve([urllib.parse.unquote(x) for x in path[len("/api/sys/"):].split("/") if x], query)
+            words = [urllib.parse.unquote(x) for x in path[len("/api/sys/"):].split("/") if x]
+            if words[:2] == ["token", "list"] and self._role(s) != "admin":
+                query["owner"] = [actor_name(s["user"])]      # whose tokens exist is for admins; everybody else sees their own (the cache key holds the owner)
+            hit = app.reads.resolve(words, query)
             if hit is None:
                 return self._json(404, {"error": "unknown"})
             if not self._allowed(s, hit[1]):
@@ -3115,11 +3181,18 @@ def make_handler(app):
                 self._read(4096)
                 self.close_connection = True
                 return
+            if self._bearer_refused():
+                self._read(4096)
+                self.close_connection = True
+                return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
             if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
-            if not self._same_origin():
+            bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
+            if bearer and path not in ("/api/plan", "/api/start"):
+                return self._json(403, {"error": "A token can only plan and start changes."})      # no sign-in, sessions, unlock, terminal or live calls
+            if not bearer and not self._same_origin():      # a bearer token is no cookie: there is no browser to trick (ADR 0012 decision 4)
                 return self._json(403, {"error": "origin"})
             # One gate for every changing request: a session and its CSRF token, checked before any handler runs, so a handler added later cannot
             # forget it. Only the requests that start a session (login, setup) and logout (which is harmless without a session) are exempt.
@@ -3127,7 +3200,7 @@ def make_handler(app):
                 gate = self._session()
                 if not gate:
                     return self._json(401, {"error": "not signed in"})
-                if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), gate["csrf"]):
+                if not self._csrf_ok(gate):
                     return self._json(403, {"error": "csrf"})
             body = self._json_body(raw)
             if body is None:
@@ -3150,7 +3223,7 @@ def make_handler(app):
                 return self._change(path[len("/api/"):], body)
             if path == "/api/logout":
                 s = self._session()
-                if s and not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+                if s and not self._csrf_ok(s):
                     return self._json(403, {"error": "csrf"})
                 app.sessions.drop(self._token())
                 return self._json(200, {"ok": True}, (self._cookie("", 0),))
@@ -3181,7 +3254,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             rev = body.get("rev")
             if not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
@@ -3194,7 +3267,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             if cfg.live != "redis":
                 return self._json(409, {"error": "live state is off"})
@@ -3209,7 +3282,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             ch = validate_change(body)
             if ch is None:
@@ -3219,7 +3292,7 @@ def make_handler(app):
                 return self._json(400, {"error": "That change is not allowed."})
             if not self._allowed(s, area.split("/") + [verb] + args):      # "ext/games" = the words `ext games` (an extension package)
                 return
-            _actor.name = actor_name(s["user"])      # every command below runs for this person (HS_ACTOR, the audit line)
+            _actor.name = actor_name("%s via token %s" % (s["user"], s["via"]) if s.get("via") else s["user"])      # every command below runs for this person (HS_ACTOR, the audit line)
             try:
                 return self._change_run(verb, s, area, args, confirm, stdin)
             finally:
@@ -3232,6 +3305,8 @@ def make_handler(app):
             if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args) or (area == "apps" and verb == "start"):
                 # ADR 0018 rule 11: who answers / who started the run, and with which role (ADR 0012)
                 cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), "--role", self._role(s)]
+            if area == "token":
+                cmd += ["--by", actor_name(s["user"]), "--cap", self._role(s)]      # the owner of a new token and the most it may have; never from the client
             if area == "fm" and verb == "start":
                 cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"]))]       # who, for the audit log of the file manager
             if verb == "start":
@@ -3268,7 +3343,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             if not self._allowed(s, ["terminal"]):      # a shell on the host: no row, so admin only
                 return
@@ -3289,7 +3364,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             if not self._allowed(s, ["vmconsole"]):      # the console of an instance: admin only (ADR 0012, decided 2026-11-10)
                 return
@@ -3406,7 +3481,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             if not self._allowed(s, ["unlock", "stdin"]):
                 return
