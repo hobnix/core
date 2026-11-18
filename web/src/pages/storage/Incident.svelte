@@ -5,7 +5,7 @@
   import PageHeader from '../../shell/PageHeader.svelte';
   import PageState from '../../shell/PageState.svelte';
   import Table from '../../shell/Table.svelte';
-  import { StatusDot, Banner, Chip } from '../../ui/index.js';
+  import { StatusDot, Banner, Chip, Stepper } from '../../ui/index.js';
   import Button from '../../ui/Button.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { go } from '../../route.svelte.js';
@@ -33,7 +33,6 @@
   const writers = $derived(apps.filter((a) => a.writes && a.state === 'RUNNING'));
   const running = $derived(progress.length > 0);
   const snap = $derived(/^(data|parity)-\d+$/.test(target?.member ?? ''));
-  const dot = (s) => (s === 'done' ? 'ok' : s === 'now' ? 'warn' : 'off');
 
   const shareCols = [{ key: 'name', label: 'Share' }, { key: 'path', label: 'Path', optional: true }, { key: 'impact', label: 'State' }];
   const appCols = [{ key: 'name', label: 'App' }, { key: 'state', label: 'State' }, { key: 'via', label: 'Uses' }];
@@ -54,11 +53,7 @@
 
   <div class="card sect">
     <div class="sh"><b>Steps</b>{#if running}<Chip>replacement running</Chip>{/if}</div>
-    <ol class="steps">
-      {#each steps as s (s.n)}
-        <li><StatusDot state={dot(s.state)} label={s.title + (s.state === 'optional' ? ' (optional)' : '')} /></li>
-      {/each}
-    </ol>
+    <Stepper vertical steps={steps.map((s) => ({ label: s.title, state: s.state === 'done' ? 'done' : s.state === 'now' ? 'current' : 'todo', note: s.state === 'optional' ? 'optional' : '' }))} />
     {#if next}<p class="next"><b>Next safe step:</b> {next[2]}</p>{/if}
     <div class="acts">
       <Button variant="primary" icon="swap" disabled={locked || !target || running || !free.length} busy={jobRunning('pool', [target?.pool ?? '', 'replace'])}
@@ -126,7 +121,6 @@
   .card { margin-bottom: 14px; }
   .sect { padding: 12px 14px; gap: 8px; }
   .sh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .next { margin: 4px 0 0; }
   .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .mute { color: var(--fg-3); font-size: 12px; margin: 0; }

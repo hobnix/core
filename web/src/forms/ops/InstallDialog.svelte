@@ -6,6 +6,7 @@
   // Text and choice answers go as --set, the one secret as a line on standard input (never an argument, never shown). Closing keeps the job running.
   import { onMount } from 'svelte';
   import Button from '../../ui/Button.svelte';
+  import Stepper from '../../ui/Stepper.svelte';
   import Banner from '../../ui/Banner.svelte';
   import Field from '../../ui/Field.svelte';
   import TextInput from '../../ui/TextInput.svelte';
@@ -126,7 +127,6 @@
   const result = $derived(rec?.result ?? {});
   const url = $derived(openUrl(result.open));
   const failedStep = $derived(steps.find((s) => s.state === 'failed'));
-  const icon = { done: 'check-circle', current: 'circle-notch spin', failed: 'x-circle', pending: 'circle' };
 
   async function send() {
     if (!q) return;
@@ -240,11 +240,7 @@
         {/if}
 
         {#if rec && rs !== 'result'}
-          <ol class="stepper">
-            {#each steps as s (s.name)}
-              <li class={s.state}><i class="ph ph-{icon[s.state]}" aria-hidden="true"></i> {s.text}{#if s.phase} <span class="hint">· {s.phase}</span>{/if}</li>
-            {/each}
-          </ol>
+          <Stepper vertical steps={steps.map((s) => ({ label: s.text, state: s.state === 'pending' ? 'todo' : s.state, note: s.phase }))} />
         {/if}
 
         {#if rs === 'question' && q}
@@ -297,9 +293,4 @@
   .rev { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
   .rev dt { color: var(--fg-3); }
   .rev dd { margin: 0; overflow-wrap: anywhere; }
-  .stepper { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-  .stepper li { display: flex; align-items: center; gap: 8px; color: var(--fg-3); }
-  .stepper li.done { color: var(--ok); }
-  .stepper li.current { color: var(--fg); font-weight: 600; }
-  .stepper li.failed { color: var(--bad); font-weight: 600; }
 </style>

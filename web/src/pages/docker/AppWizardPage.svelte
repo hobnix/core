@@ -14,6 +14,7 @@
   import { emptyDraft, suggestName, problems, generate, notes, RESTART, setHandoff } from '../../editor/wizard.js';
 
   const STEPS = ['image', 'ports', 'storage', 'env', 'review'];
+  const NAMES = [tr('Image'), tr('Ports'), tr('Folders'), tr('Settings'), tr('Review')];
   const sharesPoll = poll('/api/sys/shares/list', 30000);
   const storPoll = poll('/api/sys/ct/storage/docker', 15000);
   const remotePoll = poll('/api/sys/remote/list', 30000);
@@ -56,7 +57,7 @@
 <PageHeader title="New app" crumb="Docker" sub="Answer a few questions; the editor opens with the compose file and the .env text." />
 
 <div class="wrap">
-  <Wizard index={at} total={STEPS.length} question={tr(QUESTION[step])} help={tr(HELP[step])} primary={step === 'review' ? tr('Open in editor') : tr('Next')} canNext={!errs.length} onnext={next} onback={() => { at = Math.max(0, at - 1); }}>
+  <Wizard index={at} total={STEPS.length} steps={NAMES} onselect={(i) => { at = i; }} question={tr(QUESTION[step])} help={tr(HELP[step])} primary={step === 'review' ? tr('Open in editor') : tr('Next')} canNext={!errs.length} onnext={next} onback={() => { at = Math.max(0, at - 1); }}>
     {#if step === 'image'}
       <label class="f">{tr('Image')}
         <input class="input" bind:value={d.image} oninput={onimage} placeholder="nginx:alpine" autocapitalize="off" autocorrect="off" spellcheck="false" />

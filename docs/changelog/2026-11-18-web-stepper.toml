@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "The app wizard, the install dialog and the storage incident page show their steps"
+body  = """The steps of a flow are listed with a number or a mark and a word for the state, so you see where you are and what is left. In the app wizard a finished step can be opened again."""
