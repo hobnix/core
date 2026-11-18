@@ -35,7 +35,7 @@
 
 {#if refused}
   <div class="card"><EmptyState tone="info" icon="prohibit" title="Not for your role"
-    text={refusal(ui.role, need) + ' Ask an administrator if you need this page.'}>
+    text={refusal(ui.role, need) + ` Only the ${need} role may open this page. Ask an administrator if you need it.`}>
     {#snippet action()}<Button tooltip={'Back to the summary'} onclick={() => go('/')}><i class="ph ph-house"></i>Summary</Button>{/snippet}
   </EmptyState></div>
 {:else if off}

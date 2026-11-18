@@ -8,6 +8,7 @@
   import { prefetchRoute } from '../prefetch.js';
   import { visible } from '../nav.js';
   import { ui } from '../ui.svelte.js';
+  import { lockedWhy } from '../roles.js';
 
   let { item, node, local = true, depth = 0, locked = false, meta = {} } = $props();
 
@@ -16,6 +17,8 @@
   const hasKids = $derived(kids.length > 0);
   const here = $derived(route.node === node);
   const selected = $derived(!!item.path && here && (route.path === item.path || (item.prefix && route.path.startsWith(item.path + '/'))));
+  // a page above the session's role is greyed with a lock and the reason; it stays a link (it opens "Not for your role") and is never prefetched
+  const needs = $derived(local && item.path ? lockedWhy(ui.role, item.path) : '');
   const lockDim = $derived(local && locked && !!item.storage);
   const m = $derived(item.path && !lockDim && local ? meta[item.path] : (item.path && !local ? meta[`${node}:${item.path}`] : null));
   // a row can also be dimmed by its note (m.dim): its page would only fail (the children of Docker while the share apps is not mounted)
@@ -34,7 +37,7 @@
 
 <TreeRow {depth} icon={item.icon} label={item.label} href={addr} active={selected} {dim} gap={!!item.gap}
          caret={hasKids ? (open ? 'open' : 'closed') : null} ontoggle={() => (open = !open)} onclick={click}
-         onhover={() => local && prefetchRoute(item.path)}
+         onhover={() => local && !needs && prefetchRoute(item.path)} {needs}
          lock={lockDim} count={m?.text ?? ''} warn={!!m?.warn} dot={m?.dot ? { state: m.dot, title: m.title || m.dot } : null} />
 {#if hasKids && open}
   {#each kids as c (c.label + (c.path ?? ''))}

@@ -9,27 +9,17 @@ const rank = (r) => ROLES.indexOf(r);
 // true when `have` may do what `need` asks; an unknown role on either side is refused (the server's role_ok)
 export const roleOk = (have, need) => rank(have) >= 0 && rank(need) >= 0 && rank(have) >= rank(need);
 
-// The pages a role may open (design behaviour 4.9, docs/PLAN-web-design.md): every page is open to every role, a viewer sees it without plans and with its
-// action buttons drawn disabled (ui/Button `need`). The one exception is a page whose whole content is admin secrets, which a viewer should not even see
-// listed: the Vault and the user / token / identity pages. Those need admin, are left out of the tree, and say "Not for your role" when opened by address.
-const ADMIN_ONLY = ['/identity', '/storage/vault'];
+// The page table (design behaviour 4.9, docs/PLAN-web-design.md): EVERY page is listed for EVERY role, nothing is hidden. A page above the role is drawn
+// greyed with a lock and the reason (`lockedWhy`), stays clickable, and opens "Not for your role" without reading anything. The pages that need admin are
+// the ones whose whole content is admin secrets: the Vault and the user / token / identity pages. The server decides; this only explains.
+const ADMIN_PAGES = ['/identity', '/storage/vault'];
 export function pageRole(path) {
-  return ADMIN_ONLY.some((p) => path === p || path.startsWith(p + '/')) ? 'admin' : 'viewer';
+  return ADMIN_PAGES.some((p) => path === p || path.startsWith(p + '/')) ? 'admin' : 'viewer';
 }
 export const canSee = (role, path) => roleOk(role, pageRole(path));
 
-// the tree without the pages a role may not open; a group whose pages are all gone goes too (a group with its own path stays while it is allowed)
-export function forRole(items, role) {
-  const out = [];
-  for (const it of items ?? []) {
-    const own = it.path ? canSee(role, it.path) : true;
-    const kids = it.children ? forRole(it.children, role) : undefined;
-    if (it.path && !own && !kids?.length) continue;
-    if (!it.path && it.children && !kids.length) continue;
-    out.push(kids ? { ...it, children: kids } : it);
-  }
-  return out;
-}
+// the reason a page is greyed for `role` ('' when it is open to it): the tooltip and the accessible name of the row
+export const lockedWhy = (role, path) => (canSee(role, path) ? '' : `Needs the ${pageRole(path)} role`);
 
 // the least role of a change by its area (the first word of the `hs sys` row): the app rows are open to an app manager, everything else is admin
 const APP_AREAS = new Set(['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'jobs']);
