@@ -5,7 +5,7 @@
   import PageHeader from '../../shell/PageHeader.svelte';
   import PageState from '../../shell/PageState.svelte';
   import Table from '../../shell/Table.svelte';
-  import { StatusDot, Banner, Chip, Stepper } from '../../ui/index.js';
+  import { StatusDot, Banner, Chip, Stepper, Card, Row, Stack, Muted, Progress } from '../../ui/index.js';
   import Button from '../../ui/Button.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { go } from '../../route.svelte.js';
@@ -47,84 +47,72 @@
 
 <PageState loading={!st.loaded} hasData={st.loaded} empty={none} emptyIcon="shield-check" emptyTitle="No storage incident"
            emptyText="Every pool and every disk looks fine. This page opens by itself in the alert when that changes.">
-  {#each incidents as i (i.id)}
-    <Banner tone={i.severity === 'error' ? 'bad' : 'warn'}>{i.text}</Banner>
-  {/each}
+  <Stack gap="4">
+    {#each incidents as i (i.id)}
+      <Banner tone={i.severity === 'error' ? 'bad' : 'warn'}>{i.text}</Banner>
+    {/each}
 
-  <div class="card sect">
-    <div class="sh"><b>Steps</b>{#if running}<Chip>replacement running</Chip>{/if}</div>
-    <Stepper vertical steps={steps.map((s) => ({ label: s.title, state: s.state === 'done' ? 'done' : s.state === 'now' ? 'current' : 'todo', note: s.state === 'optional' ? 'optional' : '' }))} />
-    {#if next}<p class="next"><b>Next safe step:</b> {next[2]}</p>{/if}
-    <div class="acts">
-      <Button variant="primary" icon="swap" disabled={locked || !target || running || !free.length} busy={jobRunning('pool', [target?.pool ?? '', 'replace'])}
-        tooltip={running ? 'A replacement is already running' : !free.length ? 'Plug in a new disk that is at least as large first' : 'Pick the new disk, see the plan, type the disk name'} onclick={replace}>Replace the disk…</Button>
-      {#if paused}
-        <Button icon="play" tooltip={'Let the paused apps run again'} onclick={() => openPlan('incident', ['resume'], 'Resume apps')}>Resume apps</Button>
-      {:else}
-        <Button icon="pause" disabled={!writers.length} tooltip={writers.length ? 'Freeze the apps that write to an affected share (shows the plan first)' : 'No running app writes to an affected share'}
-          onclick={() => openPlan('incident', ['pause'], 'Pause apps')}>Pause writing apps</Button>
-      {/if}
-    </div>
-    {#if !free.length && !running}<p class="mute">No free disk that is large enough was found yet. Plug in the new disk; this page notices it.</p>{/if}
-  </div>
+    <Card title="Steps">
+      {#snippet actions()}{#if running}<Chip>replacement running</Chip>{/if}{/snippet}
+      <Stepper vertical steps={steps.map((s) => ({ label: s.title, state: s.state === 'done' ? 'done' : s.state === 'now' ? 'current' : 'todo', note: s.state === 'optional' ? 'optional' : '' }))} />
+      {#if next}<p><b>Next safe step:</b> {next[2]}</p>{/if}
+      <Row gap="2" wrap>
+        <Button variant="primary" icon="swap" disabled={locked || !target || running || !free.length} busy={jobRunning('pool', [target?.pool ?? '', 'replace'])}
+          tooltip={running ? 'A replacement is already running' : !free.length ? 'Plug in a new disk that is at least as large first' : 'Pick the new disk, see the plan, type the disk name'} onclick={replace}>Replace the disk…</Button>
+        {#if paused}
+          <Button icon="play" tooltip={'Let the paused apps run again'} onclick={() => openPlan('incident', ['resume'], 'Resume apps')}>Resume apps</Button>
+        {:else}
+          <Button icon="pause" disabled={!writers.length} tooltip={writers.length ? 'Freeze the apps that write to an affected share (shows the plan first)' : 'No running app writes to an affected share'}
+            onclick={() => openPlan('incident', ['pause'], 'Pause apps')}>Pause writing apps</Button>
+        {/if}
+      </Row>
+      {#if !free.length && !running}<Muted as="p">No free disk that is large enough was found yet. Plug in the new disk; this page notices it.</Muted>{/if}
+    </Card>
 
-  {#each progress as p}
-    <div class="card sect">
-      <div class="sh"><b>{p.kind === 'resilver' ? 'Resilver' : 'Rebuild'} of {p.pool}</b><span class="mute">{p.pct == null ? '' : `${p.pct} %`}</span></div>
-      {#if p.pct != null}<div class="bar"><div class="fill" style="width:{p.pct}%"></div></div>{/if}
-      <p class="mute">{p.text}. The pool stays usable; do not pull or unplug any disk until it is done.</p>
-    </div>
-  {/each}
+    {#each progress as p}
+      <Card title={`${p.kind === 'resilver' ? 'Resilver' : 'Rebuild'} of ${p.pool}`}>
+        {#snippet actions()}{#if p.pct != null}<Muted>{p.pct} %</Muted>{/if}{/snippet}
+        {#if p.pct != null}<Progress value={p.pct} total={100} label={`${p.kind === 'resilver' ? 'Resilver' : 'Rebuild'} of ${p.pool}`} text="" />{/if}
+        <Muted as="p">{p.text}. The pool stays usable; do not pull or unplug any disk until it is done.</Muted>
+      </Card>
+    {/each}
 
-  {#if members.length}
-    <div class="card sect">
-      <div class="sh"><b>The disk{members.length === 1 ? '' : 's'}</b></div>
-      {#each members as m (m.pool + m.name)}
-        <p><StatusDot state={m.state === 'ONLINE' ? 'warn' : 'bad'} label={`${m.name} in ${m.pool}: ${m.state.toLowerCase()}`} /> <span class="mute">{m.disk !== '-' ? m.disk : ''}{m.why !== '-' ? ` · SMART: ${m.why}` : ''}</span></p>
-      {/each}
-      {#if target}
-        <p class="mute">{target.dev === '-' ? `${target.member} is gone: nothing to pull. Plug in its replacement.`
-          : `To pull: ${target.disk} (${target.dev}). Check the serial number on the label; never go by the device letter alone.`}</p>
-      {/if}
-    </div>
-  {/if}
+    {#if members.length}
+      <Card title={`The disk${members.length === 1 ? '' : 's'}`}>
+        {#each members as m (m.pool + m.name)}
+          <Row gap="2" wrap><StatusDot state={m.state === 'ONLINE' ? 'warn' : 'bad'} label={`${m.name} in ${m.pool}: ${m.state.toLowerCase()}`} /><Muted>{m.disk !== '-' ? m.disk : ''}{m.why !== '-' ? ` · SMART: ${m.why}` : ''}</Muted></Row>
+        {/each}
+        {#if target}
+          <Muted as="p">{target.dev === '-' ? `${target.member} is gone: nothing to pull. Plug in its replacement.`
+            : `To pull: ${target.disk} (${target.dev}). Check the serial number on the label; never go by the device letter alone.`}</Muted>
+        {/if}
+      </Card>
+    {/if}
 
-  {#if shares.length}
-    <div class="card sect">
-      <div class="sh"><b>Affected shares</b></div>
-      <Table id="incident-shares" columns={shareCols} rows={shares} key="name" compact empty="None.">
-        {#snippet cell(r, col)}
-          {#if col.key === 'name'}{r.name}
-          {:else if col.key === 'path'}<code>{r.path}</code>
-          {:else}<StatusDot state={r.impact === 'unavailable' ? 'bad' : 'warn'} label={r.impact === 'unavailable' ? 'files not reachable' : 'readable, no redundancy'} />{/if}
-        {/snippet}
-      </Table>
-    </div>
-  {/if}
+    {#if shares.length}
+      <Card title="Affected shares">
+        <Table id="incident-shares" columns={shareCols} rows={shares} key="name" compact empty="None.">
+          {#snippet cell(r, col)}
+            {#if col.key === 'name'}{r.name}
+            {:else if col.key === 'path'}<code>{r.path}</code>
+            {:else}<StatusDot state={r.impact === 'unavailable' ? 'bad' : 'warn'} label={r.impact === 'unavailable' ? 'files not reachable' : 'readable, no redundancy'} />{/if}
+          {/snippet}
+        </Table>
+      </Card>
+    {/if}
 
-  {#if apps.length}
-    <div class="card sect">
-      <div class="sh"><b>Affected apps</b>{#if paused}<span class="mute">paused by you: {paused}</span>{/if}</div>
-      <Table id="incident-apps" columns={appCols} rows={apps} key="name" compact empty="None.">
-        {#snippet cell(r, col)}
-          {#if col.key === 'name'}{r.name}
-          {:else if col.key === 'state'}<StatusDot state={r.state === 'RUNNING' ? 'ok' : 'off'} label={r.state.toLowerCase()} />
-          {:else}{r.via === 'pool' ? 'lives on this pool' : `share ${r.via}`}{r.writes ? ' (writes)' : ''}{/if}
-        {/snippet}
-      </Table>
-      <p class="mute">Pausing is only a suggestion: nothing is stopped unless you press the button. A paused app keeps its memory and carries on after Resume.</p>
-    </div>
-  {/if}
+    {#if apps.length}
+      <Card title="Affected apps">
+        {#snippet actions()}{#if paused}<Muted>paused by you: {paused}</Muted>{/if}{/snippet}
+        <Table id="incident-apps" columns={appCols} rows={apps} key="name" compact empty="None.">
+          {#snippet cell(r, col)}
+            {#if col.key === 'name'}{r.name}
+            {:else if col.key === 'state'}<StatusDot state={r.state === 'RUNNING' ? 'ok' : 'off'} label={r.state.toLowerCase()} />
+            {:else}{r.via === 'pool' ? 'lives on this pool' : `share ${r.via}`}{r.writes ? ' (writes)' : ''}{/if}
+          {/snippet}
+        </Table>
+        <Muted as="p">Pausing is only a suggestion: nothing is stopped unless you press the button. A paused app keeps its memory and carries on after Resume.</Muted>
+      </Card>
+    {/if}
+  </Stack>
 </PageState>
-
-<style>
-  .card { margin-bottom: 14px; }
-  .sect { padding: 12px 14px; gap: 8px; }
-  .sh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .next { margin: 4px 0 0; }
-  .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-  .mute { color: var(--fg-3); font-size: 12px; margin: 0; }
-  .bar { height: 8px; background: var(--line); border-radius: var(--r); overflow: hidden; }
-  .fill { height: 100%; background: var(--accent); }
-  code { font-size: 12px; }
-</style>

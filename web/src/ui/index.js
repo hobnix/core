@@ -20,6 +20,7 @@ export { default as Field } from './Field.svelte';             // label, hint, e
 export { default as TextInput } from './TextInput.svelte';     // native input.input, reads the Field context
 export { default as Select } from './Select.svelte';           // native select.input, options as data or <option> children
 export { default as Textarea } from './Textarea.svelte';       // native textarea.input
+export { default as Segmented } from './Segmented.svelte';     // 2-4 short choices as joined radio segments (ChoiceList is the explained one)
 export { default as Checkbox } from './Checkbox.svelte';       // native checkbox with a clickable label (forms; Switch box is for table cells)
 export { default as Card } from './Card.svelte';             // the one card: title or header slot, actions, `dither` corner for the node card
 export { default as Row } from './Row.svelte';               // flex row, gap from the spacing tokens

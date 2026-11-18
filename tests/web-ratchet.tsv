@@ -44,18 +44,8 @@ forms/shares/NewShare.svelte	3	0	0	1	0
 forms/shares/RenameShare.svelte	0	0	0	1	0
 forms/shares/RestoreShare.svelte	0	0	0	1	0
 forms/ssh/SshKeys.svelte	0	0	1	1	0
-forms/storage/AddDisks.svelte	7	2	0	1	0
-forms/storage/CloseDisk.svelte	3	0	0	1	0
-forms/storage/ConvertPool.svelte	3	2	0	1	0
-forms/storage/DetachDisk.svelte	2	0	0	1	0
-forms/storage/DiskPicker.svelte	1	0	0	1	0
-forms/storage/ForgetDisk.svelte	0	0	0	1	0
-forms/storage/MoveFolder.svelte	0	1	0	1	1
-forms/storage/OtherDisk.svelte	3	2	0	1	0
-forms/storage/RecoverDisk.svelte	4	1	0	1	0
-forms/storage/RemoveMember.svelte	4	0	0	1	0
-forms/storage/ReplaceMember.svelte	2	1	0	1	0
-forms/storage/WipeDisk.svelte	0	0	0	1	0
+forms/storage/DiskPicker.svelte	0	0	0	1	0
+forms/storage/MoveFolder.svelte	0	0	0	1	1
 forms/unlock/UnlockForm.svelte	1	0	0	1	0
 forms/users/EditGroup.svelte	1	0	0	1	0
 forms/users/EditUser.svelte	3	0	0	1	0
@@ -67,10 +57,8 @@ pages/Apps.svelte	2	0	0	1	0
 pages/Backup.svelte	1	0	0	1	0
 pages/Certificates.svelte	0	0	0	1	0
 pages/Data.svelte	0	0	0	1	0
-pages/Disks.svelte	1	0	0	1	0
 pages/Docker.svelte	0	0	0	1	0
 pages/Docs.svelte	1	0	0	1	0
-pages/Encryption.svelte	0	0	0	1	0
 pages/Events.svelte	1	0	0	0	0
 pages/Expiry.svelte	0	0	0	1	0
 pages/Files.svelte	1	0	0	1	0
@@ -85,7 +73,6 @@ pages/Network.svelte	0	0	0	1	0
 pages/Nodes.svelte	0	0	0	1	0
 pages/Notifications.svelte	0	0	0	1	0
 pages/PackageBuilder.svelte	2	2	1	1	0
-pages/Pools.svelte	0	0	0	1	0
 pages/Proxy.svelte	0	0	0	1	0
 pages/ProxyPorts.svelte	0	0	0	1	0
 pages/ProxySettings.svelte	0	0	0	1	0
@@ -112,7 +99,6 @@ pages/protection/ShareSnapRow.svelte	0	0	0	1	0
 pages/proxy/NotYet.svelte	0	0	0	1	0
 pages/proxy/ProxyGate.svelte	0	0	0	1	0
 pages/proxy/ProxyHead.svelte	0	0	0	1	0
-pages/storage/Incident.svelte	0	0	0	1	0
 settings/Appearance.svelte	1	0	0	1	0
 settings/CapabilitySettings.svelte	0	0	0	1	0
 settings/CapsOverview.svelte	0	0	0	1	0
