@@ -16,8 +16,9 @@
 #                     `<name><TAB>ok|failed` (journal only); one failing or hanging package never stops the others; exits 0 always
 #   status            the services of the packages that are on: state (starting|running|degraded|stopping|stopped|failed), reason, since (--status = hs sys ext status: name, state, reason, since)
 #   start|stop <name> start or stop the service of a package (ADR 0011 rule 3); a stop by hand survives a reboot until start
+#   (start also writes the confinement drop-in of the unit from the permissions: scripts/lib/ext_confine.py, ADR 0014)
 #   svc-run <name>    (run by hs-ext-svc@<name>.service) supervise the service of the package: scripts/lib/ext_service.py
-# Test knobs: HS_SYSTEMCTL, HS_MACHINE_FILE, HS_STATE_DIR, HS_PACKAGES_DIR, HS_CAPABILITIES_FILE, HS_LANG.
+# Test knobs: HS_CONFINE_DIR (where the drop-ins of the units go), HS_SYSTEMCTL, HS_MACHINE_FILE, HS_STATE_DIR, HS_PACKAGES_DIR, HS_CAPABILITIES_FILE, HS_LANG.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -117,7 +118,21 @@ svc_rows() {   # name, state, reason, since of every package that is on and has 
 ' "$n" "$(svc_py status --name "$n" --state-dir "$svc_state" --active "$act" --stopped "$stopped")"
   done < <(ext_package_names)
 }
-svc_start() {   # svc_start <name> [--no-block]: forget an old failure and start the unit
+confine_dir=${HS_CONFINE_DIR:-/run/systemd/system}   # where the drop-ins of hs-ext-svc@<name>.service go (runtime only: gone at reboot, rewritten at every start)
+svc_confine() {   # svc_confine <name>: write the drop-in with the confinement of the package (scripts/lib/ext_confine.py); refuses a path that is not allowed
+  local perms=() dir text
+  mapfile -t perms < <(python3 "$here/pkg.py" perms "$1" 2>/dev/null || echo -)
+  dir=$confine_dir/hs-ext-svc@$1.service.d
+  text=$(python3 -I "$here/lib/ext_confine.py" dropin --name "$1" -- "${perms[@]}") || { rm -f "$dir/10-confine.conf"; return 1; }
+  if [ "${perms[0]:-}" = "-" ]; then
+    warn "$(t "'%s' does not declare permissions: its service gets the strict defaults and may write nothing but its own state." "$1")"
+  fi
+  mkdir -p "$dir" && printf '%s
+' "$text" > "$dir/10-confine.conf.tmp" && mv "$dir/10-confine.conf.tmp" "$dir/10-confine.conf" || return 1
+  ctl daemon-reload >/dev/null 2>&1 || true
+}
+svc_start() {   # svc_start <name> [--no-block]: confine, forget an old failure and start the unit
+  svc_confine "$1" || { warn "$(t "The confinement of '%s' could not be written, so its service is not started." "$1")"; return 1; }
   rm -f "$svc_state/$1.stopped"
   svc_py reset --name "$1" --state-dir "$svc_state"
   ctl reset-failed "hs-ext-svc@$1.service" >/dev/null 2>&1 || true

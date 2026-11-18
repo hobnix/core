@@ -69,3 +69,24 @@ Do not claim enforcement for commands until step 3: root commands can read any f
 1. Is "trust the author, show what they ask for" (step 1) enough for v1, or must commands be confined too?
 2. What may `net = lan|internet` mean, and who enforces it (unit properties vs the firewall)? (touches network, firewall)
 3. May a package ever run as non-root (needs the broker)?
+
+## Step 2 as built: confinement of services (2026-11-18, docs/PLAN-extensions-access.md step 10, #239 c)
+`hs ext start|enable` writes `/run/systemd/system/hs-ext-svc@<name>.service.d/10-confine.conf` (scripts/ext.sh `svc_confine`, text made by
+scripts/lib/ext_confine.py) and runs `daemon-reload`; the template unit in configuration.nix carries the same strict floor, so a unit started
+without its drop-in is still strict. A path that is relative, has `..`, `.` or `//`, or is `/` is refused and the service is not started.
+
+| From the package | systemd property |
+| --- | --- |
+| always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` (the bridge's own state) |
+| `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
+| `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
+| `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
+| `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
+| no `permissions` | the "always" row only, plus a warning |
+
+What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the whole file system stays readable
+(`fs.read` does not hide anything; `ProtectSystem=strict` only makes it read only); the network is open whatever `net` says; `host`, `secrets`
+and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
+event is written by the bridge (scripts/lib/ext_service.py) into /var/lib/hs/state.db, which a confined unit may not write, so that event
+needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined (D7). Not tested on hardware yet: the unit is only evaluated in CI,
+the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
