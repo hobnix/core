@@ -5,6 +5,7 @@
   import Button from '../ui/Button.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import Banner from '../ui/Banner.svelte';
+  import { Card, Row, Stack, Muted } from '../ui/index.js';
 
   const st = poll('/api/sys/dc/state', 30000);
   // key, value rows: ca, ca_until, dc, cert (ok|unreadable|none), subject, names, valid_until, days_left, checked
@@ -15,56 +16,50 @@
   const certOk = $derived(s.cert === 'ok');
 </script>
 
-<div class="page">
+<Stack gap="6">
   <PageHeader title="Certificates" crumb="Identity" sub="LDAPS of the domain controller, signed by a small CA of this setup." />
 
   {#if st.loaded && st.error}
     <Banner tone="warn">The certificates could not be read. This server needs a domain (the recipe <code>domain</code>) and the controller must be running.</Banner>
   {/if}
 
-  <div class="card" style="padding:14px 16px;gap:8px">
-    <div class="row"><span class="h">The CA</span><div class="grow"></div>
-      {#if st.loaded && !hasCa}<Button variant="primary" icon="certificate" busy={jobRunning('dc', ['ca'])} tooltip={'Create the certificate authority of the domain'} onclick={() => openPlan('dc', ['ca'], 'Make the CA')}>Make the CAâ€¦</Button>{/if}
-    </div>
+  <Card title="The CA">
+    {#snippet actions()}
+      {#if st.loaded && !hasCa}<Button variant="primary" icon="certificate" busy={jobRunning('dc', ['ca'])} tooltip={'Create the certificate authority of the domain'} onclick={() => openPlan('dc', ['ca'], 'Make the CA')}>Make the CA…</Button>{/if}
+    {/snippet}
     {#if hasCa}
       <div class="kv"><span>State</span><span><span class="dot ok"></span> exists, valid until {s.ca_until}</span></div>
-      <div class="muted">It vouches only for names inside the domain. Its key is in the vault. The certificate to trust on the clients is <code>/var/lib/hs/dc-ca.pem</code>.</div>
+      <Muted as="div">It vouches only for names inside the domain. Its key is in the vault. The certificate to trust on the clients is <code>/var/lib/hs/dc-ca.pem</code>.</Muted>
     {:else if st.loaded}
-      <div class="muted">No CA yet. Make it once, on the server that keeps it: it then signs the certificate of every controller.</div>
+      <Muted as="div">No CA yet. Make it once, on the server that keeps it: it then signs the certificate of every controller.</Muted>
     {:else}
-      <div class="muted">Loadingâ€¦</div>
+      <Muted as="div">Loading…</Muted>
     {/if}
-  </div>
+  </Card>
 
-  <div class="card" style="padding:14px 16px;gap:8px">
-    <div class="row"><span class="h">Domain controller {s.dc && s.dc !== '-' ? s.dc : ''}</span><div class="grow"></div>
+  <Card title={`Domain controller ${s.dc && s.dc !== '-' ? s.dc : ''}`.trim()}>
+    {#snippet actions()}
       <Button icon="arrows-clockwise" disabled={!hasCa || !s.dc || s.cert === 'none'} busy={jobRunning('dc', ['renew', '--dc', s.dc])} tooltip={hasCa ? 'New key and certificate, installed, Samba restarts (shows the plan first)' : 'Make the CA first'}
-        onclick={() => openPlan('dc', ['renew', '--dc', s.dc], 'Renew the certificate of ' + s.dc)}>Renew certificateâ€¦</Button>
-    </div>
+        onclick={() => openPlan('dc', ['renew', '--dc', s.dc], 'Renew the certificate of ' + s.dc)}>Renew certificate…</Button>
+    {/snippet}
     {#if certOk}
       <div class="kv"><span>Subject</span><span>{s.subject}</span></div>
       <div class="kv"><span>Names</span><span>{s.names}</span></div>
       <div class="kv"><span>Valid until</span><span>{s.valid_until}{#if days !== null} <span class="tag {soon ? 'tag-accent-2' : 'tag-neutral'}" style="padding:1px 7px">{days < 0 ? `${-days} days ago` : `${days} days left`}</span>{/if}</span></div>
-      <div class="kv"><span>Signed by</span><span><span class="dot {s.checked === 'yes' ? 'ok' : 'warn'}"></span> {s.checked === 'yes' ? 'the CA of this setup' : 'not this CA (the self-signed certificate of Samba, valid only for the controllerâ€™s own name)'}</span></div>
+      <div class="kv"><span>Signed by</span><span><span class="dot {s.checked === 'yes' ? 'ok' : 'warn'}"></span> {s.checked === 'yes' ? 'the CA of this setup' : 'not this CA (the self-signed certificate of Samba, valid only for the controller’s own name)'}</span></div>
     {:else if s.cert === 'none'}
-      <div class="muted">There is no domain controller on this server.</div>
+      <Muted as="div">There is no domain controller on this server.</Muted>
     {:else if s.cert === 'unreadable'}
-      <div class="muted">The certificate of the controller could not be read (is it running?).</div>
+      <Muted as="div">The certificate of the controller could not be read (is it running?).</Muted>
     {:else if st.loaded}
-      <div class="muted">Nothing to show.</div>
+      <Muted as="div">Nothing to show.</Muted>
     {/if}
-    <div class="muted">A controller on another server (a second one at the cousin's) is renewed in the terminal there: <code>hs dc cert request</code>, <code>sign</code> on the CA server, then <code>install</code>. The request travels between the two servers, so it stays out of the browser. Expiry dates are also tracked by <code>hs expiry</code>.</div>
-  </div>
-</div>
+    <Muted as="div">A controller on another server (a second one at the cousin's) is renewed in the terminal there: <code>hs dc cert request</code>, <code>sign</code> on the CA server, then <code>install</code>. The request travels between the two servers, so it stays out of the browser. Expiry dates are also tracked by <code>hs expiry</code>.</Muted>
+  </Card>
+</Stack>
 
 <style>
-  .page { display: flex; flex-direction: column; gap: 14px; }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .grow { flex: 1; }
-  .h { font-size: 14px; font-weight: 500; }
-  .btn { font-size: 13px; }
   .kv { display: flex; gap: 12px; font-size: 13px; }
   .kv > span:first-child { flex: 0 0 90px; color: var(--fg-3); }
   .kv > span:last-child { min-width: 0; overflow-wrap: anywhere; }
-  .muted { font-size: 12px; color: var(--fg-3); }
 </style>
