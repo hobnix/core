@@ -21,7 +21,7 @@
   // the full-screen dashboard: no sign-in, session() is not called
   const kiosk = location.pathname === '/dashboard';
 
-  setAuthLostHandler(() => { stopLive(); clearPollCache(); user = null; });
+  setAuthLostHandler(() => { stopLive(); clearPollCache(); user = null; ui.role = 'viewer'; });
 
   // the event stream runs while somebody is signed in (served in every liveState mode, ADR 0005 rule 5; `live.open` says it is up)
   $effect(() => { setTopics(ui.features.topics ?? {}); live.follow = !!ui.features.live; if (user) startLive(); else stopLive(); });
@@ -30,6 +30,7 @@
     if (kiosk) return;
     try { user = await session(); } catch { user = null; }
     ui.features = user?.features ?? { terminal: false, vps: false };
+    ui.role = user?.role ?? 'viewer';
     initLang(ui.features.language);
     if (ui.features.setup_wizard) go('/setup/first-run');
     ready = true;
@@ -40,6 +41,7 @@
     stopLive();
     clearPollCache();
     user = null;
+    ui.role = 'viewer';
   }
 </script>
 
@@ -48,7 +50,7 @@
 {:else if !ready}
   <div style="flex:1"></div>
 {:else if !user}
-  <Login onsignedin={(s) => { ui.features = s?.features ?? { terminal: false, vps: false }; initLang(ui.features.language); user = s; if (ui.features.setup_wizard) go('/setup/first-run'); }} />
+  <Login onsignedin={(s) => { ui.features = s?.features ?? { terminal: false, vps: false }; ui.role = s?.role ?? 'viewer'; initLang(ui.features.language); user = s; if (ui.features.setup_wizard) go('/setup/first-run'); }} />
 {:else if pop && ui.features.terminal}
   <Terminal target={pop} title={popTitle} page />
 {:else}

@@ -44,7 +44,7 @@
         if (it.children) walk(it.children, [...trail, it.label], node);
       }
     };
-    walk(nodeItems('main', ui.features.capabilities, null, [], pools.rows), [], ui.host);
+    walk(nodeItems('main', ui.features.capabilities, null, [], pools.rows, ui.role), [], ui.host);
     if ((ui.features.capabilities ?? ['vps']).includes('vps')) walk(vpsTree, [VPS_NODE], VPS_NODE);
     return out;
   });

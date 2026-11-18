@@ -15,6 +15,7 @@ import Users from './pages/Users.svelte';
 import Hardware from './pages/Hardware.svelte';
 import Backup from './pages/Backup.svelte';
 import SettingsPage from './settings/SettingsPage.svelte';
+import AccessPage from './settings/AccessPage.svelte';
 import Releases from './settings/Releases.svelte';
 import CapsOverview from './settings/CapsOverview.svelte';
 import CapabilitySettings from './settings/CapabilitySettings.svelte';
@@ -95,7 +96,7 @@ export const routes = {
   '/settings/network': SettingsPage,
   '/settings/storage': SettingsPage,
   '/settings/backups': SettingsPage,
-  '/settings/access': SettingsPage,
+  '/settings/access': AccessPage,
   '/settings/updates': SettingsPage,
   '/settings/releases': Releases,
   '/settings/capabilities': CapsOverview,
