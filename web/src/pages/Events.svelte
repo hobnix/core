@@ -9,6 +9,7 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Timeline from '../ui/Timeline.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import { parseRow, eventText, merge, filterRows, SINCE, sinceFrom } from './events.js';
 
   const STEP = 100;
@@ -49,7 +50,7 @@
     <Timeline {entries} {filters} bind:values onfilter={(k) => { if (k === 'source') limit = STEP; }} {more} onmore={() => { limit += STEP; }}
               emptyTitle="No events" empty="Nothing matches. Events are written as things happen on the server.">
       {#snippet toolbar()}
-        <input class="input" bind:value={kind} placeholder="Kind, e.g. job.failed" aria-label="Kind" maxlength="60" autocomplete="off" spellcheck="false" />
+        <TextInput bind:value={kind} placeholder="Kind, e.g. job.failed" ariaLabel="Kind" maxlength={60} autocomplete="off" spellcheck={false} />
       {/snippet}
     </Timeline>
   </PageState>
