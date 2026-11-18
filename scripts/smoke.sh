@@ -152,6 +152,7 @@ default_probes() {
     $'hs dc cert show\tdc cert show\t0 1' \
     $'hs update --preview\tupdate --preview\t0 1\t120' \
     $'hs ssh-key list\tssh-key list\t0 1' \
+    $'hs token list\ttoken list\t0' \
     $'hs node list\tnode list\t0' \
     $'hs notify channel list\tnotify channel list\t0' \
     $'hs notify channel providers\tnotify channel providers\t0' \

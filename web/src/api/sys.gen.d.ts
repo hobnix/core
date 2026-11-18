@@ -3225,6 +3225,42 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "token.list": {
+    /** the API tokens: id, name, owner, realm domain|local, role, created and expires (epoch seconds), state active|expired; never the token; --owner <user> for one person */
+    words: ["token", "list"];
+    path: "/token/list";
+    method: "get";
+    class: "read";
+    role: "app-manager";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([id: Field, name: Field, owner: Field, realm: "domain" | "local", role: "viewer" | "app-manager" | "admin", created: Field, expires: Field, state: "active" | "expired"])[];
+  };
+  "token.plan.by_action": {
+    /** what creating or revoking an API token would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused) */
+    words: ["token", "plan", "<action>"];
+    path: "/token/plan/{action}";
+    method: "post";
+    class: "plan";
+    role: "app-manager";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "token.start.by_action": {
+    /** do it (hs sys token start create <name> --role R --days N | revoke <name> --confirm <name>); the web interface adds --by and --cap; create prints the token once as a secret line */
+    words: ["token", "start", "<action>"];
+    path: "/token/start/{action}";
+    method: "post";
+    class: "start";
+    role: "app-manager";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
   "unifi.clients": {
     /** every address the router has reserved or sees online, no header, by address: ip, mac, name (- when none), reserved|online|reserved+online */
     words: ["unifi", "clients"];

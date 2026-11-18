@@ -15330,6 +15330,224 @@
     }
    }
   },
+  "/token/list": {
+   "get": {
+    "operationId": "token.list",
+    "summary": "the API tokens: id, name, owner, realm domain|local, role, created and expires (epoch seconds), state active|expired; never the token; --owner <user> for one person",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "token",
+      "list"
+     ],
+     "script": "token.sh",
+     "args": "--list {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/token/list",
+     "kind": "tsv",
+     "ttl": 5,
+     "query": [
+      "owner"
+     ]
+    },
+    "description": "The API tokens (never the token itself). The web server shows an admin all of them and anybody else only their own (it adds --owner). created and expires are epoch seconds.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "id"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "owner"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "realm",
+            "enum": [
+             "domain",
+             "local"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "role",
+            "enum": [
+             "viewer",
+             "app-manager",
+             "admin"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "created"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "expires"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state",
+            "enum": [
+             "active",
+             "expired"
+            ]
+           }
+          ],
+          "minItems": 8,
+          "maxItems": 8
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/token/plan/{action}": {
+   "post": {
+    "operationId": "token.plan.by_action",
+    "summary": "what creating or revoking an API token would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "token",
+      "plan",
+      "<action>"
+     ],
+     "script": "token-change.sh",
+     "args": "plan {1} {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/token/start/{action}": {
+   "post": {
+    "operationId": "token.start.by_action",
+    "summary": "do it (hs sys token start create <name> --role R --days N | revoke <name> --confirm <name>); the web interface adds --by and --cap; create prints the token once as a secret line",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "token",
+      "start",
+      "<action>"
+     ],
+     "script": "token-change.sh",
+     "args": "start {1} {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/unifi/clients": {
    "get": {
     "operationId": "unifi.clients",

@@ -25,6 +25,9 @@ jobs answer <id>	app-manager	read
 ssh-key list	admin	read
 ssh-key plan <action>	admin	plan
 ssh-key start <action>	admin	start
+token list	app-manager	read
+token plan <action>	app-manager	plan
+token start <action>	app-manager	start
 recipes list	viewer	read
 apps list	viewer	read
 apps health	viewer	read

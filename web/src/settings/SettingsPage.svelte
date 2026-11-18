@@ -15,6 +15,7 @@
   import { releaseModel, channelCard } from './releases.js';
   import Fields from './Fields.svelte';
   import Sessions from './Sessions.svelte';
+  import Tokens from '../pages/Tokens.svelte';
   import WizardSteps from './WizardSteps.svelte';
   import { useLayout } from './layoutstate.svelte.js';
   import { fieldsFor } from './layout.js';
@@ -134,7 +135,7 @@
     <div class="muted">{list.loaded ? (list.error ? `The settings could not be read${list.error?.message ? `: ${list.error.message}` : '.'}` : 'No settings on this page.') : 'Loading…'}</div>
   {/if}
 
-  {#if page === 'access'}<Sessions />{/if}
+  {#if page === 'access'}<Sessions /><Tokens />{/if}
 
   {#if page === 'general'}
     {#if Appearance}<Appearance />{/if}

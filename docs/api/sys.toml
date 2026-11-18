@@ -1002,3 +1002,18 @@ role = "admin"
 
 ["incident start <action>"]
 role = "admin"
+
+["token list"]
+role = "app-manager"
+kind = "tsv"
+columns = ["id", "name", "owner", "realm", "role", "created", "expires", "state"]
+enums = { realm = ["domain", "local"], role = ["viewer", "app-manager", "admin"], state = ["active", "expired"] }
+note = "The API tokens (never the token itself). The web server shows an admin all of them and anybody else only their own (it adds --owner). created and expires are epoch seconds."
+
+["token plan <action>"]
+role = "app-manager"
+note = "action create <name> [--role R] [--days N] or revoke <name>. The web server adds --by (the signed-in person) and --cap (their role); a token never exceeds it."
+
+["token start <action>"]
+role = "app-manager"
+note = "create answers once with the line secret<TAB>token<TAB><token>; revoke needs --confirm <name>. A request that came with a token is refused (a token cannot create tokens)."
