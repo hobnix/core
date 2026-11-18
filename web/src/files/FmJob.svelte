@@ -1,7 +1,6 @@
 <script>
   // The job of the file manager on the page: while it runs a blue banner with files, bytes, speed, time left and Cancel; when it ended a green, amber or red
   // one that opens the result (moved, skipped, failed). The same job also has a row under Tasks in the bottom panel (ui.svelte.js track).
-  import { tip } from '../ui/tooltip.svelte.js';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
   import Progress from '../ui/Progress.svelte';
@@ -53,10 +52,10 @@
         <Button size="sm" busy={j.cancelling} busyLabel="Cancelling…" disabled={j.pausing} tooltip="Stops cleanly: what is copied stays, nothing unverified is removed" onclick={() => fm.cancelJob()}>Cancel</Button>
       {:else if j.state === 'paused'}
         <Button size="sm" variant="primary" icon="play" busy={j.continuing} busyLabel="Starting…" tooltip="A new job over the same selection: --conflict skip, size check" onclick={() => fm.continueJob()}>Continue</Button>
-        <button class="btn sm btn-ghost" aria-label="Dismiss" use:tip={'Dismiss'} onclick={() => fm.dismissJob()}><i class="ph ph-x"></i></button>
+        <Button size="sm" variant="ghost" icon="x" label="Dismiss" onclick={() => fm.dismissJob()} />
       {:else}
-        {#if p && (p.skipped.n || p.failed.n || j.state !== 'done')}<button class="btn sm" onclick={() => (fm.result = true)}>Details</button>{/if}
-        <button class="btn sm btn-ghost" aria-label="Dismiss" use:tip={'Dismiss'} onclick={() => fm.dismissJob()}><i class="ph ph-x"></i></button>
+        {#if p && (p.skipped.n || p.failed.n || j.state !== 'done')}<Button size="sm" onclick={() => (fm.result = true)}>Details</Button>{/if}
+        <Button size="sm" variant="ghost" icon="x" label="Dismiss" onclick={() => fm.dismissJob()} />
       {/if}
     {/snippet}
   </Banner>

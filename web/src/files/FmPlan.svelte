@@ -3,11 +3,14 @@
   // (`fm plan`), shows what would happen, and only the button starts the job. The conflict policy and the options are part of the question, so a
   // change asks again. Overwrite and delete turn it red and need the typed name; a refusal has only Close. Same pieces as shell/PlanDialog.svelte.
   import { onMount, untrack } from 'svelte';
-  import { tip } from '../ui/tooltip.svelte.js';
   import { trackDone } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
   import Banner from '../ui/Banner.svelte';
+  import Dialog from '../ui/Dialog.svelte';
+  import TextInput from '../ui/TextInput.svelte';
+  import Checkbox from '../ui/Checkbox.svelte';
+  import ChoiceList from '../ui/ChoiceList.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Halftone from '../shell/Halftone.svelte';
   import * as api from './api.js';
@@ -21,11 +24,13 @@
   const moves = $derived(op === 'copy' || op === 'move');
 
   const POLICIES = [
-    { id: 'skip', label: 'Skip existing', sub: 'Never overwrites anything. The default.' },
-    { id: 'rename', label: 'Keep both', sub: 'The new file gets a number added to its name.' },
-    { id: 'newer', label: 'Overwrite if newer', sub: 'Replaces a file only when the source is newer.', over: true },
-    { id: 'overwrite', label: 'Overwrite always', sub: 'Replaces every file that exists on the target.', over: true },
+    { id: 'skip', label: 'Skip existing', text: 'Never overwrites anything. The default.' },
+    { id: 'rename', label: 'Keep both', text: 'The new file gets a number added to its name.' },
+    { id: 'newer', label: 'Overwrite if newer', text: 'Replaces a file only when the source is newer.', over: true },
+    { id: 'overwrite', label: 'Overwrite always', text: 'Replaces every file that exists on the target.', over: true },
   ];
+  // an overwrite is never offered with a move: it stays visible and greyed, with its reason
+  const policyOptions = $derived(POLICIES.map((o) => (o.over && op === 'move' ? { ...o, disabled: true, reason: 'Overwrite is never offered with a move: copy first, then delete the source' } : o)));
 
   let opts = $state({ conflict: 'skip', verify: 'size', parity: false, newname: untrack(() => fm.dialog.name ?? '') });
   let p = $state(null);
@@ -119,10 +124,8 @@
   const freeBefore = $derived(spec.toLoc ? spec.toLoc.free : spec.fromLoc?.free);
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
-
-<div class="dialog-backdrop" role="presentation">
-  <div class="pdlg" class:danger role="dialog" aria-modal="true" aria-labelledby="fmpt">
+<Dialog labelledby="fmpt" width="600px" onclose={close}>
+  <div class="pdlg" class:danger>
     {#if danger}<div class="stripe"></div>{/if}
     <div class="dh">
       {#if !danger}<Halftone cell={3} focus={[1, 0]} reach={0.9} opacity={0.75} />{/if}
@@ -133,9 +136,9 @@
 
     <div class="dbody">
       {#if op === 'rename' || op === 'mkdir'}
-        <label class="fld"><span class="eyebrow">{op === 'rename' ? 'New name' : 'Folder name'}</span>
-          <input class="input mono" bind:value={opts.newname} autocomplete="off" spellcheck="false" onkeydown={(e) => e.key === 'Enter' && canStart && go()} />
-        </label>
+        <div class="fld"><label class="eyebrow" for="fmnn">{op === 'rename' ? 'New name' : 'Folder name'}</label>
+          <TextInput id="fmnn" bind:value={opts.newname} autocomplete="off" spellcheck={false} onkeydown={(e) => e.key === 'Enter' && canStart && go()} />
+        </div>
         {#if nameBad && opts.newname.trim()}<div class="bad">{nameBad}</div>{/if}
       {/if}
 
@@ -163,20 +166,14 @@
         </div>
 
         {#if moves}
-          <fieldset class="policy">
-            <legend class="eyebrow">If a file exists on the target</legend>
-            {#each POLICIES as o (o.id)}
-              {@const off = o.over && op === 'move'}
-              <label class="opt" class:sel={opts.conflict === o.id} class:off use:tip={off ? 'Overwrite is never offered with a move: copy first, then delete the source' : ''}>
-                <input type="radio" name="fmpol" value={o.id} bind:group={opts.conflict} disabled={off} />
-                <span class="ot"><b>{o.label}</b><span class="os">{o.sub}</span></span>
-              </label>
-            {/each}
-          </fieldset>
+          <div class="policy">
+            <div class="eyebrow">If a file exists on the target</div>
+            <ChoiceList label="If a file exists on the target" options={policyOptions} value={opts.conflict} onpick={(id) => (opts.conflict = id)} />
+          </div>
           {#if p.conflicts > 0}
             <div class="conf">
               <i class="ph ph-warning"></i><span>{S.plural(p.conflicts, 'item exists', 'items exist')} on the target already.</span>
-              <button class="btn sm" onclick={showConflicts}>{showConf ? 'Hide' : 'Show'} the list</button>
+              <Button size="sm" busy={confBusy} onclick={showConflicts}>{showConf ? 'Hide' : 'Show'} the list</Button>
             </div>
             {#if showConf}
               {#if confBusy || !confRows}<Skeleton lines={3} />
@@ -192,9 +189,9 @@
             {/if}
           {/if}
           <div class="options">
-            <label class="chk"><input type="checkbox" bind:checked={() => opts.verify === 'checksum', (v) => (opts.verify = v ? 'checksum' : 'size')} /><span>Verify with checksums <span class="dimmed">(slower; size and time are always checked)</span></span></label>
+            <Checkbox bind:checked={() => opts.verify === 'checksum', (v) => (opts.verify = v ? 'checksum' : 'size')}>Verify with checksums <span class="dimmed">(slower; size and time are always checked)</span></Checkbox>
             {#if op === 'move' && (spec.arrayMove || p.parity)}
-              <label class="chk"><input type="checkbox" bind:checked={opts.parity} /><span>Update the parity afterwards <span class="dimmed">(hs pool {snapName} sync)</span></span></label>
+              <Checkbox bind:checked={opts.parity}>Update the parity afterwards <span class="dimmed">(hs pool {snapName} sync)</span></Checkbox>
             {/if}
           </div>
         {/if}
@@ -205,12 +202,12 @@
     {#if need}
       <div class="confirm">
         <label for="fmcf">Type <code>{need}</code> to confirm</label>
-        <input id="fmcf" class="input" bind:value={confirm} placeholder={need} autocomplete="off" spellcheck="false" />
+        <TextInput id="fmcf" bind:value={confirm} placeholder={need} autocomplete="off" spellcheck={false} />
       </div>
     {/if}
     <div class="dfoot">
       <span class="note">{p?.ok ? 'Nothing has run yet. The job appears under Tasks.' : ''}</span>
-      <button class="btn" onclick={close}>{p?.ok ? 'Cancel' : 'Close'}</button>
+      <Button onclick={close}>{p?.ok ? 'Cancel' : 'Close'}</Button>
       {#if p?.ok}
         <!-- busy (not disabled) while the job starts: a spinner, the click is ignored -->
         <Button variant={danger ? 'danger' : 'primary'} icon={op === 'delete' ? 'trash' : 'play'} {busy} busyLabel="Starting…" disabled={!canStart && !busy}
@@ -218,11 +215,11 @@
       {/if}
     </div>
   </div>
-</div>
+</Dialog>
 
 <style>
   /* the look of shell/PlanDialog.svelte (the same dialog, with the file manager's own body) */
-  .pdlg { position: relative; width: min(600px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 24px 64px oklch(0 0 0 / 0.5); }
+  .pdlg { position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .stripe { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--bad); z-index: 2; }
   .dh { position: relative; flex: none; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); overflow: hidden; }
   .pdlg.danger .dh { background: color-mix(in oklch, var(--bad) 10%, var(--panel)); }
@@ -235,6 +232,7 @@
   .bad { color: var(--bad-ink); font-size: 12.5px; }
   .refused { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--bad-ink); padding-top: 8px; }
   .fld { display: flex; flex-direction: column; gap: 6px; }
+  .fld :global(.input) { font-family: var(--mono); }
   .facts { display: grid; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
   .facts > div { display: flex; gap: 12px; justify-content: space-between; font-size: 12.5px; }
   .k { color: var(--fg-3); }
@@ -247,30 +245,21 @@
   .mk.w { color: var(--warn-ink); border-color: color-mix(in oklch, var(--warn) 45%, var(--line-2)); }
   .mk.n { color: var(--fg-3); }
   .h { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
-  .policy { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .policy legend { padding: 0 0 6px; }
-  .opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); cursor: pointer; }
-  .opt:hover { border-color: var(--fg-3); }
-  .opt.sel { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 8%, transparent); }
-  .opt.off { opacity: 0.4; cursor: not-allowed; }
-  .ot { display: flex; flex-direction: column; font-size: 13px; }
-  .os { font-size: 12px; color: var(--fg-3); }
+  .policy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .conf { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--warn-ink); flex-wrap: wrap; }
-  .conf .btn { margin-left: auto; }
+  .conf :global(.btn) { margin-left: auto; }
   .ctable { max-height: 190px; overflow: auto; border: 1px solid var(--line); }
   .ctable table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .ctable th { text-align: left; font: 500 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); padding: 6px 8px; position: sticky; top: 0; background: var(--panel-2); }
   .ctable td { padding: 5px 8px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
   .options { display: flex; flex-direction: column; gap: 8px; }
-  .chk { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; cursor: pointer; }
   .confirm { padding: 14px 22px; border-top: 1px solid var(--line); }
   .confirm label { display: block; margin-bottom: 6px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   .confirm code { color: var(--fg); text-transform: none; letter-spacing: 0; }
-  .confirm .input { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
+  .confirm :global(.input) { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
   .dfoot { flex: none; display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 14px 22px; background: var(--panel-2); border-top: 1px solid var(--line); }
   .note { flex: 1; min-width: 180px; color: var(--fg-3); font-size: 12.5px; }
   @media (max-width: 860px) {
-    .pdlg { width: calc(100% + 32px); margin: -16px; height: 100dvh; max-height: none; }
     .dh, .dbody, .confirm, .dfoot { padding-left: 16px; padding-right: 16px; }
     .dbody { flex: 1; }
   }

@@ -15,9 +15,10 @@
   //     <Button variant="ghost" icon="trash" label="Remove {name}" onclick={...} />
   //   reason: why a disabled button is disabled, in a sentence; shown as its tooltip and read by screen readers (a disabled button has no focus, so the
   //     reason is also in the accessible description). A role refusal (`need`) sets its own sentence; `reason` is for every other "not now".
+  //   keys: the shortcut shown in the tooltip next to its text (`F5`, `Ctrl R`); the button does not bind it
   //   class: extra classes of the page (`btn-icon`, a layout class); aria-label, href-less attributes and event handlers go through to the <button>
   let { variant = 'secondary', size = '', icon = '', busy = false, busyLabel = '', disabled = false, tooltip = '', type = 'button', block = false,
-        need = '', label = '', reason = '', class: extra = '', onclick = null, children, ...rest } = $props();
+        need = '', label = '', reason = '', keys = '', class: extra = '', onclick = null, children, ...rest } = $props();
 
   const refused = $derived(!!need && !can(need));
   const off = $derived(disabled || refused);
@@ -39,7 +40,7 @@
 </script>
 
 <button {...rest} {type} class="btn btn-{variant} {size} {extra}" class:btn-icon={!!label} class:btn-block={block} class:busy={working} disabled={off} data-refused={refused || undefined} aria-busy={working || undefined}
-        aria-label={label || rest['aria-label']} aria-describedby={note ? rid : undefined} aria-disabled={working || undefined} use:tip={why} onclick={click}>
+        aria-label={label || rest['aria-label']} aria-describedby={note ? rid : undefined} aria-disabled={working || undefined} use:tip={keys && why ? { text: why, keys } : why} onclick={click}>
   {#if working}<Icon name="circle-notch" spin />{:else if icon}<Icon name={icon} />{/if}
   {#if working && busyLabel}{busyLabel}{:else}{@render children?.()}{/if}
   {#if note}<span id={rid} class="sr">{note}</span>{/if}

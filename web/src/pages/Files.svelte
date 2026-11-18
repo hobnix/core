@@ -4,7 +4,6 @@
   // disk and the pool of the same array never meet) is enforced by the server; the picker and the plan dialog only show its answer.
   // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:<name>[&rpath=/y][&select=<name>].
   import { onDestroy, untrack } from 'svelte';
-  import { tip } from '../ui/tooltip.svelte.js';
   import { live } from '../live.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -14,6 +13,8 @@
   import Kv from '../ui/Kv.svelte';
   import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
+  import Segmented from '../ui/Segmented.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import { route } from '../route.svelte.js';
   import { Fm } from '../files/fm.svelte.js';
   import { loadPools } from '../pools.svelte.js';
@@ -25,6 +26,7 @@
   import * as S from '../files/selection.js';
 
   let { deck } = $props();
+  const focusFirst = (n) => { n.querySelector('input')?.focus(); };
   loadPools();
   const fm = new Fm();
   let root;
@@ -82,7 +84,7 @@
       case 'F6': return act(() => fm.plan('move'));
       case 'F7': return act(() => fm.plan('mkdir'));
       case 'F8': case 'Delete': return act(() => fm.plan('delete'));
-      case '/': return act(() => root.querySelector(`[data-fmfilter="${fm.active}"]`)?.focus());
+      case '/': return act(() => root.querySelector(`[data-fmfilter="${fm.active}"] input`)?.focus());
       case '?': return act(() => (fm.keys = true));
       case '*': return act(() => fm.invert());
       case '+': return act(() => { fm.patOpen = true; });
@@ -99,12 +101,12 @@
   });
 
   const big = (op) => ({ copy: 'F5', move: 'F6', rename: 'F2', mkdir: 'F7', delete: 'F8' })[op];
-  const tipOf = (op, text) => ({ text: why(op) ? `${text}: ${why(op)}` : text, keys: big(op) });
+  const tipOf = (op, text) => (why(op) ? `${text}: ${why(op)}` : text);
 </script>
 
 <PageHeader title="Files" crumb="Storage" sub="Copy and move between disks and pools. Nothing runs from a click: every operation opens a plan first.">
   {#snippet actions()}
-    <button class="btn" use:tip={{ text: 'Show the keyboard shortcuts', keys: '?' }} onclick={() => (fm.keys = true)}><i class="ph ph-keyboard"></i>Shortcuts</button>
+    <Button icon="keyboard" tooltip="Show the keyboard shortcuts" keys="?" onclick={() => (fm.keys = true)}>Shortcuts</Button>
   {/snippet}
 </PageHeader>
 
@@ -113,7 +115,7 @@
   <div class="fmnote"><Banner tone="info">{S.WRITE_OFF} Browsing and dry runs work; Start is switched off.</Banner></div>
 {/if}
 {#if fm.notice}
-  <div class="fmnote"><Banner tone="warn">{fm.notice}{#snippet action()}<button class="btn sm" onclick={() => (fm.notice = '')}>OK</button>{/snippet}</Banner></div>
+  <div class="fmnote"><Banner tone="warn">{fm.notice}{#snippet action()}<Button size="sm" onclick={() => (fm.notice = '')}>OK</Button>{/snippet}</Banner></div>
 {/if}
 
 <PageState loading={fm.locsState === 'loading'} error={fm.locsState === 'error' ? fm.locsError : ''} hasData={fm.locs.length > 0} empty={fm.locsState === 'ok' && !fm.locs.length}
@@ -122,21 +124,21 @@
   <div class="fm" bind:this={root} tabindex="0" role="application" aria-label="File manager" onkeydown={onkey}>
     <div class="fmtools">
       <div class="fmgrp">
-        <button class="btn sm pho" disabled={!!why('copy')} use:tip={tipOf('copy', 'Copy to the other pane')} onclick={() => fm.plan('copy')}><i class="ph ph-copy"></i>Copy<span class="kbd">F5</span></button>
-        <button class="btn sm pho" disabled={!!why('move')} use:tip={tipOf('move', 'Move to the other pane')} onclick={() => fm.plan('move')}><i class="ph ph-arrows-left-right"></i>Move<span class="kbd">F6</span></button>
-        <button class="btn sm pho" disabled={!!why('rename')} use:tip={tipOf('rename', 'Rename')} onclick={() => fm.plan('rename')}><i class="ph ph-pencil-simple"></i>Rename<span class="kbd">F2</span></button>
-        <button class="btn sm" disabled={!!why('mkdir')} use:tip={tipOf('mkdir', 'Make a new folder here')} onclick={() => fm.plan('mkdir')}><i class="ph ph-folder-plus"></i>New folder<span class="kbd">F7</span></button>
-        <button class="btn sm danger-o pho" disabled={!!why('delete')} use:tip={tipOf('delete', 'Delete for good')} onclick={() => fm.plan('delete')}><i class="ph ph-trash"></i>Delete<span class="kbd">F8</span></button>
+        <Button size="sm" class="pho" icon="copy" disabled={!!why('copy')} tooltip={tipOf('copy', 'Copy to the other pane')} keys="F5" onclick={() => fm.plan('copy')}>Copy<span class="kbd">F5</span></Button>
+        <Button size="sm" class="pho" icon="arrows-left-right" disabled={!!why('move')} tooltip={tipOf('move', 'Move to the other pane')} keys="F6" onclick={() => fm.plan('move')}>Move<span class="kbd">F6</span></Button>
+        <Button size="sm" class="pho" icon="pencil-simple" disabled={!!why('rename')} tooltip={tipOf('rename', 'Rename')} keys="F2" onclick={() => fm.plan('rename')}>Rename<span class="kbd">F2</span></Button>
+        <Button size="sm" icon="folder-plus" disabled={!!why('mkdir')} tooltip={tipOf('mkdir', 'Make a new folder here')} keys="F7" onclick={() => fm.plan('mkdir')}>New folder<span class="kbd">F7</span></Button>
+        <Button size="sm" class="pho danger-o" icon="trash" disabled={!!why('delete')} tooltip={tipOf('delete', 'Delete for good')} keys="F8" onclick={() => fm.plan('delete')}>Delete<span class="kbd">F8</span></Button>
       </div>
       <div class="fmgrp">
-        <button class="btn sm btn-ghost" disabled={!a.cur && !a.sel.size} use:tip={{ text: 'Size, time and which disks hold it', keys: 'F3' }} onclick={showInfo}><i class="ph ph-info"></i>Info<span class="kbd">F3</span></button>
-        <button class="btn sm btn-ghost" use:tip={{ text: 'Select or deselect by a pattern such as *.mkv', keys: '+' }} onclick={() => (fm.patOpen = !fm.patOpen)}>Select by pattern<span class="kbd">+</span></button>
+        <Button size="sm" variant="ghost" icon="info" disabled={!a.cur && !a.sel.size} tooltip="Size, time and which disks hold it" keys="F3" onclick={showInfo}>Info<span class="kbd">F3</span></Button>
+        <Button size="sm" variant="ghost" tooltip="Select or deselect by a pattern such as *.mkv" keys="+" onclick={() => (fm.patOpen = !fm.patOpen)}>Select by pattern<span class="kbd">+</span></Button>
       </div>
       <span class="grow"></span>
       <div class="fmgrp">
-        <button class="btn sm btn-ghost pho" use:tip={'Show the same place in the active pane'} onclick={() => fm.same(fm.active)}>Same as other pane</button>
-        <button class="btn sm btn-ghost" use:tip={'Exchange the two panes'} onclick={() => fm.swap()}><i class="ph ph-arrows-left-right"></i>Swap panes</button>
-        <button class="btn btn-ghost btn-icon sq" aria-label="Refresh" use:tip={{ text: 'Read both lists again', keys: 'Ctrl R' }} onclick={() => fm.refresh()}><i class="ph ph-arrow-clockwise"></i></button>
+        <Button size="sm" variant="ghost" class="pho" tooltip="Show the same place in the active pane" onclick={() => fm.same(fm.active)}>Same as other pane</Button>
+        <Button size="sm" variant="ghost" icon="arrows-left-right" tooltip="Exchange the two panes" onclick={() => fm.swap()}>Swap panes</Button>
+        <Button size="sm" variant="ghost" icon="arrow-clockwise" label="Refresh" tooltip="Read both lists again" keys="Ctrl R" onclick={() => fm.refresh()} />
       </div>
     </div>
 
@@ -144,25 +146,21 @@
       <div class="fmpat tray">
         <i class="ph ph-stack"></i><span><b>Tray:</b> {S.plural(fm.tray.length, 'item')} from {fm.label(fm.trayLoc)}. They join the selection of any pane on that location.</span>
         <span class="grow"></span>
-        <button class="btn sm" onclick={() => fm.clearTray()}>Empty the tray</button>
+        <Button size="sm" onclick={() => fm.clearTray()}>Empty the tray</Button>
       </div>
     {/if}
     {#if fm.patOpen}
       <div class="fmpat">
         <span class="eyebrow">Pattern</span>
-        <!-- svelte-ignore a11y_autofocus -->
-        <input class="input" type="text" placeholder="*.mkv" aria-label="Glob pattern" autofocus bind:value={fm.pat}
-               onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') fm.byPattern(false); else if (e.key === 'Escape') { fm.patOpen = false; root.focus(); } }} />
-        <button class="btn sm" onclick={() => fm.byPattern(false)}>Select</button>
-        <button class="btn sm" onclick={() => fm.byPattern(true)}>Deselect</button>
+        <span class="patin" use:focusFirst><TextInput placeholder="*.mkv" ariaLabel="Glob pattern" bind:value={fm.pat}
+               onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') fm.byPattern(false); else if (e.key === 'Escape') { fm.patOpen = false; root.focus(); } }} /></span>
+        <Button size="sm" onclick={() => fm.byPattern(false)}>Select</Button>
+        <Button size="sm" onclick={() => fm.byPattern(true)}>Deselect</Button>
         <span class="muted">in the {fm.active === 'L' ? 'left' : 'right'} pane. * is any run of letters, ? is one.</span>
       </div>
     {/if}
 
-    <div class="fmsw" role="group" aria-label="Pane">
-      <button aria-pressed={fm.mobile === 'L'} onclick={() => fm.activate('L')}>Left</button>
-      <button aria-pressed={fm.mobile === 'R'} onclick={() => fm.activate('R')}>Right</button>
-    </div>
+    <div class="fmsw"><Segmented value={fm.mobile} label="Pane" options={[{ value: 'L', label: 'Left' }, { value: 'R', label: 'Right' }]} onchange={(v) => fm.activate(v)} /></div>
 
     <Split open={!!infoRow}>
       {#snippet list()}
@@ -208,11 +206,11 @@
     {#if sel.n}
       <div class="fmbar">
         <b>{sel.n}</b><span class="grow"></span>
-        <button class="btn sm" disabled={!!why('copy')} onclick={() => fm.plan('copy')}>Copy</button>
-        <button class="btn sm" disabled={!!why('move')} onclick={() => fm.plan('move')}>Move</button>
-        <button class="btn sm danger-o" disabled={!!why('delete')} onclick={() => fm.plan('delete')}>Delete</button>
-        <button class="btn sm btn-ghost" disabled={!!why('rename')} onclick={() => fm.plan('rename')}>Rename</button>
-        <button class="btn sm btn-ghost" aria-label="Clear" onclick={() => fm.clear()}><i class="ph ph-x"></i></button>
+        <Button size="sm" disabled={!!why('copy')} reason={why('copy')} onclick={() => fm.plan('copy')}>Copy</Button>
+        <Button size="sm" disabled={!!why('move')} reason={why('move')} onclick={() => fm.plan('move')}>Move</Button>
+        <Button size="sm" class="danger-o" disabled={!!why('delete')} reason={why('delete')} onclick={() => fm.plan('delete')}>Delete</Button>
+        <Button size="sm" variant="ghost" disabled={!!why('rename')} reason={why('rename')} onclick={() => fm.plan('rename')}>Rename</Button>
+        <Button size="sm" variant="ghost" icon="x" label="Clear" onclick={() => fm.clear()} />
       </div>
     {/if}
   </div>
@@ -230,15 +228,13 @@
   .fmgrp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .fmgrp + .fmgrp { padding-left: 14px; border-left: 1px solid var(--line); }
   .kbd { margin-left: 6px; font: 500 10.5px var(--mono); color: var(--fg-3); padding: 0 4px; border: 1px solid var(--line-2); }
-  .danger-o { color: var(--bad-ink); }
-  .danger-o:disabled { color: inherit; }
-  .sq { width: 28px; min-height: 28px; height: 28px; padding: 0; }
+  :global(.btn.danger-o) { color: var(--bad-ink); }
+  :global(.btn.danger-o:disabled) { color: inherit; }
   .fmpat { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 12px; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel); font-size: 12.5px; }
-  .fmpat .input { width: 160px; min-height: 28px; height: 28px; }
+  .patin { width: 160px; }
+  .patin :global(.input) { min-height: 28px; height: 28px; }
   .muted { color: var(--fg-3); }
-  .fmsw { display: none; margin-bottom: 12px; border: 1px solid var(--line-2); }
-  .fmsw button { flex: 1; height: 34px; border: 0; background: none; color: var(--fg-2); }
-  .fmsw button[aria-pressed='true'] { background: color-mix(in oklch, var(--accent) 18%, transparent); color: var(--fg); font-weight: 600; }
+  .fmsw { display: none; margin-bottom: 12px; }
   .fmpanes { display: flex; gap: 12px; align-items: flex-start; }
   .fmbar { display: none; }
   .ipath { padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
@@ -250,7 +246,7 @@
     .fmsw { display: flex; }
     .fmpanes { flex-direction: column; }
     .fmgrp + .fmgrp { padding-left: 0; border-left: 0; }
-    .fmgrp .pho, .kbd { display: none; }
+    .fmgrp :global(.pho), .kbd { display: none; }
     .fmgrp:nth-child(2) { display: none; }
     .fmtools { padding: 6px; gap: 8px; }
     .fm { padding-bottom: 64px; }
