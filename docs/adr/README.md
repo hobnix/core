@@ -47,3 +47,4 @@ Issue: hobnix/server#<n>
 | [0026](0026-live-state-one-mode-one-store.md) | Live state always on, one mode, one store: the state database instead of Redis; no `liveState` setting | Accepted (2026-11-13), measurement first |
 | [0025](0025-translation-scope.md) | Where translation lives: `hs` commands, web, or both; freeze `de.tsv`, web translates, codes only where the web needs them | Accepted (2026-11-10) |
 | [0027](0027-package-lifecycle-states.md) | Package lifecycle states: four stages (available, installed, on, running) and flags for every kind; `sys pkg states`; verbs Install/Remove/Update | Accepted (2026-11-16) |
+| [0028](0028-component-gallery-instead-of-storybook.md) | The component gallery page (`Developer > Components`) instead of Storybook; triggers to revisit #193 | Accepted (2026-11-18) |

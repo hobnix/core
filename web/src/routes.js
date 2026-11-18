@@ -40,6 +40,7 @@ import WhatsNew from './pages/WhatsNew.svelte';
 import Data from './pages/Data.svelte';
 import LiveState from './pages/LiveState.svelte';
 import TestLab from './pages/TestLab.svelte';
+import Gallery from './pages/Gallery.svelte';
 import Section from './pages/Section.svelte';
 import Proxy from './pages/Proxy.svelte';
 import ProxyPorts from './pages/ProxyPorts.svelte';
@@ -88,6 +89,8 @@ export const routes = {
   '/monitoring/diagnostics': Data,
   '/monitoring/live-state': LiveState,
   '/monitoring/test-lab': TestLab,
+  '/developer': Section,
+  '/developer/components': Gallery,
   '/docs': Docs,
   '/setup': Setup,
   '/setup/first-run': FirstRun,
