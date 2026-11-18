@@ -4,6 +4,7 @@
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import PasswordFields from './PasswordFields.svelte';
   import { poll, rows } from '../../data.svelte.js';
+  import { Field, TextInput, Row, Muted, Banner } from '../../ui';
 
   let { ondone = () => {} } = $props();
   let name = $state('');
@@ -26,47 +27,37 @@
 
 <CreateDialog title="New user" area="users" {args} stdin={() => (pwOk ? pw : undefined)} {ondone}>
   {#snippet form()}
-    <div class="field">
-      <label for="nu-name">User name</label>
-      <div class="pre"><span class="dom">HOME\</span><input id="nu-name" class="input" bind:value={name} placeholder="anna" autocomplete="off" spellcheck="false" /></div>
-      {#if name && !nameOk}<div class="hint bad">Starts with a letter; letters, digits, dot, dash and underscore, up to 32.</div>{/if}
-    </div>
-    <div class="field">
-      <label for="nu-full">Full name <span class="opt">(optional)</span></label>
-      <input id="nu-full" class="input" bind:value={full} placeholder="Anna Muster" autocomplete="off" />
-      {#if full && !fullOk}<div class="hint bad">Letters, digits, spaces, dot, dash and apostrophe only.</div>{/if}
-    </div>
+    <Field label="User name" id="nu-name" error={name && !nameOk ? 'Starts with a letter; letters, digits, dot, dash and underscore, up to 32.' : ''}>
+      <Row gap="2"><Muted>HOME\</Muted><TextInput bind:value={name} placeholder="anna" autocomplete="off" spellcheck={false} /></Row>
+    </Field>
+    <Field label="Full name (optional)" id="nu-full" error={full && !fullOk ? 'Letters, digits, spaces, dot, dash and apostrophe only.' : ''}>
+      <TextInput bind:value={full} placeholder="Anna Muster" autocomplete="off" />
+    </Field>
     <PasswordFields bind:pw bind:pw2 />
     <div class="field">
-      <span class="lbl">Groups <span class="opt">(optional)</span></span>
+      <span class="lbl">Groups (optional)</span>
       <div class="chips">
         {#each groups as g (g)}
           <button type="button" class="chip" class:on={chosen.includes(g)} aria-pressed={chosen.includes(g)} onclick={() => toggle(g)}>
             <i class="ph {chosen.includes(g) ? 'ph-check' : 'ph-plus'}"></i>{g}
           </button>
         {:else}
-          <span class="hint">{gl.loaded ? 'No other groups yet.' : 'Loading…'}</span>
+          <Muted>{gl.loaded ? 'No other groups yet.' : 'Loading…'}</Muted>
         {/each}
       </div>
     </div>
     {#if adminWarn}
-      <div class="warn"><i class="ph ph-warning"></i>Domain Admins can sign in to this interface and change everything on the server.</div>
+      <Banner tone="warn">Domain Admins can sign in to this interface and change everything on the server.</Banner>
     {/if}
-    <div class="hint">The new user is in Domain Users. What the chosen groups may open is set in Shares.</div>
+    <Muted as="p">The new user is in Domain Users. What the chosen groups may open is set in Shares.</Muted>
   {/snippet}
 </CreateDialog>
 
 <style>
-  .pre { display: flex; align-items: center; gap: 6px; }
-  .dom { color: var(--color-neutral-400); font-size: 14px; }
-  .opt { color: var(--color-neutral-500); }
-  .lbl { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+  .lbl { display: block; font-size: 12px; margin-bottom: 5px; color: var(--fg-2); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12.5px; padding: 4px 11px; border-radius: 999px; cursor: pointer;
-    color: var(--color-neutral-300); background: transparent; border: 1px solid var(--color-divider); }
-  .chip:hover { border-color: var(--color-accent); }
-  .chip.on { background: var(--color-accent-800); color: var(--color-accent-100); border-color: transparent; }
-  .warn { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--st-warn); }
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 4px; }
-  .hint.bad { color: var(--st-bad); }
+    color: var(--fg-2); background: transparent; border: 1px solid var(--line-2); }
+  .chip:hover { border-color: var(--accent); }
+  .chip.on { background: var(--panel-3); color: var(--fg); border-color: transparent; }
 </style>
