@@ -4,6 +4,7 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
+  import Progress from '../ui/Progress.svelte';
   import * as S from './selection.js';
 
   let { fm } = $props();
@@ -29,7 +30,7 @@
             {#if p.phase}<span class="ph">{p.phase}</span>{/if}
           {:else}<span>Starting…</span>{/if}
         </div>
-        <div class="ub"><div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct} aria-label="Progress"><div class="fill" style="width:{pct}%"></div></div><span class="pc">{pct} %</span></div>
+        <div class="ub"><Progress value={pct} total={100} label="Progress" /></div>
         {#if p?.current}<div class="cur mono">{p.current}</div>{/if}
       {:else if j.state === 'paused'}
         <b>Paused.</b> {j.title}
@@ -65,9 +66,7 @@
   .jb { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .stat { display: flex; gap: 14px; flex-wrap: wrap; font: 12.5px var(--mono); color: var(--fg-2); }
   .ph { color: var(--info-ink); }
-  .ub { display: flex; align-items: center; gap: 10px; max-width: 520px; margin-top: 4px; }
-  .track { flex: 1; position: relative; height: 10px; background: var(--panel-3); overflow: hidden; -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); }
-  .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--info); transition: width 0.4s; }
-  .pc { font: 12px var(--mono); color: var(--fg-2); min-width: 3em; }
+  .ub { display: flex; max-width: 520px; margin-top: 4px; }
+  .ub :global(.pg) { flex: 1; }
   .cur { font-size: 12px; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

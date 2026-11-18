@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "One progress bar and one step list in the web interface"
+body  = """The Jobs page and the file manager now draw progress with the same bar: the percent is always written next to it, and a job without a known total shows a moving bar instead of a wrong number. Steps of a job can be listed with a word for each state."""
