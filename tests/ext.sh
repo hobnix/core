@@ -118,6 +118,11 @@ check_out "disable says it is off" "Extension 'demo' is off" echo "$out"
 check_out "machine.toml lost it" 'capabilities = \["nixy"\]' cat "$HS_MACHINE_FILE"
 check_eq "its commands are gone at once" "0" "$($HS help | grep -c 'ext demo')"
 check_eq "even when the file Nix wrote still names it" "off" "$(echo demo > "$HS_CAPABILITIES_FILE"; $HS sys ext list | awk -F'\t' '$1 == "demo" { print $2 }')"
+check "a name nobody has stays an error when it is not switched on" bash -c "! $HS ext disable ghost >/dev/null 2>&1"
+sed -i 's/^capabilities = \[\(.*\)\]/capabilities = [\1, "ghost"]/' "$HS_MACHINE_FILE"
+check_out "ghost is switched on, its package is gone" '"ghost"' cat "$HS_MACHINE_FILE"
+check_out "disable names what it did" "leftover switch is out" $HS ext disable ghost
+check "and it is out of machine.toml" bash -c "! grep -q '\"ghost\"' '$HS_MACHINE_FILE'"
 $HS ext enable demo >/dev/null 2>&1
 check_eq "enable takes the overlay back" "on" "$($HS sys ext list | awk -F'\t' '$1 == "demo" { print $2 }')"
 check_out "an unknown package is refused" "No extension called 'nope'" $HS ext enable nope
