@@ -8,6 +8,7 @@
   import PageState from '../shell/PageState.svelte';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
+  import { Card, Muted, Row } from '../ui/index.js';
   import Kv from '../ui/Kv.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
   import { ctOf, link, servicesOf } from './instances/ct.js';
@@ -90,7 +91,7 @@
     {:else if board.doc}<Board doc={board.doc} host={location.hostname} />{/if}
   </div>
 {:else}
-  <div class="muted">The dashboard is off: <code>hs config set dashboard web</code></div>
+  <Muted as="div">The dashboard is off: <code>hs config set dashboard web</code></Muted>
 {/if}
 
 {#if noProxy}
@@ -101,8 +102,7 @@
 <PageState loading={!svc.loaded} error={svc.error?.message} hasData={svc.data != null} empty={svc.loaded && !svc.error && !services.length}
            emptyIcon="arrows-split" emptyTitle="No services yet" emptyText="Import the routes of the proxy, or run a recipe: it describes its own service.">
   {#snippet emptyAction()}<Button variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>{/snippet}
-  <div class="card tc">
-    <div class="sh">Services</div>
+  <Card title="Services">
     <Table id="services" {columns} rows={services} key="name" loading={!svc.loaded} empty="No services.">
       {#snippet cell(s, col)}
         {#if col.key === 'name'}<code>{s.name}</code>
@@ -116,11 +116,10 @@
         {:else}<Button variant="ghost" class="btn-icon services-rm" tooltip={`Change ${s.name}`} aria-label="Change {s.name}" onclick={() => describe({ edit: s.name })}><i class="ph ph-pencil-simple"></i></Button><Button variant="ghost" class="btn-icon services-rm" tooltip={`Forget the description of ${s.name} (its routes stay)`} aria-label="Forget {s.name}" onclick={() => openPlan('routes', ['remove', s.name], 'Forget ' + s.name)}><i class="ph ph-x"></i></Button>{/if}
       {/snippet}
     </Table>
-  </div>
+  </Card>
 
   {#if !noProxy}
-    <div class="card tc">
-      <div class="sh">Routes on the proxy against the services</div>
+    <Card title="Routes on the proxy against the services">
       <Table id="service-routes" columns={routeCols} rows={routes} loading={!plan.loaded}
              empty={plan.error ? 'The routes could not be read.' : 'No services want a route and the proxy has none.'}>
         {#snippet cell(r, col)}
@@ -128,18 +127,17 @@
           {:else}<span class="c">{col.key === 'note' ? r.note : dash(r[col.key])}</span>{/if}
         {/snippet}
       </Table>
-    </div>
+    </Card>
   {/if}
 </PageState>
 {#if gateway}
-  <div class="card tc">
-    <div class="sh">Local names (gateway proxy)</div>
+  <Card title="Local names (gateway proxy)">
     {#if gw.loaded && gwv.wildcard && gwv.wildcard !== 'ok'}<Banner tone="warn">The wildcard DNS record is {gwv.wildcard}. Run <code>hs gateway check</code> in a terminal.</Banner>{/if}
     <Kv items={[{ k: 'Service', v: gwv.service ?? '' }, { k: 'Web interface', v: gwv.webui ?? '' }, { k: 'Domain', v: gwv.domain ?? '' }, { k: 'Wildcard', v: gwv.wildcard ?? '' }, { k: 'Port 80', v: gwv.port80 ?? '' }]} />
-    <div class="acts">
+    <Row>
       <Button icon="check-circle" disabled={!localTodo || (routesJob && !jobRunning('routes', ['apply', '--proxy', 'local']))} busy={jobRunning('routes', ['apply', '--proxy', 'local'])} busyLabel="Applying…" tooltip={localTodo ? 'Make the local names the services want' : 'The gateway proxy already matches the services'} onclick={() => openPlan('routes', ['apply', '--proxy', 'local'], 'Apply the local names')}>Apply local{localTodo ? ` (${localTodo})` : ''}…</Button>
       <Button variant="ghost" icon="download-simple" disabled={routesJob && !jobRunning('routes', ['import', '--proxy', 'local'])} busy={jobRunning('routes', ['import', '--proxy', 'local'])} busyLabel="Importing…" tooltip={'Let every service without a choice get a local name'} onclick={() => openPlan('routes', ['import', '--proxy', 'local'], 'Import local names')}>Import local…</Button>
-    </div>
+    </Row>
     <Table id="service-local-routes" columns={routeCols} rows={localRoutes} loading={!local.loaded}
            empty={local.error ? 'The local names could not be read.' : 'No services want a local name.'}>
       {#snippet cell(r, col)}
@@ -147,16 +145,11 @@
         {:else}<span class="c">{col.key === 'note' ? r.note : dash(r[col.key])}</span>{/if}
       {/snippet}
     </Table>
-  </div>
+  </Card>
 {/if}
-<div class="muted">The proxy login (<code>hs services proxy login</code>) stays in the terminal: it carries a password.</div>
+<Muted as="div">The proxy login (<code>hs services proxy login</code>) stays in the terminal: it carries a password.</Muted>
 
 <style>
-  .tc { padding: 12px 14px; }
-  .sh { font-size: 12px; color: var(--fg-3); margin-bottom: 6px; }
-  .dh { display: flex; align-items: center; justify-content: space-between; }
-  .acts { display: flex; gap: 8px; margin: 8px 0; }
-  .muted { font-size: 12px; color: var(--fg-3); }
   .c { color: var(--fg-2); }
   :global(.btn.services-rm) { width: 28px; min-height: 28px; color: var(--fg-3); }
 </style>
