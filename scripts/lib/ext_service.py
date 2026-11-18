@@ -15,12 +15,14 @@ service (shutdown message, SIGTERM to the process group, SIGKILL). Restarting af
   ext_service.py svc-run --name N --dir PACKAGE_DIR --state-dir DIR
      The unit's ExecStart: reads [service] (exec, subscribe, health_interval) of the package, supervises it, writes the states to
      DIR/<N>.json and records a failed run. The fifth failure within 10 minutes (the unit's StartLimitBurst, ADR 0011 rule 2) emits the
-     core event ext.service-failed ONCE (systemd then refuses the sixth start). Event delivery, cursors and snapshots are steps 5 and 6 of
-     docs/PLAN-extensions-access.md and are not wired here. Exit: 0 stopped on request, 1 failed, 75 never ready.
+     core event ext.service-failed ONCE (systemd then refuses the sixth start). Events come from the event log (state.db) after the cursor
+     file CURSOR_DIR/<N> (decision D12); `emit` becomes an event (50 a minute, the 51st is dropped with a warning); `snapshot` is written to
+     SNAP_DIR/<N>/<topic>.json, which the live collector serves as the live topic ext-<N>-<topic>. Exit: 0 stopped on request, 1 failed, 75 never ready.
   ext_service.py has-service DIR      exit 0 when the package has a [service] table
   ext_service.py status --name N --state-dir DIR [--active yes|no] [--stopped yes|no]    prints state, reason, since (TAB, `-` when empty)
   ext_service.py reset --name N --state-dir DIR    forget the state and the failures (hs ext start)
-  Test knobs: HS_NOW (the clock), HS_EXT_EMIT (a program called instead of `hs event emit`, same arguments).
+  Test knobs: HS_NOW (the clock), HS_EXT_EMIT (a program called instead of `hs event emit`, same arguments), HS_STATE_DIR (the state root,
+  default LIB_DIR), HS_STATE_DB (the event log).
 
 Schema of the messages: docs/api/ext-service-v1.schema.json.
 """
@@ -41,6 +43,11 @@ except ImportError:   # Python 3.10 or older: [service] cannot be read
     tomllib = None
 
 VERSION = 1
+LIB_DIR = "/var/lib/hs"         # the state root: the ONE place that names it, so the later hs -> hn rename is one edit
+CURSOR_SUB = "ext-cursors"      # decision D12: one file per service, the last acknowledged event id
+SNAP_SUB = "ext-snapshots"      # one file per snapshot topic; the live collector serves it as the live topic ext-<name>-<topic>
+EMIT_LIMIT = 50                 # emits a minute per service
+EMIT_WINDOW = 60.0
 MAX_LINE = 1 << 20
 MAX_SNAPSHOT = 256 << 10
 WINDOW = 100                    # events sent but not yet acknowledged, at most
@@ -76,6 +83,18 @@ def check_message(m):
     return None
 
 
+def state_root():
+    return os.environ.get("HS_STATE_DIR") or LIB_DIR
+
+
+def cursor_path(name):
+    return os.path.join(state_root(), CURSOR_SUB, name)
+
+
+def snapshot_dir(name):
+    return os.path.join(state_root(), SNAP_SUB, name)
+
+
 def read_cursor(path):
     try:
         return max(0, int(open(path).read().strip() or 0))
@@ -84,6 +103,7 @@ def read_cursor(path):
 
 
 def write_cursor(path, n):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = f"{path}.tmp"
     with open(tmp, "w") as f:
         f.write(f"{n}\n")
@@ -352,6 +372,122 @@ def record_failure(state_dir, name, code, reason):
     return len(fails)
 
 
+def db_events():
+    """The real event log: fetch(after, limit) -> rows with id > after, oldest first (read only; nothing when there is no database yet)."""
+    import sqlite3
+    path = os.environ.get("HS_STATE_DB") or os.path.join(state_root(), "state.db")
+
+    def fetch(after, limit):
+        if not os.path.exists(path):
+            return []
+        try:
+            c = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True, timeout=10)
+            try:
+                c.execute("PRAGMA query_only=1")
+                rows = c.execute("SELECT id, time, source, kind, subject, level, text, payload FROM events WHERE id > ? ORDER BY id LIMIT ?",
+                                 (after, limit)).fetchall()
+            finally:
+                c.close()
+        except sqlite3.Error:
+            return []
+        out = []
+        for i, t, src, kind, subj, lvl, text, payload in rows:
+            try:
+                pl = json.loads(payload) if payload else None
+            except ValueError:
+                pl = None
+            out.append({"id": i, "time": t, "source": src, "kind": kind, "subject": subj or "", "level": lvl, "text": text or "", "payload": pl})
+        return out
+    return fetch
+
+
+def db_latest():
+    """The newest event id, 0 without a database: a service that starts for the first time gets what happens from now on, not the whole log."""
+    path = os.environ.get("HS_STATE_DB") or os.path.join(state_root(), "state.db")
+    if not os.path.exists(path):
+        return 0
+    import sqlite3
+    try:
+        c = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True, timeout=10)
+        try:
+            return c.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()[0]
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return 0
+
+
+class RateLimit:
+    """At most `limit` events in any `window` seconds (a sliding window). allow() -> True and counts, or False."""
+
+    def __init__(self, limit=EMIT_LIMIT, window=EMIT_WINDOW, clock=time.monotonic):
+        self.limit, self.window, self.clock, self.stamps = limit, window, clock, []
+
+    def allow(self):
+        t = self.clock()
+        self.stamps = [x for x in self.stamps if t - x < self.window]
+        if len(self.stamps) >= self.limit:
+            return False
+        self.stamps.append(t)
+        return True
+
+
+def emit_event(name, m):
+    """Write the event of an `emit` message into the event log: `hs event emit pkg.<package>.<what> <subject> [text] --level L --payload JSON`."""
+    scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prog = [os.environ["HS_EXT_EMIT"]] if os.environ.get("HS_EXT_EMIT") else ["bash", os.path.join(scripts, "event.sh"), "emit"]
+    args = [m["kind"], m["subject"] or name, m.get("text", ""), "--level", m.get("level", "info")]
+    if m.get("payload"):
+        args += ["--payload", json.dumps(m["payload"], separators=(",", ":"))]
+    try:
+        subprocess.run(prog + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def write_snapshot(name, topic, data):
+    """Store a snapshot where the collector looks for it; only a changed document is written (no new generation for the same data)."""
+    d = snapshot_dir(name)
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, topic + ".json")
+    text = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    try:
+        with open(path) as f:
+            if f.read() == text:
+                return False
+    except OSError:
+        pass
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    return True
+
+
+def make_handler(name, limit=None, warn=None):
+    """The on_message of svc-run: `log` to the journal, `emit` into the event log under the rate limit, `snapshot` to the snapshot file."""
+    limit = limit or RateLimit()
+    warn = warn or (lambda s: print(f"warn: {s}", file=sys.stderr, flush=True))
+    state = {"warned": False}
+
+    def handle(m):
+        t = m.get("type")
+        if t == "log":
+            print(f"{m['level']}: {m['text']}", file=sys.stderr, flush=True)
+        elif t == "emit":
+            if not m["kind"].startswith(f"pkg.{name}."):
+                warn(f"{name}: emit of {m['kind']} dropped (a service may only emit pkg.{name}.<what>)")
+            elif limit.allow():
+                state["warned"] = False
+                emit_event(name, m)
+            elif not state["warned"]:     # one warning per burst, not one per dropped event
+                state["warned"] = True
+                warn(f"{name}: more than {limit.limit} emits in {limit.window:g} s, further ones are dropped")
+        elif t == "snapshot":
+            write_snapshot(name, m["topic"], m["data"])
+    return handle
+
+
 def svc_run(name, pkgdir, state_dir):
     table = service_table(pkgdir)
     if not table or not isinstance(table.get("exec"), str):
@@ -366,11 +502,11 @@ def svc_run(name, pkgdir, state_dir):
         d.update({"state": s, "reason": why, "since": now()})
         save_state(state_dir, name, d)
 
-    def on_message(m):    # `log` goes to the journal (stderr); `emit` and `snapshot` are steps 5 and 6
-        if m.get("type") == "log":
-            print(f"{m['level']}: {m['text']}", file=sys.stderr, flush=True)
-    res = supervise(program_of(pkgdir, table["exec"]), name, table.get("subscribe", []), None, None, 30,
-                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, on_message)
+    subscribe = table.get("subscribe", [])
+    if subscribe and not os.path.exists(cursor_path(name)):
+        write_cursor(cursor_path(name), db_latest())
+    res = supervise(program_of(pkgdir, table["exec"]), name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
+                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name))
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1

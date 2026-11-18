@@ -357,6 +357,57 @@ class DbStore:
         pass
 
 
+class SnapshotWatch:
+    """Snapshots of service extensions as live topics (#197 d): a service sends `snapshot`, scripts/lib/ext_service.py writes the document to a file,
+    and this watcher is the one writer that stores it as the topic ext-<name>-<topic> (only a changed document gets a new gen). A topic whose
+    package is off, or whose file is gone, is deleted."""
+    EVERY = 2.0
+
+    def __init__(self, collector, stop, read=None, every=None):
+        self.c, self.stop, self.have = collector, stop, set()
+        self.read = read or ls_snapshots
+        self.every = every or self.EVERY
+
+    def once(self):
+        now = time.time()
+        seen = set()
+        for topic, text in self.read():
+            seen.add(topic)
+            if self.c.db is not None:
+                old = self.c.db.get(topic)
+                if old and old.get("payload") == text and old.get("err") is None:
+                    continue
+            ev = []
+            changed = self.c._store(topic, 0, text, None, now, ev)
+            if changed:
+                self.c.changed(topic)
+        for topic in self.have - seen:
+            try:
+                with self.c.lock:
+                    if self.c.db is not None:
+                        self.c.db.delete(topic)
+                    else:
+                        self.c.store.cmd("DEL", ls.KEY % topic)
+            except OSError:
+                pass
+        self.have = seen
+
+    def run(self):
+        while not self.stop.wait(self.every):
+            try:
+                self.once()
+            except Exception as e:      # a broken snapshot must not stop the collector
+                log("snapshot scan failed (%s)" % e)
+
+
+def ls_snapshots():
+    try:
+        import hs_ext
+        return hs_ext.ext_snapshots()
+    except Exception:
+        return []
+
+
 def beat_every():
     try:
         n = int(os.environ.get("HS_LIVE_BEAT", "5"))
@@ -369,7 +420,8 @@ class Collector:
     RESCAN = 60.0         # seconds between looks at the extension packages that are on (their live reads)
     RESCAN_MIN = 3.0      # a refresh of an unknown ext- topic looks sooner, but not more often than this
 
-    def __init__(self, store, run=hs_run, topic_rows=None, connect=None, topic_info=None, ext_rows=None, emit=emit_event, topic_needs=None, watchers=None, db=None):
+    def __init__(self, store, run=hs_run, topic_rows=None, connect=None, topic_info=None, ext_rows=None, emit=emit_event, topic_needs=None, watchers=None, db=None, snapshots=True):
+        self.snapshots = snapshots               # SnapshotWatch: the snapshots of service extensions (a test passes False)
         self.db = db                             # a DbStore (liveState = "db"); then store is None
         self.took = {}                           # topic -> milliseconds of its last read
         self.backend = "state.db" if db else "redis"
@@ -692,6 +744,8 @@ class Collector:
         else:
             threading.Thread(target=self.listen, daemon=True).start()
         threading.Thread(target=self.watch, daemon=True).start()
+        if self.snapshots:
+            threading.Thread(target=SnapshotWatch(self, self.stop).run, daemon=True).start()
         threading.Thread(target=self.waves, daemon=True).start()
         self.rescan()      # once now: a missing needs target is in the journal from the start
         for w in (self.watchers if self.watchers is not None else [DockerWatch(self.refresh, self.stop), IncusWatch(self.refresh, self.stop)]):

@@ -5,6 +5,7 @@ Standard library only. Declaration format: see the comment above EXT_NAME in web
 import json
 import os
 import re
+import sys
 
 EXT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 EXT_KINDS = ("tsv", "json", "text")
@@ -307,6 +308,32 @@ def ext_load_web():
         if c_new:
             changes["ext/" + name] = c_new
     return reads, changes, pages
+
+
+def ext_snapshots(on=None):
+    """[(topic, text)] of the snapshots that services of packages that are on have written (scripts/lib/ext_service.py: SNAP_SUB/<name>/<topic>.json).
+    The topic is ext-<name>-<topic>; the live collector stores each as a live document."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+    import ext_service
+    on = {n for n, _ in ext_packages()} if on is None else set(on)
+    out = []
+    for name in sorted(on):
+        d = ext_service.snapshot_dir(name)
+        try:
+            files = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for f in files:
+            topic = f[:-5] if f.endswith(".json") else ""
+            full = "ext-%s-%s" % (name, topic)
+            if not topic or not TOPIC_NAME.match(topic) or len(full) > TOPIC_MAX:
+                continue
+            try:
+                with open(os.path.join(d, f), encoding="utf-8") as fh:
+                    out.append((full, fh.read()))
+            except OSError:
+                pass
+    return out
 
 
 def ext_live_rows(log=None):
