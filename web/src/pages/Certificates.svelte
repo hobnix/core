@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   // The certificate of the domain controller (LDAPS) and the small CA of this setup that signs it: hs sys dc state / plan / start.
   import { poll, rows } from '../data.svelte.js';
   import { openPlan, ui, jobRunning } from '../ui.svelte.js';
@@ -45,7 +46,7 @@
     {#if certOk}
       <div class="kv"><span>Subject</span><span>{s.subject}</span></div>
       <div class="kv"><span>Names</span><span>{s.names}</span></div>
-      <div class="kv"><span>Valid until</span><span>{s.valid_until}{#if days !== null} <span class="tag {soon ? 'tag-accent-2' : 'tag-neutral'}" style="padding:1px 7px">{days < 0 ? `${-days} days ago` : `${days} days left`}</span>{/if}</span></div>
+      <div class="kv"><span>Valid until</span><span>{s.valid_until}{#if days !== null} <Chip tone={soon ? 'soft' : ''}>{days < 0 ? `${-days} days ago` : `${days} days left`}</Chip>{/if}</span></div>
       <div class="kv"><span>Signed by</span><span><span class="dot {s.checked === 'yes' ? 'ok' : 'warn'}"></span> {s.checked === 'yes' ? 'the CA of this setup' : 'not this CA (the self-signed certificate of Samba, valid only for the controller’s own name)'}</span></div>
     {:else if s.cert === 'none'}
       <Muted as="div">There is no domain controller on this server.</Muted>
