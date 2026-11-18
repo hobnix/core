@@ -130,6 +130,14 @@ def _perms_module():
     return mod
 
 
+def _roles_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_roles", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_roles.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def ext_manifest(d):
     """the parsed capability.toml of a package folder (a recipe package: package.toml); OSError / TOMLDecodeError when it is missing or wrong"""
     import tomllib
@@ -157,6 +165,14 @@ def core_topics():
         return set()
 
 
+def _entry_role(entry):
+    """the `role` of a [[web.reads]] / [[web.changes]] entry (docs/PLAN-extensions-access.md D13); no key = admin, an unknown value raises ValueError"""
+    role = _roles_module().of(entry)
+    if role is None:
+        raise ValueError("role must be viewer, app-manager or admin")
+    return role
+
+
 def ext_read(name, rd, rows, caps=None):
     """Validate one [[web.reads]] entry of the package `name` against the sys rows of its commands.tsv -> (words, spec). Raises ValueError/KeyError/TypeError.
     `live = <seconds>` (10..3600, only without args) opts the read in to a live-state topic ext-<name>-<words joined by '-'; `locked = "run"|"skip"` (default skip).
@@ -168,7 +184,7 @@ def ext_read(name, rd, rows, caps=None):
         raise ValueError("bad read")
     if words + tuple("<x>" for _ in args) not in rows or set(words) & {"plan", "start", "stop", "delete", "purge"}:
         raise ValueError("a read is not a sys row of the package, or changes something")
-    spec = {"kind": rd["kind"], "ttl": rd["ttl"]}
+    spec = {"kind": rd["kind"], "ttl": rd["ttl"], "role": _entry_role(rd)}      # role: the least role that may read it (default admin)
     if args:
         spec["args"] = args
     locked = rd.get("locked", "skip")
@@ -271,10 +287,11 @@ def ext_declarations(log=None):
                     for k in ("topic", "live", "locked", "cap", "needs"):
                         spec.pop(k, None)
             for ch in web.get("changes", []):
+                role = _entry_role(ch)
                 if "patterns" in ch:
-                    c_new.append([_pattern(p) for p in ch["patterns"]])
+                    c_new.append({"fixed": [_pattern(p) for p in ch["patterns"]], "opts": {}, "role": role})      # an exact shape: no options, same match
                 else:
-                    ent = {"fixed": [_pattern(p) for p in ch["fixed"]],
+                    ent = {"role": role, "fixed": [_pattern(p) for p in ch["fixed"]],
                            "opts": {o["flag"]: (_pattern(o["pattern"]) if o.get("pattern") is not None else None, bool(o.get("repeats", False)))
                                     for o in ch.get("opts", [])}}
                     if ch.get("stdin"):

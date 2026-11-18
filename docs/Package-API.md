@@ -120,3 +120,16 @@ stops the whole process group of the extension: SIGTERM, five seconds of grace, 
 A demo package is `protocol-demo` in the extensions repository. Tests: `tests/ext-proto.sh`.
 
 Not tested on hardware yet.
+
+## Roles of web entries (milestone 0.8, step 18)
+
+Every `[[web.reads]]` and `[[web.changes]]` entry of an extension's `capability.toml` may carry `role`. It is the least role of the web interface
+that may use the entry (ADR 0012, decision D13). `pkg.py validate` (`scripts/lib/pkg_roles.py`) refuses any other value.
+
+| Key | Value | Rule |
+| --- | --- | --- |
+| `role` | `"viewer"`, `"app-manager"` or `"admin"` | optional; **no `role` means `admin`**, so a manifest written before roles stays admin-only |
+
+The web interface applies the higher of this role and the role of the core `sys` row the entry calls. A package can therefore make something
+stricter, never wider than the core allows. A refused call is a 403 that names both roles and runs nothing; a token never has more than its
+owner's role. Not tested on hardware yet.

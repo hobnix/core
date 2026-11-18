@@ -83,6 +83,16 @@ def _load_pkg_perms():
 pkg_perms = _load_pkg_perms()
 
 
+def _load_pkg_roles():
+    spec = importlib.util.spec_from_file_location("pkg_roles", os.path.join(HERE, "lib", "pkg_roles.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_roles = _load_pkg_roles()
+
+
 def _load_pkg_app():
     spec = importlib.util.spec_from_file_location("pkg_app", os.path.join(HERE, "lib", "pkg_app.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -427,6 +437,8 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad(t)
     for t in pkg_perms.manifest_problems(n, m, capability_toml(os.path.dirname(path)) if path else None):
         bad("permissions: " + t)
+    for t in pkg_roles.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
+        bad(t)
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs

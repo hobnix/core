@@ -43,6 +43,32 @@ CAP='[[web.reads]]\nwords = "list"\nkind = "tsv"'
 printf 'name = "permext"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n%b\n' "$CAP" > "$T/capability.toml"
 bad "[[web.reads]] without web.read is refused" "not web.read" 'permissions = ["host:incus"]'
 good "[[web.reads]] with web.read" 'permissions = ["web.read"]'
+# step 18 (docs/PLAN-extensions-access.md): `role` per web entry, default admin
+cap_role() { printf 'name = "permext"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
+%b
+' "$1" > "$T/capability.toml"; }
+cap_role '[[web.reads]]
+words = "list"
+kind = "tsv"
+role = "app-manager"
+[[web.changes]]
+patterns = ["^x$"]
+role = "viewer"'
+good "a read and a change with a known role" 'permissions = ["web.read", "web.change"]'
+cap_role '[[web.reads]]
+words = "list"
+kind = "tsv"
+role = "root"'
+bad "an unknown role of a read is refused" "role must be one of" 'permissions = ["web.read"]'
+cap_role '[[web.changes]]
+patterns = ["^x$"]
+role = "Admin"'
+bad "an unknown role of a change is refused" "web.changes.0.: role must be one of" 'permissions = ["web.change"]'
 manifest ''
 check_out "perms says -  for a package without a declaration" "^-$" bash -c "HS_PACKAGES_ROOT=$WORK/tree $PKG perms permext"
 manifest 'permissions = ["web.read", "host:incus"]'

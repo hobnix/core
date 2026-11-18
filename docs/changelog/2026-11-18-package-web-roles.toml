@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "security"
+title = "Extensions can say which role may use each read and change"
+body  = """An extension's web reads and changes can now carry a role (viewer, app-manager or admin). Without one they stay admin-only, so nothing becomes wider by this update. A role that is not one of the three is refused by hs pkg validate."""

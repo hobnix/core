@@ -1587,6 +1587,22 @@ def ext_refresh(force=False):
         CHANGES["config"] = _config_entries("|".join(overlay_settable()))
 
 
+def ext_need(words, table_need):
+    """The role an extension call needs (docs/PLAN-extensions-access.md step 18): the higher of the `role` of the package's [[web.reads]] /
+    [[web.changes]] entry and `table_need`, the role of the core row it calls. `words` are the words after `hs sys`; anything that is not an
+    extension call, or an entry that is gone, keeps `table_need` (an extension call that matches no entry is refused before this)."""
+    if len(words) < 3 or words[0] != "ext":
+        return table_need
+    if words[2] in ("plan", "start"):
+        entries = CHANGES.get("ext/" + words[1], [])
+        roles = [e.get("role", "admin") for e in entries if isinstance(e, dict) and _entry_match(e, list(words[3:]))[0]]
+    else:
+        spec = next((READS.get(tuple(words[:n])) for n in range(len(words), 0, -1) if tuple(words[:n]) in READS), None)
+        roles = [spec.get("role", "admin")] if spec else []
+    have = min(roles, key=ROLES.index) if roles else "admin"      # no entry found: admin
+    return max(have, table_need, key=ROLES.index)
+
+
 def _entry_match(entry, args):
     """-> (ok, takes_stdin). An entry is a list of patterns (an exact shape) or a dict {fixed: [patterns], opts: {--flag: (pattern|None, repeats)}, stdin: bool}
     whose options may follow the fixed arguments in any order (a flag without a pattern is a switch, a flag with `repeats` may appear more than once)."""
@@ -2776,6 +2792,9 @@ def make_handler(app):
             """The one role check (ADR 0012 decision 3): after the session is known, before the command runs. `words` are the words after `hs sys`.
             A refused call is a 403 that names both roles, runs nothing and writes no audit line (the web log has it)."""
             need, have = app.roles.need(words), self._role(s)
+            if words[:1] == ["ext"] and len(words) > 2:      # a package's entry names its own role; the core row still counts when it has one
+                ext_refresh()
+                need = ext_need(words, need if app.roles.match(words)[1] else "viewer")
             if s.get("via") and words[:1] and words[0] in TOKEN_DENIED:      # a token never manages tokens, people, secrets or the unlock, whatever its role
                 print("web refused: token %s may not %s" % (s["via"], " ".join(words[:2])), flush=True)
                 self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
