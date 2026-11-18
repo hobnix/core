@@ -1,6 +1,6 @@
 # 0010: Command extensions speak versioned JSON over stdin/stdout
 
-Status: Accepted (2026-11-10)
+Status: Accepted (2026-11-10); implemented in 0.8 (dispatcher `scripts/lib/ext_proto.py`, manifest checks `pkg_protocol.py`, SDK helpers); not tested on hardware yet. Guide: docs/extensions.md
 Issue: hobnix/server#237 (epic #197). Service extensions are #238, permissions #239; neither is decided here.
 
 ## Context
