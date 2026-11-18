@@ -10,6 +10,7 @@
   import Chip from '../ui/Chip.svelte';
   import Checkbox from '../ui/Checkbox.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import Dialog from '../ui/Dialog.svelte';
 
   let { dialog } = $props();            // { area, args, title, option?: { label, args } } (option = a checkbox that adds its args and asks the plan again)
 
@@ -70,10 +71,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
-
-<div class="dialog-backdrop" role="presentation">
-  <div class="pdlg" class:danger role="dialog" aria-modal="true" aria-labelledby="pdt">
+<Dialog labelledby="pdt" width="540px" onclose={close}>
+  <div class="pdlg" class:danger>
     {#if danger}<div class="stripe"></div>{/if}
     <div class="dh">
       <!-- halftone slot: the dialog header (not for a danger plan, whose header is tinted red) -->
@@ -134,10 +133,10 @@
     </div>
     {/if}
   </div>
-</div>
+</Dialog>
 
 <style>
-  .pdlg { position: relative; width: min(540px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 24px 64px oklch(0 0 0 / 0.5); }
+  .pdlg { display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .stripe { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--bad); z-index: 2; }
   .dh { position: relative; flex: none; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); overflow: hidden; }
   .pdlg.danger .dh { background: color-mix(in oklch, var(--bad) 10%, var(--panel)); }

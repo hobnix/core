@@ -15,6 +15,7 @@
   import { offersRebuild } from './effect.js';
   import PlanSteps from './PlanSteps.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import Dialog from '../ui/Dialog.svelte';
 
   let { title, kicker = 'New', area, args, stdin = () => undefined, form, onclose = () => { ui.create = null; }, ondone = () => {} } = $props();
 
@@ -88,10 +89,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
-
-<div class="dialog-backdrop" role="presentation" style="z-index:50">
-  <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="cdt">
+<Dialog labelledby="cdt" width="960px" onclose={onclose}>
+  <div class="wide">
     <div class="left">
       <div>
         <div class="kicker">{kicker} <span class="tag tag-neutral" style="padding:1px 8px;margin-left:6px">{ui.host}</span></div>
@@ -138,10 +137,10 @@
       </div>
     </div>
   </div>
-</div>
+</Dialog>
 
 <style>
-  .dialog.wide { width: min(960px, 100%); height: min(720px, calc(100vh - 40px)); padding: 0; gap: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .wide { height: min(720px, calc(100vh - 40px)); display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; min-height: 0; }
   .left { padding: 20px 22px; overflow: auto; display: flex; flex-direction: column; gap: 16px; min-height: 0; }
   .right { background: var(--color-bg); box-shadow: inset 1px 0 0 var(--color-neutral-800); padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
   .scroll { flex: 1; min-height: 0; overflow: auto; }
@@ -151,6 +150,6 @@
   .needs { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--color-neutral-200); }
   .refused { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--st-bad); }
   .cmd { display: block; font-size: 12px; padding: 10px 12px; margin-top: 10px; border-radius: var(--r); background: var(--color-surface); color: var(--color-neutral-300); overflow-x: auto; white-space: nowrap; }
-  .dialog :global(.btn:disabled) { opacity: 0.45; cursor: default; }
-  @media (max-width: 800px) { .dialog.wide { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); } }
+  .wide :global(.btn:disabled) { opacity: 0.45; cursor: default; }
+  @media (max-width: 800px) { .wide { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); } }
 </style>
