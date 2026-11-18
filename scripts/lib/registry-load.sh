@@ -19,7 +19,7 @@
 #     No `..`, no other absolute path.
 #   - no rust:<subcommand> script (Rust implementations are core rows, docs/adr/0001-rust-strangler.md).
 #   - no `legacy:` flag (the old words of a moved command are rows of the core registry), no second row for the same words.
-#   - the names list, enable and disable are reserved (they are the core commands `hs ext list|enable|disable`).
+#   - the names list, enable, disable, status, start, stop and svc-run are reserved (they are core commands of `hs ext`).
 #   - a CAPABILITY package (package.toml kind = "capability", docs/PLAN-capabilities-repo.md, decision O4) that was installed from a DEFAULT
 #     repository may also own its name as the first word: user rows `<name> <command...>`, sys rows `sys <name> <command...>`. A row whose
 #     first word is also the first word of a core row is refused (no shadowing). Packages from an added repository keep `ext <name>` only.
@@ -128,7 +128,7 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       sub(/\r$/, "")
       kind = $1; path = $2; script = $3; reason = ""
       nw = split(path, w, " ")
-      if (name == "list" || name == "enable" || name == "disable") reason = "the name " name " is reserved (hs ext " name ")"
+      if (name == "list" || name == "enable" || name == "disable" || name == "status" || name == "start" || name == "stop" || name == "svc-run") reason = "the name " name " is reserved (hs ext " name ")"
       else if (kind == "user") {
         if (own == 1 && w[1] == name && nw >= 2) { if (("user " name) in corefirst) reason = "the word " name " is also a core command" }
         else if (w[1] != "ext" || w[2] != name || nw < 3) reason = "a user row must be: ext " name " <command>" (own == 1 ? " or " name " <command>" : "")

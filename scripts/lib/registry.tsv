@@ -432,6 +432,10 @@ user	ssh-key add	ssh-key.sh	add	allow one more SSH key: hs ssh-key add "ssh-ed25
 user	ext list	ext.sh	list	list the extension packages (optional parts such as Games and Posters) and whether each is on	die Erweiterungspakete (optionale Teile wie Spiele und Poster) auflisten und zeigen, ob sie an sind	topic:system,reads
 user	ext enable <package>	ext.sh	enable {1}	switch an extension on: hs ext enable <package> (a package without a NixOS module is on at once)	eine Erweiterung einschalten: hs ext enable <Paket> (ein Paket ohne NixOS-Modul ist sofort an)	topic:system,changes
 user	ext disable <package>	ext.sh	disable {1}	switch an extension off: hs ext disable <package>	eine Erweiterung ausschalten: hs ext disable <Paket>	topic:system,changes
+user	ext status	ext.sh	status	the services of the extensions that are on: state, why, since	die Dienste der eingeschalteten Erweiterungen: Zustand, Grund, seit wann	topic:system,reads
+user	ext start <package>	ext.sh	start {1}	start the service of an extension (it runs again after a reboot): hs ext start <package>	den Dienst einer Erweiterung starten (er läuft nach einem Neustart wieder): hs ext start <Paket>	topic:system,changes
+user	ext stop <package>	ext.sh	stop {1}	stop the service of an extension; it stays stopped, also after a reboot, until hs ext start: hs ext stop <package>	den Dienst einer Erweiterung anhalten; er bleibt auch nach einem Neustart aus, bis hs ext start: hs ext stop <Paket>	topic:system,changes
+user	ext svc-run <package>	ext.sh	svc-run {1}	run and supervise the service of an extension (what the unit hs-ext-svc@<package> starts, not for people)	den Dienst einer Erweiterung ausführen und überwachen (das startet die Unit hs-ext-svc@<Paket>, nicht für Menschen)	topic:system,changes,nohelp
 user	ext <package>	ext.sh	show {1} {rest}	the commands of an extension: hs ext <package>; its commands are hs ext <package> <command>	die Befehle einer Erweiterung: hs ext <Paket>; ihre Befehle sind hs ext <Paket> <Befehl>	topic:system,reads
 user	pc list	ext.sh	list	game PCs saved for Sunshine streaming (name, MAC, address)	gespeicherte Spiele-PCs für Sunshine (Name, MAC, Adresse)	topic:network,reads,legacy:ext games list,nohelp
 user	pc add	ext.sh	add {rest}	save a game PC: hs pc add <name> <mac> [<ip>]	einen Spiele-PC merken: hs pc add <Name> <MAC> [<IP>]	topic:network,changes,legacy:ext games add,nohelp
@@ -513,6 +517,7 @@ sys	sys live raw <topic>	live.sh	raw {1}	the stored document of one live-state t
 sys	sys live check	live.sh	check	problems of the live state (Redis down, a topic older than three intervals): key and text	-	capability:live-state
 sys	sys reads collect	reads-collect.sh	{rest}	read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)	-
 sys	sys ext list	ext.sh	--list	extension packages as name, on|off, commands, nix (yes = a rebuild switches it), title	-
+sys	sys ext status	ext.sh	--status	the services of the extensions that are on, one per line: name, state (starting|running|degraded|stopping|stopped|failed), reason (or -), since (epoch seconds or -)	-
 user	pkg list	pkg.sh	list {rest}	list the packages (recipes and extensions) with their version: hs pkg list [--all] [--kind recipe|extension|capability]	die Pakete (Rezepte und Erweiterungen) mit Version auflisten: hs pkg list [--all] [--kind recipe|extension|capability]	topic:system,reads
 user	pkg updates	pkg.sh	updates	the packages whose version in the tree is newer than the one last applied	die Pakete, deren Version im Baum neuer ist als die zuletzt angewendete	topic:system,reads
 user	pkg validate	pkg.sh	validate	check every package manifest	alle Paket-Manifeste prüfen	topic:system,reads

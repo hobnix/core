@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: extension packages (optional parts such as Games and Posters): list them, switch them on or off, show their commands
 # help.de: Erweiterungspakete (optionale Teile wie Spiele und Poster): auflisten, an- oder ausschalten, ihre Befehle zeigen
-# args: list | enable <package> | disable <package> | <package> | --list
+# args: list | enable <package> | disable <package> | <package> | status | start <package> | stop <package> | --list | --status
 # An extension is a package folder capabilities/<name>/ with a capability.toml (`extension = true`) and a commands.tsv; its commands are
 # `hs ext <name> <command>` and the machine-readable `hs sys ext <name> <command>` (docs/PLAN-extensions.md). The folder name is the
 # namespace. A package is off until it is named in machine.toml (`capabilities = [...]`); its commands do not exist while it is off.
@@ -14,7 +14,10 @@
 #   <name>            the commands of the package (also while it is off, marked as such); a word after it that is no command is named
 #   boot              (run by hs-ext-boot.service at boot) for each package that is on and has a `sys ext <name> boot` row: run it, print
 #                     `<name><TAB>ok|failed` (journal only); one failing or hanging package never stops the others; exits 0 always
-# Test knobs: HS_MACHINE_FILE, HS_STATE_DIR, HS_PACKAGES_DIR, HS_CAPABILITIES_FILE, HS_LANG.
+#   status            the services of the packages that are on: state (starting|running|degraded|stopping|stopped|failed), reason, since (--status = hs sys ext status: name, state, reason, since)
+#   start|stop <name> start or stop the service of a package (ADR 0011 rule 3); a stop by hand survives a reboot until start
+#   svc-run <name>    (run by hs-ext-svc@<name>.service) supervise the service of the package: scripts/lib/ext_service.py
+# Test knobs: HS_SYSTEMCTL, HS_MACHINE_FILE, HS_STATE_DIR, HS_PACKAGES_DIR, HS_CAPABILITIES_FILE, HS_LANG.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -29,6 +32,7 @@ usage() {
   say "       hs ext enable <package>"
   say "       hs ext disable <package>"
   say "       hs ext <package>"
+  say "       hs ext status | start <package> | stop <package>"
   exit 1
 }
 
@@ -91,6 +95,60 @@ is_recipe() {   # is_recipe <name>: a recipe package (it is applied with hs reci
 }
 need_package() {
   exists "${1:-}" || fail_fix "$(t "No extension called '%s'" "${1:-}")" "hs ext list"
+}
+
+# Services (ADR 0011): the unit hs-ext-svc@<name>.service of configuration.nix runs `hs ext svc-run <name>`.
+svc_state=$state/ext-svc
+svc_py() { python3 "$here/lib/ext_service.py" "$@"; }
+ctl() { "${HS_SYSTEMCTL:-systemctl}" "$@"; }
+has_service() { local d; d=$(ext_package_dir "$1") || return 1; svc_py has-service "$d"; }
+need_service() {
+  need_package "${1:-}"
+  has_service "$1" || fail_fix "$(t "The extension '%s' has no service." "$1")" "hs ext $1"
+  ext_package_on "$1" || fail_fix "$(t "The extension '%s' is off." "$1")" "hs ext enable $1"
+}
+svc_rows() {   # name, state, reason, since of every package that is on and has a service
+  local n act stopped
+  while IFS= read -r n; do
+    ext_package_on "$n" && has_service "$n" || continue
+    act=no; ctl is-active --quiet "hs-ext-svc@$n.service" 2>/dev/null && act=yes
+    stopped=no; [ ! -e "$svc_state/$n.stopped" ] || stopped=yes
+    printf '%s	%s
+' "$n" "$(svc_py status --name "$n" --state-dir "$svc_state" --active "$act" --stopped "$stopped")"
+  done < <(ext_package_names)
+}
+svc_start() {   # svc_start <name> [--no-block]: forget an old failure and start the unit
+  rm -f "$svc_state/$1.stopped"
+  svc_py reset --name "$1" --state-dir "$svc_state"
+  ctl reset-failed "hs-ext-svc@$1.service" >/dev/null 2>&1 || true
+  ctl start ${2:+"$2"} "hs-ext-svc@$1.service"
+}
+
+cmd_status() {
+  local rows
+  rows=$(svc_rows)
+  if [ -z "$rows" ]; then note "No service extension is on."; return 0; fi
+  { thead 'Package' 'State' 'Why' 'Since'; printf '%s
+' "$rows" | awk -F'	' -v OFS='	' '{ w = ($3 == "-" ? "" : $3); s = $4; if (s != "-") { c = "date -d @" s " +\"%Y-%m-%d %H:%M\""; c | getline s; close(c) } else s = ""; print $1, $2, w, s }'; } | table
+}
+cmd_start() {
+  need_service "${1:-}"
+  svc_start "$1" || fail "$(t "The service of '%s' did not start." "$1")"
+  ok "$(t "The service of '%s' is started." "$1")"
+  next_step "hs ext status"
+}
+cmd_stop() {
+  need_service "${1:-}"
+  mkdir -p "$svc_state"; : > "$svc_state/$1.stopped"
+  ctl stop "hs-ext-svc@$1.service" || fail "$(t "The service of '%s' did not stop." "$1")"
+  ok "$(t "The service of '%s' is stopped. It stays stopped until: hs ext start %s" "$1" "$1")"
+}
+cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the supervisor
+  local n=${1:-} d
+  exists "$n" && ext_package_on "$n" && has_service "$n" || { printf '%s
+' "hs ext svc-run: '$n' is not a service extension that is on" >&2; exit 1; }
+  d=$(ext_package_dir "$n")
+  exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state"
 }
 
 overlay_add() { mkdir -p "$state"; grep -qxF -- "$2" "$state/capabilities-$1" 2>/dev/null || printf '%s\n' "$2" >> "$state/capabilities-$1"; }
@@ -158,6 +216,7 @@ cmd_enable() {
     next_step "hs rebuild"
   else
     overlay_del off "$n"; overlay_add on "$n"
+    if has_service "$n"; then svc_start "$n" --no-block || warn "$(t "The service of '%s' did not start." "$n")"; fi
     ok "$(t "Extension '%s' is on." "$n")"
     next_step "hs ext $n"
   fi
@@ -171,6 +230,7 @@ cmd_disable() {
   if is_recipe "$n"; then fail_fix "$(t "'%s' is a recipe: its container is managed with hs ct." "$n")" "hs ct"; fi
   deps=$(dependents_on "$n" | paste -sd' ' -)
   if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "hs ext disable ${deps%% *}"; fi
+  if has_service "$n"; then ctl stop "hs-ext-svc@$n.service" >/dev/null 2>&1 || true; fi   # a package that is off has no unit running (ADR 0011 rule 3)
   mapfile -t cur < <(caps_list)
   for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$n" ] || keep+=("$x"); done
   if has_nix "$d"; then effect_say rebuild; else effect_say now; fi
@@ -202,7 +262,7 @@ help_of() {   # help_of <script> <help_en> <help_de>
 cmd_show() {   # cmd_show <name> [<word that is no command>...]
   local n=${1:-} d kind path script args hen hde flags a
   shift || true
-  case "$n" in ""|enable|disable) usage ;; esac
+  case "$n" in ""|enable|disable|status|start|stop|svc-run) usage ;; esac
   need_package "$n"
   d=$(ext_package_dir "$n")
   if [ $# -gt 0 ] && ! ext_package_on "$n"; then
@@ -231,6 +291,10 @@ cmd_boot() {
   local n tab=$'	'
   while IFS= read -r n; do
     ext_package_on "$n" || continue
+    # a service starts unless a person stopped it; boot does not wait for `ready`
+    if has_service "$n" && [ ! -e "$svc_state/$n.stopped" ]; then
+      if ctl start --no-block "hs-ext-svc@$n.service" </dev/null >/dev/null 2>&1; then say "$n${tab}service ok"; else say "$n${tab}service failed"; fi
+    fi
     registry_rows_of "$n" | awk -F'	' -v p="sys ext $n boot" '$1 == "sys" && $2 == p { f = 1 } END { exit !f }' || continue
     if timeout 60 bash "$here/lib/hs.sh" sys ext "$n" boot </dev/null >/dev/null 2>&1; then say "$n${tab}ok"; else say "$n${tab}failed"; fi
   done < <(ext_package_names)
@@ -242,6 +306,11 @@ verb=${1:-}
 case "$verb" in
   list) cmd_list ;;
   --list) cmd_data ;;
+  --status) svc_rows ;;
+  status) cmd_status ;;
+  start) cmd_start "$@" ;;
+  stop) cmd_stop "$@" ;;
+  svc-run) cmd_svc_run "$@" ;;
   enable) cmd_enable "$@" ;;
   disable) cmd_disable "$@" ;;
   boot) cmd_boot ;;
