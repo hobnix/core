@@ -35,6 +35,9 @@ class FakeAuth:
     def domain_is_admin(self, user):
         return user == "anna"
 
+    def domain_role(self, user):
+        return "admin" if user == "anna" else None      # bob is in no role group (tests/web-roles-test.py covers the three roles)
+
     def local_password_ok(self, user, password):
         return user == "adminuser" and password == "local pw"
 

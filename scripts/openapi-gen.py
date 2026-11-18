@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The `hs sys` contract as one OpenAPI 3.1 document (docs/api/openapi.json; ADR 0001, "Must" item 3).
 
-  openapi-gen.py write                 regenerate docs/api/openapi.json and docs/adr/0012-roles-sys-rows.tsv
+  openapi-gen.py write                 regenerate docs/api/openapi.json, docs/adr/0012-roles-sys-rows.tsv and scripts/lib/sys-roles.tsv
   openapi-gen.py check [--registry F] [--shapes F]
                                        same, but change nothing: exit 1 when a file is stale (tests/openapi.sh)
 
@@ -24,6 +24,7 @@ REGISTRY = os.path.join(ROOT, "scripts", "lib", "registry.tsv")
 SHAPES = os.path.join(ROOT, "docs", "api", "sys.toml")
 OUT = os.path.join(ROOT, "docs", "api", "openapi.json")
 ROLES_OUT = os.path.join(ROOT, "docs", "adr", "0012-roles-sys-rows.tsv")
+ROLES_RUN = os.path.join(ROOT, "scripts", "lib", "sys-roles.tsv")     # the same table where the web server reads it (the nix package ships scripts/, not docs/)
 ROLES = ("viewer", "app-manager", "admin")    # ordered, each includes the one before (ADR 0012 decision 1)
 KINDS = ("tsv", "json", "text")
 MIME = {"tsv": "text/tab-separated-values", "json": "application/json", "text": "text/plain"}
@@ -263,11 +264,11 @@ def main(argv):
         print("error: %s" % e, file=sys.stderr)
         return 1
     if cmd == "write":
-        for path, text in ((OUT, want), (ROLES_OUT, roles)):
+        for path, text in ((OUT, want), (ROLES_OUT, roles), (ROLES_RUN, roles)):
             with open(path, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
         return 0
-    for path, text, name in ((OUT, want, "docs/api/openapi.json"), (ROLES_OUT, roles, "docs/adr/0012-roles-sys-rows.tsv")):
+    for path, text, name in ((OUT, want, "docs/api/openapi.json"), (ROLES_OUT, roles, "docs/adr/0012-roles-sys-rows.tsv"), (ROLES_RUN, roles, "scripts/lib/sys-roles.tsv")):
         have = None
         if os.path.exists(path):
             with open(path, encoding="utf-8", newline="") as f:

@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "security"
+title = "The web interface now has three roles: viewer, app manager, admin"
+body  = """People in the domain group hn-viewers can look, people in hn-app-managers can also change instances and apps, Domain Admins can do everything. A call a role may not make is refused with a 403. Create the groups with hs group roles. The local admin account is still an admin. The audit log now names the signed-in person for changes made in the web interface."""
