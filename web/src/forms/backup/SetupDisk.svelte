@@ -6,6 +6,7 @@
   import DiskPicker from '../storage/DiskPicker.svelte';
   import { freeDisks } from '../storage/disks.js';
   import { poll, rows } from '../../data.svelte.js';
+  import { Muted } from '../../ui';
 
   let { onclose, ondone } = $props();
 
@@ -19,18 +20,13 @@
 <CreateDialog title="Set up the backup disk" kicker="Backup" area="backup" {args} {onclose} {ondone}>
   {#snippet form()}
     <div class="field">
-      <span class="lab">Disk (it is erased)</span>
+      <Muted as="div">Disk (it is erased)</Muted>
       <DiskPicker {disks} loaded={free.loaded} bind:picked single empty="No free disk. Plug the backup disk in; a disk that belongs to a pool is never offered." />
     </div>
-    <div class="hint">
+    <Muted as="p">
       The disk is formatted ext4 with the label <code>backup</code>, the backup repository is made on it and a password is created in the vault.
       After it has run, read the password once on the server (<code>sudo cat /var/lib/hs/restic-password</code>) and keep it in your password manager:
       without it a backup cannot be opened, also not after the system disk dies.
-    </div>
+    </Muted>
   {/snippet}
 </CreateDialog>
-
-<style>
-  .lab { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-  .hint { font-size: 12px; color: var(--color-neutral-500); }
-</style>
