@@ -615,7 +615,8 @@ def main(argv):
         found = vendor_verify(rest)
         for f in found:
             print("	".join(f))
-        return 1 if found else 0
+        # a name that is nowhere (games and posters now live in hobnix/extensions) is only named: the evaluation ignores it, so it must not stop an update
+        return 1 if any(not f[1].startswith("is neither") for f in found) else 0
     elif cmd == "core-check":      # name TAB text per installed vendored package this core does not suit, exit 1 when any
         found = core_check()
         for n, t in found:
