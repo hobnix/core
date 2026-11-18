@@ -3,6 +3,7 @@
 import * as api from './api.js';
 import * as S from './selection.js';
 import { track, showTab } from '../ui.svelte.js';
+import { pools } from '../pools.svelte.js';
 
 const remember = (k, v) => { try { v === undefined ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 const recall = (k) => { try { return JSON.parse(sessionStorage.getItem(k) ?? 'null'); } catch { return null; } };
@@ -95,11 +96,12 @@ export class Fm {
 
   locOf = (id) => this.locs.find((l) => l.id === id) ?? null;
   label = (id) => this.locOf(id)?.label ?? id;
-  // the rules that depend on the location: the top level of the bulk pool is the array itself (the server marks every entry there `array`; this
+  // the rules that depend on the location: the top level of the SnapRAID pool is the array itself (the server marks every entry there `array`; this
   // keeps the two in step, so a row is locked even if a flag were missing). The fast pool and shares have no such level.
   ctxOf(side) {
     const p = this.panes[side], l = this.locOf(p.loc);
-    return { poolRoot: !!l && l.id === 'pool:bulk' && p.path === '/' };
+    const snapName = pools.rows.find((r) => r.kind !== 'zfs')?.name ?? '';
+    return { poolRoot: !!l && !!snapName && l.id === `pool:${snapName}` && p.path === '/' };
   }
   lockedNames(side) {
     const ctx = this.ctxOf(side);

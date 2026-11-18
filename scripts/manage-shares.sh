@@ -81,9 +81,10 @@ entries() { sharesec "$1" --view 2>/dev/null | sed -n 's/^ACL://p'; }
 # minutes on big shares: that is done once a night (and with --measure) and
 # kept in a file.
 sizes=${HS_STATE_DIR:-/var/lib/hs}/share-sizes
-bulk_type=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
+snap=false; if share_any_snapraid; then snap=true; fi
 size_of() {   # size_of <path>
-  if [ "$bulk_type" = snapraid ] && [ "${1#"$(share_root fast)"/}" = "$1" ]; then
+  local p; p=$(share_tier_of_path "$1" 2>/dev/null || true)
+  if [ -n "$p" ] && [ "$(share_pool_kind "$p")" = snapraid ]; then
     awk -F'\t' -v p="$1" '$1 == p { print $2; found = 1 } END { if (!found) print "-" }' "$sizes" 2>/dev/null || echo -
   else
     "${HS_ZFS:-zfs}" list -Hp -o used "${1#/}" 2>/dev/null || echo -
@@ -96,8 +97,8 @@ measure() {   # measure [share]: every share, or only one (its line in the sizes
   for s in $(net conf listshares 2>/dev/null); do
     [ -z "$only" ] || [ "$s" = "$only" ] || continue
     path=$(net conf getparm "$s" path 2>/dev/null || true)
-    case "$path" in
-      /bulk/shares/*|/bulk/sensitive/*|/fast/*)
+    case "$(share_kind_of_path "$path")" in
+      shares|sensitive)
         if [ -n "$only" ]; then { grep -vF "$path"$'\t' "$tmp" || true; } > "$tmp.n"; mv "$tmp.n" "$tmp"; fi
         if [ -t 1 ]; then
           # a person at a terminal sees a spinner per share; the timer and the interface get no extra lines
@@ -119,7 +120,7 @@ measure() {   # measure [share]: every share, or only one (its line in the sizes
 shares() {
   local s path kind cache size measured="" netc=${HS_NET:-net} zfsc=${HS_ZFS:-zfs} name used
   local -A paths=() useds=()
-  if [ "$bulk_type" = snapraid ]; then
+  if $snap; then
     measured=never
     [ ! -e "$sizes" ] || measured=$(date -r "$sizes" '+%d.%m. %H:%M')
   fi
@@ -130,19 +131,22 @@ shares() {
   done < <("$netc" conf list 2>/dev/null | awk '
     /^[ \t]*\[.*\][ \t]*$/ { sec = $0; sub(/^[ \t]*\[/, "", sec); sub(/\][ \t]*$/, "", sec); next }
     sec != "" && /^[ \t]*path[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t]+$/, "", v); print sec "\t" v; sec = "" }' || true)
-  # fast shares are datasets whatever the bulk layout is; bulk ones only on ZFS (errors ignored: a pool may not exist)
-  local pools=(fast/shares fast/sensitive)
-  [ "$bulk_type" = snapraid ] || pools=(bulk/shares bulk/sensitive "${pools[@]}")
-  while IFS=$'\t' read -r name used; do
-    [ -z "$name" ] || useds[$name]=$used
-  done < <("$zfsc" list -Hp -o name,used -r "${pools[@]}" 2>/dev/null || true)
+  # datasets of every zfs pool (data first, then apps); a snapraid pool has folders, not datasets
+  local pools=() p
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ "$(share_pool_kind "$p")" = snapraid ] || pools+=("$p/shares" "$p/sensitive")
+  done < <(pool_names data; pool_names apps)
+  if [ ${#pools[@]} -gt 0 ]; then
+    while IFS=$'\t' read -r name used; do [ -z "$name" ] || useds[$name]=$used; done < <("$zfsc" list -Hp -o name,used -r "${pools[@]}" 2>/dev/null || true)
+  fi
   for s in $names; do
     path=${paths[$s]-}
     [ -n "$path" ] || path=$("$netc" conf getparm "$s" path 2>/dev/null || true)
     kind=$(share_kind_of_path "$path")
     cache=-
     # on ZFS the cache script only answers "unsupported" (shown as -): no process needed for that
-    if [ "$kind" != other ] && [ "$bulk_type" = snapraid ]; then
+    if [ "$kind" != other ] && $snap; then
       cache=$(bash "$here/share-cache.sh" --state "$path" 2>/dev/null | cut -f1 || true)
       [ "${cache:-unsupported}" != unsupported ] || cache=-
     fi
@@ -203,7 +207,7 @@ case "${1:-}" in
     principals
     exit 0 ;;
   --measure)
-    if [ "$bulk_type" = snapraid ]; then { measure "${2:-}"; live_refresh_shares; }; else note "Nothing to measure: on ZFS the sizes are always current."; fi
+    if $snap; then { measure "${2:-}"; live_refresh_shares; }; else note "Nothing to measure: on ZFS the sizes are always current."; fi
     exit 0 ;;
 esac
 
@@ -211,22 +215,18 @@ esac
 # A share's name is its folder name, so a rename changes the folder on every
 # disk that holds it, then moves the Samba share (settings and permissions),
 # the backup switch and the mounts of containers over to the new name.
-BULK=${HS_BULK:-/bulk}
-FAST=$(share_root fast)
 DATA_ROOT=${HS_DATA_ROOT:-$(disks_root)}
 STATE=${HS_STATE_DIR:-/var/lib/hs}
 
 rename_share() {   # rename_share <old> <new>
-  local old=$1 new=$2 tier=bulk layout=$bulk_type path kind newpath cache d dirs=() done_dirs=() ct dev line k v acl=() e params=() users=()
+  local old=$1 new=$2 tier layout path kind top newpath cache d dirs=() done_dirs=() ct dev line k v acl=() e params=() users=()
   path=$(net conf getparm "$old" path)
-  case "$path" in
-    "$BULK"/shares/*)    kind=shares ;;
-    "$BULK"/sensitive/*) kind=sensitive ;;
-    "$FAST"/shares/*)    kind=shares; tier=fast ;;
-    "$FAST"/sensitive/*) kind=sensitive; tier=fast ;;
-    *) fail "$(t "'%s' is not a folder under %s/shares or %s/sensitive: it can't be renamed here." "$old" "$BULK" "$BULK")" ;;
-  esac
-  [ "$tier" = bulk ] || layout=zfs     # a fast share is always a dataset
+  tier=$(share_tier_of_path "$path" 2>/dev/null || true); kind=$(share_kind_of_path "$path")
+  if [ -z "$tier" ] || [ "$kind" = other ]; then
+    top=$(pool_default data 2>/dev/null) && top=$(share_root "$top") || top="<pool>"
+    fail "$(t "'%s' is not a folder under %s/shares or %s/sensitive: it can't be renamed here." "$old" "$top" "$top")"
+  fi
+  layout=$(share_pool_kind "$tier")     # an apps pool is always zfs
   newpath=$(dirname "$path")/$new
 
   [[ "$new" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "$(t "'%s' is not a usable name (letters, digits, . _ - only; at most one word)." "$new")"
@@ -270,7 +270,7 @@ rename_share() {   # rename_share <old> <new>
   if $dry; then echo "(dry run, nothing changed)"; exit 0; fi
 
   # nothing may write while the folders move: same lock as parity sync and cache mover
-  if [ "$tier" = bulk ]; then
+  if [ "$(share_pool_role "$tier")" = data ]; then
     exec 9>"${HS_LOCK:-/run/hs-bulk.lock}"
     flock -w 600 9 || fail "Parity sync or cache mover is running, try again later."
   fi

@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "change"
+title = "The installer no longer fixes the pool names: you name the pools with hs pool"
+docs  = "install"
+body  = """A new home server is installed with an empty pools line. After the first boot create the pools with hs pool, with any names, for example sudo hs pool ssd --use apps and sudo hs pool tank --use data. The question about ZFS or SnapRAID before the install is gone. Existing servers and restores keep their pool rows."""

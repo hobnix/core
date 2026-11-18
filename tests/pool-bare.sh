@@ -66,4 +66,61 @@ out=$(ask '' snapraid one bulk --show)
 check_out "snapraid: the members" "data-01.*ONLINE" echo "$out"
 check_out "snapraid: sync is named too" "sync" echo "$out"
 
+echo "-- a pool with any name: a NEW name needs the pools line, a role and a good name"
+export HS_MACHINE_FILE=$WORK/machine.toml
+rm -f "$HS_MACHINE_FILE"
+D=--disks\ ata-FAKE_sdy,ata-FAKE_sdz
+check_out "legacy server: a new name asks for hs pool record first" "Run hs pool record first" run zfs new tank --use data $D --dry-run
+check_out "legacy bulk is no new pool (plan as before)" "Plan: create the new pool 'bulk'" run zfs new bulk $D --dry-run
+out=$(run zfs new bulk $D --dry-run)
+if grep -q "NEW pool" <<<"$out"; then fail "legacy bulk is called a NEW pool"; else pass "legacy bulk: no NEW pool line"; fi
+printf 'pools = { bulk = { role = "data", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+out=$(run zfs new tank --use data $D --dry-run)
+check_out "new data pool: the plan says so" "a NEW pool 'tank' with role data" echo "$out"
+if grep -q "mountpoint=none" <<<"$out"; then fail "a data pool has mountpoint=none"; else pass "a data pool is mounted at /tank"; fi
+check_out "new apps pool: no mount point of its own" "mountpoint=none" run zfs new ssd --use apps $D --dry-run
+check_out "a row that is not created yet is no NEW pool" "Plan: create the new pool 'bulk'" run zfs new bulk $D --dry-run
+check_out "a bad name is refused" "invalid pool name" run zfs new mirror --use data $D --dry-run
+check_out "a long name is refused" "invalid pool name" run zfs new abcdefghijklm --use data $D --dry-run
+check_out "no --use, no terminal: the usage line" "usage: hs pool" run zfs new tank $D --dry-run
+check_out "--use must be data or apps" "use: data or apps" run zfs new tank --use fast $D --dry-run
+check_out "--role without --kind snapraid is refused" "Add --kind snapraid" run zfs new tank --use data --role data $D --dry-run
+check_out "the menu offers the rows and a new pool" "new" ask '2\n' zfs new --use apps $D --dry-run
+out=$(HS_ANSWERS='2\ntank\n' tty_ run zfs new --use data --kind zfs $D --dry-run)
+check_out "the menu: a new pool asks the name" "a NEW pool 'tank' with role data" echo "$out"
+out=$(HS_ANSWERS='1\n' tty_ run zfs new tank --kind zfs $D --dry-run)
+check_out "a terminal is asked what the new pool is for" "a NEW pool 'tank' with role data" echo "$out"
+# --kind snapraid: a NEW SnapRAID pool of any name (one per server)
+printf 'pools = { ssd = { role = "apps", kind = "zfs" } }
+' >"$HS_MACHINE_FILE"
+out=$(run zfs new tank --use data --kind snapraid --role data $D --dry-run)
+check_out "new snapraid pool: a plan" "Plan:" echo "$out"
+check_out "new snapraid pool: the plan says NEW pool" "NEW pool 'tank'" echo "$out"
+check_out "snapraid for an apps pool is refused" "an apps pool is always ZFS" run zfs new tank --use apps --kind snapraid $D --dry-run
+check_out "a bad kind is refused" "kind: zfs or snapraid" run zfs new tank --use data --kind raid5 $D --dry-run
+printf 'pools = { bulk = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }
+' >"$HS_MACHINE_FILE"
+check_out "a second snapraid pool is refused" "there can be only one" run zfs new tank --use data --kind snapraid --role data $D --dry-run
+
+echo "-- a new apps pool: Incus default stays (fake incus)"
+printf 'pools = { ssd = { role = "apps", kind = "zfs" } }\n' >"$HS_MACHINE_FILE"
+cat >"$WORK/fake-incus" <<'EOF'
+#!/usr/bin/env bash
+[ "$1 $2" = "query /1.0/storage-pools/default" ] || exit 1
+cat "$FAKE_INCUS_DEFAULT"
+EOF
+chmod +x "$WORK/fake-incus"
+export HS_INCUS=$WORK/fake-incus FAKE_INCUS_DEFAULT=$WORK/incus-default.json
+printf '{"driver":"dir","config":{"source":"/var/lib/incus/storage-pools/default"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on the system disk: the plan says it stays" "Incus keeps its pool default \(on the system disk\); 'nvme' becomes the extra Incus pool 'nvme'" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"ssd/incus"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on ssd: the plan says so" "Incus keeps its pool default \(on ssd\)" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"gone/incus"}}' >"$FAKE_INCUS_DEFAULT"
+check_out "Incus default on an unknown pool: refused before the disks" "Run hs pool record first" run zfs new nvme --use apps $D --dry-run
+printf '{"driver":"zfs","config":{"source":"ssd/incus"}}' >"$FAKE_INCUS_DEFAULT"
+out=$(run zfs new tank --use data $D --dry-run)
+if grep -q "Incus keeps" <<<"$out"; then fail "a data pool mentions Incus"; else pass "a data pool: no Incus note"; fi
+unset HS_INCUS FAKE_INCUS_DEFAULT
+rm -f "$HS_MACHINE_FILE"
+
 finish

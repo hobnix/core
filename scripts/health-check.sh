@@ -18,6 +18,7 @@ here=$(dirname "$0")
 . "$here/lib/dc.sh"
 . "$here/lib/capacity.sh"
 . "$here/lib/bulklock.sh"
+. "$here/lib/bulkpath.sh"
 . "$here/lib/capability.sh"
 . "$here/lib/channels.sh"
 . "$here/lib/event.sh"
@@ -89,7 +90,8 @@ if have zpool; then
 fi
 
 # ── SnapRAID layout: every member mounted, and a parity disk at all ──
-bulk_type=$(cat /etc/hs/bulk-type 2>/dev/null || echo zfs)
+bulk_type=zfs
+pools_rows | awk -F'	' '$3 == "snapraid" { f = 1 } END { exit !f }' && bulk_type=snapraid   # keyed on the snapraid ROW
 if [ "$bulk_type" = snapraid ]; then
   # name, bytes, state, group
   members=$(bash "$here/manage-pool.sh" bulk --members 2>/dev/null || true)
@@ -159,7 +161,7 @@ fi
 used_pct() { df --output=pcent "$1" 2>/dev/null | tail -n1 | tr -dc '0-9' || true; }
 mounts=(/)
 # on the ZFS layout /bulk is covered by the pool below
-if [ "$bulk_type" = snapraid ] && mountpoint -q /bulk 2>/dev/null; then mounts+=(/bulk); fi
+if [ "$bulk_type" = snapraid ] && mountpoint -q "$(snap_root)" 2>/dev/null; then mounts+=("$(snap_root)"); fi
 for m in "${mounts[@]}"; do
   pct=$(used_pct "$m")
   if [ -n "$pct" ] && [ "$pct" -ge "$max_full" ]; then

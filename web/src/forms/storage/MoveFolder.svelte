@@ -2,12 +2,13 @@
   import Button from '../../ui/Button.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   // Move a folder (or file) from one SnapRAID data disk to another, disk to disk (hs sys disk plan|start <member> move --path <path> [--to <member>]).
-  // The path in /bulk does not change: the same files are shown at the same paths before, during and after. The disk's own folders are browsed with
-  // `hs sys disk ls` (one level at a time); nothing here ever touches /bulk itself, which is what makes it safe (a copy from a disk into the pool destroys the files).
+  // The path in /<pool> does not change: the same files are shown at the same paths before, during and after. The disk's own folders are browsed with
+  // `hs sys disk ls` (one level at a time); nothing here ever touches /<pool> itself, which is what makes it safe (a copy from a disk into the pool destroys the files).
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { poolOfRole } from '../../pools.svelte.js';
   import { poll, rows } from '../../data.svelte.js';
 
-  let { pool = 'bulk', member, targets = [] } = $props();
+  let { pool = poolOfRole('data'), member, targets = [] } = $props();
 
   let dir = $state('');        // the folder being looked at, relative to the disk ('' = the top)
   let picked = $state('');     // the folder or file chosen to move
@@ -61,7 +62,7 @@
         {#each others as t}<option value={t}>{t}</option>{/each}
       </select>
     </div>
-    <div class="hint">Disk to disk: /bulk shows the same files at the same paths the whole time. A file that the target already has is never overwritten. To put the files in another folder or share, rename them inside /bulk afterwards.</div>
+    <div class="hint">Disk to disk: /{pool} shows the same files at the same paths the whole time. A file that the target already has is never overwritten. To put the files in another folder or share, rename them inside /{pool} afterwards.</div>
   {/snippet}
 </CreateDialog>
 

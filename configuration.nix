@@ -12,13 +12,26 @@ let
   # Optional values with defaults, so an older machine.toml keeps working.
   hostName = machine.hostName;
   # Optional Active Directory membership: { realm = "AD.HOME.LAN"; workgroup = "HOME"; }
-  # Logins and groups then come from the domain. Without it, adminuser is the
-  # only Samba login (password: sudo smbpasswd -a adminuser).
+  # Logins and groups then come from the domain. Without it, the admin user (adminUser, default adminuser) is the
+  # only Samba login (password: sudo smbpasswd -a <adminUser>).
   ad = machine.adDomain;
   # How /bulk is built. "zfs": a pool like fast (mirror pairs). "snapraid":
   # single disks of any size, merged with mergerfs, protected by SnapRAID parity.
   bulkType = machine.bulkType;
-  bulkSnapraid = bulkType == "snapraid";
+  # The pool rows (machine.toml: pools; no line = the two classic rows, the data pool of kind bulkType and the apps pool on ZFS). docs/PLAN-portable-install.md
+  legacyPools = { bulk = { role = "data"; kind = bulkType; }; fast = { role = "apps"; kind = "zfs"; }; };
+  pools = if machine.pools == null then legacyPools else machine.pools;
+  poolNames = pred: lib.sort (a: b: a < b) (lib.attrNames (lib.filterAttrs (_: pred) pools));
+  zfsNames = role: poolNames (p: (p.kind or "") == "zfs" && (p.role or "") == role);
+  zfsAppsPools = zfsNames "apps";
+  extraPools = zfsAppsPools ++ zfsNames "data";   # no line: apps pool first, then the data pool (not when it is SnapRAID)
+  snapraidNames = poolNames (p: (p.kind or "") == "snapraid");
+  snapraidPool = if snapraidNames == [ ] then null else builtins.head snapraidNames;
+  bulkSnapraid = snapraidPool != null;
+  appsNames = poolNames (p: (p.role or "") == "apps");
+  dataNames = poolNames (p: (p.role or "") == "data");
+  appsPool = if appsNames == [ ] then null else builtins.head appsNames;
+  dataPool = if dataNames == [ ] then null else builtins.head dataNames;
   # what has to be up before anything touches /bulk
   bulkReady = if bulkSnapraid then "bulk-mount.service" else "zfs-mount.service";
   # Hours between two parity syncs (machine.toml: syncEveryHours, default 24 = once a night at 03:00, so the HDDs can sleep
@@ -56,9 +69,11 @@ let
   hasStorage = builtins.elem "storage" capabilities;
   hasIncus = builtins.elem "incus" capabilities;
   hasSamba = builtins.elem "samba" capabilities;
+  # The admin account (machine.toml: adminUser, chosen at install; default adminuser): SSH, sudo, local web sign-in, owner of the share files
+  adminUser = machine.adminUser;
   # what the modules in capabilities/ get as their `hs` argument (the helpers are shared by storage, incus, samba and backup)
   hs = {
-    inherit machine hostName siteName ad bulkSnapraid bulkReady whenUnlocked notifyFailure;
+    inherit machine adminUser hostName siteName ad bulkSnapraid bulkReady pools zfsAppsPools extraPools snapraidPool appsPool dataPool whenUnlocked notifyFailure;
     enabled = name: builtins.elem name capabilities;
     scripts = ./scripts;
   };
@@ -159,7 +174,7 @@ in
 
   # ──────────────────────── /bulk on SnapRAID + mergerfs ────────────────────────
   # The scripts read the layout from here (hs pool bulk, create-share, ...).
-  environment.etc."hs/bulk-type".text = bulkType;
+  environment.etc."hs/bulk-type".text = if bulkSnapraid then "snapraid" else "zfs";
   environment.etc."hs/share-snapshots".text = if shareSnapshots then "on" else "off";
   environment.etc."hs/incus-ui".text = if incusUi then "on" else "off";
   environment.etc."hs/site-name".text = siteName;
@@ -214,6 +229,18 @@ in
   } {
     assertion = builtins.elem bulkType [ "zfs" "snapraid" ];
     message = "machine.toml: bulkType must be \"zfs\" or \"snapraid\" (found \"${bulkType}\").";
+  } {
+    assertion = lib.all (n: builtins.match "[a-z][a-z0-9]{0,11}" n != null) (builtins.attrNames pools);
+    message = "machine.toml: pools: a pool name is a lower case letter and up to 11 letters or digits (found ${builtins.toJSON (builtins.attrNames pools)}).";
+  } {
+    assertion = lib.all (p: builtins.elem (p.role or "") [ "data" "apps" ]) (builtins.attrValues pools);
+    message = "machine.toml: pools: role must be \"data\" or \"apps\".";
+  } {
+    assertion = lib.all (p: builtins.elem (p.kind or "") [ "zfs" "snapraid" ]) (builtins.attrValues pools);
+    message = "machine.toml: pools: kind must be \"zfs\" or \"snapraid\".";
+  } {
+    assertion = snapraidNames == [ ] || snapraidNames == [ "bulk" ];
+    message = "machine.toml: pools: at most one pool may be of kind \"snapraid\", and it must be named bulk (found ${builtins.toJSON snapraidNames}).";
   } {
     assertion = lib.all (g: builtins.elem g [ "nvidia" "amd" "intel" ]) gpus;
     message = "machine.toml: gpu must be \"nvidia\", \"amd\", \"intel\" or a list of them (found ${builtins.toJSON gpuSetting}).";
@@ -319,7 +346,7 @@ in
       HS_WEB_TRUST_PROXY = if webTailscale || builtins.elem "gateway" capabilities then "1" else "";
       HS_WEB_WORKGROUP = if ad != null then ad.workgroup else "";
       HS_WEB_REALM = if ad != null then ad.realm else "";
-      HS_WEB_LOCAL_USER = "adminuser";
+      HS_WEB_LOCAL_USER = adminUser;
       # PrivateTmp gives hs-web its own mount namespace: the unlock (vault mount) must run outside it, in a transient unit
       HS_WEB_UNLOCK_IN_UNIT = "1";
       HS_WEB_SESSION_FILE = "/run/hs-web/sessions.json";
@@ -339,6 +366,10 @@ in
     };
   };
 
+  # The one-time setup code (docs/adr/0022-first-run-console-token.md): shown on the console at every boot while the installer's flag says
+  # `pending`; the unit is shared with install.nix (setup-code-unit.nix). Output to the console device only, never to the journal.
+  systemd.services.hs-setup-code = lib.mkIf webUi (import ./setup-code-unit.nix { inherit pkgs webPort; hsCommand = import ./hs-command.nix { inherit pkgs; }; });
+
   # HTTPS for the web interface through `tailscale serve` (webTailscale): the unit hs-web-tailscale is in capabilities/tailscale/module.nix.
 
   # ──────────────────────── Access ────────────────────────
@@ -357,7 +388,7 @@ in
   };
   users.users.root.openssh.authorizedKeys.keys = lib.mkIf (isEdge && nodeLines != [ ]) nodeLines;
 
-  users.users.adminuser = {
+  users.users.${adminUser} = {
     isNormalUser = true;
     extraGroups = [ "wheel" ] ++ lib.optional hasIncus "incus-admin";
     openssh.authorizedKeys.keys = sshKeys ++ lib.optionals (!isEdge) nodeLines;
@@ -366,25 +397,28 @@ in
 
 
 
-  # Share directory owned by adminuser so it's writable over Samba
+  # The admin account name for scripts (scripts/lib/admin.sh: admin_user)
+  environment.etc."hs/admin-user".text = adminUser;
+
+  # Share directory owned by the admin user so it's writable over Samba
   # (on the snapraid layout bulk-mount.sh does this after merging the disks).
   # "z": only adjust it where it exists. Creating it ("d") made /bulk/shares on
   # the system disk while there was no pool yet, and `zpool create` then
   # refused the non-empty /bulk.
   systemd.tmpfiles.rules =
-    lib.optional (hasStorage && !bulkSnapraid) "z /bulk/shares 2775 adminuser users -"
+    lib.optional (hasStorage && dataPool != null && pools.${dataPool}.kind == "zfs") "z /${dataPool}/shares 2775 ${adminUser} users -"
     # where hs health leaves its numbers for node-exporter
     # the live ARC limit (zfsArcMaxGB), see boot.extraModprobeConfig above
     ++ lib.optional (hasStorage && zfsArcMaxGB > 0) "w /sys/module/zfs/parameters/zfs_arc_max - - - - ${toString (zfsArcMaxGB * 1073741824)}"
     ++ [
       # Without a ~/.zshrc zsh starts a setup wizard on the first login.
-      "f /home/adminuser/.zshrc 0644 adminuser users -"
+      "f /home/${adminUser}/.zshrc 0644 ${adminUser} users -"
       "f /root/.zshrc 0644 root root -"
       # micro copies through the terminal (OSC 52): over SSH there is no X server for
       # xclip. Written only when the file doesn't exist, so own settings are kept.
-      "d /home/adminuser/.config 0700 adminuser users -"
-      "d /home/adminuser/.config/micro 0755 adminuser users -"
-      "f /home/adminuser/.config/micro/settings.json 0644 adminuser users - {\"clipboard\":\"terminal\"}"
+      "d /home/${adminUser}/.config 0700 ${adminUser} users -"
+      "d /home/${adminUser}/.config/micro 0755 ${adminUser} users -"
+      "f /home/${adminUser}/.config/micro/settings.json 0644 ${adminUser} users - {\"clipboard\":\"terminal\"}"
     ];
 
 

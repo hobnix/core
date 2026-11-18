@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# help: publish every folder directly under /bulk/shares, /bulk/sensitive, /fast/shares and /fast/sensitive as its own Samba share (adds missing ones)
-# help.de: veröffentlicht jeden Ordner direkt unter /bulk/shares, /bulk/sensitive, /fast/shares und /fast/sensitive als eigene Samba-Freigabe (ergänzt fehlende)
+# help: publish every folder directly under shares/ and sensitive/ of every pool as its own Samba share (adds missing ones)
+# help.de: veröffentlicht jeden Ordner direkt unter shares/ und sensitive/ jedes Pools als eigene Samba-Freigabe (ergänzt fehlende)
 # args: [--check] [--fix-owner]
 set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/sharepath.sh"
+. "$(dirname "$0")/lib/admin.sh"
+adm="$(admin_user)"
 live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
 
 check=false
@@ -16,8 +18,8 @@ for a in "$@"; do
     --fix-owner) fix_all=true ;;
     *) say "usage: hs share repair [--check] [--fix-owner]"
        say "  --check      only list what is missing or wrong, change nothing"
-       say "  --fix-owner  also hand over every file of every share to adminuser (slow on big shares);"
-       say "               without it, files are only handed over in folders that do not belong to adminuser yet"
+       say "  --fix-owner  also hand over every file of every share to $adm (slow on big shares);"
+       say "               without it, files are only handed over in folders that do not belong to $adm yet"
        exit 1 ;;
   esac
 done
@@ -49,14 +51,11 @@ if [ "$(testparm -s --parameter-name=security 2>/dev/null)" = "ADS" ]; then
 fi
 
 # The shares are ZFS datasets, or plain folders on the snapraid layout
-bulk_type=$(cat /etc/hs/bulk-type 2>/dev/null || echo zfs)
-children() {   # children <tier> <parent>
-  if [ "$1" = fast ]; then
-    zfs list -H -o name -d 1 "fast/$2" 2>/dev/null | tail -n +2 | sed 's|.*/||'
-  elif [ "$bulk_type" = snapraid ]; then
-    find "/bulk/$2" -mindepth 1 -maxdepth 1 -type d ! -name 'lost+found' -printf '%f\n' 2>/dev/null | sort
+children() {   # children <pool> <parent>
+  if [ "$(share_pool_kind "$1")" = snapraid ]; then
+    find "$(share_root "$1")/$2" -mindepth 1 -maxdepth 1 -type d ! -name 'lost+found' -printf '%f\n' 2>/dev/null | sort
   else
-    zfs list -H -o name -d 1 "bulk/$2" 2>/dev/null | tail -n +2 | sed 's|.*/||'
+    zfs list -H -o name -d 1 "$1/$2" 2>/dev/null | tail -n +2 | sed 's|.*/||'
   fi
 }
 
@@ -85,33 +84,33 @@ for parent in shares sensitive; do
     # sudo belongs to root, one adopted from Unraid to nobody: the share shows up,
     # but nobody can add files. Then the whole folder is handed over: the files
     # first and the folder itself last, so an interrupted run starts again.
-    if [ "$parent" = shares ] && { $fix_all || [ "$(stat -c %U "$path")" != adminuser ]; }; then
+    if [ "$parent" = shares ] && { $fix_all || [ "$(stat -c %U "$path")" != "$adm" ]; }; then
       owner=$(stat -c %U "$path")
-      if [ "$name" = apps ] && [ "$tier" = fast ]; then
+      if [ "$name" = apps ] && [ "$(share_pool_role "$tier")" = apps ]; then
         # the files of the Docker apps keep the owners their containers gave them: only the top folder is handed over
-        if [ "$owner" != adminuser ]; then
+        if [ "$owner" != "$adm" ]; then
           if $check; then
             row "$name" "$(t 'belongs to %s, nobody can write (hs share repair hands the files over)' "$owner")"
           else
-            chown adminuser:users "$path"
+            chown "$adm":users "$path"
             chmod 2775 "$path"
-            row "$name" "$(t "belonged to %s, now adminuser's: writable for the share" "$owner")"
+            row "$name" "$(t "belonged to %s, now %s's: writable for the share" "$owner" "$adm")"
           fi
         fi
         if $fix_all; then row "$name" "$(t 'left as it is: the files of the Docker apps keep their owners')"; fi
       elif $check; then
-        if [ "$owner" != adminuser ]; then
+        if [ "$owner" != "$adm" ]; then
           row "$name" "$(t 'belongs to %s, nobody can write (hs share repair hands the files over)' "$owner")"
         fi
       else
         # the count and the current path trail under the spinner (every 500th file)
-        spin "Handing over '$name' to adminuser (all its files, can take a while)" \
-          bash -c 'stdbuf -oL find "$1" -mindepth 1 \( ! -user adminuser -o ! -group users \) -print -exec chown -h adminuser:users {} + |
-                   awk "NR % 500 == 1 { print NR \" files so far, now: \" \$0; fflush() }"' _ "$path"
-        chown adminuser:users "$path"
+        spin "Handing over '$name' to $adm (all its files, can take a while)" \
+          bash -c 'stdbuf -oL find "$1" -mindepth 1 \( ! -user "$2" -o ! -group users \) -print -exec chown -h "$2":users {} + |
+                   awk "NR % 500 == 1 { print NR \" files so far, now: \" \$0; fflush() }"' _ "$path" "$adm"
+        chown "$adm":users "$path"
         chmod 2775 "$path"
-        if [ "$owner" != adminuser ]; then
-          row "$name" "$(t "belonged to %s, now adminuser's: writable for the share" "$owner")"
+        if [ "$owner" != "$adm" ]; then
+          row "$name" "$(t "belonged to %s, now %s's: writable for the share" "$owner" "$adm")"
         fi
       fi
     fi
@@ -132,11 +131,11 @@ for parent in shares sensitive; do
       continue
     fi
 
-    # Same rules as the parent shares: /bulk/shares is written as adminuser,
-    # /bulk/sensitive is read as root and never writable.
+    # Same rules as the parent shares: <data pool>/shares is written as adminuser,
+    # <pool>/sensitive is read as root and never writable.
     if [ "$parent" = shares ]; then
       net conf addshare "$name" "$path" writeable=y guest_ok=n
-      net conf setparm "$name" "force user" adminuser
+      net conf setparm "$name" "force user" "$adm"
     else
       net conf addshare "$name" "$path" writeable=n guest_ok=n
       net conf setparm "$name" "force user" root
@@ -151,7 +150,7 @@ for parent in shares sensitive; do
   done < <(children "$tier" "$parent")
 
   # On ZFS only datasets are shares: a plain folder next to them is skipped (never published, never handed over)
-  if [ "$tier" = fast ] || [ "$bulk_type" != snapraid ]; then
+  if [ "$(share_pool_kind "$tier")" != snapraid ]; then
     while read -r name; do
       case "$name" in *.deleted-*) continue ;; esac
       row "$name" "$(t 'plain folder, not a share (make a share of it with hs share add, or move its files into one)')"

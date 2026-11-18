@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "A second apps pool is an extra Incus pool; Incus default stays"
+docs  = "storage-and-disks"
+body  = """When you add a new apps pool with hs pool, the Incus storage pool default is not moved: it stays where it was (on the first apps pool, or on the system disk). The new pool becomes its own Incus pool with the pool's name, and hs ct add ... -s <name> puts an instance on it. The choice is kept in the machine.toml key incusDefaultPool. Not tested on hardware yet."""

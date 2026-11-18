@@ -6,13 +6,14 @@
   import ReplaceMember from './ReplaceMember.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { poolTopic } from '../../pages/storage/pool.js';
+  import { live } from '../../live.svelte.js';
   import { openCreate } from '../../ui.svelte.js';
 
   let { pool, member, snap = false } = $props();
 
   // Remove only works on a disk the server can read now (it moves its files, or leaves them on the disk). A disk that is MISSING or not mounted
   // cannot be removed: replacing it restores its files from the parity. Say so here instead of letting the plan refuse after a choice.
-  const mem = poll(() => `/api/sys/pool/members?pool=${pool}`, 30000, () => poolTopic('members', pool));
+  const mem = poll(() => `/api/sys/pool/members?pool=${pool}`, 30000, () => poolTopic('members', pool, live.topics));
   // members: name, bytes, state (ONLINE|UNMOUNTED|MISSING ...), group, ...
   const state = $derived(rows(mem).find((r) => r[0] === member)?.[2] ?? '');
   const gone = $derived(snap && mem.loaded && state !== '' && state !== 'ONLINE');
@@ -55,7 +56,7 @@
           <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'move'} onchange={() => (mode = 'move')} />Move them to the other disks</label>
           <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'nomove'} onchange={() => (mode = 'nomove')} />Leave them on the disk</label>
         </div>
-        <div class="hint">{mode === 'move' ? 'The files move to the other disks first. That can take hours; it runs as a background job.' : 'Nothing moves. Files still on the disk are no longer in /bulk (the disk is not erased); use this for a disk you emptied already.'}</div>
+        <div class="hint">{mode === 'move' ? 'The files move to the other disks first. That can take hours; it runs as a background job.' : `Nothing moves. Files still on the disk are no longer in /${pool} (the disk is not erased); use this for a disk you emptied already.`}</div>
       </div>
     {:else}
       <div class="hint">The parity disk is unlabelled and leaves the array; nothing is erased.</div>

@@ -9,7 +9,7 @@ have flock || { echo "flock is missing"; exit 77; }
 T=$'\t'
 B=$WORK/base
 export HS_FM_TEST=1 HS_FM_SYNC=1 HS_FM_MARGIN=0 HS_FM_NO_RENAME=1 HS_STATE_DIR=$WORK/state HS_FM_DIR=$WORK/state/fm HS_DISKS_ROOT=$B/disks HS_DETACHED_ROOT=$B/detached \
-  HS_FM_POOL_ROOT=$B/pool HS_FM_CACHE_ROOT=$B/cache HS_FM_TEMP_ROOT=$B/temp HS_FM_FAST_ROOT=$B/fast HS_BULK_TYPE_FILE=$WORK/bulk-type \
+  HS_FM_POOL_ROOT=$B/pool HS_FM_CACHE_ROOT=$B/cache HS_FM_TEMP_ROOT=$B/temp HS_FM_FAST_ROOT=$B/fast HS_BULK_TYPE_FILE=$WORK/bulk-type HS_MACHINE_FILE=$WORK/machine.toml \
   HS_LOCK=$WORK/lock HS_LOCK_ADMIN=$WORK/admin HS_BULK_CLOSED=$WORK/state/bulk-closed HS_CAPABILITIES_FILE=$WORK/caps HS_LOCKED_MARKER=$WORK/locked-marker
 echo snapraid > "$HS_BULK_TYPE_FILE"; echo storage > "$HS_CAPABILITIES_FILE"
 mkdir -p "$HS_STATE_DIR/settings"; echo true > "$HS_STATE_DIR/settings/fileManagerWrite"     # the write switch is on for the tests below; "the write switch" block tests it off
@@ -411,5 +411,20 @@ for w in locations "pair <left> <right>" "ls <location>" "progress <unit>" "plan
 done
 grep -c "^sys${T}sys fm " "$SCRIPTS/lib/registry.tsv" | grep -q '^6$' && pass "registry rows" || fail "registry rows count"
 grep -q '("fm", "locations")' "$SCRIPTS/web-serve.py" && grep -q '"fm": \[' "$SCRIPTS/web-serve.py" && pass "web READS and CHANGES entries" || fail "web allowlists"
+
+echo "-- pools of machine.toml: tank (data) and ssd (apps)"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }
+' > "$HS_MACHINE_FILE"
+export HS_POOLS_ROOT=$B/roots; _HS_POOLS_LOADED=
+mkdir -p "$B/roots/tank/shares/docs" "$B/roots/ssd"
+fm locations
+check_eq "pool:tank is listed with its pool" tank "$(loc pool:tank | cut -f10)"
+loc pool:ssd | grep -q . && pass "pool:ssd (apps, mounted) is listed" || fail "pool:ssd: $out"
+check_eq "share:docs comes from the data pool" tank "$(loc share:docs | cut -f10)"
+has "^loc${T}disk:" && fail "disk rows on a zfs pool: $out" || pass "no disk rows without a SnapRAID pool"
+has "^loc${T}cache:" && fail "cache row on a zfs pool: $out" || pass "no cache row without a SnapRAID pool"
+fm ls pool:nope; check_eq "ls of a pool that is no row: refused" 1 "$rc"; has "unknown location" && pass "unknown location named" || fail "ls pool:nope: $out"
+fm pair pool:tank pool:ssd; has "^status${T}ok" && pass "pair of two pools is ok" || fail "pair pools: $out"
+rm -f "$HS_MACHINE_FILE"; unset HS_POOLS_ROOT; _HS_POOLS_LOADED=
 
 finish

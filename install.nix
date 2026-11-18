@@ -2,7 +2,7 @@
 #
 # It boots, gets an address via DHCP, lets adminuser in over SSH and can
 # create ZFS pools. No Incus, Samba, NVIDIA or web UIs: those are in
-# configuration.nix, which needs the pools "fast" and "bulk" to exist.
+# configuration.nix, which needs the pools of the pools line to exist.
 #
 #   NIXOS_CONFIG=/mnt/etc/nixos/install.nix nixos-install
 #
@@ -22,6 +22,16 @@ let
   home = machine.role == "homeserver";
   # GRUB on a given disk for a machine that boots with BIOS (a VPS); the installer wizard writes bootDevice then
   grub = machine.bootDevice != "";
+  # The web interface (docs/PLAN-first-run-wizard.md decision 1): the installer sets webUi = true in machine.toml, so the first dashboard needs
+  # no console rebuild. The package is taken from the binary cache when it has it (ADR 0003), else built from web/ during nixos-install. LAN only, never a public route (.claude/rules/web.md).
+  webUi = machine.webUi;
+  webPort = machine.webPort;
+  hsWeb = pkgs.callPackage ./pkgs/hs-web.nix { };
+  adminUser = machine.adminUser;
+  hsCommand = import ./hs-command.nix { inherit pkgs; };
+  # The pool rows (no pools line = the classic data pool of kind bulkType, as in configuration.nix)
+  pools = if machine.pools == null then { bulk = { role = "data"; kind = machine.bulkType; }; } else machine.pools;
+  bulkSnapraid = lib.any (p: (p.kind or "") == "snapraid") (lib.attrValues pools);
 in
 {
   imports = [ ./hardware-configuration.nix ];
@@ -39,6 +49,52 @@ in
   networking.hostId = lib.mkIf home machine.hostId;   # required by ZFS, must stay the same later
   networking.useDHCP = true;            # any NIC; bridges and VLANs come with the full config
 
+  # <hostName>.local for a PC on the same network (decision 3); the IP in the banner is the fallback when mDNS does not work there
+  services.avahi = lib.mkIf webUi {
+    enable = true;
+    openFirewall = true;
+    publish = { enable = true; addresses = true; };
+  };
+
+  # Same rule as configuration.nix: the port is open to private addresses only (home networks), never to a public one.
+  networking.nftables.enable = lib.mkIf webUi true;
+  networking.firewall.extraInputRules = lib.mkIf webUi ''
+    ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } tcp dport ${toString webPort} accept
+  '';
+
+  # ONE process on the host as root, the same unit as in configuration.nix (which replaces it after `hs rebuild`): scripts/web-serve.py.
+  # Only the local adminuser can sign in here (no Samba, no domain).
+  systemd.services.hs-web = lib.mkIf webUi {
+    description = "Web interface (port ${toString webPort})";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" ];
+    path = [ "/run/current-system/sw" ];
+    environment = {
+      HS_CALLER = "web";
+      HS_WEB_PORT = toString webPort;
+      HS_WEB_ROOT = "${hsWeb}";
+      HS_WEB_BIND = "";
+      HS_WEB_SECURE = "";
+      HS_WEB_LOCAL_USER = adminUser;
+      HS_WEB_UNLOCK_IN_UNIT = "1";
+      HS_WEB_SESSION_FILE = "/run/hs-web/sessions.json";
+    };
+    serviceConfig = {
+      ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/web-serve.py";
+      Restart = "on-failure";
+      PrivateTmp = true;
+      NoNewPrivileges = true;
+      RuntimeDirectory = "hs-web";
+      RuntimeDirectoryMode = "0700";
+      RuntimeDirectoryPreserve = "yes";
+    };
+  };
+
+  # The one-time setup code (docs/adr/0022-first-run-console-token.md): shown on the screen and the serial port at every boot while the
+  # installer's flag says `pending`. Rule 3 of the record: the output goes to the console device ONLY, never to the journal (StandardOutput=tty
+  # instead of journal) and never to /etc/issue. A server without the flag (an upgraded one) prints nothing.
+  systemd.services.hs-setup-code = lib.mkIf webUi (import ./setup-code-unit.nix { inherit pkgs hsCommand webPort; });
+
   services.openssh = {
     enable = true;
     settings = {
@@ -47,7 +103,9 @@ in
     };
   };
 
-  users.users.adminuser = {
+  environment.etc."hs/admin-user".text = adminUser;
+
+  users.users.${adminUser} = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
     openssh.authorizedKeys.keys = machine.sshKeys;
@@ -57,15 +115,15 @@ in
     vim
     git
     python3         # the scripts behind `hs` (machine.toml is read with it): without it the first `hs rebuild` fails
-    (import ./hs-command.nix { inherit pkgs; })   # the `hs` command from the first boot on (also in configuration.nix)
+    hsCommand   # the `hs` command from the first boot on (also in configuration.nix)
   ] ++ lib.optionals home [
     smartmontools   # smartctl, to check the disks before creating the pools
     newt            # whiptail, the disk menu of scripts/manage-pool.sh
     mergerfs snapraid attr jq rsync   # bulkType = "snapraid"
   ];
 
-  # so scripts/manage-pool.sh knows how /bulk is meant to be built
-  environment.etc."hs/bulk-type" = lib.mkIf home { text = machine.bulkType; };
+  # so scripts/manage-pool.sh knows how the data pool is meant to be built (same text as configuration.nix)
+  environment.etc."hs/bulk-type" = lib.mkIf home { text = if bulkSnapraid then "snapraid" else "zfs"; };
 
   system.stateVersion = "26.05";
 }

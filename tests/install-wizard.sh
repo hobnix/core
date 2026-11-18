@@ -3,7 +3,7 @@
 # No disk is touched: HS_INSTALL_SKIP_DISK=1 leaves out partitioning, mounting and nixos-install; the target is a temporary folder.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-export HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_PYTHON=python3 PYTHONUTF8=1 HS_INSTALL_SKIP_DISK=1
+export HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_PYTHON=python3 PYTHONUTF8=1 HS_INSTALL_SKIP_DISK=1 HS_INSTALL_SKIP_NETCHECK=1
 W="bash $SCRIPTS/install-wizard.sh"
 KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItestkey you@pc'
 REPO=$WORK/repo; mkdir -p "$REPO/presets" "$REPO/scripts"
@@ -34,6 +34,7 @@ check_eq "timeZone" '"Europe/Vienna"' "$(get timeZone)"
 check_out "sshKeys holds the key" "AAAAC3NzaC1lZDI1NTE5AAAAItestkey" python3 -c "import sys;print(sys.argv[1])" "$(get sshKeys)"
 check_out "hostId is a new 8-digit hex value (no CHANGEME)" '^"[0-9a-f]{8}"$' echo "$(get hostId)"
 check "the preset was applied (runtime setting written)" test -f "$T/var/lib/hs/settings/backupNewShares"
+check_eq "a new home server gets an empty pools line" "{}" "$(get pools)"
 
 echo "-- the bulk type"
 T2=$WORK/target-snapraid
@@ -112,6 +113,31 @@ printf 'describe=-\ncommit=-\n' > "$vf"
 out=$(inst "$WORK/g5"); check "a stick without a revision: no .git, no failure" test ! -e "$WORK/g5/etc/nixos/.git"
 check_out "and the plan says so" "Git checkout.*none" bash -c "HS_INSTALL_ORIGIN=$PUB HS_INSTALLER_VERSION_FILE=$vf $W --dry-run --disk sda --hostname gitbox --key '$KEY' --target $WORK/g6 --repo $ISO 2>&1"
 
+echo "-- the web interface and the setup flag (issue #580)"
+TW=$WORK/web-target
+$W --disk sda --hostname webbox --key "$KEY" --target "$TW" --repo "$REPO" >/dev/null 2>&1 || true
+M=$TW/etc/nixos/machine.toml
+check_eq "machine.toml turns the web interface on" "true" "$(get webUi)"
+check "the first-setup flag is armed" test -s "$TW/var/lib/hs/first-run.json"
+check "and holds no code" bash -c "grep -q '\"state\": \"pending\"' '$TW/var/lib/hs/first-run.json' && ! grep -Eq '[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}' '$TW/var/lib/hs/first-run.json'"
+out=$($W --disk sda --hostname webbox2 --key "$KEY" --target "$WORK/web-target2" --repo "$REPO" 2>&1)
+check_out "the last note names the address and the code" "one-time code.*webbox2.local:8480" echo "$out"
+check "arming is the last step before Done" awk '/Preset .* applied/{p=NR} /first web setup is armed/{a=NR} /Done/{d=NR} END{exit !(p && a>p && d>a)}' <<<"$out"
+
+echo "-- the admin account name (issue #575)"
+check_eq "the default writes no adminUser line" "0" "$(grep -c '^adminUser' "$TW/etc/nixos/machine.toml" || true)"
+out=$($W --dry-run --disk sda --hostname webbox --key "$KEY" --target "$WORK/adm-dry" --repo "$REPO" 2>&1)
+check_out "the plan names the default admin" "Admin account .*adminuser" echo "$out"
+TA=$WORK/adm-target
+$W --disk sda --hostname admbox --admin anna --key "$KEY" --target "$TA" --repo "$REPO" >/dev/null 2>&1 || true
+check_eq "--admin anna writes adminUser" '"anna"' "$(HS_MACHINE_FILE=$TA/etc/nixos/machine.toml python3 "$SCRIPTS/machine-toml.py" get "$TA/etc/nixos/machine.toml" adminUser --json 2>/dev/null)"
+out=$($W --disk sda --hostname admbox2 --admin anna --key "$KEY" --target "$WORK/adm-target2" --repo "$REPO" 2>&1)
+check_out "the last note uses the name" "ssh anna@admbox2.local|one-time code" echo "$out"
+for bad in root nobody Anna 1anna "an na"; do
+  out=$($W --dry-run --disk sda --hostname admbox --admin "$bad" --key "$KEY" --target "$WORK/adm-bad" --repo "$REPO" 2>&1) && rc=0 || rc=$?
+  check_eq "--admin '$bad' is refused" "1" "$rc"
+done
+
 echo "-- the role edge (a public VPS)"
 out=$($W --dry-run --role edge --bios --disk sda --hostname edge1 --key "$KEY" --target "$WORK/edge-dry" --repo "$REPO" 2>&1)
 check_out "the plan names the role" "Role .*edge" echo "$out"
@@ -121,6 +147,8 @@ TE=$WORK/edge-target
 $W --role edge --bios --disk sda --hostname edge1 --key "$KEY" --timezone Europe/Berlin --target "$TE" --repo "$REPO" >/dev/null 2>&1 || true
 M=$TE/etc/nixos/machine.toml
 check_eq "role" '"edge"' "$(get role)"
+check_eq "an edge node gets no pools line" "" "$(get pools)"
+check "an edge node serves no web page and arms no setup" bash -c "test -z \"$(get webUi)\" && test ! -e '$TE/var/lib/hs/first-run.json'"
 if [ "$(uname -o 2>/dev/null)" = Msys ]; then skip "bootDevice: Git Bash rewrites /dev/sda in arguments (Linux only)"
 else check_eq "bootDevice (GRUB, BIOS)" '"/dev/sda"' "$(get bootDevice)"; fi
 check_eq "the preset of the same name was applied: the edge capabilities" '["tailscale","edge-mail","edge-ports","edge-watcher","edge-status"]' "$(get capabilities | tr -d ' ')"
@@ -129,4 +157,30 @@ check_eq "no ZFS host id for a node without pools" "" "$(get hostId)"
 check_eq "and no network card or Samba networks" "" "$(get nic)$(get smbAllow)"
 check_eq "the name and zone are there" '"edge1" "Europe/Berlin"' "$(get hostName) $(get timeZone)"
 check "machine.toml of an edge node passes hs config check without hostId, nic, smbAllow and vlans" bash -c 'out=$(python3 "$1/machine-toml.py" check "$2/machine.toml.example" "$3" 2>&1); ! grep -q "^error" <<<"$out"' _ "$SCRIPTS" "$ROOT" "$M"
+echo "-- the network check (issue #179)"
+NB=$WORK/netbin; mkdir -p "$NB" "$WORK/nonet"
+printf '#!/bin/sh
+exit 0
+' > "$NB/ip"; printf '#!/bin/sh
+exit 2
+' > "$NB/getent"; chmod +x "$NB/ip" "$NB/getent"
+nout=$(env -u HS_INSTALL_SKIP_NETCHECK PATH="$NB:$PATH" HS_SYS_NET="$WORK/nonet" $W --dry-run --disk sda --hostname myserver --key "$KEY" --preset minimal --target "$T" --repo "$REPO" 2>&1; echo "rc=$?")
+check_out "a failed check stops the installer and names the item" "network check failed \(link: " echo "$nout"
+check_out "with the fix" "network cable" echo "$nout"
+check_out "and a non-zero exit" "rc=1" echo "$nout"
+check_eq "nothing of the plan is shown" 0 "$(grep -c 'The plan' <<<"$nout")"
+nout=$(PATH="$NB:$PATH" HS_SYS_NET="$WORK/nonet" $W --dry-run --disk sda --hostname myserver --key "$KEY" --preset minimal --target "$T" --repo "$REPO" 2>&1)
+check_out "HS_INSTALL_SKIP_NETCHECK goes on to the plan" "Dry run" echo "$nout"
 finish
+
+echo "-- the pools line and a SnapRAID preset"
+mkdir -p "$WORK/prerepo"; cp -r "$REPO/." "$WORK/prerepo/"
+printf '[machine]
+bulkType = "snapraid"
+' > "$WORK/prerepo/presets/snaptest.toml"
+out=$($W --disk sda --hostname snapbox --key "$KEY" --preset snaptest --target "$WORK/snap-target" --repo "$WORK/prerepo" 2>&1)
+M=$WORK/snap-target/etc/nixos/machine.toml
+check_eq "the preset's bulkType is kept" '"snapraid"' "$(get bulkType)"
+check_eq "and the pools line is written" "{}" "$(get pools)"
+check_out "the note says bulkType is not used" "bulkType is not used.*--kind snapraid" echo "$out"
+check_out "the last note names hs pool" "sudo hs pool ssd --use apps" echo "$out"

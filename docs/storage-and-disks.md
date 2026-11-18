@@ -15,8 +15,10 @@ ls -l /dev/disk/by-id/ | grep -v part
 ```
 
 ## Pick a layout for the data disks
-The pool `fast` (SSDs, for containers and VMs) is always a ZFS mirror. The data disks, mounted as `/bulk`, come in two layouts. You
-choose with `bulkType` in `machine.toml` **before you install**; the installer reads it only once.
+The pool `fast` (SSDs, for containers and VMs) is always a ZFS mirror. The data disks come in two layouts. On a server with a `pools`
+line the layout is chosen per pool, when you create it (`hs pool <name> --kind zfs|snapraid`, see "Create a pool with any name"). Only a
+server without a `pools` line (mounted as `/bulk`) chooses with `bulkType` in `machine.toml` **before you install**; the installer reads
+it only once.
 
 | | `bulkType = "zfs"` (default) | `bulkType = "snapraid"` |
 | --- | --- | --- |
@@ -78,6 +80,58 @@ df -h /bulk
 - With SnapRAID `zpool status` lists only `fast`; that is correct. `hs pool bulk` lists every data disk and the parity disk, and `df -h /bulk`
   shows the size of all data disks together.
 
+## What the server finds on your disks
+```bash
+hs sys storage discover
+```
+
+The command looks at every whole disk and prints one line per disk: its name under `/dev/disk/by-id/`, size in bytes, bus (sata, nvme,
+usb, sas, virtio, other), model, what it holds (kind), a label and a state. It only reads: nothing is imported, mounted or erased.
+
+| Kind | Label | State |
+| --- | --- | --- |
+| `os` (the system disk or the install stick) | - | `system` |
+| `empty` (no partitions, no signature) | - | `free` |
+| `zfs` | the name of the pool, whatever it is called | `imported`, `importable` (found, not imported) or `damaged` (a device is missing) |
+| `snapraid` | `bulk-data-NN` or `bulk-parity-N` | `mounted` or `unmounted` |
+| `backup` | `backup` | `protected` |
+| `luks` (encrypted, contents unknown) | - | `locked` or `open` |
+| `foreign` (any other filesystem or partition table) | the filesystems, for example `ntfs` | `has-data` |
+
+A field without a value shows `-`. Without ZFS installed, a disk with a ZFS label shows `importable` and no pool name. A ZFS pool on top of LUKS or another device-mapper layer, made outside `hs`, shows as `importable` even when it is imported. Not tested on
+hardware yet.
+
+## Bring in a pool that is already on the disks
+
+```bash
+hs pool tank import --dry-run
+hs pool tank import
+```
+
+Use this when `hs sys storage discover` shows a ZFS pool as `importable` (for example disks moved from another server, or a reinstall after
+`zpool export`). The pool keeps its name and its data; nothing on the disks is erased. `--dry-run` shows the plan and changes nothing. Without it
+you type the name of **a disk of the pool** (the plan names it), then you can run the work as a background job. The web interface offers the same
+plan and starts the same job (`hs sys pool plan tank import`).
+
+The job imports the pool by its id without mounting it (never with `-f`), checks that it mounts at `/tank`, mounts its datasets, creates
+`tank/shares` and `tank/sensitive` when they are missing, and adds `tank` to the `pools` line of `machine.toml` (role `data`). That takes effect
+with `hs rebuild`; until then a reboot leaves the pool unimported. A pool with native encryption stays locked until `hs unlock`.
+
+The command refuses, and says why, in these cases:
+
+| Reason | What to do |
+| --- | --- |
+| The pool is damaged (not ONLINE, or a disk is missing) | Repair it where it was made; it is not imported here. |
+| The pool was last used by another system | Export it there first (`zpool export`); it is never forced. |
+| The name does not fit the pool name rule | Rename it on a machine that can import it; a name is a lower case letter, then up to 11 lower case letters or digits. |
+| Two pools have the same name, or the pool is imported already | Nothing is imported by id from here. |
+| A disk of the pool is encrypted by LUKS, is the system disk, a backup disk or belongs to another pool | Look at it with `hs sys storage discover`; erase a disk on its disk page only when you no longer need it. |
+| It is an apps pool | Importing a pool for containers and VMs comes later. |
+| `/tank` already holds files on the system disk | Move them away first. |
+| The server has no `pools` line | Run `hs pool record` first. |
+
+Not tested on hardware yet.
+
 ## Where shares live
 `bulk` has two top folders. Each folder below them is one network share ([Users and shares](users-and-shares.md)).
 
@@ -93,6 +147,67 @@ sudo hs share add app-backups --sensitive
 
 With ZFS each share is its own dataset; with SnapRAID it is an ordinary folder. The command is the same. `hs share repair` hands the
 files of every share back to the right owner, and `hs share cleanup --dry-run` lists shares whose folder is gone.
+
+## A server without a pool
+A server can run without any pool, for example after an install on one disk. Apps then run on the system disk, without redundancy, and
+there is no place for shares: `hs share add` says so and changes nothing. `hs doctor` and the login message show the same as a note, not
+as a problem. To add a pool, look for free disks and create one:
+
+```bash
+sudo hs storage discover
+sudo hs pool <name> add
+```
+
+With a data pool but no SSD pool, apps still run on the system disk, and the upload cache and shares on SSD refuse until you add an SSD
+pool. Not tested on hardware yet.
+
+## Create a pool with any name
+
+On a server that has a `pools` line (see below) `hs pool` is not limited to two names. The menu lists the pools of the line and "A new pool",
+which asks for the name. A new name is a lower case letter, then up to 11 lower case letters or digits, and not a word that ZFS or the system
+uses. It also needs a role, given with `--use`; a terminal is asked when it is missing:
+
+```bash
+sudo hs pool tank --use data --dry-run
+sudo hs pool tank --use data
+```
+
+- `data` creates `tank/shares` and `tank/sensitive`; `apps` creates a pool without a mount point of its own, with `tank/incus`.
+- The plan says "a NEW pool 'tank' with role data", and you still type the pool name before any disk is erased.
+- When the pool is created, the row is written to the `pools` line of `machine.toml`; it takes effect with `hs rebuild`. If the row cannot be
+  written the pool stays, and the message shows the row to add by hand.
+- A server without a `pools` line refuses a new name before anything is erased: run `hs pool record` first. `bulk` and `fast` there work as
+  before.
+- `--kind zfs|snapraid` picks the layout of a new data pool (default `zfs`; a terminal is asked). An apps pool is always ZFS.
+- A server has at most one SnapRAID pool, with any valid name. `sudo hs pool tank --use data --kind snapraid --dry-run` shows the plan;
+  `/tank` is the merged folder of its disks. The disks of a SnapRAID pool keep the labels `bulk-data-NN` and `bulk-parity-N`. Add the
+  first parity disk with a second run: `sudo hs pool tank add --role parity --disks <disk>`.
+- `--role` works only with `--kind snapraid`. A second SnapRAID pool is refused before any disk is listed.
+- A new `apps` pool does not move the Incus pool `default`: it stays on the first apps pool (or on the system disk when there was none), and
+  the choice is written to `incusDefaultPool` in `machine.toml`. The new pool becomes the Incus pool `<name>`; the plan says so, and
+  `hs ct add <name> -s <pool>` puts an instance on it. If Incus cannot add it at once, `hs rebuild` does. Not tested on hardware yet.
+
+Not tested on hardware yet. CI runs the root test `tests/pool.sh` (loop devices, needs udev); the dry-run plans are covered by `tests/pool-bare.sh`.
+
+## Record the pools of an existing server
+
+A server that was set up before the pool list existed has no `pools` line in `machine.toml`; it works as before. To write the line from what
+the server already has, run the command. It looks at the ZFS pools, the Incus storage and the SnapRAID layout, shows the rows and the exact
+line, and writes it only after you type `pools`:
+
+```bash
+sudo hs pool record --dry-run
+sudo hs pool record
+sudo hs rebuild
+```
+
+- `--dry-run` prints only the line and changes nothing.
+- No disk is touched; only `machine.toml` changes. When the rows are the same as the ones a server without the line uses anyway, nothing
+  behaves differently after the rebuild.
+- It refuses when the line exists, or when a pool name is not allowed (a lower case letter, then up to 11 letters or digits). Rename the pool
+  first. Without a terminal it needs `--yes`.
+
+Not tested on hardware yet.
 
 ## Add disks
 ```bash

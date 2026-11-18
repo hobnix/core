@@ -44,12 +44,14 @@ user	backup prune	backup.sh	prune	give space back now: delete leftovers of a run
 user	backup report	backup.sh	report	send the report of the restore drills as a push message now (it goes out by itself on the 25th of every month; --dry-run only shows it)	den Bericht über die Wiederherstellungsproben als Push-Nachricht jetzt senden (er geht jeden Monat am 25. von selbst raus; --dry-run zeigt ihn nur)	topic:backup,changes,capability:backup
 user	temp-disk copy	temp-disk.sh	copy	-	-	long,nohelp,topic:disks,changes,capability:storage
 user	pool <pool>	manage-pool.sh	--show	disks and state of a pool (only shows, changes nothing): hs pool bulk, hs pool fast	Festplatten und Zustand eines Pools (zeigt nur an, ändert nichts): hs pool bulk, hs pool fast	topic:disks,reads,cheat:disks,capability:storage
-user	pool <pool> add	manage-pool.sh	-	add disks to a pool (filesystem and encryption are asked)	Platten zu einem Pool hinzufügen (Dateisystem und Verschlüsselung werden gefragt)	guided,topic:disks,changes,capability:storage
+user	pool <pool> add	manage-pool.sh	-	add disks to a pool (filesystem and encryption are asked) (a new pool: --use data|apps, --kind zfs|snapraid)	Platten zu einem Pool hinzufügen (Dateisystem und Verschlüsselung werden gefragt) (neuer Pool: --use data|apps, --kind zfs|snapraid)	guided,topic:disks,changes,capability:storage
 user	pool <pool> replace	manage-pool.sh	--replace	replace a disk (asks which one when left out): hs pool bulk replace <member> --disks <new>	Platte ersetzen (fragt, welche, wenn nichts angegeben): hs pool bulk replace <Mitglied> --disks <neu>	guided,topic:disks,changes,capability:storage
 user	pool <pool> remove	manage-pool.sh	--remove	take a disk (or a whole mirror) out (asks which one when left out): hs pool bulk remove <member>	Platte (oder ganzen Spiegel) herausnehmen (fragt, welche, wenn nichts angegeben): hs pool bulk remove <Mitglied>	guided,topic:disks,changes,capability:storage
 user	pool <pool> convert	manage-pool.sh	--convert	change filesystem or encryption of a data disk by emptying and formatting it (asks which one when left out): hs pool bulk convert <member> --fs xfs	Dateisystem oder Verschlüsselung einer Datenplatte ändern (leeren und neu formatieren): hs pool bulk convert <Mitglied> --fs xfs	guided,topic:disks,changes,capability:storage
 user	pool <pool> close	manage-pool.sh	--close	no new files on a data disk any more (it stays in /bulk); add --drain to move its files away: hs pool bulk close <member> [--drain]	keine neuen Dateien mehr auf eine Datenplatte (sie bleibt in /bulk); mit --drain werden ihre Dateien weggeräumt: hs pool bulk close <Mitglied> [--drain]	guided,topic:disks,changes,capability:storage
 user	pool <pool> open	manage-pool.sh	--open	a closed data disk takes new files again: hs pool bulk open <member>	eine geschlossene Datenplatte nimmt wieder neue Dateien auf: hs pool bulk open <Mitglied>	guided,topic:disks,changes,capability:storage
+user	pool <pool> import	pool-import.sh	{1} {rest}	bring in a ZFS pool that is on the disks already, under its own name (nothing is erased; plan first, you type a disk name): hs pool <pool> import [--dry-run]	einen ZFS-Pool übernehmen, der schon auf den Platten ist, unter seinem Namen (nichts wird gelöscht; erst der Plan, dann den Namen einer Platte tippen): hs pool <Pool> import [--dry-run]	guided,topic:disks,changes,capability:storage
+user	pool record	pool-record.sh	{rest}	write the pools line of machine.toml from the pools this server already has (asks first): hs pool record [--dry-run]	die Zeile pools in machine.toml aus den vorhandenen Pools schreiben (fragt vorher): hs pool record [--dry-run]	guided,topic:disks,changes,capability:storage
 user	disk list	disk-health.sh	-	every disk with its health verdict	jede Platte mit ihrem Gesundheitsurteil	guided,topic:disks,reads,cheat:disks,capability:storage
 user	disk <disk> health	disk-health.sh	{1}	health of one disk: verdict, age, bad sectors, errors	Gesundheit einer Platte: Urteil, Alter, defekte Sektoren, Fehler	guided,topic:disks,reads,cheat:disks,capability:storage
 user	disk <disk> test	disk-health.sh	--test {rest} {1}	start a self-test inside the disk: hs disk <disk> test short|long	Selbsttest in der Platte starten: hs disk <Platte> test short|long	topic:disks,changes,capability:storage
@@ -103,15 +105,15 @@ user	ct <ct> exec	ct-access.sh	{1} exec {rest}	run one command inside: hs ct <ct
 user	ct <ct> logs	ct-access.sh	{1} logs {rest}	the last lines of the journal inside: hs ct <ct> logs [lines]	die letzten Zeilen des Journals darin: hs ct <ct> logs [Zeilen]	guided,topic:instances,reads,cheat:trouble,capability:incus
 user	ct <ct> console	ct-access.sh	{1} console	the console of the instance (leave with Ctrl+a q)	die Konsole der Instanz (Beenden mit Strg+a q)	guided,topic:instances,changes,capability:incus
 user	ct update-all	ct-update-all.sh	{rest}	snapshot and update every running container, with a report and the way back: hs ct update-all [--dry-run] [--yes]	jeden laufenden Container per Schnappschuss sichern und aktualisieren, mit Bericht und Rückweg: hs ct update-all [--dry-run] [--yes]	topic:instances,changes,capability:incus
-user	user list	users-show.sh	users	users of the domain with state and groups	Benutzer der Domäne mit Zustand und Gruppen	topic:users,reads,cheat:users,capability:ad
-user	user <user> show	users-show.sh	users {1}	one user with state and groups	ein Benutzer mit Zustand und Gruppen	topic:users,reads,capability:ad
-user	user add	user-guided.sh	add {rest}	create a user (guided; the password is asked next): hs user add [name] [--full "Full Name"]	Benutzer anlegen (geführt; danach das Passwort): hs user add [Name] [--full "Voller Name"]	guided,topic:users,changes,cheat:users,capability:ad
-user	user <user> passwd	manage-users.sh	--password {1}	set a new password (typed on the terminal)	neues Passwort setzen (wird am Terminal getippt)	guided,topic:users,changes,cheat:users,capability:ad
-user	user <user> lock	user-guided.sh	lock {1} {rest}	lock or unlock an account (shows what it will do)	Konto sperren oder entsperren (zeigt, was passiert)	guided,topic:users,changes,capability:ad
-user	user <user> unlock	manage-users.sh	--enable {1}	unlock an account	Konto entsperren	topic:users,changes,capability:ad
-user	user <user> remove	manage-users.sh	--delete {1}	delete an account (asks you to type the name)	Konto löschen (der Name muss getippt werden)	guided,topic:users,changes,capability:ad
-user	user <user> join <group>	manage-users.sh	--member {2} {1} add	put a user into a group	Benutzer in eine Gruppe aufnehmen	topic:users,changes,capability:ad
-user	user <user> leave <group>	manage-users.sh	--member {2} {1} remove	take a user out of a group	Benutzer aus einer Gruppe nehmen	topic:users,changes,capability:ad
+user	user list	users-show.sh	users	users of the domain with state and groups	Benutzer der Domäne mit Zustand und Gruppen	topic:users,reads,cheat:users,capability:samba
+user	user <user> show	users-show.sh	users {1}	one user with state and groups	ein Benutzer mit Zustand und Gruppen	topic:users,reads,capability:samba
+user	user add	user-guided.sh	add {rest}	create a user (guided; the password is asked next): hs user add [name] [--full "Full Name"]	Benutzer anlegen (geführt; danach das Passwort): hs user add [Name] [--full "Voller Name"]	guided,topic:users,changes,cheat:users,capability:samba
+user	user <user> passwd	manage-users.sh	--password {1}	set a new password (typed on the terminal)	neues Passwort setzen (wird am Terminal getippt)	guided,topic:users,changes,cheat:users,capability:samba
+user	user <user> lock	user-guided.sh	lock {1} {rest}	lock or unlock an account (shows what it will do)	Konto sperren oder entsperren (zeigt, was passiert)	guided,topic:users,changes,capability:samba
+user	user <user> unlock	manage-users.sh	--enable {1}	unlock an account	Konto entsperren	topic:users,changes,capability:samba
+user	user <user> remove	manage-users.sh	--delete {1}	delete an account (asks you to type the name)	Konto löschen (der Name muss getippt werden)	guided,topic:users,changes,capability:samba
+user	user <user> join <group>	manage-users.sh	--member {2} {1} add	put a user into a group	Benutzer in eine Gruppe aufnehmen	topic:users,changes,capability:samba
+user	user <user> leave <group>	manage-users.sh	--member {2} {1} remove	take a user out of a group	Benutzer aus einer Gruppe nehmen	topic:users,changes,capability:samba
 user	user flush	manage-users.sh	--flush	make the file server forget cached users and groups	den Dateiserver gecachte Benutzer und Gruppen vergessen lassen	topic:users,changes,capability:ad
 user	group list	users-show.sh	groups	groups of the domain with their members	Gruppen der Domäne mit ihren Mitgliedern	topic:users,reads
 user	group <group> show	users-show.sh	groups {1}	one group with its members	eine Gruppe mit ihren Mitgliedern	topic:users,reads
@@ -194,11 +196,11 @@ user	report	report.sh	-	collect what a helper needs into one text file	sammelt, 
 user	migrate	migrate.sh	-	move from an old server step by step (resumable)	Umzug von einem alten Server Schritt für Schritt (wiederaufnehmbar)	topic:system,changes,capability:storage
 user	migrate check	migrate-check.sh	-	look at the old disks first (changes nothing)	zuerst die alten Platten ansehen (ändert nichts)	topic:system,changes,capability:storage
 user	first-run	first-run.sh	-	after the installation: language, notifications, checklist	nach der Installation: Sprache, Benachrichtigungen, Checkliste	topic:system,changes
-user	setup-code	setup-code.sh	{rest}	the one-time code of the first web setup: issue a new one on this console, show the state, or start over (hs setup-code issue|status|reset)	der Einmalcode der ersten Einrichtung im Browser: hier an der Konsole einen neuen ausstellen, den Stand zeigen oder neu beginnen (hs setup-code issue|status|reset)	topic:system,changes
+user	setup-code	setup-code.sh	{rest}	the one-time code of the first web setup: issue a new one on this console, show the state, or start over (hs setup-code issue|status|reset|arm|boot)	der Einmalcode der ersten Einrichtung im Browser: hier an der Konsole einen neuen ausstellen, den Stand zeigen oder neu beginnen (hs setup-code issue|status|reset)	topic:system,changes
 user	pool <pool> sync	bulk-sync.sh	{rest}	update the parity now (snapraid layout), or --scrub	die Parität jetzt aktualisieren (snapraid) oder --scrub	long,topic:disks,changes,capability:storage
 user	ct <ct> edit	ct-guided.sh	edit {1} {rest}	change memory, CPU, disk, autostart, Docker (guided, shows the current values)	Speicher, CPU, Platte, Autostart, Docker ändern (geführt, zeigt die aktuellen Werte)	guided,topic:instances,changes,capability:incus
 user	ct <ct> storage list	manage-ct.sh	{1} --storage	disks and shares mounted into an instance (list)	in eine Instanz eingehängte Platten und Freigaben (Liste)	nohelp,topic:instances,reads,capability:incus
-user	user <user> groups	user-guided.sh	groups {1} {rest}	the groups of a user (guided multi-select)	die Gruppen eines Benutzers (geführte Mehrfachauswahl)	guided,topic:users,changes,capability:ad
+user	user <user> groups	user-guided.sh	groups {1} {rest}	the groups of a user (guided multi-select)	die Gruppen eines Benutzers (geführte Mehrfachauswahl)	guided,topic:users,changes,capability:samba
 user	disk selftest	selftest.sh	{rest}	start a SMART self-test in every disk: hs disk selftest short|long	SMART-Selbsttest in jeder Platte starten: hs disk selftest short|long	topic:disks,changes,capability:storage
 user	secrets	secrets.sh	-	which secrets the server keeps, who can read them, which to store elsewhere	welche Geheimnisse der Server aufbewahrt, wer sie lesen kann, welche man woanders sichern sollte	topic:security,reads
 user	secrets fix	secrets.sh	fix	set root-only permissions on the secrets	nur-root-Rechte für die Geheimnisse setzen	nohelp,topic:security,changes
@@ -208,8 +210,10 @@ sys	sys pool info	manage-pool.sh	--info	layout and state of the pools	-
 sys	sys pool members	manage-pool.sh	--members	members of the bulk pool	-
 sys	sys pool info <pool>	manage-pool.sh	{1} --info	layout and state of one pool	-
 sys	sys pool members <pool>	manage-pool.sh	{1} --members	members of one pool	-
+sys	sys pool list	pool-list.sh	-	the pools with their state: name, role (data|apps), kind (zfs|snapraid), state (online|degraded|missing|locked|unmounted); no pool = no output	-
 sys	sys pool state	pool-state.sh	-	what the pools are doing: the bulk lock, the health-check pause, last scrub and last parity sync (lock, paused, scrub <pool>, sync bulk; read only)	-
 sys	sys pool state <pool>	pool-state.sh	{1}	the same for one pool	-
+sys	sys storage discover	storage-discover.sh	-	-	-
 sys	sys pool plan <pool> <action>	pool-change.sh	plan {1} {2} {rest}	what a change of a pool would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
 sys	sys pool start <pool> <action>	pool-change.sh	start {1} {2} {rest}	do a change of a pool as a background job; needs --confirm <name> (passphrase on stdin with --encrypt)	-
 sys	sys backup state	backup.sh	--state	backup state as key and value	-
@@ -227,6 +231,11 @@ sys	sys ssh-key start <action>	ssh-key-change.sh	start {1} {rest}	do it (hs sys 
 sys	sys recipes list	recipes-list.sh	--list	the app recipes: name, description, instances, state (installed|partly|not installed|parked|unknown)	-
 sys	sys recipes versions	recipes-versions.sh	--list	the app recipes with versions: name, available version, applied version (- = not known), state (current|update|unknown)	-
 sys	sys setup list	setup-list.sh	--list	the first-run checklist: id, state (done|open), label, command, web page; the last line (finished) is done once setupDone is true	-
+sys	sys setup plan <action>	setup-change.sh	plan {1} {rest}	what closing the first-run wizard would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
+sys	sys setup start <action>	setup-change.sh	start {1} {rest}	do it (hs sys setup start wizard-done); answers done	-
+sys	sys preset list	preset.sh	--list	the presets: name, title, description, capabilities (space separated, - = none)	-
+sys	sys preset plan <action>	preset-change.sh	plan {1} {rest}	what applying a preset would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
+sys	sys preset start <action>	preset-change.sh	start {1} {rest}	do it (hs sys preset start apply <name>); fills only what is not set, answers done	-
 sys	sys config list	config-read.sh	list	every option of machine.toml.example: section, key, current value, default, type, help, settable (secrets only as (set))	-
 sys	sys config check	config-read.sh	check	the result of hs config check as plain text	-
 sys	sys config plan <action>	config-change.sh	plan {1} {rest}	what changing a setting of machine.toml would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused)	-
@@ -303,6 +312,7 @@ sys	sys node status <name>	node.sh	--status {1}	the status document of a node, r
 sys	sys node keyline <name>	node.sh	--keyline {1}	the key of a node as data: key (ok|locked|missing), user, file (where the other server's owner puts the line) and line (the public half with the forced command; never the private key)	-
 sys	sys node plan <action>	node-change.sh	plan {1} {rest}	what adding, removing or making the key of a node would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused, 2 = something is missing)	-
 sys	sys net nics	net-nics.sh	--list	the physical network cards: name, link (up|down), MAC (- = none), current (yes = the nic of machine.toml; listed first)	-
+sys	sys net check	net-check.sh	--list	the network check of the installer as data: item (link|wireless|address|route|dns|clock), state (ok|warn|fail), value (- = none), fix (- = none)	-
 sys	sys parts list	parts.sh	--list	the optional parts (capabilities) of this server, one per line: name, on|off, extension|part, nix (yes = needs a rebuild), switch (yes = machine.toml switches it), title	-
 sys	sys parts pending	parts.sh	--pending	the parts the next hs rebuild changes, one per line: name, on (switched on in machine.toml, not built yet) or off (taken out of machine.toml, still running); empty: nothing waits	-
 sys	sys rebuild pending	pending-rebuild.sh	--list	the machine.toml changes that wait for one hs rebuild, one per line: key, the value the running system was built with, the value now (- = not set); empty: nothing waits or no copy was kept yet	-

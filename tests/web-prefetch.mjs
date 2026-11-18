@@ -1,6 +1,7 @@
 // The pages' first reads (web/src/readsfor.js) must all be allowlisted reads of the web server (READS in scripts/web-serve.py), or the prefetch asks for nothing.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { readsFor } from '../web/src/readsfor.js';
+import { parsePoolRows, ofRole } from '../web/src/pages/storage/pool.js';
 
 let ok = 0, bad = 0;
 const check = (name, cond, extra = '') => { if (cond) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name} ${extra}`); } };
@@ -36,6 +37,13 @@ check(`every one of the ${total} prefetched paths is an allowlisted read`, missi
 const pages = [{ name: 'demo', blocks: [{ type: 'table', read: 'list' }, { type: 'stats', read: 'disk state' }, { type: 'x', read: 'list' }] }];
 check('an extension page reads what its declaration names, once each', JSON.stringify(readsFor('/extensions/demo', pages)) === JSON.stringify(['/api/sys/ext/demo/list', '/api/sys/ext/demo/disk/state']));
 check('an extension that is off reads nothing', readsFor('/extensions/demo').length === 0 && readsFor('/extensions/other', pages).length === 0);
+const tank = readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data', kind: 'zfs', state: 'online' }]);
+check('the pools page reads the list, not the fixed pools', tank.includes('/api/sys/pool/list') && !tank.some((p) => p.includes('pool=bulk')) && !tank.some((p) => p.includes('pool=tank')));
+check('a SnapRAID pool is read for its facts', readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/info?pool=tank'));
+check('the disks page reads the members of the SnapRAID pool by name', readsFor('/storage/disks', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/members?pool=tank') && !readsFor('/storage/disks', [], false, []).some((p) => p.includes('pool=bulk')));
+const parsed = parsePoolRows([['tank', 'data', 'zfs', 'online'], ['Bad', 'data', 'zfs', 'x'], ['a1234567890123', 'data', 'zfs', 'x'], ['x', 'other', 'zfs', 'x'], ['y', 'apps', 'ext4', 'x'], ['ssd', 'apps', 'snapraid']]);
+check('parsePoolRows drops bad rows', parsed.length === 2 && parsed[0].name === 'tank' && parsed[1].state === '-');
+check('ofRole lists the names of a role', JSON.stringify(ofRole(parsed, 'apps')) === JSON.stringify(['ssd']));
 check('an unknown page prefetches nothing', readsFor('/nowhere').length === 0);
 check('the new pool address names its pool', readsFor('/node/hs/storage/pools/fast').some((p) => p.endsWith('pool=fast')) && readsFor('/storage/pools/bulk').some((p) => p.endsWith('pool=bulk')));
 const storagePages = ['/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files', '/storage/encryption', '/storage/vault'];

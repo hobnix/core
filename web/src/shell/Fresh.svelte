@@ -7,6 +7,7 @@
   import { route, go } from '../route.svelte.js';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
+  import { pools } from '../pools.svelte.js';
   import { ageOf, stateOf, refresh, sync } from '../data.svelte.js';
   import { worst } from '../freshstate.js';
   import { tr } from '../i18n.js';
@@ -17,7 +18,7 @@
     return () => clearInterval(t);
   });
 
-  const paths = $derived(route.node && route.node !== ui.host ? [] : readsFor(route.path, ui.features.extensions, ui.features.live));
+  const paths = $derived(route.node && route.node !== ui.host ? [] : readsFor(route.path, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined));
   // the oldest answer on screen; null until the first one arrived
   const age = $derived.by(() => {
     now;

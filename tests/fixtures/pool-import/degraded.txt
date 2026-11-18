@@ -1,0 +1,11 @@
+   pool: tank
+     id: 11111111111111111
+  state: DEGRADED
+status: One or more devices are missing from the system.
+ action: The pool can be imported despite missing or damaged devices.
+ config:
+
+	tank                      DEGRADED
+	  mirror-0                DEGRADED
+	    ata-A-part1           ONLINE
+	    3333333333333333333   UNAVAIL  cannot open

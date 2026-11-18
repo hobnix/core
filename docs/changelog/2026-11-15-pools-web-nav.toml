@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "The tree, the overview pages and the health page follow the pools of the server"
+docs  = "storage-and-disks"
+body  = """The Pools entry in the tree, the pool cards on the overview and the Storage page, the pool percentages, the scrub button and the links to Disks and Shares use the pool names and roles the server reports. A server without the pool list shows bulk and fast as before."""

@@ -32,8 +32,8 @@ def full_system(params):
         disk_id_by_name(params, "fast1", "f1"),
         disk_id_by_name(params, "fast2", "f2"),
         # the plan first: its text (and a refusal's reason) stays in the console log
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
-        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --disks {f1},{f2} --confirm fast",
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool plan fast add --use apps --disks {f1},{f2}; true", what="the plan of the pool fast is shown"),
+        step("run_var", "zpool list fast >/dev/null 2>&1 || HS_CALLER=test hs sys pool start fast add --use apps --disks {f1},{f2} --confirm fast",
              timeout=120, what="the pool fast (a mirror of two virtual disks) is started"),
         step("run", "for i in $(seq 1 120); do zpool list fast >/dev/null 2>&1 && break; sleep 5; done; zpool list fast >/dev/null 2>&1",
              timeout=900, what="the pool fast exists"),
@@ -165,7 +165,7 @@ def pool(params):
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
         # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
-        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --role data --fs ext4 --confirm bulk | tr '\\n\\t' '  '; echo",   # echo: tr drops the last newline, and the marker of the harness must not share the line
+        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --use data --kind snapraid --role data --fs ext4 --confirm bulk | tr '\\n\\t' '  '; echo",   # echo: tr drops the last newline, and the marker of the harness must not share the line
              var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
@@ -173,7 +173,9 @@ def pool(params):
         # that the job started lives in the job's unit and ends with it, so /bulk is not mounted after the job
         step("run", "for i in $(seq 1 120); do systemctl list-units 'hs-job-pool-add-bulk-*' --state=active,activating --no-legend | grep -q . || break; sleep 3; done",
              timeout=600, what="the pool job is over"),
-        step("run", "systemctl restart bulk-mount.service", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
+        # a server without a SnapRAID pool has no mergerfs: the rebuild after `hs pool` installs it and brings the mount unit (docs/install.md)
+        step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)"),
+        step("run", "systemctl restart bulk-mount.service || true", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
         step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="/bulk shows up", expect_rc=None),
         # what the console log needs when /bulk does not show up (not a check)
         step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "

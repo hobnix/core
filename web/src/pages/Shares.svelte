@@ -1,7 +1,7 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   // Storage > Shares: every share (the Samba shares of bulk, the instance volumes of fast) in one list, with its permissions, snapshots and
-  // history in a drawer; the folders of deleted shares are kept in the second view. /storage/shares?pool=bulk|fast filters, ?view=snapshots opens
+  // history in a drawer; the folders of deleted shares are kept in the second view. /storage/shares?pool=<pool name> filters, ?view=snapshots opens
   // the Snapshots tab. The "in the backup" switch is NOT here (it lives on Backup): a share only shows a read-only badge.
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
@@ -20,10 +20,15 @@
   import AddAccess from '../forms/shares/AddAccess.svelte';
   import { parseSize } from './storage/pool.js';
   import { filesLink } from '../files/links.js';
+  import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
+  import { onMount } from 'svelte';
+
+  onMount(() => { loadPools(); });
 
   let { deck } = $props();
 
-  const POOLS = [{ id: 'all', label: 'All' }, { id: 'bulk', label: 'bulk' }, { id: 'fast', label: 'fast' }];
+  const POOLS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name }))]);
+  // a ?pool= this server does not know shows all shares
   const pool = $derived(POOLS.some((p) => p.id === route.query.pool) ? route.query.pool : 'all');
   const view = $derived(route.query.view === 'kept' ? 'kept' : 'shares');
   const query = (o) => {
@@ -43,11 +48,11 @@
   // name, kind, path, cache, size_bytes, measured, backup, disks, mounted_in (name(ro|rw), comma separated)
   const samba = $derived(rows(overview).map((r) => ({
     name: r[0], kind: r[1], path: r[2], cache: r[3], size: Number(r[4]) || 0, measured: r[5], backup: r[6], disks: r[7], mounted: r[8],
-    pool: (r[2] ?? '').split('/')[1] || 'bulk', volume: false,
+    pool: (r[2] ?? '').split('/')[1] || poolOfRole('data'), volume: false,
   })));
   // ct list: name, type, state, ..., disk (col 9): the instances' own volumes on fast (read only here; the instance owns them)
   const volumes = $derived(rows(cts).filter((r) => r[9] && r[9] !== '-').map((r) => ({
-    name: r[0], kind: 'volume', path: '', cache: '-', size: parseSize(r[9]), measured: '', backup: '-', disks: 'fast', mounted: r[0], pool: 'fast', volume: true,
+    name: r[0], kind: 'volume', path: '', cache: '-', size: parseSize(r[9]), measured: '', backup: '-', disks: poolOfRole('apps'), mounted: r[0], pool: poolOfRole('apps'), volume: true,
   })));
   const all = $derived([...samba, ...volumes]);
   const shares = $derived(all.filter((s) => pool === 'all' || s.pool === pool));
@@ -146,7 +151,7 @@
   </PageState>
 {:else}
   <PageState loading={!overview.loaded} hasData={overview.data != null} error={overview.error?.message ?? ''} empty={overview.loaded && !shares.length} emptyIcon="folders"
-             emptyTitle={pool === 'all' ? 'No shares yet' : `No shares on ${pool}`} emptyText={pool === 'fast' ? 'Fast holds the instances’ own volumes; network shares live on bulk.' : 'A share is a folder that Windows and Linux computers on the network can open.'}>
+             emptyTitle={pool === 'all' ? 'No shares yet' : `No shares on ${pool}`} emptyText={pool !== 'all' && pool === poolOfRole('apps') ? 'This pool holds the instances’ own volumes; network shares live on the data pool.' : 'A share is a folder that Windows and Linux computers on the network can open.'}>
     {#snippet emptyAction()}<Button variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>{/snippet}
     <Split open={!!sel}>
       {#snippet list()}

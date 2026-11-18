@@ -37,12 +37,45 @@ echo "-- kind of a path"
 check_eq "bulk shares" shares "$(share_kind_of_path "$WORK/bulk/shares/x")"
 check_eq "fast sensitive" sensitive "$(share_kind_of_path "$WORK/fast/sensitive/x")"
 check_eq "elsewhere" other "$(share_kind_of_path /mnt/x/y)"
+check_eq "tier of a bulk path" bulk "$(share_tier_of_path "$HS_BULK/shares/x")"
+check_eq "tier of a fast path" fast "$(share_tier_of_path "$HS_FAST/sensitive/y")"
+check_eq "tier of a path elsewhere" 1 "$(share_tier_of_path /srv/x >/dev/null 2>&1; echo $?)"
+check_eq "any snapraid: bulk is snapraid" 0 "$(share_any_snapraid; echo $?)"
+echo zfs > "$WORK/bulk-type"
+check_eq "any snapraid: bulk is zfs" 1 "$(share_any_snapraid; echo $?)"
+echo snapraid > "$WORK/bulk-type"
 
 echo "-- name taken"
 check_eq "folder on bulk" 0 "$(share_name_taken media; echo $?)"
 check_eq "folder on fast, other case" 0 "$(share_name_taken NOTES; echo $?)"
 check_eq "only in Samba" 0 "$(share_name_taken hidden; echo $?)"
 check_eq "free" 1 "$(share_name_taken free; echo $?)"
+
+echo "-- pools tank (data) and ssd (apps): the tiers are the pool names"
+export HS_MACHINE_FILE=$WORK/machine.toml HS_POOLS_ROOT=$WORK/pr
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }
+' > "$HS_MACHINE_FILE"
+_HS_POOLS_LOADED=
+mkdir -p "$WORK/pr/tank/shares/films" "$WORK/pr/ssd/sensitive/db"
+check_eq "tiers" "tank ssd" "$(share_tiers | tr '
+' ' ' | sed 's/ $//')"
+check_eq "root of a pool" "$WORK/pr/tank" "$(share_root tank)"
+check_eq "role" "apps" "$(share_pool_role ssd)"
+check_eq "dir on the data pool" "$WORK/pr/tank/shares/films" "$(share_dir films)"
+check_eq "dir on the apps pool" "$WORK/pr/ssd/sensitive/db" "$(share_dir db)"
+check_eq "tier" "ssd" "$(share_tier db)"
+check_eq "kind" "sensitive" "$(share_kind db)"
+check_eq "dataset on the data pool" "tank/shares/films" "$(share_dataset films)"
+check_eq "dataset on the apps pool" "ssd/sensitive/db" "$(share_dataset db)"
+check_eq "name taken on a pool" 0 "$(share_name_taken FILMS; echo $?)"
+check_eq "legacy folder not looked at" 1 "$(share_name_taken vault; echo $?)"
+check_eq "kind of a pool path" shares "$(share_kind_of_path "$WORK/pr/tank/shares/x")"
+check_eq "tier of a pool path" tank "$(share_tier_of_path "$HS_POOLS_ROOT/tank/shares/x")"
+printf 'pools = { tank = { role = "data", kind = "snapraid" } }
+' > "$HS_MACHINE_FILE"; _HS_POOLS_LOADED=
+check_eq "snapraid pool: no dataset" 1 "$(share_dataset films >/dev/null 2>&1; echo $?)"
+check_eq "a pool without apps: one tier" "tank" "$(share_tiers)"
+unset HS_MACHINE_FILE HS_POOLS_ROOT; _HS_POOLS_LOADED=
 
 echo "-- cleanup, delete and restore with a share on fast"
 export HS_PLAIN=1 HS_LANG=en HS_LOCK=$WORK/lock HS_LOCKED_FLAG=$WORK/no-flag

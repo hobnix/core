@@ -10,6 +10,7 @@ set -euo pipefail
 # in progress is never cut in half.
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
+. "$here/lib/bulkpath.sh"
 cache=/mnt/bulk/cache
 pool=/mnt/bulk/pool
 age=${HS_CACHE_AGE:-10}    # minutes without change before a file is moved
@@ -95,7 +96,7 @@ for c in "$cache"/shares/*/ "$cache"/sensitive/*/; do
 
   # a share that was switched off is finished once its cache folder is empty
   if [ -e "$src.off" ] && [ "$after" -eq 0 ]; then
-    umount -l "/bulk/$rel" 2>/dev/null || true
+    umount -l "$(snap_root)/$rel" 2>/dev/null || true
     rmdir "$src" 2>/dev/null || true
     rm -f "$src.off"
     ok "$(t '%s: cache switched off' "${rel##*/}")"

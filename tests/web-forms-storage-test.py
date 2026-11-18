@@ -27,12 +27,17 @@ class Storage(lt.Base):
             self.calls.append((cmd, stdin))
             return self.answer
         ws._run = fake
+        self.real_fetch = ws.POOLS.fetch
+        ws.POOLS.fetch = lambda hs: (0, "bulk\tdata\tsnapraid\tonline\nfast\tapps\tzfs\tonline\n")
+        ws.POOLS.cached = None
         _, d, r = self.login()
         self.ck = {"Cookie": self.cookie(r), "X-CSRF-Token": d["csrf"]}
         self.calls.clear()
 
     def tearDown(self):
         ws._run = self.real_run
+        ws.POOLS.fetch = self.real_fetch
+        ws.POOLS.cached = None
         super().tearDown()
 
     def post(self, path, body):
@@ -57,6 +62,8 @@ class Storage(lt.Base):
             ["bulk", "replace", "--member", "data-01"],
             ["fast", "remove", "--member", ID1, "--mode", "detach"],
             ["bulk", "remove", "--member", "parity-1"],
+            ["tank", "add", "--disks", ID1],                     # a new pool
+            ["tank", "add", "--use", "data", "--kind", "zfs", "--disks", ID1 + "," + ID2],
         ]
         for a in ok:
             self.assertTrue(self.allowed("pool", a), a)
@@ -65,6 +72,7 @@ class Storage(lt.Base):
 
     def test_refused_shapes(self):
         bad = [
+            ["tank", "add", "--use", "x", "--disks", ID1],
             ["bulk", "add", "--disks", "/dev/sda"],                 # a path
             ["bulk", "add", "--disks", "../sda"],
             ["bulk", "add", "--disks", "a..b"],
@@ -89,8 +97,10 @@ class Storage(lt.Base):
             ["bulk", "remove", "--member", "data-01", "--encrypt"],
             ["bulk", "remove", "--member", "data-01", "--mode", "gone"],
             ["bulk", "remove", "--member", "../x"],
-            ["shares", "add"],                                       # not a pool
             ["Bulk", "add"],
+            ["a1234567890123", "add"],
+            ["tank", "remove", "--member", "data-01"],           # tank is not a pool of this server
+            ["fast", "close", "--member", "data-01"],            # fast is ZFS: nothing to close
             ["bulk", "wipe"],
             ["bulk"],
             ["bulk", "add", "extra"],
