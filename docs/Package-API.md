@@ -89,6 +89,7 @@ still only validated (the service runner is step 4). A package without these key
 | `[service]` `subscribe` | list of event kind globs | lower-case words, dots and `*`; may be empty (a pure collector) |
 | `[service]` `health_interval` | seconds | whole number from 5 to 300 (ADR 0011 rule 1; default 30) |
 | `timeout:<seconds>` | a flag in column 7 of a `commands.tsv` row | whole number from 1 to 3600 (ADR 0010 rule 6; the dispatcher's default is 30), at most once per row |
+| `confine` | a flag in column 7 of a `commands.tsv` row | opt in: the dispatcher runs this one command through `systemd-run` with the properties of the declared `permissions` (same mapping as the service unit, ADR 0014). The manifest must have `protocol = [1]` and a `permissions` list (`[]` is allowed); otherwise `pkg.py validate` refuses it. Partial: see below. |
 
 An unknown key in `[service]`, a wrong type or a value out of range is an error. A manifest that uses `protocol` or `[service]` must state
 `requires_core = ">=10"` or higher (decision D9: the API level is the promise that the core can run it); `pkg.py validate` names the missing level.
@@ -133,3 +134,16 @@ that may use the entry (ADR 0012, decision D13). `pkg.py validate` (`scripts/lib
 The web interface applies the higher of this role and the role of the core `sys` row the entry calls. A package can therefore make something
 stricter, never wider than the core allows. A refused call is a 403 that names both roles and runs nothing; a token never has more than its
 owner's role. Not tested on hardware yet.
+
+## Confined commands (`confine`, partial)
+
+A command row with the flag `confine` is started as `systemd-run --pipe --wait --collect --quiet --property=... -- <program>`; the properties are the
+ones a service of the same package gets (`scripts/lib/ext_confine.py`): `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
+`NoNewPrivileges=yes`, no capabilities, `PrivateDevices=yes` unless `devices:gpu`, `ReadWritePaths=` from `fs.write` (plus `/var/lib/hs/ext-svc`),
+`ReadOnlyPaths=` from `fs.read`. Without `systemd-run`, without `permissions` or with a path that is not allowed the command does **not** run
+(exit 69); it is never started unconfined as a fallback.
+
+It does not cover: reading the file system (`fs.read` lists, it does not restrict), the network (`net` is declared only), calls to `hs`, `incus`
+and `systemctl` (a confined command that calls them still acts as root through them), and secrets. Commands without the flag run as root and
+unconfined, as before. The install and update prompts say this in the same words. A confined command cannot write `/etc/hs` or other state unless `fs.write` lists it: list the path or leave the row unconfined (ADR 0014, D7).
+Not tested on hardware yet: only a fake `systemd-run` that records its arguments has run (tests/ext-confine.sh).

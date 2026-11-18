@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "security"
+title = "A package command can opt in to confinement"
+body  = """A package that speaks the command protocol can mark a command row with the flag confine. The command then runs through systemd-run with limits taken from the package's permissions: it can write only where fs.write says. This is partial: reading files, the network and calls to hs, incus and systemctl are not limited, and commands without the flag still run as root. The install and update prompts say so. Not tested on hardware yet."""

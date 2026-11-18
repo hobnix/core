@@ -15,7 +15,9 @@ flagged `proto` (a package with `protocol = [1]`) through `dispatch` below; test
       What `hs ext <name> <cmd>` and `hs sys ext <name> <cmd>` run for a protocol row: the command words are the row's words after the
       package name, the argv of the request is ARG..., the timeout is the row's `timeout:<s>` flag (default 30). Nothing but the
       rendered answer goes to stdout (a `sys` row: TSV only), errors to stderr, the exit codes of `call`. PROGRAM is run by its
-      extension (.py python3, .sh bash, else directly).
+      extension (.py python3, .sh bash, else directly). A row with the flag `confine` is run through `systemd-run --pipe --wait --property=...`
+      with the properties of the package's declared permissions (scripts/lib/ext_confine.py); when that cannot be set up the command does NOT run
+      (exit 69). Test knob: HS_SYSTEMD_RUN (the systemd-run program).
       Rendering of result.data: a list = one line per item (a list item = its cells joined by TAB, an object item = its values in key
       order); an object = key TAB value per member; a scalar = itself. An empty or null cell is `-`, a nested value is compact JSON. A user
       row prints result.text when it has one and else the same rendering.
@@ -23,6 +25,7 @@ flagged `proto` (a package with `protocol = [1]`) through `dispatch` below; test
 Schema of the messages: docs/api/ext-protocol-v1.schema.json. Knobs for tests: none (every limit is an option or a constant below).
 """
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -298,6 +301,42 @@ def program_of(prog):
     return prog
 
 
+def _confine_module():
+    spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def declared_permissions(package):
+    """The permissions of an installed package as a list, None when it declares none; raises OSError when they cannot be read (`pkg.py perms`)."""
+    pkg_py = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pkg.py")
+    r = subprocess.run(["python3", pkg_py, "perms", package], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise OSError("the permissions of %s could not be read" % package)
+    lines = r.stdout.splitlines()
+    return None if lines == ["-"] else [x for x in lines if x]
+
+
+def confined(prog, package):
+    """(command, None) or (None, problem): PROG wrapped in `systemd-run --pipe --wait` with the properties of the declared permissions
+    (scripts/lib/ext_confine.py, the same mapping as the service unit). Fails closed: no systemd-run, no permissions, a bad path = no run.
+    Opt-in per row (flag `confine`), partial by design (ADR 0014, D7). Not tested on hardware yet: the real systemd-run was not run."""
+    try:
+        perms = declared_permissions(package)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, str(e)
+    if perms is None:
+        return None, "%s does not declare permissions, so its command cannot be confined" % package
+    props, _, bad = _confine_module().properties(perms)
+    if bad:
+        return None, bad
+    cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet",
+           "--description=hs extension command of %s" % package, "--property=KillMode=control-group"]
+    cmd += ["--property=" + x for x in props]
+    return cmd + ["--"] + prog, None
+
+
 def timeout_of(flags):
     for f in (flags or "").split(","):
         if f.startswith("timeout:") and f[8:].isdigit():
@@ -336,7 +375,13 @@ def dispatch(a):
         if a.kind == "user" and m["type"] in ("progress", "log") and m.get("text"):
             sys.stderr.write(m["text"] + "\n")
             sys.stderr.flush()
-    o = run(program_of([prog[0]]), req, timeout, DEFAULT_GRACE, show, cancel)
+    argv_prog = program_of([prog[0]])
+    if "confine" in [f.strip() for f in (a.flags or "").split(",")]:
+        argv_prog, why = confined(argv_prog, a.package)
+        if why:
+            print("ext_proto.py: refused, confinement was asked for and cannot be set up: " + why, file=sys.stderr)
+            return EXIT["spawn_failed"]
+    o = run(argv_prog, req, timeout, DEFAULT_GRACE, show, cancel)
     # run() starts PROGRAM without its arguments: they are in the request (argv); the extension is told nothing else
     res = o["result"]
     if o["code"] == "ok":

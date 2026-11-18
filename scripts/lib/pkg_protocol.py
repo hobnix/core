@@ -8,6 +8,8 @@ Keys (all optional; a manifest without them keeps the shell contract and validat
     subscribe       = ["pkg.*"]    list of event kind globs, may be empty
     health_interval = 30           seconds, 5 to 300 (default 30)
   commands.tsv flag `timeout:<seconds>` on a row: 1 to 3600 (ADR 0010 rule 6; default 30 s is the dispatcher's)
+  commands.tsv flag `confine` on a row (step 11, ADR 0014, D7): the dispatcher runs the command through systemd-run with the properties of the
+    declared `permissions` (scripts/lib/ext_confine.py). Needs `protocol = [1]` and a `permissions` list in the manifest. Partial, see CONFINE_TEXT.
 
 D9: a manifest may use `protocol` or `[service]` only if it requires an API level at or above PROTOCOL_LEVEL (the level step 2 bumps to).
 
@@ -24,6 +26,14 @@ TIMEOUT_RANGE = (1, 3600)
 GLOB = re.compile(r"^[a-z0-9*][a-z0-9.*_-]{0,79}$")
 REQUIRES = re.compile(r"^>=\s*(\d+)$")
 TIMEOUT_FLAG = re.compile(r"^timeout:(.*)$")
+CONFINE_FLAG = "confine"
+# What the install and update prompts say about a package that has confined commands (ADR 0014: partial, never "sandboxed").
+CONFINE_TEXT = [
+    "confined commands (%s): run through systemd-run with the properties of the declared permissions:",
+    "  it covers: writes outside fs.write (and its state folder), the home folders, /tmp sharing, new privileges, capabilities, devices unless devices:gpu.",
+    "  it does NOT cover: reading the file system (fs.read lists, it does not restrict), the network (net is declared only), calls to hs, incus and",
+    "  systemctl (a command that calls them acts as root through them), and secrets. Other commands of the package run as root, unconfined.",
+]
 
 
 def _int(v):
@@ -67,6 +77,45 @@ def timeout_problems(path):
     return out
 
 
+def confine_rows_of(text):
+    """[(line number, row words)] of the rows of a commands.tsv text that carry the flag `confine`."""
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        c = line.split(chr(9))
+        if not line.startswith("#") and len(c) >= 7 and CONFINE_FLAG in [x.strip() for x in c[6].split(",")]:
+            out.append((i, c[1]))
+    return out
+
+
+def confine_rows(path):
+    """The same for a commands.tsv file ([] when it cannot be read)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return confine_rows_of(f.read())
+    except OSError:
+        return []
+
+
+def confine_problems(m, folder):
+    """[text] for the rows flagged `confine`: the manifest must speak the protocol and declare `permissions` (an empty list is a declaration)."""
+    rows = confine_rows(os.path.join(folder, "commands.tsv")) if folder else []
+    if not rows:
+        return []
+    out = []
+    if not isinstance(m.get("permissions"), list):
+        out.append("commands.tsv line %d: confine needs permissions in package.toml (what the command may write and read; permissions = [] is allowed)" % rows[0][0])
+    if "protocol" not in m:
+        out.append("commands.tsv line %d: confine needs protocol = [1] (only commands run by the dispatcher can be confined)" % rows[0][0])
+    return out
+
+
+def confine_lines(rows):
+    """The lines for the install and update prompt about confined rows (words of the rows), or [] when there are none."""
+    if not rows:
+        return []
+    return [CONFINE_TEXT[0] % ", ".join(rows)] + CONFINE_TEXT[1:]
+
+
 def manifest_problems(m, folder=None, level=PROTOCOL_LEVEL):
     out = []
     uses = []
@@ -102,4 +151,5 @@ def manifest_problems(m, folder=None, level=PROTOCOL_LEVEL):
                    % (" and ".join(uses), level))
     if folder:
         out += timeout_problems(os.path.join(folder, "commands.tsv"))
+        out += confine_problems(m, folder)
     return out
