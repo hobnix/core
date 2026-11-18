@@ -39,7 +39,7 @@ The milestones are releases in order of work, not dates. An issue without a mile
 
 ### 0.1 â€” Trustworthy Foundation
 
-71 issues, 45 done.
+71 issues, 46 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ The milestones are releases in order of work, not dates. An issue without a mile
 | [#520](https://github.com/hobnix/server/issues/520) | In Progress | - | Release the core from GitHub in 0.1 (bring the release workflow of #515 to develop, prove it with a beta tag) |
 | [#523](https://github.com/hobnix/server/issues/523) | In Progress | - | CI check: a package that changed since the last tag must have a raised version |
 | [#534](https://github.com/hobnix/server/issues/534) | In Progress | - | VM and domain controller restore: missing guide steps, --tag host, wrong messages |
-| [#607](https://github.com/hobnix/server/issues/607) | In Progress | - | Jobs panel: a job that ended stays running until the page is reloaded |
 | [#165](https://github.com/hobnix/server/issues/165) | Testing | P0 | Run the first monthly restore-drill report |
 | [#171](https://github.com/hobnix/server/issues/171) | Testing | P0 | Disk and pool failure handling review |
 | [#385](https://github.com/hobnix/server/issues/385) | Testing | - | Jobs page: show job records (history, step, progress, error) |
@@ -70,7 +69,7 @@ The milestones are releases in order of work, not dates. An issue without a mile
 | [#161](https://github.com/hobnix/server/issues/161) | Ready | P0 | Run the auto-rollback on the real server and record the result |
 | [#522](https://github.com/hobnix/server/issues/522) | Ready | - | Release the package repositories from GitHub (shared workflow for recipes, extensions, capabilities) |
 
-Done: [#121](https://github.com/hobnix/server/issues/121), [#122](https://github.com/hobnix/server/issues/122), [#123](https://github.com/hobnix/server/issues/123), [#124](https://github.com/hobnix/server/issues/124), [#125](https://github.com/hobnix/server/issues/125), [#126](https://github.com/hobnix/server/issues/126), [#127](https://github.com/hobnix/server/issues/127), [#129](https://github.com/hobnix/server/issues/129), [#131](https://github.com/hobnix/server/issues/131), [#133](https://github.com/hobnix/server/issues/133), [#135](https://github.com/hobnix/server/issues/135), [#137](https://github.com/hobnix/server/issues/137), [#141](https://github.com/hobnix/server/issues/141), [#143](https://github.com/hobnix/server/issues/143), [#145](https://github.com/hobnix/server/issues/145), [#149](https://github.com/hobnix/server/issues/149), [#151](https://github.com/hobnix/server/issues/151), [#153](https://github.com/hobnix/server/issues/153), [#155](https://github.com/hobnix/server/issues/155), [#157](https://github.com/hobnix/server/issues/157), [#167](https://github.com/hobnix/server/issues/167), [#169](https://github.com/hobnix/server/issues/169), [#252](https://github.com/hobnix/server/issues/252), [#253](https://github.com/hobnix/server/issues/253), [#286](https://github.com/hobnix/server/issues/286), [#288](https://github.com/hobnix/server/issues/288), [#289](https://github.com/hobnix/server/issues/289), [#290](https://github.com/hobnix/server/issues/290), [#291](https://github.com/hobnix/server/issues/291), [#292](https://github.com/hobnix/server/issues/292), [#293](https://github.com/hobnix/server/issues/293), [#294](https://github.com/hobnix/server/issues/294), [#295](https://github.com/hobnix/server/issues/295), [#296](https://github.com/hobnix/server/issues/296), [#297](https://github.com/hobnix/server/issues/297), [#298](https://github.com/hobnix/server/issues/298), [#322](https://github.com/hobnix/server/issues/322), [#323](https://github.com/hobnix/server/issues/323), [#324](https://github.com/hobnix/server/issues/324), [#396](https://github.com/hobnix/server/issues/396), [#397](https://github.com/hobnix/server/issues/397), [#398](https://github.com/hobnix/server/issues/398), [#399](https://github.com/hobnix/server/issues/399), [#415](https://github.com/hobnix/server/issues/415), [#567](https://github.com/hobnix/server/issues/567)
+Done: [#121](https://github.com/hobnix/server/issues/121), [#122](https://github.com/hobnix/server/issues/122), [#123](https://github.com/hobnix/server/issues/123), [#124](https://github.com/hobnix/server/issues/124), [#125](https://github.com/hobnix/server/issues/125), [#126](https://github.com/hobnix/server/issues/126), [#127](https://github.com/hobnix/server/issues/127), [#129](https://github.com/hobnix/server/issues/129), [#131](https://github.com/hobnix/server/issues/131), [#133](https://github.com/hobnix/server/issues/133), [#135](https://github.com/hobnix/server/issues/135), [#137](https://github.com/hobnix/server/issues/137), [#141](https://github.com/hobnix/server/issues/141), [#143](https://github.com/hobnix/server/issues/143), [#145](https://github.com/hobnix/server/issues/145), [#149](https://github.com/hobnix/server/issues/149), [#151](https://github.com/hobnix/server/issues/151), [#153](https://github.com/hobnix/server/issues/153), [#155](https://github.com/hobnix/server/issues/155), [#157](https://github.com/hobnix/server/issues/157), [#167](https://github.com/hobnix/server/issues/167), [#169](https://github.com/hobnix/server/issues/169), [#252](https://github.com/hobnix/server/issues/252), [#253](https://github.com/hobnix/server/issues/253), [#286](https://github.com/hobnix/server/issues/286), [#288](https://github.com/hobnix/server/issues/288), [#289](https://github.com/hobnix/server/issues/289), [#290](https://github.com/hobnix/server/issues/290), [#291](https://github.com/hobnix/server/issues/291), [#292](https://github.com/hobnix/server/issues/292), [#293](https://github.com/hobnix/server/issues/293), [#294](https://github.com/hobnix/server/issues/294), [#295](https://github.com/hobnix/server/issues/295), [#296](https://github.com/hobnix/server/issues/296), [#297](https://github.com/hobnix/server/issues/297), [#298](https://github.com/hobnix/server/issues/298), [#322](https://github.com/hobnix/server/issues/322), [#323](https://github.com/hobnix/server/issues/323), [#324](https://github.com/hobnix/server/issues/324), [#396](https://github.com/hobnix/server/issues/396), [#397](https://github.com/hobnix/server/issues/397), [#398](https://github.com/hobnix/server/issues/398), [#399](https://github.com/hobnix/server/issues/399), [#415](https://github.com/hobnix/server/issues/415), [#567](https://github.com/hobnix/server/issues/567), [#607](https://github.com/hobnix/server/issues/607)
 
 ### 0.2 â€” Safe Updates
 
@@ -87,18 +86,33 @@ Done: [#121](https://github.com/hobnix/server/issues/121), [#122](https://github
 
 Done: [#185](https://github.com/hobnix/server/issues/185), [#219](https://github.com/hobnix/server/issues/219), [#254](https://github.com/hobnix/server/issues/254), [#433](https://github.com/hobnix/server/issues/433), [#437](https://github.com/hobnix/server/issues/437), [#438](https://github.com/hobnix/server/issues/438), [#458](https://github.com/hobnix/server/issues/458), [#464](https://github.com/hobnix/server/issues/464)
 
-### 0.3 â€” Foundations
+### 0.2.1 â€” Faster test-lab
 
-10 issues, 4 done.
+1 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#560](https://github.com/hobnix/server/issues/560) | In Review | - | Live state: measure SQLite write load and changed latency on a real server |
+| [#712](https://github.com/hobnix/server/issues/712) | In Progress | - | Test-lab: a faster run that does not grow with every roadmap step |
+
+### 0.3 â€” Foundations
+
+17 issues, 4 done.
+
+| Issue | Status | Priority | Title |
+| --- | --- | --- | --- |
 | [#423](https://github.com/hobnix/server/issues/423) | Testing | - | Web: remove the old routes that still redirect |
 | [#482](https://github.com/hobnix/server/issues/482) | Testing | - | Every read has a topic or a written reason to poll (a check that only allows fewer timers) |
 | [#491](https://github.com/hobnix/server/issues/491) | Testing | - | The `hs` commands print English only: remove the German catalog |
+| [#560](https://github.com/hobnix/server/issues/560) | Testing | - | Live state: measure SQLite write load and changed latency on a real server |
 | [#420](https://github.com/hobnix/server/issues/420) | Backlog | - | Notifications: run channels, routing and the web page on a server; choose the next providers |
 | [#481](https://github.com/hobnix/server/issues/481) | Backlog | - | Live state on by default, one mode, one store (decide: Redis or the state database) |
+| [#559](https://github.com/hobnix/server/issues/559) | Backlog | - | Live state: named events instead of broad wake-up groups |
+| [#561](https://github.com/hobnix/server/issues/561) | Backlog | - | Live state: collector writes documents to the state database |
+| [#562](https://github.com/hobnix/server/issues/562) | Backlog | - | Live state: web reads topics and /api/events from the database only |
+| [#563](https://github.com/hobnix/server/issues/563) | Backlog | - | Live state: remove the liveState option and the Redis service |
+| [#564](https://github.com/hobnix/server/issues/564) | Backlog | - | Live state: one status on the Data page and in hs sys live status |
+| [#565](https://github.com/hobnix/server/issues/565) | Backlog | - | Live state: rewrite docs for the state database |
+| [#566](https://github.com/hobnix/server/issues/566) | Backlog | - | Live state: real-server check, a terminal change shows in the open page |
 
 Done: [#431](https://github.com/hobnix/server/issues/431), [#442](https://github.com/hobnix/server/issues/442), [#443](https://github.com/hobnix/server/issues/443), [#444](https://github.com/hobnix/server/issues/444)
 
@@ -108,51 +122,54 @@ Done: [#431](https://github.com/hobnix/server/issues/431), [#442](https://github
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#183](https://github.com/hobnix/server/issues/183) | In Review | P0 | First-run web wizard with a one-time console token |
-| [#489](https://github.com/hobnix/server/issues/489) | In Review | - | A public website: landing page and the documentation outside the repository |
-| [#573](https://github.com/hobnix/server/issues/573) | In Review | - | Pools: any number and any name, instead of bulk and fast |
-| [#574](https://github.com/hobnix/server/issues/574) | In Review | - | A server without an SSD pool: boot, Incus and messages |
-| [#576](https://github.com/hobnix/server/issues/576) | In Review | - | Single-disk install: say what is missing, keep apps usable |
-| [#581](https://github.com/hobnix/server/issues/581) | In Review | - | First-run checklist without fixed pool names |
+| [#173](https://github.com/hobnix/server/issues/173) | In Progress | P0 | Epic: Installation and Onboarding |
+| [#179](https://github.com/hobnix/server/issues/179) | Testing | P0 | Network setup and validation step |
 | [#181](https://github.com/hobnix/server/issues/181) | Testing | P0 | Storage discovery and disk adoption in the wizard |
+| [#183](https://github.com/hobnix/server/issues/183) | Testing | P0 | First-run web wizard with a one-time console token |
+| [#573](https://github.com/hobnix/server/issues/573) | Testing | - | Pools: any number and any name, instead of bulk and fast |
+| [#574](https://github.com/hobnix/server/issues/574) | Testing | - | A server without an SSD pool: boot, Incus and messages |
+| [#575](https://github.com/hobnix/server/issues/575) | Testing | - | Local users and Samba without a domain controller |
+| [#576](https://github.com/hobnix/server/issues/576) | Testing | - | Single-disk install: say what is missing, keep apps usable |
 | [#577](https://github.com/hobnix/server/issues/577) | Testing | - | Leftover author names: ad.home.lan in hs-nss-warm, CA subject |
 | [#580](https://github.com/hobnix/server/issues/580) | Testing | - | Minimal installed system serves the web interface |
-| [#173](https://github.com/hobnix/server/issues/173) | Backlog | P0 | Epic: Installation and Onboarding |
+| [#581](https://github.com/hobnix/server/issues/581) | Testing | - | First-run checklist without fixed pool names |
+| [#596](https://github.com/hobnix/server/issues/596) | Testing | - | Flaky web-terminal test: adminuser localhost login times out in CI |
 | [#175](https://github.com/hobnix/server/issues/175) | Backlog | P0 | Boot the ISO on real hardware or a VM, record what breaks |
-| [#179](https://github.com/hobnix/server/issues/179) | Backlog | P0 | Network setup and validation step |
 | [#459](https://github.com/hobnix/server/issues/459) | Backlog | - | Epic: Works on a machine that is not the author's |
-| [#575](https://github.com/hobnix/server/issues/575) | Backlog | - | Local users and Samba without a domain controller |
 
 ### 0.5 â€” Capabilities Repository
 
-8 issues, 0 done.
+9 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#177](https://github.com/hobnix/server/issues/177) | Backlog | P0 | Capability selection step (depends on E18) |
-| [#217](https://github.com/hobnix/server/issues/217) | Backlog | P0 | Epic: Capabilities repository and channels |
-| [#221](https://github.com/hobnix/server/issues/221) | Backlog | P0 | Vendor `module.nix` into the checkout at install (pure evaluation), instead of --impure |
-| [#224](https://github.com/hobnix/server/issues/224) | Backlog | P0 | schema-gen and registry rows regenerated on the machine after install |
+| [#217](https://github.com/hobnix/server/issues/217) | In Progress | P0 | Epic: Capabilities repository and channels |
+| [#177](https://github.com/hobnix/server/issues/177) | Testing | P0 | Capability selection step (depends on E18) |
+| [#221](https://github.com/hobnix/server/issues/221) | Testing | P0 | Vendor `module.nix` into the checkout at install (pure evaluation), instead of --impure |
+| [#224](https://github.com/hobnix/server/issues/224) | Testing | P0 | schema-gen and registry rows regenerated on the machine after install |
+| [#228](https://github.com/hobnix/server/issues/228) | Testing | P0 | CI: matrix fetches capabilities from the other repo |
+| [#229](https://github.com/hobnix/server/issues/229) | Testing | P0 | Wizard step: pick capabilities, download, rebuild |
+| [#235](https://github.com/hobnix/server/issues/235) | Testing | P0 | Capability uninstall and version compatibility |
+| [#615](https://github.com/hobnix/server/issues/615) | Testing | - | Package versions are raised by the release: bump labels and a prepare-release workflow |
 | [#225](https://github.com/hobnix/server/issues/225) | Backlog | P0 | Create hobnix/capabilities, move the first optional capability as a pilot |
-| [#228](https://github.com/hobnix/server/issues/228) | Backlog | P0 | CI: matrix fetches capabilities from the other repo |
-| [#229](https://github.com/hobnix/server/issues/229) | Backlog | P0 | Wizard step: pick capabilities, download, rebuild |
-| [#235](https://github.com/hobnix/server/issues/235) | Backlog | P0 | Capability uninstall and version compatibility |
 
 ### 0.6 â€” App Lifecycle
 
-18 issues, 9 done.
+20 issues, 9 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#187](https://github.com/hobnix/server/issues/187) | Backlog | P0 | Epic: Application Lifecycle |
-| [#269](https://github.com/hobnix/server/issues/269) | Backlog | - | Import Unraid templates and Proxmox vzdump archives |
-| [#465](https://github.com/hobnix/server/issues/465) | Backlog | - | One Install: fetch, what it needs, the questions and the run as one guided job |
-| [#466](https://github.com/hobnix/server/issues/466) | Backlog | - | A failed install: name the step, retry from it, remove what is half there |
-| [#467](https://github.com/hobnix/server/issues/467) | Backlog | - | One lifecycle for every package kind (available, installed, on, running) and one verb in the interface |
-| [#468](https://github.com/hobnix/server/issues/468) | Backlog | - | App contract: every recipe declares health, backup, routes, update and what removal keeps |
-| [#469](https://github.com/hobnix/server/issues/469) | Backlog | - | Manifest fields for a store: icon, category, description, pictures, upstream version, what it uses |
-| [#470](https://github.com/hobnix/server/issues/470) | Backlog | - | Package version and app version, and an update policy per app |
-| [#471](https://github.com/hobnix/server/issues/471) | Backlog | - | Decide: several instances of one app |
+| [#187](https://github.com/hobnix/server/issues/187) | In Progress | P0 | Epic: Application Lifecycle |
+| [#613](https://github.com/hobnix/server/issues/613) | In Progress | - | Interactive recipe: the wizard form's address is asked again in the dialog; a run on an existing app cannot ask again |
+| [#465](https://github.com/hobnix/server/issues/465) | Testing | - | One Install: fetch, what it needs, the questions and the run as one guided job |
+| [#466](https://github.com/hobnix/server/issues/466) | Testing | - | A failed install: name the step, retry from it, remove what is half there |
+| [#467](https://github.com/hobnix/server/issues/467) | Testing | - | One lifecycle for every package kind (available, installed, on, running) and one verb in the interface |
+| [#468](https://github.com/hobnix/server/issues/468) | Testing | - | App contract: every recipe declares health, backup, routes, update and what removal keeps |
+| [#469](https://github.com/hobnix/server/issues/469) | Testing | - | Manifest fields for a store: icon, category, description, pictures, upstream version, what it uses |
+| [#470](https://github.com/hobnix/server/issues/470) | Testing | - | Package version and app version, and an update policy per app |
+| [#471](https://github.com/hobnix/server/issues/471) | Testing | - | Decide: several instances of one app |
+| [#612](https://github.com/hobnix/server/issues/612) | Testing | - | hs ct remove: releasing the UniFi fixed IP is refused ("is not a client id") |
+| [#614](https://github.com/hobnix/server/issues/614) | Testing | - | A dedicated autostart flag per instance: visible, settable, default per kind |
 
 Done: [#237](https://github.com/hobnix/server/issues/237), [#238](https://github.com/hobnix/server/issues/238), [#240](https://github.com/hobnix/server/issues/240), [#257](https://github.com/hobnix/server/issues/257), [#263](https://github.com/hobnix/server/issues/263), [#264](https://github.com/hobnix/server/issues/264), [#265](https://github.com/hobnix/server/issues/265), [#266](https://github.com/hobnix/server/issues/266), [#267](https://github.com/hobnix/server/issues/267)
 
@@ -162,14 +179,14 @@ Done: [#237](https://github.com/hobnix/server/issues/237), [#238](https://github
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#189](https://github.com/hobnix/server/issues/189) | Backlog | P0 | Epic: Storage Management |
-| [#418](https://github.com/hobnix/server/issues/418) | Backlog | - | Backup target outside the house (cloud or another server) |
-| [#419](https://github.com/hobnix/server/issues/419) | Backlog | - | Capacity alerts: further automatic mitigation levels |
-| [#425](https://github.com/hobnix/server/issues/425) | Backlog | - | File manager: run the write checks in a VM, then switch `fileManagerWrite` on |
-| [#426](https://github.com/hobnix/server/issues/426) | Backlog | - | File manager: size calculation, pause, trash, `hs fm` commands, editable path |
-| [#460](https://github.com/hobnix/server/issues/460) | Backlog | - | Take over the disks of an Unraid server in place |
-| [#463](https://github.com/hobnix/server/issues/463) | Backlog | - | Disk spin-down and power use |
-| [#527](https://github.com/hobnix/server/issues/527) | Backlog | - | Back up only chosen parts of a container (include and exclude paths, like a .gitignore) |
+| [#189](https://github.com/hobnix/server/issues/189) | In Progress | P0 | Epic: Storage Management |
+| [#418](https://github.com/hobnix/server/issues/418) | In Progress | - | Backup target outside the house (cloud or another server) |
+| [#419](https://github.com/hobnix/server/issues/419) | In Progress | - | Capacity alerts: further automatic mitigation levels |
+| [#425](https://github.com/hobnix/server/issues/425) | In Progress | - | File manager: run the write checks in a VM, then switch `fileManagerWrite` on |
+| [#460](https://github.com/hobnix/server/issues/460) | In Progress | - | Take over the disks of an Unraid server in place |
+| [#527](https://github.com/hobnix/server/issues/527) | In Progress | - | Back up only chosen parts of a container (include and exclude paths, like a .gitignore) |
+| [#426](https://github.com/hobnix/server/issues/426) | Testing | - | File manager: size calculation, pause, trash, `hs fm` commands, editable path |
+| [#463](https://github.com/hobnix/server/issues/463) | Testing | - | Disk spin-down and power use |
 
 Done: [#255](https://github.com/hobnix/server/issues/255)
 
@@ -179,31 +196,41 @@ Done: [#255](https://github.com/hobnix/server/issues/255)
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#197](https://github.com/hobnix/server/issues/197) | Backlog | P1 | Epic: Extension Protocol and SDK |
-| [#239](https://github.com/hobnix/server/issues/239) | Backlog | P1 | Enforce extension permissions instead of only declaring them |
-| [#313](https://github.com/hobnix/server/issues/313) | Backlog | - | Packages declare the events they provide |
-| [#434](https://github.com/hobnix/server/issues/434) | Backlog | - | Roles and API tokens: build what ADR 0012 decides |
+| [#197](https://github.com/hobnix/server/issues/197) | In Progress | P1 | Epic: Extension Protocol and SDK |
+| [#239](https://github.com/hobnix/server/issues/239) | In Progress | P1 | Enforce extension permissions instead of only declaring them |
+| [#313](https://github.com/hobnix/server/issues/313) | In Progress | - | Packages declare the events they provide |
+| [#434](https://github.com/hobnix/server/issues/434) | In Progress | - | Roles and API tokens: build what ADR 0012 decides |
 | [#462](https://github.com/hobnix/server/issues/462) | Backlog | - | Two-factor login and single sign-on for the web interface |
+
+### 0.8.5 â€” Web Design
+
+8 issues, 8 done.
+
+Done: [#768](https://github.com/hobnix/server/issues/768), [#769](https://github.com/hobnix/server/issues/769), [#770](https://github.com/hobnix/server/issues/770), [#771](https://github.com/hobnix/server/issues/771), [#772](https://github.com/hobnix/server/issues/772), [#773](https://github.com/hobnix/server/issues/773), [#774](https://github.com/hobnix/server/issues/774), [#775](https://github.com/hobnix/server/issues/775)
 
 ### 0.9 â€” Web Components
 
-9 issues, 0 done.
+13 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
-| [#191](https://github.com/hobnix/server/issues/191) | Backlog | P1 | Epic: Component Library |
+| [#191](https://github.com/hobnix/server/issues/191) | In Progress | P1 | Epic: Component Library |
+| [#446](https://github.com/hobnix/server/issues/446) | In Progress | - | Web: small pieces (icon, icon button, chip or tag) |
+| [#447](https://github.com/hobnix/server/issues/447) | In Progress | - | Web: overlays in ui (dialog, menu, toast) |
+| [#448](https://github.com/hobnix/server/issues/448) | In Progress | - | Web: Progress and StepList |
+| [#449](https://github.com/hobnix/server/issues/449) | In Progress | - | Web: component gallery page in the developer section |
+| [#450](https://github.com/hobnix/server/issues/450) | In Progress | - | Web: move the pages to the shared components, group by group |
+| [#782](https://github.com/hobnix/server/issues/782) | In Progress | - | Web: Group and Object page pieces (StateCard, LinkedObjects, JobStrip, DangerZone) |
+| [#445](https://github.com/hobnix/server/issues/445) | Testing | - | Web: layout components (Card, Row and Stack, one muted text style) |
+| [#461](https://github.com/hobnix/server/issues/461) | Testing | - | Demo mode: the web interface with made-up data, no server needed |
+| [#783](https://github.com/hobnix/server/issues/783) | Testing | - | Web: ErrorNote and Inbox (coded error, bell and notification list) |
+| [#784](https://github.com/hobnix/server/issues/784) | Testing | - | Web: Timeline with filters |
+| [#785](https://github.com/hobnix/server/issues/785) | Testing | - | Web: Stepper under Wizard |
 | [#193](https://github.com/hobnix/server/issues/193) | Backlog | P1 | Epic: Storybook and Design System |
-| [#445](https://github.com/hobnix/server/issues/445) | Backlog | - | Web: layout components (card or section, row and stack, one muted text style) |
-| [#446](https://github.com/hobnix/server/issues/446) | Backlog | - | Web: small pieces (icon, icon button, chip or tag) |
-| [#447](https://github.com/hobnix/server/issues/447) | Backlog | - | Web: overlays in ui (dialog, menu, toast) |
-| [#448](https://github.com/hobnix/server/issues/448) | Backlog | - | Web: components the roadmap needs (step and progress list, timeline with filters, stepper) |
-| [#449](https://github.com/hobnix/server/issues/449) | Backlog | - | Web: component gallery page in the developer section |
-| [#450](https://github.com/hobnix/server/issues/450) | Backlog | - | Web: move the pages to the shared components, group by group |
-| [#461](https://github.com/hobnix/server/issues/461) | Backlog | - | Demo mode: the web interface with made-up data, no server needed |
 
 ### 0.10 â€” Live Interface
 
-5 issues, 0 done.
+7 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
@@ -212,10 +239,12 @@ Done: [#255](https://github.com/hobnix/server/issues/255)
 | [#484](https://github.com/hobnix/server/issues/484) | Backlog | - | More event sources: disks plugged and pulled (udev), units that start, stop or fail (systemd) |
 | [#485](https://github.com/hobnix/server/issues/485) | Backlog | - | End-to-end test: an action updates the open page without a reload, within seconds |
 | [#486](https://github.com/hobnix/server/issues/486) | Backlog | - | Measure the delay from "something changed" to "the browser shows it" |
+| [#617](https://github.com/hobnix/server/issues/617) | Backlog | - | Follow-ups of the 0.1 acceptance audit: job records, event kinds, Events page |
+| [#619](https://github.com/hobnix/server/issues/619) | Backlog | - | Acknowledge a health problem (quiet until it resolves and fails again) and a notification inbox |
 
 ### 0.11 â€” Navigation and Pages
 
-10 issues, 0 done.
+11 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
@@ -229,10 +258,11 @@ Done: [#255](https://github.com/hobnix/server/issues/255)
 | [#457](https://github.com/hobnix/server/issues/457) | Backlog | - | Web: group pages that show the state of the group, one or two main actions plus a More menu |
 | [#487](https://github.com/hobnix/server/issues/487) | Backlog | - | Accessibility: the whole interface by keyboard and with a screen reader |
 | [#488](https://github.com/hobnix/server/issues/488) | Backlog | - | Error messages: what happened, why, and the next step, with a stable code |
+| [#776](https://github.com/hobnix/server/issues/776) | Backlog | - | Web design: thin slice, the disk page |
 
 ### 0.12 â€” Package Pages
 
-4 issues, 0 done.
+5 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
@@ -240,19 +270,22 @@ Done: [#255](https://github.com/hobnix/server/issues/255)
 | [#424](https://github.com/hobnix/server/issues/424) | Backlog | - | Recipes: status panel and allowlisted actions from the manifest `[web]` section |
 | [#472](https://github.com/hobnix/server/issues/472) | Backlog | - | Slots: the fixed places where a package may add to the interface |
 | [#473](https://github.com/hobnix/server/issues/473) | Backlog | - | The block list is the component library: a registry with schemas, and the blocks that are missing |
+| [#790](https://github.com/hobnix/server/issues/790) | Backlog | - | Packages place their pages: group, order, tabs, template and card state in [web.page] |
 
 ### 0.13 â€” Marketplace
 
-6 issues, 0 done.
+8 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
 | [#205](https://github.com/hobnix/server/issues/205) | Backlog | P2 | Epic: Marketplace and Ecosystem |
+| [#269](https://github.com/hobnix/server/issues/269) | Backlog | - | Import Unraid templates and Proxmox vzdump archives |
 | [#474](https://github.com/hobnix/server/issues/474) | Backlog | - | Marketplace as a store: cards, categories, Installed and Updates, a page per package |
 | [#475](https://github.com/hobnix/server/issues/475) | Backlog | - | The package index refreshes by itself |
 | [#476](https://github.com/hobnix/server/issues/476) | Backlog | - | One place for updates: the system, apps and packages |
 | [#477](https://github.com/hobnix/server/issues/477) | Backlog | - | Trust shown plainly: official or community, and a "tested on a real server" date |
 | [#478](https://github.com/hobnix/server/issues/478) | Backlog | - | A page for every installed app, built from its manifest |
+| [#793](https://github.com/hobnix/server/issues/793) | Backlog | - | Marketplace: a "fits this server" check from the package's declared needs |
 
 ### 0.14 â€” Translations
 
@@ -291,22 +324,26 @@ Done: [#256](https://github.com/hobnix/server/issues/256)
 
 ### 1.0 â€” Stable Ecosystem
 
-3 issues, 0 done.
+4 issues, 0 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
 | [#268](https://github.com/hobnix/server/issues/268) | Backlog | - | WebUI package builder: create, edit and package from the browser |
 | [#479](https://github.com/hobnix/server/issues/479) | Backlog | - | Bundles: install several apps that belong together in one go |
+| [#489](https://github.com/hobnix/server/issues/489) | Backlog | - | A public website: landing page and the documentation outside the repository |
 | [#495](https://github.com/hobnix/server/issues/495) | Backlog | - | Epic: Blueprints: pick what the server is for and get it set up in one run |
 
 ### No milestone
 
-10 issues, 8 done.
+13 issues, 8 done.
 
 | Issue | Status | Priority | Title |
 | --- | --- | --- | --- |
 | [#207](https://github.com/hobnix/server/issues/207) | Backlog | P1 | Epic: Documentation and Community |
 | [#271](https://github.com/hobnix/server/issues/271) | Backlog | - | Funding: GitHub Sponsors and OpenCollective |
+| [#699](https://github.com/hobnix/server/issues/699) | Backlog | - | hs pool bulk add as a job leaves /bulk unmounted (mergerfs ends with the job unit) |
+| [#846](https://github.com/hobnix/server/issues/846) | Backlog | - | Flaky CI tests: job-step-live and dialogues (Broken pipe) |
+| [#850](https://github.com/hobnix/server/issues/850) | Backlog | - | Install dialog warns "the server is rebuilt" for an app that does not rebuild (ntfy) |
 
 Done: [#209](https://github.com/hobnix/server/issues/209), [#211](https://github.com/hobnix/server/issues/211), [#213](https://github.com/hobnix/server/issues/213), [#216](https://github.com/hobnix/server/issues/216), [#270](https://github.com/hobnix/server/issues/270), [#315](https://github.com/hobnix/server/issues/315), [#316](https://github.com/hobnix/server/issues/316), [#317](https://github.com/hobnix/server/issues/317)
 
