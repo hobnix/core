@@ -1,7 +1,7 @@
 <script>
   // Settings of one instance: `ct <name> set [--ram .. --cpu .. --disk .. --autostart on|off --docker yes|no]` or `ct <name> ip --address <ip>`.
   // Only what differs from today's value is sent.
-  import Checkbox from '../../ui/Checkbox.svelte';
+  import { Checkbox, Field, TextInput, Segmented } from '../../ui/index.js';
   import CreateDialog from '../../shell/CreateDialog.svelte';
 
   let { ct, ondone = () => {} } = $props();
@@ -31,33 +31,23 @@
 
 <CreateDialog kicker="Settings" title={`Settings of ${ct.name}`} area="ct" {args} {ondone}>
   {#snippet form()}
-    <div class="seg" role="radiogroup" style="align-self:flex-start">
-      <label class="seg-opt"><input type="radio" name="is-mode" value="resources" bind:group={mode} />Resources</label>
-      <label class="seg-opt"><input type="radio" name="is-mode" value="address" bind:group={mode} />Fixed address</label>
-    </div>
+    <Segmented bind:value={mode} label="What to change" options={[{ value: 'resources', label: 'Resources' }, { value: 'address', label: 'Fixed address' }]} />
     {#if mode === 'resources'}
-      <div class="row">
-        <div class="field"><label for="is-ram">RAM limit (MiB, "none" removes it)</label><input id="is-ram" class="input" bind:value={ram} autocomplete="off" /></div>
-        <div class="field"><label for="is-cpu">CPU limit</label><input id="is-cpu" class="input" bind:value={cpu} autocomplete="off" /></div>
+      <div class="two">
+        <Field label={'RAM limit (MiB, "none" removes it)'}><TextInput bind:value={ram} autocomplete="off" /></Field>
+        <Field label="CPU limit"><TextInput bind:value={cpu} autocomplete="off" /></Field>
       </div>
-      <div class="field">
-        <label for="is-disk">Disk size (GiB, can only grow)</label>
-        <input id="is-disk" class="input" bind:value={disk} autocomplete="off" />
-      </div>
+      <Field label="Disk size (GiB, can only grow)"><TextInput bind:value={disk} autocomplete="off" /></Field>
       <Checkbox bind:checked={autostart} label="Start at boot" hint="off = keep it off: it stays as it is" />
-      <label class="chk"><input type="checkbox" bind:checked={docker} />Docker support (restart the instance afterwards)</label>
+      <Checkbox bind:checked={docker} label="Docker support (restart the instance afterwards)" />
     {:else}
-      <div class="field">
-        <label for="is-addr">Fixed address</label>
-        <input id="is-addr" class="input" bind:value={address} placeholder="10.10.95.25" autocomplete="off" spellcheck="false" />
-      </div>
-      <div class="hint">The instance restarts when the address changes.</div>
+      <Field label="Fixed address" help="The instance restarts when the address changes.">
+        <TextInput bind:value={address} placeholder="10.10.95.25" autocomplete="off" spellcheck={false} />
+      </Field>
     {/if}
   {/snippet}
 </CreateDialog>
 
 <style>
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .chk { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; accent-color: var(--color-accent); }
-  .hint { font-size: 12px; color: var(--color-neutral-500); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 </style>

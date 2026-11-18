@@ -10,6 +10,7 @@
   import Button from '../../ui/Button.svelte';
   import Banner from '../../ui/Banner.svelte';
   import Combobox from '../../ui/Combobox.svelte';
+  import { Field, TextInput, Checkbox } from '../../ui/index.js';
   import { mountsOf } from '../../editor/volumes.js';
   import { emptyDraft, suggestName, problems, generate, notes, RESTART, setHandoff } from '../../editor/wizard.js';
 
@@ -59,21 +60,21 @@
 <div class="wrap">
   <Wizard index={at} total={STEPS.length} steps={NAMES} onselect={(i) => { at = i; }} question={tr(QUESTION[step])} help={tr(HELP[step])} primary={step === 'review' ? tr('Open in editor') : tr('Next')} canNext={!errs.length} onnext={next} onback={() => { at = Math.max(0, at - 1); }}>
     {#if step === 'image'}
-      <label class="f">{tr('Image')}
-        <input class="input" bind:value={d.image} oninput={onimage} placeholder="nginx:alpine" autocapitalize="off" autocorrect="off" spellcheck="false" />
-      </label>
-      <label class="f">{tr('Name')}
-        <input class="input" bind:value={d.name} oninput={() => { nameTouched = true; }} placeholder="my-app" autocapitalize="off" autocorrect="off" spellcheck="false" />
-      </label>
-      <label class="f">{tr('Restart')}
+      <Field label={tr('Image')}>
+        <TextInput bind:value={d.image} oninput={onimage} placeholder="nginx:alpine" autocomplete="off" spellcheck={false} />
+      </Field>
+      <Field label={tr('Name')}>
+        <TextInput bind:value={d.name} oninput={() => { nameTouched = true; }} placeholder="my-app" autocomplete="off" spellcheck={false} />
+      </Field>
+      <Field label={tr('Restart')}>
         <Combobox options={RESTART} bind:value={d.restart} />
-      </label>
+      </Field>
     {:else if step === 'ports'}
       {#each d.ports as p, i}
         <div class="row">
-          <input class="input num" bind:value={p.host} placeholder="8080" inputmode="numeric" aria-label={tr('Port on this server')} />
+          <div class="num"><TextInput bind:value={p.host} placeholder="8080" inputmode="numeric" ariaLabel={tr('Port on this server')} /></div>
           <span>→</span>
-          <input class="input num" bind:value={p.container} placeholder="80" inputmode="numeric" aria-label={tr('Port inside the app')} />
+          <div class="num"><TextInput bind:value={p.container} placeholder="80" inputmode="numeric" ariaLabel={tr('Port inside the app')} /></div>
           <Combobox options={['tcp', 'udp']} bind:value={p.proto} />
           <Button variant="ghost" icon="trash" aria-label={tr('Remove')} onclick={() => drop(d.ports, i)} />
         </div>
@@ -84,10 +85,10 @@
         <div class="row wrapr">
           <Combobox options={[{ value: 'share', label: tr('A share') }, { value: 'folder', label: tr('A folder of the app') }]} bind:value={v.kind} />
           {#if v.kind === 'share'}<Combobox options={shareOptions} bind:value={v.share} placeholder={tr('Share')} />{/if}
-          <input class="input" bind:value={v.sub} placeholder={tr('subfolder (optional)')} autocapitalize="off" spellcheck="false" aria-label={tr('Subfolder')} />
+          <TextInput bind:value={v.sub} placeholder={tr('subfolder (optional)')} spellcheck={false} ariaLabel={tr('Subfolder')} />
           <span>→</span>
-          <input class="input" bind:value={v.cpath} placeholder="/data" autocapitalize="off" spellcheck="false" aria-label={tr('Path inside the app')} />
-          <label class="chk"><input type="checkbox" bind:checked={v.ro} /> {tr('read only')}</label>
+          <TextInput bind:value={v.cpath} placeholder="/data" spellcheck={false} ariaLabel={tr('Path inside the app')} />
+          <Checkbox bind:checked={v.ro} label={tr('read only')} />
           <Button variant="ghost" icon="trash" aria-label={tr('Remove')} onclick={() => drop(d.volumes, i)} />
         </div>
       {/each}
@@ -96,9 +97,9 @@
     {:else if step === 'env'}
       {#each d.env as e, i}
         <div class="row">
-          <input class="input" bind:value={e.key} placeholder="TZ" autocapitalize="off" spellcheck="false" aria-label={tr('Name')} />
+          <TextInput bind:value={e.key} placeholder="TZ" spellcheck={false} ariaLabel={tr('Name')} />
           <span>=</span>
-          <input class="input" type={secret(e.key) ? 'password' : 'text'} bind:value={e.value} placeholder={tr('value')} autocomplete="off" spellcheck="false" aria-label={tr('Value')} />
+          <TextInput type={secret(e.key) ? 'password' : 'text'} bind:value={e.value} placeholder={tr('value')} autocomplete="off" spellcheck={false} ariaLabel={tr('Value')} />
           <Button variant="ghost" icon="trash" aria-label={tr('Remove')} onclick={() => drop(d.env, i)} />
         </div>
       {/each}
@@ -116,11 +117,9 @@
 
 <style>
   .wrap { max-width: 640px; margin-top: 12px; }
-  .f { display: flex; flex-direction: column; gap: 4px; }
   .row { display: flex; align-items: center; gap: 8px; }
   .wrapr { flex-wrap: wrap; }
   .num { max-width: 100px; }
-  .chk { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg-2); }
   .rev { border: 1px solid var(--line); background: var(--panel); }
   .ph { padding: 6px 12px; font: 12px var(--mono); color: var(--fg-2); border-bottom: 1px solid var(--line); }
   pre { margin: 0; padding: 8px 12px; font: 12px var(--mono); overflow-x: auto; white-space: pre; }
