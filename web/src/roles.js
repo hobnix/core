@@ -2,30 +2,19 @@
 // decides what is SHOWN, so a person does not click into a refusal. The role comes from `GET /api/session` (`role`). Plain JS: tests import it in node.
 //
 // The page table follows the `x-hs-role` of the `sys` rows a page reads or changes (docs/api/openapi.json, scripts/lib/sys-roles.tsv): a page that
-// reads an admin row is an admin page, a page whose changes are the app rows (apps, ct, recipes, docker*) is open to an app manager for those.
+// reads an admin row is an admin page (only the secret ones are hidden, see ADMIN_ONLY); a page whose changes are the app rows (apps, ct, recipes, docker*) is open to an app manager for those.
 export const ROLES = ['viewer', 'app-manager', 'admin'];
 const rank = (r) => ROLES.indexOf(r);
 
 // true when `have` may do what `need` asks; an unknown role on either side is refused (the server's role_ok)
 export const roleOk = (have, need) => rank(have) >= 0 && rank(need) >= 0 && rank(have) >= rank(need);
 
-// the least role of a page, by inner path; the longest matching prefix wins; a page not listed is open to a viewer (it only reads viewer rows)
-const PAGES = [
-  ['/identity', 'admin'],            // users list, groups, access: admin reads
-  ...['general', 'network', 'storage', 'backups', 'updates', 'releases', 'capabilities', 'advanced'].map((p) => [`/settings/${p}`, 'admin']),   // config list, updates, capabilities
-  // /settings itself and /settings/access stay open: the Sessions card is for everybody (their own; AccessPage.svelte shows nothing else to a lower role)
-  ['/nodes', 'admin'],
-  ['/marketplace', 'admin'],         // pkg market and install are admin rows
-  ['/setup', 'admin'],
-  ['/storage/files', 'admin'],       // the file manager pairs and trashes through admin rows
-  ['/storage/vault', 'admin'],       // vault list and usage
-  ['/extensions', 'admin'],          // ext list
-  ['/operations/notifications', 'viewer'],
-];
+// The pages a role may open (design behaviour 4.9, docs/PLAN-web-design.md): every page is open to every role, a viewer sees it without plans and with its
+// action buttons drawn disabled (ui/Button `need`). The one exception is a page whose whole content is admin secrets, which a viewer should not even see
+// listed: the Vault and the user / token / identity pages. Those need admin, are left out of the tree, and say "Not for your role" when opened by address.
+const ADMIN_ONLY = ['/identity', '/storage/vault'];
 export function pageRole(path) {
-  let best = 'viewer', len = -1;
-  for (const [p, r] of PAGES) if ((path === p || path.startsWith(p + '/')) && p.length > len) { best = r; len = p.length; }
-  return best;
+  return ADMIN_ONLY.some((p) => path === p || path.startsWith(p + '/')) ? 'admin' : 'viewer';
 }
 export const canSee = (role, path) => roleOk(role, pageRole(path));
 
