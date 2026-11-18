@@ -1,6 +1,6 @@
 <script>
   // A menu behind one button: the More menu of a page header and the row actions of a table.
-  //   <Menu label="More" items={[{ label: 'Rename', icon: 'pencil', onclick: rename }, { sep: true }, { label: 'Delete', danger: true, onclick: del },
+  //   <Menu label="More" items={[{ label: 'Rename', icon: 'pencil-simple', onclick: rename }, { sep: true }, { label: 'Delete', danger: true, onclick: del },
   //                              { label: 'Move', disabled: true, reason: 'Needs the admin role' }]} />
   // An item the user may not use stays in the list, disabled, with its reason as a tooltip (design 4.9). `icon` is a Phosphor name; `danger` colours it red.
   // The trigger is an icon button ("..." by default; `trigger` snippet to draw your own, it gets { open }). Keys: Enter, Space, ArrowDown open it; arrows, Home, End move;
