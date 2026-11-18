@@ -420,3 +420,28 @@ Decided 2026-11-18:
 ### 7.5 Open questions for review
 
 - Does the node tree of a remote node (peer and edge pages) need the same declaration, or does it stay fixed code?
+
+## 8. Mockups
+
+The mockups are a Design canvas ("Hobnix web design 0.8.5", private to the owner), not files of the repo. Medium fidelity, invented data, the tokens of `web/src/tokens.css`, dark by default and one board in light. Each board tests a decision of this document:
+
+| Board | Tests |
+|---|---|
+| Navigation tree | the SERVERS header, the node root as Summary, two levels, counts, rows of one height (2.2) |
+| Summary | the node page: banner, halftone node card, tiles, segmented pool bars, status rows with shapes (3.2, 5.1) |
+| Group page: Storage | the Group template, state cards (3.2) |
+| List with quick look: Disks | the List template, the quick look overlay, `?sel=` (3.3) |
+| Object page: disk, dark and light | the Object template: tabs, linked objects, job strip, destructive section (3.2) |
+| App page | an Object page built from a manifest, trust label, an action disabled for a role (6.3 G2, 4.9, 4.10) |
+| Marketplace | the List card view, trust and tested date, Installed and Updates as links (6.3 G4) |
+| Settings page | a generated form with the save-through-a-plan footer (3.2) |
+| Settings > Updates | a List with content tabs (6.3 G3) |
+| Feed: Jobs | the Feed template, a job that waits for an answer, a coded error (3.4, 4.4) |
+| Flow: install an app | the Flow template with its stepper (3.2) |
+| Inbox and toast | the bell with problems and notifications, acknowledge and snooze, the toast for a job that asks for input (4.5, 5.4) |
+| Plan dialog | a destructive plan with a typed name and a background job option (4.3) |
+| Error and empty states | the page error that keeps old data, the empty list, storage locked (4.4) |
+| Phone | the tree as a slide-in drawer, rows as cards (4.8) |
+| Top bar, Jobs drawer | the shell pieces on their own |
+
+Not seen by me in a browser: the canvas needs the owner's sign-in, so the owner reviewed it.
