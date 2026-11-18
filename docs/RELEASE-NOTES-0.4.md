@@ -7,7 +7,9 @@ pull request and of the GitHub release.
 **Read this first.** 0.4.0 changes how a new server is set up and how storage is named: a freshly installed home server has **no fixed pool names any
 more** (no `bulk` and `fast`); you name the pools yourself. In a virtual machine on the real test-lab server the stages install, smoke check,
 rollback, backup and restore, pool and the upgrade from v0.3.0 passed on the tip of `0.4` (2026-11-18). Stage 6 (browser) never ran there (no
-playwright on the server). Nothing of this release was run on physical hardware, and nobody has looked at the web interface of this version.
+playwright on the server). The owner then updated the real server to v0.4.0-beta.1 and looked at the web interface (2026-11-18): every page
+opens and works, and the pool list, disks, shares and navigation show the server's own pools (that server keeps its classic `bulk` and `fast`
+rows). The installer and the first-run wizard were not tried, and the local users could not be checked on that server (it has a domain controller).
 Items marked **UNVERIFIED** were written and tested only with fakes, fixtures and unit tests. An update from 0.3 keeps its pools: a server without a
 `pools` line keeps its classic rows (`hs pool record` writes the line from what the server has). Do not trust this release with the only copy of your data.
 
@@ -43,6 +45,7 @@ with `--use apps`, and stage 5 running the rebuild after the SnapRAID pool.
 - Live state on by default (see the 0.3 notes).
 
 ## Not verified
-- The web interface of this version, the first-run wizard on a real server, the pool import and the local users on real hardware.
+- The first-run wizard, the installer questions, the pool import and the creation of a new pool on a real machine.
+- The local users without a domain controller (the test server has one).
 - The headless browser stage (6) never ran.
 - The unlock page of this version.
