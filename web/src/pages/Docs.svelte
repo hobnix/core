@@ -1,5 +1,6 @@
 <script>
   import Chip from '../ui/Chip.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import Button from '../ui/Button.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   // The guides: a navigation (language, search, groups with their pages), the page rendered from Markdown, an outline of the page and
@@ -203,8 +204,8 @@
     {/if}
     <div class="find">
       <i class="ph ph-magnifying-glass"></i>
-      <input class="input" type="search" placeholder="Search the guides" bind:value={q} oninput={typing} onkeydown={(e) => e.key === 'Escape' && clear()}
-        autocomplete="off" spellcheck="false" aria-label="Search the guides" />
+      <TextInput type="search" placeholder="Search the guides" bind:value={q} oninput={typing} onkeydown={(e) => e.key === 'Escape' && clear()}
+        autocomplete="off" spellcheck={false} ariaLabel="Search the guides" />
     </div>
     {#if info}
       <button class="navtoggle" aria-expanded={navOpen} aria-controls="docs-groups" onclick={() => (navOpen = !navOpen)}>

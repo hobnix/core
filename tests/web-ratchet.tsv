@@ -23,7 +23,6 @@ forms/ops/ChannelForm.svelte	3	3	0	1	0
 forms/ops/ExpiryForm.svelte	3	0	0	1	0
 forms/ops/InputForm.svelte	1	0	0	1	0
 forms/ops/InstallDialog.svelte	0	0	0	1	0
-forms/ops/NodeAdd.svelte	3	1	0	1	0
 forms/ops/PassthroughForm.svelte	4	0	0	1	0
 forms/ops/PcForm.svelte	3	0	0	1	0
 forms/ops/PeerAttach.svelte	1	2	0	1	0
@@ -32,7 +31,6 @@ forms/ops/PeerOffer.svelte	3	0	0	1	0
 forms/ops/PeerOffered.svelte	0	0	0	1	0
 forms/ops/PosterForm.svelte	4	1	0	1	0
 forms/ops/RepoAdd.svelte	2	0	1	1	0
-forms/ops/RouterSetup.svelte	2	0	0	1	0
 forms/ops/ServiceForm.svelte	10	3	2	1	0
 forms/shares/DeleteShare.svelte	0	0	0	1	0
 forms/shares/RenameShare.svelte	0	0	0	1	0
@@ -49,8 +47,7 @@ pages/Backup.svelte	1	0	0	1	0
 pages/Certificates.svelte	0	0	0	1	0
 pages/Data.svelte	0	0	0	1	0
 pages/Docker.svelte	0	0	0	1	0
-pages/Docs.svelte	1	0	0	1	0
-pages/Events.svelte	1	0	0	0	0
+pages/Docs.svelte	0	0	0	1	0
 pages/Expiry.svelte	0	0	0	1	0
 pages/Files.svelte	1	0	0	1	0
 pages/Hardware.svelte	0	0	0	1	0
@@ -62,7 +59,7 @@ pages/Marketplace.svelte	0	0	0	1	0
 pages/Network.svelte	0	0	0	1	0
 pages/Nodes.svelte	0	0	0	1	0
 pages/Notifications.svelte	0	0	0	1	0
-pages/PackageBuilder.svelte	2	2	1	1	0
+pages/PackageBuilder.svelte	0	0	0	1	0
 pages/Proxy.svelte	0	0	0	1	0
 pages/ProxyPorts.svelte	0	0	0	1	0
 pages/ProxySettings.svelte	0	0	0	1	0
@@ -91,12 +88,12 @@ pages/proxy/ProxyHead.svelte	0	0	0	1	0
 settings/Appearance.svelte	1	0	0	1	0
 settings/CapabilitySettings.svelte	0	0	0	1	0
 settings/CapsOverview.svelte	0	0	0	1	0
-settings/Fields.svelte	2	1	0	1	0
+settings/Fields.svelte	0	0	0	1	0
 settings/Releases.svelte	0	0	0	1	0
 settings/Sessions.svelte	0	0	0	1	0
 settings/SettingsPage.svelte	0	0	0	1	0
 settings/StatusPanel.svelte	0	0	0	1	0
-settings/WizardSteps.svelte	2	0	0	1	0
+settings/WizardSteps.svelte	0	0	0	1	0
 shell/BottomPanel.svelte	0	1	0	1	0
 shell/CreateDialog.svelte	1	0	0	1	0
 shell/Fresh.svelte	0	0	0	1	0
