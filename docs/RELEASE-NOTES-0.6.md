@@ -1,7 +1,7 @@
-# Hobnix 0.6.0 release notes (draft)
+# Hobnix 0.6.0 release notes
 
-Draft for the release "0.6 App Lifecycle", built from the commits (without merges) that are on `0.6` but not in `v0.5.0`, the 17 changelog entries
-of `docs/changelog/` since then and the issues of the milestone. Written 2026-11-18. Re-read before the tag. The same text is the body of the release
+Notes for the release "0.6 App Lifecycle", built from the commits (without merges) that are on `0.6` but not in `v0.5.0`, the 17 changelog entries
+of `docs/changelog/` since then and the issues of the milestone. Written 2026-11-18. The same text is the body of the release
 pull request and of the GitHub release.
 
 **Read this first.** 0.6.0 changes how apps are installed, shown and removed: one Install for every package (a plan first, then one guided job), one set
