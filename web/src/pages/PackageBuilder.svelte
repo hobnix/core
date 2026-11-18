@@ -8,7 +8,10 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
-  import { blank, manifestText, findingsOf, fieldOf } from './builder.js';
+  import Field from '../ui/Field.svelte';
+  import TextInput from '../ui/TextInput.svelte';
+  import Select from '../ui/Select.svelte';
+  import { blank, manifestText, findingsOf, fieldOf, withKind, hasStoreFields, CATEGORIES } from './builder.js';
 
   let f = $state(blank());
   const text = $derived(manifestText(f));
@@ -44,7 +47,9 @@
 
   const errors = $derived(found.filter((x) => x.level === 'error'));
   const forField = (name) => errors.filter((x) => fieldOf(x.where) === name);
-  const copy = () => navigator.clipboard?.writeText(text).catch(() => {});
+  const setKind = (e) => { f = withKind(f, e.target.value); };
+  const err = (name) => forField(name).map((x) => x.text).join(' ');
+  const copy =() => navigator.clipboard?.writeText(text).catch(() => {});
 </script>
 
 <PageHeader title="Package builder" crumb={ui.host} sub="Write the manifest of a new app or extension; the server checks it as you type. Nothing is saved yet." />
@@ -52,9 +57,10 @@
 <div class="grid">
   <form class="card" onsubmit={(e) => e.preventDefault()}>
     <label>{tr('Kind')}
-      <select bind:value={f.kind}>
+      <select value={f.kind} onchange={setKind}>
         <option value="recipe">{tr('App (recipe)')}</option>
         <option value="extension">{tr('Extension')}</option>
+        <option value="capability">{tr('Capability')}</option>
       </select>
     </label>
     {#each [['name', 'Name', 'my-app'], ['title', 'Title', 'What it is, in a few words'], ['version', 'Version', '0.1.0'], ['requires', 'Needs core', '>=1']] as [k, label, ph]}
@@ -74,6 +80,28 @@
         <input bind:value={f.script} class:bad={forField('script').length} autocomplete="off" spellcheck="false" />
         {#each forField('script') as x}<span class="why">{x.text}</span>{/each}
       </label>
+    {/if}
+    {#if hasStoreFields(f)}
+      <Field label={tr('Description')} help={tr('One short paragraph for the store.')} error={err('description')}>
+        <TextInput bind:value={f.description} />
+      </Field>
+      <Field label={tr('Description (German)')} error={err('descriptionDe')}>
+        <TextInput bind:value={f.descriptionDe} />
+      </Field>
+      <Field label={tr('Icon')} help={tr('A Phosphor name such as ph:image. An SVG file is added to the package by hand.')} error={err('icon')}>
+        <TextInput bind:value={f.icon} placeholder="ph:package" autocomplete="off" spellcheck={false} />
+      </Field>
+      <Field label={tr('Category')} error={err('category')}>
+        <Select bind:value={f.category} options={CATEGORIES} />
+      </Field>
+      <Field label={tr('App version')} help={tr('The release of the app this package pins.')} error={err('appVersion')}>
+        <TextInput bind:value={f.appVersion} autocomplete="off" spellcheck={false} />
+      </Field>
+    {/if}
+    {#if f.kind === 'recipe'}
+      <Field label={tr('Instances')} help={tr('One app, or several side by side under their own names.')}>
+        <Select bind:value={f.instances} options={[{ value: 'one', label: tr('One') }, { value: 'many', label: tr('Many') }]} />
+      </Field>
     {/if}
     <label>{tr('Permissions')}
       <textarea rows="3" bind:value={f.permissions} placeholder="web.read&#10;net:lan" spellcheck="false"></textarea>

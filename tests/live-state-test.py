@@ -440,6 +440,9 @@ INSTANCE_TOPICS = {
 
 APP_TOPICS = {
     'pkg-market': (['pkg', 'market'], 120, 'skip', None, {'system', 'instances'}),
+    'pkg-states': (['pkg', 'states'], 120, 'skip', None, {'system', 'instances'}),
+    'apps-list': (['apps', 'list'], 120, 'skip', None, {'system', 'instances'}),
+    'apps-health': (['apps', 'health'], 60, 'skip', None, {'instances', 'system'}),
     'pkg-repos': (['pkg', 'repos'], 300, 'run', None, {'system'}),
     'recipes-list': (['recipes', 'list'], 60, 'skip', 'incus', {'instances', 'system'}),
     'recipes-versions': (['recipes', 'versions'], 60, 'skip', None, {'instances', 'system'}),
@@ -704,7 +707,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(self.fake(time.time() - 7), out), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 69)
+        self.assertEqual(len(lines), 72)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 9)
@@ -783,7 +786,7 @@ class Cli(unittest.TestCase):
         st = FakeResp()
         ls.cli_refresh(["--all"], st)
         self.assertEqual(sorted(p[1] for p in st.published), sorted([t[0] for t in ls.topics()]))
-        self.assertEqual(len(st.published), 69)
+        self.assertEqual(len(st.published), 72)
         os.environ["HS_LIVE_SOCKET"] = "/nonexistent/none.sock"
         try:
             self.assertEqual(ls.cli_refresh(["--all"]), 0)

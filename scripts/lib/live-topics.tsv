@@ -62,6 +62,9 @@ services-local-routes	services local-routes	30	skip	gateway	instances,network,sy
 services-tiles	services tiles	60	skip	dashboard	instances,network	services-list
 services-stats	services stats	30	skip	dashboard	network	-
 pkg-market	pkg market	120	skip	-	system,instances	-
+pkg-states	pkg states	120	skip	-	system,instances	-
+apps-list	apps list	120	skip	-	system,instances	-
+apps-health	apps health	60	skip	-	instances,system	-
 pkg-repos	pkg repos	300	run	-	system	-
 recipes-list	recipes list	60	skip	incus	instances,system	-
 recipes-versions	recipes versions	60	skip	-	instances,system	-

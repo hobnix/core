@@ -44,7 +44,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case '/protection/backup': return [`${A}backup/state`, `${A}backup/overview`, `${A}backup/snapshots?tag=shares`, `${A}backup/snapshots?tag=host`];
     case '/protection/expiry': return [`${A}expiry/list`];
     case '/operations/health': return [`${A}health/next`, `${A}health/list`, `${A}jobs/list`, `${A}status`];
-    case '/instances/apps': return [`${A}recipes/list`, `${A}recipes/versions`, `${A}ct/list`];
+    case '/instances/apps': return [`${A}recipes/list`, `${A}recipes/versions`, `${A}apps/versions`, `${A}ct/list`];
     case '/marketplace': return [`${A}pkg/market`, `${A}pkg/repos`];
     case '/instances/services': return [`${A}services/list`, `${A}services/routes`, `${A}ct/list`];
     case '/operations/events': return [`${A}event/list?n=100`];

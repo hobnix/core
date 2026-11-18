@@ -53,7 +53,8 @@ start_units() {
     spin "$(t 'Start %s' "$u")" systemctl start "$u" || true
   done
   # containers set to start at boot: their start job ran while Incus was down
-  case " $units " in *" incus.service "*) SPIN_SOFT=1 spin "Start the instances set to autostart" systemctl start incus-startup.service || true ;; esac
+  case " $units " in *" incus.service "*) SPIN_SOFT=1 spin "Start the instances set to autostart" systemctl start incus-startup.service || true
+    note "Instances with start at boot on start, and so do those that were running before; stopped ones without the flag stay stopped." ;; esac
   case " $units " in *" samba-winbindd.service "*) SPIN_SOFT=1 spin "Wait for the domain controller" wait_dc || true ;; esac
   for u in $units; do
     case "$u" in samba-*) spin "$(t 'Start %s' "$u")" systemctl start "$u" || true ;; esac

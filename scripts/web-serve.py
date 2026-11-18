@@ -1042,6 +1042,10 @@ READS = {
     ("recipes", "versions"): {"kind": "tsv", "ttl": 60, "topic": "recipes-versions"},
     # the Marketplace: everything installable and the repositories it comes from (pkg-change.sh does the changes)
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
+    ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
+    ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
+    ("apps", "health"): {"kind": "tsv", "ttl": 30, "topic": "apps-health"},
+    ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
     ("pkg", "capabilities"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},   # the capability packages (first-run wizard)
     ("pkg", "repos"): {"kind": "tsv", "ttl": 30, "topic": "pkg-repos"},
     ("dc", "state"): {"kind": "tsv", "ttl": 60, "topic": "dc-state"},
@@ -1303,6 +1307,18 @@ CHANGES = {
             {"fixed": [r"^check-draft$"], "document": True}],
     # the Optional parts step of the first-run wizard (pkg-bundle.sh): install, switch on, rebuild as one job; one comma list of names
     "pkg/bundle": [[r"^[a-z0-9][a-z0-9-]{0,40}(,[a-z0-9][a-z0-9-]{0,40}){0,15}$"]],
+    # One Install (apps-change.sh, docs/PLAN-app-lifecycle.md Q2): `apps plan|start install <package>`; --tag is the release the plan showed (the job refuses another),
+    # answers are `--set KEY=value`, ONE secret answer is a line on stdin, --from is a step of the job (the retry of step 9); --by/--role are added by the server
+    "apps": [{"fixed": [r"^install$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+              "opts": {"--repo": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--tag": (r"^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]{1,20})?$", False),
+                       "--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--ask": (None, False),
+                       "--from": (r"^(read|needs|ask|run(:[a-z0-9][a-z0-9-]{0,30})?|check|done|on|rebuild)$", False)}, "stdin": True},
+             # a failed install (apps-recover.sh, step 9, #466): retry from its step, or remove what the run created (the job id of the failed install)
+             {"fixed": [r"^(retry|cleanup)$", r"^[0-9A-Za-z][0-9A-Za-z-]{6,100}$"],
+              "opts": {"--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--delete-data": (None, False)}, "stdin": True},
+             # Remove with keep/delete data (apps-remove.sh, step 11): the instance; the second typed name for deleting the data is --confirm-data
+             {"fixed": [r"^remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+              "opts": {"--delete-data": (None, False), "--confirm-data": (r"^[a-z0-9][a-z0-9-]{0,40}$", False)}}],
     # an answer is `--set KEY=value` (no control characters); the one secret answer of a recipe is a single line on stdin
     "recipes": [{"fixed": [r"^[a-z0-9][a-z0-9-]{0,40}$", r"^run$"],
                  "opts": {"--name": (r"^[a-z0-9][a-z0-9-]{0,40}$", False), "--set": (r"^[A-Z][A-Z0-9_]{0,30}=[^\x00-\x1f]{0,300}$", True), "--interactive": (None, False)}, "stdin": True}],
@@ -1327,7 +1343,8 @@ CHANGES = {
                                                  "--profile": (CT_PROFILE, False), "--pool": (CT_PROFILE, False),
                                                  "--iso": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.[iI][sS][oO]$", False), "--bind": (CT_BIND, True)}},
            {"fixed": [CT, r"^set$"], "opts": {"--ram": (CT_RAM, False), "--cpu": (CT_CPU, False), "--disk": (CT_DISK, False),
-                                             "--autostart": (r"^(yes|no)$", False), "--docker": (r"^(yes|no)$", False)}},
+                                             "--autostart": (r"^(on|off|yes|no)$", False), "--docker": (r"^(yes|no)$", False)}},
+           {"fixed": [CT, r"^stop$"], "opts": {"--autostart": (r"^(off|no)$", False)}},     # stop and keep it off at boot (boot.autostart unset)
            {"fixed": [CT, r"^ip$"], "opts": {"--address": (IPV4, False)}},
            {"fixed": [CT, r"^add-storage$"], "opts": {"--kind": (r"^(fast|shares|sensitive)$", False), "--name": (CT_STORE, False),
                                                       "--path": (CT_PATH, False), "--readonly": (None, False), "--as": (r"^[0-9]{1,6}:[0-9]{1,6}$", False)}},
@@ -1586,6 +1603,16 @@ def parse_change(out, rc):
             d["fixes"].append(v)       # a refused plan: the command that makes it possible
         elif k == "needs":
             d["needs"].append(v)
+        elif k in ("package", "kind", "repo", "version", "tag", "commit", "title", "description"):
+            d[k] = v               # the plan of One Install (apps-change.sh)
+        elif k == "creates":
+            d.setdefault("creates", []).append(v)
+        elif k == "need":
+            d.setdefault("needl", []).append((v.split("\t") + ["", "", "", ""])[:4])        # name, present|missing|recipe, text, long yes|no
+        elif k == "ask":
+            d.setdefault("asks", []).append((v.split("\t") + ["-"] * 7)[:7])                # key, label, kind, choices, default, pattern, when (dash kept)
+        elif k == "jobstep":
+            d.setdefault("jobsteps", []).append((v.split("\t", 1) + [""])[:2])               # name, text
         elif k == "option":
             d["options"].append(v)
         elif k == "long":
@@ -3047,7 +3074,7 @@ def make_handler(app):
             cmd = [cfg.hs, "sys"] + area.split("/") + [verb] + args      # "ext/games" = the words `ext games` (an extension package)
             if verb == "start" and confirm:
                 cmd += ["--confirm", confirm]
-            if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args):
+            if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args) or (area == "apps" and verb == "start"):
                 # ADR 0018 rule 11: who answers / who started the run. Roles (ADR 0012) are not built: every signed-in person is an administrator today
                 cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), "--role", "admin"]
             if area == "fm" and verb == "start":

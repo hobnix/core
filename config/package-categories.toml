@@ -1,0 +1,3 @@
+# The fixed category list of the package store (docs/PLAN-app-lifecycle.md Q5). A package.toml `category` is one of these ids;
+# scripts/lib/pkg_app.py checks it. Adding or renaming an id changes what the web interface shows: that needs an API level bump.
+ids = ["media", "files", "network", "home", "games", "tools", "dev", "admin"]

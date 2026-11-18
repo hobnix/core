@@ -19,9 +19,10 @@ set -euo pipefail
 #   <name> --snapshot [label] | --restore <snapshot> | --delete-snapshot <snapshot>
 #   <name> --update                          snapshot, then update the software inside
 #   <name> --remove-storage <device>
-#   <name> --set key=value ...               ram, cpu, disk (number or "none"), autostart, docker (yes/no),
+#   <name> --set key=value ...               ram, cpu, disk (number or "none"), autostart (on|yes|off|no: on sets boot.autostart=true, off UNSETS the
+#                                            key so Incus restores the last state; the list shows true or false), docker (yes/no),
 #                                            ip (fixed address, reserved in UniFi: hs net setup)
-#   <name> --start | --stop | --restart | --delete
+#   <name> --start | --stop [--keep-off] | --restart | --delete     --keep-off: also unset boot.autostart so it stays off after a reboot
 # Add --dry-run to any change to print the commands instead of running them; --yes skips the typed name of --delete (jobs).
 
 here=$(dirname "$0")
@@ -85,7 +86,7 @@ list() {
        | map(select(.family == "inet")) | .[0].address // "-"),
     (.config["limits.memory"] // "-"),
     (.config["limits.cpu"] // "-"),
-    (.config["boot.autostart"] // "false"),
+    (if .config["boot.autostart"] == "true" then "true" else "false" end),
     ((.expanded_devices.eth0.hwaddr // "") | if . == "" then "no" else "yes" end),
     (.config["security.nesting"] // "false"),
     (.expanded_devices.root.size // "-"),
@@ -352,6 +353,7 @@ case "$1" in
     for kv in "$@"; do
       key=${kv%%=*}; val=${kv#*=}
       case "$key" in
+        autostart) case "$val" in on|yes|off|no) ;; *) fail "$(t "autostart must be on or off, got '%s'" "$val")" ;; esac ;;
         docker) [ "$val" = yes ] || refuse_if_locked "$ct" "docker=no" ;;
         disk)
           number Disk "$val"
@@ -380,7 +382,11 @@ case "$1" in
         ip)
           fix_ip "$ct" "$val" ;;
         autostart)
-          run incus config set "$ct" "boot.autostart=$([ "$val" = yes ] && echo true || echo false)" ;;
+          # on = the key is true; off = the key is UNSET (Incus then restores the last state), never "false"
+          case "$val" in
+            on|yes)  run incus config set "$ct" boot.autostart=true ;;
+            off|no)  run incus config unset "$ct" boot.autostart ;;
+          esac ;;
         docker)
           if $is_vm; then note "A VM needs no Docker setting."; continue; fi
           for k in security.nesting security.syscalls.intercept.mknod security.syscalls.intercept.setxattr; do
@@ -392,7 +398,10 @@ case "$1" in
     done ;;
 
   --start)   run incus start "$ct" ;;
-  --stop)    run incus stop "$ct" ;;
+  --stop)
+    run incus stop "$ct"
+    # --keep-off: also take the instance out of the boot start (the key is unset, see --set autostart)
+    if [ "${2:-}" = --keep-off ]; then run incus config unset "$ct" boot.autostart; fi ;;
   --restart) run incus restart "$ct" ;;
 
   --delete)
@@ -404,6 +413,7 @@ case "$1" in
     fi
     warn "$(t "Delete '%s' with all its snapshots. Attached storage stays:" "$ct")"
     while IFS=$'\t' read -r _ _ src dpath _; do note "$src -> $dpath"; done < <(storage "$ct")
+    note "$(t 'An app from a package is removed with its route and address, and you choose to keep or delete its data, on the Apps page (Remove) or with hs sys apps plan remove %s.' "$ct")"
     if ! $yes; then
       danger "$(t "'%s' and its snapshots are deleted for good." "$ct")"
       confirm_name "$ct" "the instance" || fail "cancelled"
@@ -411,9 +421,12 @@ case "$1" in
     mac=$(incus query "/1.0/instances/$ct" | jq -r '.expanded_devices.eth0.hwaddr // empty')
     incus delete -f "$ct"
     # give its address back, if UniFi is connected
-    if [ -n "$mac" ] && [ -r /var/lib/hs/unifi ]; then bash "$here/unifi.sh" clear-ip "$mac" || true
-    elif [ -L /var/lib/hs/unifi ]; then warn "The vault is closed: run hs unlock"; note "The fixed IP in UniFi was not given back; remove it in UniFi by hand"; fi
-    ok "Deleted. Remove its fixed IP in UniFi and any Zoraxy rule that pointed to it."
+    unifi_left=false
+    if [ -n "$mac" ] && [ -r /var/lib/hs/unifi ]; then
+      bash "$here/unifi.sh" clear-ip "$mac" 2>/dev/null || { unifi_left=true; warn "The fixed IP in UniFi could not be given back."; }
+    elif [ -L /var/lib/hs/unifi ]; then unifi_left=true; warn "The vault is closed: run hs unlock"; fi
+    if $unifi_left; then ok "Deleted. Remove its fixed IP in UniFi by hand, and any Zoraxy rule that pointed to it."
+    else ok "Deleted. Remove any Zoraxy rule that pointed to it."; fi
     ;;
 
   *) usage ;;

@@ -48,6 +48,111 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "apps.health": {
+    /** the declared health of the apps that declare [app.health]: name, health (healthy|unhealthy|stopped); apps without a declared check have no row */
+    words: ["apps", "health"];
+    path: "/apps/health";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, health: "healthy" | "unhealthy" | "stopped"])[];
+  };
+  "apps.list": {
+    /** the apps (recipes) with their lifecycle stage: name, kind, stage (available|installed|on|running), flags (comma list, - = none), repo, available version, installed version, instances (comma list, - = none), title */
+    words: ["apps", "list"];
+    path: "/apps/list";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, kind: Field, stage: "available" | "installed" | "on" | "running", flags: Field, repo: Field, available: Field, installed: Field, instances: Field, title: Field])[];
+  };
+  "apps.plan.by_action": {
+    /** what installing an app (or extension) would do, read from its newest verified release, as data: status, plan lines with the tag the job will install, the needs and the questions (hs sys apps plan install <name> [--repo R] [--set KEY=value]...; never asks, nothing is installed; exit 0 ok, 1 refused) */
+    words: ["apps", "plan", "<action>"];
+    path: "/apps/plan/{action}";
+    method: "post";
+    class: "plan";
+    params: { action: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "apps.policy.by_instance": {
+    /** the update policy of an installed app: without a value it prints notify or pinned, with one (hs sys apps policy <instance> notify|pinned) it is written into the app record; automatic is refused; exit 1 = refused */
+    words: ["apps", "policy", "<instance>"];
+    path: "/apps/policy/{instance}";
+    method: "get";
+    class: "read";
+    params: { instance: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
+  "apps.recover.by_verb.by_action": {
+    /** after a failed install (called by sys apps plan|start retry|cleanup): hs sys apps recover plan|start retry|cleanup <job> [--set KEY=value]... [--delete-data] [--confirm <name>]; the same lines as plan|start */
+    words: ["apps", "recover", "<verb>", "<action>"];
+    path: "/apps/recover/{verb}/{action}";
+    method: "get";
+    class: "read";
+    params: { verb: string; action: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused" | "started"]
+      | [tag: "reason", text: Field]
+      | [tag: "unit", unit: Field]
+      | [tag: "job", id: Field]
+      | [tag: "heading", text: Field]
+      | [tag: "package", name: Field]
+      | [tag: "instance", name: Field]
+      | [tag: "failed_step", text: Field]
+      | [tag: "tail", text: Field]
+      | [tag: "retry_from", text: Field]
+      | [tag: "item", text: Field]
+      | [tag: "data", text: Field]
+      | [tag: "question", text: Field]
+      | [tag: "note", text: Field]
+      | [tag: "danger", text: Field]
+      | [tag: "confirm_name", name: Field]
+      | [tag: "command", text: Field]
+      | [tag: "long", text: Field])[];
+  };
+  "apps.remove.by_verb.by_instance": {
+    /** remove an app instance, data kept or deleted (called by sys apps plan|start remove <instance>): hs sys apps remove plan|start <instance> [--delete-data] [--confirm <instance>] [--confirm-data <instance>]; the same lines as plan|start */
+    words: ["apps", "remove", "<verb>", "<instance>"];
+    path: "/apps/remove/{verb}/{instance}";
+    method: "get";
+    class: "read";
+    params: { verb: string; instance: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
+  "apps.start.by_action": {
+    /** install it as one guided job: read needs ask run check done (hs sys apps start install <name> --tag <tag from the plan> [--set KEY=value]... [--ask] [--from <step>]): status started, unit, job; a secret answer is one line on stdin; a package of an added repository needs --confirm <name> */
+    words: ["apps", "start", "<action>"];
+    path: "/apps/start/{action}";
+    method: "post";
+    class: "start";
+    params: { action: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "apps.versions": {
+    /** the installed apps with their versions and update policy: name, instance, package version, app version offered, app version running (- when not known), policy (notify|pinned), state (current|update|pinned) */
+    words: ["apps", "versions"];
+    path: "/apps/versions";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, instance: Field, package_version: Field, app_offered: Field, app_running: Field, policy: "notify" | "pinned", state: "current" | "update" | "pinned"])[];
+  };
   "audit": {
     /** who did what: the commands that changed the server; id, time (epoch seconds), actor, result ok|failed, exit, command (hs sys audit [N]) */
     words: ["audit"];
@@ -1537,6 +1642,17 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "pkg.asset.by_name.by_file": {
+    /** the bytes of the icon or a screenshot of a package, from its newest verified release (what pkg show lists) */
+    words: ["pkg", "asset", "<name>", "<file>"];
+    path: "/pkg/asset/{name}/{file}";
+    method: "get";
+    class: "read";
+    params: { name: string; file: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "pkg.available": {
     /** what the repositories offer as data: repo, package, kind, version, applied version (- = not installed) */
     words: ["pkg", "available"];
@@ -1625,6 +1741,44 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "pkg.show.by_name": {
+    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1 */
+    words: ["pkg", "show", "<name>"];
+    path: "/pkg/show/{name}";
+    method: "get";
+    class: "read";
+    params: { name: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "status", status: "ok" | "refused"]
+      | [tag: "reason", text: Field]
+      | [tag: "name", name: Field]
+      | [tag: "kind", kind: Field]
+      | [tag: "repo", repo: Field]
+      | [tag: "version", version: Field]
+      | [tag: "tag", tag2: Field]
+      | [tag: "commit", commit: Field]
+      | [tag: "title", text: Field]
+      | [tag: "description", text: Field]
+      | [tag: "description_de", text: Field]
+      | [tag: "audience", audience: Field]
+      | [tag: "requires_core", text: Field]
+      | [tag: "icon", text: Field]
+      | [tag: "category", text: Field]
+      | [tag: "app_version", text: Field]
+      | [tag: "upstream", text: Field]
+      | [tag: "needs", list: Field]
+      | [tag: "input", input: Field]
+      | [tag: "instances", text: Field]
+      | [tag: "ram_mb", count: Field]
+      | [tag: "disk_gb", count: Field]
+      | [tag: "ports", list: Field]
+      | [tag: "gpu", yes_no: Field]
+      | [tag: "screenshot", path: Field]
+      | [tag: "route", name: Field, port: Field, scheme: Field, exposure: Field, _default: "yes" | "no"]
+      | [tag: "ask", key: Field, label: Field, type: Field, choices: Field, _default: "yes" | "no", pattern: Field, when: Field]
+      | [tag: "step", name: Field, text: Field])[];
+  };
   "pkg.start.by_action": {
     /** do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name> */
     words: ["pkg", "start", "<action>"];
@@ -1635,6 +1789,17 @@ export interface SysOperations {
     stdin: "no";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "pkg.states": {
+    /** the lifecycle stage of every package: name, kind, stage (available|installed|on|running), flags (comma list of update|waits|orphan|pending|failed|unhealthy|stopped, - = none), repo, available version, installed version, instances (comma list, - = none), title */
+    words: ["pkg", "states"];
+    path: "/pkg/states";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, kind: Field, stage: "available" | "installed" | "on" | "running", flags: Field, repo: Field, available: Field, installed: Field, instances: Field, title: Field])[];
   };
   "pool.disks": {
     /** disks the interface offers (device, size, role) */

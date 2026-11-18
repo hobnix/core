@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "Installing an app is one guided job with a plan first"
+body  = """The plan of an app is read from its signed release before anything is installed: what it creates, what it needs and which questions it asks. The install then runs as one job with the steps read, needs, ask, run, check and done, installs exactly the release shown in the plan, and ends with where to open the app.
+
+Not tested on hardware yet. The web dialog follows in a later release."""

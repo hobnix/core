@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change an instance without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: eine Instanz ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <instance> <start|stop|restart|snapshot|restore|delete-snapshot|add-storage|remove-storage|set|ip|update|update-all|delete|create> [--ram <MB|none>] [--cpu <N|none>] [--disk <GB>] [--autostart yes|no] [--docker yes|no] [--address <ip>] [--type container|docker|vm] [--profile <network profile>] [--pool <incus pool>] [--iso <name.iso>] [--bind <fast|shares|sensitive>:<name>:<path>[:ro] ...] [--snapshot <name>] [--label <name>] [--kind fast|shares|sensitive] [--name <storage>] [--path <inside>] [--readonly] [--as <uid>:<gid>] [--device <name>] [--confirm <word>]
+# args: plan|start <instance> <start|stop|restart|snapshot|restore|delete-snapshot|add-storage|remove-storage|set|ip|update|update-all|delete|create> [--ram <MB|none>] [--cpu <N|none>] [--disk <GB>] [--autostart on|off|yes|no] [--docker yes|no] [--address <ip>] [--type container|docker|vm] [--profile <network profile>] [--pool <incus pool>] [--iso <name.iso>] [--bind <fast|shares|sensitive>:<name>:<path>[:ro] ...] [--snapshot <name>] [--label <name>] [--kind fast|shares|sensitive] [--name <storage>] [--path <inside>] [--readonly] [--as <uid>:<gid>] [--device <name>] [--confirm <word>]
 # System command (hs sys ct plan|start): for the interface, timers and tests. It never asks and prints plain
 # key<TAB>value lines like pool-change.sh. The questions of the console wizards are
 # ct-guided.sh's; the plan is manage-ct.sh --dry-run sorted into lines.
@@ -101,10 +101,11 @@ for pair in "ram:$ram" "cpu:$cpu" "disk:$disk"; do
   v=${pair#*:}
   [ -z "$v" ] || [ "$v" = none ] || [[ "$v" =~ ^[0-9]+$ ]] || refuse "${pair%%:*} must be a number (or none), got '$v'"
 done
-for pair in "autostart:$autostart" "docker:$docker"; do
-  v=${pair#*:}
-  [ -z "$v" ] || [ "$v" = yes ] || [ "$v" = no ] || refuse "${pair%%:*} is yes or no"
-done
+[ -z "$autostart" ] || [ "$autostart" = on ] || [ "$autostart" = off ] || [ "$autostart" = yes ] || [ "$autostart" = no ] || refuse "autostart is on or off"
+[ -z "$docker" ] || [ "$docker" = yes ] || [ "$docker" = no ] || refuse "docker is yes or no"
+[ -z "$autostart" ] || [ "$action" = set ] || [ "$action" = stop ] || refuse "--autostart belongs to set and stop"
+# on a stop, --autostart off means: also keep it off at boot (no other value makes sense there)
+[ "$action" != stop ] || [ -z "$autostart" ] || [ "$autostart" = off ] || [ "$autostart" = no ] || refuse "a stop can only keep the instance off at boot: --autostart off"
 case "$type" in container|docker|vm) ;; *) refuse "type is container, docker or vm" ;; esac
 [ "$action" = create ] || [ -z "$profile" -a ${#binds[@]} -eq 0 ] || refuse "--profile and --bind belong to create"
 [ "$action" = create ] || [ -z "$pool$iso" ] || refuse "--pool and --iso belong to create"
@@ -142,7 +143,8 @@ fi
 # the command line of manage-ct.sh for this change
 margs=("$ct")
 case "$action" in
-  start|stop|restart) margs+=("--$action") ;;
+  start|stop|restart) margs+=("--$action")
+    [ "$action" != stop ] || [ -z "$autostart" ] || margs+=(--keep-off) ;;
   snapshot)        margs+=(--snapshot); [ -z "$label" ] || margs+=("$label") ;;
   restore)         margs+=(--restore "$snap") ;;
   delete-snapshot) margs+=(--delete-snapshot "$snap") ;;
@@ -218,7 +220,8 @@ fi
 echo "status	ok"
 case "$action" in
   start)   printf 'heading\tstart %s\nstep\tstart the instance\n' "$ct" ;;
-  stop)    printf 'heading\tstop %s\nstep\tstop the instance\n' "$ct" ;;
+  stop)    printf 'heading\tstop %s\nstep\tstop the instance\n' "$ct"
+           [ -z "$autostart" ] || printf 'step\tkeep it off at boot\n' ;;
   restart) printf 'heading\trestart %s\nstep\tstop and start the instance\n' "$ct" ;;
   snapshot) printf 'heading\tsnapshot of %s\nstep\tsave the disk of the instance as it is now\nnote\tAttached storage (shares, volumes) is not part of a snapshot.\n' "$ct" ;;
   restore) printf 'heading\trestore %s to %s\n' "$ct" "$snap"
@@ -232,7 +235,7 @@ case "$action" in
        [ -z "$ram" ] || printf 'step\tmemory limit: %s\n' "$([ "$ram" = none ] && echo none || echo "$ram MiB")"
        [ -z "$cpu" ] || printf 'step\tCPU limit: %s\n' "$cpu"
        [ -z "$disk" ] || printf 'step\tdisk size: %s GiB\nnote\tA disk can only grow.\n' "$disk"
-       [ -z "$autostart" ] || printf 'step\tstart at boot: %s\n' "$autostart"
+       [ -z "$autostart" ] || printf 'step\tstart at boot: %s\n' "$([ "$autostart" = on ] || [ "$autostart" = yes ] && echo on || echo off)"
        [ -z "$docker" ] || printf 'step\tDocker support: %s\nnote\tRestart the instance for the Docker setting to take effect.\n' "$docker" ;;
   ip) printf 'heading\tfixed address for %s\nstep\treserve %s in UniFi and restart the instance\nnote\tThe instance restarts; its services are down for a moment.\n' "$ct" "$address" ;;
   update) printf 'heading\tupdate %s\nstep\tsnapshot the instance (the way back)\nstep\tupdate the software inside\nnote\tIf something breaks, restore the snapshot before-update-....\n' "$ct" ;;

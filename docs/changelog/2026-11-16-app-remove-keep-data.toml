@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "change"
+title = "Remove an app and choose to keep or delete its data"
+body  = """On the Apps page the trash button of an instance opens Remove. The plan lists what goes (the instance, its service description, its fixed address in UniFi) and what stays (the shares and volumes with data, plus what the package says it keeps). Keeping the data is the default: a later install finds it again. Deleting the data is a separate choice and asks for the name of the app a second time; a share is then taken away with its folder kept as `<share>.deleted-<date>`. Apps installed before the record of what an install creates get a read-only list of the instance and its service description, and nothing else is touched. `hs ct remove` and `hs pkg remove` keep their output and now point to it. System command: `hs sys apps plan|start remove <instance>`.
+
+Not tested on hardware yet."""

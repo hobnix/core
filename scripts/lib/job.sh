@@ -37,7 +37,7 @@ hs_job_record() {
   local cmd=${1:-} out rc=0 id=${2:-} line text
   case "$cmd" in
     new|run|wait|resume|finish|reconcile|uncancel) ;;
-    error)   # ADR 0018: only the Python writer knows it; an older or newer Rust binary that does not falls back
+    error|result)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
       _hs_job_record_write "$@" && return
       python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"; return ;;
     step|progress)   # the Rust writer does not count the change counter up (the Python one does): done here, once per second at most

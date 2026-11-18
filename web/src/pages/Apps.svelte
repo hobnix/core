@@ -2,22 +2,37 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { openCreate, ui, track, showTab } from '../ui.svelte.js';
+  import { openCreate, openPlan, jobRunning, ui, track, showTab } from '../ui.svelte.js';
   import { start, get } from '../api.js';
-  import RunRecipe from '../forms/ops/RunRecipe.svelte';
+  import InstallDialog from '../forms/ops/InstallDialog.svelte';
+  import RemoveApp from '../forms/ops/RemoveApp.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
+  import StageBadge from '../ui/StageBadge.svelte';
+  import Chip from '../ui/Chip.svelte';
+  import { parseStates, parseHealth, stageActions } from './states.js';
   import { link } from './instances/ct.js';
   import { appAction } from './apps.js';
 
   const list = poll('/api/sys/recipes/list', 30000);
+  // the lifecycle stage and flags of every app (ADR 0027): name, kind, stage, flags, repo, available, installed, instances, title
+  const stateList = poll('/api/sys/apps/list', 30000);
+  const stageOf = $derived(parseStates(rows(stateList)));
+  // the declared health check of the apps that have one: name, healthy|unhealthy|stopped. Follows the event stream (topic apps-health); the
+  // timer is only the fallback while the stream is down
+  const healthList = poll('/api/sys/apps/health', 30000);
+  const healthOf = $derived(parseHealth(rows(healthList)));
   // name, available version, applied version (- = not known), state: current | update | unknown
   const vers = poll('/api/sys/recipes/versions', 30000);
   const verOf = $derived(new Map(rows(vers).map((r) => [r[0], { avail: r[1], applied: r[2], vstate: r[3] }])));
+  // the app's own version and its update policy, one row per installed instance: name, instance, package, offered, running (- = not known), policy, state
+  const appVers = poll('/api/sys/apps/versions', 30000);
+  // keyed by instance: a second instance of one recipe has its own row
+  const appVerOf = $derived(new Map(rows(appVers).map((r) => [r[1], { name: r[0], pkg: r[2], offered: r[3], running: r[4], policy: r[5], astate: r[6] }])));
   // services app: name, container, ... the containers that have a described service
   const svc = poll('/api/sys/services/app', 30000);
   const withService = $derived(new Set(rows(svc).map((r) => r[1])));
@@ -26,7 +41,8 @@
   // name, description, containers (comma separated, - for none), state: installed | partly | not installed | parked | unknown
   const apps = $derived(rows(list).map((r) => {
     const v = verOf.get(r[0]) ?? { avail: '-', applied: '-', vstate: 'unknown' };
-    return { name: r[0], desc: r[1], cts: r[2] === '-' ? '' : r[2], state: r[3], ...v, ver: v.applied !== '-' ? v.applied : v.avail !== '-' ? v.avail : '' };
+    const avs = (r[2] === '-' ? [] : r[2].split(',')).map((c) => ({ inst: c, ...appVerOf.get(c) })).filter((x) => x.name === r[0]);
+    return { name: r[0], desc: r[1], cts: r[2] === '-' ? '' : r[2], state: r[3], ...v, avs, ver: v.applied !== '-' ? v.applied : v.avail !== '-' ? v.avail : '' };
   }));
   const installed = $derived(apps.filter((a) => a.state === 'installed').length);
 
@@ -39,7 +55,11 @@
   };
   const tag = (a) => (a.state === 'installed' ? (a.cts ? `in ${a.cts.split(',').join(', ')}` : 'installed') : a.state);
 
-  const run = (a) => openCreate(RunRecipe, { recipe: a.name });
+  // Start/Stop of one instance of an app (the plan of the instance, like the Instances page); the container docker is not stopped from here
+  const flipCt = (c, running) => openPlan('ct', [c, running ? 'stop' : 'start'], `${running ? 'Stop' : 'Start'} ${c}`);
+  const run = (a) => (a.state === 'installed' ? openPlan('recipes', [a.name, 'run'], `${a.name}`) : openCreate(InstallDialog, { pkg: a.name }));
+  // Remove one instance of an app: the plan, the data question, the typed name (step 11)
+  const removeCt = (c) => openCreate(RemoveApp, { app: c, ondone: () => refresh(['/api/sys/apps/list', '/api/sys/recipes/list']) });
   // the form only writes the description: read the services and the plan again now, so the Services page's Apply count is right at once
   const services = (a) => openCreate(AppServices, { app: a.name, cts: a.cts ? a.cts.split(',') : [], ondone: () => refresh(['/api/sys/services/app', '/api/sys/services/list', '/api/sys/services/routes']) });
 
@@ -186,13 +206,39 @@
           {:else}
             <span class="vr dim">-</span>
           {/if}
+          {#each a.avs as av (av.inst)}
+            {#if av.running !== '-' || av.policy === 'pinned'}
+              <span class="vr" use:tip={av.astate === 'update' ? `${av.inst}: running ${av.running}, the release offers ${av.offered}` : `${av.inst}: the version of the app itself, read on this server`}>
+                {#if av.running !== '-'}{av.running}{#if av.pkg !== '-'} <span class="dim">(package {av.pkg})</span>{/if}{#if av.astate === 'update'} <span class="vnew">→ {av.offered}</span>{/if}{/if}
+                {#if av.policy === 'pinned'}<Chip tone="info" title="Pinned: this app is never offered an update">pinned</Chip>{/if}
+              </span>
+            {/if}
+          {/each}
         {:else if col.key === 'name'}
           <span id="app-{a.name}" class="nm" class:hl={hl === a.name}><i class="ph ph-{icons[a.name] ?? 'package'}" style="color:{on ? 'var(--accent-ink)' : 'var(--fg-3)'}"></i>{a.name}</span>
         {:else if col.key === 'desc'}
           <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c)}>{c}</a>{/each}</div>{/if}
         {:else if col.key === 'state'}
-          <StatusDot state={on ? 'ok' : a.state === 'partly' ? 'warn' : 'off'} label={a.state} />
+          {#if stageOf.get(a.name)}
+            <StageBadge stage={stageOf.get(a.name).stage} flags={stageOf.get(a.name).flags.filter((f) => f !== 'unhealthy' || !healthOf.has(a.name))} />
+          {:else}
+            <StatusDot state={on ? 'ok' : a.state === 'partly' ? 'warn' : 'off'} label={a.state} />
+          {/if}
+          {#if healthOf.get(a.name)}
+            <div class="hl-row"><StatusDot state={healthOf.get(a.name).dot} label={healthOf.get(a.name).word} /></div>
+          {/if}
         {:else}
+          {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
+            {#if c !== 'docker'}
+              {@const live = stageOf.get(a.name).stage === 'running' || !stageOf.get(a.name).flags.includes('stopped')}
+              <Button variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
+            {/if}
+          {/each}
+          {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
+            {#if c !== 'docker'}
+              <Button variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
+            {/if}
+          {/each}
           <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
           <Button variant="ghost" class="btn-icon" icon={copied === a.name ? 'check' : 'terminal-window'} tooltip={copied === a.name ? 'Copied' : 'Copy the terminal command: hs recipe ' + a.name} aria-label="Copy hs recipe {a.name}" onclick={() => copy(a.name)} />
         {/if}
@@ -241,6 +287,7 @@
   .nm.hl { outline: 2px solid var(--accent); outline-offset: 3px; }
   .ds { font-size: 12.5px; color: var(--fg-3); }
   .in { font-size: 12px; color: var(--fg-2); }
+  .hl-row { margin-top: 2px; }
   :global(.btn.apps-go) { min-width: 96px; }
   .vr { font: 500 12.5px var(--mono); }
   .vr.dim { color: var(--fg-3); }

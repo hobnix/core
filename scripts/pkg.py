@@ -2,8 +2,13 @@
 """Packages: recipes and extensions as one thing (docs/PLAN-packages.md, step 1). Standard library only.
 
   pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
+  pkg.py states --market F --parts F --pending F --recipes F --running F   the lifecycle stage and flags of every package (pkg_states.py, ADR 0027)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
   pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
+  pkg.py validate [--warn]                                 check every manifest (--warn: also print what is only advised, on stderr) (and that a recipe's header agrees); exit 1 on a problem
+    return out
+
+
   pkg.py repo-unbumped <tag> [<folder>]                    packages of a repository checkout whose folder changed since <tag> without a version rise (package.toml AND index.toml); exit 1 when any
   pkg.py validate                                          check every manifest (and that a recipe's header agrees); exit 1 on a problem
   pkg.py check-draft                                       a package.toml draft on stdin: level, where, text per finding; exit 1 on an error (web package builder)
@@ -75,6 +80,16 @@ def _load_pkg_perms():
 
 
 pkg_perms = _load_pkg_perms()
+
+
+def _load_pkg_app():
+    spec = importlib.util.spec_from_file_location("pkg_app", os.path.join(HERE, "lib", "pkg_app.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_app = _load_pkg_app()
 
 
 def capability_toml(folder):
@@ -318,7 +333,7 @@ def capability_problems(m, path=None):
     return out
 
 
-def manifest_problems(m, path=None, seen=None):
+def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
     """[text] for one package.toml dict. `path` = its file: the checks that need the folder (name = folder, the script and its header, the
     capability.toml of an extension) run only then; None = a draft that is not on disk yet (hs pkg check-draft, the web package builder, ADR 0018)."""
     out = []
@@ -401,14 +416,21 @@ def manifest_problems(m, path=None, seen=None):
         bad(t)
     for t in pkg_perms.manifest_problems(n, m, capability_toml(os.path.dirname(path)) if path else None):
         bad("permissions: " + t)
+    errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
+    out += errs
+    if warnings is not None:
+        warnings += warns
     return out
 
 
-def problems():
-    """[(package, text)] for every manifest."""
+def problems(warnings=None):
+    """[(package, text)] for every manifest; `warnings` (a list) collects (package, text) for what is only advised (hs pkg validate --warn)."""
     out, seen = [], {}
     for path, m in manifests():
-        out += [(m.get("name", "?"), t) for t in manifest_problems(m, path, seen)]
+        w = [] if warnings is not None else None
+        out += [(m.get("name", "?"), t) for t in manifest_problems(m, path, seen, warnings=w)]
+        if warnings is not None:
+            warnings += [(m.get("name", "?"), t) for t in w]
     return out
 
 
@@ -422,7 +444,7 @@ def draft_findings(text):
     out = []
     for t in manifest_problems(m):
         key = t.split(" ", 1)[0].rstrip(":")
-        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions") else "-", t))
+        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions", "icon", "category", "description", "description_de", "upstream", "app_version", "screenshots") else "-", t))
     if not out:
         out.append(("warn", "-", "Checked without files: the script and its header lines, and capability.toml, are checked when the package is built (hs pkg validate)."))
     return out
@@ -509,7 +531,7 @@ def repo_unbumped(folder, since):
     return out
 
 
-def repo_check(folder):
+def repo_check(folder, warnings=None):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
     try:
@@ -518,6 +540,7 @@ def repo_check(folder):
     except (OSError, tomllib.TOMLDecodeError) as e:
         return [f"index.toml: {e}"]
     level = api_level()
+    warnings = [] if warnings is None else warnings
     listed = set()
     for name, e in sorted(idx.items()):
         listed.add(os.path.normpath(e.get("path", "")))
@@ -547,6 +570,12 @@ def repo_check(folder):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
+        errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
+        out += [f"{name}: {t}" for t in errs]
+        warnings += [f"{name}: {t}" for t in warns]
+        for k in ("icon", "category", "app_version"):
+            if m.get(k) != e.get(k):
+                out.append(f"{name}: {k} differs between index and package.toml")
     for sub in ("recipes", "extensions", "capabilities"):
         d = os.path.join(folder, sub)
         if os.path.isdir(d):
@@ -662,11 +691,16 @@ def main(argv):
                 typ = m.get("type") if m.get("type") in ("feature", "provider") else "-"
                 title = (e.get("title") or m.get("title") or "-").replace("\t", " ")
                 print("\t".join([pname, r_name, ver, inst, state, ",".join(req) or "-", typ, title]))
-    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove", "rollback", "rollback-candidates"):
+    elif cmd in ("repo", "fetch", "available", "market", "show", "asset", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod.run(MAIN, cmd, rest)
+    elif cmd == "states":
+        spec = importlib.util.spec_from_file_location("pkg_states", os.path.join(HERE, "pkg_states.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.run(rest)
     elif cmd == "new":
         spec = importlib.util.spec_from_file_location("pkg_new", os.path.join(HERE, "pkg_new.py"))
         mod = importlib.util.module_from_spec(spec)
@@ -688,9 +722,12 @@ def main(argv):
             print(t)
         return 1 if p else 0
     elif cmd == "repo-check":
-        p = repo_check(rest[0] if rest else ".")
+        warns = []
+        p = repo_check(rest[0] if rest else ".", warns)
         for t in p:
             print(t)
+        for t in warns:
+            print("warning: " + t, file=sys.stderr)
         return 1 if p else 0
     elif cmd == "repo-unbumped":    # repo-unbumped <tag> [<folder>]: changed since the tag without a version rise (exit 1)
         if not rest:
@@ -711,7 +748,9 @@ def main(argv):
             print(f"{lv}\t{where}\t{t}")
         return 1 if any(f[0] == "error" for f in found) else 0
     elif cmd == "validate":
-        p = problems()
+        p = problems(warns := [] if "--warn" in rest else None)
+        for n, t in warns or []:
+            print(f"warning: {n}	{t}", file=sys.stderr)
         for n, t in p:
             print(f"{n}\t{t}")
         return 1 if p else 0
