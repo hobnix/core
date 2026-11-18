@@ -1,5 +1,6 @@
 <script>
   import Button from './ui/Button.svelte';
+  import TextInput from './ui/TextInput.svelte';
   import { tip } from './ui/tooltip.svelte.js';
   import { onMount } from 'svelte';
   import { hello, login, setup } from './api.js';
@@ -132,11 +133,11 @@
           {/if}
           <form onsubmit={submitSetup}>
             <div class="field"><label for="code">{t({ en: 'One-time code', de: 'Einmalcode' })}</label>
-              <div class="inp"><input id="code" class="mono" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" bind:value={code} /></div></div>
+              <div class="inp"><TextInput id="code" mono autocomplete="off" autocapitalize="characters" spellcheck={false} placeholder="XXXXX-XXXXX-XXXXX-XXXXX" bind:value={code} /></div></div>
             <div class="field"><label for="npw">{t({ en: 'New password for {user}', de: 'Neues Passwort für {user}' }).replace('{user}', info?.local_user ?? 'adminuser')}</label>
-              <div class="inp"><input id="npw" type="password" autocomplete="new-password" bind:value={password} /></div></div>
+              <div class="inp"><TextInput id="npw" type="password" autocomplete="new-password" bind:value={password} /></div></div>
             <div class="field"><label for="npw2">{t({ en: 'Repeat the password', de: 'Passwort wiederholen' })}</label>
-              <div class="inp"><input id="npw2" type="password" autocomplete="new-password" bind:value={password2} /></div></div>
+              <div class="inp"><TextInput id="npw2" type="password" autocomplete="new-password" bind:value={password2} /></div></div>
             <p class="hint">{t({ en: 'At least 10 characters. The code works once; this page is plain HTTP, so do this on your home network only.', de: 'Mindestens 10 Zeichen. Der Code gilt nur einmal; diese Seite läuft über einfaches HTTP, also nur im Heimnetz.' })}</p>
             <Button variant="primary" class="login-submit" type="submit" disabled={busy || !code || !password || !password2}><i class="ph ph-check"></i>{busy ? t({ en: 'Setting up…', de: 'Einrichten…' }) : t({ en: 'Set up this server', de: 'Server einrichten' })}</Button>
             <Button class="login-submit" type="button" onclick={() => { signIn = true; error = ''; }}>{t({ en: 'Already set up? Sign in', de: 'Schon eingerichtet? Anmelden' })}</Button>
@@ -162,12 +163,12 @@
 
         <form onsubmit={submit}>
           {#if realm === 'domain'}
-            <div class="field"><label for="dom">{t({ en: 'Domain', de: 'Domäne' })}</label><div class="inp"><input id="dom" type="text" value={domain?.workgroup} readonly /></div></div>
+            <div class="field"><label for="dom">{t({ en: 'Domain', de: 'Domäne' })}</label><div class="inp"><TextInput id="dom" value={domain?.workgroup} readonly /></div></div>
           {/if}
           <div class="field"><label for="user">{t({ en: 'User name', de: 'Benutzername' })}</label>
-            <div class="inp"><input id="user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder={realm === 'domain' ? 'anna' : (info?.local_user ?? 'adminuser')} bind:value={user} /></div></div>
+            <div class="inp"><TextInput id="user" autocomplete="username" autocapitalize="none" spellcheck={false} placeholder={realm === 'domain' ? 'anna' : (info?.local_user ?? 'adminuser')} bind:value={user} /></div></div>
           <div class="field"><label for="password">{t({ en: 'Password', de: 'Passwort' })}</label>
-            <div class="inp"><input id="password" class="pw" type={show ? 'text' : 'password'} autocomplete="current-password" placeholder="••••••••••••" bind:value={password} />
+            <div class="inp"><TextInput id="password" style="padding-right:42px" type={show ? 'text' : 'password'} autocomplete="current-password" placeholder="••••••••••••" bind:value={password} />
               <button use:tip={show ? t({ en: 'Hide the password', de: 'Passwort verbergen' }) : t({ en: 'Show the password', de: 'Passwort anzeigen' })} type="button" class="eye" aria-label={show ? t({ en: 'Hide the password', de: 'Passwort verbergen' }) : t({ en: 'Show the password', de: 'Passwort anzeigen' })} onclick={() => (show = !show)}><i class="ph ph-{show ? 'eye-slash' : 'eye'}" style="font-size:17px"></i></button></div></div>
           <p class="hint">
             {#if realm === 'domain'}{t({ en: 'Use the account you use for the file shares. Only members of Domain Admins can sign in.', de: 'Das Konto, das du für die Freigaben nutzt. Nur Mitglieder von Domain Admins können sich anmelden.' })}
@@ -209,10 +210,9 @@
   .seg button:disabled { opacity: 0.45; cursor: not-allowed; }
   form { display: flex; flex-direction: column; gap: 14px; }
   .inp { position: relative; }
-  .inp input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--fg); font: inherit; }
-  .inp input[readonly] { color: var(--fg-3); font-family: var(--mono); }
-  .inp input:focus-visible { border-color: var(--accent); outline: none; }
-  .pw { padding-right: 42px !important; }
+  .inp :global(input) { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--fg); font: inherit; }
+  .inp :global(input[readonly]) { color: var(--fg-3); font-family: var(--mono); }
+  .inp :global(input:focus-visible) { border-color: var(--accent); outline: none; }
   .eye { position: absolute; right: 2px; top: 2px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: none; color: var(--fg-3); padding: 0; }
   .eye:hover { color: var(--fg); }
   .hint { margin: 0; color: var(--fg-3); font-size: 12.5px; }

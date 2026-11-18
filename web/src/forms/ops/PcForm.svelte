@@ -1,6 +1,7 @@
 <script>
   // Save a game PC: hs sys ext games plan|start <name> add --mac <mac> [--ip <ip>]
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { Field, TextInput } from '../../ui/index.js';
 
   let { onclose, ondone } = $props();
 
@@ -21,18 +22,15 @@
 
 <CreateDialog title="Add a game PC" kicker="Add" area="ext/games" {args} {onclose} {ondone}>
   {#snippet form()}
-    <div class="field">
-      <label for="pc-name">Name</label>
-      <input id="pc-name" class="input" bind:value={name} placeholder="gaming-pc" maxlength="41" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="field">
-      <label for="pc-mac">MAC address of its network card</label>
-      <input id="pc-mac" class="input" bind:value={mac} placeholder="aa:bb:cc:dd:ee:ff" maxlength="17" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="field">
-      <label for="pc-ip">Address on the LAN (optional)</label>
-      <input id="pc-ip" class="input" bind:value={ip} placeholder="10.10.10.50" maxlength="15" autocomplete="off" spellcheck="false" />
-    </div>
+    <Field label="Name" id="pc-name">
+      <TextInput bind:value={name} placeholder="gaming-pc" maxlength={41} autocomplete="off" spellcheck={false} />
+    </Field>
+    <Field label="MAC address of its network card" id="pc-mac">
+      <TextInput bind:value={mac} placeholder="aa:bb:cc:dd:ee:ff" maxlength={17} autocomplete="off" spellcheck={false} />
+    </Field>
+    <Field label="Address on the LAN (optional)" id="pc-ip">
+      <TextInput bind:value={ip} placeholder="10.10.10.50" maxlength={15} autocomplete="off" spellcheck={false} />
+    </Field>
     <div class="hint">The MAC address is what the Wake-on-LAN packet goes to. With an address the page can also see whether Sunshine on that PC answers. A name that is saved already gets the new values.</div>
   {/snippet}
 </CreateDialog>

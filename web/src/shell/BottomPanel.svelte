@@ -1,6 +1,7 @@
 <script>
   import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
+  import Select from '../ui/Select.svelte';
   import JobRecords from './JobRecords.svelte';
   import { tr } from '../i18n.js';
   import { onDestroy } from 'svelte';
@@ -188,9 +189,9 @@
       {:else if tab === 'logs'}
         <div class="bar">
           <label for="lvl">Show</label>
-          <select id="lvl" class="input" style="width:auto;min-height:26px;padding:2px 8px;font-size:12px" bind:value={level}>
+          <Select id="lvl" style="width:auto;min-height:26px;padding:2px 8px;font-size:12px" bind:value={level}>
             <option value="err">errors</option><option value="warning">warnings and errors</option><option value="info">everything</option>
-          </select>
+          </Select>
           <span style="color:var(--color-neutral-500)">today, newest first</span>
         </div>
         <div class="loglist">

@@ -1,6 +1,7 @@
 <script>
   import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   // The create dialog (design: "Create dialog", 960 px, form on the left, live plan on the right). A form component renders it with its own fields:
   //
   //   <CreateDialog title="New share" area="shares" args={() => [...] | null} stdin={() => password} onclose={...} ondone={...}>
@@ -124,7 +125,7 @@
         {#if p?.confirm_name && allowed}
           <div class="field" style="margin-top:10px">
             <label for="cf2">Type <code style="color:var(--color-text)">{p.confirm_name}</code> to confirm</label>
-            <input id="cf2" class="input" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck="false" />
+            <TextInput id="cf2" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck={false} />
           </div>
         {/if}
         {#if startError}<div class="refused" style="margin-top:8px"><i class="ph ph-warning-circle"></i>{startError}</div>{/if}

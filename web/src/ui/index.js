@@ -22,6 +22,7 @@ export { default as Select } from './Select.svelte';           // native select.
 export { default as Textarea } from './Textarea.svelte';       // native textarea.input
 export { default as Segmented } from './Segmented.svelte';     // 2-4 short choices as joined radio segments (ChoiceList is the explained one)
 export { default as Checkbox } from './Checkbox.svelte';       // native checkbox with a clickable label (forms; Switch box is for table cells)
+export { default as Slider } from './Slider.svelte';           // native range: accent-filled track, square thumb; oninput while dragging
 export { default as Card } from './Card.svelte';             // the one card: title or header slot, actions, `dither` corner for the node card
 export { default as Row } from './Row.svelte';               // flex row, gap from the spacing tokens
 export { default as Stack } from './Stack.svelte';           // flex column, gap from the spacing tokens

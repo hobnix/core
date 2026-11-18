@@ -1,5 +1,6 @@
 <script>
   import Button from '../ui/Button.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import { onMount } from 'svelte';
   import { plan as askPlan, start as doStart } from '../api.js';
   import { ui, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
@@ -109,7 +110,7 @@
     {#if !saved && allowed && p.confirm_name}
       <div class="confirm">
         <label for="cf">Type <code>{p.confirm_name}</code> to confirm</label>
-        <input id="cf" class="input" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck="false" />
+        <TextInput id="cf" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck={false} />
       </div>
     {/if}
     {#if saved}
@@ -150,7 +151,7 @@
   .confirm { padding: 14px 22px; border-top: 1px solid var(--line); }
   .confirm label { display: block; margin-bottom: 6px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   .confirm code { color: var(--fg); text-transform: none; letter-spacing: 0; }
-  .confirm .input { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
+  .confirm :global(.input) { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
   .dfoot { flex: none; display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 14px 22px; background: var(--panel-2); border-top: 1px solid var(--line); }
   .note { flex: 1; min-width: 180px; color: var(--fg-3); font-size: 12.5px; }
 </style>
