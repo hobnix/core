@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11).
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 is not reviewed.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -240,3 +240,60 @@ Decided 2026-11-18:
 - **A failed job's coded error stays on the row until the user dismisses it.**
 - **Acknowledge defaults to "until it resolves"**, with a snooze in the More menu.
 - **A stream outage shows only in the top bar**, no banner.
+
+## 5. Component inventory (#773)
+
+Draft, not reviewed. Each component is traced to the templates (3.2) and behaviours (section 4) that need it. A component with one user is not shared and stays in its page. Counts are from the survey of 2026-11-18 (files that use the tag, rough). `ui` components know nothing about the server; `shell` components may read the stores (jobs, events, session).
+
+### 5.1 What exists and what changes
+
+| Component | Today | Change | Needed by |
+|---|---|---|---|
+| `Button` | about 57 files | takes "not allowed" with a reason (4.9); icon variant with tooltip and screen-reader label (#446) | every template |
+| `StatusDot` | about 33 | takes a text label, so a state is never only a colour (4.7) | List, Object, Feed |
+| `Chip` | about 17 | one of `Chip` and the `tag` class stays (#446); gets a kind for trust (4.10) and for the status in an Object header | List, Object, Marketplace |
+| `Banner` | about 31 | gets a coded error variant (4.4) | every template |
+| `Kv`, `EmptyState`, `Skeleton`, `Field`, `TextInput`, `Textarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `ChoiceList`, `Tooltip` | in use | none | Object, Settings, Flow |
+| `PageTabs` | 3 pages | tab in the address (4.6); used by Object pages and for list filter tabs | Object, List |
+| `Drawer` | 12 files | becomes the quick look overlay (3.3), built on `Dialog` | List |
+| `Split` | 9 pages | removed after the quick look replaces it; the list no longer narrows | List |
+| `Wizard` | 2 pages | sits on a `Stepper` with progress (#448) | Flow |
+| `Table`, `UsageBar`, `Spark` (shell) | in use | `Table`: selected row in the address, row action menu | List |
+| `PageHeader` (shell) | in use | status chip beside the name, More menu for actions beyond two (3.1) | every template |
+| `PageFrame`, `PageState` (shell) | in use | none | every template |
+| `PlanDialog`, `CreateDialog` (shell) | in use | rebuilt on `Dialog` (#447) | every action |
+| `JobRecords`, `BottomPanel` (shell) | in use | feed the job strip and the Jobs page; one shared pending lookup (4.1) | Object, Feed |
+| `Fresh` (shell) | in use | none | top bar |
+
+### 5.2 New components
+
+| Component | Where | What | Needed by | Issue |
+|---|---|---|---|---|
+| `Card` / `Section` | `ui` | header slot, actions; replaces the `class="card"` blocks (58 files) | Group, Object, Settings | #445 |
+| `Row`, `Stack`, one muted text style | `ui` | gaps from the tokens; replaces `mute` and `muted` | all | #445 |
+| `Icon`, icon variant of `Button` | `ui` | one list of names | all | #446 |
+| `Dialog` | `ui` | focus trap, Escape, backdrop; base of plans, create and quick look | all actions | #447 |
+| `Menu` | `ui` | the More menu and row actions | every template | #447 |
+| `Toast` | `ui` | a result that needs no dialog | to be confirmed (5.4) | #447 |
+| `QuickLook` | `ui` | overlay above a list; the `Drawer` reworked | List | #447 |
+| `Progress`, `StepList` | `ui` | job step and progress | Jobs, Flow, Object job strip | #448 |
+| `Timeline` | `ui` | time-ordered entries with filters; an entry has severity, object link, optional acknowledge | Feed | #448 |
+| `Stepper` | `ui` | the steps of a Flow; under `Wizard` | Flow | #448 |
+| `ErrorNote` | `ui` | code, what, why, next step, link to the guide | every template | new |
+| `StateCard` | `ui` | a `Card` with status dot, one line and a link; the card of a Group page | Group (8 pages) | new |
+| `LinkedObjects` | `shell` | related objects with status, linking both ways (1.2) | Object (5 pages), quick look | new |
+| `JobStrip` | `shell` | the running or last jobs of one object | Object (5 pages) | new |
+| `DangerZone` | `ui` | the marked section for destructive actions | Object (5 pages) | new |
+| `Inbox` (bell and list) | `shell` | the count of 4.11 and the notification list | top bar, Feed | new |
+
+### 5.3 Left out on purpose
+
+`GenBlock`, `GenericPage`, `Terminal`, `VmConsole`, `Halftone`, the file manager parts and `Search` have one user each or are tools. They stay where they are. A Spinner is the global `spin` class, not a component.
+
+### 5.4 Open questions for review
+
+- Is `Toast` needed? Results show in the Jobs drawer and on the row (4.1); no template uses a toast. If nobody finds a use, it is dropped from #447.
+- Are `Card` and `Section` one component or two?
+- Four items have no issue yet: `ErrorNote`, `StateCard`, `LinkedObjects` plus `JobStrip` and `DangerZone` (the Object page pieces), `Inbox`. One new issue each, or one issue "Object and Group page pieces"?
+- Does the rule "`ui` is pure, `shell` may read stores" hold for the new components as listed?
+- #448 as written lists `Progress`, `StepList`, `Timeline` and `Stepper`; the inventory keeps all four. Is that the right size for one issue?
