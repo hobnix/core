@@ -1,6 +1,7 @@
 <script>
   // The shortcut list (the `?` overlay). Every key is also a button in the toolbar.
-  import { backdropClose } from '../ui/backdrop.js';
+  import Dialog from '../ui/Dialog.svelte';
+  import Button from '../ui/Button.svelte';
 
   let { onclose } = $props();
   const GROUPS = [
@@ -10,10 +11,8 @@
   ];
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), onclose())} />
-
-<div class="dialog-backdrop" role="presentation" use:backdropClose={onclose}>
-  <div class="kdlg" role="dialog" aria-modal="true" aria-labelledby="fmkt">
+<Dialog labelledby="fmkt" width="640px" dismiss {onclose}>
+  <div class="kdlg">
     <div class="dh"><span class="eyebrow">Files</span><h3 id="fmkt">Keyboard shortcuts</h3></div>
     <div class="body">
       {#each GROUPS as g}
@@ -23,12 +22,12 @@
       {/each}
       <p class="foot">Nothing starts from a key: copy, move, rename, new folder and delete open a plan first.</p>
     </div>
-    <div class="dfoot"><button class="btn btn-primary" onclick={onclose}>Close</button></div>
+    <div class="dfoot"><Button variant="primary" onclick={onclose}>Close</Button></div>
   </div>
-</div>
+</Dialog>
 
 <style>
-  .kdlg { width: min(640px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 24px 64px oklch(0 0 0 / 0.5); }
+  .kdlg { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .dh { padding: 18px 22px 12px; border-bottom: 1px solid var(--line); }
   h3 { margin: 4px 0 0; font-size: 18px; }
   .body { padding: 12px 22px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; }
@@ -37,5 +36,4 @@
   kbd { flex: none; min-width: 78px; font: 500 11.5px var(--mono); color: var(--fg); padding: 1px 6px; border: 1px solid var(--line-2); background: var(--panel-2); white-space: nowrap; }
   .foot { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: var(--fg-3); }
   .dfoot { display: flex; justify-content: flex-end; padding: 12px 22px; background: var(--panel-2); border-top: 1px solid var(--line); }
-  @media (max-width: 860px) { .kdlg { width: calc(100% + 32px); margin: -16px; height: 100dvh; max-height: none; } }
 </style>

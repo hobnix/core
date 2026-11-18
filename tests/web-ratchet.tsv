@@ -4,9 +4,9 @@ dashboard/Board.svelte	0	0	0	1	0
 dashboard/Kiosk.svelte	0	0	0	1	0
 files/FmJob.svelte	0	0	0	1	0
 files/FmKeys.svelte	0	0	0	1	0
-files/FmPane.svelte	1	0	0	1	2
-files/FmPicker.svelte	0	0	0	1	2
-files/FmPlan.svelte	5	0	0	1	0
+files/FmPane.svelte	0	0	0	1	2
+files/FmPicker.svelte	0	0	0	1	0
+files/FmPlan.svelte	0	0	0	1	0
 files/FmResult.svelte	0	0	0	1	0
 forms/docker/BindShare.svelte	0	0	0	1	0
 forms/instances/CreateInstance.svelte	0	0	0	1	0
@@ -46,7 +46,7 @@ pages/Data.svelte	0	0	0	1	0
 pages/Docker.svelte	0	0	0	1	0
 pages/Docs.svelte	0	0	0	1	0
 pages/Expiry.svelte	0	0	0	1	0
-pages/Files.svelte	1	0	0	1	0
+pages/Files.svelte	0	0	0	1	0
 pages/Hardware.svelte	0	0	0	1	0
 pages/Health.svelte	0	0	0	1	0
 pages/Instances.svelte	0	0	0	1	0
