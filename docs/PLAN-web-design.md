@@ -436,6 +436,11 @@ The mockups are a Design canvas ("Hobnix web design 0.8.5", private to the owner
 | Marketplace | the List card view with a category rail, a featured app, trust and tested date, a "fits this server" check, Installed and Updates as links (6.3 G4) |
 | Settings page | a generated form in sections, a "changed" marker per field, a floating bar that opens the plan (3.2) |
 | Settings > Updates | a List with content tabs (6.3 G3) |
+| Settings > Updates > Channel: Releases | a Settings page that picks one of three channels; a ladder strip showing where the server sits; each card says whether it is older, the same or newer than the installed version (8.1) |
+| Settings > Capabilities | a list of the optional parts, grouped by purpose, with a state chip (On, Off, Needs setup, Rebuild pending), a Settings button and a switch that opens a plan (8.1) |
+| Capability page: Gateway proxy, setup guide | the guided setup inside the page: a step list and the current step, no dialog (8.1) |
+| Gateway proxy, a step only a person can do | a step the server cannot do itself: the exact command, a copy button, a live check (8.1) |
+| Gateway proxy, set up | the same page once it is configured: state cards, a coded error, the answers as editable rows (8.1) |
 | Feed: Jobs | the Feed template, a job that waits for an answer, a coded error (3.4, 4.4) |
 | Flow: install an app | the Flow template with its stepper (3.2) |
 | Inbox and toast | the bell with problems and notifications, acknowledge and snooze, the toast for a job that asks for input (4.5, 5.4) |
@@ -450,3 +455,20 @@ One idea appears in the boards: the Marketplace "fits this server" check, tracke
 Not seen by me in a browser: the canvas needs the owner's sign-in, so the owner reviewed it.
 
 The boards share components, named as in section 5: `StatusDot`, `Chip`, `TrustLabel`, `Button`, `Banner`, `ErrorNote`, `PageHeader`, `Tabs`, `UsageBar`, `Kv`, `StateCard`, `LinkedObjects`, `JobStrip`, `DangerZone`, `SettingRow` and `AppTile`, shown with all their states in a "Component gallery" board (dark and light, the reference for the gallery issue #449). They take data (a title, a tone, rows) and no nested content, a limit of the canvas format. The page boards use them; the shell pieces (top bar, tree, jobs bar, drawer panel) are components too. Still markup of their own in the boards: the tables and list rows, the Summary tiles and halftone card, the inbox, the dialogs and the quick look.
+
+### 8.1 Releases, Capabilities and guided setup
+
+Boards added after the first review. The owner approved them; nobody has run them in a browser or on hardware.
+
+**Releases (Settings > Updates > Channel).** One place with two tabs, Updates and Channel, because both answer "what does this server run next?". The channel is a setting, not three action buttons: three radio cards, the current one marked with a status shape and the word "Current". Every other card says how it compares with the installed version (Older, Same, Newer). An older channel says that the server waits until that channel catches up; today this rule is a note at the bottom of the page. A ladder strip (Stable, Beta, Edge) shows where the server sits. Picking a card marks the change and shows the floating bar "Review changes"; Edge asks for its name to be typed in the plan, because data on it can be lost. A non-admin sees the cards disabled with the reason. If the release server cannot be reached, a coded error replaces the version line.
+
+**Capabilities.** A list in the List template, grouped by purpose (Core, Network, Watching and keeping), not one flat list. A row has an icon, a one-line description, a state chip, a Settings button when the part has a page, and a switch that shows a plan. The state chip is the addition: "Needs setup" (on, but not configured) and "Rebuild pending" (switched, not yet applied) are different from On, and today they look the same. Tabs All, On, Off, Needs setup; a banner when a part is on but not set up. Extensions stay under Settings > Extensions.
+
+**A capability page and its guided setup (Gateway proxy).** Today a wizard in a dialog walks the `[[settings.steps]]` of `capability.toml`. The proposal is the same data, shown in the page:
+- A page has two views of one data source. Before it is set up, the **guide**: a step list on the left (status shape and a short answer per step) and the current step on the right. After it is set up, the **overview**: state cards, a coded error where something is wrong, and the answers as rows with an Edit button. "Run the setup guide again" is in the header.
+- The guide never applies anything before its last step, "Review and apply", which opens the plan dialog. The user can leave and come back; answers are kept; every step can be skipped.
+- A step has a recommendation tag where the server can tell (for example "fits your tunnel").
+- A step that only a person can do (the wildcard DNS record needs the domain administrator password, which hs never asks for) shows the exact command with a copy button and a live check. The step turns green by itself when the check passes. It does not block the other steps.
+- Live checks (port 80 held, domain found, record answers, certificates) are shown in the step where they matter, not in a column of their own: a third column took space from the step.
+
+What a capability declares for this: its steps (already), a check per step (the rows of `hs sys <area> health`), and for a person's step the command to show. None of this is built; it needs a decision in section 7.4 before an issue.
