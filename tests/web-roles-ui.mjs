@@ -18,20 +18,21 @@ eq('an unknown role on either side is refused (as the server)', [roleOk('root', 
 // the pages
 const admin = tree('admin'), mgr = tree('app-manager'), view = tree('viewer');
 eq('an admin sees every page of the tree', admin, paths(nodeItems('main', null, exts, [], [])));
-for (const p of ['/identity', '/identity/users', '/settings/general', '/settings/advanced', '/settings/capabilities', '/nodes', '/marketplace', '/setup', '/storage/files', '/storage/vault', '/extensions/demo'])
-  eq(`${p}: only an admin sees it`, [admin.includes(p), mgr.includes(p), view.includes(p)], [true, false, false]);
-for (const p of ['/', '/instances', '/instances/apps', '/instances/docker', '/storage/pools', '/storage/disks', '/storage/shares', '/protection/backup', '/operations/health', '/operations/events', '/monitoring/hardware', '/settings/access'])
-  if (p !== '/') eq(`${p}: every role sees it`, [admin.includes(p), mgr.includes(p), view.includes(p)], [true, true, true]);
-eq('Settings holds only Users and access for a role below admin', paths(nodeItems('main', null, [], [], [], 'viewer')).filter((p) => p.startsWith('/settings')), ['/settings', '/settings/access']);
-eq('the groups of the hidden pages are gone (no empty Identity or Extensions)', [view.includes('/identity'), nodeItems('main', null, exts, [], [], 'viewer').some((i) => i.label === 'Extensions')], [false, false]);
+for (const p of ['/identity', '/identity/users', '/storage/vault'])
+  eq(`${p}: only an admin sees it (admin secrets, hidden from the tree)`, [admin.includes(p), mgr.includes(p), view.includes(p)], [true, false, false]);
+for (const p of ['/instances', '/instances/apps', '/instances/docker', '/storage/pools', '/storage/disks', '/storage/shares', '/storage/files', '/protection/backup', '/operations/health', '/operations/events', '/monitoring/hardware', '/settings/access', '/settings/general', '/settings/advanced', '/settings/capabilities', '/nodes', '/marketplace', '/extensions/demo'])
+  eq(`${p}: every role sees it (a viewer without plans, buttons disabled)`, [admin.includes(p), mgr.includes(p), view.includes(p)], [true, true, true]);
+eq('a viewer sees as many pages as an admin, less the secret ones', admin.filter((p) => !view.includes(p)).every((p) => p.startsWith('/identity') || p === '/storage/vault'), true);
+eq('the group of the hidden pages is gone (no empty Identity)', [view.includes('/identity'), nodeItems('main', null, exts, [], [], 'viewer').some((i) => i.label === 'Identity')], [false, false]);
 eq('a role does not change the tree it is given', mainTree === forRole(mainTree, 'admin') ? 'same' : 'copy', 'copy');
 eq('the pool pages stay for a viewer', paths(nodeItems('main', null, [], [], [{ name: 'tank', role: 'data' }], 'viewer')).includes('/storage/pools/tank'), true);
 eq('a remote node is not filtered by role (its pages only read)', nodeItems('peer', ['storage'], null, [], [], 'viewer').length, 2);
 
 // the guard of a page opened by its address
-eq('a page opened by address: admin pages refuse a viewer', [canSee('viewer', '/identity/users'), canSee('app-manager', '/settings/general'), canSee('viewer', '/settings/access'), canSee('viewer', '/instances')], [false, false, true, true]);
+eq('a page opened by address: admin pages refuse a viewer', [canSee('viewer', '/identity/users'), canSee('app-manager', '/storage/vault'), canSee('viewer', '/settings/access'), canSee('viewer', '/settings/general'), canSee('admin', '/identity')], [false, false, true, true, true]);
 eq('an unlisted page needs no more than a viewer', pageRole('/something/new'), 'viewer');
-eq('the longest prefix wins', [pageRole('/settings/general'), pageRole('/settings/access'), pageRole('/settings/access/x'), pageRole('/settings/capabilities/vps')], ['admin', 'viewer', 'viewer', 'admin']);
+eq('the longest prefix wins', [pageRole('/settings/general'), pageRole('/settings/access'), pageRole('/settings/access/x'), pageRole('/settings/capabilities/vps')], ['viewer', 'viewer', 'viewer', 'viewer']);
+eq('the secret pages need admin, with their sub-pages', [pageRole('/identity'), pageRole('/identity/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults')], ['admin', 'admin', 'admin', 'admin', 'viewer']);
 
 // the changes
 eq('the app areas are an app manager\'s', ['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'jobs'].map(areaRole), Array(7).fill('app-manager'));
@@ -46,7 +47,8 @@ eq('the session role is taken from /api/session and /api/login', /ui\.role = use
 eq('the tree and the search are built for the role', [/ui\.role\)/.test(src('shell/Tree.svelte')), /ui\.role\)/.test(src('shell/Search.svelte'))], [true, true]);
 eq('the page frame says "not for your role" instead of a broken page', /Not for your role/.test(src('shell/PageFrame.svelte')), true);
 eq('the plan dialog shows a refusal without asking', /dialog\.refused/.test(src('shell/PlanDialog.svelte')), true);
-eq('the button hides itself below its `need`', /need \|\| can\(need\)/.test(src('ui/Button.svelte')), true);
+const btn = src('ui/Button.svelte');
+eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{why\}/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
 eq('users and access shows a role below admin only its own sessions', /Sessions own/.test(src('settings/AccessPage.svelte')) && /AccessPage/.test(src('routes.js')), true);
 eq('the shell does not read admin rows for a lower role', /admin \? '\/api\/sys\/node\/list'/.test(src('shell/Shell.svelte')) && /!admin \? '' : '\/api\/sys\/users\/list'/.test(src('shell/Shell.svelte')), true);
 
