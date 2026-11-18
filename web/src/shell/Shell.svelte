@@ -7,6 +7,7 @@
   import PageFrame from './PageFrame.svelte';
   import NodeProbe from './NodeProbe.svelte';
   import PlanDialog from './PlanDialog.svelte';
+  import Toast from '../ui/Toast.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
@@ -171,6 +172,7 @@
 <BottomPanel user={who} />
 {#if ui.dialog}<PlanDialog dialog={ui.dialog} />{/if}
 {#if ui.create}{@const Form = ui.create.component}<Form {...ui.create.props} />{/if}
+<Toast />
 
 <style>
   .body { position: relative; flex: 1; min-height: 0; display: flex; }

@@ -32,3 +32,8 @@ export { default as Tooltip } from './Tooltip.svelte';   // mounted once in App.
 export { tip } from './tooltip.svelte.js';
 export { backdropClose } from './backdrop.js';           // read-only dialogs only: <div class="dialog-backdrop" use:backdropClose={close}>
 export { default as ErrorNote } from './ErrorNote.svelte';       // coded error: code, what, why, one next step, guide link (#488)
+export { default as Dialog } from './Dialog.svelte';       // modal base: backdrop, focus trap and return, Escape; CreateDialog and PlanDialog sit on it
+export { default as Menu } from './Menu.svelte';           // the More menu and row actions; a disabled item says why
+export { default as Toast } from './Toast.svelte';         // mounted once in the shell; fed by toast() from toast.svelte.js
+export { toast, dismissToast } from './toast.svelte.js';
+export { default as QuickLook } from './QuickLook.svelte'; // the Drawer as an overlay above a list

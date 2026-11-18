@@ -1,0 +1,3 @@
+date  = "2026-11-18"
+type  = "change"
+title = "Dialogs keep the keyboard focus inside and give it back when they close"
