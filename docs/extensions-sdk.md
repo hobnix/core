@@ -81,6 +81,16 @@ Go has no library on purpose: the protocol is five message types and the example
 The crate `rust/hobnix-ext-sdk` has the same message types, a command runner and a service runner (ADR 0011). Its examples are
 `rust/hobnix-ext-sdk/examples/hello.rs` and `ticker.rs`.
 
+## Events and snapshots (services)
+
+A service (`[service]` in package.toml) gets the events it subscribed to as `event` messages and acknowledges each with `ack` once it has handled it. The core
+keeps the last acknowledged id in `/var/lib/hs/ext-cursors/<name>`. After a crash or a restart it delivers what was not acknowledged again, exactly once more, so
+handle an event idempotently. A service that starts for the first time gets the events from now on, not the log of the past.
+
+A service sends `emit` for an event of its own. The kind must be `pkg.<name>.<what>`; any other kind is dropped with a warning. At most 50 emits a minute
+count; the 51st is dropped and one warning goes to the journal. `snapshot` replaces the live topic `ext-<name>-<topic>`; only changed data makes a new
+generation. Not tested on hardware yet.
+
 ## Try it without a server
 
 ```bash

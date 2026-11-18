@@ -49,6 +49,16 @@ if mode == "ackbad":
 if mode == "emit":
     say(type="emit", kind="pkg.fixsvc.seen", subject="x")
     say(type="snapshot", topic="state", data={"n": 1})
+if mode == "flood":          # 51 emits at once: the 51st is over the limit of 50 a minute
+    for i in range(51):
+        say(type="emit", kind="pkg.fixsvc.flood", subject="n%d" % i)
+if mode == "foreign":        # an emit of another package's kind
+    say(type="emit", kind="pkg.other.x", subject="x")
+if mode == "snap":
+    say(type="snapshot", topic="state", data={"n": 1})
+    say(type="snapshot", topic="state", data={"n": 1})
+    say(type="snapshot", topic="state", data={"n": 2})
+first_acked = False
 last = 0
 inbox = queue.Queue()
 threading.Thread(target=lambda: [inbox.put(l) for l in sys.stdin] + [inbox.put(None)], daemon=True).start()
@@ -67,7 +77,11 @@ while True:
                 continue
             say(type="log", level="info", text="bye")
             sys.exit(0)
-        if m["type"] == "event" and mode != "noack":
+        if m["type"] == "event" and mode == "ackfirst":      # acknowledges the first event only, the rest stays unacknowledged
+            if not first_acked:
+                first_acked = True
+                say(type="ack", id=m["id"])
+        elif m["type"] == "event" and mode != "noack":
             say(type="ack", id=m["id"])
     if mode == "unhealthy":
         say(type="health", ok=False, text="disk full")
