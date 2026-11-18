@@ -17,6 +17,7 @@
   import Switch from '../ui/Switch.svelte';
   import Banner from '../ui/Banner.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import { Card, Row, Muted, TextInput } from '../ui';
   import { link } from './instances/ct.js';
   import { restoreDrill, instanceDrill } from './backup-drill.js';
 
@@ -113,13 +114,14 @@
 
 <PageState loading={!st.loaded} error={st.error?.message} hasData={st.data != null} retry={() => refresh(['/api/sys/backup/state'])}>
   {#if !configured}
-    <div class="card">
+    <Card>
       <EmptyState icon="cloud-slash" title="No backup set up" text="Nothing is backed up yet. Make a free disk the backup disk: it is erased, the plan shows what happens first, and the backup password is made inside the vault.">
         {#snippet action()}<Button variant="primary" tooltip={'Make a free disk the backup disk (it is erased)'} onclick={() => openCreate(SetupDisk)}><i class="ph ph-hard-drive"></i>Set up backup disk…</Button>{/snippet}
       </EmptyState>
-    </div>
+    </Card>
   {:else}
-    <div class="card status">
+    <Card>
+     <div class="status">
       <div class="lead">
         <StatusDot state={headDot} large bare label={head} />
         <div><div class="big">{head}</div>{#if sub}<div class="small">{sub}</div>{/if}</div>
@@ -134,7 +136,7 @@
           <Button size="sm" icon="arrows-clockwise" busy={jobRunning('backup', ['offsite-now'])} disabled={!!why} tooltip={tipWhy('Copy the new backups to the off-site repository now')} onclick={() => openPlan('backup', ['offsite-now'], 'Copy to the off-site repository')}>Copy off-site now</Button>
           <Button variant="ghost" size="sm" icon="cloud-slash" busy={jobRunning('backup', ['offsite-off'])} tooltip={'Stop copying off site (what is there stays)'} onclick={() => openPlan('backup', ['offsite-off'], 'Switch the off-site copy off')}>Switch off</Button>
         {:else}
-          <span class="muted">Off-site copy: not set.</span>
+          <Muted>Off-site copy: not set.</Muted>
         {/if}
         <Button size="sm" icon="cloud-arrow-up" disabled={!!why} tooltip={tipWhy('Choose where the off-site copy goes: S3, REST server, SFTP or a folder')} onclick={() => openCreate(OffsiteTarget)}>{s.offsite ? 'Change target…' : 'Set up off-site copy…'}</Button>
       </div>
@@ -145,65 +147,63 @@
           {#snippet action()}<Button size="sm" onclick={() => { ui.offsitePass = ''; }}>I wrote it down</Button>{/snippet}
         </Banner>
       {/if}
-    </div>
+     </div>
+    </Card>
 
-    <div class="card tc">
-      <div class="ctl"><b>What is in the backup</b><span class="cs">the switch here is the only place that decides it; the host files are always in</span></div>
+    <Card title="What is in the backup">
+      <Muted as="p">the switch here is the only place that decides it; the host files are always in</Muted>
       {#if locked}<Banner tone="warn">The storage is locked: the shares and instances are not listed until it is unlocked.</Banner>{/if}
       <Table id="backup-items" {columns} rows={items} loading={!ov.loaded} empty={ov.error ? 'This could not be read (is the backup disk there?).' : 'Nothing listed.'}>
         {#snippet cell(i, col)}
-          {#if col.key === 'name'}<span class="row7"><i class="ph ph-{kindIcon[i.kind] ?? 'folder'}"></i>{#if i.kind === 'always'}{i.name}{:else}<a {...itemLink(i)} use:tip={i.kind === 'ct' ? 'Open the instance' : 'Open the share'}>{i.name}</a>{/if}</span>
-          {:else if col.key === 'kind'}<span class="n400">{kindName[i.kind] ?? i.kind}</span>
+          {#if col.key === 'name'}<Row gap="2"><Muted><i class="ph ph-{kindIcon[i.kind] ?? 'folder'}"></i></Muted>{#if i.kind === 'always'}{i.name}{:else}<a {...itemLink(i)} use:tip={i.kind === 'ct' ? 'Open the instance' : 'Open the share'}>{i.name}</a>{/if}</Row>
+          {:else if col.key === 'kind'}<Muted>{kindName[i.kind] ?? i.kind}</Muted>
           {:else if col.key === 'size'}{i.size && i.size !== '-' && !isNaN(i.size) ? bytes(Number(i.size)) : '–'}
           {:else if i.kind === 'always'}<Chip tone="accent">always</Chip>
-          {:else}<span class="inc"><Switch bind:checked={() => i.on, () => toggle(i)} label="{i.name} in the backup" /><span class="n400">{i.on ? 'on' : 'off'}</span></span>{/if}
+          {:else}<Row gap="3"><Switch bind:checked={() => i.on, () => toggle(i)} label="{i.name} in the backup" /><Muted>{i.on ? 'on' : 'off'}</Muted></Row>{/if}
         {/snippet}
       </Table>
-    </div>
+    </Card>
 
-    <div class="card tc">
-      <div class="ctl">
-        <b>Restore points</b>{#if s.snapshots}<span class="cs">{s.snapshots} in the repository</span>{/if}
-        <Button size="sm" tooltip={'Bring files back into the share restored; originals stay'} style="margin-left:auto" onclick={() => openCreate(RestoreFiles)}><i class="ph ph-arrow-counter-clockwise"></i>Restore files…</Button>
-      </div>
+    <Card title="Restore points">
+      {#snippet actions()}<Button size="sm" tooltip={'Bring files back into the share restored; originals stay'} onclick={() => openCreate(RestoreFiles)}><i class="ph ph-arrow-counter-clockwise"></i>Restore files…</Button>{/snippet}
+      {#if s.snapshots}<Muted as="p">{s.snapshots} in the repository</Muted>{/if}
       <Table id="backup-points" columns={pointCols} rows={points} loading={!snapsLoaded}
              empty={snapsError ? 'The restore points could not be read (backup disk missing or storage locked).' : 'No restore points yet.'}>
         {#snippet cell(p, col)}
           {#if col.key === 'id'}<span class="mono">{p.id}</span>
           {:else if col.key === 'time'}{p.time}
-          {:else}<span class="n300">{p.tags.split(',').join(' · ')}</span>{/if}
+          {:else}<Muted>{p.tags.split(',').join(' · ')}</Muted>{/if}
         {/snippet}
       </Table>
-    </div>
+    </Card>
 
-    <div class="card tc">
-      <div class="ctl"><b>Find a file</b><span class="cs">in every restore point</span></div>
+    <Card title="Find a file">
+      <Muted as="p">in every restore point</Muted>
       <form class="findrow" onsubmit={(e) => { e.preventDefault(); find(); }}>
-        <input class="input" bind:value={q} placeholder="Part of a file name, e.g. Rechnung" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Part of a file name" />
+        <TextInput bind:value={q} placeholder="Part of a file name, e.g. Rechnung" maxlength={80} autocomplete="off" spellcheck={false} ariaLabel="Part of a file name" />
         <Button type="submit" icon="magnifying-glass" disabled={!findOk} busy={finding} busyLabel="Searching…" tooltip={!findOk ? 'Type at least part of a file name first' : 'Look for this name in all backups'}>Find</Button>
       </form>
-      {#if findError}<div class="muted">{findError}</div>{/if}
+      {#if findError}<Muted as="p">{findError}</Muted>{/if}
       {#if found}
         <Table id="backup-found" columns={foundCols} rows={found} empty="Nothing found.">
           {#snippet cell(f, col)}
             {#if col.key === 'snap'}<span class="mono">{f.snap}</span>
             {:else if col.key === 'time'}{f.time}
-            {:else if col.key === 'path'}<span class="n300" style="overflow-wrap:anywhere">{f.path}{f.type === 'dir' ? '/' : ''}</span>
+            {:else if col.key === 'path'}<Muted style="overflow-wrap:anywhere">{f.path}{f.type === 'dir' ? '/' : ''}</Muted>
             {:else}{f.type === 'file' ? bytes(f.size) : ''}{/if}
           {/snippet}
         </Table>
-        {#if found.length >= 200}<div class="muted">Only the first 200 hits are shown: use a longer word.</div>{/if}
-        <div class="muted">To bring a file back: Restore files… above, with the path and the restore point.</div>
+        {#if found.length >= 200}<Muted as="p">Only the first 200 hits are shown: use a longer word.</Muted>{/if}
+        <Muted as="p">To bring a file back: Restore files… above, with the path and the restore point.</Muted>
       {/if}
-    </div>
+    </Card>
   {/if}
 </PageState>
 
 <style>
   .findrow { display: flex; gap: 8px; margin: 8px 0; }
-  .findrow .input { flex: 1; min-width: 0; }
-  .muted { font-size: 12px; color: var(--fg-3); }
-  .status { flex-direction: row; flex-wrap: wrap; gap: 24px 28px; padding: 16px 18px; align-items: center; }
+  .findrow :global(.input) { flex: 1; min-width: 0; }
+  .status { display: flex; flex-wrap: wrap; align-items: center; gap: 24px 28px; }
   .lead { flex: 1 1 260px; display: flex; align-items: center; gap: 14px; }
   .big { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
   .small { font-size: 13px; color: var(--fg-3); }
@@ -212,14 +212,5 @@
   .fact { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
   .fl { width: 100px; flex: none; color: var(--fg-3); }
   .fv { flex: 1; min-width: 0; }
-  .tc { padding: 12px 14px; }
-  .ctl { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-  .ctl b { font-size: 14px; font-weight: 600; }
-  .cs { font-size: 12px; color: var(--fg-3); }
-  .row7 { display: flex; align-items: center; gap: 7px; }
-  .row7 i { color: var(--fg-3); }
-  .inc { display: flex; align-items: center; gap: 10px; }
-  .n300 { color: var(--fg-2); }
-  .n400 { color: var(--fg-3); }
   .mono { font-size: 12px; }
 </style>

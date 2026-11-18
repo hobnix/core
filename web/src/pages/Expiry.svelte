@@ -6,6 +6,7 @@
   import ExpiryForm from '../forms/ops/ExpiryForm.svelte';
   import Table from '../shell/Table.svelte';
   import { go } from '../route.svelte.js';
+  import { Card, Stack, Row, Muted, Progress } from '../ui';
 
   // days left sorts as a number (an invalid date has none and goes last)
   const columns = [
@@ -35,50 +36,37 @@
   // The bar shows the time left on a one-year scale (the list holds no start date).
   const pct = (i) => (i.days === null ? 0 : Math.min(100, Math.max(i.days <= 0 ? 0 : 3, Math.round((i.days / 365) * 100))));
   const left = (i) => (i.days === null ? 'invalid' : i.days < 0 ? `${-i.days} d ago` : `${i.days} d`);
-  const color = (i) => (warn(i) ? 'var(--st-warn)' : 'var(--color-accent-500)');
+  const tone = (i) => (warn(i) ? 'warn' : 'info');
 </script>
 
-<div class="page">
+<Stack gap="4">
   <PageHeader title="Expiry dates" crumb="Protection" sub="The health check warns 30 and 7 days before.">
     {#snippet actions()}<Button variant="primary" tooltip={'Write down something that runs out'} onclick={() => openCreate(ExpiryForm)}><i class="ph ph-plus"></i>Add</Button>{/snippet}
   </PageHeader>
 
-  <div class="card elev-sm" style="padding:12px 14px">
+  <Card>
     <Table id="expiry" {columns} rows={items} key="name" loading={!ex.loaded} empty={ex.error ? 'The list could not be read.' : 'Nothing is entered yet. On the server: hs expiry add <name> <YYYY-MM-DD>.'}>
       {#snippet cell(i, col)}
         {#if col.key === 'name'}{i.name}
-        {:else if col.key === 'date'}<span class="date">{i.date}</span>
-        {:else if col.key === 'days'}
-          <div class="bar">
-            <div class="track"><div class="fill" style="width:{pct(i)}%;background:{color(i)}"></div></div>
-            <span class="left" style="color:{warn(i) ? 'var(--st-warn)' : 'var(--color-neutral-300)'}">{left(i)}</span>
-          </div>
-        {:else if col.key === 'note'}<span class="note">{i.note}</span>
+        {:else if col.key === 'date'}<Muted style="white-space:nowrap">{i.date}</Muted>
+        {:else if col.key === 'days'}<Progress value={pct(i)} total={100} tone={tone(i)} size="sm" label="Time left on {i.name}" text={left(i)} />
+        {:else if col.key === 'note'}<Muted>{i.note}</Muted>
         {:else}<Button variant="ghost" class="btn-icon expiry-rm" icon="x" busy={jobRunning('expiry', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={`Remove ${i.name} from the list`} onclick={() => openPlan('expiry', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
       {/snippet}
     </Table>
-  </div>
+  </Card>
 
   {#if certs.length}
-    <div class="card elev-sm" style="padding:12px 14px;gap:6px">
-      <div class="crow"><b>Certificates</b><span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Open the certificates page'} onclick={() => go('/identity/certificates')}>Manage<i class="ph ph-arrow-right"></i></Button></div>
+    <Card title="Certificates">
+      {#snippet actions()}<Button variant="ghost" size="sm" tooltip={'Open the certificates page'} onclick={() => go('/identity/certificates')}>Manage<i class="ph ph-arrow-right"></i></Button>{/snippet}
       {#each certs as k}
-        <div class="crow"><span>{k.what}</span><span class="grow"></span><span class="date">{k.until}</span>
-          {#if k.days !== null}<span class="left" style="color:{k.days < 60 ? 'var(--st-warn)' : 'var(--color-neutral-300)'}">{k.days < 0 ? `${-k.days} d ago` : `${k.days} d`}</span>{/if}</div>
+        <Row gap="3" justify="between"><span>{k.what}</span>
+          <Row gap="3"><Muted style="white-space:nowrap">{k.until}</Muted>{#if k.days !== null}<Muted style="white-space:nowrap">{k.days < 0 ? `${-k.days} d ago` : `${k.days} d`}</Muted>{/if}</Row></Row>
       {/each}
-    </div>
+    </Card>
   {/if}
-</div>
+</Stack>
 
 <style>
-  .page { display: flex; flex-direction: column; gap: 14px; }
-  .crow { display: flex; align-items: center; gap: 12px; font-size: 13px; }
-  .grow { flex: 1; }
-  .date { color: var(--color-neutral-300); white-space: nowrap; }
-  .note { color: var(--color-neutral-400); }
-  .bar { display: flex; align-items: center; gap: 8px; }
-  .track { flex: 1; height: 5px; border-radius: var(--r); background: var(--color-neutral-800); }
-  .fill { height: 5px; border-radius: var(--r); }
-  .left { width: 64px; text-align: right; white-space: nowrap; }
-  :global(.btn.expiry-rm) { width: 26px; height: 26px; color: var(--color-neutral-400); }
+  :global(.btn.expiry-rm) { width: 26px; height: 26px; }
 </style>
