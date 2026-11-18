@@ -7,6 +7,8 @@
   import Banner from '../ui/Banner.svelte';
   import Table from '../shell/Table.svelte';
 
+  let { own = false } = $props();      // a role below admin: only its own sessions are listed (the server filters), the text says so
+
   let list = $state({ rows: [], loaded: false, error: '' });
   let message = $state('');
 
@@ -51,7 +53,7 @@
 
 <div class="card sec" id="sessions">
   <div class="st">Sessions</div>
-  <p class="hp2">Everybody signed in to this web interface. A session ends by itself after 12 hours. Changing the password of the local admin ends its sessions.</p>
+  <p class="hp2">{own ? 'Your sessions in this web interface.' : 'Everybody signed in to this web interface.'} A session ends by itself after 12 hours. Changing the password of the local admin ends its sessions.</p>
   {#if list.error}<Banner tone="warn">The sessions could not be read: {list.error}</Banner>{/if}
   <Table id="web-sessions" {columns} rows={list.rows} key="id" sort={{ key: 'seen', dir: 'desc' }} loading={!list.loaded} empty="No sessions.">
     {#snippet cell(r, col)}

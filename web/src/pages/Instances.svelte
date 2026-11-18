@@ -95,15 +95,15 @@
 
 <PageHeader title="Instances" crumb={ui.host} sub={cts.length ? `${running} of ${cts.length} running` : 'Containers and virtual machines.'}>
   {#snippet actions()}
-    <Button icon="arrows-clockwise" disabled={!running} busy={jobRunning('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
-    <Button variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>
+    <Button need="app-manager" icon="arrows-clockwise" disabled={!running} busy={jobRunning('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
+    <Button need="app-manager" variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>
   {/snippet}
 </PageHeader>
 
 <PageState loading={!ctl.loaded} error={ctl.error?.message} hasData={ctl.data != null} empty={ctl.loaded && !cts.length && !ctl.error}
            emptyIcon="cube" emptyTitle="No instances yet" emptyText="An instance is a container or a virtual machine. Create the first one, or set an app up from Apps."
            retry={() => refresh(['/api/sys/ct/list'])}>
-  {#snippet emptyAction()}<Button variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>{/snippet}
+  {#snippet emptyAction()}<Button need="app-manager" variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>{/snippet}
   <Split open={!!sel}>
     {#snippet list()}
       <div class="card" style="padding:0">
@@ -127,9 +127,9 @@
             {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<span class="kd">–</span>{/if}
           {:else}
             <span class="acts">
-              <Button variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={(jobRunning('ct', [c.name, 'stop']) || jobRunning('ct', [c.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [c.name, 'start']))} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
-              <Button variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={jobRunning('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
-              <Button variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={jobRunning('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={(jobRunning('ct', [c.name, 'stop']) || jobRunning('ct', [c.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [c.name, 'start']))} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={jobRunning('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={jobRunning('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
             </span>
           {/if}
         {/snippet}
@@ -174,7 +174,7 @@
                         <Chip>{b.kind}</Chip>
                         {#if b.share && b.share !== '-'}<a {...link(sharePath(b), 'shares', b.share)} use:tip={'Open the share'}>{b.share}</a>{:else}<span class="mono">{b.source}</span>{/if}
                         <span class="kd">{b.mode}</span>
-                        {#if !sel.owner}<Button variant="ghost" class="btn-icon instances-ib" icon="x" style="margin-left:auto" busy={jobRunning('ct', [sel.name, 'remove-storage', '--device', b.device])} tooltip={'Remove this binding'} aria-label="Remove {b.device}" onclick={() => openPlan('ct', [sel.name, 'remove-storage', '--device', b.device], `Remove ${b.device} from ${sel.name}`)} />{/if}
+                        {#if !sel.owner}<Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="x" style="margin-left:auto" busy={jobRunning('ct', [sel.name, 'remove-storage', '--device', b.device])} tooltip={'Remove this binding'} aria-label="Remove {b.device}" onclick={() => openPlan('ct', [sel.name, 'remove-storage', '--device', b.device], `Remove ${b.device} from ${sel.name}`)} />{/if}
                       </div>
                       <div class="rs mono">{b.source} → {b.inside}</div>
                       {#if b.also && b.also !== '-'}<div class="rs">Also mounted by {b.also}</div>{/if}
@@ -183,7 +183,7 @@
                     <div class="kd pad">{bind.loaded ? 'No storage bindings.' : 'Loading…'}</div>
                   {/each}
                 </div>
-                {#if !sel.owner}<Button size="sm" tooltip={'Give this instance a folder of a pool or a share'} onclick={() => openCreate(BindStorage, { ct: sel.name })}><i class="ph ph-plus"></i>Bind a share</Button>{/if}
+                {#if !sel.owner}<Button need="app-manager" size="sm" tooltip={'Give this instance a folder of a pool or a share'} onclick={() => openCreate(BindStorage, { ct: sel.name })}><i class="ph ph-plus"></i>Bind a share</Button>{/if}
               </div>
             {:else if t === 'snap'}
               <div class="sec">
@@ -193,15 +193,15 @@
                     <div class="r"><div class="rt">
                       <span class="mono">{sn.name}</span><span class="kd">{sn.created}</span>
                       <span class="acts" style="margin-left:auto">
-                        <Button variant="ghost" class="btn-icon instances-ib" icon="arrow-u-up-left" busy={jobRunning('ct', [sel.name, 'restore', '--snapshot', sn.name])} aria-label="Restore {sn.name}" tooltip={i === 0 ? 'Go back to this snapshot' : 'Go back to this snapshot (the newer ones are deleted)'} onclick={() => openPlan('ct', [sel.name, 'restore', '--snapshot', sn.name], `Restore ${sel.name}`)} />
-                        <Button variant="ghost" class="btn-icon instances-ib bad" icon="trash" busy={jobRunning('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name])} aria-label="Delete {sn.name}" tooltip={'Delete this snapshot (the plan asks for the instance name)'} onclick={() => openPlan('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name], `Delete snapshot ${sn.name}`)} />
+                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-u-up-left" busy={jobRunning('ct', [sel.name, 'restore', '--snapshot', sn.name])} aria-label="Restore {sn.name}" tooltip={i === 0 ? 'Go back to this snapshot' : 'Go back to this snapshot (the newer ones are deleted)'} onclick={() => openPlan('ct', [sel.name, 'restore', '--snapshot', sn.name], `Restore ${sel.name}`)} />
+                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib bad" icon="trash" busy={jobRunning('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name])} aria-label="Delete {sn.name}" tooltip={'Delete this snapshot (the plan asks for the instance name)'} onclick={() => openPlan('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name], `Delete snapshot ${sn.name}`)} />
                       </span>
                     </div></div>
                   {:else}
                     <div class="kd pad">{snap.loaded ? (snap.error ? 'The snapshots could not be read.' : 'No snapshots yet.') : 'Loading…'}</div>
                   {/each}
                 </div>
-                <Button size="sm" icon="camera" busy={jobRunning('ct', [sel.name, 'snapshot'])} busyLabel="Snapshotting…" tooltip={'Take a snapshot of this instance now'} onclick={() => openPlan('ct', [sel.name, 'snapshot'], `Snapshot ${sel.name}`)}>Snapshot now</Button>
+                <Button need="app-manager" size="sm" icon="camera" busy={jobRunning('ct', [sel.name, 'snapshot'])} busyLabel="Snapshotting…" tooltip={'Take a snapshot of this instance now'} onclick={() => openPlan('ct', [sel.name, 'snapshot'], `Snapshot ${sel.name}`)}>Snapshot now</Button>
               </div>
             {:else if t === 'logs'}
               {#key sel.name}<LogsTab ct={sel.name} />{/key}
@@ -223,13 +223,13 @@
             {/if}
           {/snippet}
           {#snippet actions()}
-            <Button size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={(jobRunning('ct', [sel.name, 'stop']) || jobRunning('ct', [sel.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [sel.name, 'start']))} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
-            <Button size="sm" icon="arrow-clockwise" busy={jobRunning('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
-            <Button size="sm" icon="arrows-clockwise" busy={jobRunning('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
-            <Button size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'A shell inside the instance' : 'The instance is not running'} onclick={() => openCreate(Terminal, { target: sel.name, title: sel.name })}><i class="ph ph-terminal-window"></i>Terminal</Button>
-            {#if isVm(sel)}<Button size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'The screen of the virtual machine' : 'The instance is not running'} onclick={() => openCreate(VmConsole, { target: sel.name, title: sel.name })}><i class="ph ph-monitor"></i>Console</Button>{/if}
-            <Button size="sm" tooltip={'Change memory, CPU, storage and other settings'} onclick={() => openCreate(InstanceSettings, { ct: sel })}><i class="ph ph-sliders"></i>Settings</Button>
-            {#if !sel.owner}<Button variant="danger" size="sm" icon="trash" busy={jobRunning('ct', [sel.name, 'delete'])} busyLabel="Deleting…" tooltip={'Delete the instance (the plan asks for its name)'} onclick={() => openPlan('ct', [sel.name, 'delete'], `Delete ${sel.name}`)}>Delete</Button>{/if}
+            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={(jobRunning('ct', [sel.name, 'stop']) || jobRunning('ct', [sel.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [sel.name, 'start']))} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
+            <Button need="app-manager" size="sm" icon="arrow-clockwise" busy={jobRunning('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
+            <Button need="app-manager" size="sm" icon="arrows-clockwise" busy={jobRunning('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
+            <Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'A shell inside the instance' : 'The instance is not running'} onclick={() => openCreate(Terminal, { target: sel.name, title: sel.name })}><i class="ph ph-terminal-window"></i>Terminal</Button>
+            {#if isVm(sel)}<Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'The screen of the virtual machine' : 'The instance is not running'} onclick={() => openCreate(VmConsole, { target: sel.name, title: sel.name })}><i class="ph ph-monitor"></i>Console</Button>{/if}
+            <Button need="app-manager" size="sm" tooltip={'Change memory, CPU, storage and other settings'} onclick={() => openCreate(InstanceSettings, { ct: sel })}><i class="ph ph-sliders"></i>Settings</Button>
+            {#if !sel.owner}<Button need="app-manager" variant="danger" size="sm" icon="trash" busy={jobRunning('ct', [sel.name, 'delete'])} busyLabel="Deleting…" tooltip={'Delete the instance (the plan asks for its name)'} onclick={() => openPlan('ct', [sel.name, 'delete'], `Delete ${sel.name}`)}>Delete</Button>{/if}
           {/snippet}
         </Drawer>
       {/if}

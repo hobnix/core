@@ -181,8 +181,8 @@
   {#if selected.size}
     <div class="bulk">
       <span class="bulk-count">{selected.size} selected</span>
-      <Button size="sm" variant={canInstall ? 'primary' : 'ghost'} disabled={!canInstall || bulkBusy} onclick={() => runBulk('install')}>Install selected</Button>
-      <Button size="sm" variant={canUpdate ? 'primary' : 'ghost'} disabled={!canUpdate || bulkBusy} onclick={() => runBulk('update')}>Update selected</Button>
+      <Button need="app-manager" size="sm" variant={canInstall ? 'primary' : 'ghost'} disabled={!canInstall || bulkBusy} onclick={() => runBulk('install')}>Install selected</Button>
+      <Button need="app-manager" size="sm" variant={canUpdate ? 'primary' : 'ghost'} disabled={!canUpdate || bulkBusy} onclick={() => runBulk('update')}>Update selected</Button>
       <Button variant="ghost" size="sm" disabled={bulkBusy} onclick={() => (selected = new Set())}>Clear selection</Button>
     </div>
   {/if}
@@ -195,7 +195,7 @@
           <input type="checkbox" checked={selected.has(a.name)} onchange={(e) => toggle(a.name, e.target.checked)} aria-label="Select {a.name}" />
         {:else if col.key === 'go'}
           {@const act = appAction(a)}
-          <Button variant={act.primary ? 'primary' : 'secondary'} size="sm" class="apps-go" disabled={a.state === 'parked'} tooltip={act.tip} onclick={() => run(a)}><i class="ph ph-{act.icon}"></i>{act.label}</Button>
+          <Button need="app-manager" variant={act.primary ? 'primary' : 'secondary'} size="sm" class="apps-go" disabled={a.state === 'parked'} tooltip={act.tip} onclick={() => run(a)}><i class="ph ph-{act.icon}"></i>{act.label}</Button>
         {:else if col.key === 'ver'}
           {#if a.applied !== '-' && (a.avail === '-' || a.avail === a.applied)}
             <span class="vr">{a.applied}</span>
@@ -231,12 +231,12 @@
           {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
             {#if c !== 'docker'}
               {@const live = stageOf.get(a.name).stage === 'running' || !stageOf.get(a.name).flags.includes('stopped')}
-              <Button variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
             {/if}
           {/each}
           {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
             {#if c !== 'docker'}
-              <Button variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
             {/if}
           {/each}
           <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
@@ -257,7 +257,7 @@
       </ul>
       <div class="bulk-foot">
         <Button onclick={cancelBulk}>Cancel</Button>
-        <Button variant="primary" disabled={bulkBusy} onclick={confirmBulk}>Start {bulkOpen.items.length} job{bulkOpen.items.length === 1 ? '' : 's'}</Button>
+        <Button need="app-manager" variant="primary" disabled={bulkBusy} onclick={confirmBulk}>Start {bulkOpen.items.length} job{bulkOpen.items.length === 1 ? '' : 's'}</Button>
       </div>
     </div>
   </div>

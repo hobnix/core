@@ -10,6 +10,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
+  import { canSee } from '../roles.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
   import { changes, startChanges } from '../changes.svelte.js';
   import { treeMeta } from '../pages/proxy/status.js';
@@ -41,9 +42,11 @@
   const disks = poll(() => (locked ? '' : '/api/sys/monitor/disks'), 30000, 'monitor-disks');
   const shares = poll(() => (locked ? '' : '/api/sys/shares/overview'), 30000, 'shares-overview');
   const cts = poll(() => (locked ? '' : '/api/sys/ct/list'), 30000);
-  const users = poll(() => (locked ? '' : '/api/sys/users/list'), 60000);
-  const groups = poll(() => (locked ? '' : '/api/sys/users/groups'), 60000);
-  const vault = poll(() => (locked ? '' : '/api/sys/vault/list'), 60000, 'vault-list');
+  // the rows of the identity and vault pages are admin rows: a lower role does not ask (the server would answer 403) and the pages are not in its tree
+  const admin = $derived(ui.role === 'admin');
+  const users = poll(() => (locked || !admin ? '' : '/api/sys/users/list'), 60000);
+  const groups = poll(() => (locked || !admin ? '' : '/api/sys/users/groups'), 60000);
+  const vault = poll(() => (locked || !admin ? '' : '/api/sys/vault/list'), 60000, 'vault-list');
   // Docker is on but something it needs is missing (the share apps, its mount): a dot on Docker, its children dimmed
   const dockerOn = $derived(Array.isArray(ui.features.capabilities) && ui.features.capabilities.includes('docker'));
   const dockerHealth = poll(() => (locked || !dockerOn ? '' : '/api/sys/docker/health'), 30000);
@@ -57,7 +60,7 @@
     loadPools().then(() => {
       const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
         '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
-      prefetch([...new Set([...pages.flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
+      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
         '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
     });
   });
@@ -66,11 +69,11 @@
   const prox = poll('/api/proxy/status', 15000);
   const proxState = $derived(prox.data ? 'ok' : !prox.loaded ? 'loading' : prox.error?.status === 404 ? 'off' : 'down');
   // new commits upstream (refs fetched earlier by hs update; the read never fetches): the count tag of the Update button
-  const upd = poll(() => (locked ? '' : '/api/sys/system/updates'), 60000);
+  const upd = poll(() => (locked || !admin ? '' : '/api/sys/system/updates'), 60000);
   const pending = $derived(Number(rows(upd).find((r) => r[0] === 'behind')?.[1]) || 0);
 
   // ── the servers: this one first, then the rows of `hs node list` (name kind host port source key), plus the implicit proxyserver of the old vps part
-  const nodeList = poll('/api/sys/node/list', 30000);
+  const nodeList = poll(() => (admin ? '/api/sys/node/list' : ''), 30000);
   const reports = $state({});                              // name -> { dot, state } from the NodeProbe of a remote node
   const report = (name, dot, state, extra = {}) => {
     const r = reports[name];

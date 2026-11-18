@@ -2,6 +2,8 @@
   // The overview of a group in the tree (Storage, Identity, Protection, Operations): one card per child page with the note the tree shows,
   // and for Storage the capacity of the pools on top. Nothing is read here that the tree does not read already.
   import { route, go } from '../route.svelte.js';
+  import { canSee } from '../roles.js';
+  import { ui } from '../ui.svelte.js';
   import { tree, poolItems, poolIcon } from '../nav.js';
   import { pools as poolStore } from '../pools.svelte.js';
   import { bytes } from '../format.js';
@@ -20,7 +22,7 @@
   const locked = $derived(!!deck?.data?.locked);
 
   // a child may be a group itself (Pools holds one page per pool): its pages are listed under it
-  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
+  const cards = $derived((node?.children ?? []).filter((c) => canSee(ui.role, c.path)).map((c) => ({ ...c, kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
   const dim = (c) => locked && c.storage;
   const note = (it) => (dim(it) ? { text: 'locked', warn: true } : meta[it.path] ?? null);
   const shown = (n) => n.text ?? '●';

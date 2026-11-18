@@ -1,3 +1,4 @@
+import { forRole } from './roles.js';
 // The resource tree (left). `storage: true` = needs the encrypted storage, so it dims while that is locked.
 // A page that is not built yet shows a placeholder (shell/Placeholder.svelte) with its title from here.
 export const tree = [
@@ -109,8 +110,12 @@ export const vpsTree = [HEALTH, ...edgeItems];
 // capItems: tree items for the capabilities that have a settings page (settings/layout.js capEntries); they go under Settings > Capabilities.
 // The tree is copied, never changed. (nav.js stays free of the generated JSON: tests import it in plain node.)
 // poolRows: the pool rows of the server (pools.svelte.js, [{name, role, ...}]); they become the children of Storage > Pools.
-export function nodeItems(kind, caps, exts, capItems = [], poolRows = []) {
-  if (kind === 'main') return [...withPoolItems(withCapItems(visible(mainTree, caps), capItems), poolRows), ...extensionItems(exts)];
+// role: the role of the session (roles.js): the main tree loses the pages that role may not open (the server refuses them anyway); not given = all
+export function nodeItems(kind, caps, exts, capItems = [], poolRows = [], role = null) {
+  if (kind === 'main') {
+    const items = [...withPoolItems(withCapItems(visible(mainTree, caps), capItems), poolRows), ...extensionItems(exts)];
+    return role ? forRole(items, role) : items;
+  }
   if (kind === 'vps' || kind === 'edge') {
     const have = Array.isArray(caps) ? caps : null;
     return [HEALTH, ...edgeItems.filter((i) => kind === 'vps' && !have ? true : !EDGE_NEEDS[i.path] || (have ?? []).includes(EDGE_NEEDS[i.path]))];
