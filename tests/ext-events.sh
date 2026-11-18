@@ -62,6 +62,46 @@ check "the emit carries the level" grep -q -- '--level info' "$WORK/emitted"
 rm -f "$WORK/emitted"
 runfor foreign 1.5
 check_eq "a service cannot emit another package's kind" "0 1" "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ') $(grep -c 'may only emit pkg.fixsvc' "$WORK/err")"
+echo "-- emit: the events.emit permission is checked on every emit (step 9)"
+check "an undeclared package keeps the prefix check; declared kinds pass, others are dropped once per kind, the rate limit still applies" python3 -I - "$SCRIPTS/lib" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import ext_service as p
+def run(perms, kinds, limit=None):
+    sent, warns = [], []
+    p.emit_event = lambda name, m: sent.append(m["kind"])
+    h = p.make_handler("fixsvc", limit=limit, warn=warns.append, perms=perms)
+    for k in kinds:
+        h({"type": "emit", "kind": k, "subject": "s"})
+    return sent, warns
+ok, other = "pkg.fixsvc.seen", "pkg.fixsvc.secret"
+s, w = run(None, [ok, other])
+assert s == [ok, other] and not w, (s, w)
+s, w = run(["host:incus"], [ok])
+assert s == [] and len(w) == 1, (s, w)
+perms = ["events.emit:pkg.fixsvc.seen", "host:incus"]
+s, w = run(perms, [ok, other, other, other, ok])
+assert s == [ok, ok] and len(w) == 1 and other in w[0], (s, w)
+s, w = run(["events.emit:pkg.fixsvc.*"], ["pkg.fixsvc.a.b", "pkg.other.x", "pkg.other.x"])
+assert s == ["pkg.fixsvc.a.b"] and len(w) == 1, (s, w)
+t = [0.0]
+s, w = run(["events.emit:pkg.fixsvc.*"], [ok] * 52, limit=p.RateLimit(clock=lambda: t[0]))
+assert len(s) == 50 and len(w) == 1 and "further ones" in w[0], (len(s), w)
+PY
+EC="python3 -I $SCRIPTS/lib/ext_service.py emit-check --name fixsvc --state-dir $WORK/ecstate"
+rc=0; $EC --kind pkg.fixsvc.seen -- events.emit:pkg.fixsvc.seen >/dev/null 2>&1 || rc=$?
+check_eq "emit-check: a declared kind passes (exit 0)" 0 "$rc"
+rc=0; $EC --kind pkg.fixsvc.x -- - >/dev/null 2>&1 || rc=$?
+check_eq "emit-check: no permissions declared keeps today's behaviour" 0 "$rc"
+rc=0; e1=$($EC --kind pkg.fixsvc.other -- events.emit:pkg.fixsvc.seen 2>&1) || rc=$?
+e2=$($EC --kind pkg.fixsvc.other -- events.emit:pkg.fixsvc.seen 2>&1) || true
+check_eq "emit-check: an uncovered kind is dropped (exit 3), warned once per kind" "3 1 0" "$rc $(printf '%s' "$e1" | grep -c 'dropped') $(printf '%s' "$e2" | grep -c .)"
+rc=0; $EC --kind pkg.fixsvc.third -- events.emit:pkg.fixsvc.seen >/dev/null 2>&1 || rc=$?
+check_eq "emit-check: another kind is warned on its own" "3" "$rc"
+rc=0; $EC --kind pkg.other.x -- - >/dev/null 2>&1 || rc=$?
+check_eq "emit-check: another package's kind is dropped even without permissions" 3 "$rc"
+rc=0; HS_EVENT_NOROOT=1 HS_STATE_DIR=$WORK/st bash "$SCRIPTS/event.sh" emit --pkg no-such-pkg pkg.no-such-pkg.x s >/dev/null 2>&1 || rc=$?
+check "hs event emit --pkg refuses an unknown package" test "$rc" -ne 0
 check "the rate limit is a sliding window" python3 -I - "$SCRIPTS/lib" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])

@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "An extension can only emit the event kinds it declares"
+body  = """When an extension declares permissions, every event it emits (from its service or with hs event emit --pkg) must be covered by its events.emit entry. Any other kind is dropped and warned about once per kind. Extensions without a permissions list behave as before. Not tested on hardware yet."""
