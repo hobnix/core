@@ -24,6 +24,8 @@
   "webUi": "general",
   "webPort": "general",
   "webAllowedHosts": "access",
+  "webViewerGroup": "access",
+  "webAppManagerGroup": "access",
   "webAccent": "general",
   "webTailscale": "cap:tailscale",
   "webLan": "access",

@@ -4,7 +4,8 @@
 #   audit_record <typed words> <exit code> <flags>
 # Logged: who (actor), the words typed to find the command (`share add photos`), the exit code. NEVER the arguments after those words
 # (they may carry a password or a key); rows with the flag nohelp (timers, udev and event hooks) and the event log itself are not logged.
-# Actor: HS_ACTOR (the web interface sets the signed-in user), else HS_CALLER timer|job|web (ui counts as web), else SUDO_USER, else USER, else cli.
+# Actor: HS_ACTOR (scripts/web-serve.py sets it for every change to the signed-in person: WORKGROUP_anna for a domain user; a refused call never
+# reaches a command, so it has no line, ADR 0012 decision 8), else HS_CALLER timer|job|web (ui counts as web), else SUDO_USER, else USER, else cli.
 # Test knobs: HS_AUDIT_FORCE=1 (log although HS_CALLER=test), HS_AUDIT_OFF=1 (log nothing).
 
 audit_actor() {
