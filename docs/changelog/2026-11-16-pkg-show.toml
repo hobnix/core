@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "See what a package does before installing it"
+body  = """The web interface reads (hs sys pkg show) what a package is, what it asks and what installing it would do from its newest signed release, without installing anything. The install later uses exactly that release."""

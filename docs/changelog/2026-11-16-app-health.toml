@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "Apps: healthy, not healthy or stopped"
+body  = """
+An app whose package declares a health check (a container, a TCP port or an HTTP address) now shows healthy, not healthy or stopped on the Apps page. The page follows the event stream and only polls while the stream is down. Apps without a declared check look as before.
+"""

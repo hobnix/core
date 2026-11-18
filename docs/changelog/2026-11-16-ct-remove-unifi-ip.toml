@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "fix"
+title = "Deleting an instance gives its fixed IP back in UniFi again"
+body  = """Newer UniFi versions use a longer kind of id for clients, and the delete command refused it, so the fixed IP stayed reserved. It is released now. If UniFi cannot be reached, the command says so in one line and tells you to remove the IP by hand."""

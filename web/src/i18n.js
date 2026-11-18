@@ -4,6 +4,10 @@
 import { lang } from './lang.svelte.js';
 
 const de = {
+  'The install stopped': 'Die Installation ist angehalten', 'failed at': 'fehlgeschlagen bei', Retry: 'Erneut versuchen', 'Retry the install': 'Installation erneut versuchen',
+  'Remove': 'Entfernen', 'Removes the instance, its route and its fixed address. Shares and volumes with data stay unless you delete the data.': 'Entfernt die Instanz, ihre Route und ihre feste Adresse. Freigaben und Volumes mit Daten bleiben, außer du löschst die Daten.', 'Also delete the data': 'Auch die Daten löschen', 'Off: the data is kept and a later install finds it again (the default).': 'Aus: Die Daten bleiben erhalten und eine spätere Installation findet sie wieder (Standard).', 'Type the name of the app a second time to delete its data:': 'Gib den Namen der App ein zweites Mal ein, um ihre Daten zu löschen:', 'The name of the app, again': 'Der Name der App, noch einmal',
+  'Remove what was created': 'Entfernen, was angelegt wurde', 'Only what the install itself created is removed. What was there before stays.': 'Entfernt wird nur, was die Installation selbst angelegt hat. Was vorher da war, bleibt.',
+  'Also delete the data it created': 'Auch die angelegten Daten löschen', 'Off: the data is kept (the default).': 'Aus: die Daten bleiben erhalten (Standard).', 'Type the name of the app to confirm:': 'Zur Bestätigung den Namen der App eintippen:',
   Storage: 'Speicher', Pools: 'Pools', Disks: 'Festplatten', Shares: 'Freigaben', Encryption: 'Verschlüsselung', Vault: 'Tresor',
   Instances: 'Instanzen', Apps: 'Apps', Services: 'Dienste', Network: 'Netzwerk', Identity: 'Identität', Groups: 'Gruppen', Users: 'Benutzer',
   Certificates: 'Zertifikate', Monitoring: 'Überwachung', Hardware: 'Hardware', Diagnostics: 'Diagnose', Protection: 'Schutz', Backup: 'Datensicherung',
@@ -29,6 +33,12 @@ const de = {
   'Package builder': 'Paket-Baukasten', 'Write the manifest of a new app or extension': 'Das Manifest einer neuen App oder Erweiterung schreiben',
   'Write the manifest of a new app or extension; the server checks it as you type. Nothing is saved yet.': 'Das Manifest einer neuen App oder Erweiterung schreiben; der Server prüft es beim Tippen. Noch wird nichts gespeichert.',
   'App (recipe)': 'App (Rezept)', Extension: 'Erweiterung', Title: 'Titel', Version: 'Version', 'Needs core': 'Braucht Kern', For: 'Für', Script: 'Skript',
+  Capability: 'Fähigkeit', Description: 'Beschreibung', 'Description (German)': 'Beschreibung (Deutsch)', Icon: 'Symbol', Category: 'Kategorie',
+  'App version': 'App-Version', Instances: 'Instanzen', One: 'Eine', Many: 'Mehrere',
+  'One short paragraph for the store.': 'Ein kurzer Absatz für den Store.',
+  'A Phosphor name such as ph:image. An SVG file is added to the package by hand.': 'Ein Phosphor-Name wie ph:image. Eine SVG-Datei kommt von Hand ins Paket.',
+  'The release of the app this package pins.': 'Die Version der App, die dieses Paket festlegt.',
+  'One app, or several side by side under their own names.': 'Eine App, oder mehrere nebeneinander unter eigenen Namen.',
   'Everyone (generic)': 'Alle (generisch)', 'One person (personal)': 'Eine Person (persönlich)',
   'One per line, for example web.read or net:lan. Declared, not enforced (ADR 0014).': 'Eine pro Zeile, zum Beispiel web.read oder net:lan. Angegeben, nicht erzwungen (ADR 0014).',
   'Checking…': 'Prüfe…', 'The manifest passes the checks.': 'Das Manifest besteht die Prüfungen.', problem: 'Problem', problems: 'Probleme', Copy: 'Kopieren',
@@ -108,7 +118,7 @@ const de = {
   Time: 'Zeit', Subject: 'Betreff', 'What happened': 'Was passiert ist', 'Show older events': 'Ältere Ereignisse zeigen', 'No events': 'Keine Ereignisse',
   // Storage > Incident (pages/storage/Incident.svelte)
   Incident: 'Vorfall',
-  // Recipe wizard (forms/ops/RunRecipe.svelte, ADR 0018 stage 1)
+  // Recipe wizard texts (RunRecipe.svelte is gone; InstallDialog.svelte still uses some, ADR 0018 stage 1)
   Run: 'Ausführen', 'The questions of this recipe could not be read:': 'Die Fragen dieses Rezepts konnten nicht gelesen werden:',
   'This recipe needs a person at a terminal (a password is typed into the setup). Run': 'Dieses Rezept braucht eine Person am Terminal (ein Passwort wird in die Einrichtung getippt). Führe aus:',
   'on the server.': 'auf dem Server.', Needed: 'Erforderlich', 'No control characters': 'Keine Steuerzeichen', 'Pick one of the choices': 'Wähle eine der Möglichkeiten',
@@ -119,7 +129,7 @@ const de = {
   'set (not shown)': 'gesetzt (nicht angezeigt)', 'The secret goes only into the container, never into the log.': 'Das Geheimnis geht nur in den Container, nie ins Protokoll.',
   'Preferences the recipe does not ask here (memory, port, share ...) use the answers stored last time, or the defaults; to choose them yourself run': 'Einstellungen, die das Rezept hier nicht fragt (Speicher, Port, Freigabe ...), nehmen die zuletzt gespeicherten Antworten oder die Vorgaben; um sie selbst zu wählen, führe aus:',
   'in the terminal.': 'im Terminal.',
-  // Interactive recipe runs (forms/ops/RunQuestions.svelte, shell/JobRecords.svelte, ADR 0018 stage 3)
+  // Interactive recipe runs (InstallDialog.svelte, shell/JobRecords.svelte, ADR 0018 stage 3)
   'Waiting for your answer': 'Warte auf deine Antwort', 'waiting for input': 'wartet auf Eingabe', waiting: 'wartet auf Eingabe', 'Answer the question': 'Frage beantworten',
   Send: 'Senden', Done: 'Fertig', 'Running…': 'Läuft…', 'The job could not be read.': 'Der Auftrag konnte nicht gelesen werden.',
   'Leave it empty to use': 'Leer lassen, um zu verwenden:',
@@ -129,6 +139,23 @@ const de = {
   'The run was stopped.': 'Der Lauf wurde gestoppt.', 'The run was interrupted (the server restarted). Run it again.': 'Der Lauf wurde unterbrochen (der Server wurde neu gestartet). Starte ihn erneut.',
   'The answers were refused too often. Run it again.': 'Die Antworten wurden zu oft abgelehnt. Starte den Lauf erneut.', 'The run failed. The Jobs page and the log show why.': 'Der Lauf ist fehlgeschlagen. Die Seite Aufträge und das Protokoll zeigen warum.',
   'The answer was not accepted.': 'Die Antwort wurde nicht angenommen.', 'The answer could not be sent.': 'Die Antwort konnte nicht gesendet werden.',
+  // One Install (forms/ops/InstallDialog.svelte, docs/PLAN-app-lifecycle.md step 8b)
+  Install: 'Installieren', of: 'von', Cancel: 'Abbrechen', Open: 'Öffnen',
+  Yes: 'Ja', Container: 'Container', ready: 'bereit', missing: 'fehlt', 'is set up with it': 'wird mit eingerichtet',
+  'The plan could not be read.': 'Der Plan konnte nicht gelesen werden.', 'The plan was refused.': 'Der Plan wurde abgelehnt.', 'This cannot be installed now.': 'Das lässt sich jetzt nicht installieren.',
+  'This creates': 'Das legt an', 'It needs': 'Es braucht', 'The steps': 'Die Schritte',
+  'This takes a few minutes: the server is rebuilt.': 'Das dauert einige Minuten: Der Server wird neu gebaut.',
+  'Ask every preference again': 'Jede Einstellung noch einmal fragen',
+  'Memory, port, share and so on: the setup asks them while it runs, also for an app that exists.': 'Speicher, Port, Freigabe und so weiter: Die Einrichtung fragt sie während des Laufs, auch bei einer vorhandenen App.',
+  'An empty answer takes the default, or the setup asks it while it runs.': 'Eine leere Antwort nimmt den Standard, oder die Einrichtung fragt sie während des Laufs.',
+  'This package comes from a repository somebody added. Type its name to go on:': 'Dieses Paket stammt aus einem hinzugefügten Repository. Tippe seinen Namen, um fortzufahren:',
+  'Type the name': 'Namen eintippen',
+  'Check your answers, then start. The setup runs as one job; you can close this window and it goes on.': 'Prüfe deine Antworten und starte dann. Die Einrichtung läuft als ein Auftrag; du kannst dieses Fenster schließen, sie läuft weiter.',
+  'asked while it runs': 'wird während des Laufs gefragt', 'The server did not start it.': 'Der Server hat es nicht gestartet.',
+  'Closing this window does not stop the install: it waits for your answer (the Jobs page opens it again).': 'Das Schließen dieses Fensters hält die Installation nicht an: Sie wartet auf deine Antwort (die Seite Aufträge öffnet sie wieder).',
+  'is installed': 'ist installiert', 'It stopped at:': 'Sie hielt an bei:', 'The Jobs page shows the log.': 'Die Seite Aufträge zeigt das Protokoll.',
+  'A question appears here when the setup needs an answer. You can close this window; the install goes on.': 'Hier erscheint eine Frage, wenn die Einrichtung eine Antwort braucht. Du kannst dieses Fenster schließen; die Installation läuft weiter.',
+  'Fetch the release': 'Release holen', 'Check what it needs': 'Voraussetzungen prüfen', 'Check the answers': 'Antworten prüfen', 'Set it up': 'Einrichten', 'Check that it works': 'Prüfen, ob es läuft',
 };
 
 export const tr = (s) => (lang.code === 'de' && typeof s === 'string' ? (de[s] ?? s) : s);

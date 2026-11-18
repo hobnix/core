@@ -12,6 +12,7 @@
 . "${BASH_SOURCE[0]%/*}/../lib/network.sh"   # network_provider / network_run: the router connection
 . "${BASH_SOURCE[0]%/*}/../lib/recipe-runs.sh"   # recipe_runs_default: lxc or docker (recipe_runtime)
 . "${BASH_SOURCE[0]%/*}/../lib/ask.sh"   # ask_q: one question for the terminal and for the web (ADR 0018)
+. "${BASH_SOURCE[0]%/*}/../lib/created.sh"   # created <kind> <id>: the ledger of what this run made (lib/created.sh)
 . "${BASH_SOURCE[0]%/*}/../lib/internal-link.sh"   # link_get, link_overlaps: the internal link of Incus (internal_link)
 
 # ── Preferences ──
@@ -28,6 +29,8 @@
 conf="$state/recipe-${app:-$ct}.conf"
 ASK=false
 for a in "$@"; do [ "$a" != --ask ] || ASK=true; done
+[ "${RECIPE_ASK:-}" != 1 ] || ASK=true   # the Install/retry job (apps-change.sh --ask) asks every preference again, also on an existing app
+export CREATED_APP=${app:-$ct}   # the ledger record of this app; helpers in other scripts (create-share.sh) read it
 existed=false
 if incus info "${app:-$ct}" >/dev/null 2>&1; then existed=true; fi
 interactive() { [ -t 0 ] && [ -t 1 ]; }
@@ -148,6 +151,7 @@ ensure_container() {   # ensure_container <name> <ram-MB> [more options of manag
     fi
   else
     spin "$(t "Creating '%s'" "$1")" bash "$scripts/manage-ct.sh" --create "$1" "${create[@]}" "${@:3}"
+    created container "$1" "$([[ " $* " == *" --vm "* ]] && echo vm || echo container)"
   fi
   spin "Waiting for its address" bash -c "$wait_address" _ "$1" "" 60 ||
     fail "$(t "'%s' got no address. Check the network (hs ct list)." "$1")"
@@ -212,6 +216,7 @@ fixed_address() {   # fixed_address <name> [first] [last]
       spin "$(t 'Reserving %s in UniFi' "$suggestion")" bash "$scripts/providers/network/$np.sh" set-ip "$mac" "$suggestion" "$1"
       want=$suggestion
     fi
+    created reservation "$want" "$mac"   # only here: a reservation that was there before is not ours
   else
     ok "$(t "%s is reserved for '%s' in UniFi" "$want" "$1")"
   fi
@@ -561,6 +566,7 @@ declare_service() {
         --group "$group" ${desc:+--description "$desc"} ${want:+--want "${want%,}"} ${pub:+--public-name "$pub"} \
         ${px[@]+"${px[@]}"} ${stat_args[@]+"${stat_args[@]}"} 2>&1); then
     ok "$(t "Service '%s' is %s (hs services list)" "$name" "$out")"
+    [ "$out" != created ] || created service "$name"
     note "$(t 'Next: hs services apply (a public name is decided there: exposure public-ok)')"
     if capability_on gateway; then
       SPIN_SOFT=1 spin "$(t 'Local name for %s' "$name")" bash "$scripts/services.sh" apply --proxy local --adds-only

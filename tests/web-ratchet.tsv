@@ -15,7 +15,7 @@ forms/docker/RegistryForm.svelte	3	0	0	1	0
 forms/instances/BindStorage.svelte	5	0	0	1	0
 forms/instances/CreateInstance.svelte	0	0	0	1	0
 forms/instances/InstanceLogs.svelte	1	1	0	1	0
-forms/instances/InstanceSettings.svelte	8	0	0	1	0
+forms/instances/InstanceSettings.svelte	7	0	0	1	0
 forms/instances/IsoAdd.svelte	6	0	0	1	0
 forms/instances/steps/StepBasics.svelte	2	0	0	1	0
 forms/instances/steps/StepMedia.svelte	0	0	0	1	0
@@ -26,6 +26,7 @@ forms/ops/AppServices.svelte	1	1	0	1	0
 forms/ops/ChannelForm.svelte	3	3	0	1	0
 forms/ops/ExpiryForm.svelte	3	0	0	1	0
 forms/ops/InputForm.svelte	1	0	0	1	0
+forms/ops/InstallDialog.svelte	0	0	0	1	0
 forms/ops/NodeAdd.svelte	3	1	0	1	0
 forms/ops/PassthroughForm.svelte	4	0	0	1	0
 forms/ops/PcForm.svelte	3	0	0	1	0
@@ -36,8 +37,6 @@ forms/ops/PeerOffered.svelte	0	0	0	1	0
 forms/ops/PosterForm.svelte	4	1	0	1	0
 forms/ops/RepoAdd.svelte	2	0	1	1	0
 forms/ops/RouterSetup.svelte	2	0	0	1	0
-forms/ops/RunQuestions.svelte	2	1	0	1	0
-forms/ops/RunRecipe.svelte	3	1	0	1	0
 forms/ops/ServiceForm.svelte	10	3	2	1	0
 forms/shares/AddAccess.svelte	1	0	0	1	0
 forms/shares/DeleteShare.svelte	0	0	0	1	0

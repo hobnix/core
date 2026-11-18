@@ -744,3 +744,37 @@ Cancel (#135, ADR 0004 decisions 3-5): `job-record.py find-unit UNIT` prints the
 Update channels (issue #231, docs/PLAN-channels.md, core only): the setting `updateChannel` (`stable` default, `beta`, `edge`; `store = "settings"`, page updates) is read by scripts/lib/update-channel.sh (`uc_channel`, `uc_target`, `uc_verify`, `uc_rank`, `uc_last`/`uc_remember` with the state file `update-channel`). `uc_target` prints `kind<TAB>ref<TAB>label`: edge = `branch origin/develop`; stable = newest `vX.Y.Z` tag; beta = newest `vX.Y.Z` or `vX.Y.Z-beta.N` by semver order (own awk key and `sort`, not `versionsort.suffix`); no tag = kind `none`, and `hs update` then merges `@{u}` as the old `pull --ff-only` did. `hs update` now fetches with `--tags --prune --force`, verifies the tag against config/trusted-keys/server.allowed_signers (missing or empty file: refuses with a hint), refuses a tag older than HEAD, checks it out detached; edge checks out (or creates) the local `develop` and fast-forwards. Beta/edge without a terminal and without `--yes` stop with a warning and exit 3 (so a timer does not look successful); going up a channel asks for the name (not with `--yes`, which the web jobs pass: system-change.sh adds it when HS_CALLER is web or ui). A tag whose own `tag` line differs from its ref is refused, and local commits no remote has make the update refuse. `hs update --preview` compares with the same target. One new line `channel: <name> (<label>)` in both. Not done: `hs pkg`, installer ISO, `release.sh beta`, the real release key, web Settings text. tests/update-channel.sh; not run on a real server.
 
 Rust (#137, ADR 0001 "Job store"): the writer also exists as `hobnix job-record` (rust/hobnix-core `jobs`, rust/hobnix-cli `jobs`); `hs_job_record` in scripts/lib/job.sh picks it (`HOBNIX_BIN`, else `hobnix` on PATH) unless `HS_JOB_RECORD=python`, else job-record.py runs as before. The record files, stdout and exit codes are the same byte for byte (tests/job-record-rust.sh); only the stderr prefix is `hobnix:` instead of `job-record:`. Mirrored on purpose: the lock file is made from the id as given before the id is checked, `save` writes to the id inside the record, a `.lock` stays behind when reconcile skips a record. Different on purpose: a record field of the wrong JSON type is "not valid JSON" (Python carries it along), `-h` is a bad argument.
+
+## Automatic app updates, hidden (#470, step 13 of PLAN-app-lifecycle, 2026-11-16)
+
+EXPERIMENTAL, off, not shown anywhere. Not tested on hardware yet. Decision D12: the policy value `automatic` exists but cannot be set unless the
+hidden setting `appsAutoupdateEnabled` (schema, store settings, not settable from the web, default false) is `true`; `hs sys apps policy <inst> automatic`
+is refused otherwise (scripts/app_version.py `cmd_policy`). The CLI help, the Apps page and the wizard never offer it, and a stored `automatic`
+reads as `notify` in `sys apps versions` (the list keeps its shape).
+
+- **Timer** `hs-apps-autoupdate` (configuration.nix, every half hour) runs `scripts/apps-autoupdate.sh` (registry row `apps autoupdate`, flag nohelp) over
+  `scripts/app_autoupdate.py`. It does nothing while the switch is off or the local time is outside `appsAutoupdateWindow` (default `03:00-05:00`, may
+  pass midnight). It always exits 0, so the unit never fails because an app did.
+- **Per app with policy automatic**: only a package whose recorded repository (installed.toml) AND whose new release come from a default repository
+  (config/package-repos.toml); only a patch or minor change (a different major of the app version or of the package version is never applied: one
+  notification "major update waiting"); a diff that touches `needs`/`requires`/`permissions`, `commands.tsv` or `[web.*]`, or asks for new permissions,
+  is not applied either (one notification). Otherwise: snapshot of the instance (`manage-ct.sh <ct> --snapshot autoupdate-<date>`), `pkg update --yes`,
+  `hs recipe <name>`, then the declared health check (`sys apps health`, waits `HS_AUTOUPDATE_WAIT` s, default 60; an app without a declaration passes).
+- **Rollback order** on any failure after the snapshot: restore the snapshot first (the data), then `pkg rollback` (the package copy), so both agree;
+  the policy goes back to `notify`; ONE push message ("did not work ... put back" or "putting it back FAILED"). `/var/lib/hs/apps-autoupdate.json` keeps
+  the last message per instance (`failed:<version>`, `major:<version>`, `manual:<version>`), so the same case is announced once.
+- **Worst case**: a recipe of a signed, default-repository package runs as root unattended and breaks an app; the snapshot restore itself fails.
+  Protection: patch/minor only, default repositories only, trust-rule diff check, snapshot first, health check, rollback, one message, off by default.
+  Snapshots are not pruned yet (one per update). Shared storage and volumes are not part of an Incus snapshot.
+- Tests: tests/apps-autoupdate.sh (fakes for incus, pkg, manage-ct, recipe, health, push). Hardware test still to do (step 18): a pinned-image app updates
+  through the plan; an update that breaks the health check is rolled back.
+
+## App lifecycle docs and CI lessons (step 17, 2026-11-16)
+
+Two lessons from finishing PLAN-app-lifecycle. Not tested on hardware yet.
+
+- **Fakes in tests must be `chmod +x`.** A fake command written by a test (incus, unifi, pkg, recipe) that is not executable fails on Linux CI with
+  "permission denied" while it passes on Windows, where the executable bit does not exist. Every fake gets `chmod +x` when the test writes it.
+- **A recipes-repo check needs core `develop` at the same API level.** The `check` of hobnix/recipes validates against core `develop`; the recipes of step 14
+  use API level 9, which only branch `0.6` has. So the recipes pull requests hobnix/recipes#33 and #34 wait until 0.6 reaches `develop`; merging them
+  earlier turns the recipes CI red for a reason that is not in the recipes.

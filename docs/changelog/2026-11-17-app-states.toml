@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "The Apps page shows stages and health"
+body  = """Every package shows its stage (available, installed, on, running) and flags such as update or unhealthy. An app that declares a health check is running only while the check passes. Not tested on hardware yet."""

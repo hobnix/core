@@ -11,6 +11,7 @@ Never stores argv or environment, only the description the caller gives.
   resume ID   (waiting -> running) | step ID N OF TEXT | progress ID DONE TOTAL UNIT | finish ID EXIT | get ID
   find-unit UNIT | cancel ID --by NAME --safe yes|no | cancelled ID (exit 0 when cancelled)
   error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected; Python writer only)
+  result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers; Python writer only)
   reconcile   mark queued/running/waiting records whose unit is gone as interrupted (boot); never re-runs anything
 """
 import argparse
@@ -298,6 +299,20 @@ def cmd_error(a):
         save(rec)
 
 
+def cmd_result(a):
+    """Store what a job produced (docs/PLAN-app-lifecycle.md Q2: where to open it, what was installed). A flat object of short strings and numbers; any state."""
+    try:
+        obj = json.loads(a.json)
+    except ValueError:
+        raise Fail("result is not JSON")
+    if not isinstance(obj, dict) or len(a.json) > 4096 or not all(isinstance(k, str) and isinstance(v, (str, int, float)) and not isinstance(v, bool) for k, v in obj.items()):
+        raise Fail("result must be one flat JSON object of strings and numbers, at most 4 KB")
+    with locked(a.id):
+        rec = load(a.id)
+        rec["result"] = obj
+        save(rec)
+
+
 def cmd_find_unit(a):
     """Print the id of the newest queued/running record of a unit (highest id), else exit 1."""
     try:
@@ -464,6 +479,7 @@ def main():
     s = sub.add_parser("reconcile"); s.set_defaults(fn=cmd_reconcile)
     s = sub.add_parser("error"); s.add_argument("id"); s.add_argument("--category", required=True)
     s.add_argument("--message", default=""); s.set_defaults(fn=cmd_error)
+    s = sub.add_parser("result"); s.add_argument("id"); s.add_argument("--json", required=True); s.set_defaults(fn=cmd_result)
     s = sub.add_parser("find-unit"); s.add_argument("unit"); s.set_defaults(fn=cmd_find_unit)
     s = sub.add_parser("cancel"); s.add_argument("id"); s.add_argument("--by", default="")
     s.add_argument("--safe", choices=("yes", "no"), required=True); s.set_defaults(fn=cmd_cancel)

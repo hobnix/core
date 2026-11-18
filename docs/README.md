@@ -33,6 +33,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
+| [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |
 | [PLAN-capabilities-on-machine](PLAN-capabilities-on-machine.md) | Derived files of an installed capability package |
 | [PLAN-recipe-orchestrator](PLAN-recipe-orchestrator.md) | Interactive recipe runs: the orchestrator and its API contract |
 | [PLAN-first-run-wizard](PLAN-first-run-wizard.md) | From the ISO to the first dashboard: network, disks, one-time code |
@@ -48,6 +49,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-channels](PLAN-channels.md) | Update channels Stable, Beta, Edge on top of develop and main |
 | [PLAN-portable-install](PLAN-portable-install.md) | Audit of fixed names and assumptions that break on another machine, options for pools, users and single-disk installs |
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
+| [PLAN-app-lifecycle](PLAN-app-lifecycle.md) | Design for milestone 0.6: one lifecycle for apps and packages, one Install job, app contract, store fields, update policy |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
@@ -56,6 +58,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.3](RELEASE-NOTES-0.3.md) | Draft release notes of 0.3.0, with what is not verified |
 | [RELEASE-NOTES-0.4](RELEASE-NOTES-0.4.md) | Draft release notes of 0.4.0, with what is not verified |
 | [RELEASE-NOTES-0.5](RELEASE-NOTES-0.5.md) | Draft release notes of 0.5.0, with what is not verified |
+| [RELEASE-NOTES-0.6](RELEASE-NOTES-0.6.md) | Draft release notes of 0.6.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

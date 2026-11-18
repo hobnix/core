@@ -84,7 +84,13 @@ check_eq "restart" "  incus restart web" "$($C web --restart --dry-run)"
 check_eq "set ram and cpu" "  incus config set web limits.memory=2048MiB
   incus config set web limits.cpu=2" "$($C web --set ram=2048 cpu=2 --dry-run)"
 check_eq "set ram none removes the limit" "  incus config unset web limits.memory" "$($C web --set ram=none --dry-run)"
-check_eq "set autostart" "  incus config set web boot.autostart=false" "$($C web --set autostart=no --dry-run)"
+check_eq "autostart off unsets the key" "  incus config unset web boot.autostart" "$($C web --set autostart=off --dry-run)"
+check_eq "autostart no is the same" "  incus config unset web boot.autostart" "$($C web --set autostart=no --dry-run)"
+check_eq "autostart on sets true" "  incus config set web boot.autostart=true" "$($C web --set autostart=on --dry-run)"
+check_eq "autostart yes is the same" "  incus config set web boot.autostart=true" "$($C web --set autostart=yes --dry-run)"
+check_out "autostart refuses another value" "autostart must be on or off" $C web --set autostart=maybe --dry-run
+check_eq "stop --keep-off also unsets the key" "  incus stop web
+  incus config unset web boot.autostart" "$($C web --stop --keep-off --dry-run)"
 check_out "an unknown setting is refused" "unknown setting 'colour'" $C web --set colour=red --dry-run
 out=$($C web --update --dry-run)
 check_out "update takes a snapshot first" "incus snapshot create web before-update-[0-9]{8}-[0-9]{4}" echo "$out"

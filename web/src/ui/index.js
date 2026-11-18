@@ -2,6 +2,7 @@
 // Phase-2 pages import from here (or from the file directly) and never hand-draw a dot, bar, banner, drawer or select.
 export { default as StatusDot } from './StatusDot.svelte';
 export { default as Chip } from './Chip.svelte';
+export { default as StageBadge } from './StageBadge.svelte';
 export { default as Banner } from './Banner.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
 export { default as Skeleton } from './Skeleton.svelte';

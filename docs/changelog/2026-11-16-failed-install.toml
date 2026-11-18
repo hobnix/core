@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "A failed install says where it stopped, can start again from there, and can remove what it made"
+body  = """When installing an app fails, the job now names the step (read, needs, ask, run with the recipe phase, or check) and says why. Retry starts again at that step; a recipe phase runs again as a whole. Remove what was created lists exactly what the run made (the instance, its fixed address, its service), checks each line again, asks for the name of the app, and keeps any data it created unless you say otherwise."""
