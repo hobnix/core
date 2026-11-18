@@ -26,7 +26,7 @@
 
   <Card title="The CA">
     {#snippet actions()}
-      {#if st.loaded && !hasCa}<Button variant="primary" icon="certificate" busy={jobRunning('dc', ['ca'])} tooltip={'Create the certificate authority of the domain'} onclick={() => openPlan('dc', ['ca'], 'Make the CA')}>Make the CA…</Button>{/if}
+      {#if st.loaded && !hasCa}<Button variant="primary" icon="certificate" busy={jobRunning('dc', ['ca'])} tooltip={'Create the certificate authority of the domain'} onclick={() => openPlan('dc', ['ca'], 'Make the CA')}>Make the CAâ€¦</Button>{/if}
     {/snippet}
     {#if hasCa}
       <div class="kv"><span>State</span><span><span class="dot ok"></span> exists, valid until {s.ca_until}</span></div>
@@ -34,14 +34,14 @@
     {:else if st.loaded}
       <Muted as="div">No CA yet. Make it once, on the server that keeps it: it then signs the certificate of every controller.</Muted>
     {:else}
-      <Muted as="div">Loading…</Muted>
+      <Muted as="div">Loadingâ€¦</Muted>
     {/if}
   </Card>
 
   <Card title={`Domain controller ${s.dc && s.dc !== '-' ? s.dc : ''}`.trim()}>
     {#snippet actions()}
       <Button icon="arrows-clockwise" disabled={!hasCa || !s.dc || s.cert === 'none'} busy={jobRunning('dc', ['renew', '--dc', s.dc])} tooltip={hasCa ? 'New key and certificate, installed, Samba restarts (shows the plan first)' : 'Make the CA first'}
-        onclick={() => openPlan('dc', ['renew', '--dc', s.dc], 'Renew the certificate of ' + s.dc)}>Renew certificate…</Button>
+        onclick={() => openPlan('dc', ['renew', '--dc', s.dc], 'Renew the certificate of ' + s.dc)}>Renew certificateâ€¦</Button>
     {/snippet}
     {#if certOk}
       <div class="kv"><span>Subject</span><span>{s.subject}</span></div>
