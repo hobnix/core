@@ -118,6 +118,11 @@ check_out "disable says it is off" "Extension 'demo' is off" echo "$out"
 check_out "machine.toml lost it" 'capabilities = \["nixy"\]' cat "$HS_MACHINE_FILE"
 check_eq "its commands are gone at once" "0" "$($HS help | grep -c 'ext demo')"
 check_eq "even when the file Nix wrote still names it" "off" "$(echo demo > "$HS_CAPABILITIES_FILE"; $HS sys ext list | awk -F'\t' '$1 == "demo" { print $2 }')"
+check "a name nobody has stays an error when it is not switched on" bash -c "! $HS ext disable ghost >/dev/null 2>&1"
+sed -i 's/^capabilities = \[\(.*\)\]/capabilities = [\1, "ghost"]/' "$HS_MACHINE_FILE"
+check_out "ghost is switched on, its package is gone" '"ghost"' cat "$HS_MACHINE_FILE"
+check_out "disable names what it did" "leftover switch is out" $HS ext disable ghost
+check "and it is out of machine.toml" bash -c "! grep -q '\"ghost\"' '$HS_MACHINE_FILE'"
 $HS ext enable demo >/dev/null 2>&1
 check_eq "enable takes the overlay back" "on" "$($HS sys ext list | awk -F'\t' '$1 == "demo" { print $2 }')"
 check_out "an unknown package is refused" "No extension called 'nope'" $HS ext enable nope
@@ -187,5 +192,51 @@ check_eq "demo is still on" "on" "$($HS sys ext list | awk -F'\t' '$1 == "demo" 
 $HS ext disable needy >/dev/null 2>&1
 check "after the dependent is off it can go" $HS ext disable demo
 check_out "a package that needs a newer core is refused" "needs core API level 999" $HS ext enable future
+
+echo "-- a capability package may own its name (default repositories only)"
+capmf() {   # capmf <name>: package.toml of a capability package
+  mkdir -p "$PK/$1"; printf 'name = "%s"
+version = "1.0.0"
+kind = "capability"
+type = "feature"
+title = "%s"
+requires_core = ">=1"
+' "$1" "$1" > "$PK/$1/package.toml"
+}
+row() { printf '%s	%s	@/x.sh	-	x	x	topic:system,reads
+' "$1" "$2"; }
+capmf capa; capmf capb; capmf disk
+for n in capa capb disk; do
+  { row user "$n go"; row sys "sys $n data"; row user "ext $n via"; } > "$PK/$n/commands.tsv"
+done
+mkdir -p "$HS_STATE_DIR/packages"
+printf '[package.capa]
+version = "1.0.0"
+repo = "recipes"
+
+[package.capb]
+version = "1.0.0"
+repo = "elsewhere"
+
+[package.disk]
+version = "1.0.0"
+repo = "recipes"
+' > "$HS_STATE_DIR/packages/installed.toml"
+printf 'capa
+capb
+disk
+' > "$HS_CAPABILITIES_FILE"
+rows=$(registry_rows)
+check_out "a default-repository package loads its own-name row" "^user${tab}capa go${tab}$PK/capa/x.sh${tab}" echo "$rows"
+check_out "and its sys row" "^sys${tab}sys capa data${tab}" echo "$rows"
+check_out "and still its ext row" "^user${tab}ext capa via${tab}" echo "$rows"
+check_eq "a package of an added repository loads only its ext row" "0" "$(grep -c "^user${tab}capb go${tab}" <<<"$rows")"
+check_eq "its ext row loads" "1" "$(grep -c "^user${tab}ext capb via${tab}" <<<"$rows")"
+check_out "the refusal for an added repository names the ext form" "^capb${tab}[0-9]+${tab}capb go${tab}a user row must be: ext capb <command>$" registry_refused capb
+check_eq "a word that is a core command is refused" "0" "$(grep -c "^user${tab}disk go${tab}" <<<"$rows")"
+check_out "and says why" "the word disk is also a core command" registry_refused disk
+check_eq "the same package reports no refusal when the row is its own" "0" "$(registry_refused capa | grep -c .)"
+echo capa-off > "$HS_CAPABILITIES_FILE"
+check_eq "a capability package that is off adds no row" "0" "$(registry_rows | grep -c "capa go")"
 
 finish

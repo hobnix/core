@@ -68,6 +68,7 @@ case "$cmd" in
     [ $# -eq 2 ] || usage
     key=$1; val=$2
     row=$(spec "$key")
+    [ -n "$row" ] || ! config_overlay_key "$key" || row="$key|pkg|"   # an option of an installed capability package: the rule of its options.toml
     if [ -z "$row" ] && is_setting "$key"; then
       # a runtime setting that the table above does not list: checked by the rules of config/schema.toml (schema-gen.py rule)
       rule=$(PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" rule "$key" 2>/dev/null || true)
@@ -93,6 +94,20 @@ case "$cmd" in
     IFS='|' read -r _ kind allowed <<<"$row"
     tomlval=""; remove=false
     case "$kind" in
+      pkg)       rule=$(PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" rule "$key" 2>/dev/null || true)
+                 r_type=$(cut -f1 <<<"$rule"); r_choices=$(cut -f2 <<<"$rule"); r_min=$(cut -f3 <<<"$rule"); r_pattern=$(cut -f4 <<<"$rule"); r_hint=$(cut -f5 <<<"$rule")
+                 if [ "$val" = none ] || [ -z "$val" ]; then remove=true
+                 else
+                   case "$r_type" in
+                     bool)   case "$val" in true|false) tomlval=$val ;; *) fail "$(t "'%s' must be true or false" "$key")" ;; esac ;;
+                     int)    case "$val" in ""|*[!0-9]*) fail "$(t "'%s' must be a whole number" "$key")" ;; esac; tomlval=$val ;;
+                     string) case "$val" in *[\"\\]*|*[[:cntrl:]]*) fail "$(t "'%s' must be one line without quotes and backslashes" "$key")" ;; esac; tomlval="\"$val\"" ;;
+                     *)      fail "$(t "'%s' is a list or table: edit machine.toml on the server." "$key")" ;;
+                   esac
+                   if [ -n "$r_choices" ]; then case " $r_choices " in *" $val "*) ;; *) fail "$(t "'%s' must be one of: %s" "$key" "$r_choices")" ;; esac; fi
+                   if [ -n "$r_min" ] && [ "$val" -lt "$r_min" ] 2>/dev/null; then fail "$(t "'%s' must be %s or more" "$key" "$r_min")"; fi
+                   if [ -n "$r_pattern" ] && ! grep -Eq -- "$r_pattern" <<<"$val"; then fail "$(t "'%s' must be %s" "$key" "${r_hint:-valid}")"; fi
+                 fi ;;
       enum|bool|int) case " $allowed " in *" $val "*) ;; *) fail "$(t "'%s' must be one of: %s" "$key" "$allowed")" ;; esac
                  if [ "$kind" = enum ]; then tomlval="\"$val\""; else tomlval=$val; fi ;;
       gpu)       case " $allowed " in *" $val "*) ;; *) fail "$(t "'%s' must be one of: %s" "$key" "$allowed")" ;; esac

@@ -120,6 +120,7 @@ What the settings backup holds and what it leaves out:
 
 | In the host snapshot | Put back by `hs backup config restore` |
 | --- | --- |
+| `/etc/nixos/vendor` (the Nix code of installed capability packages and its lock) | yes, so a rebuild on a fresh install needs no GitHub. The package copies themselves are in `/var/lib/hs/packages`: `--from-disk` brings them. Not tested on hardware yet. |
 | `machine.toml`, `machine.nix` | yes |
 | `/var/lib/hs` (your server's state files) | only with `--with-state` |
 | `hardware-configuration.nix`, SSH host keys, Samba secrets, gateway certificate keys | no (restore them by hand, see the disaster recovery runbook below) |

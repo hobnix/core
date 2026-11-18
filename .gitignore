@@ -28,3 +28,6 @@ web/dist/
 # Rust build output
 rust/target/
 .hobnix-version
+
+# Capability modules vendored by hs pkg install (scripts/lib/pkg_vendor.py): not part of the repository
+/vendor/

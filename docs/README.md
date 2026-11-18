@@ -47,6 +47,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (Redis, collector, live updates) |
 | [PLAN-channels](PLAN-channels.md) | Update channels Stable, Beta, Edge on top of develop and main |
 | [PLAN-portable-install](PLAN-portable-install.md) | Audit of fixed names and assumptions that break on another machine, options for pools, users and single-disk installs |
+| [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
@@ -54,6 +55,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.2](RELEASE-NOTES-0.2.md) | Draft release notes of 0.2.0, with what is not verified |
 | [RELEASE-NOTES-0.3](RELEASE-NOTES-0.3.md) | Draft release notes of 0.3.0, with what is not verified |
 | [RELEASE-NOTES-0.4](RELEASE-NOTES-0.4.md) | Draft release notes of 0.4.0, with what is not verified |
+| [RELEASE-NOTES-0.5](RELEASE-NOTES-0.5.md) | Draft release notes of 0.5.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

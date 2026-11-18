@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --repos | list [--all] [--kind recipe|extension] | updates | validate | new <name> --template recipe|extension [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | repo list|add|remove | --list
+# args: --market | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -22,6 +22,7 @@
 #                          uninstall a repository package: refused while it is switched on or another package that is on `requires` it
 #                          (ADR 0009 rule 7). Shows what goes (the copy, its event declarations, its on/off marks) and what stays (containers
 #                          and data, never deleted); --dry-run changes nothing; asks to type the name, or --yes / --confirm-name without a terminal
+#   rollback <name> [--yes]  put the copy from before the last update back (previous/, and for a vendored package the old lock); then hs rebuild
 #   install and update refuse a package whose `requires_core` is above this server's API level (also checked against package.toml, not only the index)
 # Test knobs: HS_PACKAGES_ROOT, HS_STATE_DIR, HS_LANG.
 set -euo pipefail
@@ -36,6 +37,7 @@ pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh pkg-market pkg-repo
 case "${1:-list}" in
   --list) py list --all ;;
   --market) py market ;;
+  --capabilities) py capabilities ;;
   --repos) py repo list ;;
   list)
     shift
@@ -45,9 +47,14 @@ case "${1:-list}" in
     next_step "hs pkg updates" ;;
   updates)
     rows=$(py updates)
-    if [ -z "$rows" ]; then ok "$(t 'Every package is up to date.')"; exit 0; fi
-    { thead 'Package' 'Applied' 'Available'; printf '%s\n' "$rows"; } | table
-    next_step "hs recipe <name>" ;;
+    waits=$(py updates --waits)
+    if [ -z "$rows" ] && [ -z "$waits" ]; then ok "$(t 'Every package is up to date.')"; exit 0; fi
+    if [ -n "$rows" ]; then { thead 'Package' 'Applied' 'Available'; printf '%s\n' "$rows"; } | table; fi
+    while IFS=$'\t' read -r n v w; do
+      [ -n "$n" ] || continue
+      note "$(t '%s %s waits for core: it needs %s. Run: hs update' "$n" "$v" "$w")"
+    done <<<"$waits"
+    [ -z "$rows" ] || next_step "hs recipe <name>" ;;
   validate)
     if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
       while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
@@ -141,6 +148,9 @@ case "${1:-list}" in
         fail "$(t 'Removing needs a person at a terminal, --yes or --confirm-name <name>.')"; exit 1
       fi
     fi
+    # the keys of its options become "retired" (hs config check says "unused", not "unknown"): written before the folder is gone
+    PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay retire "$name" --packages "$st/packages/current" --out "$st/generated" >/dev/null \
+      || warn "$(t 'The options of this package could not be remembered.')"
     py remove "$name"
     for o in on off; do
       f=$st/capabilities-$o
@@ -164,6 +174,15 @@ case "${1:-list}" in
   update)
     shift; pkg_changed
     python3 -I "$here/pkg.py" update "$@" ;;
+  rollback)
+    # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
+    shift; name="${1:-}"; [ -n "$name" ] || fail "$(t 'Usage: hs pkg rollback <name>')"
+    plan=$(py rollback "$name" --plan) || exit 1
+    IFS=$'\t' read -r _ from to <<<"$plan"
+    note "$(t '%s: %s goes back to %s (its copy in vendor/ and the lock line).' "$name" "$from" "$to")"
+    [ "${2:-}" = --yes ] || confirm_name "$name" "$(t 'the package')" || fail "$(t 'Left as it is.')"
+    pkg_changed
+    py rollback "$name" >/dev/null && ok "$(t '%s is back at %s.' "$name" "$to")" && next_step "hs rebuild" ;;
   repo)
     shift
     case "${1:-list}" in
@@ -207,5 +226,5 @@ case "${1:-list}" in
       remove) shift; pkg_changed; py repo remove "${1:-}" && ok "$(t 'Repository removed.')" ;;
       *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>"; exit 1 ;;
     esac ;;
-  *) say "usage: hs pkg list [--all] [--kind recipe|extension] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
+  *) say "usage: hs pkg list [--all] [--kind recipe|extension|capability] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
 esac

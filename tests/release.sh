@@ -50,6 +50,15 @@ echo local >> note.txt; git add -A; git commit -q -m unpushed
 check_out "a main that differs from the remote is refused" "differs from" rel patch --yes
 git reset -q --hard origin/main
 
+echo "-- dry run and --version"
+check_out "--dry-run checks and stops, with no key at all" "Dry run: v2[.]0[.]2 would" bash -c "$REL patch --dry-run --key $WORK/none.pub --signers $WORK/signers 2>&1"
+check_eq "and tags nothing" "v1.0.0 v1.0.1 v1.1.0 v2.0.0 v2.0.1" "$(remote_tags)"
+check_out "--version names the tag" "Dry run: v2[.]5[.]0 would" rel --version v2.5.0 --dry-run
+check_out "--version below the last tag is refused" "not above" rel --version v1.9.0 --dry-run
+check_out "--version equal to the last tag is refused" "not above" rel --version v2.0.1 --dry-run
+check_out "--version v3.0.0 is signed and pushed" "v3[.]0[.]0 pushed" rel --version v3.0.0 --yes
+git fetch -q origin main --tags
+
 echo "-- bump"
 check_out "bump on main is refused" "Make a branch first" rel bump demo minor
 git checkout -q -b feature/demo-bump
@@ -58,6 +67,10 @@ check_eq "package.toml has the new version" 'version = "1.1.0"' "$(grep '^versio
 check_eq "index.toml has it too" 'version = "1.1.0"' "$(grep '^version' index.toml)"
 check_eq "and it is one commit" "demo: 1.0.0 -> 1.1.0" "$(git log -1 --format=%s)"
 check_out "the branch is on the remote" "feature/demo-bump" git ls-remote --heads origin
+git checkout -q -b feature/demo-nopush
+check_out "bump --no-push commits and does not push" "demo: 1[.]1[.]0 -> 1[.]1[.]1" rel bump demo patch --no-push
+check_eq "the branch is not on the remote" "" "$(git ls-remote --heads origin feature/demo-nopush)"
+git checkout -q feature/demo-bump
 check_out "a package that does not exist is refused" "no package" bash -c "$REL bump nope 2>&1; true"
 
 echo "-- unbumped (pkg.py repo-unbumped: a folder changed since a tag without a version rise)"

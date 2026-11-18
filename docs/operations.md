@@ -590,6 +590,70 @@ Close public SSH last, and only once SSH over Tailscale works (`sshOverIp = fals
 a command: it is a checklist you work through by hand (`docs/PLAN-nodes.md`, "Cutover checklist"). What a trial run does not prove: real mail
 delivery from the internet, outgoing mail, long game sessions through the forwarding, and a reboot of the real VPS.
 
+## Optional parts from hobnix/capabilities
+Some optional parts of the server (capabilities) can come from the repository `capabilities` instead of the core. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
+
+See what the repository offers, then install one:
+
+```bash
+hs sys pkg capabilities
+```
+
+```bash
+sudo hs pkg install <name>
+```
+
+A part that carries a Nix module is copied to `/etc/nixos/vendor/capabilities/<name>/`, and its hashes go into `vendor/capabilities.lock`. The rebuild trusts only that lock. `vendor/` is not part of the git checkout, so `hs update` never touches it. Switch the part on and build:
+
+```bash
+sudo hs ext enable <name>
+```
+
+```bash
+sudo hs rebuild
+```
+
+Before it builds, `hs rebuild` checks that every part that is on is a core part or an installed package, and that its copy in `vendor/` matches the lock. If not, it stops with the name and the command to run; nothing is built. The options of an installed part appear in `hs config list`, `hs config set` and `hs config check`; they are read from files in `/var/lib/hs/generated/`, which `hs pkg install`, `update` and `remove` rewrite.
+
+On a new server, the Optional parts step of the first-run wizard ([Install](install.md)) installs, switches on and rebuilds the parts you pick as one background job. If a step fails the job stops there; what was installed stays, off.
+
+### Updates that wait for the core
+`hs pkg updates` shows a newer release whose needs the server does not meet as a line "<name> <version> waits for core: it needs <level>". Run `sudo hs update`, then ask again.
+
+### Put the previous version back
+After `hs pkg update` replaced a part, the old copy and the old lock are kept. If the rebuild fails, `hs rebuild` shows a plan and asks you to type the name before it puts them back. You can do the same by hand, then rebuild:
+
+```bash
+sudo hs pkg rollback <name>
+```
+
+```bash
+sudo hs rebuild
+```
+
+A NixOS generation rollback (boot menu) restores the old system but not `vendor/`: the next `hs rebuild` would bring the new copy back. Roll the package back first.
+
+### Remove a part
+Switch it off and rebuild first; `hs pkg remove` refuses while it is on, or while another part that is on needs it. See the plan, then remove:
+
+```bash
+hs pkg remove <name> --dry-run
+```
+
+```bash
+sudo hs pkg remove <name>
+```
+
+The command asks you to type the name. Containers, data and the values in `machine.toml` stay. The option keys of the part are remembered as retired: `hs config check` then says they are unused because the part was removed, not that they are unknown.
+
+### Backup
+`hs backup config` includes `vendor/` with the other configuration files, and its list shows `vendor/` for the snapshots that hold it. Restore with `hs backup config restore --dry-run` first ([Backup and recovery](backup-and-recovery.md)).
+
+### Planned
+The checks of the two repositories against each other in CI, the release flow of hobnix/capabilities and the move of the pilot part `testlab` out of the core are planned (docs/PLAN-capabilities-repo.md, steps 10 to 12). Until then, do not expect a part to be there; `hs sys pkg capabilities` shows what is.
+
+Not tested on hardware yet.
+
 ## What to check, and when
 
 | When | What |

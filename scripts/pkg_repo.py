@@ -21,6 +21,7 @@ State, all under <state>/packages (root-owned on the server):
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
 import io
+import json
 import os
 import re
 import shutil
@@ -262,26 +263,51 @@ class Repos:
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
         tmp = os.path.join(self.state, "current", ".new-" + name)
-        shutil.rmtree(tmp, ignore_errors=True)
+        self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
         self.extract(r, tag, entry["path"], tmp)
         with open(os.path.join(tmp, "package.toml"), "rb") as fh:
             m = tomllib.load(fh)
         if m.get("name") != name or m.get("version") != entry["version"]:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
         rq = self.pkg.REQUIRES.match(str(m.get("requires_core", "")))
         if not rq or int(rq.group(1)) > self.pkg.api_level():
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml says requires_core %r, this server has API level %d: hs update first" % (name, m.get("requires_core"), self.pkg.api_level()))
+        for src, v in (("index.toml", entry.get("requires_nix_api")), ("package.toml", m.get("requires_nix_api"))):
+            if v is None:
+                continue
+            if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+                self.rm_quiet(tmp)
+                raise Refused("%s: requires_nix_api in %s must be a whole number from 1" % (name, src))
+            if v > self.pkg.nix_api_level():
+                self.rm_quiet(tmp)
+                raise Refused("%s: %s says requires_nix_api %d, this core has Nix API level %d: hs update first" % (name, src, v, self.pkg.nix_api_level()))
         ev = self.pkg.pkg_events.manifest_problems(name, m.get("events", []))
         if ev:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml [[events]]: %s" % (name, ev[0]))
         pm = self.pkg.pkg_perms.manifest_problems(name, m, self.pkg.capability_toml(tmp))
         if pm:
-            shutil.rmtree(tmp, ignore_errors=True)
+            self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
+        vendored = m.get("kind") == "capability" and bool(m.get("module"))
+        if vendored:
+            # Nix code from outside the checkout: default repositories only, never a name of the core, only files of its own folder (docs/PLAN-capabilities-repo.md, Q2/Q3)
+            problem = None
+            if not r.get("default"):
+                problem = "has a Nix module, which only the default repositories may ship (%s is an added repository)" % r_name
+            elif os.path.isdir(os.path.join(self.pkg.root(), "capabilities", name)):
+                problem = "has the name of a capability of the core, which a package does not replace"
+            else:
+                try:
+                    self.pkg_vendor.nix_hashes(tmp)
+                except self.pkg_vendor.Refused as e:
+                    problem = str(e)
+            if problem:
+                self.rm_quiet(tmp)
+                raise Refused("%s: %s" % (name, problem))
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -290,7 +316,14 @@ class Repos:
                 if x.startswith(name + "@"):
                     self.rm(os.path.join(prev, x))
             os.rename(cur, os.path.join(prev, "%s@%s" % (name, old.get("commit", "unknown")[:12])))
+            self.keep_previous(name, old, vendored)
         os.rename(tmp, cur)
+        if m.get("kind") == "capability":
+            if vendored:
+                tree = git("rev-parse", "%s:%s" % (tag, entry["path"]), cwd=self.clone_dir(r_name)).decode().strip()
+                self.pkg_vendor.vendor(cur, self.nixos_dir(), dict(repo=r_name, tag=tag, commit=commit, tree=tree))
+            else:
+                self.pkg_vendor.unvendor(name, self.nixos_dir())
         data = self.pkg.installed()
         data[name] = {"version": entry["version"], "repo": r_name, "commit": commit, "tag": tag}
         if "applied" in old:
@@ -302,6 +335,97 @@ class Repos:
             print("%s: its events were not installed: %s" % (name, e), file=sys.stderr)
         self.last_permissions = self.pkg.pkg_perms.of(m)
         return entry["version"], r_name, tag
+
+    def keep_previous(self, name, old, vendored):
+        """An update replaced the copy: keep what a rollback needs besides previous/<name>@<commit>: the installed.toml entry, and for a
+        vendored package the old lock as vendor/capabilities.lock.previous (docs/PLAN-capabilities-repo.md, Q6)."""
+        prev = os.path.join(self.state, "previous")
+        with open(os.path.join(prev, name + ".entry.json"), "w", encoding="utf-8") as f:
+            json.dump(old, f)
+        lock = self.pkg_vendor.lock_file(self.nixos_dir())
+        if vendored and os.path.isfile(lock):
+            shutil.copyfile(lock, lock + ".previous")
+
+    def previous_copy(self, name):
+        """-> (folder, entry dict) of the kept previous copy, or raises Refused"""
+        prev = os.path.join(self.state, "previous")
+        found = sorted(x for x in os.listdir(prev) if x.startswith(name + "@")) if os.path.isdir(prev) else []
+        if not found:
+            raise Refused("%s has no previous copy to put back" % name)
+        try:
+            with open(os.path.join(prev, name + ".entry.json"), encoding="utf-8") as f:
+                entry = json.load(f)
+        except (OSError, ValueError):
+            entry = {}
+        return os.path.join(prev, found[0]), entry
+
+    def rollback_plan(self, name):
+        """-> (from version, to version): what `rollback` would do"""
+        folder, entry = self.previous_copy(name)
+        have = self.pkg.installed().get(name, {})
+        return have.get("version", "-"), entry.get("version") or self.manifest_version(folder)
+
+    @staticmethod
+    def manifest_version(folder):
+        try:
+            with open(os.path.join(folder, "package.toml"), "rb") as f:
+                return str(tomllib.load(f).get("version", "-"))
+        except (OSError, tomllib.TOMLDecodeError):
+            return "-"
+
+    def rollback(self, name):
+        """Put the previous copy and the old lock back (the update broke the rebuild). The kept copy is consumed."""
+        folder, entry = self.previous_copy(name)
+        if not os.path.isdir(os.path.join(self.state, "current", name)):
+            raise Refused("%s was not installed from a repository" % name)
+        with open(os.path.join(folder, "package.toml"), "rb") as f:
+            m = tomllib.load(f)
+        cur = os.path.join(self.state, "current", name)
+        self.rm(cur)
+        os.rename(folder, cur)
+        lock_path = self.pkg_vendor.lock_file(self.nixos_dir())
+        if m.get("kind") == "capability" and m.get("module"):
+            oldlock = {}
+            try:
+                with open(lock_path + ".previous", "rb") as f:
+                    oldlock = tomllib.load(f).get(name, {})
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+            self.pkg_vendor.vendor(cur, self.nixos_dir(), {k: oldlock.get(k) or entry.get(k) for k in ("repo", "tag", "commit", "tree")})
+            try:
+                os.remove(lock_path + ".previous")
+            except OSError:
+                pass
+        data = self.pkg.installed()
+        back = dict(entry) if entry.get("version") else {"version": m.get("version"), "repo": data.get(name, {}).get("repo", "")}
+        if "applied" in data.get(name, {}) and "applied" not in back:
+            back["applied"] = data[name]["applied"]
+        data[name] = back
+        self.pkg.save_installed(data)
+        try:
+            os.remove(os.path.join(self.state, "previous", name + ".entry.json"))
+        except OSError:
+            pass
+        return back.get("version")
+
+    def rollback_candidates(self):
+        """[(name, version now, version before)] for every vendored package whose entry in the lock differs from vendor/capabilities.lock.previous."""
+        lock = self.pkg_vendor.lock_file(self.nixos_dir())
+        try:
+            with open(lock + ".previous", "rb") as f:
+                before = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            return []
+        now = self.pkg_vendor.read_lock(self.nixos_dir())
+        out = []
+        for n in sorted(now):
+            if n in before and now[n].get("commit") != before[n].get("commit"):
+                try:
+                    self.previous_copy(n)
+                except Refused:
+                    continue
+                out.append((n, str(now[n].get("version", "-")), str(before[n].get("version", "-"))))
+        return out
 
     def installed_permissions(self, name):
         """The permissions of the installed copy (None = not declared, or not installed)."""
@@ -318,12 +442,27 @@ class Repos:
         new = self.pkg.pkg_perms.of(tomllib.loads(raw.decode("utf-8", "replace")))
         return new, self.pkg.pkg_perms.added(self.installed_permissions(name), new)
 
+    @property
+    def pkg_vendor(self):
+        return self.pkg.pkg_vendor
+
+    @staticmethod
+    def nixos_dir():
+        """The checkout that vendor/ lives in (HS_NIXOS_DIR, default /etc/nixos)."""
+        return os.environ.get("HS_NIXOS_DIR", "/etc/nixos")
+
     @staticmethod
     def rm(path):
         def onerr(fn, p, _):
             os.chmod(p, stat.S_IRWXU)
             fn(p)
         shutil.rmtree(path, onerror=onerr)
+
+    @classmethod
+    def rm_quiet(cls, path):
+        """Remove a folder if it exists; read-only files too (a refused install leaves one behind, and on Windows a plain rmtree keeps it)."""
+        if os.path.lexists(path):
+            cls.rm(path)
 
     def recorded(self, name):
         """installed.toml's entry for a package that sits in current/; an entry without repo (written by the old `hs recipe` record, which
@@ -343,6 +482,7 @@ class Repos:
         if not os.path.isdir(cur):
             raise Refused("%s was not installed from a repository" % name)
         self.rm(cur)
+        self.pkg_vendor.unvendor(name, self.nixos_dir())
         self.pkg.pkg_events.remove(name)
         data.pop(name, None)
         self.pkg.save_installed(data)
@@ -401,7 +541,7 @@ def run(pkg, cmd, rest):
                     print("\t".join([r_name, pname, e.get("kind", "?"), str(e.get("version")), have.get(pname, {}).get("version", "-")]))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
-            # (- = no copy in current/), state (new|current|update|orphan), core (yes|no), audience, title. A package of a repository that
+            # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that
             # is gone (or no longer lists it) is an orphan: its copy stays until `hs pkg remove`.
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
@@ -421,6 +561,8 @@ def run(pkg, cmd, rest):
                             state = "update" if pkg.semver_key(ver) > pkg.semver_key(inst) else "current"
                         except ValueError:
                             state = "update"
+                    if state in ("new", "update") and pkg.waits_for(e):
+                        state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
                     seen.add(pname)
                     print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
                                      e.get("audience", "generic"), (e.get("title") or "-").replace("	", " ")]))
@@ -479,6 +621,17 @@ def run(pkg, cmd, rest):
                     raise Refused("not installed")
             v, r_name, tag = R.install(rest[0], R.recorded(rest[0])["repo"])
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
+        elif cmd == "rollback":
+            # rollback <name> --plan: "name TAB from TAB to" | rollback <name>: put the previous copy and lock back (the caller asked first)
+            if "--plan" in rest:
+                a, b = R.rollback_plan(rest[0])
+                print("\t".join([rest[0], a, b]))
+            else:
+                print("%s %s" % (rest[0], R.rollback(rest[0])))
+        elif cmd == "rollback-candidates":
+            # the vendored packages whose lock line differs from the kept old lock: name TAB now TAB before
+            for n, a, b in R.rollback_candidates():
+                print("\t".join([n, a, b]))
         elif cmd == "remove":
             R.remove_package(rest[0])
         else:

@@ -67,7 +67,7 @@ Sessions end after 8 hours without activity, after 12 hours at most, and when th
 ## Finish the first setup
 
 On a new server the sign-in page asks for the one-time code from the server's screen ([Install](install.md)). After you choose the password, the
-**First setup** wizard opens: account, storage, preset, done. The storage step lists the pools that are already on the disks (**Import** opens a plan), the empty disks (tick an even number, at least two, name the pool, **Create the pool** opens a plan) and the disks it only shows (erase those on their disk page first). **Finish** (or skipping every step and finishing) removes it; it never comes back. What is
+**First setup** wizard opens: account, storage, preset, optional parts, done. The storage step lists the pools that are already on the disks (**Import** opens a plan), the empty disks (tick an even number, at least two, name the pool, **Create the pool** opens a plan) and the disks it only shows (erase those on their disk page first). **Finish** (or skipping every step and finishing) removes it; it never comes back. What is
 still open stays on the **Setup** page. Not tested on hardware yet.
 
 ## If the sign-in is locked

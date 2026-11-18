@@ -207,6 +207,7 @@ Phases 1 to 3 are core-only and can run in parallel after phase 0 (they touch `p
 ## Decided by the owner (2026-11-10)
 
 1. **Pilot capability:** `network`, if its manifest has no `module.nix` dependency (checked in phase 4); otherwise `docs`.
+   *Note (2026-11-16): replaced by decision O1 of docs/PLAN-capabilities-repo.md: the pilot is `testlab`. The text above is kept as decided.*
 2. **Vendor location:** `/etc/nixos/vendor/capabilities/`, ignored by git.
 3. **Licence:** AGPL-3.0 (as set).
 4. **No `release/*` branches.** `develop` is the release candidate; beta tags come from the milestone branch `X.Y` (ADR 0007, amended 2026-11-13).

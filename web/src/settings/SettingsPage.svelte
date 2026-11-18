@@ -16,7 +16,7 @@
   import Fields from './Fields.svelte';
   import Sessions from './Sessions.svelte';
   import WizardSteps from './WizardSteps.svelte';
-  import layout from './layout.gen.json';
+  import { useLayout } from './layoutstate.svelte.js';
   import { fieldsFor } from './layout.js';
   import { useConfig } from './config.svelte.js';
 
@@ -39,6 +39,8 @@
   const title = $derived(TITLES[page] ?? TITLES.general);
 
   const { list, opts: getOpts } = useConfig();
+  const getLayout = useLayout();
+  const layout = $derived(getLayout());
   const fields = $derived(fieldsFor(layout, page, getOpts()));
 
   // A page with guided steps (layout.core, from [[page]] in config/schema.toml): the wizard, and Advanced = the step keys as plain fields + the page's other keys
