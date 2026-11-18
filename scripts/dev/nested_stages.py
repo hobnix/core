@@ -239,7 +239,7 @@ def _bulk_steps(params, kind):
         step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
              timeout=1800, what="the pool job finishes"),
         # a SnapRAID pool needs mergerfs and its mount unit: on a server that had none, the rebuild after `hs pool` brings them (docs/install.md)
-    ] + ([step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
+    ] + ([step("run", "(unset HS_CALLER; hs rebuild --foreground)", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
         step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
         step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
