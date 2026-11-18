@@ -132,4 +132,21 @@ check_eq "--yes leaves the SSH key alone" "livekey2" "$(cat "$HS_SSH_DIR/ssh_hos
 check_eq "--yes restores machine.toml" "new = 7" "$(cat "$NX/machine.toml")"
 if out=$(bash "$SCRIPTS/backup.sh" config restore --with-samba </dev/null 2>&1); then fail "--with-samba without --from-disk accepted"; else pass "--with-samba needs --from-disk"; fi
 
+echo "-- vendor/ comes back with the settings (ADR 0017 decision 10)"
+echo live-pass > "$ST/restic-password"; unset FIXPASS
+mkdir -p "$FIX$NX/vendor/capabilities/fixmod"
+printf '[fixmod]
+version = "1.0.0"
+' > "$FIX$NX/vendor/capabilities.lock"
+echo '{ ... }: { }' > "$FIX$NX/vendor/capabilities/fixmod/module.nix"
+out=$(b config)
+has "vendor/" && pass "the list says the snapshot holds vendor/" || fail "list: $out"
+out=$(b config restore --dry-run)
+has "$NX/vendor/capabilities.lock" && has "$NX/vendor/capabilities/fixmod/module.nix" && pass "the plan names the lock and the module" || fail "plan: $out"
+rm -rf "$NX/vendor"
+out=$(b config restore --yes) || fail "restore failed: $out"
+check_eq "the lock is back" '[fixmod]' "$(head -n 1 "$NX/vendor/capabilities.lock" 2>/dev/null)"
+check "and the vendored module" test -f "$NX/vendor/capabilities/fixmod/module.nix"
+check "the host snapshot takes /etc/nixos/vendor" grep -q '/etc/nixos/vendor' "$SCRIPTS/backup.sh"
+
 finish

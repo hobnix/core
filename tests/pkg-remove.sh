@@ -55,6 +55,19 @@ python3 "$SCRIPTS/schema-gen.py" overlay write --packages "$HS_STATE_DIR/package
 check "the overlay lists the package" grep -q '^gone	' "$HS_STATE_DIR/generated/capabilities.tsv"
 check "removing it" $PKGSH remove gone --yes
 check "the overlay row is gone" bash -c "! grep -q '^gone	' '$HS_STATE_DIR/generated/capabilities.tsv'"
+mk optcap capability
+printf 'options = "options.toml"
+' >> "$HS_STATE_DIR/packages/current/optcap/package.toml"
+printf '[[item]]
+key = "optcapHost"
+capability = "optcap"
+store = "machine"
+type = "string"
+default = "x"
+description = "d"
+' > "$HS_STATE_DIR/packages/current/optcap/options.toml"
+check "removing a package with options" $PKGSH remove optcap --yes
+check "its key is remembered as retired" grep -q '^optcapHost	optcap	1.0.0' "$HS_STATE_DIR/generated/retired-keys.tsv"
 rm -rf "$HS_STATE_DIR/generated"
 mk gone2 extension
 check "no overlay is created where there was none" bash -c "$PKGSH remove gone2 --yes && test ! -e '$HS_STATE_DIR/generated'"

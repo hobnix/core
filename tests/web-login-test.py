@@ -773,7 +773,7 @@ class Changes(Base):
             if area in PENDING_CHANGES:
                 continue
             for verb in ("plan", "start"):
-                self.assertTrue(any(p.startswith("sys %s %s " % (area, verb)) for p in paths), (area, verb))
+                self.assertTrue(any(p.startswith("sys %s %s " % (area.replace("/", " "), verb)) for p in paths), (area, verb))
 
 
 class HelperLine(unittest.TestCase):

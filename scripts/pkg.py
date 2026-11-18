@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Packages: recipes and extensions as one thing (docs/PLAN-packages.md, step 1). Standard library only.
 
-  pkg.py list [--kind recipe|extension] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
+  pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
   pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py repo-unbumped <tag> [<folder>]                    packages of a repository checkout whose folder changed since <tag> without a version rise (package.toml AND index.toml); exit 1 when any
@@ -13,6 +13,8 @@
   pkg.py api                                               the API level of the core helpers
   pkg.py perms-check <folder> [name]                       exit 1 and the reasons when the declared permissions do not cover what the package uses (hs ext enable refuses it)
   pkg.py perms <name>                                      the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
+  pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
+  pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
 
 Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work is `git`, signatures are SSH signatures on release tags:
@@ -22,6 +24,7 @@ Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work i
   pkg.py fetch [<repo>]                                    update the local clones and find the newest tag whose signature verifies
   pkg.py available                                         packages in the repositories (cache): repo, name, kind, version, installed
   pkg.py market                                            everything installable as data: name, kind, repo, version, installed, state (new|current|update|orphan), core, audience, title
+  pkg.py capabilities                                      the capability packages of the repositories: name, repo, version, installed, state, requires, type, title
   pkg.py install <name> [--repo <repo>]                    fetch the package at the verified tag into <state>/packages/current/<name>
   pkg.py update <name> [--yes] [--accept-permissions]     show the diff and the permissions, ask, install the new tag; NEW permissions need the typed name (or the flag)
   pkg.py remove <name>                                     forget an installed repository package (a recipe's container is never touched)
@@ -54,6 +57,16 @@ def _load_pkg_events():
 pkg_events = _load_pkg_events()
 
 
+def _load_pkg_vendor():
+    spec = importlib.util.spec_from_file_location("pkg_vendor", os.path.join(HERE, "lib", "pkg_vendor.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_vendor = _load_pkg_vendor()
+
+
 def _load_pkg_perms():
     spec = importlib.util.spec_from_file_location("pkg_perms", os.path.join(HERE, "lib", "pkg_perms.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -71,7 +84,10 @@ def capability_toml(folder):
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-KINDS = ("recipe", "extension")
+KINDS = ("recipe", "extension", "capability")
+CAP_TYPES = ("feature", "provider")
+CAP_LISTS = ("requires", "provides", "needs", "variants", "implied_by")
+NIX_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.nix$")
 AUDIENCES = ("generic", "personal")
 NEEDS = ("docker", "share", "tailscale")
 USES = ("gpu",)
@@ -98,6 +114,47 @@ def root():
 def api_level():
     with open(os.path.join(HERE, "lib", "api-level"), encoding="utf-8") as f:
         return int(f.read().split()[0])
+
+
+def nix_api_level():
+    """The Nix interface level of this core (capabilities/nix-api-level): what a capability module may rely on from `hs.*`. Goes up only
+    when a name a module may use is removed or changes meaning (docs/PLAN-capabilities-repo.md, Q3)."""
+    for r in (root(), os.path.dirname(HERE)):
+        try:
+            with open(os.path.join(r, "capabilities", "nix-api-level"), encoding="utf-8") as f:
+                return int(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            continue
+    return 1
+
+
+def waits_for(entry):
+    """"" when this core meets what a release needs, else the words for it ("core API level 3", "Nix API level 2"): the release waits for a newer core."""
+    rq = REQUIRES.match(str(entry.get("requires_core", "")))
+    if rq and int(rq.group(1)) > api_level():
+        return "core API level %s" % rq.group(1)
+    v = entry.get("requires_nix_api")
+    if isinstance(v, int) and not isinstance(v, bool) and v > nix_api_level():
+        return "Nix API level %d" % v
+    return ""
+
+
+def core_check():
+    """[(name, text)]: installed vendored packages (a Nix module) whose needs the core in this checkout does not meet, for `hs update` after the
+    pull and before the rebuild (docs/PLAN-capabilities-repo.md, Q6)."""
+    out = []
+    for n in sorted(installed()):
+        try:
+            with open(os.path.join(state_dir(), "current", n, "package.toml"), "rb") as f:
+                m = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        if m.get("kind") != "capability" or not m.get("module"):
+            continue
+        w = waits_for(m)
+        if w:
+            out.append((n, "needs %s, this core has core API level %d and Nix API level %d" % (w, api_level(), nix_api_level())))
+    return out
 
 
 def semver_key(v):
@@ -210,6 +267,57 @@ def convert(script):
     return "\n".join(lines) + "\n"
 
 
+def capability_problems(m, path=None):
+    """[text] for the capability fields of a package.toml with kind = "capability" (docs/PLAN-capabilities-repo.md, Q1).
+    `path` = the file: the files `module` and `options` name must exist beside it then."""
+    out = []
+    bad = out.append
+    folder = os.path.dirname(path) if path else None
+    if m.get("type") not in CAP_TYPES:
+        bad("type is not feature or provider")
+    for k in CAP_LISTS:
+        v = m.get(k, [])
+        if not isinstance(v, list) or not all(isinstance(x, str) and NAME.match(x) for x in v):
+            bad(f"{k} is not a list of capability names")
+    if folder and os.path.isfile(os.path.join(folder, "capability.toml")):
+        bad("a capability package has no capability.toml (package.toml holds its fields)")
+    mod = m.get("module")
+    if mod is not None:
+        if not isinstance(mod, str) or not NIX_FILE.match(mod):
+            bad("module must be the name of a .nix file in the package folder")
+        elif folder and not os.path.isfile(os.path.join(folder, mod)):
+            bad(f"module {mod} not found in the package")
+    nix = m.get("requires_nix_api")
+    if mod is not None and nix is None:
+        bad("requires_nix_api is required when module is set")
+    if nix is not None and (isinstance(nix, bool) or not isinstance(nix, int) or nix < 1):
+        bad("requires_nix_api must be a whole number from 1")
+    if nix is not None and mod is None:
+        bad("requires_nix_api without module")
+    if isinstance(nix, int) and not isinstance(nix, bool) and nix > nix_api_level():
+        bad(f"requires_nix_api {nix} is above the Nix API level {nix_api_level()}")
+    opt = m.get("options")
+    if opt is not None:
+        if not isinstance(opt, str) or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.toml$", opt):
+            bad("options must be the name of a .toml file in the package folder")
+        elif folder:
+            of = os.path.join(folder, opt)
+            try:
+                with open(of, "rb") as f:
+                    items = tomllib.load(f).get("item", [])
+            except OSError:
+                bad(f"options {opt} not found in the package")
+                items = []
+            except tomllib.TOMLDecodeError as e:
+                bad(f"options {opt} is not valid TOML: {e}")
+                items = []
+            for it in items:
+                if not isinstance(it, dict) or it.get("capability") != m.get("name"):
+                    bad(f"options {opt}: every [[item]] needs capability = \"{m.get('name')}\"")
+                    break
+    return out
+
+
 def manifest_problems(m, path=None, seen=None):
     """[text] for one package.toml dict. `path` = its file: the checks that need the folder (name = folder, the script and its header, the
     capability.toml of an extension) run only then; None = a draft that is not on disk yet (hs pkg check-draft, the web package builder, ADR 0018)."""
@@ -231,7 +339,7 @@ def manifest_problems(m, path=None, seen=None):
     if not SEMVER.match(str(m.get("version", ""))):
         bad("version is not semver (1.2.3)")
     if m.get("kind") not in KINDS:
-        bad("kind is not recipe or extension")
+        bad("kind is not recipe, extension or capability")
     if not m.get("title"):
         bad("title missing")
     rq = REQUIRES.match(str(m.get("requires_core", "")))
@@ -284,6 +392,9 @@ def manifest_problems(m, path=None, seen=None):
                 bad(f"question {a.get('key')}: a choice needs choices")
             if not a.get("label"):
                 bad(f"question {a.get('key')}: label missing")
+    elif m.get("kind") == "capability":
+        for t in capability_problems(m, path):
+            bad(t)
     elif path and not os.path.isfile(os.path.join(os.path.dirname(path), "capability.toml")):
         bad("an extension needs its capability.toml beside package.toml")
     for t in pkg_events.manifest_problems(n, m.get("events", [])):
@@ -314,6 +425,42 @@ def draft_findings(text):
         out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions") else "-", t))
     if not out:
         out.append(("warn", "-", "Checked without files: the script and its header lines, and capability.toml, are checked when the package is built (hs pkg validate)."))
+    return out
+
+
+def vendor_verify(enabled, nixos=None):
+    """[(name, problem, command)] for the capabilities that are switched on, before `hs rebuild` builds (docs/PLAN-capabilities-repo.md, Q3 rule 5):
+    every name is a folder of the core, an installed package or a package folder; a package with a module is vendored and its lock entry says what
+    installed.toml says. Nothing is built when this finds something."""
+    nixos = nixos or os.environ.get("HS_NIXOS_DIR", "/etc/nixos")
+    inst = installed()
+    known = {m.get("name") for _, m in manifests()}
+    lock = pkg_vendor.read_lock(nixos)
+    bad = {}
+    for n, t in pkg_vendor.problems(nixos):
+        bad.setdefault(n, t)
+    out = []
+    for n in sorted(set(enabled)):
+        if any(os.path.isdir(os.path.join(r, "capabilities", n)) for r in (root(), nixos)):
+            continue
+        if n in inst:
+            try:
+                with open(os.path.join(state_dir(), "current", n, "package.toml"), "rb") as f:
+                    m = tomllib.load(f)
+            except (OSError, tomllib.TOMLDecodeError):
+                m = {}
+            if m.get("kind") != "capability" or not m.get("module"):
+                continue
+            fix = "hs pkg install " + n
+            e = lock.get(n)
+            if e is None:
+                out.append((n, "has a Nix module but is not vendored", fix))
+            elif n in bad:
+                out.append((n, "vendor/ differs from the lock: " + bad[n], fix))
+            elif e.get("version") != inst[n].get("version") or (inst[n].get("commit") and e.get("commit") not in (None, inst[n].get("commit"))):
+                out.append((n, "vendor/ holds another release than the installed one", fix))
+        elif n not in known:
+            out.append((n, "is neither a part of the core nor an installed package", "hs ext disable " + n))
     return out
 
 
@@ -400,7 +547,7 @@ def repo_check(folder):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
-    for sub in ("recipes", "extensions"):
+    for sub in ("recipes", "extensions", "capabilities"):
         d = os.path.join(folder, sub)
         if os.path.isdir(d):
             for n in sorted(os.listdir(d)):
@@ -431,6 +578,22 @@ def main(argv):
     cmd, rest = argv[0], argv[1:]
     if cmd == "api":
         print(api_level())
+    elif cmd in ("vendor", "unvendor", "vendor-check"):
+        # vendor --from <package folder> --to <checkout> [--repo R --tag T --commit C --tree X] | unvendor <name> --to <checkout> | vendor-check --to <checkout>
+        return pkg_vendor.main([{"vendor-check": "check"}.get(cmd, cmd)] + rest)
+    elif cmd == "vendor-verify":     # names of the enabled capabilities as arguments: name TAB problem TAB command per finding, exit 1 when any
+        found = vendor_verify(rest)
+        for f in found:
+            print("	".join(f))
+        # a name that is nowhere (games and posters now live in hobnix/extensions) is only named: the evaluation ignores it, so it must not stop an update
+        return 1 if any(not f[1].startswith("is neither") for f in found) else 0
+    elif cmd == "core-check":      # name TAB text per installed vendored package this core does not suit, exit 1 when any
+        found = core_check()
+        for n, t in found:
+            print("%s	%s" % (n, t))
+        return 1 if found else 0
+    elif cmd == "nix-api":
+        print(nix_api_level())
     elif cmd == "list":
         kind = rest[rest.index("--kind") + 1] if "--kind" in rest else None
         data = rows("--all" in rest, kind)
@@ -441,8 +604,11 @@ def main(argv):
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
     elif cmd == "updates":
         seen = set()
+        inst_now = installed()
         for r in rows(True):
-            if r["installed"] != "-" and semver_key(r["version"]) > semver_key(r["installed"]):
+            if "repo" in inst_now.get(r["name"], {}):
+                continue       # installed from a repository: compared with its newest release below
+            if "--waits" not in rest and r["installed"] != "-" and semver_key(r["version"]) > semver_key(r["installed"]):
                 print("\t".join([r["name"], r["installed"], r["version"]]))
                 seen.add(r["name"])
         # packages from a repository: the newest verified release in the cached clones (hs pkg fetch refreshes them)
@@ -455,8 +621,48 @@ def main(argv):
                 continue
             for r_name, e, _, _ in cat.get(n, []):
                 if r_name == have["repo"] and semver_key(e["version"]) > semver_key(have["version"]):
-                    print("\t".join([n, have["version"], e["version"]]))
-    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove"):
+                    w = waits_for(e)
+                    if "--waits" in rest:     # newer releases this core cannot take yet: name, available, what they wait for
+                        if w:
+                            print("\t".join([n, e["version"], w]))
+                    elif not w:
+                        print("\t".join([n, have["version"], e["version"]]))
+    elif cmd == "capabilities":
+        # the capability packages the repositories offer (hs sys pkg capabilities): name, repo, available version, installed version (- = none),
+        # state (new|current|update), requires (comma list, - = none), type (feature|provider, - = not given), title. requires and type come from
+        # package.toml at the verified tag of the cached clone (hs pkg fetch refreshes it); a package.toml that cannot be read gives - for both.
+        spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        R = mod.Repos(MAIN)
+        have = installed()
+        cur = os.path.join(R.state, "current")
+        for pname, found in sorted(R.catalog().items()):
+            for r_name, e, tag, _ in found:
+                path = str(e.get("path", ""))
+                if e.get("kind") != "capability" or not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
+                    continue
+                ver = str(e.get("version"))
+                inst = str(have.get(pname, {}).get("version", "?")) if os.path.isdir(os.path.join(cur, pname)) else "-"
+                if inst == "-":
+                    state = "new"
+                elif inst == ver:
+                    state = "current"
+                else:
+                    try:
+                        state = "update" if semver_key(ver) > semver_key(inst) else "current"
+                    except ValueError:
+                        state = "update"
+                try:
+                    m = tomllib.loads(mod.git("show", "%s:%s/package.toml" % (tag, path), cwd=R.clone_dir(r_name)).decode("utf-8"))
+                except Exception:
+                    m = {}
+                req = m.get("requires") if isinstance(m.get("requires"), list) else []
+                req = [x for x in req if isinstance(x, str) and NAME.match(x)]
+                typ = m.get("type") if m.get("type") in ("feature", "provider") else "-"
+                title = (e.get("title") or m.get("title") or "-").replace("\t", " ")
+                print("\t".join([pname, r_name, ver, inst, state, ",".join(req) or "-", typ, title]))
+    elif cmd in ("repo", "fetch", "available", "market", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

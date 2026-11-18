@@ -136,5 +136,30 @@ env PATH="$BIN:$PATH" $U > "$WORK/u.out" 2>&1 < /dev/null; rc=$?
 check_out "HEAD ahead of the tag, commits published: already the latest" "Already the latest" cat "$WORK/u.out"
 check_eq "...and HEAD stays on its branch" "main" "$(git -C "$CL2" rev-parse --abbrev-ref HEAD)"
 
-finish
+echo "-- a vendored package the pulled core does not suit"
+cp "$SCRIPTS/pkg.py" "$CL2/scripts/"; mkdir -p "$CL2/scripts/lib" "$CL2/capabilities"
+cp "$SCRIPTS"/lib/pkg_*.py "$SCRIPTS/lib/api-level" "$CL2/scripts/lib/"; printf '1
+' > "$CL2/capabilities/nix-api-level"
+PK=$HS_STATE_DIR/packages; mkdir -p "$PK/current/needy"
+printf 'name = "needy"
+version = "1.0.0"
+kind = "capability"
+module = "module.nix"
+requires_core = ">=1"
+requires_nix_api = 5
+' > "$PK/current/needy/package.toml"
+printf '[package.needy]
+version = "1.0.0"
+repo = "caps"
+commit = "abc"
+tag = "v1.0.0"
+' > "$PK/installed.toml"
+env PATH="$BIN:$PATH" $U > "$WORK/u.out" 2>&1 < /dev/null; rc=$?
+check_out "the package is named with what it needs" "needy does not suit this core: needs Nix API level 5" cat "$WORK/u.out"
+check_eq "...exit 1 and no rebuild" "1 0" "$rc $(grep -c 'REBUILD RAN' "$WORK/u.out")"
+printf '5
+' > "$CL2/capabilities/nix-api-level"
+env PATH="$BIN:$PATH" $U > "$WORK/u.out" 2>&1 < /dev/null; rc=$?
+check_eq "a core that meets the need goes on" "0 0" "$rc $(grep -c 'does not suit' "$WORK/u.out")"
 
+finish

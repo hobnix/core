@@ -15,6 +15,9 @@ check "every manifest is valid" $PKG validate
 n_recipes=$(ls "$FIX"/packages/*/run.sh | wc -l)
 check_eq "every recipe has a manifest" "$n_recipes" "$(ls "$FIX"/packages/*/package.toml | wc -l)"
 check_eq "the fixture extension is an extension package" "1" "$($PKG list --all --kind extension | wc -l)"
+check_eq "the fixture capability is a capability package" "1" "$($PKG list --all --kind capability | wc -l)"
+check_out "list --kind capability names it" "^fixcap${tab}capability${tab}1[.]0[.]0" $PKG list --kind capability
+check_eq "list --kind extension does not show it" "0" "$($PKG list --all --kind extension | grep -c '^fixcap')"
 check_out "list shows fixapp with a version" "^fixapp${tab}recipe${tab}1[.]1[.]0" $PKG list
 check_eq "a personal recipe is hidden without --all" "0" "$($PKG list | grep -c "^fixpersonal${tab}")"
 check_eq "and shown with it" "1" "$($PKG list --all | grep -c "^fixpersonal${tab}")"
@@ -44,6 +47,30 @@ check_out "a name that differs from the folder is named" "differs from the folde
 
 echo "-- applied versions and updates"
 check_eq "nothing is applied yet, no update" "" "$($PKG updates)"
+echo "-- the capability kind"
+CAP=$WORK/captree; mkdir -p "$CAP/capabilities"
+capcase() {   # capcase <label> <expected text | ""> <sed expression on the good package.toml> [extra shell]
+  rm -rf "$CAP/capabilities/fixcap"; cp -r "$FIX/capabilities/fixcap" "$CAP/capabilities/fixcap"
+  sed -i "$3" "$CAP/capabilities/fixcap/package.toml"
+  if [ -n "$4" ]; then ( cd "$CAP/capabilities/fixcap" && eval "$4" ); fi
+  if [ -z "$2" ]; then check "$1" bash -c "HS_PACKAGES_ROOT=$CAP $PKG validate"
+  else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$CAP $PKG validate; true"; fi
+}
+capcase "the fixture capability is valid" "" 's/^$//'
+capcase "a type that is not feature or provider is named" "type is not feature or provider" 's/type = "feature"/type = "thing"/'
+capcase "a missing type is named" "type is not feature or provider" '/^type = /d'
+capcase "requires that is not a list of names is named" "requires is not a list" 's/^requires = \[\]/requires = "x"/'
+capcase "a module that is not a .nix name is named" "module must be" 's/module.nix/..\/x.sh/'
+capcase "a module file that is missing is named" "module module.nix not found" 's/^$//' "rm module.nix"
+capcase "a module without requires_nix_api is named" "requires_nix_api is required" '/requires_nix_api/d'
+capcase "requires_nix_api of 0 is named" "requires_nix_api must be" 's/requires_nix_api = 1/requires_nix_api = 0/'
+capcase "requires_nix_api without a module is named" "requires_nix_api without module" '/^module/d'
+capcase "an options file that is missing is named" "options options.toml not found" 's/^$//' "rm options.toml"
+capcase "an option of another capability is named" "needs capability" 's/^$//' "sed -i 's/capability = \"fixcap\"/capability = \"other\"/' options.toml"
+capcase "a capability.toml beside it is refused" "has no capability.toml" 's/^$//' "touch capability.toml"
+capcase "a module needing a higher Nix API level is named" "above the Nix API level" 's/requires_nix_api = 1/requires_nix_api = 99/'
+capcase "the kind of a draft stays valid" "" 's/^$//'
+
 $PKG record fixapp
 check_out "record writes the version" 'version = "1.1.0"' cat "$HS_STATE_DIR/packages/installed.toml"
 check_eq "up to date after record" "" "$($PKG updates)"

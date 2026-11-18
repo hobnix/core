@@ -1,0 +1,7 @@
+[[item]]
+key = "fixcapGreeting"
+capability = "fixcap"
+store = "machine"
+type = "string"
+default = "hello"
+description = "Fixture option."

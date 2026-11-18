@@ -21,6 +21,7 @@ set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/machine.sh"
 . "$here/lib/config-keys.sh"
+config_keys_extend
 machine=$(machine_file)
 example=$(machine_example)
 py=${HS_PYTHON:-python3}; command -v "$py" >/dev/null 2>&1 || py=python
@@ -30,6 +31,7 @@ case "${1:-}" in
   check)
     [ -f "$machine" ] || { echo "No $machine."; exit 2; }
     moved=$(PYTHONUTF8=1 "$py" "$here/schema-gen.py" settings 2>/dev/null | cut -f1 || true)
+    retired=$(machine_generated_dir)/retired-keys.tsv
     rc=0; out=$(machine_tool check "$example" "$machine" 2>&1) || rc=$?
     if [ "$rc" -ge 2 ]; then printf '%s\n%s does not parse.\n' "$out" "$machine"; exit 2; fi
     while IFS=$'\t' read -r kind key text; do
@@ -37,6 +39,11 @@ case "${1:-}" in
       # an option that moved out of machine.toml (store = settings): still honoured by Nix, but say where it lives now
       if [ "$kind" = warn ] && grep -qx "$key" <<<"$moved"; then
         text="runtime setting now (no rebuild): run hs config migrate-settings to move it out of machine.toml"
+      fi
+      # an option of a capability package that was removed: a note, never an error (the key stays harmless in machine.toml)
+      if [ "$kind" = warn ] && [ -r "$retired" ] && row=$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$retired") && [ -n "$row" ]; then
+        printf 'note: %s: unused, capability %s removed (delete the line when you like)\n' "$key" "$row"
+        continue
       fi
       case "$kind" in error) printf 'error: %s: %s\n' "$key" "$text" ;; *) printf 'warning: %s: %s\n' "$key" "$text" ;; esac
     done <<<"$out"

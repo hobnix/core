@@ -1548,6 +1548,39 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "pkg.bundle.plan.by_names": {
+    /** what installing capability packages (one comma list) with what they require, switching them on and one rebuild would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused, also without the network) */
+    words: ["pkg", "bundle", "plan", "<names>"];
+    path: "/pkg/bundle/plan/{names}";
+    method: "post";
+    class: "plan";
+    params: { names: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "pkg.bundle.start.by_names": {
+    /** do it as one background job: install, switch on, hs rebuild (hs sys pkg bundle start a,b): status started, unit */
+    words: ["pkg", "bundle", "start", "<names>"];
+    path: "/pkg/bundle/start/{names}";
+    method: "post";
+    class: "start";
+    params: { names: string; };
+    stdin: "no";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "pkg.capabilities": {
+    /** the capability packages the repositories offer, as data: name, repo, available version, installed version (- = none), state (new|current|update), requires (comma list, - = none), type (feature|provider, - = not given), title */
+    words: ["pkg", "capabilities"];
+    path: "/pkg/capabilities";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
+  };
   "pkg.list": {
     /** every package as data: name, kind, version, applied version (- = never), audience, title */
     words: ["pkg", "list"];
@@ -1560,7 +1593,7 @@ export interface SysOperations {
     lines: string;
   };
   "pkg.market": {
-    /** every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|orphan), core (yes|no), audience, title */
+    /** every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|waits|orphan; waits = the release needs a newer core), core (yes|no), audience, title */
     words: ["pkg", "market"];
     path: "/pkg/market";
     method: "get";

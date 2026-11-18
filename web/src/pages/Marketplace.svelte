@@ -18,7 +18,7 @@
   const repoList = poll('/api/sys/pkg/repos', 30000);
   const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos'];
 
-  // name, kind, repository, available version, installed version (- = none), state (new|current|update|orphan), core, audience, title
+  // name, kind, repository, available version, installed version (- = none), state (new|current|update|waits|orphan), core, audience, title
   const pkgs = $derived(rows(market).map((r) => ({ name: r[0], kind: r[1], repo: r[2], avail: r[3], inst: r[4] === '-' ? '' : r[4], state: r[5], core: r[6] === 'yes', title: r[8] === '-' ? '' : r[8] })));
   // name, address, signed|unsigned, default|added
   const repos = $derived(rows(repoList).map((r) => ({ name: r[0], url: r[1], signed: r[2] === 'signed', from: r[3] })));
@@ -37,7 +37,7 @@
 
   const kindLabel = (k) => (k === 'recipe' ? 'App' : k === 'extension' ? 'Extension' : 'Package');
   const kindIcon = (k) => (k === 'extension' ? 'puzzle-piece' : 'package');
-  const stateDot = (p) => (p.state === 'current' ? 'ok' : p.state === 'update' || p.state === 'orphan' ? 'warn' : 'off');
+  const stateDot = (p) => (p.state === 'current' ? 'ok' : p.state === 'update' || p.state === 'waits' || p.state === 'orphan' ? 'warn' : 'off');
   const stateText = (p) => (p.state === 'new' ? 'not installed' : p.state === 'current' ? `installed ${p.inst}` : p.state === 'update' ? `${p.inst} → ${p.avail}` : 'repository gone');
   const columns = [
     { key: 'sel', label: '', sort: false, width: '44px' },

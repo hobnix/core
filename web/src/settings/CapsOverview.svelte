@@ -4,7 +4,7 @@
   import { go } from '../route.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PartTag from './PartTag.svelte';
-  import layout from './layout.gen.json';
+  import { useLayout } from './layoutstate.svelte.js';
   import Fields from './Fields.svelte';
   import { fieldsFor } from './layout.js';
   import { useConfig } from './config.svelte.js';
@@ -16,6 +16,8 @@
   const parts = $derived(getParts());
   const extensions = $derived(parts.filter((p) => p.kind === 'extension'));
   const plainParts = $derived(parts.filter((p) => p.kind !== 'extension' && !p.name.startsWith('edge-')));
+  const getLayout = useLayout();
+  const layout = $derived(getLayout());
   const { opts: getOpts } = useConfig();
   const fields = $derived(fieldsFor(layout, 'capabilities', getOpts()));
   const hasPage = (p) => !!layout.caps[p.name]?.entry;

@@ -19,3 +19,14 @@ export function capEntries(layout, names) {
     .map(([n, c]) => ({ label: shortTitle(c.title), icon: c.icon, path: `/settings/capabilities/${n}` }))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
+
+// layout.gen.json plus layout.overlay.json (GET /api/settings-layout: { keys, caps } of the capability packages installed on this machine). The core
+// wins: an overlay key or capability that the core already has is ignored. A bad or empty overlay leaves the core layout as it is.
+export function mergeLayout(core, overlay) {
+  if (!overlay || typeof overlay !== 'object') return core;
+  const keys = { ...core.keys };
+  const caps = { ...core.caps };
+  for (const [k, p] of Object.entries(overlay.keys ?? {})) if (!(k in core.keys) && typeof p === 'string' && p.startsWith('cap:')) keys[k] = p;
+  for (const [n, c] of Object.entries(overlay.caps ?? {})) if (!(n in core.caps) && c && typeof c.title === 'string') caps[n] = { title: c.title, icon: c.icon || 'puzzle-piece', entry: c.entry !== false };
+  return { ...core, keys, caps };
+}

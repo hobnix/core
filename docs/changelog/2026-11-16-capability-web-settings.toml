@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "The Settings pages show the options of an installed capability package"
+body  = """After a capability package is installed or removed, its options appear on its own page under Settings > Capabilities (and in Advanced) without a rebuild, and the ones marked settable can be changed there. Options of the built-in parts are unchanged."""

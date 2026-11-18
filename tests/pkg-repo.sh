@@ -107,6 +107,10 @@ cd "$R"; release v1.6.0 1.6.0 "$WORK/good" ">=1" recipes/demo '[[events]]\nkind 
 check_out "a package with a bad [[events]] is refused" "events" bash -c "$PKG update demo --yes 2>&1; true"
 check "and the installed version is still 1.3.5" grep -q '^version = "1[.]3[.]5"$' "$HS_STATE_DIR/packages/installed.toml"
 check_out "and its declaration is untouched" "pkg[.]demo[.]done" cat "$HS_STATE_DIR/pkg-events/demo.tsv"
+cd "$R"; release v1.6.5 1.6.5 "$WORK/good" ">=1" recipes/demo 'requires_nix_api = 99'; cd "$ROOT"; $PKG fetch test >/dev/null
+check_out "a package needing a higher Nix API level is refused" "Nix API level" bash -c "$PKG update demo --yes 2>&1; true"
+check "and the installed version is still 1.3.5" grep -q '^version = "1[.]3[.]5"$' "$HS_STATE_DIR/packages/installed.toml"
+check_eq "the core's Nix API level is a number" "1" "$($PKG nix-api | grep -cE '^[1-9][0-9]*$')"
 cd "$R"; git rm -q -r recipes; mkdir -p recipes/fixapp; cd "$ROOT"
 cd "$R"
 printf 'name = "fixapp"\nversion = "9.0.0"\nkind = "recipe"\ntitle = "Evil fixapp"\nrequires_core = ">=1"\nscript = "run.sh"\n' > recipes/fixapp/package.toml; echo 'echo evil' > recipes/fixapp/run.sh

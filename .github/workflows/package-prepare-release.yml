@@ -1,0 +1,42 @@
+# Release preparation of a package repository (hobnix/server#615). Reusable; the callers in hobnix/recipes, hobnix/extensions and
+# hobnix/capabilities run it by hand on `develop`. It runs `bash scripts/dev/prepare-release.sh`: the changed packages since the last tag, the
+# highest `bump:` label of the merged pull requests of each (none = patch), `version` raised in package.toml and index.toml, `pkg.py
+# repo-check`, and a pull request into develop with "package: old -> new" and the tag level for `package-release`. UNVERIFIED: never run.
+# Note: a pull request opened with the workflow token starts no `pull_request` workflow, so `check` does not run on it; push an empty commit
+# or close and reopen it by hand, and Settings, Actions must allow Actions to create pull requests (the owner).
+name: package-prepare-release
+on:
+  workflow_call:
+    inputs:
+      core_ref:
+        description: "ref of hobnix/server that holds prepare-release.sh"
+        type: string
+        default: develop
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          path: repo
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/server
+          ref: ${{ inputs.core_ref }}
+          path: core
+      - name: Prepare
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags --force origin
+          git checkout -q -B develop origin/develop
+          git config user.name "hobnix release"; git config user.email "release@users.noreply.github.com"
+          bash ../core/scripts/dev/prepare-release.sh

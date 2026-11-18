@@ -1,0 +1,4 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "Guides for optional parts from the capabilities repository"
+body  = """Operations describes how to install, switch on, update, roll back and remove an optional part from hobnix/capabilities, and what `hs rebuild` checks first. Containers and apps names capability packages as a package kind."""

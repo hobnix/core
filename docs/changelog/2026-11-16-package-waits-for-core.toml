@@ -1,0 +1,6 @@
+date  = "2026-11-16"
+type  = "feature"
+title = "A package release that needs a newer core is shown as waiting"
+body  = """`hs pkg updates` and the Marketplace show a newer release that needs a newer core as waiting (state `waits`), instead of offering it. `hs update` stops before the rebuild, and names the package, when an installed package with a Nix module does not suit the core it just fetched.
+
+Not tested on hardware yet."""
