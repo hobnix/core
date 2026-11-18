@@ -6,7 +6,7 @@
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { StatusDot, Chip, Kv, Drawer, Split, Banner } from '../ui/index.js';
+  import { StatusDot, Chip, Kv, Drawer, Split, Banner, Segmented, Card, Row, Muted } from '../ui/index.js';
   import { poll, rows } from '../data.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
   import { route, go } from '../route.svelte.js';
@@ -101,6 +101,7 @@
   const setLevel = (e, l) => l !== e.level && openPlan('shares', [sel.name, 'perm', '--set', `${e.sid}=${l}`], `${e.name}: ${l} on ${sel.name}`);
   const toggle = (what, to) => openPlan('shares', [sel.name, what, '--to', to], `${what === 'cache' ? 'Upload cache' : 'Automatic snapshots'} of ${sel.name} ${to}`);
 
+  const VIEWS = $derived([{ value: 'shares', label: 'Shares' }, { value: 'kept', label: `Kept folders${deleted.loaded ? ` · ${kept.length}` : ''}` }]);
   const columns = [
     { key: 'name', label: 'Share' }, { key: 'kind', label: 'Kind', optional: true }, { key: 'pool', label: 'Pool', optional: true },
     { key: 'size', label: 'Size', sort: 'num', value: (s) => s.size }, { key: 'backup', label: 'Backup', optional: true },
@@ -116,38 +117,31 @@
   {/snippet}
 </PageHeader>
 
-<div class="bar">
-  <div class="seg" role="tablist" aria-label="View">
-    <label class="seg-opt"><input type="radio" name="sview" checked={view === 'shares'} onchange={() => go(query({ view: 'shares' }))} />Shares</label>
-    <label class="seg-opt"><input type="radio" name="sview" checked={view === 'kept'} onchange={() => go(query({ view: 'kept' }))} />Kept folders{deleted.loaded ? ` · ${kept.length}` : ''}</label>
-  </div>
+<Row gap="4" wrap style="margin-bottom:14px">
+  <Segmented label="View" value={view} options={VIEWS} onchange={(v) => go(query({ view: v }))} />
   {#if view === 'shares'}
-    <div class="seg" role="tablist" aria-label="Pool">
-      {#each POOLS as p (p.id)}
-        <label class="seg-opt"><input type="radio" name="spool" checked={pool === p.id} onchange={() => { selName = ''; go(query({ pool: p.id })); }} />{p.label}</label>
-      {/each}
-    </div>
+    <Segmented label="Pool" value={pool} options={POOLS.map((p) => ({ value: p.id, label: p.label }))} onchange={(v) => { selName = ''; go(query({ pool: v })); }} />
   {/if}
-</div>
+</Row>
 
 {#if view === 'kept'}
   <PageState loading={!deleted.loaded} hasData={deleted.data != null} error={deleted.error?.message ?? ''} empty={deleted.loaded && !kept.length} emptyIcon="folder-dashed"
              emptyTitle="No kept folders" emptyText="When a share is deleted its folder stays as a renamed copy until someone removes it for good.">
     <Banner tone="info">Deleting a share keeps its files as <code>name.deleted-date</code>, never published again. Remove a kept folder for good only when you are sure; copies in old backup snapshots stay until they age out.</Banner>
-    <div class="card gap">
+    <Card style="padding:4px 8px;overflow-x:auto">
       <Table id="kept" columns={keptCols} rows={kept} key="name" compact empty="No kept folders.">
         {#snippet cell(k, col)}
           {#if col.key === 'name'}<span class="nm"><i class="ph ph-folder-dashed"></i><code>{k.name}</code></span>
           {:else if col.key === 'kind'}<Chip>{k.kind}</Chip>
           {:else if col.key === 'size'}{size(k.size) || '–'}
-          {:else if col.key === 'disks'}<span class="mute">{dash(k.disks) || '–'}</span>
+          {:else if col.key === 'disks'}<Muted>{dash(k.disks) || '–'}</Muted>
           {:else}<span class="acts">
             <Button size="sm" icon="arrow-counter-clockwise" busy={jobRunning('shares', [k.name, 'undelete'])} busyLabel="Restoring…" disabled={locked} tooltip={'Bring the folder back as a share; nothing is overwritten'} onclick={() => openPlan('shares', [k.name, 'undelete'], `Restore ${k.name.replace(/\.deleted-\d{8}$/, '')}`)}>Restore</Button>
             <Button variant="danger" size="sm" icon="trash-simple" busy={jobRunning('shares', [k.name, 'purge'])} disabled={locked} tooltip={locked ? 'Storage is locked' : 'Delete this folder and all its files for good'} onclick={() => openPlan('shares', [k.name, 'purge'], `Remove ${k.name} for good`)}>Remove for good</Button>
           </span>{/if}
         {/snippet}
       </Table>
-    </div>
+    </Card>
   </PageState>
 {:else}
   <PageState loading={!overview.loaded} hasData={overview.data != null} error={overview.error?.message ?? ''} empty={overview.loaded && !shares.length} emptyIcon="folders"
@@ -155,20 +149,20 @@
     {#snippet emptyAction()}<Button variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>{/snippet}
     <Split open={!!sel}>
       {#snippet list()}
-        <div class="card gap">
+        <Card style="padding:4px 8px;overflow-x:auto">
           <Table id="shares" {columns} rows={shares} key="name" compact selected={sel?.name} onrow={(s) => { selName = s.name; tab = 'info'; }} empty="No shares.">
             {#snippet cell(s, col)}
               {#if col.key === 'name'}<span class="nm"><i class="ph {s.volume ? 'ph-cube' : s.kind === 'sensitive' ? 'ph-folder-lock' : 'ph-folder'}"></i>{s.name}</span>
-              {:else if col.key === 'kind'}<span class="mute">{s.kind}</span>
+              {:else if col.key === 'kind'}<Muted>{s.kind}</Muted>
               {:else if col.key === 'pool'}<Chip>{s.pool}</Chip>
               {:else if col.key === 'size'}<span class="nw">{size(s.size) || '–'}</span>
-              {:else if col.key === 'backup'}{#if s.volume || s.kind === 'other'}<span class="mute">–</span>{:else}<StatusDot state={s.backup === 'on' ? 'ok' : 'off'} label={s.backup === 'on' ? 'in backup' : 'not in backup'} />{/if}
-              {:else if col.key === 'cache'}<span class="mute">{dash(s.cache) || '–'}</span>
-              {:else if col.key === 'disks'}<span class="mute">{dash(s.disks) || '–'}</span>
-              {:else}<span class="mute">{dash(s.mounted) || '–'}</span>{/if}
+              {:else if col.key === 'backup'}{#if s.volume || s.kind === 'other'}<Muted>–</Muted>{:else}<StatusDot state={s.backup === 'on' ? 'ok' : 'off'} label={s.backup === 'on' ? 'in backup' : 'not in backup'} />{/if}
+              {:else if col.key === 'cache'}<Muted>{dash(s.cache) || '–'}</Muted>
+              {:else if col.key === 'disks'}<Muted>{dash(s.disks) || '–'}</Muted>
+              {:else}<Muted>{dash(s.mounted) || '–'}</Muted>{/if}
             {/snippet}
           </Table>
-        </div>
+        </Card>
       {/snippet}
       {#snippet side()}
         {#if sel}
@@ -184,24 +178,24 @@
                 ]} />
                 <div class="pad">
                   {#if mountedBy(sel).length}
-                    <div class="sh"><b>Mounted by</b></div>
-                    <div class="links">{#each mountedBy(sel) as m}<Button size="sm" tooltip={`Open the instance ${m.name}`} onclick={() => openInstance(m.name)}><i class="ph ph-cube"></i>{m.text}</Button>{/each}</div>
-                  {:else}<p class="mute">No instance mounts this {sel.volume ? 'volume' : 'share'}.</p>{/if}
-                  {#if sel.volume}<p class="mute">An instance volume belongs to its instance: change it there.</p>{:else if sel.kind !== 'other'}
-                    <p class="mute">Whether it is in the backup is set on <button class="link-btn" onclick={() => go('/protection/backup')}>Backup</button>.</p>
+                    <Row style="margin-bottom:8px"><b>Mounted by</b></Row>
+                    <Row wrap gap="3" style="margin-bottom:8px">{#each mountedBy(sel) as m}<Button size="sm" tooltip={`Open the instance ${m.name}`} onclick={() => openInstance(m.name)}><i class="ph ph-cube"></i>{m.text}</Button>{/each}</Row>
+                  {:else}<Muted as="p">No instance mounts this {sel.volume ? 'volume' : 'share'}.</Muted>{/if}
+                  {#if sel.volume}<Muted as="p">An instance volume belongs to its instance: change it there.</Muted>{:else if sel.kind !== 'other'}
+                    <Muted as="p">Whether it is in the backup is set on <button class="link-btn" onclick={() => go('/protection/backup')}>Backup</button>.</Muted>
                   {/if}
                 </div>
               {:else if t === 'perm'}
                 <div class="pad">
-                  <div class="sh"><b>Visibility</b><span class="mute">in the network list of the server</span></div>
+                  <Row align="baseline" gap="3" style="margin-bottom:8px"><b>Visibility</b><Muted>in the network list of the server</Muted></Row>
                   <div class="arow2">
-                    <span class="mute">Hidden shares can still be opened by typing the path. Visible shares are listed only for people with at least read access below.</span>
+                    <Muted>Hidden shares can still be opened by typing the path. Visible shares are listed only for people with at least read access below.</Muted>
                     <div class="lv" role="group" aria-label="Visibility of {sel.name}">
                       {#each ['hidden', 'visible'] as v}<button type="button" class="lvb" class:on={v === visibility} aria-pressed={v === visibility} disabled={locked || !vis.loaded} use:tip={v === visibility ? '' : `Make ${sel.name} ${v}`} onclick={() => v !== visibility && openPlan('shares', [sel.name, 'visibility', '--to', v], `${sel.name}: ${v}`)}>{v === 'hidden' ? 'Hidden' : 'Visible'}</button>{/each}
                     </div>
                   </div>
-                  <div class="sh sp"><b>Permissions</b><span class="mute">apply at the next connection</span><span class="grow"></span>
-                    <Button size="sm" tooltip={locked ? 'Storage is locked' : 'Give a user or group access to this share'} disabled={locked} onclick={() => openCreate(AddAccess, { share: sel.name, taken: entries.map((e) => e.sid) })}><i class="ph ph-plus"></i>Add</Button></div>
+                  <Row align="baseline" gap="3" style="margin:16px 0 8px"><b>Permissions</b><Muted>apply at the next connection</Muted><span class="grow"></span>
+                    <Button size="sm" tooltip={locked ? 'Storage is locked' : 'Give a user or group access to this share'} disabled={locked} onclick={() => openCreate(AddAccess, { share: sel.name, taken: entries.map((e) => e.sid) })}><i class="ph ph-plus"></i>Add</Button></Row>
                   {#each entries as e (e.sid)}
                     <div class="arow2">
                       <span class="nm"><i class="ph {e.type === 'group' ? 'ph-users-three' : 'ph-user'}"></i>{e.name}</span>
@@ -210,7 +204,7 @@
                       </div>
                     </div>
                   {:else}
-                    <p class="mute">{acl.loaded ? 'No entries.' : 'Loading…'}</p>
+                    <Muted as="p">{acl.loaded ? 'No entries.' : 'Loading…'}</Muted>
                   {/each}
                 </div>
               {:else if t === 'snap'}
@@ -218,19 +212,19 @@
                   {#if !isZfs(sel)}
                     <Banner tone="info">Snapshots exist on ZFS only. {snapraid ? 'This server keeps its shares on SnapRAID, so the restore points come from the backup (History tab).' : 'This share is not on a ZFS dataset.'}</Banner>
                   {:else}
-                    <div class="sh"><b>Snapshots</b><span class="mute">{auto ? 'automatic: hourly, kept 24 h / 7 d / 4 w' : 'automatic snapshots are off'}</span></div>
+                    <Row align="baseline" gap="3" style="margin-bottom:8px"><b>Snapshots</b><Muted>{auto ? 'automatic: hourly, kept 24 h / 7 d / 4 w' : 'automatic snapshots are off'}</Muted></Row>
                     {#each [...snaps].reverse() as n (n.name)}
-                      <div class="trow"><code class="grow">{n.name}</code><span class="mute">{n.created}</span><Chip>{n.how}</Chip></div>
-                    {:else}<p class="mute">{hist.loaded ? 'No snapshots yet.' : 'Loading…'}</p>{/each}
-                    <p class="mute">ZFS can only go back to the newest snapshot; newer ones are deleted by a roll-back.</p>
+                      <div class="trow"><code class="grow">{n.name}</code><Muted>{n.created}</Muted><Chip>{n.how}</Chip></div>
+                    {:else}<Muted as="p">{hist.loaded ? 'No snapshots yet.' : 'Loading…'}</Muted>{/each}
+                    <Muted as="p">ZFS can only go back to the newest snapshot; newer ones are deleted by a roll-back.</Muted>
                   {/if}
                 </div>
               {:else}
                 <div class="pad">
-                  <div class="sh"><b>Restore points</b><span class="mute">from the backup, newest first</span></div>
-                  {#each points as p (p.id)}<div class="trow"><code>{p.id}</code><span class="grow"></span><span class="mute">{p.time}</span></div>
-                  {:else}<p class="mute">{backups.loaded ? 'The backup has no restore points for shares yet.' : 'Loading…'}</p>{/each}
-                  <p class="mute">A restore puts the files into the share <code>restored</code>; the original is not touched.</p>
+                  <Row align="baseline" gap="3" style="margin-bottom:8px"><b>Restore points</b><Muted>from the backup, newest first</Muted></Row>
+                  {#each points as p (p.id)}<div class="trow"><code>{p.id}</code><span class="grow"></span><Muted>{p.time}</Muted></div>
+                  {:else}<Muted as="p">{backups.loaded ? 'The backup has no restore points for shares yet.' : 'Loading…'}</Muted>{/each}
+                  <Muted as="p">A restore puts the files into the share <code>restored</code>; the original is not touched.</Muted>
                 </div>
               {/if}
             {/snippet}
@@ -259,20 +253,12 @@
 {/if}
 
 <style>
-  .bar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
-  .seg { max-width: 100%; overflow-x: auto; }
-  .card { overflow-x: auto; }
-  .gap { padding: 4px 8px; }
   .pad { padding: 12px 16px; }
   .nm { display: inline-flex; align-items: center; gap: 8px; }
   .nm i { color: var(--fg-3); }
   .acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-  .mute { color: var(--fg-3); font-size: 12px; }
   .nw { white-space: nowrap; }
   code { font-size: 12px; }
-  .sh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
-  .sp { margin-top: 16px; }
-  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
   .trow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
   .arow2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .lv { display: inline-flex; border: 1px solid var(--line-2); }

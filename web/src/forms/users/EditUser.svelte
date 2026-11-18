@@ -3,6 +3,7 @@
   // the domain holds are sent; "-" clears a field. The login name cannot be changed here.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
+  import { Field, TextInput, Muted } from '../../ui';
 
   let { user, ondone = () => {} } = $props();
   const det = poll(`/api/sys/users/details/${encodeURIComponent(user)}`, 30000);
@@ -21,26 +22,15 @@
 
 <CreateDialog title="Edit user" kicker={user} area="users" {args} {ondone}>
   {#snippet form()}
-    <div class="field">
-      <label for="eu-full">Full name</label>
-      <input id="eu-full" class="input" value={val('full')} oninput={(e) => (edited.full = e.currentTarget.value)} placeholder="Anna Muster" autocomplete="off" disabled={!det.loaded} />
-      {#if !fullOk}<div class="hint bad">Letters, digits, spaces, dot, dash and apostrophe only.</div>{/if}
-    </div>
-    <div class="field">
-      <label for="eu-mail">Email</label>
-      <input id="eu-mail" class="input" type="email" value={val('mail')} oninput={(e) => (edited.mail = e.currentTarget.value)} placeholder="anna@example.org" autocomplete="off" disabled={!det.loaded} />
-      {#if !mailOk}<div class="hint bad">This is not an email address.</div>{/if}
-    </div>
-    <div class="field">
-      <label for="eu-desc">Description</label>
-      <input id="eu-desc" class="input" value={val('description')} oninput={(e) => (edited.description = e.currentTarget.value)} autocomplete="off" disabled={!det.loaded} />
-      {#if !descOk}<div class="hint bad">One line, up to 255 characters.</div>{/if}
-    </div>
-    <div class="hint">The login name stays as it is. Leave a field empty to clear it.</div>
+    <Field label="Full name" id="eu-full" error={!fullOk ? 'Letters, digits, spaces, dot, dash and apostrophe only.' : ''}>
+      <TextInput value={val('full')} oninput={(e) => (edited.full = e.currentTarget.value)} placeholder="Anna Muster" autocomplete="off" disabled={!det.loaded} />
+    </Field>
+    <Field label="Email" id="eu-mail" error={!mailOk ? 'This is not an email address.' : ''}>
+      <TextInput type="email" value={val('mail')} oninput={(e) => (edited.mail = e.currentTarget.value)} placeholder="anna@example.org" autocomplete="off" disabled={!det.loaded} />
+    </Field>
+    <Field label="Description" id="eu-desc" error={!descOk ? 'One line, up to 255 characters.' : ''}>
+      <TextInput value={val('description')} oninput={(e) => (edited.description = e.currentTarget.value)} autocomplete="off" disabled={!det.loaded} />
+    </Field>
+    <Muted as="p">The login name stays as it is. Leave a field empty to clear it.</Muted>
   {/snippet}
 </CreateDialog>
-
-<style>
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 4px; }
-  .hint.bad { color: var(--st-bad); }
-</style>
