@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3); section 7 (packages) has its decisions (7.4).
+Status: draft, reviewed once (2026-11-18). Every section has its decisions; open: the node tree of a remote node (7.5), the visual polish of the mockups (#775).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -28,7 +28,7 @@ An object is something the user can name, open and act on. Every object gets one
 | Job | object | none yet (#385) | Opened from any page that started it. |
 | Event | list entry | `Events` (#391) | Not an object with a page: a filtered, time-ordered list that links to the object it is about. |
 | Notification | list entry | `Notifications`, inbox (#619) | Same as Event. |
-| Service | list entry | `Services` | Linked to the instance or app that provides it. |
+| Service | address and quick look | `Services` | A row of the Services list. Linked to the instance or app that provides it. |
 
 Not objects: Summary, Health, Monitoring pages (Hardware, Diagnostics, Live state, Test-lab), Setup, What's new, Docs, Incident, Settings pages. They are views, checklists or settings. Section 2 places them.
 
@@ -55,7 +55,7 @@ An arrow is a link that every page shows, in both directions.
 
 ### 1.3 Rules
 
-1. One object, one address. The address survives a reload and can be shared. Five objects have a page of their own, the others open as a quick look in their list (3.6).
+1. One object, one address. The address survives a reload and can be shared. Seven objects have a page of their own, the others open as a quick look in their list (3.6).
 2. A list shows rows of one kind of object. A row opens a quick look (#454) or the page.
 3. An object page always shows its state, its links to other objects, its running or last job and its actions.
 4. A name is data. No page, route or filter names a specific pool or disk.
@@ -69,7 +69,7 @@ Decided 2026-11-18:
 - **Files is a tool of its own**, a browser over shares. It is not an object and not a tab of a share. A share page links to it.
 - **A backup target is a field of the backup job**, not an object.
 - **One user object.** Directory users (capability `ad`) use the same page with a read-only marker.
-- **A remote node shows instances only** (assumed, not yet decided by the user; revisit in section 2).
+- **A remote node keeps the tree it has today** (`nav.js` `nodeItems`): a peer shows Storage, Instances and Backup as read-only summaries, a vps or edge node shows the proxy pages (Mail entry, Ports, Outside watcher, Certificate, Tailscale, Settings). How that fits the new groups is open (7.5).
 - **No Jobs page exists today.** `nav.js` and `routes.js` have no entry; #385 adds it. The shell already has a Jobs and Logs drawer at the bottom (web/design/HANDOFF.md, "Shell"); the question for the templates is how that drawer and a Jobs page relate.
 
 ## 2. Navigation tree (#770)
@@ -88,12 +88,11 @@ A place is a page the user comes back to, to see the state of one kind of object
 | Releases | a view of updates | a tab of Updates |
 | Docs | a link out of the interface | the top bar |
 | Nodes | the list of servers | the node switcher in the top bar, with the list as its page |
-| Registries | a setting of Docker apps | a tab of Apps |
 | Pool names `bulk`, `fast` | data (#456) | children come from the pool list |
 
 ### 2.2 The tree
 
-Per node. Nine entries instead of twelve, and the three groups that each answer "is my server fine" become one.
+Per node. Summary and eight groups instead of Summary and twelve entries, and the three groups that each answer "is my server fine" become one.
 
 | Group | Entries | Replaces |
 |---|---|---|
@@ -114,7 +113,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 | Current entry | New place |
 |---|---|
 | Summary | Summary |
-| Storage > Pools, bulk, fast | Storage > Pools; its children are the pools |
+| Storage > Pools, bulk, fast | Storage > Pools; the pools are rows of that list and each opens its page, not tree children |
 | Storage > Disks, Shares, Files, Encryption, Vault | unchanged |
 | Storage > Incident | action on Pools and Health |
 | Instances > Instances | Instances > Instances |
@@ -134,13 +133,13 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 | Setup | banner on Summary |
 | Settings > General ... Advanced | unchanged |
 | Settings > Releases | Settings > Updates, tab |
-| proxyserver and peer pages | unchanged for now; section 3 covers remote nodes |
+| proxyserver and peer pages | unchanged for now; whether they use the new groups is open (7.5) |
 
 ### 2.4 Rules
 
-1. A group has at least two places, or it is a place itself (Summary, Network).
+1. A group has at least two places, or it is a place itself (Summary).
 2. No group page that only lists its children: a group page shows the state of the group and one or two actions (#457).
-3. A capability that is off hides its entry, as today. A page opened by address still works.
+3. A capability that is off hides its entry, as today. A page opened by address still works. People is not hidden by the capability `ad` any more (today Identity is): local users exist without it, and only the directory parts depend on it.
 4. Names are nouns for what the user sees; no entry is named after a task.
 5. Pools, disks and other data never appear as fixed entries.
 6. The tree has two levels, group and place. More views of one place are tabs (7.4).
@@ -149,7 +148,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 
 Decided 2026-11-18:
 
-- **Instances and Apps stay two groups.** Nine entries per node.
+- **Instances and Apps stay two groups.** Summary and eight groups per node.
 - **Expiry dates stays in Backup.**
 - **Certificates are in People, Services in Network.**
 - **The Jobs drawer stays and the Jobs page (#385) sits beside it.** How the two relate (what each shows) is for the page templates, section 3.
@@ -168,13 +167,13 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 | Template | Used for | Body | Address |
 |---|---|---|---|
 | **Group** | Storage, Instances, Apps, Network, People, Health, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
-| **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes, Marketplace (card view), Updates | filter tabs, `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
+| **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes, Services, Marketplace (card view), Updates | filter tabs (or content tabs where a list has several views: Updates, Releases, What's new), `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
 | **Object** | one disk, pool, share, instance, user, package or app | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
 | **Feed** | Events, Notifications, Jobs, Health problems | time-ordered entries with filters; each entry links to the object it is about; acknowledge where it applies (#619) | `/<group>/<kind>`, filters in the address |
 | **Flow** | first-run wizard, app wizard, storage incident, capability setup | `Wizard` steps with progress, a way out that loses nothing, a last step that opens the object page | `/<group>/<kind>/new` or `/setup` |
 | **Settings** | Settings pages | form built from `layout.gen.json`, grouped by section, saved through a plan | `/settings/<page>` |
 
-Two pages are exempt from a template and use only the frame: **Files** (two-pane file manager, web/design/HANDOFF.md "Files") and the **browser terminal**. Summary is a Group page of its own kind: status lines that each open their owner page, a usage bar per pool, shortcuts that open plans.
+Four pages are exempt from a template: **Files** (two-pane file manager, web/design/HANDOFF.md "Files") and the **browser terminal** use only the frame; the **Login** page and the one-time **console-code sign-in** of the first run (ADR 0022) are outside the shell. The first-run wizard (#183) is a Flow at `/setup` after sign-in. Summary is a Group page of its own kind: status lines that each open their owner page, a usage bar per pool, shortcuts that open plans.
 
 ### 3.3 Quick look
 
@@ -192,7 +191,7 @@ All three read the same job records (jobs and events, #480) and follow events; n
 
 | Today | Becomes |
 |---|---|
-| 9 pages with `Split` + `Drawer` | List, with the drawer as quick look |
+| 9 pages with `Split` + `Drawer`: Disks, Docker, Files, Groups, Instances, Live state, Nodes, Shares, Users | List for seven (Docker becomes Installed apps), with the drawer as quick look; `Files` is exempt; Live state is decided per page in the matrix (#774) |
 | `Section` (6 routes) | Group, with state per place |
 | `AppWizardPage`, `SettingsPage` wizard steps, CapabilitySettings wizard | Flow |
 | `SettingsPage` and `CapabilitySettings` | Settings |
@@ -203,7 +202,7 @@ All three read the same job records (jobs and events, #480) and follow events; n
 
 Decided 2026-11-18:
 
-- **Seven objects get an Object page:** disk, pool, share, instance, user (#453), and package and app (#474, #478; changed by 6.3). Every other object (group, certificate, service, backup job, node, app and so on) has an address and a quick look, and its page is the List with `?sel=`. An object moves up to an Object page when its quick look no longer fits; that is a change to this document. The table in 1.1 lists the shape each object had before this decision; read "object" there as "address and quick look" for everything but the five.
+- **Seven objects get an Object page:** disk, pool, share, instance, user (#453), and package and app (#474, #478; changed by 6.3). Every other object (group, certificate, service, backup job, node and so on) has an address and a quick look, and its page is the List with `?sel=`. An object moves up to an Object page when its quick look no longer fits; that is a change to this document. The table in 1.1 lists the shape each object had before this decision; read "object" there as "address and quick look" for everything but the seven.
 - **At most four tabs** on an Object page: Overview plus up to three of its own. History is the job strip, not a tab.
 - **Health problems is a Feed.** Severity, acknowledge and undo are features of a Feed entry.
 - **Settings pages stay generated forms.** No Settings page becomes an Object page. One exception, decided in 6.3: Settings > Updates is a List page (#476).
@@ -221,7 +220,7 @@ Draft, not reviewed. Each behaviour is decided once, here, and carried by one co
 | 4.4 | Errors | Every error says what happened, the likely reason and one next step, with a stable code, a link to the guide section, and the English text for a code the web does not know. The same shape for a refused plan, a failed job and a page that cannot read. A page error keeps the old data visible with its age. | one error component (a `Banner` variant) and `PageState` | #488 |
 | 4.5 | Problems and notifications | Health problems can be acknowledged (quiet until the problem resolves and fails again, optionally for a time). An acknowledged problem is dimmed, is not in the red count and sends no push. A notification inbox lives in the top bar. | Feed template, bell in the top bar | #619 |
 | 4.6 | State in the address | The selected row (`?sel=`), the tab and the filters are in the address. Back closes the quick look, forward opens it again. A shared link opens the same view. | route helper next to `route.svelte.js` | #455 |
-| 4.7 | Keyboard and screen reader | Every action is reachable and startable by keyboard. Focus is visible. A dialog traps focus and returns it. A state is said in words, never only by a colour dot. Contrast holds in both themes. An automatic check runs in the browser stage of the test-lab. | every `ui` component; `StatusDot` takes a label | #487, #447 |
+| 4.7 | Keyboard and screen reader | Every action is reachable and startable by keyboard. Focus is visible. A dialog traps focus and returns it. A state is said in words, never only by a colour dot. Contrast holds in both themes. An automatic check is added to the browser stage of the test-lab (#487); today that stage only opens the pages. | every `ui` component; `StatusDot` takes a label | #487, #447 |
 | 4.8 | Phone | Up to 860 px: the tree is a slide-in drawer, optional columns are hidden, the quick look and plans are full screen, a wizard shows one question per screen. | the shell, `Table`, overlays | #427, web/design/HANDOFF.md |
 | 4.9 | Roles | An action the user may not start is shown, disabled, with the reason. The server enforces the role; the web only explains. A viewer sees every page without a plan. | `ui/Button` takes "not allowed" with a reason | #434 |
 | 4.10 | Trust | A package says "Official, signed" or "Community" on its card and its page, and "Tested on a real server" with a date, or "Not tested". The same words are used for extensions. | one chip in the Marketplace and app pages | #477 |
@@ -245,7 +244,7 @@ Decided 2026-11-18:
 
 ## 5. Component inventory (#773)
 
-Draft, not reviewed. Each component is traced to the templates (3.2) and behaviours (section 4) that need it. A component with one user is not shared and stays in its page. Counts are from the survey of 2026-11-18 (files that use the tag, rough). `ui` components know nothing about the server; `shell` components may read the stores (jobs, events, session).
+Draft, not reviewed. Each component is traced to the templates (3.2) and behaviours (section 4) that need it. A component with one user is not shared and stays in its page. Counts are rough, from the survey of 2026-11-18 (files that use the tag); a later grep gave higher numbers for some (Button 72 files, Chip 24), so read them as an order of magnitude. `ui` components know nothing about the server; `shell` components may read the stores (jobs, events, session).
 
 ### 5.1 What exists and what changes
 
@@ -258,7 +257,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | `Kv`, `EmptyState`, `Skeleton`, `Field`, `TextInput`, `Textarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `ChoiceList`, `Tooltip` | in use | none | Object, Settings, Flow |
 | `PageTabs` | 3 pages | tab in the address (4.6); used by Object pages and for list filter tabs | Object, List |
 | `Drawer` | 12 files | becomes the quick look overlay (3.3), built on `Dialog` | List |
-| `Split` | 9 pages | removed after the quick look replaces it; the list no longer narrows | List |
+| `Split` | 9 pages and `GenBlock` | removed from the list pages after the quick look replaces it; `Files` and `GenBlock` keep their own layout | List |
 | `Wizard` | 2 pages | sits on a `Stepper` with progress (#448) | Flow |
 | `Table`, `UsageBar`, `Spark` (shell) | in use | `Table`: selected row in the address, row action menu; a card view of the same rows for the Marketplace (6.3) | List |
 | `PageHeader` (shell) | in use | status chip beside the name, More menu for actions beyond two (3.1) | every template |
@@ -279,14 +278,14 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | `Toast` | `ui` | a job that asks for input, and short results that need no dialog (5.4) | every page, via the shell | #447 |
 | `QuickLook` | `ui` | overlay above a list; the `Drawer` reworked | List | #447 |
 | `Progress`, `StepList` | `ui` | job step and progress | Jobs, Flow, Object job strip | #448 |
-| `Timeline` | `ui` | time-ordered entries with filters; an entry has severity, object link, optional acknowledge | Feed | #448 |
-| `Stepper` | `ui` | the steps of a Flow; under `Wizard` | Flow | #448 |
-| `ErrorNote` | `ui` | code, what, why, next step, link to the guide | every template | new |
-| `StateCard` | `ui` | a `Card` with status dot, one line and a link; the card of a Group page | Group (8 pages) | new |
-| `LinkedObjects` | `shell` | related objects with status, linking both ways (1.2) | Object (5 pages), quick look | new |
-| `JobStrip` | `shell` | the running or last jobs of one object | Object (5 pages) | new |
-| `DangerZone` | `ui` | the marked section for destructive actions | Object (5 pages) | new |
-| `Inbox` (bell and list) | `shell` | the count of 4.11 and the notification list | top bar, Feed | new |
+| `Timeline` | `ui` | time-ordered entries with filters; an entry has severity, object link, optional acknowledge | Feed | #784 |
+| `Stepper` | `ui` | the steps of a Flow; under `Wizard` | Flow | #785 |
+| `ErrorNote` | `ui` | code, what, why, next step, link to the guide | every template | #783 |
+| `StateCard` | `ui` | a `Card` with status dot, one line and a link; the card of a Group page | Group (8 pages) | #782 |
+| `LinkedObjects` | `shell` | related objects with status, linking both ways (1.2) | Object (7 pages), quick look | #782 |
+| `JobStrip` | `shell` | the running or last jobs of one object | Object (7 pages) | #782 |
+| `DangerZone` | `ui` | the marked section for destructive actions | Object (7 pages) | #782 |
+| `Inbox` (bell and list) | `shell` | the count of 4.11 and the notification list | top bar, Feed | #783 |
 
 ### 5.3 Left out on purpose
 
@@ -304,7 +303,7 @@ Decided 2026-11-18:
 
 ## 6. Feature-to-page matrix (#774)
 
-Draft, not reviewed. Every open web issue, and the issues of other areas that add or change a page, mapped to a page, a template and the components. Read from the issue titles and the bodies I read for sections 3 to 5; the pages of #434, #239 and #313 are inferred from their titles. Epics and issues with no page (#484 udev events, #485 and #486 tests, #580) are left out.
+Draft, not reviewed. Every open web issue, and the issues of other areas that add or change a page, mapped to a page, a template and the components. Read from the issue titles and the bodies I read for sections 3 to 5; the pages of #434, #239 and #313 are inferred from their titles. Left out on purpose: issues with no page (#484 udev events, #485 and #486 tests, #580), the component issues of section 5 (#445 to #448, #782 to #785), the design issues #769 to #775, and the epics (#191, #193, #451, #490, #768).
 
 ### 6.1 The matrix
 
@@ -317,10 +316,12 @@ Draft, not reviewed. Every open web issue, and the issues of other areas that ad
 | #483 pending state from the job | every list and Object page | behaviour 4.1 | the chip, `JobStrip` (#782) | |
 | #488 error messages | every page | behaviour 4.4 | `ErrorNote` (#783) | |
 | #452 regroup the tree | the tree | section 2 | `Tree` (shell) | |
-| #453 a page per object | disk, pool, share, instance, user | Object | `Card`, `LinkedObjects`, `JobStrip`, `DangerZone` (#782), `PageTabs` | Gap G2 |
+| #453 a page per object | disk, pool, share, instance, user (package and app by #474 and #478) | Object | `Card`, `LinkedObjects`, `JobStrip`, `DangerZone` (#782), `PageTabs` | Gap G2 |
+| #776 thin slice | Storage > Disks > one disk | Object | the first components of 5.2 | Waits for 0.4 and 0.8 to leave the Disks page free |
+| #790 packages place their pages | Apps (package places), `/extensions/<name>` | List, Object or Feed by `template` | `GenericPage` | Section 7 |
 | #454 quick look | every List page | List | `QuickLook` (#447) | |
 | #455 selection in the address | every List page | List | route helper | |
-| #456 pools from data | Storage > Pools, tree, Section | List, Object | none | Same fix as #573 (G6) |
+| #456 pools from data (closed into #573) | Storage > Pools, tree, Section | List, Object | none | Same fix as #573 (G6) |
 | #457 group pages | the 7 groups and Summary | Group | `StateCard` (#782), `Menu` (#447) | |
 | #427 phone and read-only status page | every page | behaviour 4.8, role viewer | the shell | The status page is the viewer role (4.11) |
 | #487 accessibility | every page | behaviour 4.7 | every `ui` component | |
@@ -335,9 +336,9 @@ Draft, not reviewed. Every open web issue, and the issues of other areas that ad
 | #424 status panel from the manifest `[web]` | the app's Object page | Object | `Kv`, `StateCard`, `Button` | Overlaps #478, #195 (G7) |
 | #478 a page for every installed app | Apps > Installed | Object | as #424 | Gap G2 |
 | #195 packages declare pages | `/extensions/<name>`, app pages | built from the templates | `GenericPage` | G7 |
-| #474 Marketplace as a store | Apps > Marketplace | needs a decision | `Card`, `Chip` (trust) | Gap G4 |
+| #474 Marketplace as a store | Apps > Marketplace, one page per package | List (card view), Object | `Card`, `Chip` (trust) | Gap G4 |
 | #477 trust shown plainly | Marketplace, package and app pages | behaviour 4.10 | `Chip` kind | |
-| #476 one place for updates | Settings > Updates | needs a decision | `Table`, `Progress` | Gap G3 |
+| #476 one place for updates | Settings > Updates | List (content tabs) | `Table`, `Progress` | Gap G3 |
 | #268 package builder | Apps > Marketplace > Builder | Flow | `Wizard`, `Stepper` | |
 | #239, #313, #197 extension permissions, events, SDK | Extension pages, Events | Feed, built from the templates | `GenericPage` | Pages inferred |
 | #426 file manager | Storage > Files | exempt | `Progress`, `StepList`, `Dialog` | |
@@ -350,7 +351,7 @@ Draft, not reviewed. Every open web issue, and the issues of other areas that ad
 | # | Finding | Why it matters |
 |---|---|---|
 | G1 | Jobs had no place in the tree. | Fixed: Health > Jobs, in 2.2. |
-| G2 | #474 and #478 give a package and an installed app their own page, but 3.6 says only five objects get an Object page. | Package and App need an Object page, or the Marketplace and app pages are built differently. |
+| G2 | #474 and #478 give a package and an installed app their own page, but 3.6 first said only five objects get an Object page. | Package and App need an Object page, or the Marketplace and app pages are built differently. |
 | G3 | #476 (updates for the system, apps and packages in one place) is a list with actions and progress, but 3.6 says Settings pages are generated forms. | Settings > Updates cannot be a generated form. |
 | G4 | #474 wants cards, categories and Installed and Updates tabs. No template has a card view. | The List template needs a card view, or the Marketplace is a page of its own. |
 | G5 | The Login page and the first-run setup have no template. | They are exempt like Files, or a Flow. |
@@ -363,10 +364,10 @@ Decided 2026-11-18:
 
 - **G2: Package and App get an Object page.** Seven objects have one (see 3.6). The package page and the app page are built from the manifest.
 - **G3: Settings > Updates is a List page** (system, apps and packages), an exception to the generated forms. It stays under Settings in the tree.
-- **G4: the List template gets a card view.** The Marketplace uses it, with categories as filter tabs and Installed and Updates as tabs. The card view is part of `Table` (5.1).
-- **G5: Login and first-run setup are exempt** from the templates, like Files. The first-run wizard (#183) is a Flow after sign-in.
+- **G4: the List template gets a card view.** The Marketplace uses it, with categories as filter tabs. Installed and Updates are not repeated there as tabs: they link to Apps > Installed and Settings > Updates, which are the one place for each (#476). The card view is part of `Table` (5.1).
+- **G5: Login and the console-code sign-in of the first run are exempt** from the templates, like Files (3.2). The first-run wizard (#183) is a Flow at `/setup` after sign-in.
 - **G6: #456 is closed into #573.** The pool-name fix is done once, in 0.4.
-- **G7: one renderer** builds the manifest pages of #424, #478 and #195. It uses the Object template.
+- **G7: one renderer** builds the manifest pages of #424, #478 and #195. An app's or package's own page uses the Object template; a package page declared with `[web.page]` picks `list`, `object` or `feed` (7.3).
 
 ## 7. Pages from capabilities and packages
 
@@ -386,7 +387,7 @@ No code reaches the browser (ADR 0016, accepted). A package page is data drawn b
 
 | Need | Why |
 |---|---|
-| a group and a position | the tree has nine groups, there is no Extensions group any more (2.2) |
+| a group and a position | the tree has eight groups, there is no Extensions group any more (2.2) |
 | tabs, each with its own blocks | one place for a package with several pages; also the Object page (3.2) |
 | a template for the page | List, Object or Feed, so a package page has the same frame as a core page |
 | a short state for its card | the Group page shows a state per place (3.2, `StateCard`) |
@@ -400,6 +401,8 @@ No code reaches the browser (ADR 0016, accepted). A package page is data drawn b
 - **Tabs.** `[[web.page.tabs]]`, each with a `title` and its own `[[web.page.blocks]]`. A package with several views is one place with tabs.
 - **Template.** `template = "list" | "object" | "feed"`, default list when the first block is a table. The frame (header, actions, More menu, states) comes from the template.
 - **Card state.** An optional `state` read that returns one dot and one line, for the Group page and the Apps list.
+- **Role.** `role` on the page and on each action (viewer, app manager or admin, ADR 0012), default admin; the web shows the action disabled with its reason (4.9).
+- **Trust is not a key.** The core derives "Official, signed" or "Community" from the repository and the tested date from the index (#477), so a package cannot claim it.
 - **Capabilities** keep `[settings]` and the `capability` flag on core rows. A capability does not get places of its own outside Settings.
 - **No new group, no code.** A package names an existing group. ADR 0016 stands.
 
@@ -410,9 +413,7 @@ Decided 2026-11-18:
 - **A package or capability adds places in existing groups only**, for now. A package may become a group of its own later, if real packages call for it.
 - **Extension pages land in Apps** when they name no group. There is no Extensions group.
 - **Core places keep their order, package places follow.** An optional `after` places one directly after a named place.
-
 - **The tree is two levels, group and place.** A package with several views (a "mediaserver" with Radarr and Sonarr) is one place with a tab per view, never a third level. If real packages later need more, a package may become a group (see the first decision).
-
 - **The new keys have an issue of their own:** hobnix/server#790 (milestone 0.12, part of #195). #424 and #478 build on it.
 - **Capabilities declare no places outside Settings** (assumed, not yet confirmed): the node tree of a `vps` or peer node is a separate mechanism.
 
