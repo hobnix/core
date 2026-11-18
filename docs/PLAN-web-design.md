@@ -433,8 +433,8 @@ The mockups are a Design canvas ("Hobnix web design 0.8.5", private to the owner
 | List with quick look: Disks | the List template, the quick look overlay, `?sel=` (3.3) |
 | Object page: disk, dark and light | the Object template: tabs, linked objects, job strip, destructive section (3.2) |
 | App page | an Object page built from a manifest, trust label, an action disabled for a role (6.3 G2, 4.9, 4.10) |
-| Marketplace | the List card view, trust and tested date, Installed and Updates as links (6.3 G4) |
-| Settings page | a generated form with the save-through-a-plan footer (3.2) |
+| Marketplace | the List card view with a category rail, a featured app, trust and tested date, a "fits this server" check, Installed and Updates as links (6.3 G4) |
+| Settings page | a generated form in sections, a "changed" marker per field, a floating bar that opens the plan (3.2) |
 | Settings > Updates | a List with content tabs (6.3 G3) |
 | Feed: Jobs | the Feed template, a job that waits for an answer, a coded error (3.4, 4.4) |
 | Flow: install an app | the Flow template with its stepper (3.2) |
@@ -442,6 +442,9 @@ The mockups are a Design canvas ("Hobnix web design 0.8.5", private to the owner
 | Plan dialog | a destructive plan with a typed name and a background job option (4.3) |
 | Error and empty states | the page error that keeps old data, the empty list, storage locked (4.4) |
 | Phone | the tree as a slide-in drawer, rows as cards (4.8) |
-| Top bar, Jobs drawer | the shell pieces on their own |
+| Drawer open: Jobs, Logs, Disk events, Reports | the bottom drawer expanded, one board per tab: running, waiting and failed jobs; a log with source, level and follow; plugged, pulled, SMART and scrub events; generated reports and the next scheduled one (3.4) |
+| Top bar, Jobs drawer | the shell pieces on their own; the logo is the real mark from `ui/Logo.svelte` |
+
+Two ideas appear in the boards that no issue carries yet: the Marketplace "fits this server" check (an app's needs, such as memory and storage, compared with what the server has free) and the Reports tab with a generate action. Both are proposals for the owner to accept or drop; neither is a decision of this document.
 
 Not seen by me in a browser: the canvas needs the owner's sign-in, so the owner reviewed it.
