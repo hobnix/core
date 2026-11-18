@@ -1,6 +1,5 @@
 <script>
-  import Chip from '../../ui/Chip.svelte';
-  import Button from '../../ui/Button.svelte';
+  import { Field, Segmented, Banner, Button, Stack, Row, Muted, Chip } from '../../ui/index.js';
   // Remove a member (SnapRAID: a single disk) or detach one from a ZFS mirror (hs sys pool plan|start <pool> remove --member <name> [--mode detach|vdev|move|nomove]).
   // The plan is red and the server names the word to type (the disk).
   import CreateDialog from '../../shell/CreateDialog.svelte';
@@ -27,50 +26,29 @@
 
 <CreateDialog title={snap ? 'Remove a disk' : 'Detach a disk'} kicker="Pool" area="pool" {args}>
   {#snippet form()}
-    <div class="field">
-      <span class="lab">Member</span>
-      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
-    </div>
+    <Field label="Member" id="rm-member"><Row gap="2" id="rm-member"><code>{member}</code><Chip>{pool}</Chip></Row></Field>
     {#if gone}
-      <div class="gone">
-        <div><strong>{member} is {state}.</strong> {state === 'MISSING' ? 'The server cannot see the disk at all.' : 'The disk is there but not mounted.'}</div>
-        <p>A disk cannot be removed while the server cannot read it: its files would be dropped from the array although the parity still holds them.
-          <strong>Replace it</strong> with a new disk instead: its files are rebuilt from the parity (hours).</p>
-        <p class="what">Before you replace it, look for a simple cause: the cable, the port and the power; an encrypted disk that is still locked (<code>hs unlock</code>);
-          <code>hs disk list</code> and <code>lsblk -o NAME,LABEL,SIZE</code> show whether the disk is there at all. Replacing needs the parity to be in good order and no more
-          disks missing than there are parity disks.</p>
-        <Button variant="primary" tooltip={'Replace the disk instead of removing it'} onclick={() => openCreate(ReplaceMember, { pool, member, snap })}><i class="ph ph-swap"></i>Replace {member}…</Button>
-      </div>
+      <Banner tone="warn">
+        <Stack gap="2">
+          <div><strong>{member} is {state}.</strong> {state === 'MISSING' ? 'The server cannot see the disk at all.' : 'The disk is there but not mounted.'}</div>
+          <div>A disk cannot be removed while the server cannot read it: its files would be dropped from the array although the parity still holds them.
+            <strong>Replace it</strong> with a new disk instead: its files are rebuilt from the parity (hours).</div>
+          <Muted as="div">Before you replace it, look for a simple cause: the cable, the port and the power; an encrypted disk that is still locked (<code>hs unlock</code>);
+            <code>hs disk list</code> and <code>lsblk -o NAME,LABEL,SIZE</code> show whether the disk is there at all. Replacing needs the parity to be in good order and no more
+            disks missing than there are parity disks.</Muted>
+        </Stack>
+        {#snippet action()}<Button variant="primary" tooltip={'Replace the disk instead of removing it'} onclick={() => openCreate(ReplaceMember, { pool, member, snap })}><i class="ph ph-swap"></i>Replace {member}…</Button>{/snippet}
+      </Banner>
     {:else if !snap}
-      <div class="field">
-        <span class="lab">What happens to the mirror</span>
-        <div class="seg" role="radiogroup" aria-label="Mode">
-          <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'detach'} onchange={() => (mode = 'detach')} />Detach this disk</label>
-          <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'vdev'} onchange={() => (mode = 'vdev')} />Remove the whole mirror</label>
-        </div>
-        <div class="hint">{mode === 'detach' ? 'The other disk of the mirror stays alone; nothing moves.' : 'The data moves to the other mirrors first; both disks leave the pool.'}</div>
-      </div>
+      <Field label="What happens to the mirror" help={mode === 'detach' ? 'The other disk of the mirror stays alone; nothing moves.' : 'The data moves to the other mirrors first; both disks leave the pool.'}>
+        <Segmented bind:value={mode} label="Mode" options={[{ value: 'detach', label: 'Detach this disk' }, { value: 'vdev', label: 'Remove the whole mirror' }]} />
+      </Field>
     {:else if snapData}
-      <div class="field">
-        <span class="lab">What happens to the files on this disk</span>
-        <div class="seg" role="radiogroup" aria-label="Mode">
-          <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'move'} onchange={() => (mode = 'move')} />Move them to the other disks</label>
-          <label class="seg-opt"><input type="radio" name="rm-mode" checked={mode === 'nomove'} onchange={() => (mode = 'nomove')} />Leave them on the disk</label>
-        </div>
-        <div class="hint">{mode === 'move' ? 'The files move to the other disks first. That can take hours; it runs as a background job.' : `Nothing moves. Files still on the disk are no longer in /${pool} (the disk is not erased); use this for a disk you emptied already.`}</div>
-      </div>
+      <Field label="What happens to the files on this disk" help={mode === 'move' ? 'The files move to the other disks first. That can take hours; it runs as a background job.' : `Nothing moves. Files still on the disk are no longer in /${pool} (the disk is not erased); use this for a disk you emptied already.`}>
+        <Segmented bind:value={mode} label="Mode" options={[{ value: 'move', label: 'Move them to the other disks' }, { value: 'nomove', label: 'Leave them on the disk' }]} />
+      </Field>
     {:else}
-      <div class="hint">The parity disk is unlabelled and leaves the array; nothing is erased.</div>
+      <Muted as="p">The parity disk is unlabelled and leaves the array; nothing is erased.</Muted>
     {/if}
   {/snippet}
 </CreateDialog>
-
-<style>
-  .lab { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-  .fixed { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .gone { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: var(--r); background: var(--color-neutral-900); box-shadow: inset 0 0 0 1px var(--st-warn); font-size: 13px; }
-  .gone p { margin: 0; }
-  .gone .what { font-size: 12px; color: var(--color-neutral-400); }
-  .gone :global(.btn) { align-self: flex-start; margin-top: 4px; }
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 5px; }
-</style>

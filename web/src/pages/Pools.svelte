@@ -7,7 +7,7 @@
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { StatusDot, Chip, Kv, Banner } from '../ui/index.js';
+  import { StatusDot, Chip, Kv, Banner, Card, Row, Stack, Muted } from '../ui/index.js';
   import { poll, rows } from '../data.svelte.js';
   import { route, go } from '../route.svelte.js';
   import { filesLink } from '../files/links.js';
@@ -148,20 +148,20 @@
   </PageHeader>
   <PageState loading={!pools.loaded} hasData={pools.loaded} empty={!shown.length} emptyIcon="cylinder" emptyTitle="No pool yet"
              emptyText="A pool groups disks into one place for the shares. Pick free disks to create the first one.">
-    <div class="card"><div class="scrollx">
+    <Card><div style="overflow-x:auto">
       <Table id="pools" {columns} rows={shown} key="name" onrow={(p) => go(`/storage/pools/${p.name}`)} empty="No pools.">
         {#snippet cell(p, col)}
-          {#if col.key === 'name'}<span class="nm"><i class="ph {p.role === 'apps' ? 'ph-lightning' : 'ph-cylinder'}"></i>{p.name}</span>
+          {#if col.key === 'name'}<Row gap="2" style="font-weight:500"><i class="ph {p.role === 'apps' ? 'ph-lightning' : 'ph-cylinder'}"></i>{p.name}</Row>
           {:else if col.key === 'layout'}{#if p.layout}<Chip>{p.layout}</Chip>{:else}–{/if}
-          {:else if col.key === 'usage'}{#if p.size}<UsageBar used={p.used} size={p.size} />{:else}<span class="mute">{p.loaded ? 'not mounted' : '…'}</span>{/if}
+          {:else if col.key === 'usage'}{#if p.size}<UsageBar used={p.used} size={p.size} />{:else}<Muted>{p.loaded ? 'not mounted' : '…'}</Muted>{/if}
           {:else if col.key === 'state'}<StatusDot state={p.failed ? 'bad' : dotOf(p.state)} label={p.failed ? 'cannot be read' : p.state || (p.loaded ? 'unknown' : 'reading')} />
           {:else if col.key === 'count'}{p.count || '–'}
-          {:else}<span class="mute">{p.sync || '–'}</span>{/if}
+          {:else}<Muted>{p.sync || '–'}</Muted>{/if}
         {/snippet}
       </Table>
-    </div></div>
+    </div></Card>
     {#if notYet.length}
-      <p class="mute">Not found (not created yet or not imported): {notYet.map((p) => p.name).join(', ')}. Open the pool's page to create it from free disks.</p>
+      <Muted as="p">Not found (not created yet or not imported): {notYet.map((p) => p.name).join(', ')}. Open the pool's page to create it from free disks.</Muted>
     {/if}
   </PageState>
 {:else}
@@ -182,70 +182,60 @@
         {#snippet action()}<Button size="sm" tooltip={locked ? 'Storage is locked' : 'Pick free disks and make a new pool'} disabled={locked} onclick={() => addPool('empty')}>Create pool</Button>{/snippet}
       </Banner>
     {:else}
+     <Stack gap="4">
       {#if paused}<Banner tone="warn">The health check paused the parity sync, scrub and upload cache mover because of a failing disk or pool. Lift it under Health (<code>hs health resume</code>).</Banner>{/if}
       {#if lockState === 'pool-change'}<Banner tone="info">A pool change is running and owns the bulk lock: syncs, scrubs and share renames wait or are skipped until it is done.</Banner>
       {:else if lockState === 'busy'}<Banner tone="info">{running ? 'A sync or scrub is running.' : 'Something holds the bulk lock (a parity sync, scrub, upload cache mover, share rename or disk move).'} Changes that need the lock wait until it is free.</Banner>{/if}
-      <div class="card xh cap">
+      <Card pad="lg">
         {#if dp?.size}
-          <div class="cap-top"><StatusDot state={dotOf(stateTxt)} label={stateTxt || 'unknown'} /><span class="mute">{pctUsed != null ? `${pctUsed} % used` : ''}</span></div>
+          <Row gap="3"><StatusDot state={dotOf(stateTxt)} label={stateTxt || 'unknown'} /><Muted>{pctUsed != null ? `${pctUsed} % used` : ''}</Muted></Row>
           <UsageBar block used={dp.used} size={dp.size} />
         {:else}
-          <p class="mute">{info.loaded ? 'No capacity available (the pool is not mounted).' : 'Loading…'}</p>
+          <Muted as="p">{info.loaded ? 'No capacity available (the pool is not mounted).' : 'Loading…'}</Muted>
         {/if}
         {#if facts.length}<Kv items={facts} cols={3} />{/if}
-      </div>
+      </Card>
 
-      <div class="card sect">
-        <div class="sh"><b>Members</b><span class="mute">{members.some((m) => m.state !== 'ONLINE') ? 'check the state column' : members.length ? (snap ? 'all present' : 'all ONLINE') : ''}</span>
-          <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the disks of this pool'} onclick={() => go(`/storage/disks?pool=${pool}`)}>Disks of this pool<i class="ph ph-caret-right"></i></Button></div>
-        <div class="scrollx">
+      <Card title="Members">
+        {#snippet actions()}
+          <Muted>{members.some((m) => m.state !== 'ONLINE') ? 'check the state column' : members.length ? (snap ? 'all present' : 'all ONLINE') : ''}</Muted>
+          <Button variant="ghost" size="sm" tooltip={'Show the disks of this pool'} onclick={() => go(`/storage/disks?pool=${pool}`)}>Disks of this pool<i class="ph ph-caret-right"></i></Button>
+        {/snippet}
+        <div style="overflow-x:auto">
           <Table id="pool-members" columns={memberCols} rows={members} key="name" compact loading={!memb.loaded} empty="No members.">
             {#snippet cell(m, col)}
               {#if col.key === 'dev'}<button class="link-btn" use:tip={'Open this disk'} onclick={() => openDisk(m)}><code>{m.dev}</code></button>
               {:else if col.key === 'role'}<Chip>{snap ? m.name : m.group}</Chip>{#if m.closed} <Chip>closed</Chip>{/if}
               {:else if col.key === 'state'}<StatusDot state={memberDot(m)} label={(m.state ?? '').toLowerCase()} />
-              {:else if col.key === 'size'}<span class="nw"><UsageBar free={m.free} size={m.size} width={96} /></span>
-              {:else if col.key === 'fs'}<span class="nw mute">{fsText(m)}</span>
+              {:else if col.key === 'size'}<span style="white-space:nowrap"><UsageBar free={m.free} size={m.size} width={96} /></span>
+              {:else if col.key === 'fs'}<Muted style="white-space:nowrap">{fsText(m)}</Muted>
               {:else}
-                <span class="acts">
-                  {#if snap ? /^data-\d+$/.test(m.name) : true}<Button variant="ghost" class="btn-icon pools-sq" tooltip={snap ? 'Browse the files of this disk' : 'Browse the files of this pool'} aria-label="Browse" disabled={locked} onclick={() => go(filesLink({ left: snap ? `disk:${m.name}` : `pool:${pool}` }))}><i class="ph ph-folder-open"></i></Button>{/if}
-                  <Button variant="ghost" class="btn-icon pools-sq" tooltip={'Replace this disk'} aria-label="Replace" disabled={locked} onclick={() => openCreate(ReplaceMember, { pool, member: m.name, snap })}><i class="ph ph-swap"></i></Button>
-                  {#if snap}<Button variant="ghost" class="btn-icon pools-sq" tooltip={convertible.includes(m.name) ? 'Change filesystem or LUKS; its files are moved away first' : 'Only an online data disk can be converted'} aria-label="Convert" disabled={locked || !convertible.includes(m.name)} onclick={() => openCreate(ConvertPool, { pool, member: m.name, members: convertible })}><i class="ph ph-arrows-clockwise"></i></Button>{/if}
-                  {#if snap && m.group === 'data'}<Button variant="ghost" class="btn-icon pools-sq" tooltip={m.closed ? 'Closed: no new files. Open it again or move its files away' : 'Stop putting new files on this disk (optionally move its files away)'} aria-label={m.closed ? 'Open' : 'Close'} disabled={locked || m.state !== 'ONLINE'} onclick={() => openCreate(CloseDisk, { pool, member: m.name, closed: m.closed })}><i class="ph ph-{m.closed ? 'lock-key-open' : 'prohibit'}"></i></Button>{/if}
-                  <Button variant="ghost" class="btn-icon pools-sq" tooltip={snap ? 'Remove this disk' : 'Detach this disk'} aria-label={snap ? 'Remove' : 'Detach'} disabled={locked} onclick={() => openCreate(RemoveMember, { pool, member: m.name, snap })}><i class="ph ph-link-break"></i></Button>
-                </span>
+                <Row gap="1" justify="end">
+                  {#if snap ? /^data-\d+$/.test(m.name) : true}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={snap ? 'Browse the files of this disk' : 'Browse the files of this pool'} aria-label="Browse" disabled={locked} onclick={() => go(filesLink({ left: snap ? `disk:${m.name}` : `pool:${pool}` }))}><i class="ph ph-folder-open"></i></Button>{/if}
+                  <Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={'Replace this disk'} aria-label="Replace" disabled={locked} onclick={() => openCreate(ReplaceMember, { pool, member: m.name, snap })}><i class="ph ph-swap"></i></Button>
+                  {#if snap}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={convertible.includes(m.name) ? 'Change filesystem or LUKS; its files are moved away first' : 'Only an online data disk can be converted'} aria-label="Convert" disabled={locked || !convertible.includes(m.name)} onclick={() => openCreate(ConvertPool, { pool, member: m.name, members: convertible })}><i class="ph ph-arrows-clockwise"></i></Button>{/if}
+                  {#if snap && m.group === 'data'}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={m.closed ? 'Closed: no new files. Open it again or move its files away' : 'Stop putting new files on this disk (optionally move its files away)'} aria-label={m.closed ? 'Open' : 'Close'} disabled={locked || m.state !== 'ONLINE'} onclick={() => openCreate(CloseDisk, { pool, member: m.name, closed: m.closed })}><i class="ph ph-{m.closed ? 'lock-key-open' : 'prohibit'}"></i></Button>{/if}
+                  <Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={snap ? 'Remove this disk' : 'Detach this disk'} aria-label={snap ? 'Remove' : 'Detach'} disabled={locked} onclick={() => openCreate(RemoveMember, { pool, member: m.name, snap })}><i class="ph ph-link-break"></i></Button>
+                </Row>
               {/if}
             {/snippet}
           </Table>
         </div>
-      </div>
+      </Card>
 
-      <div class="card sect">
-        {#if role === 'data'}
-          <div class="sh"><b>Shares</b><span class="mute">{shares.loaded ? `${shareRows.length} share${shareRows.length === 1 ? '' : 's'}${shareBytes ? ` · ${sizeTxt(shareBytes)}` : ''}` : 'Loading…'}</span>
-            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button></div>
-        {:else}
-          <div class="sh"><b>Instance volumes</b><span class="mute">{cts.loaded ? `${volumes.length} volume${volumes.length === 1 ? '' : 's'}${volBytes ? ` · ${sizeTxt(volBytes)}` : ''} · Incus pool "default"` : 'Loading…'}</span>
-            <span class="grow"></span><Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
-            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go('/instances')}>Instances<i class="ph ph-caret-right"></i></Button></div>
-        {/if}
-      </div>
+      <Card title={role === 'data' ? 'Shares' : 'Instance volumes'}>
+        {#snippet actions()}
+          {#if role === 'data'}
+            <Muted>{shares.loaded ? `${shareRows.length} share${shareRows.length === 1 ? '' : 's'}${shareBytes ? ` · ${sizeTxt(shareBytes)}` : ''}` : 'Loading…'}</Muted>
+            <Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
+          {:else}
+            <Muted>{cts.loaded ? `${volumes.length} volume${volumes.length === 1 ? '' : 's'}${volBytes ? ` · ${sizeTxt(volBytes)}` : ''} · Incus pool "default"` : 'Loading…'}</Muted>
+            <Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`/storage/shares?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
+            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go('/instances')}>Instances<i class="ph ph-caret-right"></i></Button>
+          {/if}
+        {/snippet}
+      </Card>
+     </Stack>
     {/if}
   </PageState>
 {/if}
-
-<style>
-  .card { margin-bottom: 14px; }
-  .cap { padding: 16px 18px; gap: 14px; }
-  .cap-top { display: flex; align-items: center; gap: 12px; }
-  .sect { padding: 12px 14px; gap: 8px; }
-  .sh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .mute { color: var(--fg-3); font-size: 12px; }
-  .nm { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
-  .nm i { color: var(--fg-3); }
-  .scrollx { overflow-x: auto; }
-  .acts { display: flex; justify-content: flex-end; gap: 2px; }
-  :global(.btn.pools-sq) { width: 28px; min-height: 28px; }
-  .nw { white-space: nowrap; }
-  code { font-size: 12px; }
-</style>

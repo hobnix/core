@@ -14,7 +14,7 @@
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
-    Banner, Button, Card, Checkbox, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted,
+    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
   } from '../ui/index.js';
@@ -215,6 +215,10 @@
       <div class="cell"><small>disabled</small><Combobox value="" options={['a']} disabled /></div>
     </Entry>
 
+    <Entry name="Segmented" text="Two to four short choices as joined segments; ChoiceList is the one with explanations.">
+      <div class="cell"><small>with a count</small><Segmented value="all" label="Filter" options={[{ value: 'all', label: 'All', count: 4 }, { value: 'free', label: 'Free', count: 1 }]} /></div>
+      <div class="cell"><small>with icons</small><Segmented value="a" label="Kind" options={[{ value: 'a', label: 'Folder', icon: 'folder' }, { value: 'b', label: 'Sensitive', icon: 'folder-lock' }]} /></div>
+    </Entry>
     <Entry name="Checkbox" text="Native checkbox with a clickable label (forms).">
       <div class="cell"><small>checked + hint</small><Checkbox bind:checked label="Mount it into an instance" hint="Optional" /></div>
       <div class="cell"><small>unchecked</small><Checkbox checked={false} label="Off" /></div>
