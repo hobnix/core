@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Convert a SnapRAID data disk (hs sys pool plan|start <pool> convert --member <name> [--fs ext4|xfs|btrfs] [--encrypt]):
   // its files move onto the other data disks, the disk is erased and formatted again (another filesystem, or LUKS).
   // It is red and long (a background job); the server names the word to type (the disk). Only the data disks of a SnapRAID pool qualify.
@@ -30,7 +31,7 @@
           {#each members as m}<option value={m}>{m}</option>{/each}
         </select>
       {:else}
-        <div class="fixed" id="cv-member"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+        <div class="fixed" id="cv-member"><code>{member}</code> <Chip>{pool}</Chip></div>
       {/if}
       <div class="hint">Its files move onto the other data disks first (that can take hours, it runs as a background job), then the disk is erased and formatted again. The parity follows with the next sync.</div>
     </div>

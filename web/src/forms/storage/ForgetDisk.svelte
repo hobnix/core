@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Remove a missing disk from the inventory for good (hs sys disk plan|start <serial> forget). The plan is red and the server names the word to type (the serial).
   import CreateDialog from '../../shell/CreateDialog.svelte';
 
@@ -11,7 +12,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Disk</span>
-      <div class="fixed"><code>{serial}</code>{#if model || dev} <span class="tag tag-neutral" style="padding:1px 7px">{[model, dev ? `was ${dev}` : ''].filter(Boolean).join(' · ')}</span>{/if}</div>
+      <div class="fixed"><code>{serial}</code>{#if model || dev} <Chip>{[model, dev ? `was ${dev}` : ''].filter(Boolean).join(' · ')}</Chip>{/if}</div>
     </div>
     <div class="hint">Takes the disk off the list of disks this server has had, together with its SMART history and events. Only a disk that is not in the machine can be forgotten; if it comes back it is recorded as a new one.</div>
   {/snippet}

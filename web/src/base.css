@@ -1,4 +1,4 @@
-/* Base look of the web interface: reset, hairline grid, scrollbars, and the global classes the pages use (.btn, .input, .field, .card, .tag,
+/* Base look of the web interface: reset, hairline grid, scrollbars, and the global classes the pages use (.btn, .input, .field, .card,
    .table, .dot, .seg, .radio, .dialog*). Tokens are in tokens.css. Hard edges everywhere (--r is 0). Components with their own markup
    (Drawer, Combobox, Banner ...) carry their CSS inside the .svelte file; only what several pages share lives here. */
 
@@ -160,12 +160,7 @@ input[type='checkbox']:disabled, input[type='radio']:where(:not(.radio input, .s
 .elev-sm { box-shadow: none; }
 .elev-md, .elev-lg { box-shadow: var(--shadow); }
 
-/* ── tags / chips ── */
-.tag { display: inline-flex; align-items: center; font: 500 10.5px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border: 1px solid var(--line-2); border-radius: var(--r); color: var(--fg-3); white-space: nowrap; background: none; }
-.tag-accent { border-color: color-mix(in oklch, var(--accent) 55%, var(--line)); color: var(--accent-ink); }
-.tag-accent-2 { color: var(--fg-2); }
-.tag-neutral { color: var(--fg-3); background: none; }
-.tag-outline { border-color: var(--accent); color: var(--accent-ink); }
+/* ── chips: ui/Chip.svelte (the old .tag class is gone) ── */
 
 /* ── tables (the shared Table.svelte draws these; hand-written tables get the same look) ── */
 .table { width: 100%; border-collapse: collapse; font-size: 12.5px; }

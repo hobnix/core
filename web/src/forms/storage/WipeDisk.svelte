@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Format (erase) a disk that belongs to nothing (hs sys disk plan|start <disk> wipe). The plan is red and the server names the word to type (the disk).
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { sizeTxt } from '../../pages/storage/pool.js';
@@ -12,7 +13,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Disk</span>
-      <div class="fixed"><code>{disk}</code>{#if model || size} <span class="tag tag-neutral" style="padding:1px 7px">{[model, size ? sizeTxt(size) : ''].filter(Boolean).join(' · ')}</span>{/if}</div>
+      <div class="fixed"><code>{disk}</code>{#if model || size} <Chip>{[model, size ? sizeTxt(size) : ''].filter(Boolean).join(' · ')}</Chip>{/if}</div>
     </div>
     <div class="hint">Erases every filesystem and the partition table, so the disk is empty and can be added to a pool. A disk that is mounted, in a pool or an array, or one of this server's encrypted disks is refused.</div>
   {/snippet}

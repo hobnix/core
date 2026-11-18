@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Stop (or allow again) new files on a SnapRAID data disk (hs sys pool plan|start <pool> close|open --member <name> [--drain]).
   // A closed disk stays in /<pool> and keeps its files; mergerfs just never picks it for a new file. --drain also moves its files
   // onto the other disks (a long background job, the server names the word to type). Open and close without drain change a mark only.
@@ -16,7 +17,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Data disk</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     <div class="field">
       <span class="lab">What should happen</span>

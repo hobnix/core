@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import Button from '../../ui/Button.svelte';
   // Remove a member (SnapRAID: a single disk) or detach one from a ZFS mirror (hs sys pool plan|start <pool> remove --member <name> [--mode detach|vdev|move|nomove]).
   // The plan is red and the server names the word to type (the disk).
@@ -28,7 +29,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Member</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     {#if gone}
       <div class="gone">

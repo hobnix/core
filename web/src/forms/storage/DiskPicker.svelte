@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   // A list of free disks to pick from: checkboxes, or radio buttons with `single`. `picked` is a list of by-id names.
   import { shortId } from './disks.js';
@@ -21,7 +22,7 @@
         <code use:tip={d.id}>{shortId(d.id)}</code>
         <span class="meta">{d.space ?? d.size} · {d.type}</span>
       </span>
-      {#each d.notes as n}<span class="tag {warnNote(n) ? 'tag-accent-2' : 'tag-neutral'}" style="padding:1px 7px;white-space:nowrap">{n}</span>{/each}
+      {#each d.notes as n}<Chip tone={warnNote(n) ? 'soft' : ''} style="white-space:nowrap">{n}</Chip>{/each}
     </label>
   {:else}
     <div class="empty">{loaded ? empty : 'Loading…'}</div>

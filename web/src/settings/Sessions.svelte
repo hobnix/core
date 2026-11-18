@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   // The web sessions (Settings > Users and access): who is signed in, from where, and a way to end one or all the others (#504).
   // The server sends id, user, realm, created, seen, ip, ua, current; the id is a short name, never the cookie.
   import { onMount } from 'svelte';
@@ -57,7 +58,7 @@
   {#if list.error}<Banner tone="warn">The sessions could not be read: {list.error}</Banner>{/if}
   <Table id="web-sessions" {columns} rows={list.rows} key="id" sort={{ key: 'seen', dir: 'desc' }} loading={!list.loaded} empty="No sessions.">
     {#snippet cell(r, col)}
-      {#if col.key === 'user'}{r.user}{#if r.current} <span class="tag tag-accent">this browser</span>{/if}
+      {#if col.key === 'user'}{r.user}{#if r.current} <Chip tone="accent">this browser</Chip>{/if}
       {:else if col.key === 'created' || col.key === 'seen'}{when(r[col.key])}
       {:else if col.key === 'act'}<Button size="sm" tooltip={r.current ? 'Sign out this browser' : 'End this session'} onclick={() => end(r)}>Sign out</Button>
       {:else}{r[col.key] || '–'}{/if}

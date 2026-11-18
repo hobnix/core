@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { bytes, ago } from '../format.js';
@@ -154,7 +155,7 @@
           {#if col.key === 'name'}<span class="row7"><i class="ph ph-{kindIcon[i.kind] ?? 'folder'}"></i>{#if i.kind === 'always'}{i.name}{:else}<a {...itemLink(i)} use:tip={i.kind === 'ct' ? 'Open the instance' : 'Open the share'}>{i.name}</a>{/if}</span>
           {:else if col.key === 'kind'}<span class="n400">{kindName[i.kind] ?? i.kind}</span>
           {:else if col.key === 'size'}{i.size && i.size !== '-' && !isNaN(i.size) ? bytes(Number(i.size)) : '–'}
-          {:else if i.kind === 'always'}<span class="tag tag-accent">always</span>
+          {:else if i.kind === 'always'}<Chip tone="accent">always</Chip>
           {:else}<span class="inc"><Switch bind:checked={() => i.on, () => toggle(i)} label="{i.name} in the backup" /><span class="n400">{i.on ? 'on' : 'off'}</span></span>{/if}
         {/snippet}
       </Table>

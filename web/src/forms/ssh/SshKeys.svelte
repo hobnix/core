@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import Button from '../../ui/Button.svelte';
   // SSH keys of adminuser: the list (`hs sys ssh-key list`: id, type, comment, session) with a remove button per key (plan dialog,
   // red, you type the word), and a field to add a public key (`hs sys ssh-key plan|start add <key>`). Both only change machine.toml;
@@ -33,7 +34,7 @@
         <tbody>
           {#each keys as k}
             <tr>
-              <td>{k.comment || '(no comment)'}{#if k.session} <span class="tag tag-accent">this session</span>{/if}</td>
+              <td>{k.comment || '(no comment)'}{#if k.session} <Chip tone="accent">this session</Chip>{/if}</td>
               <td class="n400 opt">{k.type}</td>
               <td class="n400 fp">{k.id}</td>
               <td class="act">

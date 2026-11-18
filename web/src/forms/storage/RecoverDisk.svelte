@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Get deleted files back from a SnapRAID data disk (hs sys disk plan|start <member> recover [--to <member>] [--types media|all]) and give the disk back
   // to the pool afterwards (<member> recover-finish). The disk leaves /<pool>, is made read-only and searched by content (photorec), a long background job;
   // what is found goes onto another data disk (share "recovered"). Names and folders of deleted files cannot be recovered. The server names the word to type.
@@ -19,7 +20,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Data disk</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     <div class="field">
       <span class="lab">What should happen</span>
