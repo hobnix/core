@@ -31,6 +31,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [dev-environment](dev-environment.md) | Running tests, the WSL and VM tiers, the agent workflow |
 | [GUIDE-TEMPLATE](GUIDE-TEMPLATE.md) | How a guide is written: shape, rules, the glossary |
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
+| [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |

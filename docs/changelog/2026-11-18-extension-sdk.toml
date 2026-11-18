@@ -1,0 +1,5 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "Write extension commands in shell, Python or Go"
+docs  = "extensions-sdk"
+body  = """`hs pkg new <name> --template extension --protocol shell|python` starts an extension whose command speaks the command protocol. The new guide shows the shell and Python helpers and a Go example. Not tested on hardware yet."""

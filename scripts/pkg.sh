@@ -81,11 +81,11 @@ case "${1:-list}" in
     if [ "$rc" -ne 0 ]; then
       line=$(sed -n 's/^error\t//p' <<<"$out"); code=${line%%$'\t'*}; detail=${line#*$'\t'}
       case "$code" in
-        usage) say "usage: hs pkg new <name> --template recipe|extension|capability [--dir <path>] [--title <text>] [--title-de <text>] [--description <text>] [--icon ph:<name>] [--category <id>] [--app-version <text>] [--instances one|many]"; exit 1 ;;
+        usage) say "usage: hs pkg new <name> --template recipe|extension|capability [--protocol shell|python] [--dir <path>] [--title <text>] [--title-de <text>] [--description <text>] [--icon ph:<name>] [--category <id>] [--app-version <text>] [--instances one|many]"; exit 1 ;;
         template) fail "$(t 'Unknown template %s: use recipe, extension or capability.' "$detail")" ;;
         name) fail "$(t 'The name %s is not allowed: lower case letters, digits and -, starting with a letter, at most 41 characters, and not list, enable or disable.' "$detail")" ;;
         title) fail "$(t 'A title is one line of at most 100 characters, without spaces at its ends.')" ;;
-        field) fail "$(t 'The value of %s is not allowed: an icon like ph:image, a category of config/package-categories.toml, a short app version, one or many, one short paragraph; a capability has no store fields.' "$detail")" ;;
+        field) fail "$(t 'The value of %s is not allowed: an icon like ph:image, a category of config/package-categories.toml, a short app version, one or many, shell or python for --protocol (extensions only), one short paragraph; a capability has no store fields.' "$detail")" ;;
         notrepo) fail "$(t '%s is not a checkout of a package repository: it needs index.toml and the folder recipes/ (recipe), extensions/ (extension) or capabilities/ (capability). Use --dir <path>.' "$detail")" ;;
         exists) fail "$(t 'There is a package %s already (its folder or its index.toml entry); nothing was changed.' "$detail")" ;;
         *) fail "$(t 'The package could not be written (%s); nothing was left behind.' "$detail")" ;;
