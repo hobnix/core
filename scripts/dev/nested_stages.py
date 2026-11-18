@@ -233,7 +233,7 @@ def _bulk_steps(params, kind):
         disk_id_by_name(params, "pool1", "i1"),
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
-        step("capture", "hs sys pool start %s add --disks $(basename {d1}),$(basename {d2}) --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start", fmt=True,
+        step("capture", "HS_CALLER=test hs sys pool start %s add --disks {i1},{i2} --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start", fmt=True,
              timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
