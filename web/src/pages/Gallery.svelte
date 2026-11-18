@@ -50,7 +50,7 @@
     { key: 'size', label: 'Size', sort: 'num', align: 'right' },
     { key: 'note', label: 'Note', optional: true },
   ];
-  const rowsData = [{ name: 'tank', size: 4000, note: 'mirror' }, { name: 'bulk', size: 12000, note: '' }, { name: 'scratch', size: 500, note: 'stripe' }];
+  const rowsData = [{ name: 'tank', size: 4000, note: 'mirror' }, { name: 'data', size: 12000, note: '' }, { name: 'scratch', size: 500, note: 'stripe' }];
   const steps = [{ label: 'Download', state: 'done' }, { label: 'Install', state: 'current', note: 'about 2 min' }, { label: 'Start' }, { label: 'Check', state: 'failed' }, { label: 'Clean up', state: 'skipped' }];
   const menu = [{ label: 'Rename', icon: 'pencil-simple', onclick: () => {} }, { sep: true }, { label: 'Move', disabled: true, reason: 'Needs the admin role' }, { label: 'Delete', danger: true, onclick: () => {} }];
   const icons = ['check-circle', 'warning', 'warning-octagon', 'info', 'lock', 'gear-six', 'trash', 'plus', 'x'];
@@ -318,7 +318,7 @@
     </Entry>
 
     <Entry from="shell" name="Table" text="Declared columns, data rows, sort by header, empty text, loading; optional columns drop on a phone.">
-      <div class="cell wide"><small>rows, selected</small><Table id="gallery" columns={cols} rows={rowsData} key="name" selected="bulk" onrow={() => {}} /></div>
+      <div class="cell wide"><small>rows, selected</small><Table id="gallery" columns={cols} rows={rowsData} key="name" selected="data" onrow={() => {}} /></div>
       <div class="cell wide"><small>empty</small><Table columns={cols} rows={[]} empty="No pools." /></div>
       <div class="cell wide"><small>loading</small><Table columns={cols} rows={[]} loading /></div>
     </Entry>
