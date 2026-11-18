@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "fix"
+title = "An unknown part that is switched on no longer stops hs update"
+body  = """A name in `extensions` that is neither a part of the core nor an installed package (for example `games` or `posters`, which live in hobnix/extensions now) is only named by `hs rebuild` with the way out (`hs ext disable <name>`); the build goes on, as it did before 0.5.0-beta.1. A package with a Nix module that is missing from vendor/ or differs from its lock still stops the rebuild before anything is built."""
