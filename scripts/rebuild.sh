@@ -231,16 +231,18 @@ link_check() {
 }
 
 # Every capability that is on is a part of the core or an installed package, and a package with a Nix module is vendored and matches its lock
-# (docs/PLAN-capabilities-repo.md, Q3). The evaluation would stop with an error anyway; this says the same in plain words, before anything is built.
+# (docs/PLAN-capabilities-repo.md, Q3). For a vendored package the evaluation would stop with an error anyway; this says the same in plain words, before
+# anything is built. A name that is nowhere (for example games or posters, which live in hobnix/extensions) is only named: the build ignores it.
 vendor_check() {
-  local out line name problem cmd
-  out=$(python3 "$(dirname "$0")/pkg.py" vendor-verify $(capability_list) 2>/dev/null) && return 0
-  [ -n "$out" ] || return 0   # the check itself could not run (no pkg.py beside this script): the evaluation still checks the hashes
+  local out line name problem cmd rc=0
+  out=$(python3 "$(dirname "$0")/pkg.py" vendor-verify $(capability_list) 2>/dev/null) || rc=$?
+  [ -n "$out" ] || return 0   # nothing found, or the check itself could not run (no pkg.py beside this script): the evaluation still checks the hashes
   while IFS=$'	' read -r name problem cmd; do
     [ -n "$name" ] || continue
     warn "$(t '%s %s.' "$name" "$problem")"
     note "$(t 'Fix it with: %s' "$cmd")"
   done <<< "$out"
+  [ "$rc" -eq 0 ] && return 0
   fail "$(t 'Nothing was built: a part that is switched on is not in place.')"
 }
 

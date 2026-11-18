@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "fix"
+title = "CI of a release no longer fails while hobnix/capabilities has no release"
+body  = """A release pull request or a version tag checks the newest release of hobnix/capabilities, or its main branch while there is no tag. The main branch is still empty (no index.toml), so the packages job failed on the release pull request of 0.5.0. CI now uses develop of that repository in that case and says so in a notice. Once the repository has a signed release the tag is used as before."""

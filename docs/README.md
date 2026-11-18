@@ -57,6 +57,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.2](RELEASE-NOTES-0.2.md) | Draft release notes of 0.2.0, with what is not verified |
 | [RELEASE-NOTES-0.3](RELEASE-NOTES-0.3.md) | Draft release notes of 0.3.0, with what is not verified |
 | [RELEASE-NOTES-0.4](RELEASE-NOTES-0.4.md) | Draft release notes of 0.4.0, with what is not verified |
+| [RELEASE-NOTES-0.5](RELEASE-NOTES-0.5.md) | Draft release notes of 0.5.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

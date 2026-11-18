@@ -197,6 +197,14 @@ jobs:
           repository: hobnix/capabilities
           ref: ${{ steps.capref.outputs.ref }}
           path: pkgs/capabilities
+      - name: hobnix/capabilities has nothing released yet
+        # a release before the repository has a tag and content on main: check against develop instead of failing on an empty checkout
+        run: |
+          if [ ! -f pkgs/capabilities/index.toml ]; then
+            echo "::notice::hobnix/capabilities ${{ steps.capref.outputs.ref }} has no index.toml (nothing released yet): using develop"
+            git -C pkgs/capabilities fetch -q --depth 1 origin develop
+            git -C pkgs/capabilities checkout -q FETCH_HEAD
+          fi
       - name: Manifests and indexes
         run: |
           echo "hobnix/capabilities: ${{ steps.capref.outputs.ref }} at $(git -C pkgs/capabilities rev-parse HEAD)"
@@ -290,6 +298,14 @@ jobs:
           repository: hobnix/capabilities
           ref: ${{ steps.capref.outputs.ref }}
           path: pkgs/capabilities
+      - name: hobnix/capabilities has nothing released yet
+        if: steps.capref.outputs.ref != ''
+        run: |
+          if [ ! -f pkgs/capabilities/index.toml ]; then
+            echo "::notice::hobnix/capabilities ${{ steps.capref.outputs.ref }} has no index.toml (nothing released yet): using develop"
+            git -C pkgs/capabilities fetch -q --depth 1 origin develop
+            git -C pkgs/capabilities checkout -q FETCH_HEAD
+          fi
       - name: Capability matrix with hobnix/capabilities (--vendor)
         if: steps.capref.outputs.ref != ''
         run: |
