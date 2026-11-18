@@ -1,5 +1,6 @@
 // Vite plugin of demo mode (`npm run demo` in web/): answers /api/* from the fixtures in web/demo/fixtures, nothing else runs.
 // The fixture is chosen with ?fixture=<name> on any page (kept in a cookie); HS_DEMO_FIXTURE sets the default. Names: fixtures/*.json.
+import { INDEX, page, search } from './docs.js';
 import { answer, fixture, fixtureNames, DEFAULT_FIXTURE } from './engine.js';
 
 const cookieOf = (req) => (/(?:^|;\s*)hs-demo=([a-z0-9-]+)/.exec(req.headers.cookie || '') || [])[1];
@@ -41,6 +42,14 @@ export default function demoPlugin() {
           res.writeHead(200, { 'Content-Type': 'text/css' });
           res.end(':root{--color-accent:#9184d9}');
           return;
+        }
+        if (url.pathname.startsWith('/api/docs/')) {      // the guides: made-up ones (web/demo/docs.js)
+          const m = /^\/api\/docs\/page\/[a-z]+\/([^/]+)$/.exec(url.pathname);
+          const send = (code, type, text) => { res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' }); res.end(text); };
+          if (url.pathname === '/api/docs/index') return send(200, 'application/json', JSON.stringify(INDEX));
+          if (url.pathname === '/api/docs/search') return send(200, 'application/json', JSON.stringify(search(url.searchParams.get('q'))));
+          const t = m && page(decodeURIComponent(m[1]));
+          return t === null || !m ? send(404, 'application/json', '{"error":"no such guide"}') : send(200, 'text/markdown; charset=utf-8', t);
         }
         if (!url.pathname.startsWith('/api/')) return next();
         const body = req.method === 'POST' ? await readBody(req) : undefined;

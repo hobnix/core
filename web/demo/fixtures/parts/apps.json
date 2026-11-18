@@ -1,0 +1,385 @@
+{
+ "reads": {
+  "ct/list": [
+   ["nextcloud","container","running","192.168.1.21","4GiB","2","yes","yes","no","20GiB","3","2026-11-18 03:00","1200000000","5230","2","2026-11-10T08:00:00Z","-"],
+   ["jellyfin","container","running","192.168.1.22","8GiB","4","yes","yes","no","40GiB","2","2026-11-18 03:00","2400000000","91200","1","2026-11-10T08:00:00Z","-"],
+   ["home-assistant","vm","running","192.168.1.23","2GiB","2","yes","yes","no","16GiB","1","2026-11-17 03:00","1100000000","20110","0","2026-11-12T19:30:00Z","-"],
+   ["docker","container","running","192.168.1.24","8GiB","4","yes","yes","yes","60GiB","2","2026-11-18 03:00","3100000000","48800","2","2026-11-10T08:00:00Z","docker"],
+   ["dc1","container","running","192.168.1.10","1GiB","1","yes","yes","no","8GiB","2","2026-11-18 03:00","310000000","1720","0","2026-11-10T08:00:00Z","-"],
+   ["uptime-kuma","container","running","192.168.1.25","1GiB","1","yes","yes","no","4GiB","1","2026-11-18 03:00","240000000","880","0","2026-11-14T10:15:00Z","-"],
+   ["ntfy","container","stopped","-","512MiB","1","no","yes","no","2GiB","1","2026-11-16 03:00","0","0","0","2026-11-13T09:00:00Z","-"],
+   ["test-box","container","stopped","-","1GiB","1","no","yes","no","8GiB","0","-","0","0","0","-","-"]
+  ],
+  "ct/profiles": [
+   ["lan","br0","Bridged to the home network"],
+   ["iot","br0.30","VLAN 30 for smart-home devices"],
+   ["guest","br0.40","VLAN 40 for guests, no access to the LAN"]
+  ],
+  "ct/bindings": [
+   ["data","shares","bulk","/bulk/shares/cloud","/var/www/nextcloud/data","rw","-","on","cloud","412000000000","data-1,data-2","-"],
+   ["photos","shares","bulk","/bulk/shares/photos","/mnt/photos","ro","-","on","photos","180000000000","data-1,data-3","-"],
+   ["media","shares","bulk","/bulk/shares/media","/media","ro","-","on","media","1500000000000","data-1,data-2,data-3","jellyfin"]
+  ],
+  "ct/snapshots": [
+   ["auto-2026-11-18","2026-11-18 03:00"],
+   ["auto-2026-11-11","2026-11-11 03:00"],
+   ["before-update","2026-11-05 21:42"]
+  ],
+  "ct/users": [
+   ["www-data","33","33","nginx, php-fpm"],
+   ["redis","110","110","redis-server"],
+   ["postgres","109","109","postgres"]
+  ],
+  "ct/logs": "2026-11-19T06:00:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:00:05+0100 nextcloud php[412]: cron.php finished in 1.8 s\n2026-11-19T06:05:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:05:04+0100 nextcloud php[433]: cron.php finished in 1.1 s\n2026-11-19T06:12:40+0100 nextcloud nginx[210]: 192.168.1.50 \"GET /apps/files/ HTTP/2.0\" 200\n2026-11-19T06:12:41+0100 nextcloud nginx[210]: 192.168.1.50 \"GET /remote.php/dav/files/anna/ HTTP/2.0\" 207\n2026-11-19T06:15:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:15:04+0100 nextcloud php[455]: cron.php finished in 1.3 s",
+  "jobs/running": [
+   ["hs-backup-offsite.service","Off-site backup","2026-11-19 02:10"]
+  ],
+  "jobs/records": [
+   ["20261119-021000-backup-offsite-kqzr","backup-offsite","Off-site backup","running","2026-11-19T01:10:00Z","2026-11-19T01:10:01Z","-","-","2","3","copy to the off-site repository","38400000000","52000000000","bytes"],
+   ["20261119-014500-recipe-uptime-kuma-mwta","recipe-uptime-kuma","Update uptime-kuma","ok","2026-11-19T00:45:00Z","2026-11-19T00:45:02Z","2026-11-19T00:47:30Z","0","4","4","done","-","-","-"],
+   ["20261118-030000-bulk-sync-hdnp","bulk-sync","Parity sync of the bulk pool","ok","2026-11-18T02:00:00Z","2026-11-18T02:00:01Z","2026-11-18T02:41:12Z","0","-","-","-","-","-","-"],
+   ["20261118-020000-backup-nowx","backup","Nightly backup","ok","2026-11-18T01:00:00Z","2026-11-18T01:00:01Z","2026-11-18T01:23:44Z","0","3","3","prune old snapshots","-","-","-"],
+   ["20261117-221500-recipe-ntfy-bjfe","recipe-ntfy","Update ntfy","failed","2026-11-17T21:15:00Z","2026-11-17T21:15:02Z","2026-11-17T21:16:20Z","1","2","4","pull the new image","-","-","-"],
+   ["20261116-190000-ct-test-box-snap-ttyc","ct-test-box-snapshot","Snapshot test-box","cancelled","2026-11-16T18:00:00Z","-","2026-11-16T18:00:09Z","-","-","-","-","-","-","-"]
+  ],
+  "jobs/record": {"id":"20261117-221500-recipe-ntfy-bjfe","slug":"recipe-ntfy","description":"Update ntfy","source":"web","initiator":"admin","unit":"hs-recipe-ntfy.service","queued":"2026-11-17T21:15:00Z","started":"2026-11-17T21:15:02Z","ended":"2026-11-17T21:16:20Z","state":"failed","exit":1,"step":{"n":2,"of":4,"text":"pull the new image"},"progress":null,"error":{"category":"network","message":"could not pull binwiederhall/ntfy: the registry did not answer"},"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/tail": [
+   ["line","step 1/4: snapshot ntfy"],
+   ["line","step 2/4: pull the new image"],
+   ["line","done"],
+   ["state","ok"],
+   ["exit","0"],
+   ["next","3"]
+  ],
+  "jobs/list": [
+   ["hs-bulk-sync.service","Parity sync of the bulk pool","2026-11-19 03:00","2026-11-18 03:00","ok"],
+   ["hs-backup.service","Nightly backup","2026-11-19 02:00","2026-11-18 02:00","ok"],
+   ["hs-backup-offsite.service","Off-site backup","2026-11-20 02:10","2026-11-19 02:10","ok"],
+   ["hs-bulk-scrub.service","Scrub of the bulk pool","2026-12-01 04:00","2026-11-01 04:00","ok"],
+   ["hs-reads-collect.service","Collect the slow reads","2026-11-19 06:30","2026-11-19 06:29","ok"],
+   ["hs-snapshots-ct.service","Instance snapshots","2026-11-20 03:00","2026-11-19 03:00","ok"]
+  ],
+  "recipes/list": [
+   ["audiobookshelf","streams your audiobooks and podcasts to phones and browsers, remembers where you stopped","audiobookshelf","not installed"],
+   ["domain","the domain controller for users and groups, and this server joined to it","dc1","installed"],
+   ["docker","run your own Docker apps (compose files), with Arcane or Portainer as the web page that manages them","docker","installed"],
+   ["homeassistant","Home Assistant, smart home control in its own virtual machine (Home Assistant OS)","home-assistant","installed"],
+   ["immich","your own photo and video library with phone backup, like Google Photos","immich","not installed"],
+   ["jellyfin","watch your films, series and music in the browser, on the TV and on the phone","jellyfin","installed"],
+   ["navidrome","streams your music library to phones and browsers (Subsonic apps work with it)","navidrome","not installed"],
+   ["ntfy","ntfy, your own server for push messages; this server's warnings are sent through it","ntfy","installed"],
+   ["seerr","a page where family and friends ask for films and series (works with Jellyfin and Plex)","seerr","not installed"],
+   ["stalwart","your own mail server (SMTP, IMAP, JMAP, CalDAV/CardDAV) with a web admin page","stalwart","not installed"],
+   ["sunshine","play games from the server on the TV (Moonlight), with Steam and the NVIDIA card","sunshine","parked"],
+   ["tdarr","converts the films once, so Jellyfin starts them at once (extra AC3 audio, old formats to H.264)","tdarr","not installed"],
+   ["upload-storage","your own file sync and upload server (Seafile or ownCloud), with apps for phone and PC","upload-storage","not installed"],
+   ["uptime-kuma","checks that your services answer, keeps a history and warns when one is down","uptime-kuma","installed"],
+   ["zoraxy","the reverse proxy that sends each public name to the right container","zoraxy","not installed"]
+  ],
+  "recipes/versions": [
+   ["audiobookshelf","1.0.0","-","unknown"],
+   ["domain","1.0.1","1.0.1","current"],
+   ["docker","1.0.0","1.0.0","current"],
+   ["homeassistant","1.0.0","1.0.0","current"],
+   ["immich","1.0.0","-","unknown"],
+   ["jellyfin","1.1.0","1.0.2","update"],
+   ["navidrome","1.1.0","-","unknown"],
+   ["ntfy","1.0.0","1.0.0","current"],
+   ["seerr","1.0.0","-","unknown"],
+   ["stalwart","1.1.0","-","unknown"],
+   ["sunshine","1.0.0","-","unknown"],
+   ["tdarr","1.0.0","-","unknown"],
+   ["upload-storage","1.0.0","-","unknown"],
+   ["uptime-kuma","1.0.0","1.0.0","current"],
+   ["zoraxy","1.0.0","-","unknown"]
+  ],
+  "apps/list": [
+   ["audiobookshelf","recipe","available","-","recipes","1.0.0","-","-","streams your audiobooks and podcasts to phones and browsers, remembers where you stopped"],
+   ["domain","recipe","running","-","recipes","1.0.1","1.0.1","dc1","the domain controller for users and groups, and this server joined to it"],
+   ["docker","recipe","running","-","recipes","1.0.0","1.0.0","docker","run your own Docker apps (compose files), with Arcane or Portainer as the web page that manages them"],
+   ["homeassistant","recipe","running","-","recipes","1.0.0","1.0.0","home-assistant","Home Assistant, smart home control in its own virtual machine (Home Assistant OS)"],
+   ["immich","recipe","available","-","recipes","1.0.0","-","-","your own photo and video library with phone backup, like Google Photos"],
+   ["jellyfin","recipe","running","update","recipes","1.1.0","1.0.2","jellyfin","watch your films, series and music in the browser, on the TV and on the phone"],
+   ["navidrome","recipe","available","-","recipes","1.1.0","-","-","streams your music library to phones and browsers (Subsonic apps work with it)"],
+   ["ntfy","recipe","on","stopped","recipes","1.0.0","1.0.0","ntfy","ntfy, your own server for push messages; this server's warnings are sent through it"],
+   ["seerr","recipe","available","-","recipes","1.0.0","-","-","a page where family and friends ask for films and series (works with Jellyfin and Plex)"],
+   ["stalwart","recipe","available","-","recipes","1.1.0","-","-","your own mail server (SMTP, IMAP, JMAP, CalDAV/CardDAV) with a web admin page"],
+   ["tdarr","recipe","available","-","recipes","1.0.0","-","-","converts the films once, so Jellyfin starts them at once (extra AC3 audio, old formats to H.264)"],
+   ["upload-storage","recipe","available","-","recipes","1.0.0","-","-","your own file sync and upload server (Seafile or ownCloud), with apps for phone and PC"],
+   ["uptime-kuma","recipe","on","unhealthy","recipes","1.0.0","1.0.0","uptime-kuma","checks that your services answer, keeps a history and warns when one is down"],
+   ["zoraxy","recipe","available","-","recipes","1.0.0","-","-","the reverse proxy that sends each public name to the right container"]
+  ],
+  "pkg/states": [
+   ["audiobookshelf","recipe","available","-","recipes","1.0.0","-","-","streams your audiobooks and podcasts to phones and browsers, remembers where you stopped"],
+   ["domain","recipe","running","-","recipes","1.0.1","1.0.1","dc1","the domain controller for users and groups, and this server joined to it"],
+   ["docker","recipe","running","-","recipes","1.0.0","1.0.0","docker","run your own Docker apps (compose files), with Arcane or Portainer as the web page that manages them"],
+   ["homeassistant","recipe","running","-","recipes","1.0.0","1.0.0","home-assistant","Home Assistant, smart home control in its own virtual machine (Home Assistant OS)"],
+   ["immich","recipe","available","-","recipes","1.0.0","-","-","your own photo and video library with phone backup, like Google Photos"],
+   ["jellyfin","recipe","running","update","recipes","1.1.0","1.0.2","jellyfin","watch your films, series and music in the browser, on the TV and on the phone"],
+   ["navidrome","recipe","available","-","recipes","1.1.0","-","-","streams your music library to phones and browsers (Subsonic apps work with it)"],
+   ["ntfy","recipe","on","stopped","recipes","1.0.0","1.0.0","ntfy","ntfy, your own server for push messages; this server's warnings are sent through it"],
+   ["seerr","recipe","available","-","recipes","1.0.0","-","-","a page where family and friends ask for films and series (works with Jellyfin and Plex)"],
+   ["stalwart","recipe","available","-","recipes","1.1.0","-","-","your own mail server (SMTP, IMAP, JMAP, CalDAV/CardDAV) with a web admin page"],
+   ["tdarr","recipe","available","-","recipes","1.0.0","-","-","converts the films once, so Jellyfin starts them at once (extra AC3 audio, old formats to H.264)"],
+   ["upload-storage","recipe","available","-","recipes","1.0.0","-","-","your own file sync and upload server (Seafile or ownCloud), with apps for phone and PC"],
+   ["uptime-kuma","recipe","on","unhealthy","recipes","1.0.0","1.0.0","uptime-kuma","checks that your services answer, keeps a history and warns when one is down"],
+   ["zoraxy","recipe","available","-","recipes","1.0.0","-","-","the reverse proxy that sends each public name to the right container"],
+   ["ad-selfservice","extension","on","-","extensions","0.2.0","0.2.0","-","Self-service password change for domain users"],
+   ["games","extension","available","-","extensions","1.0.0","-","-","Game PCs (wake, list) and the Game streaming page"],
+   ["passthrough","extension","installed","-","extensions","1.0.0","1.0.0","-","Passthrough domains (outside domains to reverse proxies on the LAN)"],
+   ["posters","extension","on","update","extensions","1.1.0","1.0.0","-","Posters drawn from the command line or the web interface"],
+   ["edge-mail","capability","available","-","extensions","1.0.0","-","-","Edge node: public mail entry (MX)"],
+   ["edge-status","capability","available","-","extensions","1.0.0","-","-","Edge node: status document"],
+   ["gateway","capability","on","-","extensions","1.0.0","1.0.0","-","Gateway proxy (Traefik: local names for the services)"]
+  ],
+  "pkg/market": [
+   ["audiobookshelf","recipe","recipes","1.0.0","-","new","no","generic","streams your audiobooks and podcasts to phones and browsers, remembers where you stopped"],
+   ["domain","recipe","recipes","1.0.1","1.0.1","current","no","generic","the domain controller for users and groups, and this server joined to it"],
+   ["docker","recipe","recipes","1.0.0","1.0.0","current","no","generic","run your own Docker apps (compose files), with Arcane or Portainer as the web page that manages them"],
+   ["homeassistant","recipe","recipes","1.0.0","1.0.0","current","no","generic","Home Assistant, smart home control in its own virtual machine (Home Assistant OS)"],
+   ["immich","recipe","recipes","1.0.0","-","new","no","generic","your own photo and video library with phone backup, like Google Photos"],
+   ["jellyfin","recipe","recipes","1.1.0","1.0.2","update","no","generic","watch your films, series and music in the browser, on the TV and on the phone"],
+   ["navidrome","recipe","recipes","1.1.0","-","new","no","generic","streams your music library to phones and browsers (Subsonic apps work with it)"],
+   ["ntfy","recipe","recipes","1.0.0","1.0.0","current","no","generic","ntfy, your own server for push messages; this server's warnings are sent through it"],
+   ["seerr","recipe","recipes","1.0.0","-","new","no","generic","a page where family and friends ask for films and series (works with Jellyfin and Plex)"],
+   ["stalwart","recipe","recipes","1.1.0","-","new","no","generic","your own mail server (SMTP, IMAP, JMAP, CalDAV/CardDAV) with a web admin page"],
+   ["tdarr","recipe","recipes","1.0.0","-","new","no","generic","converts the films once, so Jellyfin starts them at once (extra AC3 audio, old formats to H.264)"],
+   ["upload-storage","recipe","recipes","1.0.0","-","new","no","generic","your own file sync and upload server (Seafile or ownCloud), with apps for phone and PC"],
+   ["uptime-kuma","recipe","recipes","1.0.0","1.0.0","current","no","generic","checks that your services answer, keeps a history and warns when one is down"],
+   ["zoraxy","recipe","recipes","1.0.0","-","new","no","generic","the reverse proxy that sends each public name to the right container"],
+   ["ad-selfservice","extension","extensions","0.2.0","0.2.0","current","no","generic","Self-service password change for domain users"],
+   ["games","extension","extensions","1.0.0","-","new","no","generic","Game PCs (wake, list) and the Game streaming page"],
+   ["passthrough","extension","extensions","1.0.0","1.0.0","current","no","generic","Passthrough domains (outside domains to reverse proxies on the LAN)"],
+   ["posters","extension","extensions","1.1.0","1.0.0","update","no","generic","Posters drawn from the command line or the web interface"],
+   ["edge-mail","capability","extensions","1.0.0","-","new","no","generic","Edge node: public mail entry (MX)"],
+   ["edge-status","capability","extensions","1.0.0","-","new","no","generic","Edge node: status document"],
+   ["gateway","capability","extensions","1.0.0","1.0.0","current","no","generic","Gateway proxy (Traefik: local names for the services)"]
+  ],
+  "pkg/capabilities": [
+   ["edge-mail","extensions","1.0.0","-","new","-","feature","Edge node: public mail entry (MX)"],
+   ["edge-status","extensions","1.0.0","-","new","edge-mail","feature","Edge node: status document"],
+   ["gateway","extensions","1.0.0","1.0.0","current","-","feature","Gateway proxy (Traefik: local names for the services)"]
+  ],
+  "pkg/repos": [
+   ["recipes","https://github.com/hobnix/recipes","signed","default"],
+   ["extensions","https://github.com/hobnix/extensions","signed","default"],
+   ["family","https://git.example.home/hobnix-family","unsigned","added"]
+  ],
+  "apps/health": [
+   ["jellyfin","healthy"],
+   ["homeassistant","healthy"],
+   ["docker","healthy"],
+   ["domain","healthy"],
+   ["uptime-kuma","unhealthy"],
+   ["ntfy","stopped"]
+  ],
+  "apps/versions": [
+   ["jellyfin","jellyfin","1.1.0","10.10.4","10.10.2","notify","update"],
+   ["homeassistant","home-assistant","1.0.0","2026.11.1","2026.11.1","notify","current"],
+   ["docker","docker","1.0.0","-","-","notify","current"],
+   ["domain","dc1","1.0.1","-","-","notify","current"],
+   ["uptime-kuma","uptime-kuma","1.0.0","1.23.16","1.23.16","notify","current"],
+   ["ntfy","ntfy","1.0.0","2.11.0","2.11.0","pinned","pinned"]
+  ],
+  "dc/state": [
+   ["ca","yes"],
+   ["ca_until","2036-03-02"],
+   ["dc","dc1"],
+   ["cert","ok"],
+   ["subject","dc1.home.example"],
+   ["names","dc1.home.example,home.example"],
+   ["valid_until","2027-03-02"],
+   ["days_left","103"],
+   ["checked","2026-11-19 06:00"]
+  ],
+  "recipes/asks": [
+   ["FIXED_IP","Fixed address of the instance","text","-","^[0-9.]+$","-"],
+   ["MEDIA_SHARE","Share with your media","text","media","^[a-z0-9-]+$","-"],
+   ["ADMIN_PASSWORD","Password of the first admin","secret","-","-","-"],
+   ["HARDWARE","Hardware transcoding","choice:none,intel,nvidia","none","-","-"],
+   ["input","form"]
+  ],
+  "recipes/steps": [
+   ["network","Network","Where the app lives on your network","FIXED_IP"],
+   ["storage","Storage","The share the app reads","MEDIA_SHARE"],
+   ["account","Account and hardware","First login and the graphics card","ADMIN_PASSWORD,HARDWARE"]
+  ],
+  "docker/status": [
+   ["state","on"],
+   ["instance","docker"],
+   ["owned","yes"],
+   ["running","yes"],
+   ["manager","arcane"],
+   ["size","60GiB"],
+   ["memory","8192"],
+   ["cpus","4"],
+   ["children","5"],
+   ["address","192.168.1.24"],
+   ["mapped","1000:1000"]
+  ],
+  "docker/health": [
+   ["container","ok","-","the container docker runs","-"],
+   ["share","ok","-","apps on the SSD pool","-"],
+   ["mount","ok","-","shares are mounted in Docker","-"]
+  ],
+  "docker/apps": [
+   ["vaultwarden","docker","vaultwarden","running","1/1","8081","192.168.1.24","vaultwarden/server:1.32.5","web","no","same"],
+   ["paperless","docker","paperless","running","3/3","8000","192.168.1.24","paperlessngx/paperless-ngx:2.13,redis:7,postgres:16","web","yes","changed"],
+   ["radarr","docker","radarr","running","1/1","7878","192.168.1.24","linuxserver/radarr:5.14","recipe","no","same"],
+   ["freshrss","docker","freshrss","stopped","0/1","-","-","freshrss/freshrss:1.25","web","no","same"],
+   ["watchtower","docker","-","running","1/1","-","-","containrrr/watchtower:latest","unmanaged","no","-"]
+  ],
+  "docker/list": [
+   ["vaultwarden","docker","vaultwarden","running","8081"],
+   ["paperless","docker","paperless","running","8000"],
+   ["radarr","docker","radarr","running","7878"],
+   ["freshrss","docker","freshrss","stopped","-"],
+   ["watchtower","docker","-","running","-"]
+  ],
+  "docker/containers": [
+   ["vaultwarden","vaultwarden","running"],
+   ["paperless-web","paperless","running"],
+   ["paperless-redis","paperless","running"],
+   ["paperless-db","paperless","running"],
+   ["radarr","radarr","running"],
+   ["freshrss","freshrss","exited"],
+   ["watchtower","-","running"],
+   ["arcane","arcane","running"]
+  ],
+  "docker/logs": "2026-11-19T06:10:11.204Z [INFO] vaultwarden: Rocket has launched from http://0.0.0.0:80\n2026-11-19T06:11:02.931Z [INFO] 192.168.1.50 POST /identity/connect/token 200\n2026-11-19T06:11:03.177Z [INFO] 192.168.1.50 GET /api/sync?excludeDomains=true 200\n2026-11-19T06:14:40.002Z [INFO] 192.168.1.61 GET /alive 200\n2026-11-19T06:20:12.455Z [INFO] 192.168.1.50 POST /api/ciphers 200",
+  "docker/app": {"rev":"a41f9c20d7e3","managed":"web","envTooBig":false,"compose":"services:\n  vaultwarden:\n    image: vaultwarden/server:1.32.5\n    container_name: vaultwarden\n    env_file: .env\n    ports:\n      - \"8081:80\"\n    volumes:\n      - ./data:/data\n    restart: unless-stopped\n","envText":"DOMAIN=https://vault.home.example\nSIGNUPS_ALLOWED=false\nPUID=1000\nPGID=1000\n"},
+  "docker/rev": "a41f9c20d7e3",
+  "docker/registries": [
+   ["ghcr.io","hobnix","ok","paperless"],
+   ["registry.example.home","family","ok","-"],
+   ["docker.io","hobnix-bot","ok","-"]
+  ],
+  "parts/list": [
+   ["samba","on","part","no","yes","Windows file sharing"],
+   ["incus","on","part","yes","yes","Incus (containers and VMs, VLAN profiles)"],
+   ["backup","on","part","no","yes","Backup (restic to the backup disk, restore drills)"],
+   ["docker","on","part","yes","yes","Docker host with a web page to manage it"],
+   ["ad","on","part","yes","yes","Active Directory (domain users, Domain Admins sign in)"],
+   ["dashboard","on","part","no","yes","Dashboard (tiles for the services)"],
+   ["docs","on","part","no","yes","Documentation in the web interface (guides and command reference)"],
+   ["gateway","on","part","yes","yes","Gateway proxy (Traefik: local names for the services)"],
+   ["live-state","off","part","yes","yes","Live state (Redis cache for the web interface)"],
+   ["edge-mail","off","part","yes","yes","Edge node: public mail entry (MX)"],
+   ["ad-selfservice","on","extension","no","yes","Self-service password change for domain users"],
+   ["games","off","extension","no","yes","Game PCs (wake, list) and the Game streaming page"]
+  ],
+  "parts/pending": [],
+  "rebuild/pending": [],
+  "preset/list": [
+   ["home","Home server","Files, backups and a few apps","samba backup incus dashboard docs"],
+   ["family","Family media server","Home server plus photos, music and films","samba backup incus dashboard docs docker gateway"],
+   ["minimal","Files only","Just the file shares, nothing else","samba"]
+  ],
+  "setup/list": [
+   ["language","done","Language","-","/settings"],
+   ["timezone","done","Time zone","-","/settings"],
+   ["notifications","done","Set up notifications","-","/operations/notifications"],
+   ["storage","done","Storage pool","-","/storage/pools/bulk"],
+   ["share","done","A first share","-","/storage/shares?pool=bulk"],
+   ["backup","done","Backup disk","-","/protection/backup"],
+   ["parts","done","Optional parts (capabilities)","-","/settings"],
+   ["gateway-dns","open","Wildcard DNS for the gateway proxy","hs gateway check","/instances/services"],
+   ["finished","open","Setup finished","hs config set setupDone true","/setup"]
+  ],
+  "ct/bindings/nextcloud": [
+   ["data","shares","bulk","/bulk/shares/cloud","/var/www/nextcloud/data","rw","-","on","cloud","412000000000","data-1,data-2","-"],
+   ["photos","shares","bulk","/bulk/shares/photos","/mnt/photos","ro","-","on","photos","180000000000","data-1,data-3","-"],
+   ["media","shares","bulk","/bulk/shares/media","/media","ro","-","on","media","1500000000000","data-1,data-2,data-3","jellyfin"]
+  ],
+  "ct/bindings/jellyfin": [
+   ["media","shares","bulk","/bulk/shares/media","/media","rw","-","on","media","1500000000000","data-1,data-2,data-3","-"],
+   ["cache","fast","fast","volume jellyfin-cache","/var/cache/jellyfin","rw","-","-","-","-","-","-"]
+  ],
+  "ct/bindings/home-assistant": [],
+  "ct/bindings/docker": [
+   ["apps","fast","fast","volume docker-data","/srv/apps","rw","-","-","-","-","-","-"],
+   ["downloads","shares","bulk","/bulk/shares/downloads","/downloads","rw","-","on","downloads","96000000000","data-2,data-3","-"]
+  ],
+  "ct/bindings/dc1": [],
+  "ct/bindings/uptime-kuma": [],
+  "ct/bindings/ntfy": [],
+  "ct/bindings/test-box": [],
+  "ct/snapshots/nextcloud": [
+   ["auto-2026-11-18","2026-11-18 03:00"],
+   ["auto-2026-11-11","2026-11-11 03:00"],
+   ["before-update","2026-11-05 21:42"]
+  ],
+  "ct/snapshots/jellyfin": [
+   ["auto-2026-11-18","2026-11-18 03:00"],
+   ["auto-2026-11-11","2026-11-11 03:00"]
+  ],
+  "ct/snapshots/home-assistant": [
+   ["auto-2026-11-18","2026-11-18 03:00"]
+  ],
+  "ct/snapshots/docker": [
+   ["auto-2026-11-18","2026-11-18 03:00"],
+   ["auto-2026-11-11","2026-11-11 03:00"]
+  ],
+  "ct/snapshots/dc1": [
+   ["auto-2026-11-18","2026-11-18 03:00"],
+   ["auto-2026-11-11","2026-11-11 03:00"]
+  ],
+  "ct/snapshots/uptime-kuma": [
+   ["auto-2026-11-18","2026-11-18 03:00"]
+  ],
+  "ct/snapshots/ntfy": [
+   ["auto-2026-11-18","2026-11-18 03:00"]
+  ],
+  "ct/snapshots/test-box": [],
+  "ct/users/nextcloud": [
+   ["www-data","33","33","nginx, php-fpm"],
+   ["redis","110","110","redis-server"],
+   ["postgres","109","109","postgres"]
+  ],
+  "ct/users/jellyfin": [
+   ["jellyfin","998","996","jellyfin, ffmpeg"]
+  ],
+  "ct/users/docker": [
+   ["dockremap","1000","1000","dockerd, containerd"],
+   ["arcane","1001","1001","arcane"]
+  ],
+  "ct/logs/jellyfin": "2026-11-19T06:02:11+0100 jellyfin jellyfin[301]: [INF] Library scan started for \"Films\"\n2026-11-19T06:02:48+0100 jellyfin jellyfin[301]: [INF] Library scan finished in 37 s, 2 new items\n2026-11-19T06:10:30+0100 jellyfin jellyfin[301]: [INF] Playback started: anna on Living room TV\n2026-11-19T06:10:31+0100 jellyfin jellyfin[301]: [INF] ffmpeg: direct play, no transcode",
+  "ct/logs/nextcloud": "2026-11-19T06:00:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:00:05+0100 nextcloud php[412]: cron.php finished in 1.8 s\n2026-11-19T06:05:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:05:04+0100 nextcloud php[433]: cron.php finished in 1.1 s\n2026-11-19T06:12:40+0100 nextcloud nginx[210]: 192.168.1.50 \"GET /apps/files/ HTTP/2.0\" 200\n2026-11-19T06:12:41+0100 nextcloud nginx[210]: 192.168.1.50 \"GET /remote.php/dav/files/anna/ HTTP/2.0\" 207\n2026-11-19T06:15:03+0100 nextcloud systemd[1]: Started Nextcloud background jobs.\n2026-11-19T06:15:04+0100 nextcloud php[455]: cron.php finished in 1.3 s",
+  "recipes/asks/jellyfin": [
+   ["MEDIA_SHARE","Share with your media","text","media","^[a-z0-9-]+$","-"],
+   ["HARDWARE","Hardware transcoding","choice:none,intel,nvidia","none","-","-"],
+   ["input","form"]
+  ],
+  "recipes/steps/jellyfin": [
+   ["storage","Storage","The share Jellyfin reads","MEDIA_SHARE"],
+   ["hardware","Hardware","Graphics card for transcoding","HARDWARE"]
+  ],
+  "recipes/asks/immich": [
+   ["PHOTO_SHARE","Share for the photos","text","photos","^[a-z0-9-]+$","-"],
+   ["ADMIN_PASSWORD","Password of the first admin","secret","-","-","-"],
+   ["input","form"]
+  ],
+  "recipes/steps/immich": [
+   ["storage","Storage","Where the photos are kept","PHOTO_SHARE"],
+   ["account","Account","First login","ADMIN_PASSWORD"]
+  ],
+  "docker/rev/vaultwarden": "a41f9c20d7e3",
+  "docker/rev/paperless": "c90b17e4a2d5",
+  "docker/app/vaultwarden": {"rev":"a41f9c20d7e3","managed":"web","envTooBig":false,"compose":"services:\n  vaultwarden:\n    image: vaultwarden/server:1.32.5\n    container_name: vaultwarden\n    env_file: .env\n    ports:\n      - \"8081:80\"\n    volumes:\n      - ./data:/data\n    restart: unless-stopped\n","envText":"DOMAIN=https://vault.home.example\nSIGNUPS_ALLOWED=false\nPUID=1000\nPGID=1000\n"},
+  "docker/app/paperless": {"rev":"c90b17e4a2d5","managed":"web","envTooBig":false,"compose":"services:\n  web:\n    image: paperlessngx/paperless-ngx:2.13\n    container_name: paperless-web\n    env_file: .env\n    ports:\n      - \"8000:8000\"\n    depends_on: [redis, db]\n  redis:\n    image: redis:7\n    container_name: paperless-redis\n  db:\n    image: postgres:16\n    container_name: paperless-db\n    env_file: .env\n","envText":"PAPERLESS_URL=https://docs.home.example\nPUID=1000\nPGID=1000\n"},
+  "docker/logs/vaultwarden": "2026-11-19T06:10:11.204Z [INFO] vaultwarden: Rocket has launched from http://0.0.0.0:80\n2026-11-19T06:11:02.931Z [INFO] 192.168.1.50 POST /identity/connect/token 200\n2026-11-19T06:11:03.177Z [INFO] 192.168.1.50 GET /api/sync?excludeDomains=true 200\n2026-11-19T06:14:40.002Z [INFO] 192.168.1.61 GET /alive 200\n2026-11-19T06:20:12.455Z [INFO] 192.168.1.50 POST /api/ciphers 200",
+  "docker/logs/paperless": "2026-11-19T06:00:02.100Z [INFO] paperless.consumer: Consuming scan-2026-11-19.pdf\n2026-11-19T06:00:09.877Z [INFO] paperless.consumer: Document 2026-11-19 scan-2026-11-19 consumed\n2026-11-19T06:00:10.002Z [INFO] paperless.tasks: Index updated",
+  "jobs/record/20261119-021000-backup-offsite-kqzr": {"id":"20261119-021000-backup-offsite-kqzr","slug":"backup-offsite","description":"Off-site backup","source":"web","initiator":"admin","unit":"hs-backup-offsite.service","queued":"2026-11-19T01:10:00Z","started":"2026-11-19T01:10:01Z","ended":null,"state":"running","exit":null,"step":{"n":2,"of":3,"text":"copy to the off-site repository"},"progress":{"done":38400000000,"total":52000000000,"unit":"bytes"},"error":null,"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/record/20261119-014500-recipe-uptime-kuma-mwta": {"id":"20261119-014500-recipe-uptime-kuma-mwta","slug":"recipe-uptime-kuma","description":"Update uptime-kuma","source":"web","initiator":"admin","unit":"hs-recipe-uptime-kuma.service","queued":"2026-11-19T00:45:00Z","started":"2026-11-19T00:45:02Z","ended":"2026-11-19T00:47:30Z","state":"ok","exit":0,"step":{"n":4,"of":4,"text":"done"},"progress":null,"error":null,"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/record/20261118-030000-bulk-sync-hdnp": {"id":"20261118-030000-bulk-sync-hdnp","slug":"bulk-sync","description":"Parity sync of the bulk pool","source":"web","initiator":"admin","unit":"hs-bulk-sync.service","queued":"2026-11-18T02:00:00Z","started":"2026-11-18T02:00:01Z","ended":"2026-11-18T02:41:12Z","state":"ok","exit":0,"step":null,"progress":null,"error":null,"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/record/20261118-020000-backup-nowx": {"id":"20261118-020000-backup-nowx","slug":"backup","description":"Nightly backup","source":"web","initiator":"admin","unit":"hs-backup.service","queued":"2026-11-18T01:00:00Z","started":"2026-11-18T01:00:01Z","ended":"2026-11-18T01:23:44Z","state":"ok","exit":0,"step":{"n":3,"of":3,"text":"prune old snapshots"},"progress":null,"error":null,"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/record/20261117-221500-recipe-ntfy-bjfe": {"id":"20261117-221500-recipe-ntfy-bjfe","slug":"recipe-ntfy","description":"Update ntfy","source":"web","initiator":"admin","unit":"hs-recipe-ntfy.service","queued":"2026-11-17T21:15:00Z","started":"2026-11-17T21:15:02Z","ended":"2026-11-17T21:16:20Z","state":"failed","exit":1,"step":{"n":2,"of":4,"text":"pull the new image"},"progress":null,"error":{"category":"network","message":"could not pull binwiederhall/ntfy: the registry did not answer"},"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/record/20261116-190000-ct-test-box-snap-ttyc": {"id":"20261116-190000-ct-test-box-snap-ttyc","slug":"ct-test-box-snapshot","description":"Snapshot test-box","source":"web","initiator":"admin","unit":"hs-ct-test-box-snapshot.service","queued":"2026-11-16T18:00:00Z","started":null,"ended":"2026-11-16T18:00:09Z","state":"cancelled","exit":null,"step":null,"progress":null,"error":null,"result":null,"cancel":null,"version":1,"parent":null,"kind":null,"waiting":null},
+  "jobs/tail/hs-backup-offsite.service": [
+   ["line","step 1/3: back up 4 shares"],
+   ["line","step 2/3: copy to the off-site repository"],
+   ["state","running"],
+   ["next","2"]
+  ]
+ }
+}

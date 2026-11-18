@@ -1,6 +1,6 @@
 // Demo mode: answers of the web API from made-up fixtures, no server and nothing changed. Used by plugin.js (vite) and tests/web-demo.mjs.
 // A read is answered from fixtures/<name>.json laid over fixtures/base.json; a plan is a generic plan with a note; a start is always refused.
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +11,13 @@ const CAPABILITIES = ['ad', 'backup', 'dashboard', 'docker', 'docs', 'gateway', 
 
 const load = (name) => JSON.parse(readFileSync(join(dir, name + '.json'), 'utf8'));
 export const fixtureNames = () => readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'base.json').map((f) => f.slice(0, -5)).sort();
-export const baseReads = () => load('base').reads;
+// base.json plus every parts/<area>.json (the reads of one area of the interface, so a fixture file stays readable)
+export const baseReads = () => {
+  const reads = load('base').reads;
+  const parts = join(dir, 'parts');
+  if (existsSync(parts)) for (const f of readdirSync(parts).filter((x) => x.endsWith('.json')).sort()) Object.assign(reads, JSON.parse(readFileSync(join(parts, f), 'utf8')).reads);
+  return reads;
+};
 
 // fixture name -> { name, title, locked, reads } (base laid under the fixture's own reads); an unknown name is the default
 export function fixture(name) {
@@ -52,10 +58,16 @@ export function read(fx, path, query = {}) {
 }
 
 export function plan(body) {
-  const words = [body.area, ...(body.args || [])].filter(Boolean).join(' ').replace(/\//g, ' ');
+  const args = (body.args || []).filter(Boolean).map(String);
+  const words = [body.area, ...args].filter(Boolean).join(' ').replace(/\//g, ' ');
+  const destructive = /\b(remove|delete|destroy|wipe|format|rollback|purge|erase|replace)\b/.test(words);
+  const subject = args.findLast((a) => !/^[-/]/.test(a) && !/^(add|remove|delete|destroy|wipe|format|rollback|purge|erase|replace|create|start|stop|restart|enable|disable|set|apply|run|sync|scrub|snapshot)$/.test(a)) || body.area || 'this';
+  const steps = [['section', 'What happens'], ['step', `Run \`hs ${words}\` on the server.`], ['step', `Check that ${subject} is in the expected state before and after.`]];
+  if (destructive) steps.splice(1, 0, ['warn', 'This cannot be undone. A snapshot is taken first where the storage supports it.']);
+  steps.push(['note', DEMO_NOTE]);
   return json(200, {
-    exit: 0, status: 'ok', reason: '', heading: `Demo: ${words}`, command: `hs ${words}`, confirm_name: '', long: false, unit: '',
-    needs: [], options: [], fixes: [], steps: [['step', 'On a real server this lists what would happen.'], ['note', DEMO_NOTE]],
+    exit: 0, status: 'ok', reason: '', heading: `Demo: ${words}`, command: `hs ${words}`, confirm_name: destructive ? subject : '', long: false, unit: '',
+    needs: [], options: [], fixes: [], steps,
   });
 }
 

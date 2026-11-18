@@ -1,0 +1,178 @@
+{
+ "reads": {
+  "shares/overview": [
+   ["media", "shares", "/bulk/shares/media", "on", "5600000000000", "18.11. 03:00", "off", "data-1,data-2", "jellyfin(ro)"],
+   ["documents", "sensitive", "/bulk/sensitive/documents", "off", "120000000000", "18.11. 03:00", "on", "data-1", "nextcloud(rw)"],
+   ["backups-pc", "shares", "/bulk/shares/backups-pc", "on", "1900000000000", "18.11. 03:00", "off", "data-2,data-3", "-"],
+   ["downloads", "shares", "/bulk/shares/downloads", "off", "640000000000", "18.11. 03:00", "on", "data-3", "-"],
+   ["photos", "shares", "/fast/shares/photos", "-", "180000000000", "", "on", "fast", "nextcloud(rw),jellyfin(ro)"],
+   ["scans", "other", "/srv/scans", "-", "-", "", "-", "-", "-"]
+  ],
+  "shares/list": [
+   ["media", "shares", "/bulk/shares/media", "on", "5600000000000", "18.11. 03:00"],
+   ["documents", "sensitive", "/bulk/sensitive/documents", "off", "120000000000", "18.11. 03:00"],
+   ["backups-pc", "shares", "/bulk/shares/backups-pc", "on", "1900000000000", "18.11. 03:00"],
+   ["downloads", "shares", "/bulk/shares/downloads", "off", "640000000000", "18.11. 03:00"],
+   ["photos", "shares", "/fast/shares/photos", "-", "180000000000", ""],
+   ["scans", "other", "/srv/scans", "-", "-", ""]
+  ],
+  "shares/principals": [
+   ["S-1-1-0", "Everyone", "group"],
+   ["S-1-5-21-1001-512", "HOME\\Domain Admins", "group"],
+   ["S-1-5-21-1001-513", "HOME\\Domain Users", "group"],
+   ["S-1-5-21-1001-1104", "HOME\\family", "group"],
+   ["S-1-5-21-1001-1105", "HOME\\kids", "group"],
+   ["S-1-5-21-1001-1000", "HOME\\admin", "user"],
+   ["S-1-5-21-1001-1101", "HOME\\anna", "user"],
+   ["S-1-5-21-1001-1102", "HOME\\ben", "user"],
+   ["S-1-5-21-1001-1103", "HOME\\clara", "user"]
+  ],
+  "shares/acl": [
+   ["S-1-5-21-1001-512", "HOME\\Domain Admins", "group", "full"],
+   ["S-1-5-21-1001-1104", "HOME\\family", "group", "write"]
+  ],
+  "shares/acl/media": [
+   ["S-1-5-21-1001-512", "HOME\\Domain Admins", "group", "full"],
+   ["S-1-5-21-1001-1104", "HOME\\family", "group", "read"],
+   ["S-1-5-21-1001-1102", "HOME\\ben", "user", "write"],
+   ["S-1-5-21-1001-1105", "HOME\\kids", "group", "denied"]
+  ],
+  "shares/acl/documents": [
+   ["S-1-5-21-1001-512", "HOME\\Domain Admins", "group", "full"],
+   ["S-1-5-21-1001-1101", "HOME\\anna", "user", "write"]
+  ],
+  "shares/acl/photos": [
+   ["S-1-5-21-1001-512", "HOME\\Domain Admins", "group", "full"],
+   ["S-1-5-21-1001-1104", "HOME\\family", "group", "write"],
+   ["S-1-1-0", "Everyone", "group", "read"]
+  ],
+  "shares/visible": [["visible"]],
+  "shares/visible/documents": [["hidden"]],
+  "shares/mounts": [],
+  "shares/mounts/media": [["jellyfin", "media", "/media", "ro", "/bulk/shares/media"]],
+  "shares/mounts/documents": [["nextcloud", "documents", "/mnt/documents", "rw", "/bulk/sensitive/documents"]],
+  "shares/mounts/photos": [
+   ["nextcloud", "photos", "/mnt/photos", "rw", "/fast/shares/photos"],
+   ["jellyfin", "photos", "/photos", "ro", "/fast/shares/photos/2024"]
+  ],
+  "shares/history": [],
+  "shares/history/photos": [
+   ["auto-2026-11-15", "2026-11-15 03:00", "auto", "84000000"],
+   ["auto-2026-11-16", "2026-11-16 03:00", "auto", "126000000"],
+   ["auto-2026-11-17", "2026-11-17 03:00", "auto", "52000000"],
+   ["auto-2026-11-18", "2026-11-18 03:00", "auto", "310000000"],
+   ["before-import", "2026-11-12 19:42", "manual", "2400000000"]
+  ],
+  "shares/deleted": [
+   ["old-projects.deleted-20261020", "shares", "3200000000", "data-2"],
+   ["tmp-share.deleted-20261105", "shares", "48000000", "fast"]
+  ],
+  "users/list": [
+   ["admin", "Home Admin", "enabled", "Domain Admins,Domain Users"],
+   ["anna", "Anna Muster", "enabled", "Domain Users,family"],
+   ["ben", "Ben Muster", "enabled", "Domain Users,family"],
+   ["clara", "Clara Muster", "enabled", "Domain Users,family,kids"],
+   ["tv-guest", "-", "disabled", "Domain Users"]
+  ],
+  "users/groups": [
+   ["Domain Admins", "admin"],
+   ["Domain Users", "admin,anna,ben,clara,tv-guest"],
+   ["family", "anna,ben,clara"],
+   ["kids", "clara"]
+  ],
+  "users/access": [],
+  "users/access/admin": [["media", "full", "Domain Admins"], ["documents", "full", "Domain Admins"], ["backups-pc", "full", "Domain Admins"], ["downloads", "full", "Domain Admins"], ["photos", "full", "Domain Admins"]],
+  "users/access/anna": [["media", "read", "family"], ["documents", "write", "anna"], ["photos", "write", "family"]],
+  "users/access/ben": [["media", "write", "ben"], ["photos", "write", "family"]],
+  "users/access/clara": [["media", "denied", "kids"], ["photos", "write", "family"]],
+  "users/access/tv-guest": [["photos", "read", "Everyone"]],
+  "users/group-access": [],
+  "users/group-access/Domain Admins": [["media", "full", "Domain Admins"], ["documents", "full", "Domain Admins"], ["backups-pc", "full", "Domain Admins"], ["downloads", "full", "Domain Admins"], ["photos", "full", "Domain Admins"]],
+  "users/group-access/Domain Users": [],
+  "users/group-access/family": [["media", "read", "family"], ["photos", "write", "family"]],
+  "users/group-access/kids": [["media", "denied", "kids"]],
+  "users/details": [["full", "-"], ["mail", "-"], ["description", "-"]],
+  "users/details/admin": [["full", "Home Admin"], ["mail", "admin@home.example"], ["description", "Server administrator"]],
+  "users/details/anna": [["full", "Anna Muster"], ["mail", "anna@home.example"], ["description", "-"]],
+  "users/details/ben": [["full", "Ben Muster"], ["mail", "ben@home.example"], ["description", "-"]],
+  "users/details/clara": [["full", "Clara Muster"], ["mail", "-"], ["description", "Child account"]],
+  "users/details/tv-guest": [["full", "-"], ["mail", "-"], ["description", "Living room TV (locked)"]],
+  "users/group-details": [["description", "-"]],
+  "users/group-details/Domain Admins": [["description", "Designated administrators of the domain"]],
+  "users/group-details/Domain Users": [["description", "All domain users"]],
+  "users/group-details/family": [["description", "The whole family"]],
+  "users/group-details/kids": [["description", "Children: no access to the media share"]],
+  "fm/locations": [
+   ["status", "ok"], ["write", "yes"],
+   ["loc", "pool:bulk", "pool", "bulk", "snapraid", "22000000000000", "12000000000000", "yes", "-", "-", "-", "yes"],
+   ["loc", "pool:fast", "pool", "fast", "zfs", "1800000000000", "1400000000000", "yes", "-", "-", "-", "yes"],
+   ["loc", "disk:data-1", "disk", "data-1", "ext4", "8000000000000", "2900000000000", "yes", "-", "bulk", "data-1", "yes"],
+   ["loc", "disk:data-2", "disk", "data-2", "ext4", "8000000000000", "4100000000000", "yes", "-", "bulk", "data-2", "yes"],
+   ["loc", "disk:data-3", "disk", "data-3", "ext4", "8000000000000", "5200000000000", "yes", "-", "bulk", "data-3", "yes"],
+   ["loc", "share:photos", "share", "photos", "zfs", "1400000000000", "1220000000000", "yes", "-", "fast", "-", "yes"],
+   ["loc", "share:media", "share", "media", "snapraid", "22000000000000", "12000000000000", "yes", "-", "bulk", "-", "yes"],
+   ["loc", "share:documents", "share", "documents", "snapraid", "22000000000000", "12000000000000", "no", "Read only", "bulk", "-", "no"]
+  ],
+  "fm/ls/pool:bulk?path=/": [["status", "ok"], ["row", "d", "0", "1793800000", "shares", "data-1,data-2,data-3", "-", "-"], ["row", "d", "0", "1793700000", "sensitive", "data-1", "-", "-"], ["end"]],
+  "fm/ls/pool:bulk?path=/shares": [["status", "ok"], ["row", "d", "0", "1793800000", "backups-pc", "data-2,data-3", "-", "-"], ["row", "d", "0", "1793900000", "downloads", "data-3", "-", "-"], ["row", "d", "0", "1793850000", "media", "data-1,data-2", "-", "-"], ["end"]],
+  "fm/ls/pool:bulk?path=/shares/media": [["status", "ok"], ["row", "d", "0", "1793000000", "Movies", "data-1,data-2", "-", "-"], ["row", "d", "0", "1793500000", "Music", "data-1", "-", "-"], ["row", "d", "0", "1793850000", "Series", "data-2", "-", "-"], ["row", "f", "2300", "1790000000", "readme.txt", "data-1", "-", "-"], ["end"]],
+  "fm/ls/pool:bulk?path=/shares/media/Movies": [["status", "ok"], ["row", "d", "0", "1790000000", "Dune (2021)", "data-1", "-", "-"], ["row", "f", "8400000000", "1791000000", "Blade Runner 2049.mkv", "data-2", "-", "-"], ["row", "f", "6100000000", "1792000000", "Arrival.mkv", "data-1", "-", "-"], ["row", "f", "11200000000", "1793000000", "Oppenheimer.mkv", "data-2", "-", "-"], ["end"]],
+  "fm/ls/pool:bulk?path=/sensitive": [["status", "ok"], ["row", "d", "0", "1793700000", "documents", "data-1", "-", "-"], ["end"]],
+  "fm/ls/pool:fast?path=/": [["status", "ok"], ["row", "d", "0", "1793900000", "shares", "-", "-", "-"], ["row", "d", "0", "1793000000", "incus", "-", "-", "-"], ["end"]],
+  "fm/ls/pool:fast?path=/shares": [["status", "ok"], ["row", "d", "0", "1793900000", "photos", "-", "-", "-"], ["end"]],
+  "fm/ls/share:photos?path=/": [["status", "ok"], ["row", "d", "0", "1731000000", "2023", "-", "-", "-"], ["row", "d", "0", "1763000000", "2024", "-", "-", "-"], ["row", "d", "0", "1731100000", "Holiday", "-", "-", "-"], ["row", "f", "4200000", "1731200000", "IMG_0001.jpg", "-", "-", "-"], ["row", "f", "5100000", "1731300000", "IMG_0002.jpg", "-", "-", "-"], ["end"]],
+  "fm/ls/share:photos?path=/2024": [["status", "ok"], ["row", "d", "0", "1763000000", "Birthday", "-", "-", "-"], ["row", "f", "3900000", "1763100000", "IMG_1204.jpg", "-", "-", "-"], ["row", "f", "4400000", "1763200000", "IMG_1205.jpg", "-", "-", "-"], ["row", "f", "1200000000", "1763300000", "garden.mp4", "-", "-", "-"], ["end"]],
+  "fm/ls/share:media?path=/": [["status", "ok"], ["row", "d", "0", "1793000000", "Movies", "-", "-", "-"], ["row", "d", "0", "1793500000", "Music", "-", "-", "-"], ["row", "d", "0", "1793850000", "Series", "-", "-", "-"], ["end"]],
+  "fm/ls/disk:data-1?path=/": [["status", "ok"], ["row", "d", "0", "1793800000", "shares", "-", "-", "-"], ["row", "d", "0", "1793700000", "sensitive", "-", "-", "-"], ["row", "d", "0", "1700000000", "lost+found", "-", "-", "-"], ["end"]],
+  "fm/trash": [["status", "ok"], ["days", "14"]],
+  "fm/trash/pool:bulk": [
+   ["status", "ok"], ["days", "14"],
+   ["row", ".hn-trash/2026-11-12/shares/downloads/old-installer.iso", "2026-11-12", "/shares/downloads/old-installer.iso", "3400000000", "f", "7"],
+   ["row", ".hn-trash/2026-11-16/shares/media/Series/Pilot", "2026-11-16", "/shares/media/Series/Pilot", "2100000000", "d", "11"],
+   ["row", ".hn-trash/2026-11-18/shares/backups-pc/laptop-2019.img", "2026-11-18", "/shares/backups-pc/laptop-2019.img", "48000000000", "f", "13"]
+  ],
+  "fm/du": [["status", "ok"], ["cached", "yes"], ["files", "1240"], ["folders", "86"], ["bytes", "182000000000"], ["partial", "no"], ["mtime", "1793800000"], ["time", "1794900000"]],
+  "fm/stat": [["status", "ok"], ["type", "d"], ["owner", "adminuser"], ["group", "users"], ["uid", "1000"], ["gid", "100"], ["mode", "2775"], ["perms", "rwxrwsr-x"], ["bytes", "4096"], ["mtime", "1793800000"]],
+  "fm/progress": [["status", "ok"], ["files_done", "412"], ["files_total", "412"], ["bytes_done", "9800000000"], ["bytes_total", "9800000000"], ["speed", "180000000"], ["eta", "0"], ["current", "-"], ["phase", "done"], ["result", "done"], ["skipped", "0"], ["failed", "0"]],
+  "disk/ls": [["d", "0", "shares"], ["d", "0", "sensitive"]],
+  "disk/ls?path=shares": [["d", "0", "backups-pc"], ["d", "0", "downloads"], ["d", "0", "media"]],
+  "disk/ls?path=shares/media": [["d", "0", "Movies"], ["d", "0", "Series"], ["f", "2300", "readme.txt"]],
+  "disk/ls?path=sensitive": [["d", "0", "documents"]],
+  "vault/list": [
+   ["samba-admin-password", "secret", "in vault"],
+   ["restic-password", "secret", "in vault"],
+   ["tailscale-authkey", "secret", "in vault"],
+   ["zoraxy (/var/lib/zoraxy)", "folder", "in vault"],
+   ["notify-token", "secret", "not moved"]
+  ],
+  "vault/usage": [["state", "open"], ["device", "/dev/nvme0n1p4"], ["size", "1073741824"], ["used", "41943040"], ["free", "1031798784"], ["header-backup-days", "12"]],
+  "vault/uses": [
+   ["samba-admin-password", "Samba file sharing"],
+   ["restic-password", "Nightly backup"],
+   ["tailscale-authkey", "Tailscale"],
+   ["zoraxy", "Zoraxy proxy"],
+   ["notify-token", "-"]
+  ],
+  "encryption/list": [
+   ["vault", "/dev/nvme0n1p4", "open", "1073741824"],
+   ["zfs", "fast", "open", "410000000000"],
+   ["luks", "/dev/sde1", "unmanaged", "4000787030016"]
+  ],
+  "iso/list": [
+   ["debian-12.8.0-amd64-netinst.iso", "665845760", "sha256", "9ebe405c3404a005ce926e483bc6c6841b405c4d85e0c8a7b1707a7fe4949a7b", "yes", "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/", "2026-10-12", "-"],
+   ["ubuntu-24.04.1-live-server-amd64.iso", "2773874688", "sha256", "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9", "yes", "https://releases.ubuntu.com/24.04/", "2026-10-30", "-"],
+   ["haos_ova-13.2.qcow2", "1020000000", "sha256", "5b1c2f8f0a3d4c9e7a1b6d2e8f4a0c3b9d7e1f5a2c4b6d8e0f1a3c5e7b9d2f4a", "yes", "https://github.com/home-assistant/operating-system/releases", "2026-09-02", "home-assistant"],
+   ["windows-11-eval.iso", "5800000000", "-", "-", "no", "upload", "2026-11-05", "-"]
+  ],
+  "token/list": [
+   ["t-4f2a91", "grafana-read", "admin", "local", "viewer", "1790000000", "1797776000", "active"],
+   ["t-7c03de", "backup-script", "admin", "local", "admin", "1788000000", "1795776000", "active"],
+   ["t-1b88a0", "old-ci", "anna", "domain", "viewer", "1770000000", "1778000000", "expired"]
+  ],
+  "ssh-key/list": [
+   ["SHA256:4Zp0yJq3mT1sV7eXk9LrN2cWb8uHf5AaGdOiY6QtE1M", "ssh-ed25519", "admin@laptop", "yes"],
+   ["SHA256:Rk8vB2nUe5XcQ1oJwZ7tPm3LyHa9dFgS4iNbVx6TuEs", "ssh-ed25519", "admin@desktop", "no"],
+   ["SHA256:Wm3hT7yLq0ZpA9cEoXr5NbKj2dGfUs8VtYiBn1QeRxO", "ssh-rsa", "-", "no"]
+  ]
+ }
+}
