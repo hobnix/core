@@ -152,7 +152,7 @@ printf 'name = "svcpkg"\ntitle = "t"\nkind = "feature"\nrequires = []\nprovides 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$EXT/pk/svcpkg/run.sh"
 printf '#!/usr/bin/env bash\necho "$*" >> "%s"\n[ "$1" = is-active ] && [ -e "%s" ]\nexit 0\n' "$EXT/ctl.log" "$EXT/active" > "$EXT/systemctl"; chmod +x "$EXT/systemctl"
 printf 'hostName = "t"\n' > "$EXT/machine.toml"; : > "$EXT/caps"
-xe() { HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$EXT/state HS_PACKAGES_DIR=$EXT/pk HS_CAPABILITIES_FILE=$EXT/caps HS_MACHINE_FILE=$EXT/machine.toml HS_SYSTEMCTL=$EXT/systemctl bash "$SCRIPTS/ext.sh" "$@"; }
+xe() { HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$EXT/state HS_PACKAGES_DIR=$EXT/pk HS_CAPABILITIES_FILE=$EXT/caps HS_MACHINE_FILE=$EXT/machine.toml HS_SYSTEMCTL=$EXT/systemctl HS_CONFINE_DIR=$EXT/dropin bash "$SCRIPTS/ext.sh" "$@"; }
 check_eq "a package that is off has no status row" "" "$(xe --status)"
 echo svcpkg > "$EXT/caps"
 check_eq "on, never ran: stopped" "svcpkg	stopped	-	-" "$(xe --status)"

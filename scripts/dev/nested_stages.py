@@ -305,6 +305,30 @@ def unraid(params):
     ]
 
 
+def confine(params):
+    """Stage `confine` (docs/PLAN-extensions-access.md step 10, #239 c): a service cannot write outside its `fs.write`. The drop-in that
+    scripts/lib/ext_confine.py makes for a package declaring fs.write:/srv/confine-in is turned into `systemd-run -p` properties and a unit with
+    them writes inside the path (works) and outside it (must fail); the template unit hs-ext-svc@ carries the strict floor. It checks what
+    systemd does with the lines, not the whole `hs ext start` chain. Not tested on hardware yet: written from the scripts, never run in a VM."""
+    ec = "/etc/nixos/scripts/lib/ext_confine.py"
+    cf = ("cf() { a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine.props; systemd-run --wait --collect --quiet \"${a[@]}\" sh -c \"$1\"; }")
+    return login_root(params) + [
+        step("run", "test -f %s" % ec, what="the confinement writer is in the installed checkout"),
+        step("run", "mkdir -p /srv/confine-in /srv/confine-out", what="a path the service may write and one it may not"),
+        step("run", "python3 -I %s dropin --name confinefx -- fs.write:relative/path; test $? -eq 1" % ec, what="a relative path is refused"),
+        step("run", "python3 -I %s dropin --name confinefx -- fs.write:/srv/../etc; test $? -eq 1" % ec, what="a path with .. is refused"),
+        step("run", "python3 -I %s dropin --name confinefx -- fs.write:/; test $? -eq 1" % ec, what="/ is refused"),
+        step("run", "test \"$(systemctl show hs-ext-svc@confinefx.service -p ProtectSystem --value)\" = strict", what="the template unit carries the strict floor"),
+        step("run", "python3 -I %s dropin --name confinefx -- fs.write:/srv/confine-in fs.read:/etc/hs net:lan | grep -v '^[#[]' > /tmp/confine.props" % ec,
+             what="the drop-in of a package with fs.write:/srv/confine-in, as one property per line"),
+        step("run", cf, what="a helper that runs a command in a transient unit with those properties"),
+        step("run", "cf 'echo ok > /srv/confine-in/f'", timeout=60, what="a confined unit writes inside fs.write"),
+        step("run", "test \"$(cat /srv/confine-in/f)\" = ok", what="the file is there"),
+        step("run", "! cf 'echo no > /srv/confine-out/f' && test ! -e /srv/confine-out/f", timeout=60, what="a service cannot write outside fs.write"),
+        step("run", "! cf 'echo no > /etc/confine-test' && test ! -e /etc/confine-test", timeout=60, what="and not below /etc either"),
+    ]
+
+
 # ---------------------------------------------------------------- stage 6 (browser): the address of the VM
 def address(params):
     """Read the IPv4 address of the VM from its own serial console. `incus list` shows none (no incus agent in the installed system, and the VM
@@ -371,6 +395,7 @@ SCENARIOS = {
     "pool": pool,
     "poolzfs": poolzfs,
     "unraid": unraid,
+    "confine": confine,
     "address": address,
     "upgrade": upgrade_steps,
 }
