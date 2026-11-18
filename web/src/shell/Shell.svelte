@@ -42,7 +42,7 @@
   const disks = poll(() => (locked ? '' : '/api/sys/monitor/disks'), 30000, 'monitor-disks');
   const shares = poll(() => (locked ? '' : '/api/sys/shares/overview'), 30000, 'shares-overview');
   const cts = poll(() => (locked ? '' : '/api/sys/ct/list'), 30000);
-  // the rows of the identity and vault pages are admin rows: a lower role does not ask (the server would answer 403) and the pages are not in its tree
+  // the rows of the identity and vault pages are admin rows: a lower role does not ask (the server would answer 403); its pages are greyed in the tree and never opened
   const admin = $derived(ui.role === 'admin');
   const users = poll(() => (locked || !admin ? '' : '/api/sys/users/list'), 60000);
   const groups = poll(() => (locked || !admin ? '' : '/api/sys/users/groups'), 60000);
