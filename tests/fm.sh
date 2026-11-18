@@ -218,6 +218,7 @@ for k in files_done files_total bytes_done bytes_total speed eta current phase r
 check_eq "progress: skipped 0" 0 "$(kv skipped)"; check_eq "progress: failed 0" 0 "$(kv failed)"
 [ "$(kv bytes_done)" = "$(kv bytes_total)" ] && pass "progress: all bytes done" || fail "bytes: $out"
 fm progress hs-job-nonexistent; check_eq "progress: unknown job" 1 "$rc"
+mkdir -p "$HS_FM_DIR/jobs"; echo ghost1 > "$HS_FM_DIR/jobs/hs-job-ghost.alias"; fm progress hs-job-ghost; check_eq "progress: a job stopped before its first state is cancelled, not running" cancelled "$(kv result)"
 # conflicts: the same copy again
 fmsel Avatar Heat -- plan copy --from disk:data-04 --path shares/media/movies --to disk:data-05 --to-path shares/media
 check_eq "plan: conflicts counted" 3 "$(kv conflicts)"
