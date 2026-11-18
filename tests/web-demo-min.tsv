@@ -1,0 +1,6 @@
+# fixture	minimum number of allowlisted reads with data (only goes up)
+degraded	133
+healthy	131
+locked	121
+one-pool	131
+three-pools	131
