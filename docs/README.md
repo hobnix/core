@@ -15,6 +15,7 @@ listed there and below, or `tests/docs.sh` complains. Guides follow [GUIDE-TEMPL
 | [Encryption and vault](encryption-and-vault.md) | One passphrase, the vault, encrypted disks, unlocking |
 | [Backup and recovery](backup-and-recovery.md) | Backups, restoring, snapshots, rebuilding a server |
 | [Web interface](web-interface.md) | Turning it on, signing in, pages, terminal, appearance |
+| [Extensions](extensions.md) | Extension commands and services, permissions and what is enforced, package events |
 | [Operations](operations.md) | Health alerts, updates, UPS, remote access, the gateway |
 
 The command reference is generated from the command list (`hs help`, or the page *All commands*).
