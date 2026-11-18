@@ -4,6 +4,7 @@
   // With `edit` (the name of a described service) the same form changes it: `hs sys routes plan|start edit <name> ...` sends every field, a field
   // left empty is cleared (--clear), what the form does not show (fqdn, scheme, health, other wants) stays in the file.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { Field, TextInput, Select, Textarea, Checkbox } from '../../ui/index.js';
   import { poll, rows } from '../../data.svelte.js';
 
   let { onclose, ondone = () => {}, edit = '' } = $props();
@@ -89,78 +90,64 @@
 
 <CreateDialog title={edit ? 'Change ' + edit : 'Describe a service'} kicker="Services" area="routes" {args} {onclose} {ondone}>
   {#snippet form()}
-    <div class="field">
-      <label for="sv-name">Name</label>
-      <input id="sv-name" class="input" bind:value={name} readonly={!!edit} placeholder="wiki" maxlength="41" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="sv-where">Runs on</label>
-      <select id="sv-where" class="input" bind:value={where}>
+    <Field label="Name" id="sv-name">
+      <TextInput bind:value={name} readonly={!!edit} placeholder="wiki" maxlength={41} autocomplete="off" />
+    </Field>
+    <Field label="Runs on" id="sv-where">
+      <Select bind:value={where}>
         <option value="container">An instance of this server</option>
         <option value="host">Another machine (name or address)</option>
-      </select>
-    </div>
+      </Select>
+    </Field>
     {#if where === 'container'}
-      <div class="field">
-        <label for="sv-ct">Instance</label>
-        <select id="sv-ct" class="input" bind:value={ct}>
+      <Field label="Instance" id="sv-ct">
+        <Select bind:value={ct}>
           <option value="">Choose…</option>
           {#each instances as i}<option value={i}>{i}</option>{/each}
-        </select>
-      </div>
+        </Select>
+      </Field>
     {:else}
-      <div class="field">
-        <label for="sv-host">Host</label>
-        <input id="sv-host" class="input" bind:value={host} placeholder="10.10.95.40" autocomplete="off" />
-      </div>
+      <Field label="Host" id="sv-host">
+        <TextInput bind:value={host} placeholder="10.10.95.40" autocomplete="off" />
+      </Field>
     {/if}
-    <div class="field">
-      <label for="sv-port">Port</label>
-      <input id="sv-port" class="input" bind:value={port} placeholder="3000" inputmode="numeric" maxlength="5" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="sv-title">Title (optional)</label>
-      <input id="sv-title" class="input" bind:value={title} placeholder="Wiki" maxlength="160" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="sv-names">Host names (optional)</label>
-      <input id="sv-names" class="input" bind:value={names} placeholder="wiki,notes: the name of the service when empty" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="sv-exp">Exposure</label>
-      <select id="sv-exp" class="input" bind:value={exposure}>
+    <Field label="Port" id="sv-port">
+      <TextInput bind:value={port} placeholder="3000" inputmode="numeric" maxlength={5} autocomplete="off" />
+    </Field>
+    <Field label="Title (optional)" id="sv-title">
+      <TextInput bind:value={title} placeholder="Wiki" maxlength={160} autocomplete="off" />
+    </Field>
+    <Field label="Host names (optional)" id="sv-names">
+      <TextInput bind:value={names} placeholder="wiki,notes: the name of the service when empty" autocomplete="off" />
+    </Field>
+    <Field label="Exposure" id="sv-exp">
+      <Select bind:value={exposure}>
         <option value="private-ok">private-ok: only inside (the default)</option>
         <option value="never-public">never-public: refused on a public proxy</option>
         <option value="public-ok">public-ok: may be put on the internet</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="sv-paths">Public paths (optional)</label>
-      <input id="sv-paths" class="input" bind:value={paths} placeholder="/hook /api/public" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="sv-blocked">Blocked paths (optional)</label>
-      <input id="sv-blocked" class="input" bind:value={blocked} placeholder="/admin /metrics" autocomplete="off" />
-    </div>
-    <label class="check"><input type="checkbox" bind:checked={auth} /> Login first (forward auth with authentik)</label>
+      </Select>
+    </Field>
+    <Field label="Public paths (optional)" id="sv-paths">
+      <TextInput bind:value={paths} placeholder="/hook /api/public" autocomplete="off" />
+    </Field>
+    <Field label="Blocked paths (optional)" id="sv-blocked">
+      <TextInput bind:value={blocked} placeholder="/admin /metrics" autocomplete="off" />
+    </Field>
+    <Checkbox bind:checked={auth} label="Login first (forward auth with authentik)" />
     {#if auth}
-      <div class="field">
-        <label for="sv-skip">Paths without login (optional)</label>
-        <input id="sv-skip" class="input" bind:value={skip} placeholder="/hook /api/public" autocomplete="off" />
-      </div>
+      <Field label="Paths without login (optional)" id="sv-skip">
+        <TextInput bind:value={skip} placeholder="/hook /api/public" autocomplete="off" />
+      </Field>
     {/if}
-    <div class="field">
-      <label for="sv-reqh">Request headers (optional, one per line)</label>
-      <textarea id="sv-reqh" class="input" rows="2" bind:value={reqHeaders} placeholder="X-Forwarded-Prefix: /wiki"></textarea>
-    </div>
-    <div class="field">
-      <label for="sv-resh">Response headers (optional, one per line)</label>
-      <textarea id="sv-resh" class="input" rows="2" bind:value={resHeaders} placeholder="X-Frame-Options: SAMEORIGIN"></textarea>
-    </div>
-    <label class="check"><input type="checkbox" bind:checked={dashboard} /> Show a tile on the dashboard</label>
+    <Field label="Request headers (optional, one per line)" id="sv-reqh">
+      <Textarea rows={2} bind:value={reqHeaders} placeholder="X-Forwarded-Prefix: /wiki" />
+    </Field>
+    <Field label="Response headers (optional, one per line)" id="sv-resh">
+      <Textarea rows={2} bind:value={resHeaders} placeholder="X-Frame-Options: SAMEORIGIN" />
+    </Field>
+    <Checkbox bind:checked={dashboard} label="Show a tile on the dashboard" />
   {/snippet}
 </CreateDialog>
 
 <style>
-  .check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--color-neutral-300); }
 </style>

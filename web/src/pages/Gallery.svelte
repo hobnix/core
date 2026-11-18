@@ -15,7 +15,7 @@
   import PageTabs from '../ui/PageTabs.svelte';
   import {
     Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted,
-    Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Switch, TextInput, Textarea,
+    Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
   } from '../ui/index.js';
   import { theme, toggleTheme } from '../theme.svelte.js';
@@ -31,6 +31,7 @@
   let box = $state(false);
   let checked = $state(true);
   let text = $state('photos');
+  let level = $state(40);
   let area = $state('One line\nAnother line');
   let combo = $state('');
   let sel = $state('zfs');
@@ -225,6 +226,10 @@
       <div class="cell"><small>disabled</small><Checkbox checked disabled label="Fixed" /></div>
     </Entry>
 
+    <Entry name="Slider" text="Native range: accent-filled track, square thumb. oninput while dragging, onchange on release.">
+      <div class="cell"><small>40 %</small><Slider bind:value={level} min={0} max={100} step={5} ariaLabel="Level" /></div>
+      <div class="cell"><small>disabled</small><Slider value={70} disabled ariaLabel="Level" /></div>
+    </Entry>
     <Entry name="Switch" text="A switch, or with box the checkbox for table cells. A disabled one shows its reason.">
       <div class="cell"><small>switch</small><Switch bind:checked={on} label="Backup" /></div>
       <div class="cell"><small>box</small><Switch box bind:checked={box} label="Select" /></div>
