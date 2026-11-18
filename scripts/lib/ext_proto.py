@@ -2,14 +2,23 @@
 """Reference runner of the command-extension protocol, version 1 (docs/adr/0010-extension-command-protocol.md). Python stdlib only.
 
 The core side of one call: start the extension process, send ONE request line on its stdin, read JSON lines from its stdout until the
-`result` line, enforce the timeout and the cancellation rules, and map the outcome to an exit code. It is NOT wired into `hs ext` yet
-(see the ADR, "Open points"); the format is what is fixed here, with tests/ext-proto.sh as proof.
+`result` line, enforce the timeout and the cancellation rules, and map the outcome to an exit code. The dispatcher (scripts/lib/hs.sh) runs the rows
+flagged `proto` (a package with `protocol = [1]`) through `dispatch` below; tests/ext-proto.sh is the proof.
 
   ext_proto.py call [--timeout SECONDS] [--grace SECONDS] [--command WORD]... [--lang en|de] [--caller cli|web|boot] -- PROGRAM [ARG...]
       The words after --command are the command words of the request; the arguments after `--` that the program is started with are
       its argv. The request's `argv` is set with --arg VALUE (repeatable). Progress and log lines are copied to stdout as they come,
       then ONE final line {"v":1,"type":"outcome",...} says what the core makes of the call. Exit code: 0 ok, 1 the extension
       answered ok=false, 124 timeout, 130 cancelled (SIGTERM or SIGINT to this runner), 70 protocol error, 69 the program did not start.
+
+  ext_proto.py dispatch --kind user|sys --package NAME --path "<row words>" [--flags FLAGS] -- PROGRAM [ARG...]
+      What `hs ext <name> <cmd>` and `hs sys ext <name> <cmd>` run for a protocol row: the command words are the row's words after the
+      package name, the argv of the request is ARG..., the timeout is the row's `timeout:<s>` flag (default 30). Nothing but the
+      rendered answer goes to stdout (a `sys` row: TSV only), errors to stderr, the exit codes of `call`. PROGRAM is run by its
+      extension (.py python3, .sh bash, else directly).
+      Rendering of result.data: a list = one line per item (a list item = its cells joined by TAB, an object item = its values in key
+      order); an object = key TAB value per member; a scalar = itself. An empty or null cell is `-`, a nested value is compact JSON. A user
+      row prints result.text when it has one and else the same rendering.
 
 Schema of the messages: docs/api/ext-protocol-v1.schema.json. Knobs for tests: none (every limit is an option or a constant below).
 """
@@ -254,6 +263,95 @@ def run(argv_prog, request, timeout=DEFAULT_TIMEOUT, grace=DEFAULT_GRACE, on_mes
     return out
 
 
+def _cell(v):
+    if v is None or v == "" or v == []:
+        return "-"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+    return re.sub(r"[\t\r\n]+", " ", str(v)) or "-"
+
+
+def render(data):
+    """The lines of result.data as TSV (see the module doc)."""
+    if data is None:
+        return []
+    if isinstance(data, list):
+        lines = []
+        for it in data:
+            cells = it if isinstance(it, list) else list(it.values()) if isinstance(it, dict) else [it]
+            lines.append("\t".join(_cell(c) for c in cells))
+        return lines
+    if isinstance(data, dict):
+        return [_cell(k) + "\t" + _cell(v) for k, v in data.items()]
+    return [_cell(data)]
+
+
+def program_of(prog):
+    """The command that starts the extension file PROG[0]."""
+    p = prog[0]
+    if p.endswith(".py"):
+        return ["python3", "-I", p] + prog[1:]
+    if p.endswith(".sh"):
+        return ["bash", p] + prog[1:]
+    return prog
+
+
+def timeout_of(flags):
+    for f in (flags or "").split(","):
+        if f.startswith("timeout:") and f[8:].isdigit():
+            return int(f[8:])
+    return DEFAULT_TIMEOUT
+
+
+def dispatch(a):
+    prog = a.prog[1:] if a.prog[:1] == ["--"] else a.prog
+    if not prog:
+        print("usage: ext_proto.py dispatch --kind K --package N --path P [--flags F] -- PROGRAM [ARG...]", file=sys.stderr)
+        return 2
+    words = a.path.split()
+    if a.package not in words:
+        print("ext_proto.py: the package name is not in the row words", file=sys.stderr)
+        return 2
+    words = words[words.index(a.package) + 1:]
+    for i, w in enumerate(words):   # a placeholder such as <name> or [x] in the row's words is an argument, not a command word
+        if not WORD.match(w):
+            words = words[:i]
+            break
+    lang = "de" if os.environ.get("HS_LANG") == "de" or os.environ.get("LANG", "").startswith("de") else "en"
+    caller = os.environ.get("HS_CALLER", "cli")
+    caller = "web" if caller in ("ui", "web", "job") else "boot" if caller in ("boot", "timer") else "cli"
+    timeout = timeout_of(a.flags)
+    try:
+        req = make_request(words, prog[1:], lang, caller, timeout)
+    except ValueError as e:
+        print(f"ext_proto.py: {e}", file=sys.stderr)
+        return 2
+    cancel = threading.Event()
+    for s in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(s, lambda *_: cancel.set())
+
+    def show(m):   # progress and log of a user row on stderr; nothing of it on a sys row; events are the core's business (step 5)
+        if a.kind == "user" and m["type"] in ("progress", "log") and m.get("text"):
+            sys.stderr.write(m["text"] + "\n")
+            sys.stderr.flush()
+    o = run(program_of([prog[0]]), req, timeout, DEFAULT_GRACE, show, cancel)
+    # run() starts PROGRAM without its arguments: they are in the request (argv); the extension is told nothing else
+    res = o["result"]
+    if o["code"] == "ok":
+        text = res.get("text") if a.kind == "user" else None
+        lines = [text] if text else render(res.get("data"))
+        if lines:
+            sys.stdout.write("\n".join(lines) + "\n")
+        return 0
+    msg = res["error"]["message"] if res and not res["ok"] else o["reason"]
+    if o["stderr"].strip() and o["code"] != "failed":
+        msg += ": " + o["stderr"].strip().splitlines()[-1]
+    sys.stderr.write(msg + "\n")
+    return EXIT[o["code"]]
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="ext_proto.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -265,7 +363,15 @@ def main(argv):
     c.add_argument("--lang", default="en")
     c.add_argument("--caller", default="cli")
     c.add_argument("prog", nargs=argparse.REMAINDER)
+    d = sub.add_parser("dispatch")
+    d.add_argument("--kind", choices=("user", "sys"), required=True)
+    d.add_argument("--package", required=True)
+    d.add_argument("--path", required=True)
+    d.add_argument("--flags", default="")
+    d.add_argument("prog", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
+    if a.cmd == "dispatch":
+        return dispatch(a)
     prog = a.prog[1:] if a.prog[:1] == ["--"] else a.prog
     if not prog:
         print("usage: ext_proto.py call [options] -- PROGRAM [ARG...]", file=sys.stderr)

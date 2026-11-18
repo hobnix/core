@@ -6,7 +6,7 @@ is in [PLAN-app-lifecycle](PLAN-app-lifecycle.md) (Q4 and Q5); the states of a p
 
 **These field names are a contract.** The Apps and Marketplace pages and the later steps of the lifecycle plan (0.11, 0.13) read them. The field
 names are stable for milestones 0.11 and 0.13: a field is renamed or removed only with an API level bump and one level in which the old name still
-works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 9. Adding an optional key
+works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 10. Adding an optional key
 is a bump too, because an older core would refuse the unknown key.
 
 ## Level 9: the app contract and store fields
@@ -78,13 +78,13 @@ Not tested on hardware yet. The fields are validated; the server does not read t
 
 ## Level 10 (milestone 0.8): protocol, timeout and service keys
 
-Planned for the API level that step 2 of [PLAN-extensions-access](PLAN-extensions-access.md) raises to 10. Today the core only **reads and
-validates** these keys (`scripts/lib/pkg_protocol.py`, called by `pkg.py validate`, `repo-check` and `check-draft`); no dispatcher or service
-unit uses them yet. A package without them keeps the shell contract and validates unchanged (ADR 0010 rule 10).
+The core validates these keys (`scripts/lib/pkg_protocol.py`, called by `pkg.py validate`, `repo-check` and `check-draft`) and, since step 2 of
+[PLAN-extensions-access](PLAN-extensions-access.md), **runs the commands** of a package that says `protocol = [1]`. The `[service]` table is
+still only validated (the service runner is step 4). A package without these keys keeps the shell contract and validates unchanged (ADR 0010 rule 10).
 
 | Key | Value | Rule |
 | --- | --- | --- |
-| `protocol` | `[1]` | the command protocol versions the package speaks (ADR 0010); `[1]` is the only value |
+| `protocol` | `[1]` | the command protocol versions the package speaks (ADR 0010); `[1]` is the only value; every row of `commands.tsv` of the package runs through the protocol |
 | `[service]` `exec` | `"@/<file>"` or `"scripts/..."` | the service's program, same rule as a `commands.tsv` script: a file in the package or a path under `scripts/`, no `..`, not absolute; required |
 | `[service]` `subscribe` | list of event kind globs | lower-case words, dots and `*`; may be empty (a pure collector) |
 | `[service]` `health_interval` | seconds | whole number from 5 to 300 (ADR 0011 rule 1; default 30) |
@@ -93,4 +93,30 @@ unit uses them yet. A package without them keeps the shell contract and validate
 An unknown key in `[service]`, a wrong type or a value out of range is an error. A manifest that uses `protocol` or `[service]` must state
 `requires_core = ">=10"` or higher (decision D9: the API level is the promise that the core can run it); `pkg.py validate` names the missing level.
 
-Not tested on hardware yet. The keys are validated only; nothing reads them at run time before steps 2 and 4.
+### How a protocol row runs
+
+`scripts/lib/registry-load.sh` gives every row of a package with `protocol` the flag `proto`; `scripts/lib/hs.sh` then runs the row's script
+through `python3 -I scripts/lib/ext_proto.py dispatch` instead of starting it. The script column is the extension program (`@/demo.py`; `.py` runs
+with python3, `.sh` with bash, anything else directly).
+
+| Part of the request | Comes from |
+| --- | --- |
+| `command` | the words of the row after the package name (placeholders such as `<x>` end the list) |
+| `argv` | the arguments the dispatcher builds for the row (typed arguments, fixed arguments of the row) |
+| `lang`, `caller` | `HS_LANG` / `LANG` (`en` or `de`); `HS_CALLER` (`ui` and `job` = `web`, `timer` and `boot` = `boot`, else `cli`) |
+| `timeout_ms` | the row's `timeout:` flag, else 30 s |
+
+The core renders `result.data` (the extension does not format output):
+
+- a list: one line per item; an item that is a list is its cells joined by a tab, an item that is an object is its values in key order;
+- an object: one line `key<TAB>value` per member; a scalar: itself;
+- an empty string, `null` or `[]` is `-`; a nested value is compact JSON; tabs and line breaks inside a cell become a space.
+
+A `user` row prints `result.text` when the extension sent one and else the rendered `data`; progress and log text go to stderr. A `sys` row prints
+only the rendered `data` on stdout (the machine-readable contract of `hs sys ext ...` does not change). A failed call prints the error message on
+stderr and exits 1 (the extension said `ok=false`), 124 (timeout), 130 (cancelled), 70 (protocol error) or 69 (the program did not start). A timeout
+stops the whole process group of the extension: SIGTERM, five seconds of grace, then SIGKILL. Events sent by an extension are not used yet (step 5).
+
+A demo package is `protocol-demo` in the extensions repository. Tests: `tests/ext-proto.sh`.
+
+Not tested on hardware yet.
