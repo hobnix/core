@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 is not reviewed.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -228,6 +228,7 @@ Draft, not reviewed. Each behaviour is decided once, here, and carried by one co
 ### 4.1 Details that the table leaves out
 
 - **Pending versus real state.** The row shows pending while a job for its key runs, and the real state afterwards. If the job fails, the row shows the real state and a coded error (4.4) until the user dismisses it.
+- **A job that asks for input.** A running job that needs an answer shows a toast on whatever page the user is on. It names the job and links to its record, where the question is answered. Until then the job shows as waiting, not as running.
 - **Stream down.** The top bar shows that live updates are off and the data age keeps counting. Pages start polling at the slow fallback rate; the polling and its ratchet (`timed-reads.max`) stay as they are.
 - **Acknowledge.** The entry stays in the Feed, dimmed, with who acknowledged it and until when. Undo is always offered. The count in the bell and in Summary leaves acknowledged entries out.
 
@@ -274,7 +275,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | `Icon`, icon variant of `Button` | `ui` | one list of names | all | #446 |
 | `Dialog` | `ui` | focus trap, Escape, backdrop; base of plans, create and quick look | all actions | #447 |
 | `Menu` | `ui` | the More menu and row actions | every template | #447 |
-| `Toast` | `ui` | a result that needs no dialog | to be confirmed (5.4) | #447 |
+| `Toast` | `ui` | a job that asks for input, and short results that need no dialog (5.4) | every page, via the shell | #447 |
 | `QuickLook` | `ui` | overlay above a list; the `Drawer` reworked | List | #447 |
 | `Progress`, `StepList` | `ui` | job step and progress | Jobs, Flow, Object job strip | #448 |
 | `Timeline` | `ui` | time-ordered entries with filters; an entry has severity, object link, optional acknowledge | Feed | #448 |
@@ -290,10 +291,12 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 
 `GenBlock`, `GenericPage`, `Terminal`, `VmConsole`, `Halftone`, the file manager parts and `Search` have one user each or are tools. They stay where they are. A Spinner is the global `spin` class, not a component.
 
-### 5.4 Open questions for review
+### 5.4 Decisions
 
-- Is `Toast` needed? Results show in the Jobs drawer and on the row (4.1); no template uses a toast. If nobody finds a use, it is dropped from #447.
-- Are `Card` and `Section` one component or two?
-- Four items have no issue yet: `ErrorNote`, `StateCard`, `LinkedObjects` plus `JobStrip` and `DangerZone` (the Object page pieces), `Inbox`. One new issue each, or one issue "Object and Group page pieces"?
-- Does the rule "`ui` is pure, `shell` may read stores" hold for the new components as listed?
-- #448 as written lists `Progress`, `StepList`, `Timeline` and `Stepper`; the inventory keeps all four. Is that the right size for one issue?
+Decided 2026-11-18:
+
+- **`Toast` stays in #447.** Its use: a job that is running asks for input (a recipe that needs an answer), and the user may be on any page. The toast names the job and links to it; the question is answered in the job's record. Short results that need no dialog use it too. This behaviour is added to 4.1.
+- **`Card` and `Section` are one component:** `Card`, with an optional header and actions.
+- **Two new issues** for the components that have none: one for the Group and Object page pieces (`StateCard`, `LinkedObjects`, `JobStrip`, `DangerZone`), one for `ErrorNote` and `Inbox`.
+- **`ui` is pure, `shell` may read the stores.** The rule holds for every component in 5.2.
+- **#448 is split in three:** `Progress` with `StepList`, then `Timeline`, then `Stepper`.
