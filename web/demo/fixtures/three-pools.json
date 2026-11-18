@@ -1,0 +1,151 @@
+{
+ "title": "Three pools (bulk, media and fast), so the pool selector has something to choose.",
+ "locked": false,
+ "reads": {
+  "pool/list": [
+   [
+    "bulk",
+    "data",
+    "snapraid",
+    "online"
+   ],
+   [
+    "fast",
+    "apps",
+    "zfs",
+    "online"
+   ],
+   [
+    "media",
+    "data",
+    "snapraid",
+    "online"
+   ]
+  ],
+  "pool/info?pool=media": [
+   [
+    "layout: SnapRAID + mergerfs"
+   ],
+   [
+    "disks: 2 data, 1 parity"
+   ],
+   [
+    "size: 36T"
+   ],
+   [
+    "used: 21T (58%)"
+   ],
+   [
+    "free: 15T"
+   ],
+   [
+    "state: protected by parity"
+   ],
+   [
+    "last sync: 18.11. 03:30"
+   ],
+   [],
+   [
+    "data-1",
+    "18T",
+    "60% used"
+   ],
+   [
+    "data-2",
+    "18T",
+    "56% used"
+   ],
+   [
+    "parity-1",
+    "18T",
+    ""
+   ]
+  ],
+  "pool/members?pool=media": [
+   [
+    "data-1",
+    "18000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "data-2",
+    "18000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "parity-1",
+    "18000000000000",
+    "online",
+    "parity",
+    "ext4",
+    "-",
+    "-"
+   ]
+  ],
+  "pool/state?pool=media": [
+   [
+    "lock",
+    "free",
+    "nothing is running that changes the pool"
+   ],
+   [
+    "sync",
+    "media",
+    "ok",
+    "2026-11-18 03:30"
+   ],
+   [
+    "scrub",
+    "media",
+    "ok",
+    "2026-11-02 04:00"
+   ]
+  ],
+  "deck": {
+   "schema": 1,
+   "kind": "server",
+   "host": "demo",
+   "locked": false,
+   "uptime_s": 864000,
+   "load": [
+    0.42,
+    0.38,
+    0.31
+   ],
+   "encryption": "open",
+   "problems": 0,
+   "mem": {
+    "total": 34359738368,
+    "available": 23622320128
+   },
+   "pools": {
+    "bulk": {
+     "size": 22000000000000,
+     "used": 9800000000000,
+     "free": 12000000000000,
+     "health": "online"
+    },
+    "fast": {
+     "size": 1800000000000,
+     "used": 410000000000,
+     "free": 1400000000000,
+     "health": "online"
+    },
+    "media": {
+     "size": 36000000000000,
+     "used": 21000000000000,
+     "free": 15000000000000,
+     "health": "online"
+    }
+   }
+  }
+ }
+}

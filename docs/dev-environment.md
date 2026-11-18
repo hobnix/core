@@ -93,6 +93,38 @@ Limits: nested virtualization must be enabled on the host. Where it is not (exit
 on a machine with Incus; that tests our scripts on Ubuntu VMs, not the ISO. The rebuild rehearsal is not part of it yet. CI: the manual
 workflow `nested` (Actions, "Run workflow", give an ISO URL).
 
+## Demo mode: the web interface without a server
+
+`npm run demo` in `web/` starts the web interface with made-up data: no `hs`, no storage and no backend are needed (Node and `npm ci` are).
+A Vite plugin (`web/demo/plugin.js`, only in `--mode demo`) answers `/api/*` itself from the fixtures in `web/demo/fixtures/`. Use it to look at
+a page, to review the navigation or to take a screenshot.
+
+```bash
+cd web
+npm ci
+npm run demo
+```
+
+Pick the data with `?fixture=<name>` on any page (the choice is kept in a cookie), or set `HS_DEMO_FIXTURE` for the default.
+
+| Fixture | Shows |
+|---|---|
+| `healthy` (default) | two pools (bulk, fast), four instances, nothing to fix |
+| `degraded` | pool bulk lost a disk; two problems are listed |
+| `locked` | encrypted storage is closed, instances are down |
+| `one-pool` | a single pool |
+| `three-pools` | three pools, so the pool selector has something to choose |
+
+- **Reads:** every read of the `READS` allowlist in `scripts/web-serve.py` has an entry in `fixtures/base.json`; a fixture file lays its own rows
+  over it. A key is the words joined by `/` (`pool/info`), optionally with the query (`pool/info?pool=bulk`). Many reads are an empty list
+  so far: the page then shows its empty state. Add rows to `base.json` when a page you work on needs them.
+- **Changes:** a plan opens with a generic list of steps and a note. A start is always refused with the note "Demo mode: ... Nothing was
+  changed." No command runs, no file is written, the terminal and the VM console are refused.
+- **Not covered:** reads of extension packages (declared in their manifests), the file manager's listings and job logs have no made-up answer yet.
+- A hosted demo is not part of this.
+- Test: `scripts/dev/t quick web-demo` checks that every allowlisted read has a fixture and that plans open and starts are refused.
+  Not tested on hardware yet (it needs none; the browser check is in the issue).
+
 ## Branches and releases
 
 The same model in hobnix/server, hobnix/recipes and hobnix/extensions.

@@ -1,0 +1,696 @@
+{
+ "reads": {
+  "status": [
+   [
+    "backup",
+    "ok",
+    "7200"
+   ],
+   [
+    "encryption",
+    "open"
+   ],
+   [
+    "job",
+    "hs-bulk-sync.service",
+    "ok",
+    "2026-11-18 03:00",
+    "2026-11-19 03:00"
+   ],
+   [
+    "job",
+    "hs-bulk-scrub.service",
+    "ok",
+    "2026-11-01 04:00",
+    "2026-12-01 04:00"
+   ],
+   [
+    "cache",
+    "120 GB of 500 GB",
+    "24"
+   ],
+   [
+    "smart",
+    "6",
+    ""
+   ],
+   [
+    "instances",
+    "3",
+    "4"
+   ],
+   [
+    "hottest",
+    "sdb",
+    "41"
+   ],
+   [
+    "event",
+    "2026-11-17 22:10",
+    "sdc: temperature back to normal"
+   ],
+   [
+    "version",
+    "v0.9.0"
+   ]
+  ],
+  "deck": {
+   "schema": 1,
+   "kind": "server",
+   "host": "demo",
+   "locked": false,
+   "uptime_s": 864000,
+   "load": [
+    0.42,
+    0.38,
+    0.31
+   ],
+   "encryption": "open",
+   "problems": 0,
+   "mem": {
+    "total": 34359738368,
+    "available": 23622320128
+   },
+   "pools": {
+    "bulk": {
+     "size": 22000000000000,
+     "used": 9800000000000,
+     "free": 12000000000000,
+     "health": "online"
+    },
+    "fast": {
+     "size": 1800000000000,
+     "used": 410000000000,
+     "free": 1400000000000,
+     "health": "online"
+    }
+   }
+  },
+  "ups/status": [],
+  "monitor/disks": [],
+  "pool/info": [
+   [
+    "layout: SnapRAID + mergerfs"
+   ],
+   [
+    "state: protected by parity"
+   ]
+  ],
+  "pool/members": [
+   [
+    "data-1",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ]
+  ],
+  "pool/state": [
+   [
+    "lock",
+    "free",
+    "nothing is running that changes the pool"
+   ],
+   [
+    "sync",
+    "bulk",
+    "ok",
+    "2026-11-18 03:00"
+   ],
+   [
+    "scrub",
+    "bulk",
+    "ok",
+    "2026-11-01 04:00"
+   ],
+   [
+    "scrub",
+    "fast",
+    "ok",
+    "2026-11-01 05:00"
+   ]
+  ],
+  "incident/state": [],
+  "storage/discover": [],
+  "pool/list": [
+   [
+    "bulk",
+    "data",
+    "snapraid",
+    "online"
+   ],
+   [
+    "fast",
+    "apps",
+    "zfs",
+    "online"
+   ]
+  ],
+  "pool/disks": [],
+  "disk-health/list": [
+   [
+    "data-1",
+    "OK",
+    "0 reallocated sectors"
+   ],
+   [
+    "data-2",
+    "OK",
+    "-"
+   ],
+   [
+    "data-3",
+    "OK",
+    "-"
+   ],
+   [
+    "parity-1",
+    "OK",
+    "-"
+   ]
+  ],
+  "state/disks": [],
+  "reads/status": [],
+  "live/status": [],
+  "live/inspect": {},
+  "live/raw": {},
+  "state/events": [],
+  "testlab/results": [],
+  "event/list": [],
+  "ct/list": [
+   [
+    "nextcloud",
+    "container",
+    "running",
+    "192.168.1.21",
+    "4GiB",
+    "2",
+    "yes",
+    "yes",
+    "no",
+    "20GiB",
+    "3",
+    "2026-11-18 03:00",
+    "1200000000",
+    "5230",
+    "2",
+    "2026-11-10T08:00:00Z",
+    "admin"
+   ],
+   [
+    "jellyfin",
+    "container",
+    "running",
+    "192.168.1.22",
+    "8GiB",
+    "4",
+    "yes",
+    "yes",
+    "no",
+    "40GiB",
+    "2",
+    "2026-11-18 03:00",
+    "2400000000",
+    "91200",
+    "1",
+    "2026-11-10T08:00:00Z",
+    "admin"
+   ],
+   [
+    "home-assistant",
+    "vm",
+    "running",
+    "192.168.1.23",
+    "2GiB",
+    "2",
+    "yes",
+    "yes",
+    "no",
+    "16GiB",
+    "1",
+    "2026-11-17 03:00",
+    "1100000000",
+    "20110",
+    "0",
+    "2026-11-12T19:30:00Z",
+    "admin"
+   ],
+   [
+    "test-box",
+    "container",
+    "stopped",
+    "-",
+    "1GiB",
+    "1",
+    "no",
+    "no",
+    "no",
+    "8GiB",
+    "0",
+    "-",
+    "0",
+    "0",
+    "0",
+    "-",
+    "admin"
+   ]
+  ],
+  "ct/profiles": [
+   [
+    "lan",
+    "br0",
+    "Bridged to the home network"
+   ]
+  ],
+  "ct/pools": [
+   [
+    "fast",
+    "zfs",
+    "fast",
+    "1400000000000",
+    "1800000000000",
+    "-"
+   ],
+   [
+    "bulk",
+    "dir",
+    "bulk",
+    "12000000000000",
+    "22000000000000",
+    "-"
+   ]
+  ],
+  "ct/bindings": [],
+  "ct/snapshots": [],
+  "jobs/list": [
+   [
+    "hs-bulk-sync.service",
+    "Parity sync of the bulk pool",
+    "2026-11-19 03:00",
+    "2026-11-18 03:00",
+    "ok"
+   ],
+   [
+    "hs-backup.service",
+    "Nightly backup",
+    "2026-11-19 02:00",
+    "2026-11-18 02:00",
+    "ok"
+   ]
+  ],
+  "jobs/running": [],
+  "jobs/records": [],
+  "jobs/record": {},
+  "jobs/tail": [],
+  "system/updates": [
+   [
+    "behind",
+    "0"
+   ],
+   [
+    "ahead",
+    "0"
+   ],
+   [
+    "upstream",
+    "origin/main"
+   ],
+   [
+    "fetched",
+    "2026-11-18 06:00"
+   ]
+  ],
+  "release/show": [
+   [
+    "channel",
+    "stable"
+   ],
+   [
+    "installed",
+    "v0.9.0"
+   ],
+   [
+    "offer",
+    "stable",
+    "v0.9.0",
+    "current"
+   ],
+   [
+    "offer",
+    "beta",
+    "v0.10.0-beta.1",
+    "update"
+   ],
+   [
+    "offer",
+    "edge",
+    "-",
+    "unknown"
+   ],
+   [
+    "ref",
+    "v0.9.0"
+   ],
+   [
+    "state",
+    "current"
+   ],
+   [
+    "signed",
+    "yes"
+   ]
+  ],
+  "token/list": [],
+  "ssh-key/list": [],
+  "node/list": [],
+  "node/show": [],
+  "changes/list": [],
+  "parts/pending": [],
+  "rebuild/pending": [],
+  "preset/list": [
+   [
+    "home",
+    "Home server",
+    "Files, backups and a few apps",
+    "samba,backup,incus"
+   ]
+  ],
+  "net/check": [
+   [
+    "router",
+    "ok",
+    "192.168.1.1",
+    "-"
+   ],
+   [
+    "dns",
+    "ok",
+    "192.168.1.1",
+    "-"
+   ]
+  ],
+  "net/nics": [],
+  "parts/list": [
+   [
+    "samba",
+    "on",
+    "part",
+    "no",
+    "yes",
+    "Windows file sharing"
+   ],
+   [
+    "incus",
+    "on",
+    "part",
+    "no",
+    "yes",
+    "Instances"
+   ],
+   [
+    "backup",
+    "on",
+    "part",
+    "no",
+    "yes",
+    "Backups"
+   ]
+  ],
+  "node/keyline": [],
+  "node/status": {},
+  "logs/units": [],
+  "logs/show": "",
+  "health/next": [],
+  "health/list": [],
+  "backup/state": [],
+  "backup/overview": [],
+  "backup/shares": [],
+  "shares/overview": [],
+  "shares/list": [],
+  "shares/acl": [],
+  "shares/visible": [],
+  "shares/mounts": [],
+  "shares/history": [],
+  "users/list": [],
+  "users/groups": [],
+  "vault/list": [],
+  "remote/list": [],
+  "unifi/networks": [],
+  "unifi/clients": [],
+  "ports/list": [],
+  "dns/list": [],
+  "cache/state": [],
+  "system/config": "",
+  "disk/results": [],
+  "disk/marks": [],
+  "fm/locations": [],
+  "fm/pair": [],
+  "fm/ls": [],
+  "fm/trash": [],
+  "fm/du": [],
+  "fm/stat": [],
+  "fm/progress": [],
+  "disk/ls": [],
+  "state/smart": [],
+  "state/history": {},
+  "temp-disk/raw": [],
+  "ct/storage": [],
+  "ct/users": [],
+  "ct/logs": "",
+  "users/access": [],
+  "users/group-access": [],
+  "users/details": [],
+  "users/group-details": [],
+  "shares/deleted": [],
+  "shares/principals": [],
+  "backup/find": [],
+  "backup/snapshots": [],
+  "system/doctor": "",
+  "system/cleanup": "",
+  "system/report": "",
+  "expiry/list": [],
+  "iso/list": [],
+  "hardware": [
+   [
+    "cpu-model",
+    "Demo CPU 8-core"
+   ],
+   [
+    "cpu-cores",
+    "8"
+   ],
+   [
+    "cpu-threads",
+    "16"
+   ],
+   [
+    "temp",
+    "CPU",
+    "48"
+   ]
+  ],
+  "encryption/list": [],
+  "vault/usage": [],
+  "vault/uses": [],
+  "recipes/list": [],
+  "recipes/versions": [],
+  "pkg/market": [],
+  "pkg/states": [],
+  "apps/list": [],
+  "apps/health": [],
+  "apps/versions": [],
+  "pkg/capabilities": [],
+  "pkg/repos": [],
+  "dc/state": [],
+  "recipes/asks": [],
+  "recipes/steps": [],
+  "services/list": [],
+  "services/show": [],
+  "services/app": [],
+  "services/routes": [],
+  "services/local-routes": [],
+  "services/tiles": [],
+  "services/stats": [],
+  "gateway/status": [],
+  "gateway/routes": [],
+  "gateway/health": [],
+  "docker/list": [],
+  "docker/apps": [],
+  "docker/logs": "",
+  "docker/containers": [],
+  "docker/app": {},
+  "docker/rev": "",
+  "docker/registries": [],
+  "docker/health": [],
+  "docker/status": [],
+  "setup/list": [],
+  "config/list": [],
+  "config/check": "",
+  "notify/channels": [],
+  "notify/providers": [],
+  "pool/info?pool=bulk": [
+   [
+    "layout: SnapRAID + mergerfs"
+   ],
+   [
+    "disks: 3 data, 1 parity"
+   ],
+   [
+    "size: 22T"
+   ],
+   [
+    "used: 9.8T (45%)"
+   ],
+   [
+    "free: 12T"
+   ],
+   [
+    "state: protected by parity"
+   ],
+   [
+    "last sync: 18.11. 03:00"
+   ],
+   [],
+   [
+    "data-1",
+    "7.3T",
+    "61% used"
+   ],
+   [
+    "data-2",
+    "7.3T",
+    "44% used"
+   ],
+   [
+    "data-3",
+    "7.3T",
+    "30% used"
+   ],
+   [
+    "parity-1",
+    "7.3T",
+    ""
+   ]
+  ],
+  "pool/info?pool=fast": [
+   [
+    "layout: ZFS mirror pairs"
+   ],
+   [
+    "state: ONLINE"
+   ],
+   [
+    "size: 1.8T"
+   ],
+   [
+    "used: 410G (22%)"
+   ],
+   [
+    "free: 1.4T"
+   ],
+   [],
+   [
+    "mirror-0",
+    "ONLINE"
+   ],
+   [
+    "  nvme-demo-A1",
+    "ONLINE"
+   ],
+   [
+    "  nvme-demo-B1",
+    "ONLINE"
+   ]
+  ],
+  "pool/members?pool=bulk": [
+   [
+    "data-1",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "data-2",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "data-3",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "parity-1",
+    "8000000000000",
+    "online",
+    "parity",
+    "ext4",
+    "-",
+    "-"
+   ]
+  ],
+  "pool/members?pool=fast": [
+   [
+    "nvme-demo-A1",
+    "2000000000000",
+    "online",
+    "mirror-0",
+    "zfs",
+    "-"
+   ],
+   [
+    "nvme-demo-B1",
+    "2000000000000",
+    "online",
+    "mirror-0",
+    "zfs",
+    "-"
+   ]
+  ],
+  "pool/state?pool=bulk": [
+   [
+    "lock",
+    "free",
+    "nothing is running that changes the pool"
+   ],
+   [
+    "sync",
+    "bulk",
+    "ok",
+    "2026-11-18 03:00"
+   ],
+   [
+    "scrub",
+    "bulk",
+    "ok",
+    "2026-11-01 04:00"
+   ]
+  ],
+  "pool/state?pool=fast": [
+   [
+    "lock",
+    "free",
+    "nothing is running that changes the pool"
+   ],
+   [
+    "scrub",
+    "fast",
+    "ok",
+    "2026-11-01 05:00"
+   ]
+  ]
+ }
+}

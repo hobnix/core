@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "The web interface can be tried without a server"
+body  = """For developers: `npm run demo` in `web/` starts the interface with made-up data (a healthy server, a degraded pool, locked storage, one pool or three pools). Plans open, but no change is ever started."""
