@@ -240,4 +240,20 @@ import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_protocol.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 print(m.manifest_problems({'requires_core': '>=10', 'protocol': [1], 'service': {'exec': '@/s.py', 'subscribe': ['pkg.*'], 'health_interval': 30}}))" | sed 's/^\[\]$//')"
 
+echo "-- confine flag (0.8 step 11): needs permissions and protocol"
+cfcase() {   # cfcase <label> <expected problems joined by " | " or ""> <manifest as a Python dict>: the problems of a package with one confined row
+  check_eq "$1" "$2" "$(python3 -I -c "
+import importlib.util, os, tempfile
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_protocol.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+d = tempfile.mkdtemp()
+row = chr(9).join(['user', 'ext x go', '@/go.py', '-', 'h', 'h', 'confine,timeout:5'])
+open(os.path.join(d, 'commands.tsv'), 'w').write(row + chr(10))
+print(' | '.join(m.manifest_problems($3, d)))")"
+}
+cfcase "confine without permissions is refused" "commands.tsv line 1: confine needs permissions in package.toml (what the command may write and read; permissions = [] is allowed)" "{'requires_core': '>=10', 'protocol': [1]}"
+cfcase "confine without protocol is refused" "commands.tsv line 1: confine needs protocol = [1] (only commands run by the dispatcher can be confined)" "{'requires_core': '>=10', 'permissions': []}"
+cfcase "confine with permissions = [] and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': []}"
+cfcase "confine with fs.write and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': ['fs.write:/srv/x']}"
+protocase "a row without confine needs no permissions" "" '' 'reads'
+
 finish

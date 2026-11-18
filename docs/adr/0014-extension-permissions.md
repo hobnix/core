@@ -88,5 +88,12 @@ What it does NOT cover (say so wherever confinement is mentioned): the service s
 (`fs.read` does not hide anything; `ProtectSystem=strict` only makes it read only); the network is open whatever `net` says; `host`, `secrets`
 and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
 event is written by the bridge (scripts/lib/ext_service.py) into /var/lib/hs/state.db, which a confined unit may not write, so that event
-needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined (D7). Not tested on hardware yet: the unit is only evaluated in CI,
+needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the unit is only evaluated in CI,
 the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
+
+## Step 3 as built: opt-in confinement of commands (2026-11-18, docs/PLAN-extensions-access.md step 11, #239 d)
+A row of `commands.tsv` with the flag `confine` is run by the dispatcher (scripts/lib/ext_proto.py) through `systemd-run --pipe --wait` with the
+same properties as a service (`ext_confine.properties`, one mapping). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
+at run time no `systemd-run`, no `permissions` or a bad path means exit 69 and no run. The install and update prompts print what it covers and what it
+does not (reads, network, `hs`/`incus`/`systemctl`, secrets). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
+hardware yet: the real `systemd-run` was not run, and whether SIGTERM to the runner stops the transient unit (cancel, timeout) is unverified.

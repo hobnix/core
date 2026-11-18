@@ -86,4 +86,97 @@ check "and gets the strict defaults" grep -qx 'PrivateDevices=yes' "$EXT/dropin/
 rc=0; out=$(xe start badpkg 2>&1) || rc=$?
 check_eq "a package with a bad path is not started" "1 0" "$rc $(grep -c '^start' "$EXT/ctl.log")"
 check "no drop-in is left for it" test ! -e "$EXT/dropin/hs-ext-svc@badpkg.service.d/10-confine.conf"
+
+echo "-- commands: the flag confine runs a row through systemd-run (step 11)"
+CF=$WORK/cf; mkdir -p "$CF/pk/fixconf" "$CF/pk/fixplain" "$CF/root/capabilities/fixconf" "$CF/root/capabilities/fixplain" "$CF/state"
+tab=$(printf '\t')
+for n in fixconf fixplain; do
+  cp "$ROOT/tests/fixtures/ext-proto/ext.py" "$CF/pk/$n/ext.py"
+  printf 'name = "%s"\ntitle = "t"\ntitle_de = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n' "$n" > "$CF/pk/$n/capability.toml"
+done
+pt='name = "%s"\nversion = "1.0.0"\nkind = "capability"\nrequires_core = ">=10"\nprotocol = [1]\n%s\n'
+printf "$pt" fixconf 'permissions = ["fs.write:/srv/ok", "fs.read:/etc/hs", "net:lan"]' | tee "$CF/pk/fixconf/package.toml" > "$CF/root/capabilities/fixconf/package.toml"
+printf "$pt" fixplain 'permissions = ["fs.write:/srv/ok"]' | tee "$CF/pk/fixplain/package.toml" > "$CF/root/capabilities/fixplain/package.toml"
+row() { printf '%s\t%s\t@/ext.py\t-\tx\tx\t%s\n' sys "$1" "$2"; }
+{ row "sys ext fixconf rows" confine; row "sys ext fixconf echo" -; } > "$CF/pk/fixconf/commands.tsv"
+row "sys ext fixplain rows" - > "$CF/pk/fixplain/commands.tsv"
+# a fake systemd-run: records its arguments, then runs what follows the --
+cat > "$CF/systemd-run" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$CF_LOG"
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+shift
+exec "$@"
+SH
+chmod +x "$CF/systemd-run"
+printf 'fixconf\nfixplain\n' > "$CF/caps"; printf 'hostName = "t"\n' > "$CF/machine.toml"
+hsc() { CF_LOG=$CF/run.log HS_SYSTEMD_RUN=${HS_SYSTEMD_RUN:-$CF/systemd-run} HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$CF/state HS_PACKAGES_ROOT=$CF/root \
+  HS_PACKAGES_DIR=$CF/pk HS_CAPABILITIES_FILE=$CF/caps HS_MACHINE_FILE=$CF/machine.toml bash "$SCRIPTS/lib/hs.sh" "$@"; }
+ran() { [ -e "$CF/run.log" ] && echo yes || echo no; }   # did the fake systemd-run get called
+rm -f "$CF/run.log"
+check_eq "a confined row still answers like an unconfined one" "$(printf 'alpha\tb c\t-\nx\t3\t-')" "$(hsc sys ext fixconf rows 2>/dev/null)"
+expect="--pipe
+--wait
+--collect
+--quiet
+--description=hs extension command of fixconf
+--property=KillMode=control-group
+--property=ProtectSystem=strict
+--property=ProtectHome=yes
+--property=PrivateTmp=yes
+--property=NoNewPrivileges=yes
+--property=CapabilityBoundingSet=
+--property=PrivateDevices=yes
+--property=ReadWritePaths=-/var/lib/hs/ext-svc -/srv/ok
+--property=ReadOnlyPaths=-/etc/hs
+--
+python3
+-I
+$CF/pk/fixconf/ext.py"
+check_eq "systemd-run gets exactly the properties of the declared permissions, then the program" "$expect" "$(cat "$CF/run.log")"
+want=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props -- fs.write:/srv/ok fs.read:/etc/hs net:lan)
+check_eq "they are the properties of the service drop-in (one mapping)" "$want" "$(grep '^--property=[A-Z]' "$CF/run.log" | grep -v KillMode | sed 's/^--property=//')"
+check_eq "and ext_confine.py dropin prints the same lines" "$want" "$(python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name fixconf -- fs.write:/srv/ok fs.read:/etc/hs net:lan | sed '1,2d;/^#/d')"
+rm -f "$CF/run.log"; rc=0; hsc sys ext fixconf echo >/dev/null 2>&1 || rc=$?
+check_eq "an unconfined row of the same package is unchanged: run directly" "0 no" "$rc $(ran)"
+hsc sys ext fixplain rows >/dev/null 2>&1 || true
+check_eq "a package without a confined row never calls systemd-run" "no" "$(ran)"
+rc=0; HS_SYSTEMD_RUN=$CF/missing hsc sys ext fixconf rows >/dev/null 2>&1 || rc=$?
+check_eq "without systemd-run the command is refused (69), not run unconfined" "69 no" "$rc $(ran)"
+printf 'name = "fixconf"\nversion = "1.0.0"\nkind = "capability"\nrequires_core = ">=10"\nprotocol = [1]\n' > "$CF/root/capabilities/fixconf/package.toml"
+rc=0; err=$(hsc sys ext fixconf rows 2>&1 >/dev/null) || rc=$?
+check_eq "a package that lost its permissions is refused at run time" "69 no" "$rc $(ran)"
+check_out "and the reason is said" "does not declare permissions" printf '%s' "$err"
+printf 'name = "fixconf"\nversion = "1.0.0"\nkind = "capability"\nrequires_core = ">=10"\nprotocol = [1]\npermissions = ["fs.write:/srv/../etc"]\n' > "$CF/root/capabilities/fixconf/package.toml"
+rc=0; hsc sys ext fixconf rows >/dev/null 2>&1 || rc=$?
+check_eq "a bad path is refused at run time" "69 no" "$rc $(ran)"
+
+echo "-- the install and update prompt says what confinement covers"
+PRM=$(python3 -I - "$SCRIPTS" <<'PY'
+import importlib.util, os, sys, tempfile
+def load(n, f):
+    s = importlib.util.spec_from_file_location(n, os.path.join(sys.argv[1], f)); m = importlib.util.module_from_spec(s); s.loader.exec_module(m); return m
+proto = load("pkg_protocol", "lib/pkg_protocol.py")
+repo = load("pkg_repo", "pkg_repo.py")
+st = tempfile.mkdtemp()
+tab = chr(9)
+for n, flag in (("fixconf", "confine"), ("fixplain", "-")):
+    os.makedirs(os.path.join(st, "current", n))
+    open(os.path.join(st, "current", n, "commands.tsv"), "w").write(tab.join(["user", "ext %s go" % n, "@/g", "-", "h", "h", flag]) + chr(10))
+class P:
+    pkg_protocol = proto
+    def state_dir(self): return st
+R = repo.Repos(P())
+print(chr(10).join(R.confine_text("fixconf", None)))
+print("PLAIN=" + repr(R.confine_text("fixplain", None)))
+print("NONE=" + repr(R.confine_text("nothere", None)))
+PY
+)
+check_out "the prompt names the confined row" 'confined commands \(ext fixconf go\)' printf '%s' "$PRM"
+check_out "it says what is covered" "it covers: writes outside fs.write" printf '%s' "$PRM"
+check_out "it says what is not covered: reads, network, hs and incus" "it does NOT cover: reading the file system.*the network.*incus" bash -c "printf '%s' \"\$0\" | tr '\n' ' '" "$PRM"
+check_out "it says the other commands run as root, unconfined" "run as root, unconfined" printf '%s' "$PRM"
+check_out "a package without a confined row gets no extra text" 'PLAIN=\[\]' printf '%s' "$PRM"
+check_out "an uninstalled package gets none and no error" 'NONE=\[\]' printf '%s' "$PRM"
+
 finish
