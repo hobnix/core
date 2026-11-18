@@ -23,6 +23,8 @@ export { default as Card } from './Card.svelte';             // the one card: ti
 export { default as Row } from './Row.svelte';               // flex row, gap from the spacing tokens
 export { default as Stack } from './Stack.svelte';           // flex column, gap from the spacing tokens
 export { default as Muted } from './Muted.svelte';           // the one secondary text style (not `mute`, not `muted`)
+export { default as StateCard } from './StateCard.svelte';     // Group page card: status dot, one line, link
+export { default as DangerZone } from './DangerZone.svelte';   // marked section of an Object page; each action opens a plan
 // elsewhere, kept at their old paths so pages keep working:
 //   shell/Table.svelte, shell/UsageBar.svelte, shell/Spark.svelte, shell/PlanDialog.svelte (opened with openPlan), forms/unlock/UnlockForm.svelte
 // new in shell/: Halftone, PageHeader, PageState (loading, empty, error with stale data), PageFrame (locked, off, unreachable: the shell does it)

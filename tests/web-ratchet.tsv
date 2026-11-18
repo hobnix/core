@@ -129,6 +129,8 @@ shell/GenBlock.svelte	0	0	0	1	0
 shell/GenericPage.svelte	0	0	0	1	0
 shell/Halftone.svelte	0	0	0	1	4
 shell/JobRecords.svelte	0	0	0	1	0
+shell/JobStrip.svelte	0	0	0	1	0
+shell/LinkedObjects.svelte	0	0	0	1	0
 shell/NodeSummary.svelte	0	0	0	1	0
 shell/PageFrame.svelte	0	0	0	1	0
 shell/PageHeader.svelte	0	0	0	1	0
