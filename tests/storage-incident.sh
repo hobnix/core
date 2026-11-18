@@ -4,7 +4,7 @@
 # pause/resume of the writing apps, the plan/start protocol for the web interface and the alert line. Not run on real hardware.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-export HS_PLAIN=1 HS_LANG=en HS_STATE_DIR=$WORK/state HS_BULK_TYPE_FILE=$WORK/bt HS_INCIDENT_PAUSED=$WORK/paused HS_LOCK_ADMIN=$WORK/noadmin
+export HS_PLAIN=1 HS_LANG=en HS_STATE_DIR=$WORK/state HS_BULK_TYPE_FILE=$WORK/bt HS_INCIDENT_PAUSED=$WORK/paused HS_LOCK_ADMIN=$WORK/noadmin HS_MACHINE_FILE=$WORK/machine.toml
 unset HS_CALLER HS_GUIDED_TTY
 mkdir -p "$WORK/m" "$WORK/state"
 S=$SCRIPTS/storage-incident.sh
@@ -20,10 +20,14 @@ case "$*" in
     case "$sc" in
       zfs-degraded|zfs-resilver) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
       smart) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
+      snap-parity) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\nparity-1\t0\tMISSING\tparity\t-\t-\t-\n' ;;
       snap-missing) printf 'data-01\t4000000000\tONLINE\tdata\text4\t-\t-\ndata-02\t0\tMISSING\tdata\t-\t-\t-\nparity-1\t4000000000\tONLINE\tparity\text4\t-\t-\n' ;;
       *) printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tONLINE\tmirror-0\tzfs\t-\n' ;;
     esac ;;
   "fast --members") ;;
+  "ssd --members") [ -f "$(dirname "$0")/../multi" ] && printf 'ata-S1_SS1\t1000000000\tONLINE\tmirror-0\tzfs\t-\nata-S2_SS2\t1000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
+  "ssd2 --members") ;;
+  "tank --members") printf 'ata-A_SERA\t4000000000\tONLINE\tmirror-0\tzfs\t-\nata-B_SERB\t4000000000\tFAULTED\tmirror-0\tzfs\t-\n' ;;
   "--list-disks") [ -f "$(dirname "$0")/../newdisk" ] && printf 'ata-NEW_SERN\t4000000000\tfree\n' ;;
 esac
 X
@@ -34,6 +38,9 @@ sc=$(cat "$(dirname "$0")/../scen")
 case "$1 $2 $3 $4 $5" in
   "list -H -o health bulk") case "$sc" in zfs-*) echo DEGRADED ;; *) echo ONLINE ;; esac ;;
   "list -H -o health fast") exit 1 ;;
+  "list -H -o health tank") echo DEGRADED ;;
+  "list -H -o health ssd") [ -f "$(dirname "$0")/../multi" ] && echo DEGRADED || exit 1 ;;
+  "list -H -o health ssd2") echo ONLINE ;;
   "status bulk   ") [ "$sc" = zfs-resilver ] && printf '  scan: resilver in progress since Sun Nov  8 10:00:00 2026\n\t800G resilvered, 26.67%% done, 02:10:00 to go\n' ;;
 esac
 exit 0
@@ -46,22 +53,36 @@ X
 cat > "$WORK/m/mon.sh" <<'X'
 #!/usr/bin/env bash
 printf 'sda\t4000000000\tHDD\tbulk\t30\tPASS\t100\t0\t0\t0\tMODEL SERA\t1\tspinning\tzfs\n'
+printf 'sdc\t4000000000\tHDD\ttank\t31\tPASS\t100\t0\t0\t0\tMODEL SERB\t1\tspinning\tzfs\n'
 printf 'sdb\t4000000000\tHDD\tbulk\t31\tPASS\t100\t0\t0\t0\tMODEL SERB\t1\tspinning\tzfs\n'
 X
 cat > "$WORK/m/sov.sh" <<'X'
 #!/usr/bin/env bash
 sc=$(cat "$(dirname "$0")/../scen")
-if [ "$sc" = snap-missing ]; then
+if [ "$sc" = snap-missing ] || [ "$sc" = snap-parity ]; then
   printf 'docs\tshares\t/bulk/shares/docs\toff\t1\t-\ton\tdata-01\t-\n'
   printf 'media\tshares\t/bulk/shares/media\toff\t1\t-\ton\tdata-01,data-02\timmich(rw),jelly(ro)\n'
 else
   printf 'docs\tshares\t/bulk/shares/docs\toff\t1\t-\ton\tbulk\timmich(rw),jelly(ro)\n'
 fi
+[ -f "$(dirname "$0")/../multi" ] && printf 'cdocs\tshares\t/bulk/shares/cdocs\ton\t1\t-\ton\tbulk\t-\n'
+printf 'tankdocs\tshares\t/tank/shares/docs\toff\t1\t-\ton\ttank\t-\n'
 printf 'fastone\tshares\t/fast/shares/x\toff\t1\t-\ton\tfast\t-\n'
 X
 cat > "$WORK/m/incus.sh" <<'X'
 #!/usr/bin/env bash
-case "$1" in list) printf 'immich,RUNNING\njelly,RUNNING\n' ;; *) echo "incus $*" >> "$(dirname "$0")/../calls" ;; esac
+case "$1" in list) if [ -f "$(dirname "$0")/../multi" ]; then printf 'immich,RUNNING,default\njelly,RUNNING,second\nplain,STOPPED,default\n'; else printf 'immich,RUNNING\njelly,RUNNING\n'; fi ;; *) echo "incus $*" >> "$(dirname "$0")/../calls" ;; esac
+X
+cat > "$WORK/m/ctp.sh" <<'X'
+#!/usr/bin/env bash
+[ -f "$(dirname "$0")/../multi" ] || exit 0
+printf 'default\tzfs\tfast\t-\t-\tssd/incus\nsecond\tzfs\tfast\t-\t-\tssd2/incus\n'
+X
+cat > "$WORK/m/jobs.sh" <<'X'
+#!/usr/bin/env bash
+[ -f "$(dirname "$0")/../job" ] && printf 'u1	%s	-	-	-	-	-	-	-	-	-	3	4
+' "$(cat "$(dirname "$0")/../job")"
+exit 0
 X
 cat > "$WORK/m/none.sh" <<'X'
 #!/usr/bin/env bash
@@ -73,7 +94,7 @@ echo "replace $*" >> "$(dirname "$0")/../calls"
 X
 mkdir -p "$WORK/bin"; cp "$WORK/bin-zpool" "$WORK/bin/zpool"; chmod +x "$WORK"/m/*.sh "$WORK/bin/zpool"
 export HS_MANAGE_POOL=$WORK/m/pool.sh HS_ZPOOL=$WORK/bin/zpool HS_DISK_HEALTH=$WORK/m/dh.sh HS_MONITOR=$WORK/m/mon.sh HS_SHARE_OVERVIEW=$WORK/m/sov.sh \
-  HS_INCUS=$WORK/m/incus.sh HS_JOBS=$WORK/m/none.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
+  HS_INCUS=$WORK/m/incus.sh HS_CT_POOLS=$WORK/m/ctp.sh HS_JOBS=$WORK/m/jobs.sh HS_DISK_DETACH=$WORK/m/none.sh HS_DISK_REPLACE=$WORK/m/repl.sh
 st() { bash "$S" --state "$@" 2>/dev/null; }
 lines() { grep -c "^$1	" <<<"$out"; }
 
@@ -165,4 +186,58 @@ check_out "names the disk" "MODEL SERB" echo "$out"
 check_out "names the affected share" "docs" echo "$out"
 check_out "suggests the pause" "Suggestion: pause" echo "$out"
 check_out "shows the next step" "hs storage incident replace" echo "$out"
+echo "-- renamed pools (tank data zfs, ssd apps zfs)"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }\n' > "$WORK/machine.toml"
+scen healthy; out=$(st)
+check_eq "renamed: incident on tank" "1" "$(grep -c '^incident	tank:degraded	tank	pool-degraded	error	' <<<"$out")"
+check_eq "renamed: the disk to pull" "target	tank	ata-B_SERB	sdc	MODEL SERB" "$(grep '^target' <<<"$out")"
+check_eq "renamed: share under /tank is at risk" "share	tank	tankdocs	/tank/shares/docs	at-risk" "$(grep '^share' <<<"$out")"
+check_eq "renamed: legacy pool names are not read" "0" "$(grep -c 'bulk' <<<"$out")"
+
+echo "-- instances by the pool of their root disk (two apps pools)"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" }, ssd2 = { role = "apps", kind = "zfs" } }
+' > "$WORK/machine.toml"
+: > "$WORK/multi"; scen healthy; out=$(st)
+check_eq "apps pool ssd degraded: its instances live on it, once each" "app	ssd	immich	RUNNING	pool	no
+app	ssd	plain	STOPPED	pool	no" "$(grep '^app' <<<"$out")"
+check_eq "an instance of the healthy second pool is not listed" "0" "$(grep -c jelly <<<"$out")"
+rm -f "$WORK/multi" "$WORK/machine.toml"
+
+echo "-- two degraded data pools (tank, bulk): free once, one app line, row order"
+printf 'pools = { tank = { role = "data", kind = "zfs" }, bulk = { role = "data", kind = "zfs" } }
+' > "$WORK/machine.toml"
+scen zfs-degraded; touch "$WORK/newdisk"; out=$(st)
+check_eq "two pools: both incidents, in row order" "bulk:degraded tank:degraded" "$(awk -F'	' '$1=="incident" && $4=="pool-degraded" { printf "%s%s", sep, $2; sep=" " }' <<<"$out")"
+check_eq "two pools: the new disk is listed once" "1" "$(grep -c '^free	ata-NEW_SERN' <<<"$out")"
+check_eq "two pools: a phase for each" "phase	bulk	ready
+phase	tank	ready" "$(grep '^phase' <<<"$out")"
+check_eq "two pools: step follows the first pool" "ready" "$(awk -F'	' '$1=="phase"{print $3; exit}' <<<"$out")"
+rm -f "$WORK/newdisk" "$WORK/machine.toml"; scen healthy
+
+echo "-- SnapRAID: replace job matched by member, parity missing, upload cache"
+echo snapraid > "$WORK/bt"; scen snap-missing; echo pool-replace-data-02 > "$WORK/job"; out=$(st)
+check_eq "job of a member of the pool is its progress" "progress	bulk	rebuild	75" "$(grep '^progress' <<<"$out" | cut -f1-4)"
+echo pool-replace-other > "$WORK/job"; out=$(st)
+check_eq "job of another disk is not" "0" "$(grep -c '^progress' <<<"$out")"
+rm -f "$WORK/job"
+scen snap-parity; out=$(st)
+check_eq "parity missing: target parity-1" "target	bulk	parity-1	-	-" "$(grep '^target' <<<"$out")"
+check_eq "parity missing: every share of the pool at risk" "2" "$(grep -cE "^share	bulk	(docs|media)	.*	at-risk" <<<"$out")"
+echo zfs > "$WORK/bt"
+printf 'pools = { bulk = { role = "data", kind = "snapraid" }, ssd = { role = "apps", kind = "zfs" } }
+' > "$WORK/machine.toml"
+: > "$WORK/multi"; scen healthy; out=$(st)
+check_eq "apps pool degraded: a share with upload cache is at risk" "share	ssd	cdocs	/bulk/shares/cdocs	at-risk" "$(grep '^share' <<<"$out")"
+rm -f "$WORK/multi" "$WORK/machine.toml"
+
+echo "-- no pool at all"
+printf 'pools = {}\n' > "$WORK/machine.toml"
+out=$(st)
+check_eq "no pool: one ok line" "ok	-	no storage incident: every pool and every disk looks fine" "$out"
+check_eq "no pool: no alert line" "" "$(bash "$S" --alert-line)"
+rc=0; bash "$S" pause --yes >/dev/null 2>&1 || rc=$?
+check_eq "no pool: pause refused" "1" "$rc"
+rc=0; bash "$S" replace --dry-run >/dev/null 2>&1 || rc=$?
+check_eq "no pool: replace refused" "1" "$rc"
+rm -f "$WORK/machine.toml"
 finish

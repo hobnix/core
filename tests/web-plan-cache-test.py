@@ -101,7 +101,7 @@ class PlanCache(lt.Base):
         self.assertIsNotNone(p.get(("x", ("69",))))
 
     def test_change_shape(self):
-        self.assertEqual(ws.change_shape("pool", ["bulk", "convert", "--member", "data-01", "--fs", "xfs"]), "pool bulk convert --member * --fs *")
+        self.assertEqual(ws.change_shape("pool", ["bulk", "convert", "--member", "data-01", "--fs", "xfs"]), "pool * convert --member * --fs *")
         self.assertEqual(ws.change_shape("disk", DISK), "disk * test short")
         self.assertEqual(ws.change_shape("nonesuch", ["a"]), "nonesuch")
 
@@ -110,7 +110,7 @@ class PlanCache(lt.Base):
         with contextlib.redirect_stdout(buf):
             self.plan("pool", CONV, stdin="secret pw")
         out = buf.getvalue()
-        self.assertIn("web timing: plan pool bulk convert --member * --encrypt", out)
+        self.assertIn("web timing: plan pool * convert --member * --encrypt", out)
         self.assertIn(" ms ", out)
         self.assertNotIn("data-01", out)
         self.assertNotIn("secret pw", out)

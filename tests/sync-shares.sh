@@ -33,12 +33,8 @@ FAKE
 for c in chown chmod find; do printf '#!/usr/bin/env bash\necho "%s $*" >> "$CALLS"\n' "$c" > "$BIN/$c"; done
 chmod +x "$BIN"/*
 export PATH=$BIN:$PATH
-echo zfs > "$WORK/bulk-type"
+export HS_BULK_TYPE_FILE=$WORK/bulk-type HS_MACHINE_FILE=$WORK/machine.toml   # neither file exists: the layout is legacy
 S="bash $SCRIPTS/sync-shares.sh"
-
-if [ "$(cat /etc/hs/bulk-type 2>/dev/null || echo zfs)" = snapraid ]; then
-  skip "this machine uses the snapraid layout (sync-shares reads /etc/hs/bulk-type)"; finish; exit $?
-fi
 
 echo "-- --check lists the fast shares and changes nothing"
 out=$($S --check 2>&1)

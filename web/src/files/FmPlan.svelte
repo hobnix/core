@@ -10,9 +10,11 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import Halftone from '../shell/Halftone.svelte';
   import * as api from './api.js';
+  import { pools } from '../pools.svelte.js';
   import * as S from './selection.js';
 
   let { fm } = $props();
+  const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? 'bulk');
   const spec = $derived(fm.dialog);
   const op = $derived(spec.op);
   const moves = $derived(op === 'copy' || op === 'move');
@@ -190,7 +192,7 @@
           <div class="options">
             <label class="chk"><input type="checkbox" bind:checked={() => opts.verify === 'checksum', (v) => (opts.verify = v ? 'checksum' : 'size')} /><span>Verify with checksums <span class="dimmed">(slower; size and time are always checked)</span></span></label>
             {#if op === 'move' && (spec.arrayMove || p.parity)}
-              <label class="chk"><input type="checkbox" bind:checked={opts.parity} /><span>Update the parity afterwards <span class="dimmed">(hs pool bulk sync)</span></span></label>
+              <label class="chk"><input type="checkbox" bind:checked={opts.parity} /><span>Update the parity afterwards <span class="dimmed">(hs pool {snapName} sync)</span></span></label>
             {/if}
           </div>
         {/if}

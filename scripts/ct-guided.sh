@@ -17,7 +17,7 @@ usage() {
   say "usage: hs ct add [--kind empty|docker|vm] [--name <n>] [--ram MB] [--cpu N] [--disk GB] [--ip <address>] [--profile <vlan>] [--pool <incus pool>] [--iso <name.iso>] [--yes]"
   say "       hs ct <ct> edit [--ram MB|none] [--cpu N|none] [--disk GB] [--autostart yes|no] [--docker yes|no] [--yes]"
   say "       hs ct <ct> snapshot [label]            (without a label: a menu)"
-  say "       hs ct <ct> storage [--kind fast|shares|sensitive] [--source <share>] [--name <n>] [--path </x>] [--readonly] [--as uid:gid] [--yes]"
+  say "       hs ct <ct> storage [--kind fast|shares|sensitive] [--source <share>] [--name <n>] [--path </x>] [-s <apps pool>] [--readonly] [--as uid:gid] [--yes]"
   say "       hs ct <ct> ip [<address>]"
   exit 1
 }
@@ -155,11 +155,11 @@ snapshot)
 storage)
   [ $# -ge 1 ] || usage
   ct=$1; shift; ct_exists "$ct"
-  kind=""; source_=""; sname=""; path=""; ro=false; as=""; yes=false
+  kind=""; source_=""; sname=""; path=""; ro=false; as=""; apool=""; yes=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --kind) kind=$2; shift 2 ;; --source) source_=$2; shift 2 ;; --name) sname=$2; shift 2 ;; --path) path=$2; shift 2 ;;
-      --readonly) ro=true; shift ;; --as) as=$2; shift 2 ;; --yes) yes=true; shift ;; *) usage ;;
+      --readonly) ro=true; shift ;; --as) as=$2; shift 2 ;; -s|--pool) apool=$2; shift 2 ;; --yes) yes=true; shift ;; *) usage ;;
     esac
   done
   if [ -z "$kind" ]; then
@@ -195,6 +195,7 @@ storage)
   args=("$ct" --add-storage "$kind" "$sname" "$path")
   $ro && args+=(--readonly)
   [ -z "$as" ] || args+=(--as "$as")
+  [ -z "$apool" ] || args+=(-s "$apool")
   run_plan "$yes" bash "$mct" "${args[@]}" ;;
 
 # ───────────────────────────────────────────────────────────────────────────── ip

@@ -16,7 +16,7 @@ export function lockOf(row, ctx = {}) {
     return { locked: true, openable: dir, tag: `${OPS[row.busy.op] ?? 'Working'}${pct}`, tone: 'info', reason: 'A job is working on this item. It is locked until the job ends.' };
   }
   if (f.includes('busyparent')) return { locked: true, openable: dir, tag: 'Job running inside', tone: 'info', reason: 'A job is working on something inside this folder, so the folder itself is locked.' };
-  // an array folder (shares, sensitive on a bulk disk), and the top-level folders of a pool view, which are the same folders seen through the merge
+  // an array folder (shares, sensitive on a pool disk), and the top-level folders of a pool view, which are the same folders seen through the merge
   if (f.includes('array') || ctx.poolRoot) return { locked: true, openable: dir, tag: 'array', tone: 'warn', reason: ctx.poolRoot && !f.includes('array') ? 'Top-level folder of a pool: open it, but it is never moved, renamed or deleted.' : 'Array folder: it can be opened, never selected, so it cannot be moved, renamed or deleted.' };
   return { locked: false, openable: dir };
 }

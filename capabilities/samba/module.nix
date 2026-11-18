@@ -1,15 +1,15 @@
 { config, lib, pkgs, hs, ... }:
 
 let
-  inherit (hs) machine bulkReady whenUnlocked notifyFailure ad;
+  inherit (hs) machine adminUser bulkReady dataPool whenUnlocked notifyFailure ad;
   scripts = hs.scripts;
   smbAllow = machine.smbAllow;
   # Who may open the two catch-all shares. In a domain that's the admins only:
   # everyone else gets per-dataset shares with their own permissions.
   smbValid =
     if ad != null
-    then ''adminuser @"${ad.workgroup}\Domain Admins"''
-    else "adminuser";
+    then ''${adminUser} @"${ad.workgroup}\Domain Admins"''
+    else adminUser;
 in
 {
   # ──────────────────────── Samba ────────────────────────
@@ -45,16 +45,17 @@ in
         "idmap config ${ad.workgroup} : range" = "10000-999999";
         "template shell" = "/run/current-system/sw/bin/nologin";
       };
-
+    # The two catch-all shares need a data pool; a server without one has none of them.
+    } // lib.optionalAttrs (dataPool != null) {
       shares = {
-        "path" = "/bulk/shares";
+        "path" = "/${dataPool}/shares";
         "browseable" = "yes";
         "read only" = "no";
         "guest ok" = "no";
         "valid users" = smbValid;
         # Whoever logs in, files are written as adminuser on disk, so
         # ownership never gets mixed up. Who gets in is decided per share.
-        "force user" = "adminuser";
+        "force user" = adminUser;
       };
 
       # Container-owned data (backups, app state): one dataset per folder,
@@ -63,7 +64,7 @@ in
       # read-only for every Samba user, so Windows can't alter what they manage.
       # The fast pool is deliberately not shared (Incus-managed).
       sensitive = {
-        "path" = "/bulk/sensitive";
+        "path" = "/${dataPool}/sensitive";
         "browseable" = "yes";
         "read only" = "yes";
         "guest ok" = "no";
@@ -143,12 +144,13 @@ in
   # "Server accepts key" after idle gaps (user/group lookups through winbind, or DNS). Every minute
   # the same lookups sshd does, so nothing goes cold; one that takes over 1 s is logged with the tag
   # hs-nss-warm (journalctl -t hs-nss-warm). Remove once the cause is known.
-  systemd.services.hs-nss-warm = {
+  # Only with a domain: the realm comes from adDomain, nothing is looked up on a standalone server.
+  systemd.services.hs-nss-warm = lib.mkIf (ad != null) {
     description = "Keep winbind and DNS lookups warm for SSH logins (temporary)";
     path = [ "/run/current-system/sw" ];
     serviceConfig.Type = "oneshot";
     script = ''
-      for cmd in 'getent initgroups adminuser' 'getent group "domain admins"' 'getent hosts ad.home.lan'; do
+      for cmd in 'getent initgroups ${adminUser}' 'getent group "domain admins"' 'getent hosts ${lib.toLower ad.realm}'; do
         s=$(date +%s%N)
         eval "$cmd" >/dev/null 2>&1 || true
         ms=$(( ($(date +%s%N) - s) / 1000000 ))

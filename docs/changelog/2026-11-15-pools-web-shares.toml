@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "New share and the Shares page use the pools of the server"
+docs  = "storage-and-disks"
+body  = """The New share form offers every data and apps pool by name (default: the first data pool) and passes it as --pool; without a pool it says shares wait for one. The Shares page filters by those pool names, and the links from Users, Groups and Backup go to the data pool."""

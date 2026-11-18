@@ -323,6 +323,8 @@ class RedisMode(RedisBase):
         self.assertEqual(m["/api/sys/pool/state?pool=fast"], "pool-state-fast")
         self.assertNotIn("/api/sys/pool/disks", m)
         self.assertNotIn("/api/sys/pool/info", m)
+        self.assertNotIn("/api/sys/pool/info?pool=tank", m)
+        self.assertEqual(len([k for k in m if "?pool=" in k]), 6)
         self.assertEqual(ws.features(self.cfg)["topics"], m)
 
     def test_the_topic_map_is_empty_in_off_mode(self):
@@ -543,8 +545,9 @@ class StorageTopics(RedisBase):
 
     def test_the_pool_reads_map_exactly_bulk_and_fast(self):
         for kind in ("info", "members", "state"):
-            self.assertEqual(ws.READS[("pool", kind)]["topic"],
-                             {"bulk": "pool-%s-bulk" % kind, "fast": "pool-%s-fast" % kind})
+            self.assertEqual(ws.READS[("pool", kind)]["topic"], ("pool", kind))
+            for pool in ("bulk", "fast"):
+                self.assertEqual(ws.live_topic_map()["/api/sys/pool/%s?pool=%s" % (kind, pool)], "pool-%s-%s" % (kind, pool))
         self.assertNotIn("topic", ws.READS[("pool", "disks")])
 
     def test_resolution_picks_the_topic_per_pool(self):
@@ -554,7 +557,7 @@ class StorageTopics(RedisBase):
                 self.assertEqual(spec["topic"], "pool-%s-%s" % (kind, pool))
             self.assertNotIn("topic", self.app.reads.resolve(["pool", kind], {})[0])
             self.assertNotIn("topic", self.app.reads.resolve(["pool", kind], {"pool": ["archive"]})[0])
-            self.assertIsInstance(ws.READS[("pool", kind)]["topic"], dict)      # the global entry is never changed
+            self.assertIsInstance(ws.READS[("pool", kind)]["topic"], tuple)      # the global entry is never changed
 
     def test_fixed_pool_read_uses_its_own_key_and_no_process(self):
         self.redis.keys["hs:v1:pool-info-fast"] = doc("fast\t1\n")

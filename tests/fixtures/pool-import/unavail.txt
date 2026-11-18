@@ -1,0 +1,14 @@
+   pool: tank
+     id: 11111111111111111
+  state: UNAVAIL
+status: The pool can only be accessed in read-only mode on this system. It
+	cannot be accessed in read-write mode because it uses the following
+	feature(s) not supported on this system.
+ action: The pool cannot be imported. Access the pool on a system that supports
+	the required feature(s), or recreate the pool from backup.
+ config:
+
+	tank                ONLINE
+	  mirror-0          ONLINE
+	    ata-A-part1     ONLINE
+	    ata-B-part1     ONLINE

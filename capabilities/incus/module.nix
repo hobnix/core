@@ -1,7 +1,7 @@
 { config, lib, pkgs, hs, ... }:
 
 let
-  inherit (hs) machine whenUnlocked notifyFailure;
+  inherit (hs) machine appsPool zfsAppsPools whenUnlocked notifyFailure;
   scripts = hs.scripts;
   incusUi = machine.incusUi;
   link = import ./internal-link.nix { inherit lib machine; };
@@ -14,6 +14,14 @@ let
     "snapshots.expiry" = "7d";
     "snapshots.pattern" = "auto-{{ creation_date|date:'2006-01-02' }}";
   };
+
+  # A dir pool (no apps pool) copies a whole instance per snapshot: no nightly schedule there (system disk).
+  # `default` is pinned by incusDefaultPool (written by hs pool when a second apps pool is added); without it: the first apps pool.
+  defaultPool =
+    if machine.incusDefaultPool == null then appsPool
+    else if machine.incusDefaultPool == "dir" then null
+    else machine.incusDefaultPool;
+  profileSnapshots = if defaultPool != null then autoSnapshots else { };
 
   defaultVlanNames = builtins.attrNames (lib.filterAttrs (_: v: v.default or false) vlans);
   defaultVlan =
@@ -45,11 +53,20 @@ in
       # Incus doesn't listen on the network by default; the UI and remote `incus` need it
       config = lib.optionalAttrs incusUi { "core.https_address" = ":8443"; };
 
-      storage_pools = [{
+      # With an apps pool: ZFS on it. Without one: Incus' own folder on the system disk (no redundancy).
+      # `default` stays what it was first (D5); every further ZFS apps pool becomes an Incus pool beside it, named like the pool.
+      storage_pools = (if defaultPool != null then [{
         name = "default";
         driver = "zfs";
-        config.source = "fast/incus";          # Incus creates/mounts child datasets itself
-      }];
+        config.source = "${defaultPool}/incus";   # Incus creates/mounts child datasets itself
+      }] else [{
+        name = "default";
+        driver = "dir";
+      }]) ++ map (n: {
+        name = n;
+        driver = "zfs";
+        config.source = "${n}/incus";
+      }) (lib.filter (n: n != defaultPool) zfsAppsPools);
 
       # "default" profile uses the VLAN marked `default = true` in machine.toml.
       # Every VLAN also gets its own profile named after it:
@@ -57,12 +74,12 @@ in
       profiles =
         [{
           name = "default";
-          config = autoSnapshots;
+          config = profileSnapshots;
           devices = { eth0 = nicDevice defaultVlan; } // rootDevice;
         }]
         ++ lib.mapAttrsToList (name: _: {
           inherit name;
-          config = autoSnapshots;
+          config = profileSnapshots;
           devices = { eth0 = nicDevice name; } // rootDevice;
         }) vlans;
 
@@ -114,6 +131,9 @@ in
   networking.dhcpcd.denyInterfaces = [ link.name ];   # a role without the home networking would otherwise ask for a lease on it
   environment.etc."hs/internal-link".text = "name=${link.name}\nsubnet=${link.subnet}\nhost=${link.host}\npeer=${link.peer}\n";
   assertions = [{
+    assertion = machine.incusDefaultPool == null || machine.incusDefaultPool == "dir" || builtins.elem machine.incusDefaultPool zfsAppsPools;
+    message = "machine.toml: incusDefaultPool names no ZFS apps pool";
+  } {
     assertion = link.valid;
     message = "machine.toml: incusInternalSubnet = \"${link.subnet}\" must be a private /29 network such as \"10.99.0.0/29\" (10.x, 172.16-31.x or 192.168.x; the last number a multiple of 8).";
   }];

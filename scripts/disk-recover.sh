@@ -18,6 +18,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)   # absolute: the background job runs from another folder
 . "$here/lib/bulkpath.sh"
 . "$here/lib/live.sh"
+. "$here/lib/admin.sh"
+adm="$(admin_user)"
 
 live_refresh_recover() {
   live_refresh status monitor-disks disk-inventory disk-marks pool-info-bulk pool-members-bulk pool-state-bulk shares-overview fm-locations
@@ -169,7 +171,7 @@ echo "Recovering deleted files from $member (the disk is only read)."
 mkdir -p "$recdir"; printf '%s\n' "$to" > "$recdir/$member"
 live_refresh_recover
 if [ "$testmode" != 1 ] && [ "$mounted" = yes ]; then
-  for m in /bulk "$rawpool"; do
+  for m in "$(snap_root)" "$rawpool"; do
     mountpoint -q "$m" 2>/dev/null && setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
   done
   umount "$dir" || { rm -f "$recdir/$member"; bash "$bulkmount" >/dev/null 2>&1 || true; echo "$member is busy and could not be unmounted (something still uses it); nothing was changed."; exit 1; }
@@ -236,7 +238,7 @@ while IFS= read -r -d '' f; do
   count[${kind%%/*}]=$(( ${count[${kind%%/*}]:-0} + 1 ))
 done < <(find "$raw" -type f ! -name '*.se2' ! -name '*.log' -print0)
 find "$raw" -depth -type d -empty -delete 2>/dev/null || true
-chown -R adminuser:users "$out" 2>/dev/null || true
+chown -R "$adm":users "$out" 2>/dev/null || true
 chmod -R g+rwX "$out" 2>/dev/null || true
 
 total=0; summary=""

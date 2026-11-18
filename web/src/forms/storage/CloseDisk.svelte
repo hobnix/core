@@ -1,10 +1,11 @@
 <script>
-  // Stop (or allow again) new files on a SnapRAID data disk (hs sys pool plan|start bulk close|open --member <name> [--drain]).
-  // A closed disk stays in /bulk and keeps its files; mergerfs just never picks it for a new file. --drain also moves its files
+  // Stop (or allow again) new files on a SnapRAID data disk (hs sys pool plan|start <pool> close|open --member <name> [--drain]).
+  // A closed disk stays in /<pool> and keeps its files; mergerfs just never picks it for a new file. --drain also moves its files
   // onto the other disks (a long background job, the server names the word to type). Open and close without drain change a mark only.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { poolOfRole } from '../../pools.svelte.js';
 
-  let { pool = 'bulk', member, closed = false } = $props();
+  let { pool = poolOfRole('data'), member, closed = false } = $props();
 
   let choice = $state(closed ? 'open' : 'close');
 
@@ -29,8 +30,8 @@
       </div>
       <div class="hint">
         {#if choice === 'open'}New files are spread over all disks again, this one included.
-        {:else if choice === 'close'}The disk stays in /bulk and keeps what it holds; only new files go to the other disks. Nothing moves, nothing is erased. A file that already lives there and grows is still written there.
-        {:else}Its files move onto the other data disks (hours, a background job). Until a file is moved it is not visible in /bulk. The disk stays in the pool, empty and closed. A good first step before removing it.{/if}
+        {:else if choice === 'close'}The disk stays in /{pool} and keeps what it holds; only new files go to the other disks. Nothing moves, nothing is erased. A file that already lives there and grows is still written there.
+        {:else}Its files move onto the other data disks (hours, a background job). Until a file is moved it is not visible in /{pool}. The disk stays in the pool, empty and closed. A good first step before removing it.{/if}
       </div>
     </div>
   {/snippet}

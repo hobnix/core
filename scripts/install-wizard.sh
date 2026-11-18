@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: install a new server from the installer ISO: the OS disk, name, SSH key, preset (run on the ISO as root)
 # help.de: einen neuen Server vom Installer-Stick einrichten: Systemplatte, Name, SSH-Schlüssel, Vorlage (auf dem Stick als root)
-# args: [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bios] [--restore-from <dir>] [--dry-run]
+# args: [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bios] [--restore-from <dir>] [--dry-run]
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
@@ -26,10 +26,10 @@ here=$(dirname "$0")
 # needed), fetch with tags, HEAD = the commit the ISO was built from (/etc/hs-installer-version, written by installer/iso.nix). The files are
 # not changed, so `git status` is clean and hs update, the channels and the version work. Without a network, or for a stick built from
 # unpublished work, no .git is left and the install goes on: docs/install.md "Keep the configuration updatable" has the manual steps.
-# Test knobs: HS_INSTALLER_VERSION_FILE, HS_INSTALL_ORIGIN (the url to fetch from), HS_INSTALL_FETCH_TIMEOUT, HS_INSTALL_SKIP_DISK=1 (no partitioning, no mounting, no nixos-install: only the files), HS_INSTALL_PASSWORD (the adminuser
+# Test knobs: HS_INSTALLER_VERSION_FILE, HS_INSTALL_ORIGIN (the url to fetch from), HS_INSTALL_FETCH_TIMEOUT, HS_INSTALL_SKIP_NETCHECK=1 (no network check; without it a failed check stops the install before the disk questions), HS_INSTALL_SKIP_DISK=1 (no partitioning, no mounting, no nixos-install: only the files), HS_INSTALL_PASSWORD (the adminuser
 # password without asking), HS_PRESETS_DIR, HS_PYTHON.
 
-disk=""; hostname_=""; keyfile=""; key=""; tz=""; preset=""; confirm_disk=""; nic=""; smb=""; dry=false; role=""; bios=false; bulk_type=""
+disk=""; hostname_=""; admin=""; keyfile=""; key=""; tz=""; preset=""; confirm_disk=""; nic=""; smb=""; dry=false; role=""; bios=false; bulk_type=""
 target=${HS_INSTALL_TARGET:-/mnt}
 repo=""; restore_from=""
 # no arguments in a terminal: the entry menu, "New install" next to "Restore from backup" (UNVERIFIED: not tested on hardware)
@@ -44,6 +44,7 @@ while [ $# -gt 0 ]; do
     --bulk-type) bulk_type=${2:?}; shift 2 ;;
     --disk) disk=${2:?}; shift 2 ;;
     --hostname) hostname_=${2:?}; shift 2 ;;
+    --admin) admin=${2:?}; shift 2 ;;
     --key-file) keyfile=${2:?}; shift 2 ;;
     --key) key=${2:?}; shift 2 ;;
     --timezone) tz=${2:?}; shift 2 ;;
@@ -55,7 +56,7 @@ while [ $# -gt 0 ]; do
     --repo) repo=${2:?}; shift 2 ;;
     --restore-from) restore_from=${2:?}; shift 2 ;;
     --dry-run) dry=true; shift ;;
-    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bulk-type zfs|snapraid] [--dry-run]"; exit 1 ;;
+    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bulk-type zfs|snapraid] [--dry-run]"; exit 1 ;;
   esac
 done
 skip=${HS_INSTALL_SKIP_DISK:-}
@@ -91,6 +92,16 @@ if [ -z "$skip" ] && ! $dry; then
   fi
 fi
 
+# ---- the network (issue #179): the closure is not on the stick, so without a working network nothing can be installed; a failed check stops here,
+# before any disk question, and nothing is erased. DHCP only: no address form, no Wi-Fi. HS_INSTALL_SKIP_NETCHECK=1 skips it (tests).
+if [ -z "${HS_INSTALL_SKIP_NETCHECK:-}" ]; then
+  step "Network"
+  . "$here/lib/netcheck.sh"
+  netcheck_show
+  bad=$(netcheck_rows | awk -F'	' '$2 == "fail" && !d { print $1 ": " $4; d = 1 }')
+  [ -z "$bad" ] || fail "$(t "The network check failed (%s). Nothing was changed. Fix this, then run hs-install again." "$bad")"
+fi
+
 # ---- the disk
 disks() {   # name<TAB>size<TAB>transport<TAB>model, without loop devices, optical drives and the stick itself
   local iso_src iso_disk=""
@@ -121,6 +132,20 @@ if [ -z "$hostname_" ]; then
 fi
 case "$bulk_type" in ""|zfs|snapraid) ;; *) fail "$(t "'%s' is not a bulk type (zfs or snapraid)." "$bulk_type")" ;; esac
 valid_host "$hostname_" || fail "$(t "'%s' is not a usable server name (letters, digits, dashes; at most 15 characters)." "$hostname_")"
+
+# the name of the admin account (machine.toml adminUser; the default adminuser is not written). A restore keeps the name of the backup.
+if [ -z "$admin" ] && [ -n "$restore_from" ] && [ -f "$restore_from/etc/nixos/machine.toml" ]; then
+  admin=$(sed -n 's/^adminUser[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$restore_from/etc/nixos/machine.toml" | head -n1)
+fi
+# --confirm-disk on the command line means an unattended run (the test-lab, scripts): no question, the default name
+if [ -z "$admin" ]; then
+  if $tty && [ -z "$confirm_disk" ]; then admin=$(ask "Name of the admin account (lowercase letters, digits, _ and -)" adminuser); else admin=adminuser; fi
+fi
+[[ "$admin" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || fail "$(t "'%s' is not a usable account name (lowercase letters, digits, _ and -; starts with a letter or _; at most 31 characters)." "$admin")"
+case "$admin" in root|nobody) fail "$(t "'%s' cannot be the admin account." "$admin")" ;; esac
+if [ "$admin" != adminuser ] && [ -z "$skip" ] && getent passwd "$admin" >/dev/null 2>&1; then
+  fail "$(t "The name '%s' is already used by an account on this installer system. Choose another." "$admin")"
+fi
 
 if [ -z "$key" ] && [ -n "$keyfile" ]; then key=$(sed -n '/^ssh-/{p;q;}' "$keyfile" 2>/dev/null || true); fi
 if [ -z "$key" ]; then
@@ -158,6 +183,7 @@ if $bios; then kv "Layout" "1 MB BIOS boot, 8 GB swap, the rest for the system (
 else kv "Layout" "1 GB boot, 8 GB swap, the rest for the system (ext4)"; fi
 kv "Role" "$role"
 kv "Server name" "$hostname_"
+kv "Admin account" "$admin"
 kv "SSH key" "${key%% *} ... ${key##* }"
 kv "Time zone" "${tz:-UTC (not set)}"
 kv "Preset" "$preset"
@@ -182,11 +208,11 @@ if [ -z "$skip" ]; then
   fi
 fi
 
-# ---- the password of adminuser
+# ---- the password of the admin account
 pw=${HS_INSTALL_PASSWORD:-}
 if [ -z "$pw" ] && [ -z "$skip" ]; then
-  $tty || fail "No terminal and no HS_INSTALL_PASSWORD: the password of adminuser cannot be asked."
-  pw=$(ask_secret "Password of adminuser (for sudo; the SSH key is used to log in):")
+  $tty || fail "$(t "No terminal and no HS_INSTALL_PASSWORD: the password of %s cannot be asked." "$admin")"
+  pw=$(ask_secret "$(t "Password of %s (for sudo; the SSH key is used to log in):" "$admin")")
   pw2=$(ask_secret "Once more:")
   [ -n "$pw" ] && [ "$pw" = "$pw2" ] || fail "The passwords are empty or not the same. Nothing was changed."
 fi
@@ -252,6 +278,9 @@ mset() { machine_set "$1" "$2" installer >/dev/null || fail "$(t "'%s' could not
 [ -z "$bulk_type" ] || [ "$role" != homeserver ] || mset bulkType "\"$bulk_type\""   # chosen here: a rebuild refuses to change it later
 ! $bios || mset bootDevice "\"/dev/$disk\""
 mset hostName "\"$hostname_\""
+[ "$admin" = adminuser ] || mset adminUser "\"$admin\""
+[ "$role" != homeserver ] || mset webUi true   # (a public edge node serves no web page)
+# the minimal system serves the web interface from the first boot (install.nix; docs/PLAN-first-run-wizard.md decision 1)
 mset sshKeys "[ \"$key\" ]"
 [ -z "$nic" ] || [ "$role" != homeserver ] || mset nic "\"$nic\""
 [ -z "$smb" ] || [ "$role" != homeserver ] || mset smbAllow "\"$smb\""
@@ -262,6 +291,12 @@ fi
 ok "machine.toml: server name, SSH key, network card and the rest"
 HS_PRESETS_DIR=${HS_PRESETS_DIR:-$etc/presets} bash "$here/preset.sh" apply "$preset" --yes >/dev/null || fail "The preset could not be applied."
 ok "$(t "Preset '%s' applied (only what was not set yet)" "$preset")"
+# a new home server names its pools itself (hs pool <name> --use ...): an empty pools line says "no classic pool rows".
+# A restore keeps the pool rows of its own machine.toml (a legacy server has none and must stay legacy).
+if [ -z "$restore_from" ] && [ "$role" = homeserver ] && ! machine_has pools; then
+  mset pools "{}"
+  [ "$(machine_get bulkType 2>/dev/null || true)" != snapraid ] || note "With a pools line bulkType is not used: create the SnapRAID pool with hs pool <name> --use data --kind snapraid."
+fi
 
 # ---- the settings from the backup (hs-restore): over the fresh machine.toml, then what the new disk needs is set again
 if [ -n "$restore_from" ]; then
@@ -279,17 +314,28 @@ if [ -z "$skip" ]; then
     tail -n 15 /tmp/hs-nixos-install.log | sed 's/^/      /' >&2
     fail "$(t 'nixos-install failed. The whole log: %s' /tmp/hs-nixos-install.log)"
   }
-  printf '%s\n' "adminuser:$pw" | nixos-enter --root "$target" -c 'chpasswd' >/dev/null
-  ok "adminuser has its password"
+  printf '%s\n' "$admin:$pw" | nixos-enter --root "$target" -c 'chpasswd' >/dev/null
+  ok "$(t "%s has its password" "$admin")"
+fi
+
+# the flag of the one-time setup code (docs/adr/0022): the boot unit shows the code while it says pending. Last, so a failed install leaves
+# no armed flag. Not on a restore: that server already has its settings and its password.
+if [ -z "$restore_from" ] && [ "$role" = homeserver ]; then
+  HS_FIRST_RUN_FILE=$HS_STATE_DIR/first-run.json bash "$here/setup-code.sh" arm || fail "The first-setup flag could not be written."
+  ok "$(t 'The first web setup is armed: the code appears on the screen after the first boot')"
 fi
 
 step "Done"
 if [ -n "$restore_from" ]; then
   note "After the first boot: sudo hs rebuild, make the vault (hs vault init), put the backup password back, import the pools, sudo hs unlock. The checklist: docs/backup-and-recovery.md Case A, from step 8."
 fi
-note "Take the stick out and reboot. Then, from your PC:  ssh adminuser@$hostname_.local   (or the address your router gave it)"
+if [ -z "$restore_from" ] && [ "$role" = homeserver ]; then
+  note "Take the stick out and reboot. The screen then shows an address and a one-time code: open the address in a browser on your network (http://$hostname_.local:8480, or the IP shown) and enter the code. If the page does not open, the IP works, or: ssh $admin@$hostname_.local"
+else
+  note "Take the stick out and reboot. Then, from your PC:  ssh $admin@$hostname_.local   (or the address your router gave it)"
+fi
 if [ "$role" = homeserver ]; then
-  note "Next: create the pools (the hs command is there from the first boot: sudo hs pool bulk add; or zpool create, as in section 3 of the Homeserver guide), then sudo hs rebuild. The guide: docs/install.md."
+  note "Next: create the pools: sudo hs pool ssd --use apps, sudo hs pool tank --use data [--kind snapraid] (any names), then sudo hs rebuild. The guide: docs/install.md."
 else
   note "Next: fill the section \"Edge node\" of /etc/nixos/machine.toml, put the Tailscale auth key into /var/lib/hs/tailscale-authkey (mode 0600), then sudo nixos-rebuild switch. The guide: docs/operations.md."
 fi

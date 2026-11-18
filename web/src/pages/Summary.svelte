@@ -7,6 +7,8 @@
   import { untrack } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
   import { live } from '../live.svelte.js';
+  import { pools as poolStore, poolOfRole } from '../pools.svelte.js';
+  import { poolIcon } from '../nav.js';
   import { go } from '../route.svelte.js';
   import { changes } from '../changes.svelte.js';
   import { openPlan, jobRunning, ui } from '../ui.svelte.js';
@@ -28,6 +30,7 @@
   const updates = poll(() => (deck.data?.locked ? '' : '/api/sys/system/updates'), 60000);
   const setupRows = $derived(rows(setup));
   const setupOpen = $derived(setupRows.length > 0 && setupRows.some((r) => r[0] === 'finished' && r[1] !== 'done') ? setupRows.filter((r) => r[0] !== 'finished' && r[1] === 'open').length : 0);
+  const setupLabels = $derived(setupRows.filter((r) => r[0] !== 'finished' && r[1] === 'open').slice(0, 3).map((r) => r[2]).join(', '));
   const behind = $derived(Number(rows(updates).find((r) => r[0] === 'behind')?.[1]) || 0);
 
   const d = $derived(deck.data);
@@ -79,10 +82,11 @@
   ]);
 
   // --- one UsageBar per pool (the numbers are in the status document)
-  const pools = $derived(['bulk', 'fast'].map((n) => ({ name: n, ...(d?.pools?.[n] ?? {}) })).filter((p) => p.size > 0));
+  const pools = $derived(poolStore.rows.map((r) => ({ name: r.name, role: r.role, ...(d?.pools?.[r.name] ?? {}) })).filter((p) => p.size > 0));
 
   // --- one line per fact: icon, label, value, a note, the dot, and the page that owns it (a click opens it)
-  const OWNER = { Backup: '/protection/backup', Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': '/storage/pools/bulk', 'Parity sync': '/storage/pools/bulk', Scrub: '/storage/pools/bulk', 'Disk health': '/storage/disks?pool=bulk', 'Hottest disk': '/monitoring/hardware' };
+  const dataPage = $derived(poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools');
+  const OWNER = $derived({ Backup: '/protection/backup', Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': '/monitoring/hardware' });
   const facts = $derived.by(() => {
     const m = {};
     const jobs = [];
@@ -133,7 +137,7 @@
   </PageHeader>
 
   {#if !locked && setupOpen}
-    <Banner tone="warn" icon="list-checks">Finish the setup: {setupOpen} item{setupOpen === 1 ? '' : 's'} still open.
+    <Banner tone="warn" icon="list-checks">Finish the setup: {setupOpen} item{setupOpen === 1 ? '' : 's'} still open{setupLabels ? ` (${setupLabels})` : ''}.
       {#snippet action()}<Button size="sm" tooltip={'Open the first-run checklist'} onclick={() => go('/setup')}>Open Setup<i class="ph ph-arrow-right"></i></Button>{/snippet}
     </Banner>
   {/if}
@@ -184,7 +188,7 @@
         <div class="ctitle">Pools</div>
         {#each pools as p}
           <button class="prow" onclick={() => go(`/storage/pools/${p.name}`)}>
-            <span class="pn"><i class="ph {p.name === 'bulk' ? 'ph-cylinder' : 'ph-lightning'}"></i>{p.name}</span>
+            <span class="pn"><i class="ph ph-{poolIcon(p.role)}"></i>{p.name}</span>
             <StatusDot state={p.health && p.health !== 'ONLINE' ? 'warn' : 'ok'} label={p.health && p.health !== 'ONLINE' ? p.health.toLowerCase() : 'online'} />
             <UsageBar used={p.used} size={p.size} width={180} />
           </button>

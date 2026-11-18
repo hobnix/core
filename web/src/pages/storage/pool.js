@@ -1,11 +1,21 @@
 // helpers shared by the storage pages
-export const poolOf = (path) => (/\/storage\/fast/.test(path) ? 'fast' : 'bulk');
+// the pool rows of `hs sys pool list` (name, role data|apps, kind zfs|snapraid, state); a server without that list has these two (kind - = unknown)
+export const LEGACY_POOLS = [{ name: 'bulk', role: 'data', kind: '-', state: '-' }, { name: 'fast', role: 'apps', kind: 'zfs', state: '-' }];
 
-// live-state topic for a fixed pool read, or undefined when the arguments are not a fixed topic
-export const poolTopic = (kind, pool) => {
-  if (!['info', 'members', 'state'].includes(kind) || !['bulk', 'fast'].includes(pool)) return undefined;
-  return `pool-${kind}-${pool}`;
-};
+// rows of the list -> pools; a row with a bad name, role or kind is dropped (the same filter as the server)
+export function parsePoolRows(rows) {
+  const out = [];
+  for (const r of rows ?? []) {
+    const [name = '', role = '', kind = '', state = '-'] = r;
+    if (/^[a-z][a-z0-9]{0,11}$/.test(name) && ['data', 'apps'].includes(role) && ['zfs', 'snapraid'].includes(kind)) out.push({ name, role, kind, state });
+  }
+  return out;
+}
+
+export const ofRole = (list, role) => list.filter((p) => p.role === role).map((p) => p.name);
+
+// live-state topic of a pool read: the server's map (live.topics) knows which pools have one; undefined = read it directly
+export const poolTopic = (kind, pool, topics = {}) => topics[`/api/sys/pool/${kind}?pool=${pool}`];
 
 // `pool info` lines: "key: value" facts, then free lines (the mirror tree or the SnapRAID disk lines)
 export function parseInfo(rowList) {

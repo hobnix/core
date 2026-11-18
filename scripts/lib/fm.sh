@@ -12,15 +12,15 @@
 #   fm_esc <name>          the name with every unsafe byte as \xNN (prints it)
 #
 # Test knobs: HS_FM_TEST=1 (every folder counts as mounted), HS_FM_POOL_ROOT, HS_FM_ZFS_ROOT, HS_FM_CACHE_ROOT, HS_FM_FAST_ROOT, HS_FM_TEMP_ROOT,
-# HS_BULK_TYPE_FILE, HS_STATE_DIR, HS_BULK_CLOSED, HS_DISKS_ROOT, HS_DETACHED_ROOT, HS_LOCKED_MARKER.
+# HS_BULK_TYPE_FILE, HS_MACHINE_FILE, HS_POOLS_ROOT, HS_STATE_DIR, HS_BULK_CLOSED, HS_DISKS_ROOT, HS_DETACHED_ROOT, HS_LOCKED_MARKER.
 . "${BASH_SOURCE[0]%/*}/bulkpath.sh"
+. "${BASH_SOURCE[0]%/*}/pools.sh"
 . "${BASH_SOURCE[0]%/*}/locked.sh"
 
 fm_state_dir=${HS_STATE_DIR:-/var/lib/hs}
 fm_dir=${HS_FM_DIR:-$fm_state_dir/fm}
 fm_test=${HS_FM_TEST:-0}
 
-fm_bulk_type() { local t; t=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || true); echo "${t:-zfs}"; }
 fm_ismnt() { if [ "$fm_test" = 1 ]; then [ -d "$1" ]; else mountpoint -q "$1" 2>/dev/null; fi; }
 fm_human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1 B"; }
 fm_readonly() {
@@ -33,6 +33,11 @@ fm_zfs_root() { echo "${HS_FM_ZFS_ROOT:-/bulk}"; }
 fm_cache_root() { echo "${HS_FM_CACHE_ROOT:-/mnt/bulk/cache}"; }
 fm_fast_root() { echo "${HS_FM_FAST_ROOT:-/fast}"; }
 fm_temp_root() { echo "${HS_FM_TEMP_ROOT:-/mnt/temp}"; }
+fm_snapraid_pool() { local p; while IFS= read -r p; do [ -n "$p" ] && [ "$(pool_kind "$p")" = snapraid ] && { printf '%s\n' "$p"; return 0; }; done < <(pool_names data); return 1; }
+fm_pool_dir() {   # fm_pool_dir <pool>: the folder of the pool view (SnapRAID: the disks without the cache)
+  if [ "$1" = "$(fm_snapraid_pool 2>/dev/null || true)" ]; then fm_pool_root; return 0; fi
+  case $1 in bulk) fm_zfs_root ;; fast) fm_fast_root ;; *) pool_root "$1" ;; esac     # legacy names keep their test knobs
+}
 fm_is_closed() { grep -qx "$1" "${HS_BULK_CLOSED:-$fm_state_dir/bulk-closed}" 2>/dev/null; }
 
 fm_clean_path() {
@@ -78,15 +83,15 @@ fm_resolve() {
   local id=$1 n dir
   LID=$id; LKIND=""; LLABEL=""; LROOT=""; LFS="-"; LSIZE=0; LFREE=0; LADD=no; LMOD=no; LREASON="-"; LPOOL="-"; LDISK="-"
   LUSABLE=yes; LERR=""; LAK=$id; LREL=""; LTOP=no; LSNAP=no; LLOCK=no
-  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; return 1; }
+  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:[a-z][a-z0-9]{0,11}|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; return 1; }
   LKIND=${id%%:*}; n=${id#*:}; LLABEL=$n
   if storage_locked; then LUSABLE=no; LERR="The encrypted storage is locked: unlock it first (hs unlock)."; LREASON="storage locked"; return 1; fi
-  local bt; bt=$(fm_bulk_type)
+  local sr; sr=$(fm_snapraid_pool || true)
   local unusable=""
   case $LKIND in
     disk)
-      [ "$bt" = snapraid ] || { LERR="This server has no data disks of an array (ZFS layout)."; return 1; }
-      LDISK=$n; LPOOL=bulk; LAK=bulk; LTOP=yes; LSNAP=yes; LLOCK=yes
+      [ -n "$sr" ] || { LERR="This server has no data disks of an array (ZFS layout)."; return 1; }
+      LDISK=$n; LPOOL=$sr; LAK=$sr; LTOP=yes; LSNAP=yes; LLOCK=yes
       dir=$(disk_dir "$n"); local mode=pool
       if fm_ismnt "$dir"; then LROOT=$dir
       elif fm_ismnt "$(detached_dir "$n")"; then LROOT=$(detached_dir "$n"); mode=detached
@@ -95,29 +100,39 @@ fm_resolve() {
         LADD=yes; LMOD=yes
         if [ -e "$fm_state_dir/recovering/$n" ]; then LADD=no; LMOD=no; LREASON="out for recovery: read only, a source"
         elif [ "$mode" = detached ]; then LADD=no; LMOD=no; LREASON="detached: out of the pool, a source only"
-        elif fm_is_closed "$n"; then LADD=no; LREASON="closed: it takes no new files (hs pool bulk open $n)"; fi
+        elif fm_is_closed "$n"; then LADD=no; LREASON="closed: it takes no new files (hs pool $sr open $n)"; fi
       fi ;;
     pool)
+      pool_exists "$n" || { LERR="unknown location $id"; return 1; }
       LPOOL=$n; LAK=$n; LLABEL=$n
-      case $n in
-        bulk)
-          LTOP=yes
-          if [ "$bt" = snapraid ]; then dir=$(fm_pool_root); LSNAP=yes; LLOCK=yes; else dir=$(fm_zfs_root); fi ;;
-        fast) dir=$(fm_fast_root) ;;
-      esac
+      [ "$(pool_role "$n")" != data ] || LTOP=yes
+      [ "$n" != "$sr" ] || { LSNAP=yes; LLOCK=yes; }
+      dir=$(fm_pool_dir "$n")
       if fm_ismnt "$dir"; then LROOT=$dir; LADD=yes; LMOD=yes; else unusable="The pool $n is not mounted."; LREASON="not mounted"; fi ;;
     cache)
-      [ "$bt" = snapraid ] || { LERR="There is no upload cache on this server (ZFS layout)."; return 1; }
-      LLOCK=yes; LLABEL="bulk cache"; dir=$(fm_cache_root)
+      [ -n "$sr" ] || { LERR="There is no upload cache on this server (ZFS layout)."; return 1; }
+      LLOCK=yes; LLABEL="$sr cache"; dir=$(fm_cache_root)
       if fm_ismnt "$dir"; then LROOT=$dir; LADD=yes; LMOD=yes; else unusable="There is no upload cache mounted."; LREASON="not mounted"; fi ;;
     share)
-      local pr
-      if [ "$bt" = snapraid ]; then pr=$(fm_pool_root); LSNAP=yes; LLOCK=yes; else pr=$(fm_zfs_root); fi
-      LPOOL=bulk; LAK=bulk
-      if ! fm_ismnt "$pr"; then unusable="The pool is not mounted."; LREASON="not mounted"
-      elif [ -d "$pr/shares/$n" ] && [ ! -L "$pr/shares/$n" ]; then LROOT=$pr/shares/$n; LREL=shares/$n; LADD=yes; LMOD=yes
-      elif [ -d "$pr/sensitive/$n" ] && [ ! -L "$pr/sensitive/$n" ]; then LROOT=$pr/sensitive/$n; LREL=sensitive/$n; LADD=yes; LMOD=yes
-      else LERR="There is no share $n."; LUSABLE=no; LREASON="no such share"; return 1; fi ;;
+      local pr sp found="" unmounted=""
+      LPOOL=$(pool_default data 2>/dev/null || echo -); LAK=$LPOOL
+      [ "$LPOOL" != "$sr" ] || { LSNAP=yes; LLOCK=yes; }
+      while IFS= read -r sp; do
+        [ -n "$sp" ] || continue
+        pr=$(fm_pool_dir "$sp")
+        if ! fm_ismnt "$pr"; then unmounted=1; continue; fi
+        if [ -d "$pr/shares/$n" ] && [ ! -L "$pr/shares/$n" ]; then LROOT=$pr/shares/$n; LREL=shares/$n
+        elif [ -d "$pr/sensitive/$n" ] && [ ! -L "$pr/sensitive/$n" ]; then LROOT=$pr/sensitive/$n; LREL=sensitive/$n
+        else continue; fi
+        LPOOL=$sp; LAK=$sp; LSNAP=no; LLOCK=no
+        [ "$sp" != "$sr" ] || { LSNAP=yes; LLOCK=yes; }
+        LADD=yes; LMOD=yes; found=1
+        break
+      done < <(pool_names data)
+      if [ -z "$found" ]; then
+        if [ -n "$unmounted" ]; then unusable="The pool is not mounted."; LREASON="not mounted"
+        else LERR="There is no share $n."; LUSABLE=no; LREASON="no such share"; return 1; fi
+      fi ;;
     temp)
       dir=$(fm_temp_root)/$n
       if fm_ismnt "$dir"; then LROOT=$dir; LREASON="temporary disk: a source only"; else unusable="There is no temporary disk $n."; LREASON="not mounted"; fi ;;

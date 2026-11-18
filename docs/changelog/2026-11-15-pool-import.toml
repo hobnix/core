@@ -1,0 +1,5 @@
+date  = "2026-11-15"
+type  = "feature"
+title = "Import a ZFS pool that is already on the disks"
+docs  = "storage-and-disks#bring-in-a-pool-that-is-already-on-the-disks"
+body  = """`hs pool <pool> import` brings in a healthy ZFS pool that is on the disks but not imported, under its own name. It shows a plan first, you type the name of a disk of the pool, and the work runs as a background job. Nothing on the disks is erased, a pool that is damaged or was last used by another system is refused, and `-f` is never used."""

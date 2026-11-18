@@ -3,6 +3,7 @@
   import { poll, rows } from '../data.svelte.js';
   import { openPlan, jobRunning, ui } from '../ui.svelte.js';
   import { go } from '../route.svelte.js';
+  import { pools, poolOfRole } from '../pools.svelte.js';
   import { agoShort } from '../format.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -28,13 +29,15 @@
   const SEVERE = /BAD|failed|errors?\b|expired|ran out|not healthy|DEGRADED|FAULTED|is locked|are locked|battery is low|power is out|open to everyone/i;
   // The `hs sys` flow that fixes a problem, where there is one (the problem texts are the ones of scripts/health-check.sh). Everything else keeps its
   // pointer text only: there is no safe single button for it (a failed unit, a full disk, an open share, a UPS, a certificate).
+  // the SnapRAID pool the scrub fix is for: a snapraid row, else the data pool (a legacy server has bulk)
+  const snapName = $derived((pools.rows.find((p) => p.kind === 'snapraid') ?? pools.rows.find((p) => p.role === 'data'))?.name ?? '');
   const FIXES = [
     [/^no backup has finished yet|^last successful backup is \d+ hours old/, () => ['backup', ['now'], 'Back up now', 'Back up now']],
     [/container restore drill/, null],
     [/restore drill has succeeded|last successful restore drill/, () => ['backup', ['drill'], 'Restore drill', 'Restore drill']],
     [/off-site copy of the backup is more than/, () => ['backup', ['offsite-now'], 'Copy to the off-site repository', 'Copy off-site']],
     [/^ZFS pool (\S+) has never finished a scrub|^the last scrub of ZFS pool (\S+) finished/, (m) => ['system', ['scrub', '--pool', m[1] ?? m[2]], `Scrub ${m[1] ?? m[2]}`, 'Start a scrub']],
-    [/SnapRAID scrub/, () => ['system', ['scrub', '--pool', 'bulk'], 'Scrub bulk', 'Start a scrub']],
+    [/SnapRAID scrub/, () => (snapName ? ['system', ['scrub', '--pool', snapName], `Scrub ${snapName}`, 'Start a scrub'] : null)],
     [/^temp disk ([a-z0-9][a-z0-9-]*) has been mounted/, (m) => ['disk', [m[1], 'temp-eject'], `Eject ${m[1]}`, 'Eject']],
   ];
   function fixFor(text) {
@@ -42,7 +45,9 @@
       const m = re.exec(text);
       if (m) {
         if (!make) return null;
-        const [area, args, title, label] = make(m);
+        const fx = make(m);
+        if (!fx) return null;
+        const [area, args, title, label] = fx;
         return { area, args, title, label };
       }
     }
@@ -96,7 +101,8 @@
 
   // grouped as the design shows them (storage, backup, system, network) and each with the page of the object it is about
   const GROUPS = [['Storage', 'hard-drive', ['hard-drive', 'database', 'lock', 'usb', 'folders']], ['Backup', 'cloud-arrow-up', ['cloud-arrow-up']], ['Network', 'network', []], ['System', 'gear-six', ['lightning', 'calendar-x', 'git-branch', 'gear-six', 'warning']]];
-  const OBJECT = { 'cloud-arrow-up': ['Backup', '/protection/backup'], 'hard-drive': ['Disks', '/storage/disks?pool=bulk'], database: ['Pools', '/storage/pools/bulk'], lock: ['Encryption', '/storage/encryption'], usb: ['Unassigned disks', '/storage/disks?pool=none'], folders: ['Shares', '/storage/shares?pool=bulk'], lightning: ['Hardware', '/monitoring/hardware'], 'calendar-x': ['Expiry dates', '/protection/expiry'] };
+  const dataPool = $derived(poolOfRole('data'));
+  const OBJECT = $derived({ 'cloud-arrow-up': ['Backup', '/protection/backup'], 'hard-drive': ['Disks', dataPool ? `/storage/disks?pool=${dataPool}` : '/storage/disks'], database: ['Pools', dataPool ? `/storage/pools/${dataPool}` : '/storage/pools'], lock: ['Encryption', '/storage/encryption'], usb: ['Unassigned disks', '/storage/disks?pool=none'], folders: ['Shares', dataPool ? `/storage/shares?pool=${dataPool}` : '/storage/shares'], lightning: ['Hardware', '/monitoring/hardware'], 'calendar-x': ['Expiry dates', '/protection/expiry'] });
   const groups = $derived(GROUPS.map(([name, icon, icons]) => ({ name, icon, items: problems.filter((p) => icons.includes(p.icon)) })).filter((g) => g.items.length));
 </script>
 

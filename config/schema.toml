@@ -614,9 +614,42 @@ doc = '''
 # How the data disks under /bulk are organised. Default "zfs".
 #   "zfs"       a ZFS pool of mirror pairs: equal disks, always protected, snapshots
 #   "snapraid"  single disks of any size, merged; the parity is updated every few hours
+# Only without a pools line; with one, the kind is chosen per pool (hs pool <name> --kind).
 # Disks are added with `hs manage-pool` in both cases, never listed here.'''
 value = '''
 bulkType = "snapraid"'''
+
+[[item]]
+kind = "option"
+key = "pools"
+type = "table"
+required = false
+settable = false
+secret = false
+default = 'null'
+doc = '''
+# The storage pools of this server: the key is the pool name (a lower case letter, then up to 11 letters or digits),
+# `role` is "data" (shares) or "apps" (Incus storage, SSD shares), `kind` is "zfs" or "snapraid" (at most one).
+# Without this line the two classic rows apply, derived from bulkType.
+# `pools = {}` is a server without any pool: apps run on the system disk, no shares. The line is written by
+# the installer and `hs pool`, not by hand.'''
+value = '''
+pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }'''
+
+[[item]]
+kind = "option"
+key = "incusDefaultPool"
+type = "string"
+required = false
+settable = false
+secret = false
+default = 'null'
+page = "storage"
+doc = '''
+# The apps pool behind the Incus storage pool `default`, or "dir" for Incus' folder on the system disk.
+# Written by hs pool when a second apps pool is added, never by hand. Without it: the first apps pool (or dir when there is none).'''
+value = '''
+incusDefaultPool = "ssd"'''
 
 [[item]]
 kind = "option"
@@ -785,6 +818,23 @@ doc = '''
 #   sudo net ads join -U Administrator'''
 value = '''
 adDomain = { realm = "AD.HOME.LAN", workgroup = "HOME" }'''
+
+[[item]]
+kind = "option"
+key = "adminUser"
+type = "string"
+required = false
+settable = false
+secret = false
+default = '"adminuser"'
+pattern = '^[a-z_][a-z0-9_-]{0,30}$'
+hint = "lowercase letters, digits, _ and -; starts with a letter or _"
+doc = '''
+# The login for SSH, sudo, the web interface (local sign-in) and the owner of every file on the shares.
+# Chosen at install. Changing it on an installed server is not supported: the old account, its home
+# and the owner of all share files would stay.'''
+value = '''
+adminUser = "adminuser"'''
 
 [[item]]
 kind = "section"

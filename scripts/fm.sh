@@ -6,7 +6,7 @@
 # docs/PLAN-file-manager.md. The interface reads and changes only through `hs sys fm ...`; every rule below is enforced HERE, never only in the UI.
 #
 #   locations             status ok, then loc<TAB>id<TAB>kind<TAB>label<TAB>fs<TAB>size_bytes<TAB>free_bytes<TAB>writable<TAB>reason<TAB>pool<TAB>disk
-#                         ids: disk:data-NN pool:bulk pool:fast cache:bulk share:<name> temp:<name>   (storage locked: status ok + locked<TAB>yes and no loc rows)
+#                         ids: disk:data-NN pool:<name> (every data pool; an apps pool when mounted) cache:bulk share:<name> temp:<name>   (storage locked: status ok + locked<TAB>yes and no loc rows)
 #   pair <a> <b>          status ok | status refused + reason (the same-files rule: a pool disk and the pool view of its array are never both sides)
 #   ls <loc> [--path P] [--cursor C] [--limit N]
 #                         status ok, row<TAB>type(d|f|l)<TAB>bytes<TAB>mtime<TAB>name<TAB>disks<TAB>flags<TAB>busy, then cursor<TAB>X or end. Folders first, then by name.
@@ -20,13 +20,15 @@
 #
 # Tested with folders standing in for the locations (HS_FM_TEST=1, tests/fm.sh); NOT yet on real mergerfs / ZFS (docs/PLAN-file-manager.md section 7).
 # Test knobs: HS_FM_TEST, HS_FM_DIR, HS_FM_SYNC=1 (start runs the job in the foreground), HS_FM_NO_RENAME=1 (folders on one filesystem stand in for disks: copy+verify, no rename), HS_FM_MARGIN (bytes), HS_FM_PARITY_CMD, HS_FM_POOL_ROOT, HS_FM_CACHE_ROOT,
-# HS_FM_FAST_ROOT, HS_FM_TEMP_ROOT, HS_FM_ZFS_ROOT, HS_BULK_TYPE_FILE, HS_STATE_DIR, HS_DISKS_ROOT, HS_DETACHED_ROOT, HS_LOCK, HS_LOCK_ADMIN, HS_CAPABILITIES_FILE.
+# HS_FM_FAST_ROOT, HS_FM_TEMP_ROOT, HS_FM_ZFS_ROOT, HS_BULK_TYPE_FILE, HS_MACHINE_FILE, HS_POOLS_ROOT, HS_STATE_DIR, HS_DISKS_ROOT, HS_DETACHED_ROOT, HS_LOCK, HS_LOCK_ADMIN, HS_CAPABILITIES_FILE.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)   # absolute: the background job runs from another folder
 . "$here/lib/fm.sh"
 . "$here/lib/capability.sh"
 . "$here/lib/bulklock.sh"
 . "$here/lib/setting.sh"
+. "$here/lib/admin.sh"
+adm="$(admin_user)"
 
 # The safety switch (runtime setting fileManagerWrite, default off): this code has never run on real disks. Browsing, pairs and plans work either way.
 write_on() { [ "$(setting_get fileManagerWrite 2>/dev/null || true)" = true ]; }
@@ -45,8 +47,8 @@ cmd_locations() {
   if storage_locked; then printf 'status\tok\nlocked\tyes\n'; return 0; fi
   echo "status	ok"
   if write_on; then printf 'write\tyes\n'; else printf 'write\tno\n'; fi
-  local ids=() d n bt; bt=$(fm_bulk_type)
-  if [ "$bt" = snapraid ]; then
+  local ids=() d n p sr; sr=$(fm_snapraid_pool || true)
+  if [ -n "$sr" ]; then
     local m; local -A seen=()
     for d in "$(disks_root)"/data-[0-9]* "${HS_DETACHED_ROOT:-/mnt/bulk}"/data-[0-9]* "$fm_state_dir"/recovering/data-[0-9]*; do
       [ -e "$d" ] || continue
@@ -55,18 +57,25 @@ cmd_locations() {
       seen[$m]=1; ids+=("disk:$m")
     done
   fi
-  ids+=("pool:bulk")
-  fm_ismnt "$(fm_fast_root)" && ids+=("pool:fast") || true
-  [ "$bt" != snapraid ] || { fm_ismnt "$(fm_cache_root)" && ids+=("cache:bulk") || true; }
-  local pr; if [ "$bt" = snapraid ]; then pr=$(fm_pool_root); else pr=$(fm_zfs_root); fi
-  if fm_ismnt "$pr"; then
-    for d in "$pr"/shares/*/ "$pr"/sensitive/*/; do
-      [ -d "$d" ] || continue
-      n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || continue
-      case " ${ids[*]} " in *" share:$n "*) continue ;; esac
-      ids+=("share:$n")
-    done
-  fi
+  while IFS= read -r p; do [ -n "$p" ] && ids+=("pool:$p"); done < <(pool_names data)
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if fm_ismnt "$(fm_pool_dir "$p")"; then ids+=("pool:$p"); fi
+  done < <(pool_names apps)
+  [ -z "$sr" ] || { fm_ismnt "$(fm_cache_root)" && ids+=("cache:bulk") || true; }
+  local pr
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    pr=$(fm_pool_dir "$p")
+    if fm_ismnt "$pr"; then
+      for d in "$pr"/shares/*/ "$pr"/sensitive/*/; do
+        [ -d "$d" ] || continue
+        n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || continue
+        case " ${ids[*]} " in *" share:$n "*) continue ;; esac
+        ids+=("share:$n")
+      done
+    fi
+  done < <(pool_names data)
   for d in "$(fm_temp_root)"/*/; do
     [ -d "$d" ] || continue
     n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || continue
@@ -583,7 +592,7 @@ setup_chown() {
   esac
   if [ "${S_KIND:-}" = temp ]; then chown_mode=admin; fi
   if [ "$(id -u)" = 0 ] && [ "$fm_test" != 1 ]; then
-    admin_ids="$(id -u adminuser 2>/dev/null || echo 0):$(id -g adminuser 2>/dev/null || echo 0)"
+    admin_ids="$(id -u "$adm" 2>/dev/null || echo 0):$(id -g "$adm" 2>/dev/null || echo 0)"
   fi
 }
 fm_arel_for() { if [ -n "$1" ] && [ -n "$2" ]; then AREL=$1/$2; elif [ -n "$1" ]; then AREL=$1; else AREL=$2; fi; }

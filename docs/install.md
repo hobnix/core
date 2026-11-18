@@ -8,11 +8,11 @@ and the web interface. It ends with the first-run checklist. Everything after th
 - A PC for the server with UEFI boot, one disk for the system, and the disks for your data. **Every disk you use is erased.** Back up
   what you want to keep first.
 - A second computer on the same network with an SSH client, and a USB stick for the installer.
-- A decision about how the data disks work, made **before** the install because `bulkType` is read during it (see
-  [Storage and disks](storage-and-disks.md)):
-  - `zfs` (the default): disks in mirrored pairs, every file stored twice, protected at once.
-  - `snapraid`: single disks of any size merged into one folder, with a parity disk; new files are protected after the next nightly sync.
-  The pool `fast` for the SSDs is always a ZFS mirror.
+- A thought about how the data disks work. You decide it later, when you create each pool with `hs pool` (see
+  [Storage and disks](storage-and-disks.md)); the installer needs no answer:
+  - ZFS (the default): disks in mirrored pairs, every file stored twice, protected at once.
+  - SnapRAID (`--kind snapraid`): single disks of any size merged into one folder, with a parity disk; new files are protected after the next nightly sync.
+  The pools have names you choose. Not tested on hardware yet.
 
 ## Create an SSH key
 
@@ -61,6 +61,22 @@ It asks for the system disk, a server name, your public SSH key, a time zone and
 disk is erased**, and you confirm by typing its name. Every question has an option for unattended runs (`--disk`, `--confirm-disk`,
 `--hostname`, `--key-file`, `--timezone`, `--preset`). It installs the base system, writes `machine.toml` with a generated `hostId` and
 applies the preset. Reboot, remove the stick, and continue with [First start](#first-start).
+
+#### Network check
+
+Not tested on hardware yet.
+
+`hs-install` checks the network before it asks for a disk, and stops when the check fails, so nothing is erased. Plug in a cable between
+the server and the router; the server gets its address by DHCP. The same check is available as data:
+
+```bash
+hs sys net check
+```
+
+It prints six rows: the cable (link), Wi-Fi, the address, the route to the router, the name lookup (DNS) and the clock. A `fail` row comes
+with a one-line fix: connect the cable, turn DHCP on in the router, or set the clock with `date -s "YYYY-MM-DD HH:MM:SS"`. A server needs
+a cable: Wi-Fi is not supported, so a wireless card alone only gets a warning. There is no offline install, because the system is not on
+the stick. When the check passes, reserve the shown address for this server on your router, so it keeps the same address.
 
 To bring back a dead server from its backup instead, see [Restore from a backup](#restore-from-a-backup).
 
@@ -200,7 +216,7 @@ nano /mnt/etc/nixos/machine.toml
 | --- | --- |
 | `hostId` | A random value: run `head -c4 /dev/urandom \| od -A none -t x4` and use the result, for example `"a1b2c3d4"`. It must never change later, ZFS remembers it |
 | `sshKeys` | The whole line of `id_hobnix.pub`, in quotes, inside the brackets |
-| `bulkType` | Only for `snapraid`: remove the `#` in front of `bulkType = "snapraid"` now, not later |
+| `pools` | Leave it as it is (`pools = {}`): the pools get their names when you create them with `hs pool` |
 
 With `hostId` still `CHANGEME` the install stops with a hint. Install the base system:
 
@@ -249,16 +265,17 @@ It prints `root` after asking for the password of `adminuser`.
 
 ## Create the storage pools
 
-`zpool status` reports no pools yet, which is right. The disk menu lists the free disks with size and model, asks which pool to create
-(`fast` from SSDs, `bulk` from the data disks) and shows its plan, including the exact `zpool create` command, before you type the pool
-name to confirm. The system disk and disks that are in use are never offered.
+`zpool status` reports no pools yet, which is right. `hs pool` lists the free disks with size and model and shows its plan, including the
+exact `zpool create` command, before you type the pool name to confirm. The system disk and disks that are in use are never offered.
+Choose the names yourself: one pool for the apps (SSDs), one for the data. Not tested on hardware yet.
 
 ```bash
-sudo bash /etc/nixos/scripts/manage-pool.sh
+sudo hs pool ssd --use apps
+sudo hs pool tank --use data
 ```
 
-Run it once for `fast` and once for `bulk`. With `bulkType = "snapraid"` the data disks are added the same way and one of them is the
-parity disk. The full story, including adding, replacing and removing disks later, is in [Storage and disks](storage-and-disks.md).
+For a SnapRAID data pool add `--kind snapraid`: the data disks are added the same way and one of them is the parity disk. The full story,
+including adding, replacing and removing disks later, is in [Storage and disks](storage-and-disks.md).
 
 Check the result:
 
@@ -266,11 +283,10 @@ Check the result:
 zpool status
 ```
 
-`fast` must be `ONLINE` with a `mirror-0`. With `zfs`, `bulk` is `ONLINE` as well. With `snapraid`, `zpool status` shows only `fast`, and you
-check `bulk` like this:
+A ZFS pool must be `ONLINE` (a mirror shows `mirror-0`). A SnapRAID pool does not appear in `zpool status`; check it like this:
 
 ```bash
-df -h /bulk
+df -h /tank
 ```
 
 ## Apply the full configuration
@@ -404,14 +420,27 @@ and is meant for your home network and Tailscale: never give it a public route. 
 the install; with a domain, members of Domain Admins can sign in too ([Users and shares](users-and-shares.md)). Not tested on hardware
 yet.
 
-### First setup with a one-time code (proposed)
+### First setup with a one-time code
 
-Design: ADR 0022 (`docs/adr/0022-first-run-console-token.md`). The server part is built; the boot step that shows the code on the screen is not
-yet, so a fresh install does not use this by itself. Not tested on hardware yet.
+Design: ADR 0022 (`docs/adr/0022-first-run-console-token.md`). A server made with `hs-install` serves the web interface from its first boot
+(the installer turns `webUi` on; the program is taken from the binary cache when it has it, otherwise built during the install, so the install needs a network). After the
+first boot the screen and the serial console show an address and the code: `http://<name>.local:8480` and the IP address of the server.
+If `<name>.local` does not open on your network, use the IP. The server takes its address by DHCP; reserve it on your router. The code is
+never written to the journal or a file. A server restored with `hs-restore` or updated from an older version has no waiting setup and shows
+nothing; an edge node (public VPS) serves no web page. The code goes to the screen and, as a second copy, to the first serial port. The installer also asks for an `adminuser` password for sudo; the setup then replaces it. Not tested on hardware yet.
 
 On a server whose setup is waiting, the sign-in page becomes **First setup**. The server's own screen (or serial console) shows a one-time
 code; type it into the page and choose a password for `adminuser`. The code works once and for 60 minutes, five wrong tries make it
 useless, and it is only ever printed on the console, never sent anywhere. You are then signed in.
+
+After the password the page leads you through the **first-run wizard** (`/setup/first-run`):
+
+1. **Account:** your administrator name, the server name (read only; a rename needs `hs config set hostName` and a rebuild) and the language of the interface.
+2. **Preset:** pick what the server is for. A preset fills in only what is not set yet and never overwrites a value. Single capabilities are shown greyed out; choosing them comes in a later version. Skip keeps the minimal setup.
+3. **Done:** lists what is still open. Machine settings of a preset take effect with `hs rebuild`; the wizard does not start it.
+
+Network and storage steps are reserved places and are not shown yet. **Finish** closes the wizard for good; the **Setup** page keeps the
+checklist (below). A server set up before the wizard existed never shows it. Not tested on hardware yet.
 
 Lost or expired code, or somebody else may have seen it: on the console run
 
@@ -444,7 +473,7 @@ done:
 | Language | The default language of the web interface (`en` or `de`); the `hs` commands print English only | `hs config set language de` |
 | Time zone | Without it times in messages are UTC | `hs config set timeZone Europe/Berlin` |
 | Notifications | A push address, so you hear about a disk problem | `hs config set notifications true` |
-| Storage pool | A pool, if you skipped it | `hs pool bulk add` |
+| Storage pool | A pool, if you skipped it | `hs pool <name> --use data` |
 | A first share | A folder you see from Windows | `hs share add <name>` |
 | Backup disk | A disk for `hs backup` | `hs backup init <device>` |
 | Vault (secrets) | Only with a vault: the vault must be open for backup and the like | `hs unlock` |

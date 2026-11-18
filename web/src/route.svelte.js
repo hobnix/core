@@ -4,7 +4,7 @@
 //   route.full  the address as it is in the bar            /node/homeserver/storage/disks
 //   route.node  the node's name                            homeserver        ('' = an address without a node: not yet redirected)
 //   route.path  the INNER path, which pages and tests use  /storage/disks         ('/' = the node's Summary)
-//   route.query the search part as an object               { pool: 'bulk' }
+//   route.query the search part as an object               { pool: 'tank' }
 // go('/instances') on a page means "this page of the CURRENT node"; go('/node/other/health') names a node. url(path) gives the address for an <a href>.
 import { redirect } from './redirects.js';
 

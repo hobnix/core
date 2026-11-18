@@ -138,8 +138,20 @@ vlans = { home = { id = 95, default = true } }
 # How the data disks under /bulk are organised. Default "zfs".
 #   "zfs"       a ZFS pool of mirror pairs: equal disks, always protected, snapshots
 #   "snapraid"  single disks of any size, merged; the parity is updated every few hours
+# Only without a pools line; with one, the kind is chosen per pool (hs pool <name> --kind).
 # Disks are added with `hs manage-pool` in both cases, never listed here.
 # bulkType = "snapraid"
+
+# The storage pools of this server: the key is the pool name (a lower case letter, then up to 11 letters or digits),
+# `role` is "data" (shares) or "apps" (Incus storage, SSD shares), `kind` is "zfs" or "snapraid" (at most one).
+# Without this line the two classic rows apply, derived from bulkType.
+# `pools = {}` is a server without any pool: apps run on the system disk, no shares. The line is written by
+# the installer and `hs pool`, not by hand.
+# pools = { tank = { role = "data", kind = "zfs" }, ssd = { role = "apps", kind = "zfs" } }
+
+# The apps pool behind the Incus storage pool `default`, or "dir" for Incus' folder on the system disk.
+# Written by hs pool when a second apps pool is added, never by hand. Without it: the first apps pool (or dir when there is none).
+# incusDefaultPool = "ssd"
 
 # How often the SnapRAID parity is updated, in hours. Default 24 (once a night at 03:00, so the
 # disks can sleep the rest of the day); allowed 1 2 3 4 6 8 12 24.
@@ -178,6 +190,11 @@ vlans = { home = { id = 95, default = true } }
 # sets this up. After the rebuild join once:
 #   sudo net ads join -U Administrator
 # adDomain = { realm = "AD.HOME.LAN", workgroup = "HOME" }
+
+# The login for SSH, sudo, the web interface (local sign-in) and the owner of every file on the shares.
+# Chosen at install. Changing it on an installed server is not supported: the old account, its home
+# and the owner of all share files would stay.
+# adminUser = "adminuser"
 
 # ═══ History and status ═══════════════════════════════════════════════════
 

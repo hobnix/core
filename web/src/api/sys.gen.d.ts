@@ -1295,6 +1295,17 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "net.check": {
+    /** the network check of the installer as data: item (link|wireless|address|route|dns|clock), state (ok|warn|fail), value (- = none), fix (- = none) */
+    words: ["net", "check"];
+    path: "/net/check";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([item: "link" | "wireless" | "address" | "route" | "dns" | "clock", state: "ok" | "warn" | "fail", value: Field, fix: Field])[];
+  };
   "net.nics": {
     /** the physical network cards: name, link (up|down), MAC (- = none), current (yes = the nic of machine.toml; listed first) */
     words: ["net", "nics"];
@@ -1625,6 +1636,17 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "pool.list": {
+    /** the pools with their state: name, role (data|apps), kind (zfs|snapraid), state (online|degraded|missing|locked|unmounted); no pool = no output */
+    words: ["pool", "list"];
+    path: "/pool/list";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, role: "data" | "apps", kind: "zfs" | "snapraid", state: "online" | "degraded" | "missing" | "locked" | "unmounted"])[];
+  };
   "pool.members": {
     /** members of the bulk pool */
     words: ["pool", "members"];
@@ -1729,6 +1751,39 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string;
+  };
+  "preset.list": {
+    /** the presets: name, title, description, capabilities (space separated, - = none) */
+    words: ["preset", "list"];
+    path: "/preset/list";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [name: Field, title: Field, description: Field, capabilities: Field][];
+  };
+  "preset.plan.by_action": {
+    /** what applying a preset would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused) */
+    words: ["preset", "plan", "<action>"];
+    path: "/preset/plan/{action}";
+    method: "post";
+    class: "plan";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "preset.start.by_action": {
+    /** do it (hs sys preset start apply <name>); fills only what is not set, answers done */
+    words: ["preset", "start", "<action>"];
+    path: "/preset/start/{action}";
+    method: "post";
+    class: "start";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
   };
   "reads.collect": {
     /** read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals) */
@@ -2042,6 +2097,28 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "setup.plan.by_action": {
+    /** what closing the first-run wizard would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused) */
+    words: ["setup", "plan", "<action>"];
+    path: "/setup/plan/{action}";
+    method: "post";
+    class: "plan";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "setup.start.by_action": {
+    /** do it (hs sys setup start wizard-done); answers done */
+    words: ["setup", "start", "<action>"];
+    path: "/setup/start/{action}";
+    method: "post";
+    class: "start";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
   };
   "shares.acl": {
     /** who may use a share */
@@ -2449,6 +2526,17 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "storage.discover": {
+    /** what the server finds on its disks: one line per whole disk with size, bus, model, what it holds and in which state (read only) */
+    words: ["storage", "discover"];
+    path: "/storage/discover";
+    method: "get";
+    class: "read";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([disk: Field, size: Field, bus: "sata" | "nvme" | "usb" | "sas" | "virtio" | "other", model: Field, kind: "os" | "empty" | "zfs" | "snapraid" | "backup" | "luks" | "foreign", label: Field, state: "system" | "free" | "imported" | "importable" | "damaged" | "mounted" | "unmounted" | "protected" | "locked" | "open" | "has-data"])[];
   };
   "system.cleanup": {
     /** the cleanup report as plain text (read only, changes nothing) */

@@ -7,10 +7,8 @@ export const tree = [
       {
         label: 'Storage', icon: 'database', path: '/storage', storage: true,
         children: [
-          { label: 'Pools', icon: 'cylinder', path: '/storage/pools', storage: true, children: [
-            { label: 'bulk', icon: 'cylinder', path: '/storage/pools/bulk', storage: true },
-            { label: 'fast', icon: 'lightning', path: '/storage/pools/fast', storage: true },
-          ] },
+          // the pools of this server are added under it at render time (nodeItems poolRows)
+          { label: 'Pools', icon: 'cylinder', path: '/storage/pools', storage: true },
           { label: 'Disks', icon: 'hard-drive', path: '/storage/disks', storage: true },
           { label: 'Incident', icon: 'first-aid-kit', path: '/storage/incident', storage: true },
           { label: 'Shares', icon: 'folders', path: '/storage/shares', storage: true },
@@ -110,13 +108,29 @@ export const vpsTree = [HEALTH, ...edgeItems];
 // kind: 'main' | 'vps' | 'edge' | 'peer' (hs sys node list); caps: the capability names of the node (main: the session answer, remote: its status document)
 // capItems: tree items for the capabilities that have a settings page (settings/layout.js capEntries); they go under Settings > Capabilities.
 // The tree is copied, never changed. (nav.js stays free of the generated JSON: tests import it in plain node.)
-export function nodeItems(kind, caps, exts, capItems = []) {
-  if (kind === 'main') return [...withCapItems(visible(mainTree, caps), capItems), ...extensionItems(exts)];
+// poolRows: the pool rows of the server (pools.svelte.js, [{name, role, ...}]); they become the children of Storage > Pools.
+export function nodeItems(kind, caps, exts, capItems = [], poolRows = []) {
+  if (kind === 'main') return [...withPoolItems(withCapItems(visible(mainTree, caps), capItems), poolRows), ...extensionItems(exts)];
   if (kind === 'vps' || kind === 'edge') {
     const have = Array.isArray(caps) ? caps : null;
     return [HEALTH, ...edgeItems.filter((i) => kind === 'vps' && !have ? true : !EDGE_NEEDS[i.path] || (have ?? []).includes(EDGE_NEEDS[i.path]))];
   }
   return [HEALTH, ...(Array.isArray(caps) ? peerItems.filter((i) => caps.includes(i.capability)) : [])];
+}
+
+// the icon of a pool by role: the apps pool is the fast one
+export const poolIcon = (role) => (role === 'apps' ? 'lightning' : 'cylinder');
+
+export function poolItems(poolRows) {
+  return (poolRows ?? []).map((r) => ({ label: r.name, icon: poolIcon(r.role), path: `/storage/pools/${r.name}`, storage: true }));
+}
+
+function withPoolItems(items, poolRows) {
+  if (!poolRows?.length) return items;
+  const kids = poolItems(poolRows);
+  return items.map((it) => it.path === '/storage' && it.children
+    ? { ...it, children: it.children.map((c) => (c.path === '/storage/pools' ? { ...c, children: kids } : c)) }
+    : it);
 }
 
 function withCapItems(items, capItems) {
@@ -145,7 +159,8 @@ export function itemOf(path) {
     }
     return null;
   };
-  return walk(tree);
+  // a pool page (/storage/pools/<name>) is a page of the Pools item
+  return walk(tree) ?? (path.startsWith('/storage/pools/') ? itemOf('/storage/pools') : null);
 }
 
 export function titleOf(path) {
@@ -157,5 +172,5 @@ export function titleOf(path) {
     }
     return null;
   };
-  return walk(tree, []);
+  return walk(tree, []) ?? (path.startsWith('/storage/pools/') ? [...(titleOf('/storage/pools') ?? []), path.slice('/storage/pools/'.length)] : null);
 }
