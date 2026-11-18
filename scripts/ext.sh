@@ -161,8 +161,22 @@ cmd_enable() {
 }
 
 cmd_disable() {
-  local n=${1:-} d cur=() keep=() x deps
+  local n=${1:-} d cur=() keep=() x deps found=0
   [ -n "$n" ] || usage
+  if ! exists "$n" && [[ "$n" =~ ^[a-z][a-z0-9-]{0,30}$ ]]; then
+    # a name that is still switched on but whose package is gone (removed by hand, or moved to another repository): take the leftover out
+    mapfile -t cur < <(caps_list)
+    for x in ${cur[@]+"${cur[@]}"}; do [ "$x" != "$n" ] || found=1; done
+    grep -qxF -- "$n" "$state/capabilities-on" 2>/dev/null && found=1
+    if [ "$found" = 1 ]; then
+      for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$n" ] || keep+=("$x"); done
+      if [ ${#keep[@]} -ne ${#cur[@]} ]; then caps_write ${keep[@]+"${keep[@]}"}; fi
+      overlay_del on "$n"
+      ok "$(t "'%s' is not installed on this server; the leftover switch is out of the settings." "$n")"
+      next_step "hs rebuild"
+      return 0
+    fi
+  fi
   need_package "$n"
   d=$(ext_package_dir "$n")
   if is_recipe "$n"; then fail_fix "$(t "'%s' is a recipe: its container is managed with hs ct." "$n")" "hs ct"; fi
