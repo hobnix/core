@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 is not reviewed.
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 has its decisions (6.3).
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -167,8 +167,8 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 | Template | Used for | Body | Address |
 |---|---|---|---|
 | **Group** | Storage, Instances, Apps, Network, People, Health, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
-| **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes | filter tabs, `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
-| **Object** | one disk, pool, share, instance, app, user, backup job | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
+| **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes, Marketplace (card view), Updates | filter tabs, `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
+| **Object** | one disk, pool, share, instance, user, package or app | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
 | **Feed** | Events, Notifications, Jobs, Health problems | time-ordered entries with filters; each entry links to the object it is about; acknowledge where it applies (#619) | `/<group>/<kind>`, filters in the address |
 | **Flow** | first-run wizard, app wizard, storage incident, capability setup | `Wizard` steps with progress, a way out that loses nothing, a last step that opens the object page | `/<group>/<kind>/new` or `/setup` |
 | **Settings** | Settings pages | form built from `layout.gen.json`, grouped by section, saved through a plan | `/settings/<page>` |
@@ -202,10 +202,10 @@ All three read the same job records (jobs and events, #480) and follow events; n
 
 Decided 2026-11-18:
 
-- **Five objects get an Object page:** disk, pool, share, instance, user (#453). Every other object (group, certificate, service, backup job, node, app and so on) has an address and a quick look, and its page is the List with `?sel=`. An object moves up to an Object page when its quick look no longer fits; that is a change to this document. The table in 1.1 lists the shape each object had before this decision; read "object" there as "address and quick look" for everything but the five.
+- **Seven objects get an Object page:** disk, pool, share, instance, user (#453), and package and app (#474, #478; changed by 6.3). Every other object (group, certificate, service, backup job, node, app and so on) has an address and a quick look, and its page is the List with `?sel=`. An object moves up to an Object page when its quick look no longer fits; that is a change to this document. The table in 1.1 lists the shape each object had before this decision; read "object" there as "address and quick look" for everything but the five.
 - **At most four tabs** on an Object page: Overview plus up to three of its own. History is the job strip, not a tab.
 - **Health problems is a Feed.** Severity, acknowledge and undo are features of a Feed entry.
-- **Settings pages stay generated forms.** No Settings page becomes an Object page.
+- **Settings pages stay generated forms.** No Settings page becomes an Object page. One exception, decided in 6.3: Settings > Updates is a List page (#476).
 - **Destructive actions sit in a marked section at the bottom** of the Object page, each through a plan that asks for the name.
 
 ## 4. Behaviours that cross pages (#772)
@@ -259,7 +259,7 @@ Draft, not reviewed. Each component is traced to the templates (3.2) and behavio
 | `Drawer` | 12 files | becomes the quick look overlay (3.3), built on `Dialog` | List |
 | `Split` | 9 pages | removed after the quick look replaces it; the list no longer narrows | List |
 | `Wizard` | 2 pages | sits on a `Stepper` with progress (#448) | Flow |
-| `Table`, `UsageBar`, `Spark` (shell) | in use | `Table`: selected row in the address, row action menu | List |
+| `Table`, `UsageBar`, `Spark` (shell) | in use | `Table`: selected row in the address, row action menu; a card view of the same rows for the Marketplace (6.3) | List |
 | `PageHeader` (shell) | in use | status chip beside the name, More menu for actions beyond two (3.1) | every template |
 | `PageFrame`, `PageState` (shell) | in use | none | every template |
 | `PlanDialog`, `CreateDialog` (shell) | in use | rebuilt on `Dialog` (#447) | every action |
@@ -356,11 +356,13 @@ Draft, not reviewed. Every open web issue, and the issues of other areas that ad
 | G6 | #456 (0.11) and #573 (0.4) are one fix: pool names from data. | Do it once, in 0.4; close #456 into it. |
 | G7 | #424, #478 and #195 each describe a page built from a manifest. | One renderer for all three, or they diverge. |
 
-### 6.3 Open questions for review
+### 6.3 Decisions
 
-- G2: do Package and App join the five objects with an Object page?
-- G3: does Settings > Updates become a List or an Object page, as an exception to the generated forms?
-- G4: does the List template get a card view, or does the Marketplace keep a page of its own?
-- G5: are Login and first-run setup exempt, or a Flow?
-- G6: close #456 into #573 and do the fix in 0.4?
-- G7: one manifest-built page for #424, #478 and #195?
+Decided 2026-11-18:
+
+- **G2: Package and App get an Object page.** Seven objects have one (see 3.6). The package page and the app page are built from the manifest.
+- **G3: Settings > Updates is a List page** (system, apps and packages), an exception to the generated forms. It stays under Settings in the tree.
+- **G4: the List template gets a card view.** The Marketplace uses it, with categories as filter tabs and Installed and Updates as tabs. The card view is part of `Table` (5.1).
+- **G5: Login and first-run setup are exempt** from the templates, like Files. The first-run wizard (#183) is a Flow after sign-in.
+- **G6: #456 is closed into #573.** The pool-name fix is done once, in 0.4.
+- **G7: one renderer** builds the manifest pages of #424, #478 and #195. It uses the Object template.
