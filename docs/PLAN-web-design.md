@@ -445,6 +445,6 @@ The mockups are a Design canvas ("Hobnix web design 0.8.5", private to the owner
 | Drawer open: Jobs, Logs, Disk events, Reports | the bottom drawer expanded, one board per tab: running, waiting and failed jobs; a log with source, level and follow; plugged, pulled, SMART and scrub events; generated reports and the next scheduled one (3.4) |
 | Top bar, Jobs drawer | the shell pieces on their own; the logo is the real mark from `ui/Logo.svelte` |
 
-One idea appears in the boards that no issue carries yet: the Marketplace "fits this server" check (an app's needs, such as memory and storage, compared with what the server has free). It is a proposal for the owner to accept or drop, not a decision of this document. The Reports tab already exists in the current bottom panel; the board only shows how its content could look.
+One idea appears in the boards: the Marketplace "fits this server" check, tracked as hobnix/server#793 (an app's needs, such as memory and storage, compared with what the server has free). It is not a decision of this document. The Reports tab already exists in the current bottom panel; the board only shows how its content could look.
 
 Not seen by me in a browser: the canvas needs the owner's sign-in, so the owner reviewed it.
