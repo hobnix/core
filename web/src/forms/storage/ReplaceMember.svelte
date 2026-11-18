@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Replace a member of a pool with a free disk (hs sys pool plan|start <pool> replace --member <name> --disks <id> ...).
   // SnapRAID can format the new disk with another filesystem or LUKS; ZFS takes the disk as it is.
   import CreateDialog from '../../shell/CreateDialog.svelte';
@@ -29,7 +30,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Member to replace</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     <div class="field">
       <label for="rp-disks">New disk (it is erased)</label>

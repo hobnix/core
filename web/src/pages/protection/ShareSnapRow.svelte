@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan, jobRunning } from '../../ui.svelte.js';
@@ -17,7 +18,7 @@
 <tr>
   <td style="padding:4px 8px">{name}</td>
   <td class="n400" style="padding:4px 8px">{pool}</td>
-  <td style="padding:4px 8px">{#if hist.loaded && !hist.error}<button class="tagbtn tag {auto ? 'tag-accent' : 'tag-neutral'}" use:tip={auto ? 'Turn automatic snapshots off' : 'Turn automatic snapshots on'} onclick={() => openPlan('shares', [name, 'auto', '--to', auto ? 'off' : 'on'], `Automatic snapshots of ${name} ${auto ? 'off' : 'on'}`)}>{auto ? 'on' : 'off'}</button>{/if}</td>
+  <td style="padding:4px 8px">{#if hist.loaded && !hist.error}<button class="tagbtn" use:tip={auto ? 'Turn automatic snapshots off' : 'Turn automatic snapshots on'} onclick={() => openPlan('shares', [name, 'auto', '--to', auto ? 'off' : 'on'], `Automatic snapshots of ${name} ${auto ? 'off' : 'on'}`)}><Chip tone={auto ? 'accent' : ''}>{auto ? 'on' : 'off'}</Chip></button>{/if}</td>
   <td style="padding:4px 8px">{hist.loaded && !hist.error ? snaps.length : ''}</td>
   <td class="n300" style="padding:4px 8px">{hist.loaded && !hist.error ? newest : ''}</td>
   <td style="padding:2px 8px">

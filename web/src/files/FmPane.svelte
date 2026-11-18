@@ -126,7 +126,7 @@
         {#if loc}<Chip>{loc.kind}</Chip><b class="mono">{loc.label}</b>{#if loc.fs}<span class="fsx">{loc.fs}</span>{/if}{:else}<span class="fsx">{p.loc || 'Choose a location'}</span>{/if}
         <span class="cv" aria-hidden="true"></span>
       </button>
-      {#if loc && !loc.writable}<span class="tag tag-neutral warnchip" use:tip={loc.reason || 'Nothing can be written here'}>{loc.modifiable ? 'closed' : 'read only'}</span>{/if}
+      {#if loc && !loc.writable}<Chip tone="warn" title={loc.reason || 'Nothing can be written here'}>{loc.modifiable ? 'closed' : 'read only'}</Chip>{/if}
       <span class="grow"></span>
       <input class="input fmfilter" type="search" placeholder="Filter" aria-label="Filter the list" data-fmfilter={side} bind:value={p.filter} onkeydown={(e) => { if (e.key === 'Escape') { p.filter = ''; e.currentTarget.blur(); e.stopPropagation(); } else if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key !== 'Tab') e.stopPropagation(); }} />
       <button class="btn btn-ghost btn-icon sq" aria-pressed={p.hidden} aria-label="Show hidden files" use:tip={p.hidden ? 'Hide dot files' : 'Show dot files'} onclick={() => (p.hidden = !p.hidden)}><i class="ph ph-{p.hidden ? 'eye' : 'eye-slash'}"></i></button>
@@ -188,8 +188,8 @@
                 <i class="ph ph-{r.type === 'd' ? 'folder' : r.type === 'l' ? 'arrow-bend-down-right' : 'file'} ftype"></i>
                 <span class="nmtxt">{r.name}</span>
                 {#if r.flags.includes('link')}<span class="muted lk">link</span>{/if}
-                {#if r.flags.includes('badname')}<span class="tag tag-neutral" use:tip={'The name has odd characters. It is shown escaped and cannot be renamed here.'}>odd name</span>{/if}
-                {#if l.locked}<span class="tag lk-{l.tone}" use:tip={l.reason}>{l.tag}</span>{/if}
+                {#if r.flags.includes('badname')}<Chip title="The name has odd characters. It is shown escaped and cannot be renamed here.">odd name</Chip>{/if}
+                {#if l.locked}<Chip tone={l.tone === 'off' ? '' : l.tone} title={l.reason}>{l.tag}</Chip>{/if}
                 {#if r.type === 'd' && l.openable}<button class="btn btn-ghost btn-icon sq opn" aria-label={`Open ${r.name}`} use:tip={'Open this folder'} onclick={() => fm.open(side, r.name)}><i class="ph ph-caret-right"></i></button>{/if}
                 {#if showDisks && r.disks.length}<span class="dkb">{#each r.disks as d}<Chip>{d.replace('data-', 'd')}</Chip>{/each}</span>{/if}
               </div>
@@ -225,7 +225,6 @@
   .cv { flex: none; width: 6px; height: 6px; border: solid var(--fg-3); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg) translate(-2px, -2px); }
   .fmlocbtn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fsx { font-size: 12px; color: var(--fg-3); }
-  .warnchip { color: var(--warn-ink); border-color: color-mix(in oklch, var(--warn) 50%, var(--line)); }
   .fmfilter { width: 118px; min-height: 28px; height: 28px; padding: 2px 8px; font-size: 12.5px; }
   .sq { width: 28px; min-height: 28px; height: 28px; padding: 0; }
   .fmcrumb { display: flex; align-items: center; gap: 2px; overflow-x: auto; white-space: nowrap; }
@@ -265,9 +264,6 @@
   .opn { margin-left: auto; opacity: 0.5; flex: none; }
   tr:hover .opn { opacity: 1; }
   .dim { opacity: 0.5; }
-  .lk-warn { color: var(--warn-ink); border-color: color-mix(in oklch, var(--warn) 50%, var(--line)); }
-  .lk-info { color: var(--info-ink); border-color: color-mix(in oklch, var(--info) 55%, var(--line)); background: color-mix(in oklch, var(--info) 12%, transparent); }
-  .lk-off { color: var(--fg-3); }
   .dks { display: flex; gap: 4px; flex-wrap: wrap; }
   .dkb { display: none; gap: 4px; flex-wrap: wrap; }
   @media (max-width: 860px) {

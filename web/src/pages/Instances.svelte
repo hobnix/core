@@ -160,7 +160,7 @@
             <div class="bk">
               <span class="kd">Backup</span>
               {#if backupKnown && sel.name in backupOf}
-                <a {...link('/protection/backup')} use:tip={'Change this on the Backup page'}><span class="tag {backupOf[sel.name] ? 'tag-accent' : 'tag-neutral'}">{backupOf[sel.name] ? 'in the backup' : 'not in the backup'}</span></a>
+                <a {...link('/protection/backup')} use:tip={'Change this on the Backup page'}><Chip tone={backupOf[sel.name] ? 'accent' : ''}>{backupOf[sel.name] ? 'in the backup' : 'not in the backup'}</Chip></a>
               {:else}<span class="kd">{backupKnown ? 'not listed' : 'not known (no backup disk, or storage locked)'}</span>{/if}
             </div>
 
@@ -212,7 +212,7 @@
                   {#each myServices as s (s.name)}
                     <div class="r"><div class="rt">
                       <a {...link('/instances/services')}>{s.title && s.title !== '-' ? s.title : s.name}</a>
-                      <span class="tag {s.exposure === 'public-ok' ? 'tag-accent' : 'tag-neutral'}">{s.exposure}</span>
+                      <Chip tone={s.exposure === 'public-ok' ? 'accent' : ''}>{s.exposure}</Chip>
                     </div><div class="rs">{s.names && s.names !== '-' ? s.names : 'no public name'} → {s.target}</div></div>
                   {:else}
                     <div class="kd pad">{svc.loaded ? 'No service describes this instance, so it has no route.' : 'Loading…'}</div>

@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   // API tokens (Settings > Users and access, ADR 0012 step 17): programs (curl, a dashboard, a script) sign in with `Authorization: Bearer hn_...`.
   // The list is `hs sys token list` (an admin sees all, everybody else their own; never the token), create is `hs sys token start create`
   // (the token comes back ONCE, here, and only its hash is kept), revoke opens the plan dialog and asks for the typed token name.
@@ -85,7 +86,7 @@
     {#if list.error}<Banner tone="warn">The tokens could not be read.</Banner>{/if}
     <Table id="api-tokens" {columns} rows={tokens} key="id" loading={!list.loaded} empty="No tokens yet.">
       {#snippet cell(r, col)}
-        {#if col.key === 'expires'}{day(r.expires)}{#if r.state === 'expired'} <span class="tag">expired</span>{/if}
+        {#if col.key === 'expires'}{day(r.expires)}{#if r.state === 'expired'} <Chip>expired</Chip>{/if}
         {:else if col.key === 'act'}<Button size="sm" variant="ghost" busy={jobRunning('token', ['revoke', r.name])} tooltip={'Revoke this token'} onclick={() => revoke(r)}>Revoke</Button>
         {:else}{r[col.key] || '–'}{/if}
       {/snippet}

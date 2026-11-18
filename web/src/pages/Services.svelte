@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
@@ -109,7 +110,7 @@
         {:else if col.key === 'target'}
           {@const ct = ctOfTarget(s)}
           <span class="c">{#if ct}<a {...link('/instances', 'instances', ct)} use:tip={`Open the instance ${ct}`}>{s.target}</a>{:else}{s.target}{/if}</span>
-        {:else if col.key === 'exposure'}<span class="tag {s.exposure === 'public-ok' ? 'tag-accent' : 'tag-neutral'}">{s.exposure}</span>
+        {:else if col.key === 'exposure'}<Chip tone={s.exposure === 'public-ok' ? 'accent' : ''}>{s.exposure}</Chip>
         {:else if col.key === 'names'}<span class="c">{dash(s.names)}</span>
         {:else if col.key === 'wants'}<span class="c">{dash(s.wants)}</span>
         {:else}<Button variant="ghost" class="btn-icon services-rm" tooltip={`Change ${s.name}`} aria-label="Change {s.name}" onclick={() => describe({ edit: s.name })}><i class="ph ph-pencil-simple"></i></Button><Button variant="ghost" class="btn-icon services-rm" tooltip={`Forget the description of ${s.name} (its routes stay)`} aria-label="Forget {s.name}" onclick={() => openPlan('routes', ['remove', s.name], 'Forget ' + s.name)}><i class="ph ph-x"></i></Button>{/if}

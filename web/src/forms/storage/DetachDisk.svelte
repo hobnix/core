@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   // Take a SnapRAID data disk out of /<pool> to work on it by hand, and put it back (hs sys disk plan|start <member> detach|attach).
   // While a disk is part of /<pool> its files and the pool's are the same files: copying from the disk into /<pool> (a file manager, mv, Midnight Commander) truncates them.
   // A detached disk is not in the pool, so copying from it is an ordinary copy. Its files are missing in /<pool> meanwhile; the health check complains after 2 hours.
@@ -15,7 +16,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">Data disk</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     <div class="field">
       <span class="lab">What should happen</span>

@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
   // The create dialog (design: "Create dialog", 960 px, form on the left, live plan on the right). A form component renders it with its own fields:
   //
@@ -94,7 +95,7 @@
   <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="cdt">
     <div class="left">
       <div>
-        <div class="kicker">{kicker} <span class="tag tag-neutral" style="padding:1px 8px;margin-left:6px">{ui.host}</span></div>
+        <div class="kicker">{kicker} <Chip style="margin-left:6px">{ui.host}</Chip></div>
         <div id="cdt" class="dialog-title">{title}</div>
       </div>
       {@render form?.(p)}

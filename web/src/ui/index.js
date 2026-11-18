@@ -1,6 +1,8 @@
 // The shared components of the redesign, one per job (web/design/HANDOFF.md "Shared components"). Props are documented at the top of each file.
 // Phase-2 pages import from here (or from the file directly) and never hand-draw a dot, bar, banner, drawer or select.
 export { default as StatusDot } from './StatusDot.svelte';
+export { default as Icon } from './Icon.svelte';           // one icon by name from ui/icons.js
+export { ICONS, isIcon } from './icons.js';
 export { default as Chip } from './Chip.svelte';
 export { default as StageBadge } from './StageBadge.svelte';
 export { default as Banner } from './Banner.svelte';

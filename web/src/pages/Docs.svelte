@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   // The guides: a navigation (language, search, groups with their pages), the page rendered from Markdown, an outline of the page and
@@ -249,7 +250,7 @@
             {#each hits as h}
               <li>
                 <a class="hit" href={url(docPath(h.lang, h.slug)) + (h.anchor ? '#' + h.anchor : '')} onclick={(e) => pick(e, h.lang, h.slug, h.anchor)}>
-                  <span class="ht">{h.title}{#if h.lang !== lang}<span class="tag tag-neutral">{h.lang.toUpperCase()}</span>{/if}</span>
+                  <span class="ht">{h.title}{#if h.lang !== lang}<Chip>{h.lang.toUpperCase()}</Chip>{/if}</span>
                   {#if h.heading && h.heading !== h.title}<span class="hh"><i class="ph ph-hash"></i>{h.heading}</span>{/if}
                   {#if h.snippet && h.snippet !== h.heading}<span class="hs">{h.snippet}</span>{/if}
                 </a>

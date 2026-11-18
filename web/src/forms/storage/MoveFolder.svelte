@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import Button from '../../ui/Button.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   // Move a folder (or file) from one SnapRAID data disk to another, disk to disk (hs sys disk plan|start <member> move --path <path> [--to <member>]).
@@ -30,7 +31,7 @@
   {#snippet form()}
     <div class="field">
       <span class="lab">From data disk</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
+      <div class="fixed"><code>{member}</code> <Chip>{pool}</Chip></div>
     </div>
     <div class="field">
       <span class="lab">Folder or file</span>
