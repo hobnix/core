@@ -29,6 +29,7 @@ export { default as StateCard } from './StateCard.svelte';     // Group page car
 export { default as DangerZone } from './DangerZone.svelte';   // marked section of an Object page; each action opens a plan
 export { default as Progress } from './Progress.svelte';       // one bar: value/total, unknown total moves, tone, text beside it
 export { default as StepList } from './StepList.svelte';       // the steps of a job with a state word each; compact = the current step on one line
+export { default as Timeline } from './Timeline.svelte';       // Feed body: entries newest first by day, filters above, severity word, object link, acknowledge
 // elsewhere, kept at their old paths so pages keep working:
 //   shell/Table.svelte, shell/UsageBar.svelte, shell/Spark.svelte, shell/PlanDialog.svelte (opened with openPlan), forms/unlock/UnlockForm.svelte
 // new in shell/: Halftone, PageHeader, PageState (loading, empty, error with stale data), PageFrame (locked, off, unreachable: the shell does it)
