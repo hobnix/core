@@ -1,6 +1,6 @@
 # Plan: web design handover
 
-Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4).
+Status: draft. Sections 1 and 2 have their decisions (1.4, 2.5); section 3 has its decisions (3.6); section 4 has its decisions (4.11); section 5 has its decisions (5.4); section 6 is not reviewed.
 
 The document ends when it is approved. Components (0.9), navigation and pages (0.11), package pages (0.12) and the live interface (0.10) are built against it.
 
@@ -103,7 +103,7 @@ Per node. Nine entries instead of twelve, and the three groups that each answer 
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
 | Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
 | People | Users, Groups, Certificates | Identity |
-| Health | Health, Events, Notifications, Hardware, Diagnostics, Live state, Test-lab | Monitoring, Operations |
+| Health | Health, Jobs, Events, Notifications, Hardware, Diagnostics, Live state, Test-lab | Monitoring, Operations, and the new Jobs page (#385) |
 | Backup | Backup, Expiry dates | Protection |
 | Settings | General, Network and DNS, Storage, Backups, Users and access, Updates, Capabilities, Advanced | Settings minus Releases |
 
@@ -300,3 +300,67 @@ Decided 2026-11-18:
 - **Two new issues** for the components that have none: one for the Group and Object page pieces (`StateCard`, `LinkedObjects`, `JobStrip`, `DangerZone`), one for `ErrorNote` and `Inbox`.
 - **`ui` is pure, `shell` may read the stores.** The rule holds for every component in 5.2.
 - **#448 is split in three:** `Progress` with `StepList`, then `Timeline`, then `Stepper`.
+
+## 6. Feature-to-page matrix (#774)
+
+Draft, not reviewed. Every open web issue, and the issues of other areas that add or change a page, mapped to a page, a template and the components. Read from the issue titles and the bodies I read for sections 3 to 5; the pages of #434, #239 and #313 are inferred from their titles. Epics and issues with no page (#484 udev events, #485 and #486 tests, #580) are left out.
+
+### 6.1 The matrix
+
+| Issue | Page | Template | Components | Note |
+|---|---|---|---|---|
+| #385 Jobs page | Health > Jobs | Feed | `Timeline` (#784), `Progress`, `StepList` (#448), `ErrorNote` | The Jobs page beside the drawer (3.4); Jobs was missing from the tree and is added to 2.2 |
+| #391 Events view | Health > Events | Feed | `Timeline` | |
+| #617 job records, event kinds, Events page | Health > Jobs, Events | Feed | `Timeline` | |
+| #619 acknowledge, inbox | Health (problems), top bar | Feed | `Timeline`, `Inbox` (#783) | |
+| #483 pending state from the job | every list and Object page | behaviour 4.1 | the chip, `JobStrip` (#782) | |
+| #488 error messages | every page | behaviour 4.4 | `ErrorNote` (#783) | |
+| #452 regroup the tree | the tree | section 2 | `Tree` (shell) | |
+| #453 a page per object | disk, pool, share, instance, user | Object | `Card`, `LinkedObjects`, `JobStrip`, `DangerZone` (#782), `PageTabs` | Gap G2 |
+| #454 quick look | every List page | List | `QuickLook` (#447) | |
+| #455 selection in the address | every List page | List | route helper | |
+| #456 pools from data | Storage > Pools, tree, Section | List, Object | none | Same fix as #573 (G6) |
+| #457 group pages | the 7 groups and Summary | Group | `StateCard` (#782), `Menu` (#447) | |
+| #427 phone and read-only status page | every page | behaviour 4.8, role viewer | the shell | The status page is the viewer role (4.11) |
+| #487 accessibility | every page | behaviour 4.7 | every `ui` component | |
+| #434 roles and API tokens | Settings > Users and access, user Object page | Settings, Object | `Button` "not allowed" (#446) | Pages inferred |
+| #462 two-factor and single sign-on | Login, Settings > Users and access, user Object page | exempt, Settings, Object | `Field`, `TextInput` | Login is outside the templates (G5) |
+| #183 first-run wizard | `/setup` and the first run | Flow | `Wizard`, `Stepper` (#785) | |
+| #181 storage discovery in the wizard | Flow step, then Disks | Flow | `Stepper`, `LinkedObjects` | |
+| #179 network step | Flow step | Flow | `Stepper` | |
+| #581 first-run checklist | Summary banner | Group | `Banner` | The banner of 2.1, until every check is done |
+| #573, #574, #576 pools, single disk | Pools, Summary messages | List, Object | none | |
+| #575 local users without a directory | Users | List | none | One user object (1.4) |
+| #424 status panel from the manifest `[web]` | the app's Object page | Object | `Kv`, `StateCard`, `Button` | Overlaps #478, #195 (G7) |
+| #478 a page for every installed app | Apps > Installed | Object | as #424 | Gap G2 |
+| #195 packages declare pages | `/extensions/<name>`, app pages | built from the templates | `GenericPage` | G7 |
+| #474 Marketplace as a store | Apps > Marketplace | needs a decision | `Card`, `Chip` (trust) | Gap G4 |
+| #477 trust shown plainly | Marketplace, package and app pages | behaviour 4.10 | `Chip` kind | |
+| #476 one place for updates | Settings > Updates | needs a decision | `Table`, `Progress` | Gap G3 |
+| #268 package builder | Apps > Marketplace > Builder | Flow | `Wizard`, `Stepper` | |
+| #239, #313, #197 extension permissions, events, SDK | Extension pages, Events | Feed, built from the templates | `GenericPage` | Pages inferred |
+| #426 file manager | Storage > Files | exempt | `Progress`, `StepList`, `Dialog` | |
+| #492, #493 translations | every page | all use `tr()` | `ErrorNote` codes | No page of its own |
+| #461 demo mode | every page | review tool | fixtures per template | Use it for the mockups (#775) |
+| #449, #450 gallery, move the pages | developer section | exempt | all `ui` | The order of #450 should follow the groups of 2.2 |
+
+### 6.2 Gaps and overlaps
+
+| # | Finding | Why it matters |
+|---|---|---|
+| G1 | Jobs had no place in the tree. | Fixed: Health > Jobs, in 2.2. |
+| G2 | #474 and #478 give a package and an installed app their own page, but 3.6 says only five objects get an Object page. | Package and App need an Object page, or the Marketplace and app pages are built differently. |
+| G3 | #476 (updates for the system, apps and packages in one place) is a list with actions and progress, but 3.6 says Settings pages are generated forms. | Settings > Updates cannot be a generated form. |
+| G4 | #474 wants cards, categories and Installed and Updates tabs. No template has a card view. | The List template needs a card view, or the Marketplace is a page of its own. |
+| G5 | The Login page and the first-run setup have no template. | They are exempt like Files, or a Flow. |
+| G6 | #456 (0.11) and #573 (0.4) are one fix: pool names from data. | Do it once, in 0.4; close #456 into it. |
+| G7 | #424, #478 and #195 each describe a page built from a manifest. | One renderer for all three, or they diverge. |
+
+### 6.3 Open questions for review
+
+- G2: do Package and App join the five objects with an Object page?
+- G3: does Settings > Updates become a List or an Object page, as an exception to the generated forms?
+- G4: does the List template get a card view, or does the Marketplace keep a page of its own?
+- G5: are Login and first-run setup exempt, or a Flow?
+- G6: close #456 into #573 and do the fix in 0.4?
+- G7: one manifest-built page for #424, #478 and #195?
