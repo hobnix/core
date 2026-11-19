@@ -6,8 +6,8 @@ issues of the milestone. Written 2026-11-18. The same text is the body of the re
 **Read this first.** 0.7.0 is about disks, pools and backups: taking over old disks and an Unraid server, a trash in the file manager, off-site backup
 targets, backups of only chosen parts of an instance, automatic reactions to a full pool, and sleep times for disks. In a virtual machine on the real test-lab server the stages install, smoke check, rollback, backup and restore and pool passed on the tip of `0.7` (2026-11-19, commit f751607b); the upgrade from v0.6.0 passed on the same commit. Stage 6 (browser) never ran
 there (no playwright on the server). Almost everything here touches data or disks and was written and tested with fakes, fixtures, loop devices and
-virtual disks, not on real hardware: items marked **Not tested on hardware yet** have not been tried on real disks, and the web interface of this version
-was not looked at by the owner yet. Do not trust this release with the only copy of your data, and keep a copy of anything on a disk you let it adopt.
+virtual disks, not on real hardware: items marked **Not tested on hardware yet** have not been tried on real disks. The owner looked at the web interface of
+`v0.7.0-beta.1` on 2026-11-19; what was found is under "Known problems" below. Do not trust this release with the only copy of your data, and keep a copy of anything on a disk you let it adopt.
 
 ## What 0.7.0 is
 Storage you can take over and look after: old disks and Unraid servers come in with clear reasons when they cannot, the file manager gets a trash, the
@@ -54,7 +54,15 @@ Everything the 0.6 notes say; stage 5 names the virtual disks by their by-id nam
 - Apps that update themselves (hidden and off), importing a Docker Compose file as an app (see the 0.6 notes).
 - Live state on by default; booting the ISO on real hardware (#175).
 
+## Known problems
+Found in the web check of `v0.7.0-beta.1`, not fixed in 0.7.0, planned for 0.8:
+- The file manager can be slow: reading a folder took up to a minute (#907).
+- The web has no view of the trash and no Restore button, and the Delete button tooltip still says "Delete for good" (#908). Restore works on the command line only through the backend, not through an `hs fm` command yet.
+- The second pane cannot be closed, so with two panes some actions are blocked when the dropdowns refuse the pair (#909).
+- Folder sizes show only in the Info panel (F3); Cancel is only in the banner of a running job; `hs fm` alone prints no help (#910).
+
 ## Not verified
+- Web check of `v0.7.0-beta.1` by the owner: the file manager (delete into the trash, copy, move), the Unraid take-over page, the backup pages and the Disks page looked right. Not tried: the off-site backup targets with a real server, the rotating backup disk, partial instance backups, and the automatic reactions on a full pool.
 - Every item marked "Not tested on hardware yet": adopting real disks, the Unraid take-over, off-site targets on real S3, REST and SFTP servers, the trash on a
   real pool, spindown on real disks, the automatic reactions on a real full pool.
 - The headless browser stage (6) never ran.
