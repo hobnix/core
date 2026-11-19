@@ -300,6 +300,11 @@ export class Fm {
       if (r.ok) this.detail.stat = r; else this.detail.statErr = r.reason || 'The server did not answer.';
     } catch (e) { if (this.detail.key === key) this.detail.statErr = e.message; }
   }
+  // "Size" next to a folder: open its Info panel and measure it at once
+  async sizeOf(side, name) {
+    await this.openInfo(side, name);
+    return this.measure(side, name);
+  }
   // the size of a folder: a background job on the server (kept per folder with its mtime); ask again every 2 s until the number is there
   async measure(side = this.info?.side, name = this.info?.name) {
     if (!this.info || this.detail.duBusy) return;

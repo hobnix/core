@@ -51,6 +51,7 @@
   const infoLoc = $derived(fm.info ? fm.locOf(fm.panes[fm.info.side].loc) : null);
   const st = $derived(fm.detail.stat && fm.detail.key === (fm.info ? fm.infoKey() : '') ? fm.detail.stat : null);
 
+  const curIsFolder = $derived.by(() => { const p = fm.panes[fm.active]; return p.rows.find((x) => x.name === p.cur)?.type === 'd'; });
   function showInfo() {
     if (fm.info) { fm.info = null; return; }
     const p = fm.panes[fm.active];
@@ -130,6 +131,7 @@
       </div>
       <div class="fmgrp">
         <button class="btn sm btn-ghost" disabled={!a.cur && !a.sel.size} use:tip={{ text: 'Size, time and which disks hold it', keys: 'F3' }} onclick={showInfo}><i class="ph ph-info"></i>Info<span class="kbd">F3</span></button>
+        <button class="btn sm btn-ghost" disabled={!curIsFolder} use:tip={'Calculate the size of the current folder (reads everything below it, can wake disks)'} onclick={() => { const p = fm.panes[fm.active]; fm.sizeOf(fm.active, p.cur); }}><i class="ph ph-ruler"></i>Folder size</button>
         <button class="btn sm btn-ghost" use:tip={{ text: 'Select or deselect by a pattern such as *.mkv', keys: '+' }} onclick={() => (fm.patOpen = !fm.patOpen)}>Select by pattern<span class="kbd">+</span></button>
       </div>
       <span class="grow"></span>

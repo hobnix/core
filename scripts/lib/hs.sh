@@ -398,6 +398,8 @@ find_row "$@"
 if [ -z "$row_script" ] || [ "$row_script" = "-" ]; then
   ext_off_guard "$@"
   . "$here/ui.sh"
+  # a bare group word (hs fm, hs share): its commands are the help, not "unknown command"
+  if [ $# -eq 1 ] && [ "$1" != sys ] && help_for "$1" >/dev/null 2>&1; then help_for "$1"; exit 0; fi
   warn "$(tr_txt unknown) '$*'" >&2
   usage >&2
   exit 1
