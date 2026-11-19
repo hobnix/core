@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "File manager starts with one pane; the second pane opens and closes"
+body  = """Delete, New folder and Rename work in a single pane, so a pair of places the second pane refuses can no longer block them. Copy and Move need the second pane as their target: the button Second pane opens it, Close second pane hides it again. The choice is remembered in the browser."""
