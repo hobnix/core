@@ -749,6 +749,34 @@ hs docker move-apps --finish
 
 Not tested on hardware yet.
 
+### Give the apps in Docker the graphics chip
+
+Hardware transcoding (Jellyfin, Plex, Tdarr in Docker) needs `/dev/dri`. The container `docker` is locked, so you cannot add the
+device by hand; `hs docker gpu` does it:
+
+```bash
+hs docker gpu on --dry-run
+hs docker gpu on
+```
+
+The plan names the chip (the first Intel or AMD chip the server has; pick another with `--pci <address>`, the plan lists the
+addresses when there are several) and the group `render` of the container `docker` that owns `/dev/dri` inside it. Nothing
+restarts. All apps in Docker share the chip. Afterwards `hs docker gpu` prints the two lines an app needs in its compose file, for
+example:
+
+```yaml
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "993"   # the gid hs docker gpu prints
+```
+
+An app sees the chip once it is created again (`docker compose up -d`). `hs docker gpu off` removes the device after a plan; apps
+that use it fall back to the CPU. An NVIDIA card is not covered by this command yet; an app that needs it runs in its own
+container. Not tested on hardware yet.
+
 ## Check that it worked
 
 ```bash
