@@ -8,3 +8,10 @@ export function jobMatches(key, area, args) {
   if (args !== undefined) return key === jobKey(area, args);
   return key === area || key.startsWith(area + ' ');
 }
+
+// A job whose arguments START with `lead` (a pool or disk page asks "any job of pool bulk": `pool bulk add --disks sdb,sdc` counts, `pool bulk2 add` does not).
+export function jobMatchesLead(key, area, lead = []) {
+  if (!key) return false;
+  const k = jobKey(area, lead);
+  return key === k || key.startsWith(k + ' ');
+}

@@ -77,4 +77,23 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   check('docker failed pull shows error', dockerFailed('web', (a, g) => failureOf(dkf, new Set(), a, g))?.error.code === 'job.failed');
   void fail;
 }
+// Pools and Disks rows (web/src/pages/storage/pending.js): a pool or disk job by the leading arguments, from a terminal too
+{
+  const { activeKeys, failureOfLead } = await import('../web/src/rowstate.js');
+  const { poolPending, syncPending, diskPending, failedOf } = await import('../web/src/pages/storage/pending.js');
+  const P1 = '20261119-130000-pool-bulk-replace-abcd', P2 = '20261119-130100-disk-sdb-wipe-efgh', P3 = '20261119-130200-system-scrub-ijkl', P4 = '20261119-130300-system-sync-mnop';
+  const jobs = fromRecords([rec(P1, 'running', 'pool bulk replace --member x --disks sdc', '-', 'hs pool bulk replace'), rec(P2, 'running', 'disk sdb wipe'), rec(P3, 'running', 'system scrub --pool fast'), rec(P4, 'running', 'system sync')]);
+  const act = (a, l) => activeKeys(jobs, [], a, l);
+  check('pool replace from a terminal: Replacing a disk', poolPending('bulk', act) === 'Replacing a disk');
+  check('another pool, and a pool named by prefix, are not pending', poolPending('bul', act) === '' && poolPending('bulk2', act) === '');
+  check('scrub of a ZFS pool', poolPending('fast', act) === 'Scrubbing' && poolPending('bulk', act) !== 'Scrubbing');
+  check('parity sync names no pool', syncPending(act) === 'Syncing parity');
+  check('disk wipe by device or member', diskPending(['sdb', '', 'S1'], act) === 'Formatting' && diskPending(['sdc'], act) === '');
+  const bad2 = fromRecords([rec(P1, 'failed', 'pool bulk replace --member x', '1', 'hs pool bulk replace'), rec(P2, 'ok', 'disk sdb wipe')]);
+  const fl = (a, l) => failureOfLead(bad2, new Set(), a, l);
+  check('failed pool job: not pending, error shown', poolPending('bulk', (a, l) => activeKeys(bad2, [], a, l)) === '' && failedOf('pool', ['bulk'], fl)?.error.code === 'job.failed');
+  check('a later ok job of the same lead replaces the failure', failedOf('disk', ['sdb'], fl) === null);
+  check('dismissed failure is gone', failureOfLead(bad2, new Set([P1]), 'pool', ['bulk']) === null);
+  check('own task counts by lead', activeKeys(new Map(), [{ key: 'pool bulk add --disks a,b', state: 'running' }], 'pool', ['bulk']).length === 1);
+}
 if (bad) process.exit(1);
