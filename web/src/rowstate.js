@@ -69,7 +69,7 @@ export function failureOf(jobs, dismissed, area, args) {
 }
 
 // The same by the LEADING arguments only (a pool or disk row: any job whose arguments start with the pool or disk name, whatever else follows).
-// activeKeys lists the keys of the running jobs, so a page can name what is happening ("pool bulk replace --member ..." -> Replacing).
+// activeKeys lists the keys of the running jobs, so a page can name what is happening ("pool data replace --member ..." -> Replacing).
 export function activeKeys(jobs, tasks, area, lead) {
   const out = [];
   for (const j of jobs.values()) if (ACTIVE.includes(j.state) && jobMatchesLead(j.key, area, lead)) out.push(j.key);
