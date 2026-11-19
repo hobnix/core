@@ -42,6 +42,7 @@ export class Fm {
   pairs = $state({});               // `${fixedLoc}|${candidate}` -> { ok, reason }
   dialog = $state(null);            // the plan dialog: { op, from, fromLabel, path, names, to, toLabel, toPath, summary }
   info = $state(null);              // { side, name }
+  detail = $state({ key: '', stat: null, statErr: '', du: null, duErr: '', duBusy: false });   // what the Info panel read for the item: stat (owner, group, mode) and du (a folder's size)
   keys = $state(false);             // the shortcuts overlay
   patOpen = $state(false);
   pat = $state('');
@@ -283,6 +284,54 @@ export class Fm {
     };
   }
 
+  // ── the Info panel: owner, group and mode come from `stat`; the size of a folder only when asked (it reads the whole folder and can wake disks) ──────────────────
+  infoKey(side = this.info?.side, name = this.info?.name) { const p = this.panes[side]; return `${p.loc}|${S.joinPath(p.path, name)}`; }
+  openInfo(side, name) {
+    this.info = { side, name };
+    const key = this.infoKey(side, name);
+    this.detail = { key, stat: null, statErr: '', du: null, duErr: '', duBusy: false };
+    return this.loadStat(side, name, key);
+  }
+  async loadStat(side, name, key) {
+    const p = this.panes[side];
+    try {
+      const r = await api.stat(p.loc, S.joinPath(p.path, name));
+      if (this.detail.key !== key) return;
+      if (r.ok) this.detail.stat = r; else this.detail.statErr = r.reason || 'The server did not answer.';
+    } catch (e) { if (this.detail.key === key) this.detail.statErr = e.message; }
+  }
+  // the size of a folder: a background job on the server (kept per folder with its mtime); ask again every 2 s until the number is there
+  async measure(side = this.info?.side, name = this.info?.name) {
+    if (!this.info || this.detail.duBusy) return;
+    const key = this.infoKey(side, name), loc = this.panes[side].loc, path = S.joinPath(this.panes[side].path, name);
+    this.detail.duBusy = true; this.detail.duErr = '';
+    try {
+      for (let i = 0; i < 300; i++) {
+        const r = await api.du(loc, path);
+        if (this.detail.key !== key) return;
+        if (!r.ok) { this.detail.duErr = r.reason || 'The server refused.'; return; }
+        if (!r.pending) { this.detail.du = r; return; }
+        await new Promise((ok) => setTimeout(ok, 2000));
+        if (this.detail.key !== key) return;
+      }
+      this.detail.duErr = 'Still measuring. Try again later.';
+    } catch (e) { if (this.detail.key === key) this.detail.duErr = e.message; }
+    finally { if (this.detail.key === key) this.detail.duBusy = false; }
+  }
+
+  // ── a typed path: the server decides (ls says why not), the browser never resolves .. or links ───────────────────────────────────────────────────────────────
+  async tryPath(side, text) {
+    const p = this.panes[side];
+    const t = String(text ?? '').trim();
+    if (!p.loc) return 'No location chosen.';
+    try {
+      const r = await api.ls(p.loc, t === '' ? '/' : t, '', 1);
+      if (!r.ok) return r.reason || 'The server refused this path.';
+    } catch (e) { return e.message; }
+    await this.navigate(side, p.loc, S.cleanPath(t === '' ? '/' : t.startsWith('/') ? t : `/${t}`));
+    return '';
+  }
+
   // ── drag and drop (desktop): the drop only opens the plan ───────────────────────────────────────────────────────────────────────────────
   dragStart(side, row) {
     const p = this.panes[side];
@@ -301,9 +350,10 @@ export class Fm {
   }
 
   // ── jobs ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  beginJob(unit, spec, title) {
-    this.job = { unit, op: spec.op, title, from: spec.from, to: spec.to, started: Date.now(), state: 'running', p: null, bad: 0 };
-    remember('fm:job', { unit, op: spec.op, title, from: spec.from, to: spec.to, started: this.job.started });
+  beginJob(unit, spec, title, opts = {}) {
+    const keep = spec.names && spec.names.length <= 2000 ? { spec: { op: spec.op, from: spec.from, path: spec.path, to: spec.to, toPath: spec.toPath, names: [...spec.names] }, opts: { ...opts } } : {};   // what Continue needs (a huge selection is not kept)
+    this.job = { unit, op: spec.op, title, from: spec.from, to: spec.to, started: Date.now(), state: 'running', p: null, bad: 0, ...keep };
+    remember('fm:job', { unit, op: spec.op, title, from: spec.from, to: spec.to, started: this.job.started, ...keep });
     track(unit, title);
     showTab('tasks');
     this.watch();
@@ -318,6 +368,7 @@ export class Fm {
   resumeJob() {
     const j = recall('fm:job');
     if (!j || this.job) return;
+    if (j.paused) { this.job = { ...j, state: 'paused', p: null, bad: 0 }; return; }
     this.job = { ...j, state: 'running', p: null, bad: 0 };
     this.watch();
   }
@@ -336,11 +387,13 @@ export class Fm {
       j.bad = 0;
       j.p = p;
       if (p.result !== 'running') {
-        j.state = p.result;
+        const paused = j.pausing && p.result === 'cancelled';
+        j.state = paused ? 'paused' : p.result;
         clearInterval(this.timer);
-        remember('fm:job', undefined);
+        if (paused) remember('fm:job', { unit: j.unit, op: j.op, title: j.title, from: j.from, to: j.to, started: j.started, paused: true, spec: j.spec, opts: j.opts });
+        else remember('fm:job', undefined);
         await this.refresh();
-        if (p.skipped.n || p.failed.n || p.result !== 'done') this.result = true;
+        if (!paused && (p.skipped.n || p.failed.n || p.result !== 'done')) this.result = true;
         return;
       }
     } catch {
@@ -354,6 +407,44 @@ export class Fm {
     if (!j || j.cancelling) return;
     j.cancelling = true;
     try { await api.cancel(j.unit); } catch { j.cancelling = false; }
+  }
+  // Pause = stop the job and keep its list (no SIGSTOP: a stopped process would hold the pool lock). The job ends cleanly: what was copied stays, nothing
+  // unverified was removed. Only copy and move can go on (delete and the rest are instant or ask for a typed confirmation).
+  canPause = () => !!this.job && this.job.state === 'running' && (this.job.op === 'copy' || this.job.op === 'move') && !!this.job.spec;
+  async pauseJob() {
+    const j = this.job;
+    if (!j || j.cancelling || j.pausing) return;
+    j.pausing = true;
+    try { const r = await api.cancel(j.unit); if (!r.ok) j.pausing = false; } catch { j.pausing = false; }
+  }
+  // Continue = a NEW job over the same selection with `--conflict skip --verify size`: what is at the target already is left alone. For a move the items that
+  // already left the source are not asked for again.
+  async continueJob() {
+    const j = this.job;
+    if (!j || j.state !== 'paused' || j.continuing || !j.spec) return;
+    j.continuing = true;
+    try {
+      let names = j.spec.names;
+      if (j.op === 'move') {
+        const have = new Set();
+        let cursor = '';
+        for (let i = 0; i < 50; i++) {
+          const r = await api.ls(j.spec.from, j.spec.path, cursor, 2000);
+          if (!r.ok) { this.notice = r.reason || 'The source cannot be read.'; return; }
+          for (const row of r.rows) have.add(row.name);
+          if (!r.next || r.next === 'end') break;
+          cursor = r.next;
+        }
+        names = names.filter((n) => have.has(n));
+        if (!names.length) { j.state = 'done'; this.notice = 'Nothing is left to move: every item has left the source.'; remember('fm:job', undefined); return; }
+      }
+      const spec = { ...j.spec, names };
+      const opts = { ...j.opts, conflict: 'skip', verify: 'size' };
+      const r = await api.start(spec, opts, '');
+      if (!r.ok) { this.notice = r.reason || 'The server did not start it.'; return; }
+      this.beginJob(r.unit, spec, j.title, opts);
+    } catch (e) { this.notice = e.message; }
+    finally { if (this.job === j) j.continuing = false; }
   }
   dismissJob() { this.job = null; this.result = false; remember('fm:job', undefined); }
   // the location a running job works in (a pane on it shows "a move is running here")

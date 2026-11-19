@@ -223,7 +223,7 @@ def check_steps(steps, rows=None, root=ROOT, name="stage"):
 def scenarios():
     """(name, steps) of every stage, with the variants that change the steps (a pool disk set or not, an app or not)."""
     import nested_lib as n
-    disks = {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2", "fast1", "fast2")}
+    disks = {k: "<disk-%s>" % k for k in ("backup", "pool1", "pool2", "fast1", "fast2", "unraid1", "unraid2", "unraidp")}
     base = {"password": "<password>", "pubkey": "<pubkey>", "backup_pass": "<backup-password>", "hostname": "nested-test", "disks": disks}
     for stage in n.STAGES:
         yield stage, n.build_scenario(stage, dict(base))

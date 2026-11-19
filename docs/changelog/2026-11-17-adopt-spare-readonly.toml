@@ -1,0 +1,6 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Pools: adopting disks with a spare disk writes nothing to them until the parity is synced"
+body  = """
+`sudo hs pool bulk add --role adopt --disks <data-disks> --spare <spare-disk>` mounts the disks to adopt read-only, builds the parity on the spare disk, and only after the sync has finished writes the labels and moves the folders. SnapRAID keeps its content files off the adopted disks meanwhile. Without `--spare` the order is as before and the plan says the data is not protected until a parity disk is synced. Not tested on hardware yet.
+"""

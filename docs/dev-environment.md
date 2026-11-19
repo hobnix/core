@@ -72,6 +72,23 @@ rehearsal are not part of the run. Its logic is also tested without a VM (`scrip
 Exit codes: 0 passed, 1 a check failed, 2 usage, 3 this machine cannot run it, 4 harness or Incus error. Logs: `.work/nested/<run-id>/`
 (`run.log`, `console-<stage>.log`, `result-<stage>.json`; `.work/nested/latest`).
 
+**File manager write checks (stages `pool` and `poolzfs`, #425).** Both run on an installed VM (`--name`) with two virtual disks
+(`HS_NESTED_DISKS="pool1=<device> pool2=<device>"`) that are still empty, so each needs a fresh VM or fresh disks. `pool` makes a SnapRAID `bulk`
+(two data disks, no parity), `poolzfs` a ZFS `bulk` (a mirror). Then `fileManagerWrite` is switched on and the file manager does, with a checksum
+of the folder before and after: copy, move (source gone only after the target matches), rename, mkdir, an overwrite choice (refused without the typed
+name, done with it), delete (refused with a wrong `delete N files`, done with the right one) and a cancelled move (`hs sys jobs stop`: afterwards the
+data is whole in one place). On SnapRAID this runs disk to disk and share to share, and checks the guard: `sys fm pair disk:data-01 pool:bulk` says
+`refused` and a `start` with that pair refuses. On ZFS it runs share to share and share to the pool view (a ZFS pool has no data disks).
+`nested.sh plan pool` and `plan poolzfs` print the steps. Not tested on hardware yet: the stages have not run against a real VM.
+
+**Unraid fixtures (`tests/lib-unraid.sh`, #460 a).** The helper builds loop disks the way Unraid makes them: one GPT partition from sector 64 (`loop -P`
+needs partition devices on loop), xfs or btrfs in it (or LUKS with xfs/btrfs inside, opened with `$UNRAID_PASS`), a parity disk with the partition and
+no file system, files owned 99:100, and the same top folder (`Shared`) on every data disk. For the refusals of the plan (D8) it also makes a ZFS array
+disk, a two-device btrfs, a LUKS disk that only a key file opens, and an xfs with a dirty log. `tests/adopt.sh` uses it (adoptable cases and refusals,
+dry run only); a case whose tool or kernel support is missing says `skip` with the reason (xfs and ZFS are often absent in a sandbox or WSL2; CI fails
+a skip). The nested stage `unraid` (`HS_NESTED_DISKS="unraid1=<dev> unraid2=<dev> unraidp=<dev>"`, empty disks) builds the same disks inside the VM
+and runs only the read-only side: `hs migrate check` and `hs pool <pool> add --role adopt --dry-run`, then compares the superblocks. Not tested on hardware yet.
+
 Limits: nested virtualization must be enabled on the host. Where it is not (exit 3, a WSL2 without it, many CI runners) use `scripts/dev/t vm`
 on a machine with Incus; that tests our scripts on Ubuntu VMs, not the ISO. The rebuild rehearsal is not part of it yet. CI: the manual
 workflow `nested` (Actions, "Run workflow", give an ISO URL).

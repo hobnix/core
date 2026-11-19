@@ -14,6 +14,11 @@ import os
 LOGIN = r"\n[^\n]*login: $"
 
 
+POOL = "bulk"   # the pool name of the stages (a name that is spelled once, tests/pool-names-ratchet.sh)
+ROOT = "/" + POOL
+SHARES = ROOT + "/shares"
+
+
 def _q(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
@@ -155,46 +160,153 @@ def restore(params):
 
 
 # ---------------------------------------------------------------- stage 5: a pool and the file manager on virtual disks
-def pool(params):
-    """Two virtual disks become the data disks of the pool bulk (SnapRAID, no parity), then the file manager copies a file from one data disk
-    to the other. The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it is switched on first."""
+FM_HELPERS = (
+    # cs <dir>: one checksum over all files below a folder (names and content); fmgo <names> <start args...>: start a job, wait, succeed when it is done;
+    # fmcn <names> <plan args...>: the confirm_name of a plan.
+    "cs() { (cd \"$1\" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum | sha256sum | cut -c1-64); }; "
+    "fmgo() { n=$1; shift; printf '%s\\0' $n | HS_CALLER=test hs sys fm start \"$@\" > /tmp/fm.out 2>&1 || return 1; "
+    "u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); for i in $(seq 150); do r=$(hs sys fm progress $u | awk -F'\\t' '$1==\"result\"{print $2}'); "
+    "[ \"$r\" = running ] || break; sleep 2; done; echo \"$r\" > /tmp/fm.result; [ \"$r\" = done ]; }; "
+    "fmcn() { n=$1; shift; printf '%s\\0' $n | hs sys fm plan \"$@\" | awk -F'\\t' '$1==\"confirm_name\"{print $2}'; }"
+)
+
+
+def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
+    """The write checks of the file manager between two locations: la (location id) with fm path pa, and ra = the same folder as the system sees it;
+    lb, pb, rb the same for the target. confirm = the name the overwrite choice asks to be typed (the last folder of the target path, or the location
+    name). Every step that moves data compares checksums before and after. Names start with the tag, so two runs on one pool do not meet."""
+    s = "%s-src" % tag
+    a = "%s/%s" % (ra, s)
+    b = "%s/%s" % (rb, s)
+    fa = "--from %s --path '%s'" % (la, pa)
+    fb = "--from %s --path '%s'" % (lb, pb)
+    to = "--to %s --to-path '%s'" % (lb, pb)
+    return [
+        step("run", "mkdir -p %s/sub && head -c 1048576 /dev/urandom > %s/f1 && head -c 524288 /dev/urandom > %s/f2 && echo three > %s/sub/f3" % (a, a, a, a),
+             what="[%s] a test folder with three files" % tag),
+        step("run", "cs %s > /tmp/%s.c1; fmgo %s copy %s %s" % (a, tag, s, fa, to), timeout=400, what="[%s] copy a folder %s to %s" % (tag, la, lb)),
+        step("run", "[ \"$(cs %s)\" = \"$(cat /tmp/%s.c1)\" ] && [ -d %s ]" % (b, tag, a), what="[%s] the copy has the same checksum, the source is still there" % tag),
+        # move: the source goes only after the target is verified
+        step("run", "mkdir -p %s/%s-mv && head -c 786432 /dev/urandom > %s/%s-mv/m1 && cs %s/%s-mv > /tmp/%s.c2; fmgo %s-mv move %s %s"
+             % (ra, tag, ra, tag, ra, tag, tag, tag, fa, to), timeout=400, what="[%s] move a folder %s to %s" % (tag, la, lb)),
+        step("run", "[ \"$(cs %s/%s-mv)\" = \"$(cat /tmp/%s.c2)\" ] && [ ! -e %s/%s-mv ]" % (rb, tag, tag, ra, tag),
+             what="[%s] moved: same checksum there, gone from the source" % tag),
+        # rename
+        step("run", "fmgo %s-mv rename %s --newname %s-moved" % (tag, fb, tag), timeout=120, what="[%s] rename the moved folder" % tag),
+        step("run", "[ -d %s/%s-moved ] && [ ! -e %s/%s-mv ] && [ \"$(cs %s/%s-moved)\" = \"$(cat /tmp/%s.c2)\" ]" % (rb, tag, rb, tag, rb, tag, tag),
+             what="[%s] renamed, content unchanged" % tag),
+        # mkdir
+        step("run", "fmgo '' mkdir %s --newname %s-made && [ -d %s/%s-made ]" % (fb, tag, rb, tag), timeout=120, what="[%s] make a folder" % tag),
+        # overwrite choice: a changed source file; without the typed confirmation the start is refused and nothing changes
+        step("run", "echo changed-%s > %s/f1 && cs %s > /tmp/%s.c3 && cs %s > /tmp/%s.c4" % (tag, a, a, tag, b, tag),
+             what="[%s] the source file differs from the copy now" % tag),
+        step("run", "! (printf '%s\\0' | HS_CALLER=test hs sys fm start copy %s %s --conflict overwrite) && [ \"$(cs %s)\" = \"$(cat /tmp/%s.c4)\" ]" % (s, fa, to, b, tag),
+             what="[%s] overwrite without the typed confirmation is refused, nothing changed" % tag),
+        step("run", "fmgo %s copy %s %s --conflict overwrite --confirm '%s'" % (s, fa, to, confirm), timeout=400,
+             what="[%s] overwrite with the confirmation" % tag),
+        step("run", "[ \"$(cs %s)\" = \"$(cat /tmp/%s.c3)\" ]" % (b, tag), what="[%s] the target now has the changed content" % tag),
+        # delete: without --permanent it moves into the trash (no confirmation)
+        step("run", "fmgo %s-made delete %s && [ ! -e %s/%s-made ]" % (tag, fb, rb, tag), timeout=120,
+             what="[%s] delete moves a folder into the trash" % tag),
+        # permanent delete: the plan names the confirmation, a wrong one is refused, the right one deletes
+        step("run", "cn=$(fmcn %s-moved delete %s --permanent); echo \"$cn\" | grep -q '^delete [0-9]* file' && echo \"$cn\" > /tmp/%s.cn" % (tag, fb, tag),
+             what="[%s] the permanent delete plan asks for 'delete N files'" % tag),
+        step("run", "! (printf '%s-moved\\0' | HS_CALLER=test hs sys fm start delete %s --permanent --confirm 'delete 99 files') && [ -d %s/%s-moved ]" % (tag, fb, rb, tag),
+             what="[%s] delete with a wrong confirmation is refused, the folder is still there" % tag),
+        step("run", "fmgo %s-moved delete %s --permanent --confirm \"$(cat /tmp/%s.cn)\" && [ ! -e %s/%s-moved ]" % (tag, fb, tag, rb, tag), timeout=120,
+             what="[%s] delete with the right confirmation" % tag),
+        # cancel: a big move is stopped; afterwards the data is whole in one place: intact at the source, or gone from it and complete at the target
+        step("run", "mkdir -p %s/%s-big && head -c 1500000000 /dev/zero > %s/%s-big/big && cs %s/%s-big > /tmp/%s.c5" % (ra, tag, ra, tag, ra, tag, tag),
+             timeout=300, what="[%s] a big folder to cancel" % tag),
+        step("run", "printf '%s-big\\0' | HS_CALLER=test hs sys fm start move %s %s > /tmp/fm.out; u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); sleep 1; "
+                    "hs sys jobs stop \"$u\"; for i in $(seq 1 60); do hs sys fm progress \"$u\" | grep -q 'result.*running' || break; sleep 2; done; hs sys fm progress \"$u\" | grep -q 'result.*\\(cancelled\\|done\\)' || { hs sys fm progress \"$u\"; false; }" % (tag, fa, to), timeout=240,
+             what="[%s] start a move and stop the job" % tag),
+        step("run", "if [ -e %s/%s-big/big ]; then [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; else [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; fi"
+                    % (ra, tag, ra, tag, tag, rb, tag, tag),
+             what="[%s] after the stop the data is whole in one place (nothing unverified was removed)" % tag),
+    ]
+
+
+def _bulk_steps(params, kind):
+    extra = " --role data --fs ext4" if kind == "snapraid" else ""
     return login_root(params) + full_system(params) + [
+        step("run", "export HS_CALLER=test", what="hs sys commands typed by hand do not ask (scripts/lib/hs.sh sys_guard)"),
         disk_by_name(params, "pool1", "d1"),
         disk_by_name(params, "pool2", "d2"),
         disk_id_by_name(params, "pool1", "i1"),
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
-        # fmt: {d1} and {d2} are filled in; HS_CALLER=test: a `hs sys` command typed by hand asks "Run it anyway?" (scripts/lib/hs.sh sys_guard)
-        step("capture", "HS_CALLER=test hs sys pool start bulk add --disks {i1},{i2} --use data --kind snapraid --role data --fs ext4 --confirm bulk | tr '\\n\\t' '  '; echo",   # echo: tr drops the last newline, and the marker of the harness must not share the line
-             var="start", timeout=120, strip=True, fmt=True, what="the pool is created as a background job"),
+        step("capture", "HS_CALLER=test hs sys pool start %s add --disks {i1},{i2} --use data --kind %s%s --confirm %s | tr -s '[:space:]' ' '; echo" % (POOL, kind, extra, POOL), var="start", fmt=True,
+             timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
-        # not "the first pool job of hs job list": the job of the pool fast (set up before the rebuild) is in that list as well
-        # the job has to be over first; then bulk-mount.service brings /bulk up the way boot does. WORKAROUND for hobnix/server#699: the mergerfs
-        # that the job started lives in the job's unit and ends with it, so /bulk is not mounted after the job
-        step("run", "for i in $(seq 1 120); do systemctl list-units 'hs-job-pool-add-bulk-*' --state=active,activating --no-legend | grep -q . || break; sleep 3; done",
-             timeout=600, what="the pool job is over"),
-        # a server without a SnapRAID pool has no mergerfs: the rebuild after `hs pool` installs it and brings the mount unit (docs/install.md)
-        step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)"),
-        step("run", "systemctl restart bulk-mount.service || true", timeout=120, what="bulk-mount.service mounts /bulk (workaround for #699)"),
-        step("run", "for i in $(seq 1 36); do mountpoint -q /bulk && break; sleep 5; done", timeout=600, what="/bulk shows up", expect_rc=None),
-        # what the console log needs when /bulk does not show up (not a check)
-        step("run", "systemctl list-units 'hs-job-*' --all --no-pager --no-legend | cut -c1-150; journalctl -u 'hs-job-pool-add-bulk-*' --no-pager | grep -v -E 'mergerfs\\['| tail -n 60 | cut -c1-200; "
-                    "systemctl status bulk-mount.service --no-pager | head -n 12 | cut -c1-200; grep -E 'bulk|data' /proc/mounts | cut -c1-150; ls /var/lib/hs/disks 2>&1 | head",
-             expect_rc=None, what="the state of the pool job and the mounts is shown"),
-        step("run", "hs pool bulk | grep -q data", what="hs pool bulk lists the data disks"),
-        step("run", "mountpoint -q /bulk", what="/bulk is mounted"),
+        step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
+             timeout=1800, what="the pool job finishes"),
+        # a SnapRAID pool needs mergerfs and its mount unit: on a server that had none, the rebuild after `hs pool` brings them (docs/install.md)
+    ] + ([step("run", "(unset HS_CALLER; hs rebuild --foreground)", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
+        step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
+        step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
+        step("run", FM_HELPERS, what="helper functions for the checks (checksums, wait for a job)"),
+        step("run", "hs share add hslab1 && hs share add hslab2 && [ -d %s/hslab1 ] && [ -d %s/hslab2 ]" % (SHARES, SHARES), what="two shares for share to share"),
+    ]
+
+
+def pool(params):
+    """Stage `pool`: a SnapRAID data pool of two data disks (no parity). The file manager is read only until fileManagerWrite is on (scripts/fm.sh), so it
+    is switched on first. Then the full write list (docs/PLAN-storage-nas.md step 2, #425): copy, move, rename, mkdir, overwrite, delete, cancel, disk to
+    disk and share to share, and the guard: a pool disk and the pool view of its array are never the two sides of one job."""
+    dk = "/var/lib/hs/disks"
+    return _bulk_steps(params, "snapraid") + [
         step("run", "hs sys fm locations | grep -q 'disk:data-01' && hs sys fm locations | grep -q 'disk:data-02'", what="the file manager sees both data disks"),
-        step("run", "mkdir -p /var/lib/hs/disks/data-01/testlab /var/lib/hs/disks/data-02/testlab && echo hs-testlab > /var/lib/hs/disks/data-01/testlab/a.txt", what="a test file on the first data disk"),
-        step("run", "hs sys fm ls disk:data-01 --path testlab | grep -q a.txt", what="the file manager lists it"),
-        # the plan and the answer of start stay in the console log (a refusal says why)
-        step("run", "printf 'a.txt\\0' | HS_CALLER=test hs sys fm plan copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab; true",
-             what="the plan of the copy is shown"),
-        step("run", "out=$(printf 'a.txt\\0' | HS_CALLER=test hs sys fm start copy --from disk:data-01 --path testlab --to disk:data-02 --to-path testlab); "
-                    "echo \"$out\"; echo \"$out\" | grep -q 'status.*done'",
-             timeout=300, what="the file manager copies it to the second data disk"),
-        step("run", "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do [ -f /var/lib/hs/disks/data-02/testlab/a.txt ] && break; sleep 5; done; "
-                    "grep -qx hs-testlab /var/lib/hs/disks/data-02/testlab/a.txt", timeout=120, what="the copy arrived with the same content"),
+        step("run", "mkdir -p %s/data-01/shares/hslab-a %s/data-02/shares/hslab-b && hs sys fm ls disk:data-01 --path shares/hslab-a | grep -q status" % (dk, dk),
+             what="a folder on each data disk, the file manager lists it"),
+    ] + write_checks("dd", "disk:data-01", "shares/hslab-a", dk + "/data-01/shares/hslab-a",
+                     "disk:data-02", "shares/hslab-b", dk + "/data-02/shares/hslab-b", "hslab-b") \
+      + write_checks("ss", "share:hslab1", "", SHARES + "/hslab1", "share:hslab2", "", SHARES + "/hslab2", "hslab2") + [
+        # the guard
+        step("run", "hs sys fm pair disk:data-01 pool:%s | grep -q 'status.refused'" % POOL, what="the guard: a pool disk and the pool view are refused as a pair"),
+        step("run", "out=$(printf 'dd-src\\0' | HS_CALLER=test hs sys fm start copy --from disk:data-01 --path shares/hslab-a --to pool:%s --to-path shares/hslab2 2>&1); rc=$?; "
+                    "[ $rc -ne 0 ] && echo \"$out\" | grep -q refused" % POOL, what="the guard: a start with that pair refuses"),
+    ]
+
+
+def poolzfs(params):
+    """Stage `poolzfs`: the same write list on a ZFS data pool (a mirror of the two virtual disks), on a VM whose two disks are still empty. A ZFS pool has
+    no data disks, so the pairs are share to share and share to the pool view."""
+    return _bulk_steps(params, "zfs") + [
+        step("run", "hs sys fm locations | grep -q pool:" + POOL, what="the file manager sees the pool"),
+        step("run", "mkdir -p " + SHARES + "/hslab2/zz-in", what="a folder in the pool view"),
+    ] + write_checks("ss", "share:hslab1", "", SHARES + "/hslab1", "share:hslab2", "", SHARES + "/hslab2", "hslab2") \
+      + write_checks("sp", "share:hslab1", "", SHARES + "/hslab1", "pool:" + POOL, "shares/hslab2/zz-in", SHARES + "/hslab2/zz-in", "zz-in")
+
+
+def unraid(params):
+    """Stage `unraid` (docs/PLAN-storage-nas.md step 7, #460 a): three still empty virtual disks are made the way Unraid makes them (one partition from
+    sector 64, xfs in it, files owned 99:100, the same top folder on both data disks; a parity disk with a partition and no file system), then only
+    the read-only side runs: `hs migrate check` and the adopt `--dry-run` plan. The checksum of each partition before and after proves nothing was
+    written. Keys of HS_NESTED_DISKS: unraid1, unraid2 (data), unraidp (parity, smaller). Not tested on hardware yet."""
+    fxp = "fxp() { lsblk -nrpo PATH,TYPE $1 | awk '$2==\"part\"{print $1; exit}'; }"
+    mk = ("mkunraid() { d=$1; printf 'label: gpt\\nfirst-lba: 34\\nstart=64\\n' | sfdisk -q $d && partprobe $d && udevadm settle; p=$(fxp $d); "
+          "mkfs.xfs -q -f $p && mkdir -p /mnt/unraid-fx && mount $p /mnt/unraid-fx && mkdir -p /mnt/unraid-fx/Media /mnt/unraid-fx/Shared /mnt/unraid-fx/Own-$2 && "
+          "echo film-$2 > /mnt/unraid-fx/Media/$2.mkv && echo shared-$2 > /mnt/unraid-fx/Shared/$2.txt && chown -R 99:100 /mnt/unraid-fx/Media /mnt/unraid-fx/Shared /mnt/unraid-fx/Own-$2 && "
+          "umount /mnt/unraid-fx; }")
+    return login_root(params) + [
+        disk_by_name(params, "unraid1", "u1"),
+        disk_by_name(params, "unraid2", "u2"),
+        disk_by_name(params, "unraidp", "up"),
+        step("run_var", "test -b {u1} && test -b {u2} && test -b {up}", what="the three virtual disks are block devices"),
+        step("run", "command -v mkfs.xfs sfdisk partprobe >/dev/null", what="the tools to build the fixtures are installed"),
+        step("run", fxp, what="a helper that names the partition of a disk"),
+        step("run", mk, what="a helper that builds one Unraid data disk"),
+        step("run_var", "mkunraid {u1} one && mkunraid {u2} two", timeout=300, what="two data disks: partition 1, xfs, files 99:100, the same top folder"),
+        step("run_var", "printf 'label: gpt\\nfirst-lba: 34\\nstart=64\\n' | sfdisk -q {up} && partprobe {up}", what="a parity disk: a partition, no file system"),
+        step("run_var", "for d in {u1} {u2}; do blkid -p -o export $(fxp $d); done | sha256sum > /tmp/unraid-before", what="the superblocks are noted"),
+        step("run", "hs migrate check --parity $(basename {up}) | tee /tmp/unraid-check.out | grep -q xfs", what="migrate check lists the xfs disks"),
+        step("run", "grep -q 'can be adopted' /tmp/unraid-check.out", what="migrate check: they can be adopted"),
+        step("run_var", "hs pool %s add --role adopt --disks $(basename {u1}),$(basename {u2}) --merge --dry-run | tee /tmp/unraid-plan.out | grep -q Own-one" % POOL,
+             what="the adopt plan lists the folder of the first disk"),
+        step("run", "grep -q 'merged with folders of the same name' /tmp/unraid-plan.out && grep -q Shared /tmp/unraid-plan.out", what="the plan merges the shared top folder"),
+        step("run_var", "for d in {u1} {u2}; do blkid -p -o export $(fxp $d); done | sha256sum | cmp - /tmp/unraid-before", what="nothing was written to the data disks"),
     ]
 
 
@@ -262,6 +374,8 @@ SCENARIOS = {
     "backup": backup,
     "restore": restore,
     "pool": pool,
+    "poolzfs": poolzfs,
+    "unraid": unraid,
     "address": address,
     "upgrade": upgrade_steps,
 }

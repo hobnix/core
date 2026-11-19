@@ -6,6 +6,7 @@
   import Button from '../ui/Button.svelte';
   import RestoreFiles from '../forms/backup/RestoreFiles.svelte';
   import SetupDisk from '../forms/backup/SetupDisk.svelte';
+  import OffsiteTarget from '../forms/backup/OffsiteTarget.svelte';
   import { get, prefetchPlan } from '../api.js';
   import { sharesPath } from '../pools.svelte.js';
   import Table from '../shell/Table.svelte';
@@ -132,9 +133,17 @@
           <Button size="sm" icon="arrows-clockwise" busy={jobRunning('backup', ['offsite-now'])} disabled={!!why} tooltip={tipWhy('Copy the new backups to the off-site repository now')} onclick={() => openPlan('backup', ['offsite-now'], 'Copy to the off-site repository')}>Copy off-site now</Button>
           <Button variant="ghost" size="sm" icon="cloud-slash" busy={jobRunning('backup', ['offsite-off'])} tooltip={'Stop copying off site (what is there stays)'} onclick={() => openPlan('backup', ['offsite-off'], 'Switch the off-site copy off')}>Switch off</Button>
         {:else}
-          <span class="muted">Off-site copy: set one on the server with <span class="mono">hs backup offsite set &lt;repo&gt;</span> (an address can carry a password, so it is not typed here).</span>
+          <span class="muted">Off-site copy: not set.</span>
         {/if}
+        <Button size="sm" icon="cloud-arrow-up" disabled={!!why} tooltip={tipWhy('Choose where the off-site copy goes: S3, REST server, SFTP or a folder')} onclick={() => openCreate(OffsiteTarget)}>{s.offsite ? 'Change target…' : 'Set up off-site copy…'}</Button>
       </div>
+      {#if ui.offsitePass}
+        <Banner tone="warn" icon="key">
+          The new off-site repository has its OWN password. Write it down now; it is shown only once and without it that copy cannot be opened:
+          <span class="mono">{ui.offsitePass}</span>
+          {#snippet action()}<Button size="sm" onclick={() => { ui.offsitePass = ''; }}>I wrote it down</Button>{/snippet}
+        </Banner>
+      {/if}
     </div>
 
     <div class="card tc">

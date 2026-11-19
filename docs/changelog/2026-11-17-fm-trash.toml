@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "File manager: delete moves into a trash"
+body  = """Delete in the file manager now moves files into a hidden trash folder on the same file system (a rename, instant). Items can be put back for 14 days; then the trash is emptied at 03:35. The trash keeps the space used until then. "Delete for good" still needs the typed confirmation. Not tested on hardware yet."""

@@ -1006,11 +1006,14 @@ READS = {
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
     ("disk", "marks"): {"kind": "tsv", "ttl": 10, "topic": "disk-marks"},
-    # the file manager (fm.sh, docs/PLAN-file-manager.md): the places, the same-files rule, one page of a folder (a cursor, never the whole tree), a job's state
+    # the file manager (fm.sh, docs/PLAN-storage-nas.md): the places, the same-files rule, one page of a folder (a cursor, never the whole tree), a job's state
     ("fm", "locations"): {"kind": "tsv", "ttl": 5, "topic": "fm-locations"},
     ("fm", "pair"): {"kind": "tsv", "ttl": 5, "args": [FM_LOC, FM_LOC]},
     ("fm", "ls"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path"), "cursor": (r"^[0-9]{1,9}$", "--cursor"),
                                                                         "limit": (r"^[0-9]{1,4}$", "--limit")}},
+    ("fm", "trash"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC]},
+    ("fm", "du"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{0,1024}$", "--path")}},
+    ("fm", "stat"): {"kind": "tsv", "ttl": 0, "args": [FM_LOC], "query": {"path": (r"^[^\x00-\x1f]{1,1024}$", "--path")}},
     ("fm", "progress"): {"kind": "tsv", "ttl": 0, "args": [UNIT]},
     ("disk", "ls"): {"kind": "tsv", "ttl": 5,"args": [r"^data-[0-9]{1,3}$"], "query": {"path": (r"^(?!.*(^|/)\.\.(/|$))(shares|sensitive)(/[^/\x00-\x1f]{1,255}){0,20}$", "--path")}},
     ("state", "smart"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
@@ -1112,10 +1115,11 @@ CHANGE = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9._ -]{0,63}=(ad
 CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webAccent|webTerminal|"
                "recipeQuestionHours|webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|"
                "incusUi|isoDir|syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|"
-               "backupNewShares|backupNewInstances|notifySecondMinPriority|notifications|quietHours|autoMitigate|"
-               "metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|"
-               "gatewayPublicHttp|gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|"
-               "gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
+               "backupNewShares|backupNewInstances|offsiteDiskDays|notifySecondMinPriority|notifications|quietHours|"
+               "autoMitigate|autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|"
+               "dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
+               "gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|"
+               "gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS
 CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one --set key=value of `config apply` (hand-written, outside the generated block)
 # share forms: a folder name inside the instance (absolute) and inside a share (relative or absolute, both without ..), a SID with its level, a kept folder
@@ -1165,6 +1169,7 @@ def area_refresh(area):
 
 
 # the keys of the docker steps (capabilities/docker/capability.toml; scripts/docker-setup.sh accepts the same ones)
+OFFW = r"^[A-Za-z0-9/@:._+=,~%-]{1,200}$"   # one word of an off-site target (backup-change.sh checks it again)
 DOCKER_REGISTRY_HOST = r"^[a-z0-9][a-z0-9.-]{0,99}(:[0-9]{1,5})?$"
 DOCKER_SET = r"^(dockerManager=(webui|arcane|portainer|none)|dockerSize=[sml])$"
 def _config_entries(extra):
@@ -1209,8 +1214,8 @@ CHANGES = {
              {"fixed": [r"^answer$", r"^[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]{1,60}-[a-z]{4}$"], "opts": {"--seq": (r"^[0-9]{1,9}$", False), "--key": (r"^[A-Za-z][A-Za-z0-9_]{0,40}$", False)}, "need": ["--seq", "--key"], "stdin": True}],
     # the file manager (fm.sh): copy, move, delete, rename, mkdir. The selection (names below --path) is NOT an argument: the body field `selection` (a list of names,
     # at most FM_SELECTION_MAX) goes to the script on stdin, NUL separated, never argv. The script enforces every rule itself; --by (who) is added here, not by the client.
-    "fm": [{"fixed": [r"^(copy|move|delete|rename|mkdir)$"],
-            "opts": {"--from": (FM_LOC, False), "--to": (FM_LOC, False), "--path": (FM_PATH, False), "--to-path": (FM_PATH, False),
+    "fm": [{"fixed": [r"^(copy|move|delete|restore|rename|mkdir)$"],
+            "opts": {"--permanent": (None, False), "--from": (FM_LOC, False), "--to": (FM_LOC, False), "--path": (FM_PATH, False), "--to-path": (FM_PATH, False),
                      "--conflict": (r"^(skip|rename|newer|overwrite)$", False), "--verify": (r"^(size|checksum)$", False), "--parity-after": (None, False),
                      "--newname": (r"^[^\x00-\x1f/]{1,255}$", False), "--conflicts": (None, False)},
             "selection": True}],
@@ -1237,6 +1242,10 @@ CHANGES = {
              # convert: a SnapRAID data disk is emptied and formatted again (--fs, --encrypt); ZFS has nothing to convert, so only a SnapRAID pool (pool_change_ok)
              {"fixed": [POOL_NAME, r"^convert$", r"^--member$", DISKID],
               "opts": {"--fs": (FSTYPE, False), "--encrypt": (None, False), "--discard": (None, False)}, "stdin": True}],
+    # taking over an Unraid server (migrate-unraid.sh plan|start): disks named by id, the passphrases of encrypted disks as ONE JSON line on stdin (--unlock)
+    "migrate": [{"fixed": [r"^unraid$"],
+                 "opts": {"--disks": (DISKIDS, False), "--parity": (DISKIDS, False), "--spare": (DISKID, False), "--pool": (POOL_NAME, False),
+                          "--per-disk": (None, False), "--chown": (None, False), "--unlock": (None, False)}, "stdin": True}],
     # the storage incident workflow: freeze the apps that write to an affected share, thaw them again (storage-incident.sh plan|start)
     "incident": [[r"^(pause|resume)$"]],
     "disk": [[DISKID, r"^test$", r"^(short|long)$"],
@@ -1354,7 +1363,12 @@ CHANGES = {
                [r"^drill$", r"^--count$", r"^[0-9]{1,2}$"],
                [r"^browse$", r"^--to$", ONOFF],
                [r"^toggle$", r"^--name$", NAME, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
-               [r"^offsite-now$"], [r"^offsite-off$"]],     # offsite-set stays a terminal job: an address can carry a password (rest:https://user:pw@host)
+               [r"^offsite-now$"], [r"^offsite-off$"],
+               # the guided off-site target (backup-change.sh offsite-config): keys and passwords are lines on stdin, never an argument
+               {"fixed": [r"^offsite-config$"], "stdin": True,
+                "opts": {"--kind": (r"^(s3|rest|sftp|folder|typed)$", False), "--endpoint": (OFFW, False), "--bucket": (OFFW, False), "--prefix": (OFFW, False),
+                         "--url": (OFFW, False), "--user": (OFFW, False), "--host": (OFFW, False), "--port": (r"^[0-9]{1,5}$", False),
+                         "--path": (OFFW, False), "--repo": (OFFW, False)}}],
     "shares": [[SHARE, r"^(snapshot|repair)$"],
                [SHARE, r"^snapshot$", r"^--label$", LABEL],
                [SHARE, r"^(backup|cache|auto)$", r"^--to$", ONOFF],

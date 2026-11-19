@@ -1,0 +1,6 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Disks: hs disk spindown log shows what wakes a sleeping disk"
+body  = """
+`sudo hs disk spindown log 24` watches the spinning disks for 24 hours (kernel counters and `hdparm -C`, nothing that wakes a disk) and writes which disk woke when and which systemd units started in that minute. Not tested on hardware yet.
+"""

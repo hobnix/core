@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Old disks that cannot be adopted say why"
+body  = """Adopting and `hs migrate check` now refuse ZFS-formatted disks, a btrfs that spans several disks, a file system with an unreplayed log and a LUKS disk that only a key file opens, each with its reason, before anything is written. Not tested on hardware yet."""

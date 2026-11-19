@@ -6,6 +6,7 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import { trackDone } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
+  import Button from '../ui/Button.svelte';
   import Banner from '../ui/Banner.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Halftone from '../shell/Halftone.svelte';
@@ -51,7 +52,7 @@
     if (op === 'rename' && n === spec.name) return 'That is the name it has already';
     return '';
   });
-  const canStart = $derived(fm.write && !!p?.ok && !loading && !busy && !nameBad && (!need || confirm === need));
+  const canStart = $derived(fm.write && !!p?.ok && !loading && !nameBad && (!need || confirm === need));
   const verb = { copy: 'Copy', move: 'Move', delete: 'Delete permanently', rename: 'Rename', mkdir: 'Create folder' };
   const things = $derived(`${S.plural(spec.sum.n, 'item')}${spec.sum.dirs ? ` (${S.plural(spec.sum.dirs, 'folder')})` : ''}`);
   const title = $derived(p?.heading || ({ copy: `Copy ${things}`, move: `Move ${things}`, delete: `Delete ${things}`, rename: `Rename ${spec.name}`, mkdir: 'New folder' })[op]);
@@ -99,12 +100,13 @@
 
   function close() { fm.dialog = null; }
   async function go() {
+    if (busy || !canStart) return;
     busy = true;
     startErr = '';
     try {
       const r = await api.start(spec, opts, need ? confirm : '');
       if (!r.ok) { startErr = r.reason || 'The server did not start it.'; return; }
-      if (r.unit) fm.beginJob(r.unit, spec, title);
+      if (r.unit) fm.beginJob(r.unit, spec, title, { ...opts });
       else { trackDone(title, p.steps.map((s) => s.text)); fm.afterStart(spec.side); }
       close();
     } catch (e) {
@@ -210,9 +212,9 @@
       <span class="note">{p?.ok ? 'Nothing has run yet. The job appears under Tasks.' : ''}</span>
       <button class="btn" onclick={close}>{p?.ok ? 'Cancel' : 'Close'}</button>
       {#if p?.ok}
-        <button class="btn {danger ? 'btn-danger' : 'btn-primary'}" disabled={!canStart} use:tip={canStart ? '' : !fm.write ? S.WRITE_OFF : need && confirm !== need ? 'Type the name to confirm first' : nameBad || (busy ? 'Starting' : 'Not ready yet')} onclick={go}>
-          <i class="ph ph-{op === 'delete' ? 'trash' : 'play'}"></i>{busy ? 'Starting…' : verb[op]}
-        </button>
+        <!-- busy (not disabled) while the job starts: a spinner, the click is ignored -->
+        <Button variant={danger ? 'danger' : 'primary'} icon={op === 'delete' ? 'trash' : 'play'} {busy} busyLabel="Starting…" disabled={!canStart && !busy}
+                tooltip={canStart || busy ? '' : !fm.write ? S.WRITE_OFF : need && confirm !== need ? 'Type the name to confirm first' : nameBad || 'Not ready yet'} onclick={go}>{verb[op]}</Button>
       {/if}
     </div>
   </div>

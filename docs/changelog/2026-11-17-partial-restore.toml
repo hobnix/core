@@ -1,0 +1,5 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Restore and check a partly backed-up instance"
+docs  = "backup-and-recovery"
+body  = """`hs backup restore ct <name>` runs the recipe of the app again and then puts the backed-up paths back while the app is stopped (plan first, you type the instance name). `hs backup drill ct` checks such an instance without booting it: every included path and dump file must come back with data, and the report says "partial". Not tested on hardware yet."""

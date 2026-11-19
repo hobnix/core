@@ -5,6 +5,7 @@
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
+. "$here/lib/adopt-check.sh"
 
 usage() {
   say "usage: hs migrate check [--parity <disk>]"
@@ -64,18 +65,20 @@ while IFS=$'\t' read -r id size _ _; do
   fs="-"; part=""
   while read -r p; do
     t=$(blkid -p -o value -s TYPE "$p" 2>/dev/null || true)
-    case "$t" in xfs|ext4|btrfs|crypto_LUKS|ntfs|exfat|vfat) fs=$t; part=$p ;; esac
+    case "$t" in xfs|ext4|btrfs|crypto_LUKS|ntfs|exfat|vfat|zfs_member) fs=$t; part=$p ;; esac
   done < <(lsblk -nr -o PATH "$dev")
   what=""; used="-"
   case "$fs" in
     xfs|ext4|btrfs)
-      used=$(inspect_fs "$part" "$fs")
-      if [ "$used" = unreadable ]; then what="$(t 'NOT READABLE: not shut down cleanly? Stop the old server properly, or repair it (%s)' "$([ "$fs" = xfs ] && echo xfs_repair || echo fsck)")"; problems=$((problems + 1))
+      if reason=$(adopt_refusal "$part" "$fs"); then used=$(inspect_fs "$part" "$fs"); else used=refused; fi
+      if [ "$used" = refused ]; then what="$(t 'REFUSED: %s' "$reason")"; problems=$((problems + 1)); used="-"
+      elif [ "$used" = unreadable ]; then what="$(t 'NOT READABLE: not shut down cleanly? Stop the old server properly, or repair it (%s)' "$([ "$fs" = xfs ] && echo xfs_repair || echo fsck)")"; problems=$((problems + 1))
       else what="$(t 'can be adopted')"; adoptable=$((adoptable + 1)); total_used=$((total_used + used)); used=$(human "$used")
         [ "$size" -le "$max_data" ] || max_data=$size
       fi ;;
     crypto_LUKS) what="$(t 'encrypted: adopting asks for the passphrase (hs unlock)')"; adoptable=$((adoptable + 1))
         [ "$size" -le "$max_data" ] || max_data=$size ;;
+    zfs_member) what="$(t 'ZFS (an Unraid ZFS array disk): it can not be adopted as it is, import its ZFS pool instead')"; problems=$((problems + 1)) ;;
     ntfs|exfat|vfat) what="$(t '%s: copy it with hs disk temp, it cannot be adopted' "$fs")"; problems=$((problems + 1)) ;;
     *) what="$(t 'no filesystem found')" ;;
   esac

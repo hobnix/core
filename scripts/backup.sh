@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: back up shares, chosen containers, the domain controller and the host config with restic to the disk labelled "backup"
 # help.de: sichert Freigaben, ausgewählte Container, den Domänencontroller und die Server-Einstellungen mit restic auf die Platte mit dem Etikett "backup"
-# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|now|off | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
+# args: [--state | --shares | --snapshots | status | now | list | find <name> | restore <snapshot|latest> <path> | restore ct <name> [--recipe <app>] | config [restore [<snapshot|latest>] [--with-state] [--from-disk <device>] [--with-samba]] | browse [--off] | verify | drill [N] | drill ct [<name>] | report | offsite set <repo>|--kind s3|rest|sftp|folder ...|now|off|migrate | restore|find|list|drill ... --repo offsite | init [<device>] | <share> on|off | ct <name> on|off] [--dry-run]
 set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/dc.sh"
@@ -19,6 +19,10 @@ usage: hs backup [status]                    what is in the backup, last run, sp
        hs backup ct <name> on|off            same for a container (needs to be running) or a virtual machine
                                              (the whole machine as one export file every night, needs that much
                                              free space in /var/tmp or HS_VM_EXPORT_DIR)
+       hs backup ct <name> paths             which parts of the instance are in the backup (in and out, with sizes)
+       hs backup ct <name> include <path>    back up only chosen parts of the instance: add a path inside it
+       hs backup ct <name> exclude <glob>    leave a part out (restic pattern, a leading / is the instance root)
+       hs backup ct <name> reset [<path>]    forget one rule, or all of them: the whole instance again
        hs backup list                        snapshots (id, time, tag, size)
        hs backup find <name>                 which snapshots contain a file name
        hs backup restore <snapshot|latest> <path> [--tag T] [--to DIR] [--keep-owner]
@@ -37,7 +41,10 @@ usage: hs backup [status]                    what is in the backup, last run, sp
                                              the Samba secrets only with --with-samba
        hs backup browse [--off]              show the whole backup read-only as share "backup-browse"
        hs backup verify                      check part of the stored data
-       hs backup prune [--dry-run]           give space back now: delete leftovers of a run that ran out of space, apply the
+       hs backup restore ct <name> [--recipe <app>] [--dry-run]
+                                             a partial container (only some parts in the backup): run its recipe again, then put
+                                             the backed-up parts back while the app is stopped (plan first, you type the name)
+       hs backup prune [--dry-run]         give space back now: delete leftovers of a run that ran out of space, apply the
                                              retention (7 daily, 4 weekly, 6 monthly) and prune
        hs backup drill [N]                   restore N random files (default 5) into a temp folder and compare them
        hs backup drill ct [<name>]           restore a container (the one drilled longest ago, smallest first) into a
@@ -45,9 +52,14 @@ usage: hs backup [status]                    what is in the backup, last run, sp
                                              domain controller backup file and the export file of one virtual machine
        hs backup report [--dry-run]          the report of the restore drills as a push message (it goes out
                                              every month by itself, on the 25th)
-       hs backup offsite set <repo>          also copy every backup to a second repository (a folder on another
-                                             disk, sftp:user@host:/path, b2:bucket:path ...); keys in
-                                             /var/lib/hs/backup-offsite.env. offsite now / off
+       hs backup offsite set [<repo> | --kind s3|rest|sftp|folder ...]
+                                             also copy every backup to a second repository. By kind it asks the fields
+                                             (s3: --endpoint --bucket [--prefix], keys asked; rest: --url [--user], password
+                                             asked; sftp: --host --user [--port] --path; folder: --path) and writes the restic
+                                             address itself; a typed <repo> (b2:bucket:path ...) stays possible. Secrets are asked
+                                             for or read from stdin, never taken as arguments. offsite now / off / migrate
+       hs backup restore|find|list|drill --repo offsite
+                                             the same on the off-site repository instead of the backup disk
        hs backup init [<device>] [--dry-run] FORMAT a disk as the backup disk (erases it) and create the repository;
                                              without a device the free disks are listed to pick from
 
@@ -75,29 +87,47 @@ ON=$STATE/backup-on              # shares included on purpose, one per line (onl
 # "off" = a share is in the backup only when it was switched on; "on" = in unless switched off.
 # Without the file (a server that was not rebuilt yet) nothing changes: "on".
 . "$(dirname "$0")/lib/sharepath.sh"
+. "$(dirname "$0")/lib/backup-rules.sh"   # rule file per instance: which parts of it are backed up (hs backup ct <ct> paths)
 . "$(dirname "$0")/lib/event.sh"   # event_emit: backup.ok, backup.failed, backup.report (best effort)
 . "$(dirname "$0")/lib/setting.sh"   # backupNewShares is a runtime setting now (true|false); the old /etc/hs file (on|off) is its fallback
 NEW_SHARES=${HS_BACKUP_NEW_SHARES:-$(case "$(setting_get backupNewShares 2>/dev/null)" in false|off) echo off ;; *) echo on ;; esac)}
 CTS=$STATE/backup-instances      # containers included, one per line
 DUMPS=$STATE/backup-dump         # one file per container: the command that writes its database dump
-OFFSITE=$STATE/backup-offsite    # second repository (restic address), optional
-OFFSITE_ENV=$STATE/backup-offsite.env
+OFFSITE=$STATE/backup-offsite.repo          # second repository: the restic address (may carry a REST password), 0600, restic --repository-file
+OFFSITE_OLD=$STATE/backup-offsite           # the address before 0.7: moved to $OFFSITE once
+OFFSITE_PASS=$STATE/restic-offsite-password # its own password (absent: an older off-site repository that shares the backup disk's)
+OFFSITE_CRED=$STATE/backup-offsite.credentials   # S3 keys as an AWS credentials file; restic reads it by path (AWS_SHARED_CREDENTIALS_FILE)
+OFFSITE_ENV=$STATE/backup-offsite.env       # old way: KEY=VALUE lines for restic's environment; parsed, never sourced, until migrated
 RESULT=$STATE/backup.state       # read by hs health
 DC=$(dc_name)
 INCUS_ROOT=${HS_INCUS_ROOT:-/var/lib/incus/storage-pools/default/containers}
 BROWSE=/mnt/backup-browse
+OFFDEV=${HS_BACKUP_OFFSITE_DEV:-/dev/disk/by-label/backup-offsite}   # the rotating off-site disk (step 14, D18): a folder repository on it
+OFFMNT=${HS_BACKUP_OFFSITE_MOUNT:-/mnt/backup-offsite}                # mounted only while a command needs it
+EXPIRY_NAME=offline-backup-disk
 export RESTIC_CACHE_DIR=${HS_BACKUP_CACHE:-/var/cache/restic}
 
 dry=false
+want_off=false   # --repo offsite: every restic call of this command goes to the off-site repository
+machine=false    # offsite set --machine: plain key<TAB>value lines for the web interface
 args=()
+prev=""
 for a in "$@"; do
+  if [ "$prev" = --repo ]; then
+    prev=""
+    case "$a" in offsite) want_off=true ;; local) ;; *) usage ;; esac
+    continue
+  fi
   case "$a" in
+    --repo) prev=--repo ;;
+    --machine) machine=true ;;
     --dry-run) dry=true ;;
     --yes)     export HS_BACKUP_YES=1 ;;   # init: the typed confirmation was asked before (the interface's review)
     -h|--help) usage ;;
     *) args+=("$a") ;;
   esac
 done
+[ -z "$prev" ] || usage
 set -- "${args[@]+"${args[@]}"}"
 cmd=${1:-status}
 [ $# -gt 0 ] && shift
@@ -105,7 +135,9 @@ cmd=${1:-status}
 # --from-disk (config restore on a fresh install): the typed passphrase is in a private temp file and the disk is read-only, so no lock is taken
 R_PASSFILE=$PASSFILE
 R_EXTRA=()
-R() { restic -r "$REPO" --password-file "$R_PASSFILE" "${R_EXTRA[@]}" "$@"; }
+R() {
+  if $want_off; then R_off "$@"; else restic -r "$REPO" --password-file "$R_PASSFILE" "${R_EXTRA[@]}" "$@"; fi
+}
 
 # Remove locks a dead run left behind. `restic unlock` only removes a lock whose process is gone, and a reused PID (or a
 # reboot) keeps it for days ("already locked by PID ... 85h ago"); when no restic runs on this host any more nothing can
@@ -123,11 +155,16 @@ set_up() { [ "$(pass_state)" != missing ]; }
 
 # ── The backup disk: mounted only while something needs it ──
 mounted_by_us=false
+off_mounted=false
 cleanup() {
   if declare -F drill_cleanup >/dev/null; then drill_cleanup || true; fi   # the throwaway instance of `drill ct`
   if $mounted_by_us; then
     sync
     umount "$MNT" 2>/dev/null || warn "$(t 'Could not unmount %s (still in use)' "$MNT")" >&2
+  fi
+  if $off_mounted; then
+    sync
+    umount "$OFFMNT" 2>/dev/null || warn "$(t 'Could not unmount %s (still in use)' "$OFFMNT")" >&2
   fi
 }
 trap cleanup EXIT
@@ -142,6 +179,7 @@ mount_disk() {
 }
 
 need_repo() {
+  if $want_off; then offsite_ready; return; fi
   [ "$(pass_state)" != locked ] || secret_locked_exit
   [ -f "$PASSFILE" ] || die "Not set up yet. Run: hs backup init <device>"
   mount_disk
@@ -223,6 +261,67 @@ cmd_toggle_ct() {
            ok "$(t '%s: included in the backup (its files, while it runs)' "$name")"
          fi ;;
     off) set_line "$CTS" "$name" remove; ok "$(t '%s: left out of the backup' "$name")" ;;
+    *) usage ;;
+  esac
+}
+
+# ── Which parts of an instance are backed up (hs backup ct <ct> paths|include|exclude|reset, hs sys backup rules <ct>) ──
+rules_size() {   # rules_size <ct> <path inside the instance>: bytes on the SSD (rootfs), or - when it is not mounted or not there
+  local f=$INCUS_ROOT/$1/rootfs$2 n
+  if [ -e "$f" ] && n=$(du -sb -- "$f" 2>/dev/null | cut -f1) && [ -n "$n" ]; then echo "$n"; else echo -; fi
+}
+cmd_rules_kv() {   # --rules <ct>: partial<TAB>yes|no, include<TAB>path<TAB>bytes, exclude<TAB>glob<TAB>-, dump<TAB>path<TAB>bytes
+  local ct=${1:-} p
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "usage: backup.sh --rules <instance>" >&2; exit 1; }
+  if rules_has "$ct"; then printf 'partial\tyes\n'; else printf 'partial\tno\n'; fi
+  while IFS= read -r p; do if [ -n "$p" ]; then printf 'include\t%s\t%s\n' "$p" "$(rules_size "$ct" "$p")"; fi; done < <(rules_list "$ct" include)
+  while IFS= read -r p; do if [ -n "$p" ]; then printf 'exclude\t%s\t-\n' "$p"; fi; done < <(rules_list "$ct" exclude)
+  if rules_has "$ct" && [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then printf 'dump\t/var/backups/hs\t%s\n' "$(rules_size "$ct" /var/backups/hs)"; fi
+}
+cmd_ct_paths() {   # hs backup ct <ct> paths
+  local ct=$1 p b kind sz
+  if ! rules_has "$ct"; then
+    note "$(t '%s: the whole instance is backed up (no rules). Choose parts: hs backup ct %s include <path>' "$ct" "$ct")"
+    return 0
+  fi
+  step "$(t 'In the backup of %s' "$ct")"
+  while IFS=$'\t' read -r kind p b; do
+    case "$kind" in include|dump) ;; *) continue ;; esac
+    if [ "$b" = - ]; then sz=$(t '(size unknown: the instance is not running)'); else sz=$(human "$b"); fi
+    if [ "$kind" = dump ]; then sz="$sz $(t '(dump files, always)')"; fi
+    say "  $p  $sz"
+  done < <(cmd_rules_kv "$ct")
+  step "$(t 'Left out')"
+  while IFS= read -r p; do if [ -n "$p" ]; then say "  $p"; fi; done < <(rules_list "$ct" exclude)
+  say "  $(t 'everything else in the instance: a restore runs the recipe again and puts these paths back')"
+}
+cmd_ct_rule_apply() {   # cmd_ct_rule_apply <ct> include|exclude|reset <arg>
+  local ct=$1 verb=$2 arg=${3:-}
+  case "$verb" in
+    include) rules_path_ok "$arg" || die "$(t 'An include is an absolute path inside the instance (no .. in it): %s' "$arg")"
+             rules_add "$ct" include "$arg"; ok "$(t '%s: %s is in the backup' "$ct" "$arg")" ;;
+    exclude) rules_glob_ok "$arg" || die "$(t 'An exclude is a restic pattern, not empty, no ! in front: %s' "$arg")"
+             rules_has "$ct" || die "$(t '%s has no include yet: choose what is in first (hs backup ct %s include <path>)' "$ct" "$ct")"
+             rules_add "$ct" exclude "$arg"; ok "$(t '%s: %s is left out' "$ct" "$arg")" ;;
+    reset)   if [ -n "$arg" ] && [ "$arg" != all ]; then rules_drop "$ct" "$arg"; ok "$(t '%s: rule %s removed' "$ct" "$arg")"
+             else rules_reset "$ct"; ok "$(t '%s: no rules, the whole instance is backed up again' "$ct")"; fi ;;
+  esac
+}
+cmd_ct_rules() {   # hs backup ct <ct> paths|include|exclude|reset|apply ...
+  local ct=$1 verb=$2 s
+  shift 2
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "$(t 'That is not an instance name: %s' "$ct")"
+  case "$verb" in
+    paths)   [ $# -eq 0 ] || usage; cmd_ct_paths "$ct" ;;
+    include|exclude) [ $# -eq 1 ] || usage
+             incus info "$ct" >/dev/null 2>&1 </dev/null || die "$(t 'No instance called %s' "$ct")"
+             cmd_ct_rule_apply "$ct" "$verb" "$1" ;;
+    reset)   [ $# -le 1 ] || usage; cmd_ct_rule_apply "$ct" reset "${1:-}" ;;
+    apply)   # the interface: include=<path> exclude=<glob> reset=<path>|all, in this order
+             incus info "$ct" >/dev/null 2>&1 </dev/null || die "$(t 'No instance called %s' "$ct")"
+             for s in "$@"; do
+               case "$s" in include=*|exclude=*|reset=*) cmd_ct_rule_apply "$ct" "${s%%=*}" "${s#*=}" ;; *) die "$(t 'Unknown rule change: %s' "$s")" ;; esac
+             done ;;
     *) usage ;;
   esac
 }
@@ -374,6 +473,29 @@ ct_excludes() {  # ct_excludes <rootfs>
   done
 }
 
+# An instance with backup rules (scripts/lib/backup-rules.sh): only the included paths below its rootfs, tagged partial, with the
+# usual excludes and the rule excludes. The dump files (/var/backups/hs) are always part of it when the instance has a dump descriptor.
+# ct_partial_backup <name> <rootfs> <restic backup options...> -- <ct_excludes...>
+ct_partial_backup() {
+  local name=$1 root=$2 inc=() ex=() opts=() paths=() p g
+  shift 2
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do opts+=("$1"); shift; done
+  shift
+  ex=("$@")
+  while IFS= read -r p; do if [ -n "$p" ]; then inc+=("$p"); fi; done < <(rules_list "$name" include)
+  if [ -n "$(dump_cmds "$DUMPS/$name")" ]; then inc+=(/var/backups/hs); fi
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    case "$g" in /*) ex+=(--exclude "$root$g") ;; *) ex+=(--exclude "$g") ;; esac
+  done < <(rules_list "$name" exclude)
+  for p in "${inc[@]}"; do
+    if [ -e "$root$p" ]; then paths+=("$root$p"); else warn "$(t '%s: %s is not in the instance, skipped' "$name" "$p")"; fi
+  done
+  if [ ${#paths[@]} -eq 0 ]; then warn "$(t '%s: none of its backup paths exist, nothing backed up' "$name")"; return 1; fi
+  note "$(t '%s: only the chosen parts are backed up (hs backup ct %s paths)' "$name" "$name")"
+  R backup "${opts[@]}" --tag "ct:$name" --tag partial "${ex[@]}" "${paths[@]}"
+}
+
 cmd_now() {
   local scheduled=false
   [ "${1:-}" = --scheduled ] && scheduled=true
@@ -412,6 +534,9 @@ cmd_now() {
   # restic shows its own progress line on a terminal; in a job or a log (no terminal) one line a minute
   [ -t 1 ] || export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-0.0167}
   local fail=0 b=(--host "$(hostname)" --exclude-caches)
+  # the file manager's trash is not backed up (names from scripts/lib/fm.sh, read in a subshell so nothing of it leaks into this script)
+  mapfile -t tx < <(. "$(dirname "$0")/lib/fm.sh" && fm_trash_excludes)
+  b+=("${tx[@]}")
   mount_disk
   [ -f "$REPO/config" ] || die "$(t 'No backup repository in %s. Run: hs backup init <device>' "$REPO")"
   clear_locks
@@ -430,7 +555,7 @@ cmd_now() {
   mapfile -t hf < <(host_files)
   if [ ${#hf[@]} -gt 0 ]; then
     mapfile -t hx < <(host_excludes)
-    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" "${hf[@]}" || fail=1
+    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" --exclude "$OFFSITE_PASS" --exclude "$OFFSITE_CRED" --exclude "$OFFSITE" --exclude "$VAULT_SECRETS/${OFFSITE_PASS##*/}" --exclude "$VAULT_SECRETS/${OFFSITE_CRED##*/}" --exclude "$VAULT_SECRETS/${OFFSITE##*/}" "${hf[@]}"   # none of the off-site secrets goes into a backup (least of all into the off-site repository it protects) || fail=1
   fi
 
   for name in "${cts[@]+"${cts[@]}"}"; do
@@ -447,7 +572,11 @@ cmd_now() {
     step "$(t 'Container %s' "$name")"
     dump_hook "$name" || fail=1
     mapfile -t ex < <(ct_excludes "$root")
-    R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || fail=1
+    if rules_has "$name"; then
+      ct_partial_backup "$name" "$root" "${b[@]}" -- "${ex[@]}" || fail=1
+    else
+      R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || fail=1
+    fi
   done
 
   # Keep 7 daily, 4 weekly, 6 monthly per kind of snapshot. Space is only
@@ -459,9 +588,17 @@ cmd_now() {
     R check --read-data-subset=5% >/dev/null || { warn "restic check found a problem"; fail=1; }
   fi
 
-  if [ -s "$OFFSITE" ]; then
+  offsite_adopt_old
+  if [ -s "$OFFSITE" ] && offsite_is_disk; then
+    note "The off-site disk is copied by hand, not by the nightly run: hs backup offsite now"
+  elif [ -s "$OFFSITE" ]; then
     step "Off-site copy"
-    if offsite_copy; then note_state "offsite_ok=$(date +%s)"; else warn "The off-site copy failed (the backup itself is fine)"; fi
+    if offsite_copy; then
+      note_state "offsite_ok=$(date +%s)"
+      # the same 7/4/6 rule there; REST targets run append-only and prune themselves (offsite_retention skips them)
+      if [ "$(date +%u)" = 7 ]; then offsite_retention prune || warn "The off-site prune failed (the copy itself is fine)"
+      else offsite_retention || warn "The off-site retention failed (the copy itself is fine)"; fi
+    else warn "The off-site copy failed (the backup itself is fine)"; fi
   fi
 
   local used
@@ -549,7 +686,7 @@ cmd_status() {
     fi
   fi
   if [ -s "$OFFSITE" ]; then
-    kv "Off-site copy" "$(t '%s, last copied %s' "$(cat "$OFFSITE")" "$(ago "$(sed -n 's/^offsite_ok=//p' "$RESULT" 2>/dev/null || true)")")"
+    kv "Off-site copy" "$(t '%s, last copied %s' "$(offsite_masked)" "$(ago "$(sed -n 's/^offsite_ok=//p' "$RESULT" 2>/dev/null || true)")")"
   fi
   if [ -n "${HS_BACKUP_NO_MOUNT:-}" ] || [ -b "$DEV" ] || mountpoint -q "$MNT"; then
     mount_disk
@@ -560,42 +697,276 @@ cmd_status() {
   fi
 }
 
-# ── Second copy: another restic repository, same password ──
-R_off() {   # restic on the off-site repository (credentials from the env file)
-  [ "$(secret_state "$OFFSITE_ENV")" != locked ] || { vault_locked_note >&2; return 1; }
-  ( set -a; [ ! -f "$OFFSITE_ENV" ] || . "$OFFSITE_ENV"; set +a
-    restic -r "$(cat "$OFFSITE")" --password-file "$PASSFILE" "$@" )
+# ── Second copy: another restic repository (own password, secrets in files restic reads by path) ──
+# What restic gets, per kind of target (restic 0.18 docs; each backend checked, none of them takes a secret on argv):
+#   s3      address s3:https://host/bucket/prefix; keys in an AWS credentials file, restic (minio-go) reads the file named
+#           by AWS_SHARED_CREDENTIALS_FILE. The environment carries only that PATH, not a key.
+#   rest    address rest:https://user:password@host:port/path/ inside the repository file (--repository-file).
+#   sftp    address sftp:user@host:/path; restic runs ssh, which logs in with the key of root (a password cannot be given
+#           to ssh without a helper, so SFTP is key-only).
+#   folder  a path. No secret.
+#   typed   any address (b2:, azure:, gs:, swift:, rclone:): keys that restic reads ONLY from the environment stay in the old
+#           /var/lib/hs/backup-offsite.env. It is parsed as KEY=VALUE (never sourced) and its variables are set in restic's own
+#           child process only (off_env runs in a subshell that exec's restic): not in this script's environment, not on argv.
+secret_write() {   # secret_write <path>: the content comes on stdin; created through secret_prepare (vault), mode 0600
+  local p=$1
+  secret_prepare "${p##*/}" "$STATE" || return 1
+  ( umask 077; cat > "$p" ) && chmod 600 "$p" 2>/dev/null || true
+}
+secret_rm() {      # secret_rm <path>: also the file in the vault the link points to
+  local p=$1 t=""
+  secret_in_vault "$p" && t=$(readlink "$p") || true
+  rm -f "$p"
+  [ -z "$t" ] || rm -f "$t"
+}
+off_env() {   # runs in the subshell of the restic call: the variables of the old env file, read strictly as KEY=VALUE
+  local line k v
+  [ ! -e "$OFFSITE_CRED" ] || export AWS_SHARED_CREDENTIALS_FILE=$OFFSITE_CRED
+  [ -s "$OFFSITE_ENV" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    k=${BASH_REMATCH[2]}; v=${BASH_REMATCH[3]}
+    case "$k" in AWS_*|AZURE_*|B2_*|GOOGLE_*|OS_*|ST_*|SWIFT_*|OSS_*|RCLONE_*|RESTIC_*) ;; *) continue ;; esac
+    case "$v" in \"*\") v=${v#\"}; v=${v%\"} ;; \'*\') v=${v#\'}; v=${v%\'} ;; esac
+    export "$k=$v"
+  done < "$OFFSITE_ENV"
+}
+offsite_adopt_old() {   # the address of before: into the repository file, once
+  [ -s "$OFFSITE_OLD" ] && [ ! -e "$OFFSITE" ] || return 0
+  [ "$(secret_state "$OFFSITE")" != locked ] || return 0
+  secret_write "$OFFSITE" < "$OFFSITE_OLD" && rm -f "$OFFSITE_OLD" || true
+}
+offsite_pass_file() { if [ -e "$OFFSITE_PASS" ]; then echo "$OFFSITE_PASS"; else echo "$PASSFILE"; fi; }
+R_off() {   # restic on the off-site repository
+  local s
+  for s in "$OFFSITE" "$OFFSITE_PASS" "$OFFSITE_CRED" "$OFFSITE_ENV"; do
+    [ "$(secret_state "$s")" != locked ] || { vault_locked_note >&2; return 1; }
+  done
+  offsite_adopt_old
+  [ -s "$OFFSITE" ] || { echo "No off-site repository" >&2; return 1; }
+  ( off_env; exec restic --repository-file "$OFFSITE" --password-file "$(offsite_pass_file)" "$@" )
+}
+offsite_ready() {   # for --repo offsite: set, unlocked and openable
+  [ "$(secret_state "$OFFSITE")" != locked ] || secret_locked_exit
+  offsite_adopt_old
+  [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
+  ! offsite_is_disk || offsite_disk_mount
+  R_off cat config >/dev/null 2>&1 || die "$(t 'The off-site repository cannot be opened (not reachable, or wrong credentials or password).')"
+}
+# The rotating disk: a folder target under $OFFMNT. Only a person copies to it (hs backup offsite now); the nightly run skips it.
+offsite_is_disk() { local a; a=$(cat "$OFFSITE" 2>/dev/null || true); [ "$a" = "$OFFMNT" ] || [[ "$a" == "$OFFMNT"/* ]]; }
+offsite_disk_mount() {   # mount the disk labelled backup-offsite for this command (no-op for another target)
+  [ -z "${HS_BACKUP_NO_MOUNT:-}" ] || return 0
+  mountpoint -q "$OFFMNT" && return 0
+  [ -e "$OFFDEV" ] || die "$(t "The off-site disk is not plugged in (no disk with the label 'backup-offsite'). Plug it in and run again.")"
+  mkdir -p "$OFFMNT"
+  mount -o noatime "$OFFDEV" "$OFFMNT" || die "Could not mount the off-site disk."
+  off_mounted=true
+}
+offsite_renew_expiry() {   # after a copy to the rotating disk: the swap reminder moves to today + offsiteDiskDays (hs expiry)
+  local days base until
+  days=$(setting_get offsiteDiskDays 2>/dev/null || true)
+  [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -ge 1 ] || days=30
+  base=${HS_EXPIRY_TODAY:-$(date +%F)}
+  until=$(date -u -d "$base +$days days" +%F 2>/dev/null) || { warn "Could not work out the new date of the swap reminder."; return 0; }
+  bash "$(dirname "$0")/expiry.sh" add "$EXPIRY_NAME" "$until" "plug in the disk labelled backup-offsite and run: hs backup offsite now" >/dev/null ||
+    warn "The swap reminder could not be renewed (hs expiry add $EXPIRY_NAME $until)."
+  note_state "offsite_disk_until=$until"
+  note "$(t 'Swap reminder renewed: %s' "$until")"
 }
 offsite_copy() {
   R_off copy --from-repo "$REPO" --from-password-file "$PASSFILE" >/dev/null
 }
+# Retention on the off-site repository: the same 7/4/6 rule. REST targets run `rest-server --append-only` (this server may
+# not delete there), so forget and prune are the target's job; the other kinds prune from here on Sundays.
+offsite_is_rest() { case "$(cat "$OFFSITE" 2>/dev/null || true)" in rest:*) return 0 ;; *) return 1 ;; esac; }
+offsite_retention() {   # offsite_retention [prune]
+  offsite_is_rest && return 0
+  local f=(--group-by tags --keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+  [ "${1:-}" = prune ] && f+=(--prune)
+  R_off forget --quiet "${f[@]}"
+}
+offsite_enc() { printf '%s' "$1" | jq -sRr @uri; }
+offsite_read() {   # offsite_read <question> secret|plain: one line, from the terminal when there is one, else from stdin
+  local v
+  if [ -t 0 ]; then
+    if [ "$2" = secret ]; then v=$(ask_secret "$1"); else v=$(ask "$1"); fi
+  else
+    IFS= read -r v || true
+  fi
+  printf '%s' "$v"
+}
 cmd_offsite() {
-  local sub=${1:-} repo
+  local sub=${1:-}
+  [ $# -gt 0 ] && shift
   case "$sub" in
     set)
-      repo=${2:-}; [ -n "$repo" ] || usage
-      need_repo
-      printf '%s\n' "$repo" > "$OFFSITE"
-      if ! R_off cat config >/dev/null 2>&1; then
-        R_off init --from-repo "$REPO" --from-password-file "$PASSFILE" --copy-chunker-params >/dev/null ||
-          { rm -f "$OFFSITE"; die "$(t 'Could not create the repository %s (credentials in %s?)' "$repo" "$OFFSITE_ENV")"; }
-        ok "$(t 'Created the repository %s (same password as the backup disk)' "$repo")"
-      else
-        ok "$(t 'Using the existing repository %s' "$repo")"
-      fi
-      note_state "offsite=1"
-      note "Every nightly run copies new backups there. Now: hs backup offsite now" ;;
+      offsite_set "$@" ;;
     now)
-      [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set <repo>"
+      offsite_adopt_old
+      [ -s "$OFFSITE" ] || die "No off-site repository. Set one: hs backup offsite set --kind s3|rest|sftp|folder"
       need_repo
-      step "$(t 'Off-site copy to %s' "$(cat "$OFFSITE")")"
+      step "$(t 'Off-site copy to %s' "$(offsite_masked)")"
+      ! offsite_is_disk || offsite_disk_mount
       offsite_copy || die "The off-site copy failed."
       note_state "offsite_ok=$(date +%s)"
+      ! offsite_is_disk || offsite_renew_expiry
       ok "Copied." ;;
     off)
-      rm -f "$OFFSITE"; note_state "offsite=0"; ok "Off-site copy switched off (what is there stays there)." ;;
+      rm -f "$OFFSITE_OLD"; secret_rm "$OFFSITE"; secret_rm "$OFFSITE_CRED"
+      note_state "offsite=0"; ok "Off-site copy switched off (what is there stays there; its password file stays: $OFFSITE_PASS)." ;;
+    migrate)
+      offsite_migrate ;;
+    retention)   # what the nightly run does after the copy: forget (7/4/6), with `prune` also prune; nothing for a REST target
+      offsite_ready; offsite_retention "${1:-}" ;;
     *) usage ;;
   esac
+}
+offsite_masked() { sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#' "$OFFSITE" 2>/dev/null || true; }
+offsite_migrate() {   # the old env file: AWS keys become a credentials file; anything else stays, and says so
+  local k id="" sec="" other=0 line
+  [ -s "$OFFSITE_ENV" ] || { note "Nothing to migrate: there is no $OFFSITE_ENV."; return 0; }
+  offsite_adopt_old
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    k=${BASH_REMATCH[2]}
+    case "$k" in
+      AWS_ACCESS_KEY_ID) id=${BASH_REMATCH[3]} ;;
+      AWS_SECRET_ACCESS_KEY) sec=${BASH_REMATCH[3]} ;;
+      *) other=1 ;;
+    esac
+  done < "$OFFSITE_ENV"
+  id=${id#[\"\']}; id=${id%[\"\']}; sec=${sec#[\"\']}; sec=${sec%[\"\']}
+  if [ -n "$id" ] && [ -n "$sec" ]; then
+    printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$sec" | secret_write "$OFFSITE_CRED" ||
+      die "Could not write the credentials file."
+    ok "S3 keys moved to $OFFSITE_CRED"
+  fi
+  if [ "$other" -eq 0 ]; then
+    secret_rm "$OFFSITE_ENV"; ok "The old env file is gone."
+  else
+    note "$OFFSITE_ENV keeps variables that restic reads only from the environment (b2, azure, ...): they are set in restic's own process only."
+  fi
+}
+offsite_set() {   # offsite set <repo> | --kind s3|rest|sftp|folder [fields]
+  local kind="" endpoint="" bucket="" prefix="" url="" user="" host="" port="" path="" typed="" addr="" id="" sec="" pw="" new=false pass_new=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --kind) kind=${2:-}; shift 2 || usage ;;
+      --endpoint) endpoint=${2:-}; shift 2 || usage ;;
+      --bucket) bucket=${2:-}; shift 2 || usage ;;
+      --prefix) prefix=${2:-}; shift 2 || usage ;;
+      --url) url=${2:-}; shift 2 || usage ;;
+      --user) user=${2:-}; shift 2 || usage ;;
+      --host) host=${2:-}; shift 2 || usage ;;
+      --port) port=${2:-}; shift 2 || usage ;;
+      --path) path=${2:-}; shift 2 || usage ;;
+      -*) usage ;;
+      *) [ -z "$typed" ] || usage; typed=$1; shift ;;
+    esac
+  done
+  [ -n "$typed" ] && [ -z "$kind" ] && kind=typed
+  if [ -z "$kind" ]; then
+    if [ -t 0 ] && [ -z "${HS_BACKUP_YES:-}" ]; then
+      kind=$(choose "Where does the copy go?" s3 rest sftp folder typed)
+    else usage; fi
+  fi
+  need_repo
+  local re_host='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$' re_path='^/[A-Za-z0-9/._+=,~%@:-]*$'
+  case "$kind" in
+    s3)
+      [ -n "$endpoint" ] || endpoint=$(ask "S3 endpoint (host[:port], for example s3.eu-central-1.amazonaws.com)")
+      [ -n "$bucket" ] || bucket=$(ask "Bucket")
+      [[ "$endpoint" =~ ^(https?://)?[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "That is not an S3 endpoint (host or host:port)."
+      [[ "$bucket" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$ ]] || die "That is not a bucket name."
+      [[ "$prefix" =~ ^[A-Za-z0-9/._-]*$ ]] && [[ "$prefix" != *..* ]] || die "That is not a prefix (letters, digits, / . _ -)."
+      case "$endpoint" in http*) ;; *) endpoint=https://$endpoint ;; esac
+      addr="s3:$endpoint/$bucket${prefix:+/${prefix#/}}"
+      id=$(offsite_read "Access key id" plain); sec=$(offsite_read "Secret access key" secret)
+      [ -n "$id" ] && [ -n "$sec" ] || die "The access key id and the secret key are needed (stdin: two lines)."
+      ;;
+    rest)
+      [ -n "$url" ] || url=$(ask "REST server address (https://host:8000/path)")
+      [[ "$url" =~ ^(https?)://([A-Za-z0-9.-]+(:[0-9]+)?)(/[A-Za-z0-9/._-]*)?$ ]] || die "That is not a REST server address (https://host[:port]/path)."
+      [[ "$url" != *..* ]] || die "No .. in the path."
+      local scheme=${BASH_REMATCH[1]} hp=${BASH_REMATCH[2]} rp=${BASH_REMATCH[4]:-/}
+      if [ -n "$user" ]; then
+        [[ "$user" =~ ^[A-Za-z0-9._@+-]{1,64}$ ]] || die "That is not a user name."
+        pw=$(offsite_read "Password of the REST server" secret)
+        [ -n "$pw" ] || die "The password is needed (stdin: one line)."
+        addr="rest:$scheme://$(offsite_enc "$user"):$(offsite_enc "$pw")@$hp$rp"
+      else
+        addr="rest:$scheme://$hp$rp"
+      fi ;;
+    sftp)
+      [ -n "$host" ] || host=$(ask "SFTP host")
+      [ -n "$user" ] || user=$(ask "SFTP user")
+      [ -n "$path" ] || path=$(ask "Path on the host (absolute)")
+      [[ "$host" =~ $re_host ]] || die "That is not a host name."
+      [[ "$user" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "That is not a user name."
+      [[ "$path" =~ $re_path ]] && [[ "$path" != *..* ]] || die "That is not an absolute path."
+      if [ -n "$port" ]; then
+        [[ "$port" =~ ^[0-9]{1,5}$ ]] || die "That is not a port."
+        addr="sftp://$user@$host:$port/$path"   # restic: sftp://user@host:port//abs/path
+      else
+        addr="sftp:$user@$host:$path"
+      fi
+      note "SFTP uses the ssh key of root on this server (no password): ssh-copy-id $user@$host first." ;;
+    folder)
+      [ -n "$path" ] || path=$(ask "Folder (absolute path, for example the mounted offsite disk)")
+      [[ "$path" =~ $re_path ]] && [[ "$path" != *..* ]] || die "That is not an absolute path."
+      addr=$path ;;
+    typed)
+      [ -n "$typed" ] || typed=$(ask "restic repository address")
+      [[ "$typed" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$typed" != -* ]] && [[ "$typed" != *..* ]] || die "That is not a restic repository address."
+      addr=$typed ;;
+    *) usage ;;
+  esac
+
+  # Everything is written through secret_prepare (vault when there is one), mode 0600; a failure takes it all away again.
+  # The same address again keeps the password it has; replacing another address starts without one.
+  local old_addr=""
+  [ ! -s "$OFFSITE" ] || old_addr=$(cat "$OFFSITE")
+  fail_cleanup() { secret_rm "$OFFSITE"; secret_rm "$OFFSITE_CRED"; [ -z "$pass_new" ] || secret_rm "$OFFSITE_PASS"; }
+  [ -z "$old_addr" ] || [ "$old_addr" = "$addr" ] || secret_rm "$OFFSITE_PASS"   # no old address: a password put there by hand (Case C) stays
+  secret_rm "$OFFSITE_CRED"; rm -f "$OFFSITE_OLD"
+  printf '%s\n' "$addr" | secret_write "$OFFSITE" || { fail_cleanup; die "Could not store the address (is the vault open?)."; }
+  if [ "$kind" = s3 ]; then
+    printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$sec" | secret_write "$OFFSITE_CRED" ||
+      { fail_cleanup; die "Could not store the S3 keys."; }
+  fi
+  ! offsite_is_disk || offsite_disk_mount
+  if R_off cat config >/dev/null 2>&1; then
+    # an existing repository keeps the password it has (the backup disk's)
+    $machine || ok "$(t 'Using the existing repository %s (it keeps its password)' "$(offsite_masked)")"
+  else
+    pass_new=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    printf '%s\n' "$pass_new" | secret_write "$OFFSITE_PASS" || { fail_cleanup; die "Could not store the off-site password."; }
+    if ! R_off init --from-repo "$REPO" --from-password-file "$PASSFILE" --copy-chunker-params >/dev/null 2>&1; then
+      fail_cleanup
+      die "$(t 'Could not create the repository %s (reachable? credentials right? does one with another password exist there?)' "$(printf '%s' "$addr" | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')")"
+    fi
+    new=true
+  fi
+  note_state "offsite=1"
+  if $machine; then
+    printf 'status\tdone\naddress\t%s\n' "$(offsite_masked)"
+    # `secret<TAB>password<TAB>...` is the line the web interface shows once (parse_change); `created` says whether the repository is new
+    if $new; then printf 'created\tyes\nsecret\tpassword\t%s\n' "$pass_new"; else printf 'created\tno\n'; fi
+    return 0
+  fi
+  if $new; then
+    ok "$(t 'Created the repository %s' "$(offsite_masked)")"
+    if [ -t 1 ] && ! secret_batch; then
+      warn "This repository has its OWN password. Write it down now; it is not shown again."
+      kv "Off-site password" "$pass_new"
+    else
+      note "The off-site password is in $OFFSITE_PASS (root only). Read it once and write it down."
+    fi
+  fi
+  if offsite_is_disk; then note "This is the rotating disk: plug it in and copy by hand with hs backup offsite now (never by the nightly run)."
+  else note "Every nightly run copies new backups there. Now: hs backup offsite now"; fi
 }
 
 # ── Does a restore really work? Random files out of the newest backup, compared with the originals ──
@@ -663,6 +1034,35 @@ drill_pick() {   # drill_pick [<name>] [ct|vm]
   printf '%s' "$rows" | sort -t$'\t' -k1,1n -k2,2n | awk -F'\t' 'NR == 1 { print $3, $4, $2, $5 }'
 }
 
+# A partial container (backup rules) cannot boot: each included path and each dump file must have come back, non-empty.
+# The paths are the ones in the rule file now (a rule changed since the snapshot shows up as missing: the next backup fixes it).
+drill_ct_partial() {   # drill_ct_partial <name> <restored rootfs>
+  local name=$1 root=$2 p bad=0 n=0 what=""
+  note "$(t '%s is a partial backup (only chosen parts): checking the paths and the dumps, not booting' "$name")"
+  ok "$(t '%s: files restored' "$name")"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    n=$((n + 1))
+    if [ -f "$root$p" ]; then
+      if [ ! -s "$root$p" ]; then warn "$(t '%s: %s came back empty' "$name" "$p")"; bad=$((bad + 1)); fi
+    elif [ -d "$root$p" ]; then
+      if [ -z "$(find "$root$p" -type f -size +0 -print -quit 2>/dev/null)" ]; then warn "$(t '%s: %s came back with no file that holds data' "$name" "$p")"; bad=$((bad + 1)); fi
+    else
+      warn "$(t '%s: %s is not in the backup' "$name" "$p")"; bad=$((bad + 1))
+    fi
+  done < <(rules_list "$name" include)
+  if [ -n "$(dump_cmds "$DUMPS/$name")" ]; then
+    what=" and dump"
+    if [ -z "$(find "$root/var/backups/hs" -type f -print -quit 2>/dev/null)" ]; then warn "$(t '%s: the backup holds no dump file' "$name")"; bad=$((bad + 1))
+    elif [ -n "$(find "$root/var/backups/hs" -type f -size 0 -print -quit 2>/dev/null)" ]; then warn "$(t '%s: a dump file came back empty' "$name")"; bad=$((bad + 1)); fi
+  fi
+  if [ "$n" -eq 0 ]; then warn "$(t '%s: no backup rules now, nothing to check' "$name")"; bad=$((bad + 1)); fi
+  drill_cleanup
+  [ "$bad" -eq 0 ] || return 1
+  ok "$(t '%s: every backed-up path%s is back and holds data' "$name" "$what")"
+  note_state "drill_ct_partial=$name"
+}
+
 # One container. Returns 1 with a warning (never exits), so the domain controller check still runs.
 drill_ct_one() {   # drill_ct_one <name> <snapshot id> <bytes> <snapshot epoch>
   local name=$1 id=$2 size=$3 when=${4:-0} root avail i st="" wait=${HS_DRILL_WAIT:-90} age
@@ -692,6 +1092,9 @@ drill_ct_one() {   # drill_ct_one <name> <snapshot id> <bytes> <snapshot epoch>
   fi
   R restore "$id" --target "$drill_tmp/restore" >/dev/null || { warn "$(t '%s: the restore itself failed' "$name")"; drill_cleanup; return 1; }
   root=$drill_tmp/restore$INCUS_ROOT/$name/rootfs
+  if [ "$(R snapshots --json 2>/dev/null | python3 "$CTIMG" partial "$id" 2>/dev/null | tr -d '\r' || true)" = yes ]; then
+    drill_ct_partial "$name" "$root"; return
+  fi
   if [ ! -d "$root/etc" ]; then warn "$(t '%s: the snapshot holds no root file system (no etc folder)' "$name")"; drill_cleanup; return 1; fi
   ok "$(t '%s: files restored' "$name")"
   python3 "$CTIMG" build "$root" "$drill_tmp/image.tar.gz" "$name" || { warn "$(t '%s: could not pack the image' "$name")"; drill_cleanup; return 1; }
@@ -840,6 +1243,7 @@ cmd_report() {
       [ "$cage" -gt 3 ] || cage=""
     fi
     if [ -n "$cage" ]; then cname="${cname:+$cname, }$(t 'snapshot %s days old' "$cage")"; fi
+    if [ -n "$cname" ] && [ "$(get drill_ct_partial)" = "$(get drill_ct_name)" ]; then cname="$cname, $(t 'partial: paths and dumps')"; fi
     check_age "$(t 'Container restore drill')" drill_ct_ok 90 "$([ -z "$cname" ] || echo "($cname)")"
   fi
   # containers were backed up once, none is in the backup now (the newest container snapshot was noted by the container drill)
@@ -850,7 +1254,7 @@ cmd_report() {
   if $has_vm && [ -z "$(get drill_vm_ok)" ]; then add "$(t '! Virtual machine drill: never')"; problems=$((problems + 1))
   elif [ -n "$(get drill_vm_ok)" ]; then check_age "$(t 'Virtual machine drill')" drill_vm_ok 90 "($(get drill_vm_name))"; fi
   if incus info "$DC" >/dev/null 2>&1 </dev/null || [ -n "$(get drill_dc_ok)" ]; then check_age "$(t 'Domain controller backup file')" drill_dc_ok 90; fi
-  if [ -s "$OFFSITE" ]; then check_age "$(t 'Off-site copy')" offsite_ok 3; fi
+  if [ -s "$OFFSITE" ] && ! offsite_is_disk; then check_age "$(t 'Off-site copy')" offsite_ok 3; fi   # the rotating disk is warned about by its expiry entry
   # tries that failed lately (the container drills keep a list)
   if [ -s "$CTDRILL" ]; then
     # only containers that are in the backup now (switching one off is a choice; its old failures do not count)
@@ -980,8 +1384,70 @@ restore_make_datasets() {   # restore_make_datasets <snapshot> <tag> <path>
   ok "$(t 'Created %s share datasets. After the restore: sudo hs share repair' "${#want[@]}")"
 }
 
+# A partial container (backup rules, D12/D13) cannot boot from its snapshot: the snapshot holds only the chosen paths and the dump files.
+# Its restore = run the recipe again from its package (container, app, wiring), then put the paths back while the app is stopped.
+# HS_BACKUP_RECIPE_CMD replaces `bash recipe.sh` and HS_BACKUP_RESTORE_TARGET the target "/" (tests/backup-drill-ct.sh).
+cmd_restore_ct() {   # hs backup restore ct <ct> [--recipe <app>] [--dry-run] [--yes]
+  local ct="" recipe="" id size p target=${HS_BACKUP_RESTORE_TARGET:-/} root rc=0 here unit
+  local recipe_cmd=() rargs=()
+  here=$(dirname "$0")
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --recipe) [ $# -ge 2 ] || usage; recipe=$2; shift 2 ;;
+      -*)       usage ;;
+      *)        [ -z "$ct" ] || usage; ct=$1; shift ;;
+    esac
+  done
+  [[ "$ct" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage
+  recipe=${recipe:-$ct}
+  [[ "$recipe" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || die "$(t "'%s' is not the name of an app (recipe)." "$recipe")"
+  if [ -n "${HS_BACKUP_RECIPE_CMD:-}" ]; then recipe_cmd=("$HS_BACKUP_RECIPE_CMD"); else recipe_cmd=(bash "$here/recipe.sh"); fi
+  rargs=("$recipe"); [ "$recipe" = "$ct" ] || rargs+=(--name "$ct")
+  need_repo
+  id=$(R snapshots --tag "ct:$ct" --json | jq -r 'sort_by(.time) | last // empty | select((.tags // []) | index("partial")) | .id')
+  [ -n "$id" ] || die "$(t '%s has no partial backup (only some parts). A whole container: hs backup restore latest <path> --tag ct:%s' "$ct" "$ct")"
+  root=$INCUS_ROOT/$ct/rootfs
+  size=$(R stats --mode restore-size --json "$id" 2>/dev/null | python3 "$CTIMG" field total_size 2>/dev/null | tr -d '\r' || true)
+  step "$(t 'Restore of the partial container %s' "$ct")"
+  note "$(t 'The backup holds only the chosen parts, not the whole container; it cannot boot from them.')"
+  say "  1. $(t 'run the recipe %s again (container, app, connection to this server)' "$recipe")"
+  say "  2. $(t 'stop %s' "$ct")"
+  say "  3. $(t 'put these back from the newest backup (%s):' "$(human "${size:-0}")")"
+  if rules_has "$ct"; then
+    while IFS= read -r p; do if [ -n "$p" ]; then say "       $p"; fi; done < <(rules_list "$ct" include)
+  fi
+  if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then say "       /var/backups/hs   $(t '(the database dumps)')"; fi
+  say "  4. $(t 'start %s again' "$ct")"
+  warn "$(t 'Files of these paths that are newer than the backup are overwritten; files that are not in the backup stay as the recipe made them.')"
+  if $dry; then note "$(t 'Dry run: nothing was changed.')"; return 0; fi
+  if [ -z "${HS_BACKUP_YES:-}" ]; then
+    confirm_name "$ct" "$(t 'the name of the instance')" || die "cancelled"
+    if [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ] && confirm "$(t 'Run the work as a background job? (recommended: it keeps going if the terminal closes; follow it with: hs job follow)')"; then
+      . "$here/lib/job.sh"
+      unit=$(hs_job "backup-restore-$ct" "hs backup restore ct $ct" -- bash "$here/backup.sh" restore ct "$ct" --recipe "$recipe" --yes) || exit 1
+      ok "$(t 'Started as job %s. Follow it: hs job follow %s' "$unit" "$unit")"
+      return 0
+    fi
+  fi
+  step "$(t 'Running the recipe %s' "$recipe")"
+  "${recipe_cmd[@]}" "${rargs[@]}" || die "$(t 'The recipe failed: nothing was put back. Fix that first, then run this command again.')"
+  step "$(t 'Putting the backed-up parts back')"
+  inc stop "$ct" </dev/null >/dev/null 2>&1 || true
+  R restore "$id" --target "$target" --include "$root" || rc=1
+  if [ "$rc" -eq 0 ] && rules_has "$ct"; then
+    while IFS= read -r p; do
+      if [ -n "$p" ] && [ ! -e "$target$root$p" ]; then warn "$(t '%s: not in the backup' "$p")"; rc=1; fi
+    done < <(rules_list "$ct" include)
+  fi
+  inc start "$ct" </dev/null >/dev/null 2>&1 || warn "$(t '%s did not start: hs instance start %s' "$ct" "$ct")"
+  [ "$rc" -eq 0 ] || die "$(t 'Not everything came back (see above). The container runs the recipe version of the app.')"
+  ok "$(t '%s: recipe run, backed-up parts put back.' "$ct")"
+  if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then note "$(t 'The database dumps are in /var/backups/hs inside the container; load them with the import of the app (see its guide).')"; fi
+}
+
 cmd_restore() {
   local snap="" path="" tag=shares to=$BULK/shares/restored keep=false
+  if [ "${1:-}" = ct ]; then shift; cmd_restore_ct "$@"; return; fi
   while [ $# -gt 0 ]; do
     case "$1" in
       --keep-owner) keep=true; shift ;;
@@ -1020,7 +1486,7 @@ SAMBA_DIR=${HS_SAMBA_DIR:-/var/lib/samba/private}
 # Files of $STATE that describe THIS disk set or the backup itself: never restored, even with --with-state.
 state_skip() {  # state_skip <path relative to $STATE>
   case "$1" in
-    restic-password|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
+    restic-password|restic-offsite-password|backup-offsite.credentials|backup-offsite.repo|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
   esac
   return 1
 }
@@ -1379,6 +1845,7 @@ cmd_state_kv() {
   fi
   if mountpoint -q "$BROWSE" 2>/dev/null; then printf 'browse\ton\n'; else printf 'browse\toff\n'; fi
   # the address may carry user:password (rest:https://u:pw@host/); this output lands in Redis, so the password is masked
+  offsite_adopt_old
   printf 'offsite\t%s\n' "$({ cat "$OFFSITE" 2>/dev/null || true; } | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')"
   printf 'offsite_ok\t%s\n' "$(get offsite_ok)"
   printf 'last_drill\t%s\n' "$(get last_drill)"
@@ -1390,6 +1857,7 @@ cmd_state_kv() {
   # appended last: readers go by key and ignore keys they do not know
   printf 'used_bytes\t%s\n' "$(get used_bytes)"
   printf 'size_bytes\t%s\n' "$(get size_bytes)"
+  printf 'drill_ct_partial\t%s\n' "$(get drill_ct_partial)"   # the container of the last partial drill (paths and dumps, no boot)
 }
 
 # --overview: kind<TAB>name<TAB>on|off<TAB>bytes or -  (kind = shares | sensitive | ct | always)
@@ -1448,6 +1916,7 @@ case "$cmd" in
   --find)  cmd_find_kv "$@" ;;
   --snapshots) cmd_snapshots_kv "$@" ;;
   --overview)  cmd_overview_kv ;;
+  --rules)  cmd_rules_kv "$@" ;;
   --state)  cmd_state_kv ;;
   --shares) cmd_shares_kv ;;
   status)  cmd_status ;;
@@ -1463,7 +1932,9 @@ case "$cmd" in
   drill)  cmd_drill "$@" ;;
   offsite) cmd_offsite "$@" ;;
   init)    cmd_init "$@" ;;
-  ct)      [ $# -eq 2 ] || usage; cmd_toggle_ct "$@" ;;
+  ct)      if [ $# -eq 2 ] && { [ "$2" = on ] || [ "$2" = off ]; }; then cmd_toggle_ct "$@"
+           elif [ $# -ge 2 ]; then cmd_ct_rules "$@"
+           else usage; fi ;;
   *)
     # hs backup <share> on|off
     if [ $# -eq 1 ] && { [ "$1" = on ] || [ "$1" = off ]; }; then

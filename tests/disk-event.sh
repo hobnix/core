@@ -118,4 +118,15 @@ rm -rf "$HS_STATE_DIR"; : > "$CALLS"
 check "seed" $E seed
 check "marker" test -e "$HS_STATE_DIR/disks-seen/.seeded"
 check_eq "no push message" 0 "$(pushes)"
+echo "-- the rotating off-site disk: a message \"copy now?\" and nothing else (D18, step 14)"
+: > "$CALLS"
+disk sdz 2000398934016 "Rotating HDD" OFF1 $'backup-offsite ext4
+'
+check "plug in the labelled disk" $E add sdz
+check_out "the text names the disk" "the rotating off-site backup disk" $E log
+check_eq "one push message" 1 "$(pushes)"
+check_out "it asks: copy now? and names the command" "Copy now.*hs backup offsite now" cat "$CALLS"
+check "nothing was copied: no off-site state was written" test ! -e "$HS_STATE_DIR/backup.state"
+check "nothing was copied: no expiry entry was written" test ! -e "$HS_STATE_DIR/expiry"
+
 finish

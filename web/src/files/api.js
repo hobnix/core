@@ -1,10 +1,12 @@
-// The ONLY place the file manager talks to the backend (the contract is `hs sys fm ...`, docs/PLAN-file-manager.md section 7). Everything else in
+// The ONLY place the file manager talks to the backend (the contract is `hs sys fm ...`, docs/PLAN-storage-nas.md). Everything else in
 // web/src/files works with the objects this module returns, so a change of the wire format is a change here.
 //
 // READS (GET /api/sys/fm/<words>, tsv rows; the first row is `status<TAB>ok|refused`, a refusal has `reason<TAB>text`):
 //   fm/locations                     loc <id> <kind> <label> <fs> <size> <free> <writable yes|no> <reason|-> <pool|-> <disk|-> <modifiable yes|no>
 //   fm/pair/<left>/<right>           status ok | refused + reason (the same-files rule)
 //   fm/ls/<loc>?path=&cursor=&limit= row <type d|f|l> <bytes> <mtime> <name> <disks|-> <flags|-> <busy op:pct|->, then `cursor <X>` or `end`
+//   fm/du/<loc>?path=                key<TAB>value: cached yes + files folders bytes partial mtime time, or pending yes + unit (a job measures it; ask again)
+//   fm/stat/<loc>?path=              key<TAB>value: type owner group uid gid mode perms bytes mtime of the item at `path`
 //   fm/progress/<unit>               key<TAB>value: files_done files_total bytes_done bytes_total speed eta current phase result skipped failed
 //   fm/locations also carries `write<TAB>yes|no` (the runtime setting fileManagerWrite: no = copy, move, delete, rename and new folder are refused) and,
 //   while the encrypted storage is locked, `locked<TAB>yes` and no loc rows.
@@ -55,6 +57,23 @@ export async function ls(loc, path = '/', cursor = '', limit = 500) {
   if (limit) q.set('limit', String(limit));
   const s = split(await get(`${A}ls/${enc(loc)}?${q}`));
   return { ok: s.ok, reason: s.reason, rows: s.rows.filter((r) => r[0] === 'row').map((r) => parseRow(r.slice(1))), next: s.kv.cursor ?? null };
+}
+
+// the size of a folder (a background job on the server, it can wake disks): { ok, reason, pending, unit, cached, files, folders, bytes, partial, mtime, time }.
+// While `pending` is true there is no number yet; ask again later (the page does, see Fm.measure).
+export async function du(loc, path = '/') {
+  const s = split(await get(`${A}du/${enc(loc)}?${new URLSearchParams({ path })}`));
+  const n = (k) => (s.kv[k] === undefined || s.kv[k] === '-' ? NaN : Number(s.kv[k]));
+  return { ok: s.ok, reason: s.reason, pending: s.kv.pending === 'yes', unit: s.kv.unit && s.kv.unit !== '-' ? s.kv.unit : '', cached: s.kv.cached === 'yes',
+           files: n('files'), folders: n('folders'), bytes: n('bytes'), partial: s.kv.partial === 'yes', mtime: n('mtime'), time: n('time') };
+}
+
+// owner, group and mode of one item, read from stat: { ok, reason, type, owner, group, uid, gid, mode, perms, bytes, mtime }; `path` is the item's whole path
+export async function stat(loc, path) {
+  const s = split(await get(`${A}stat/${enc(loc)}?${new URLSearchParams({ path })}`));
+  const t = (k) => (s.kv[k] === undefined || s.kv[k] === '-' ? '' : s.kv[k]);
+  return { ok: s.ok, reason: s.reason, type: t('type'), owner: t('owner'), group: t('group'), uid: t('uid'), gid: t('gid'), mode: t('mode'), perms: t('perms'),
+           bytes: Number(s.kv.bytes), mtime: Number(s.kv.mtime) };
 }
 
 // the state of a running or finished job: numbers as numbers; `skipped` and `failed` are lists of { path, why } (a bare number = only a count)

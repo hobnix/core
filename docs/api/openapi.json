@@ -1101,6 +1101,17 @@
       }
      }
     ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
     "responses": {
      "0": {
       "description": "allowed",
@@ -1131,6 +1142,50 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/backup/rules/{ct}": {
+   "get": {
+    "operationId": "backup.rules.by_ct",
+    "summary": "which parts of an instance are in the backup, as data: partial yes|no, include path and bytes, exclude glob, dump path and bytes (- when the size is unknown)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "backup",
+      "rules",
+      "<ct>"
+     ],
+     "script": "backup.sh",
+     "args": "--rules {1}",
+     "class": "read",
+     "rest": false
+    },
+    "parameters": [
+     {
+      "name": "ct",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }
@@ -1303,7 +1358,7 @@
   "/backup/start/{action}": {
    "post": {
     "operationId": "backup.start.by_action",
-    "summary": "do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off)",
+    "summary": "do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off | offsite-config --kind s3|rest|sftp|folder|typed [--endpoint E --bucket B | --url U --user N | --host H --user N --path P | --path P | --repo R]: the secrets are lines on stdin, answers status done, secret password once for a new repository)",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -1327,6 +1382,17 @@
       }
      }
     ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
     "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
     "responses": {
      "0": {
@@ -2847,6 +2913,100 @@
     }
    }
   },
+  "/disk/power": {
+   "get": {
+    "operationId": "disk.power",
+    "summary": "sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "disk",
+      "power"
+     ],
+     "script": "disk-spindown.sh",
+     "args": "power",
+     "class": "read",
+     "rest": false
+    },
+    "description": "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "disk"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "dev"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "state",
+              "enum": [
+               "asleep",
+               "spinning",
+               "unknown"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "since"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "wakes"
+             }
+            ],
+            "minItems": 5,
+            "maxItems": 5
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "power"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "source",
+              "enum": [
+               "ups",
+               "rapl"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "what"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "watts"
+             }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/disk/results/{disk}": {
    "get": {
     "operationId": "disk.results.by_disk",
@@ -4228,6 +4388,231 @@
     }
    }
   },
+  "/fm/du/{location}": {
+   "get": {
+    "operationId": "fm.du.by_location",
+    "summary": "file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "du",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "du {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/du/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": [
+      "path"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "cached"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "pending"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "unit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "unit"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "files"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "folders"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "count"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "bytes"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "bytes"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "partial"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "answer",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mtime"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "time"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/fm/locations": {
    "get": {
     "operationId": "fm.locations",
@@ -4383,7 +4768,7 @@
   "/fm/plan/{op}": {
    "post": {
     "operationId": "fm.plan.by_op",
-    "summary": "file manager: what copy|move|delete|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; never asks",
+    "summary": "file manager: what copy|move|delete|restore|rename|mkdir would do, as data (status, heading, step, note, warn, files, folders, bytes, free_after, conflicts, parity, confirm_name, long); the selection comes on stdin, NUL separated; --conflicts lists the conflicts; delete means: into the trash (a rename, kept 14 days), --permanent means for good; restore puts trash items back; never asks",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -4493,7 +4878,7 @@
   "/fm/start/{op}": {
    "post": {
     "operationId": "fm.start.by_op",
-    "summary": "file manager: do it as a background job (status done + unit); delete and an overwrite choice need --confirm <confirm_name> from the plan",
+    "summary": "file manager: do it as a background job (status done + unit); delete --permanent (for good) and an overwrite choice need --confirm <confirm_name> from the plan",
     "x-hs-exit": true,
     "x-hs-sys": {
      "words": [
@@ -4548,6 +4933,275 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/fm/stat/{location}": {
+   "get": {
+    "operationId": "fm.stat.by_location",
+    "summary": "file manager: owner, group and mode of one item (--path), read from stat: type, owner, group, uid, gid, mode, perms, bytes, mtime; changes nothing",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "stat",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "stat {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/stat/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": [
+      "path"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "status"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "status",
+              "enum": [
+               "ok",
+               "refused"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "type"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "type",
+              "enum": [
+               "d",
+               "f",
+               "l"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "owner"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "group"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "uid"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "id"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "gid"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "id"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mode"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "octal"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "perms"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "rwx"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "bytes"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "bytes"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "mtime"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/fm/trash/{location}": {
+   "get": {
+    "operationId": "fm.trash.by_location",
+    "summary": "file manager: what is in the trash of a place (kept 14 days): days, then row lines (item, date, origin, bytes, type d|f, days left); give an item to sys fm plan restore",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "fm",
+      "trash",
+      "<location>"
+     ],
+     "script": "fm.sh",
+     "args": "trash {1}",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/fm/trash/<location>",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": []
+    },
+    "parameters": [
+     {
+      "name": "location",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }
@@ -6944,6 +7598,130 @@
      },
      "default": {
       "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/migrate/plan/unraid": {
+   "post": {
+    "operationId": "migrate.plan.unraid",
+    "summary": "what taking over an Unraid server would do, as data: status, candidate (disks to pick, when none is given), disk, plan lines, confirm_name, long, option (never asks; exit 0 ok, 1 refused, 2 something is missing; with --unlock one JSON line with the passphrases on stdin)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "migrate",
+      "plan",
+      "unraid"
+     ],
+     "script": "migrate-unraid.sh",
+     "args": "plan {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin: the secret or the document, never in argv or the environment"
+    },
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/migrate/start/unraid": {
+   "post": {
+    "operationId": "migrate.start.unraid",
+    "summary": "take over an Unraid server as a background job; needs --confirm <name> (the passphrases of encrypted disks as one JSON line on stdin with --unlock)",
+    "x-hs-exit": true,
+    "x-hs-sys": {
+     "words": [
+      "migrate",
+      "start",
+      "unraid"
+     ],
+     "script": "migrate-unraid.sh",
+     "args": "start {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "requestBody": {
+     "required": false,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "one line on stdin for the entries that take it (a password, a key)"
+    },
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
      }
     }
    }

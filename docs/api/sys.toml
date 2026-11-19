@@ -219,3 +219,28 @@ kind = "tsv"
 records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"], heading = ["text"], package = ["name"], instance = ["name"], failed_step = ["text"], tail = ["text"], retry_from = ["text"], item = ["text"], data = ["text"], question = ["text"], note = ["text"], danger = ["text"], confirm_name = ["name"], command = ["text"], long = ["text"] }
 enums = { status = ["ok", "refused", "started"] }
 note = "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly."
+
+["fm du <location>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], cached = ["answer"], pending = ["answer"], unit = ["unit"], files = ["count"], folders = ["count"], bytes = ["bytes"], partial = ["answer"], mtime = ["epoch"], time = ["epoch"] }
+enums = { "status.status" = ["ok", "refused"], "cached.answer" = ["yes", "no"], "pending.answer" = ["yes"], "partial.answer" = ["yes", "no"] }
+note = "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks."
+
+["fm stat <location>"]
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], type = ["type"], owner = ["name"], group = ["name"], uid = ["id"], gid = ["id"], mode = ["octal"], perms = ["rwx"], bytes = ["bytes"], mtime = ["epoch"] }
+enums = { "status.status" = ["ok", "refused"], "type.type" = ["d", "f", "l"] }
+note = "Owner, group and mode of one item (--path, the whole path of the item), read from stat. Changes nothing."
+
+["disk power"]
+kind = "tsv"
+records = { disk = ["dev", "state", "since", "wakes"], power = ["source", "what", "watts"] }
+enums = { "disk.state" = ["asleep", "spinning", "unknown"], "power.source" = ["ups", "rapl"] }
+note = "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured."
+
+["migrate plan unraid"]
+kind = "tsv"
+records = { status = ["status"], needs = ["input"], candidate = ["id", "size", "kind", "note"], reason = ["text"], disk = ["id", "role", "size", "filesystem"], heading = ["text"], section = ["text"], step = ["text"], note = ["text"], warn = ["text"], danger = ["text"], text = ["text"], confirm_name = ["word"], long = ["yes"], option = ["name", "values", "default"] }
+enums = { "status.status" = ["ok", "refused", "needs"], "needs.input" = ["disks", "unlock"], "candidate.kind" = ["data", "encrypted", "empty", "refused"], "disk.role" = ["data", "old-parity", "spare"] }
+stdin = "line"
+note = "Exit 0 ok, 1 refused, 2 something is missing (needs disks lists the candidates; needs unlock: pass --unlock and one JSON line {\"unraid\": ..., \"server\": ...} on stdin)."

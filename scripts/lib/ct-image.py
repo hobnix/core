@@ -87,13 +87,24 @@ def newest(data, kind="ct", with_time=False):
         print("%s\t%s\t%d" % (tag[3:], best[tag]["id"], epoch(best[tag]["time"])) if with_time else "%s\t%s" % (tag[3:], best[tag]["id"]))
 
 
+def partial(data, snap_id):
+    # a container snapshot made from backup rules (docs/PLAN-storage-nas.md, D12) carries the tag "partial"
+    for snap in data or []:
+        if snap.get("id") == snap_id or snap.get("short_id") == snap_id:
+            print("yes" if "partial" in (snap.get("tags") or []) else "no")
+            return
+    print("no")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "build" and len(sys.argv) == 5:
         build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif cmd == "newest" and len(sys.argv) in (2, 3, 4) and (len(sys.argv) == 2 or sys.argv[2] in ("ct", "vm")) and (len(sys.argv) < 4 or sys.argv[3] == "--time"):
         newest(json.load(sys.stdin), sys.argv[2] if len(sys.argv) >= 3 else "ct", len(sys.argv) == 4)
+    elif cmd == "partial" and len(sys.argv) == 3:
+        partial(json.load(sys.stdin), sys.argv[2])
     elif cmd == "field" and len(sys.argv) == 3:
         print(json.load(sys.stdin)[sys.argv[2]])
     else:
-        sys.exit("usage: ct-image.py build <rootfs> <out.tar.gz> <name> | newest [ct|vm [--time]] | field <key>")
+        sys.exit("usage: ct-image.py build <rootfs> <out.tar.gz> <name> | newest [ct|vm [--time]] | partial <snapshot id> | field <key>")

@@ -41,6 +41,16 @@ STORE_REQUIRED = ("description", "icon", "category", "app_version")
 CONTRACT_REQUIRED = ("health", "backup", "update", "remove")
 
 
+def backup_paths(m):
+    """The paths of [app.backup] mode = "paths" (absolute, inside the instance), else []. The recipe run seeds the backup rules from them."""
+    app = m.get("app") if isinstance(m.get("app"), dict) else {}
+    b = app.get("backup") if isinstance(app.get("backup"), dict) else {}
+    paths = b.get("paths", [])
+    if b.get("mode") != "paths" or not _strs(paths):
+        return []
+    return [p for p in paths if p.startswith("/") and ".." not in p.split("/")]
+
+
 def categories():
     """The fixed category list, config/package-categories.toml (`ids = [...]`)."""
     for base in (os.environ.get("HS_CONFIG_DIR"), os.path.join(HERE, "..", "..", "config"), "/etc/nixos/config"):

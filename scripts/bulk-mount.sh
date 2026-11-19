@@ -46,6 +46,28 @@ for l in "${labels[@]}"; do
   }
 done
 
+# Disks that are being adopted (docs/PLAN-storage-nas.md D9): no label yet, written by hs pool <pool> add --role adopt --spare. One record
+# <filesystem-uuid> per disk, its content the label to come. Such a disk is mounted READ-ONLY by UUID (an xfs log is not replayed) and
+# nothing is written to it: the merge has it as RO and no SnapRAID content file is kept on it. The record goes when the label is written.
+adoptdir=${HS_ADOPTING_DIR:-/var/lib/hs/adopting}
+declare -A adopting=()
+for r in "$adoptdir"/*; do
+  [ -f "$r" ] || continue
+  u=${r##*/}; l=$(head -n1 "$r" 2>/dev/null || true)
+  [[ "$l" =~ ^[a-z]+-data-[0-9]+$ ]] || continue
+  dev=$(blkid -U "$u" 2>/dev/null || true)
+  if [ -z "$dev" ]; then echo "adopting: ${l#*-} is being adopted but its disk ($u) is not there"; continue; fi
+  [[ "$(blkid -s LABEL -o value "$dev" 2>/dev/null || true)" != "${l%%-*}"-* ]] || continue   # labelled meanwhile: the label loop above has it
+  dir=$(disk_dir "$l")
+  mkdir -p "$dir"
+  if ! mountpoint -q "$dir"; then
+    ft=$(blkid -s TYPE -o value "$dev" 2>/dev/null || true)
+    case "$ft" in xfs) ro=ro,norecovery ;; ext4) ro=ro,noload ;; *) ro=ro ;; esac
+    mount -o "$ro,noatime" "UUID=$u" "$dir" || { echo "adopting: cannot mount ${l#*-} read-only"; rmdir "$dir" 2>/dev/null || true; continue; }
+  fi
+  adopting["$dir"]=1
+done
+
 # Remember every member ever seen. A disk that dies completely has no label
 # any more; this list is how manage-pool and bulk-sync notice it is MISSING.
 touch /var/lib/snapraid/members
@@ -82,7 +104,7 @@ minfree=${BULK_MINFREESPACE:-10G}
 # Closed disks (hs pool bulk close): still in the merge, readable and writable for the files they
 # hold, but mode NC = "no create": a new file never lands there. List: one member name per line.
 closed_file=${HS_BULK_CLOSED:-/var/lib/hs/bulk-closed}
-mode_of() { if grep -qx "${1##*/}" "$closed_file" 2>/dev/null; then echo NC; else echo RW; fi; }
+mode_of() { if [ -n "${adopting[$1]:-}" ]; then echo RO; elif grep -qx "${1##*/}" "$closed_file" 2>/dev/null; then echo NC; else echo RW; fi; }
 bspec=()
 for d in "${mdata[@]}"; do bspec+=("$d=$(mode_of "$d")"); done
 branches=$(IFS=:; echo "${bspec[*]}")
@@ -189,7 +211,10 @@ done
     if [ $n -eq 1 ]; then echo "parity $p/snapraid.parity"; else echo "$n-parity $p/snapraid.$n-parity"; fi
   done
   echo "content /var/lib/snapraid/snapraid.content"
-  for d in "${data[@]}"; do echo "content $d/snapraid.content"; done
+  # a disk that is being adopted gets no content file (nothing is written to it); SnapRAID wants one content file more than parity
+  # levels, so a second copy is kept on the system disk until the labels are written
+  if [ ${#adopting[@]} -gt 0 ]; then echo "content ${HS_ADOPT_CONTENT2:-/var/lib/snapraid/adopting/snapraid.content}"; mkdir -p "$(dirname "${HS_ADOPT_CONTENT2:-/var/lib/snapraid/adopting/snapraid.content}")"; fi
+  for d in "${data[@]}"; do [ -n "${adopting[$d]:-}" ] || echo "content $d/snapraid.content"; done
   for d in "${data[@]}"; do echo "data ${d##*/} $d"; done
   # disks taken out by hs pool bulk remove: kept, pointing at an empty folder, until the
   # next sync has dropped them (bulk-sync.sh uses -E and then forgets the record)

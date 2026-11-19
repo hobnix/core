@@ -372,6 +372,26 @@ declare_dump() {   # declare_dump <name> <command inside the container>
   dump_declare "${state}/backup-dump/$ct" "$1" "$2" 2>/dev/null || { warn "Could not write the backup dump command."; return 1; }
 }
 
+# A recipe whose manifest says [app.backup] mode = "paths" backs up only those paths of the instance: the rule file
+# $state/backup-rules/<ct> is written from them ONCE (scripts/lib/backup-rules.sh); an existing file, a person's edit, always wins.
+. "${BASH_SOURCE[0]%/*}/../lib/backup-rules.sh"
+seed_backup_rules() {   # seed_backup_rules [<package name>]: the package of the running recipe by default (packages/<name>/run.sh or <name>.sh)
+  local pkg=${1:-${RECIPE_PKG:-}} paths=()
+  if [ -z "$pkg" ]; then
+    pkg=$(basename "$0" .sh)
+    if [ "$pkg" = run ]; then pkg=$(basename "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")"); fi
+  fi
+  [ -n "$pkg" ] || return 0
+  [ ! -e "$state/backup-rules/$ct" ] || return 0
+  mapfile -t paths < <(python3 "$scripts/pkg.py" backup-paths "$pkg" 2>/dev/null || true)
+  [ ${#paths[@]} -gt 0 ] && [ -n "${paths[0]}" ] || return 0
+  if STATE=$state rules_seed "$ct" "${paths[@]}"; then
+    note "$(t "'%s' is backed up as a partial backup: %s (change it: hs backup ct %s paths)" "$ct" "${paths[*]}" "$ct")"
+  else
+    warn "$(t "Could not write the backup rules of '%s'." "$ct")"
+  fi
+}
+
 backup_with_dump() {   # backup_with_dump <name> <command inside the container, or "" for a container without a database>
   if ${RUNS_DOCKER:-false}; then   # a child: the parent's backup is decided by hs docker enable; only the dump command is ours
     if [ -n "$2" ]; then declare_dump "$1" "$2" || return 0; fi
@@ -383,6 +403,7 @@ backup_with_dump() {   # backup_with_dump <name> <command inside the container, 
   if ! backup_new_instances_on; then
     note "$(t "'%s' is not put into the backup (backupNewInstances is false). Later: hs backup ct %s on" "$ct" "$ct")"; return 0
   fi
+  seed_backup_rules || true
   bash "$scripts/backup.sh" ct "$ct" on >/dev/null 2>&1 || warn "$(t "Could not add '%s' to the backup. Later: hs backup ct %s on" "$ct" "$ct")"
 }
 

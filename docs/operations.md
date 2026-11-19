@@ -137,7 +137,19 @@ hs disk sda results
 ```
 
 `hs disk selftest short` tests every disk. A `long` test takes hours. Disks that spin down to save power are shown by `hs disk spindown`
-(`diskSpindownMinutes` in `machine.toml` sets the timer).
+(`diskSpindownMinutes` in `machine.toml` sets the timer; `diskSpindownPools = { backup = 10, bulk = 30 }` gives a pool its own time, `0` means
+never). `hs disk spindown power` shows which disk is asleep, how often it woke today and the power that is measured, each number with its
+source. If a disk never sleeps, `sudo hs disk spindown log 24` records for a night what woke it and which systemd unit started in that
+minute; the maintenance window is 03:00 to about 06:30. Details: [Storage and disks](storage-and-disks.md). Not tested on hardware yet.
+
+**Automatic reaction.** Three switches in `machine.toml`, all off by default, decide what the server does by itself when a disk or pool is in
+trouble: `autoMitigate` pauses the parity sync, the scrub and the cache mover (`hs health resume` lifts it), `autoMitigateFreeze` freezes the
+apps that write to a pool above 98 % full (`hs storage incident resume` lets them run again) and `autoMitigateBackup` starts one backup when
+a disk turns failing and the newest backup is older than 24 hours. None of them deletes or copies anything from disk to disk. The levels
+and what each does are in [Storage and disks](storage-and-disks.md). Not tested on hardware yet.
+
+**Trash.** Files deleted in the file manager wait in a hidden trash folder on their file system for 14 days; a timer empties it at 03:35. The
+space is not free until then. See [Storage and disks](storage-and-disks.md). Not tested on hardware yet.
 
 **Scrub.** A scrub reads everything and finds silent damage. ZFS pools scrub weekly by themselves; for SnapRAID run one by hand when the
 health check says the last one is older than 21 days:
@@ -192,6 +204,7 @@ Adding an existing name sets a new date, which is how you renew. Good candidates
 | API token of a tunnel or DNS service | the date you chose | create a new token, run the recipe again |
 | Domain name | renewal date at the registrar | renew; check auto-renew |
 | Keys of the off-site backup (S3/B2) | key expiry | create a new key, update the backup settings |
+| The rotating off-site backup disk (`offline-backup-disk`) | set by the server 30 days (`offsiteDiskDays`) after each copy to the disk | swap the disks and run `hs backup offsite now` ([Backup and recovery](backup-and-recovery.md)); it renews the date |
 | Tailscale and other service keys | per service | renew in that service |
 
 ## Know that the configuration is in sync

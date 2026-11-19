@@ -112,15 +112,43 @@ check_out "the container files are in the backup" "app.conf" repo ls --recursive
 check_out "the inventory is in the host backup" "backup-inventory/incus-instances.json" repo ls --recursive latest --tag host
 umount "$WORK/mnt"
 
+echo "-- a partial backup: only the paths of the rule file"
+mkdir -p "$WORK/incus/web/rootfs/var/lib/app" "$WORK/incus/web/rootfs/var/backups/hs"
+echo "rows" > "$WORK/incus/web/rootfs/var/lib/app/data.db"; echo "junk" > "$WORK/incus/web/rootfs/var/lib/app/scratch.tmp"
+echo "dump" > "$WORK/incus/web/rootfs/var/backups/hs/db.sql"
+check_out "no rules: paths says the whole instance" "whole instance" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web paths
+check "include" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web include /var/lib/app
+check "exclude" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web exclude '*.tmp'
+check_out "paths lists what is in" "/var/lib/app" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web paths
+check_out "paths lists what is out" "*.tmp" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web paths
+check_eq "the rule file" "include /var/lib/app
+exclude *.tmp" "$(cat "$WORK/state/backup-rules/web")"
+check_out "an include has to be an absolute path" "absolute" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web include relative/dir
+check "backup now with rules" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" now
+mount "$dev" "$WORK/mnt"
+check_out "the snapshot is tagged partial" "partial" repo snapshots --compact --tag ct:web
+out=$(repo ls --recursive latest --tag ct:web 2>&1)
+grep -q "data.db" <<<"$out" && pass "an included file is in the backup" || fail "data.db is in the partial backup"
+grep -q "db.sql" <<<"$out" && pass "the dump file is in the backup" || fail "the dump file is in the partial backup"
+grep -q "app.conf" <<<"$out" && fail "app.conf is not in the partial backup" || pass "a file outside the paths is not in the backup"
+grep -q "scratch.tmp" <<<"$out" && fail "an excluded file is not in the backup" || pass "an excluded file is left out"
+umount "$WORK/mnt"
+check "reset forgets the rules" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" ct web reset
+check "no rule file again" test ! -e "$WORK/state/backup-rules/web"
+check "backup now whole again" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" now
+mount "$dev" "$WORK/mnt"
+check_out "the whole instance is back in the backup" "app.conf" repo ls --recursive latest --tag ct:web
+umount "$WORK/mnt"
+
 echo "-- off-site copy"
 off=$WORK/offsite-repo
 check "offsite set creates the second repository" hsb offsite set "$off"
 check "offsite now copies" hsb offsite now
-check_out "the second repository holds the snapshots" "shares" restic -r "$off" --password-file "$WORK/state/restic-password" snapshots --compact
+check_out "the second repository holds the snapshots" "shares" restic -r "$off" --password-file "$WORK/state/restic-offsite-password" snapshots --compact
 check "the next nightly run copies as well" env PATH="$WORK/fakebin:$PATH" bash "$SCRIPTS/backup.sh" now
 check_out "status shows the off-site copy" "Off-site copy" hsb status
 hsb offsite off >/dev/null 2>&1
-check "offsite off removes the setting" test ! -s "$WORK/state/backup-offsite"
+check "offsite off removes the setting" test ! -e "$WORK/state/backup-offsite.repo"
 
 echo "-- health"
 export HS_BACKUP_STATE=$WORK/state/backup.state HS_HEALTH_STATE=$WORK/h.state

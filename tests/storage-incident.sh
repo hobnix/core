@@ -154,6 +154,13 @@ scen zfs-resilver
 rc=0; bash "$S" replace --disk x >/dev/null 2>&1 || rc=$?
 check_eq "a running replacement blocks a second one" "1" "$rc"
 
+echo "-- a nearly full pool (HS_INCIDENT_FULL, level 2 of the automatic reaction) is affected on a healthy pool"
+scen healthy; : > "$WORK/calls"; rm -f "$WORK/paused"
+check_eq "full pool: incident line" "1" "$(HS_INCIDENT_FULL=bulk bash "$S" --state 2>/dev/null | grep -c '^incident	bulk:full	bulk	pool-full')"
+HS_INCIDENT_FULL=bulk bash "$S" pause --yes >/dev/null 2>&1
+check_eq "full pool: only the writer is frozen" "incus pause immich" "$(grep '^incus' "$WORK/calls")"
+bash "$S" resume >/dev/null 2>&1; rm -f "$WORK/paused"
+
 echo "-- pause and resume"
 scen zfs-degraded; : > "$WORK/calls"; rm -f "$WORK/paused"
 bash "$S" pause --yes >/dev/null 2>&1

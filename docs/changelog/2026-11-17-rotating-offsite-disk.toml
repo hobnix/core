@@ -1,0 +1,5 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "A rotating backup disk: plug-in message, copy by hand, swap reminder"
+docs  = "backup-and-recovery"
+body  = """A second disk labelled backup-offsite is a folder target of the off-site copy. When you plug it in you get a message; hs backup offsite now (or the button on the Backup page) copies and moves the reminder offline-backup-disk 30 days ahead (setting offsiteDiskDays). Nothing is copied by itself."""

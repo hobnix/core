@@ -4,7 +4,7 @@
 # args: [log] | add|remove <kernel name> | seed
 # Called by udev through hs-disk-event@<action>-<name>.service when a disk appears or goes away (hs sys disk event ...). It
 # NEVER touches a disk: it describes it (size, model, serial, what is on it), writes an event (disk.plugged, disk.removed) to the event log and sends
-# a push message. Adding a disk to a pool stays a deliberate step: hs pool <pool> add (or the Disks tab).
+# a push message (the disk labelled backup-offsite asks "copy now?" and nothing more: hs backup offsite now is a person's step). Adding a disk to a pool stays a deliberate step: hs pool <pool> add (or the Disks tab).
 # The old file /var/lib/hs/disk-events is not written any more: state-db.py imports it into the log once (then disk-events.imported).
 # Every disk it has seen is remembered in <state>/disks-seen/<name> (serial|description|member): an add event for a disk that is
 # known already (udev replays all of them at every boot and at every `hs rebuild`) is silent. The first run records the disks that
@@ -29,11 +29,12 @@ describe() {
   model=$("$lsblk_" -dn -o MODEL "/dev/$name" 2>/dev/null | sed 's/[[:space:]]*$//' | head -n1 || true)
   serial=$("$lsblk_" -dn -o SERIAL "/dev/$name" 2>/dev/null | sed 's/[[:space:]]*$//' | head -n1 || true)
   parts=$("$lsblk_" -nr -o LABEL,FSTYPE "/dev/$name" 2>/dev/null || true)
-  label=$(awk 'NF >= 1 && $1 ~ /^(bulk-|backup$)/ { print $1; exit }' <<<"$parts")
+  label=$(awk 'NF >= 1 && $1 ~ /^(bulk-|backup$|backup-offsite$)/ { print $1; exit }' <<<"$parts")
   fstypes=$(awk 'NF >= 2 { print $2 } NF == 1 && $1 ~ /^(ext4|xfs|btrfs|ntfs|exfat|vfat|zfs_member|crypto_LUKS|swap)$/ { print $1 }' <<<"$parts" | sort -u | paste -sd, || true)
   case "$label" in
     bulk-*) state="a member of the bulk array (${label#bulk-})"; member=yes ;;
     backup) state="the backup disk"; member=yes ;;
+    backup-offsite) state="the rotating off-site backup disk"; member=yes ;;
     *)
       case ",$fstypes," in
         *,zfs_member,*) state="has ZFS labels (a pool member or a leftover)"; member=yes ;;
@@ -105,7 +106,12 @@ case "${1:-log}" in
         echo "plugged in: $text"
         event_log plugged "$name" "$text"
         collect_state
-        push "$host: disk plugged in" "$text" default info ;;
+        if [[ "$text" == *"the rotating off-site backup disk" ]]; then
+          # D18: only a message; the copy is started by a person (hs backup offsite now), never by the plug-in
+          push "$host: off-site backup disk plugged in" "$text. Copy now? Run: hs backup offsite now" default info
+        else
+          push "$host: disk plugged in" "$text" default info
+        fi ;;
       remove)
         [ -e "$seen/$name" ] || exit 0
         old=$(cat "$seen/$name")
