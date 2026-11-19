@@ -219,7 +219,7 @@ def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
         step("run", "mkdir -p %s/%s-big && head -c 1500000000 /dev/zero > %s/%s-big/big && cs %s/%s-big > /tmp/%s.c5" % (ra, tag, ra, tag, ra, tag, tag),
              timeout=300, what="[%s] a big folder to cancel" % tag),
         step("run", "printf '%s-big\\0' | HS_CALLER=test hs sys fm start move %s %s > /tmp/fm.out; u=$(awk -F'\\t' '$1==\"unit\"{print $2}' /tmp/fm.out); sleep 1; "
-                    "hs sys jobs stop \"$u\"; sleep 5; hs sys fm progress \"$u\" | grep -q 'result.*\\(cancelled\\|done\\)'" % (tag, fa, to), timeout=120,
+                    "hs sys jobs stop \"$u\"; for i in $(seq 1 60); do hs sys fm progress \"$u\" | grep -q 'result.*running' || break; sleep 2; done; hs sys fm progress \"$u\" | grep -q 'result.*\\(cancelled\\|done\\)' || { hs sys fm progress \"$u\"; false; }" % (tag, fa, to), timeout=240,
              what="[%s] start a move and stop the job" % tag),
         step("run", "if [ -e %s/%s-big/big ]; then [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; else [ \"$(cs %s/%s-big)\" = \"$(cat /tmp/%s.c5)\" ]; fi"
                     % (ra, tag, ra, tag, tag, rb, tag, tag),
