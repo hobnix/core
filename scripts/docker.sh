@@ -699,7 +699,7 @@ gpu_pci() { inc config device get "$CT" "$GPU_DEV" pci 2>/dev/null </dev/null ||
 gpu_group_gid() {   # the gid of the group render in docker (video when there is no render); nothing when neither or docker is stopped
   local g gid
   for g in render video; do
-    gid=$(inc exec "$CT" -- getent group "$g" </dev/null 2>/dev/null | cut -d: -f3)
+    gid=$(inc exec "$CT" -- getent group "$g" </dev/null 2>/dev/null | cut -d: -f3 || true)   # getent exits 2 for a missing group
     if [[ "$gid" =~ ^[0-9]+$ ]]; then printf '%s\t%s\n' "$g" "$gid"; return 0; fi
   done
   return 1
