@@ -1116,6 +1116,8 @@ READS = {
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
     ("disk", "marks"): {"kind": "tsv", "ttl": 10, "topic": "disk-marks"},
+    # sleep state per spinning disk and the measured watts (hdparm -C does not wake a disk; only its own counter file under the state dir is written)
+    ("disk", "power"): {"kind": "tsv", "ttl": 30},
     # the file manager (fm.sh, docs/PLAN-storage-nas.md): the places, the same-files rule, one page of a folder (a cursor, never the whole tree), a job's state
     ("fm", "locations"): {"kind": "tsv", "ttl": 5, "topic": "fm-locations"},
     ("fm", "pair"): {"kind": "tsv", "ttl": 5, "args": [FM_LOC, FM_LOC]},
@@ -2152,7 +2154,7 @@ def collected_keys():
 
 # What the pages need first after sign-in; read again about every ttl while somebody is using the interface (see Warmer).
 WARM = [("status",), ("deck",), ("monitor", "disks"), ("ct", "list"), ("shares", "overview"), ("users", "list"), ("users", "groups"),
-        ("backup", "overview"), ("backup", "state"), ("pool", "info"), ("health", "next"), ("unifi", "used"), ("unifi", "reserved"),
+        ("backup", "overview"), ("backup", "state"), ("pool", "info"), ("health", "next"),
         ("vault", "list"), ("jobs", "running"), ("disk-health", "list"), ("cache", "state")]
 
 

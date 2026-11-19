@@ -445,6 +445,7 @@
   "system/config": "",
   "disk/results": [],
   "disk/marks": [],
+  "disk/power": [],
   "fm/locations": [
    [
     "status",

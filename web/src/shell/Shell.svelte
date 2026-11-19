@@ -62,7 +62,7 @@
       const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
         '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
       prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
-        '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
+        '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });
 
