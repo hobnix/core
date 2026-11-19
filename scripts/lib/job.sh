@@ -33,11 +33,15 @@ _hs_job_bump() {
 # hs_job_record: the writer above plus the event log (docs/adr/0005-events.md rule 9): a transition writes job.<state> with the job id as
 # subject, once it is in the record. One place for both writers. Best effort: a failed emit never changes the exit code or the output.
 # finish on a record that ended already (cancelled stays cancelled) emits nothing; cancel emits nothing here (jobs-change.sh emits job.cancelled after the stop worked).
+# The row key of the job (HS_JOB_KEY, set by hs_job in the unit), as an event payload part. Only the characters a key may have; empty = none.
+_hs_job_key_json() { [ -z "${HS_JOB_KEY:-}" ] || printf ',"key":"%s"' "$(printf %s "$HS_JOB_KEY" | tr -cd 'A-Za-z0-9 ._:/=@,+-')"; }
+_hs_job_key_arg() { _HS_KEYARG=(); [ -z "${HS_JOB_KEY:-}" ] || _HS_KEYARG=(--payload "{\"key\":\"$(printf %s "$HS_JOB_KEY" | tr -cd 'A-Za-z0-9 ._:/=@,+-')\"}"); }
+
 hs_job_record() {
   local cmd=${1:-} out rc=0 id=${2:-} line text
   case "$cmd" in
     new|run|wait|resume|finish|reconcile|uncancel) ;;
-    error|result)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
+    error|result|key)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
       _hs_job_record_write "$@" && return
       python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"; return ;;
     step|progress)   # the Rust writer does not count the change counter up (the Python one does): done here, once per second at most
@@ -60,7 +64,7 @@ hs_job_record() {
   . "${BASH_SOURCE[0]%/*}/event.sh" 2>/dev/null || return 0
   case "$cmd" in
     new)  event_emit job.queued "$out" "job queued" || true ;;
-    run)  event_emit job.running "$id" "job started" || true ;;
+    run)  _hs_job_key_arg; event_emit job.running "$id" "job started" ${_HS_KEYARG[@]+"${_HS_KEYARG[@]}"} || true ;;
     wait)   # ADR 0018: the payload names the question key and its kind, never a label, a default or an answer
       local key="" qkind="" prev=""
       for line in "${@:3}"; do
@@ -70,8 +74,8 @@ hs_job_record() {
       event_emit job.waiting "$id" "job waits for input" --payload "$(printf '{"key":"%s","kind":"%s"}' "${key//[^A-Za-z0-9._-]/}" "${qkind//[^a-z]/}")" || true ;;
     resume) event_emit job.resumed "$id" "job got its answer" || true ;;
     finish)
-      if [ "${3:-1}" = 0 ]; then event_emit job.ok "$id" "job finished" || true
-      else event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}}" || true; fi ;;
+      if [ "${3:-1}" = 0 ]; then _hs_job_key_arg; event_emit job.ok "$id" "job finished" ${_HS_KEYARG[@]+"${_HS_KEYARG[@]}"} || true
+      else event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)}" || true; fi ;;
     reconcile)
       while IFS=$'	' read -r line _ text; do
         [ -z "$line" ] || event_emit job.interrupted "$line" "${text:-job} did not finish" || true
@@ -101,6 +105,14 @@ hs_job() {
   jid=$(hs_job_record new --slug "$slug" --desc "$desc" --unit "$unit" --source "$src" \
           --initiator "${HS_JOB_INITIATOR:-${SUDO_USER:-${USER:-}}}" ${rec_extra[@]+"${rec_extra[@]}"} 2>/dev/null) || jid=
   [ -z "$jid" ] || extra+=(-E "HS_JOB_ID=$jid")
+  # the row key (web/src/jobkey.js): HS_JOB_KEY from the caller, else the description of a plain `hs ...` command without the leading "hs "; the web interface
+  # follows the key of a job started in a terminal as well as one it started itself
+  local jkey=${HS_JOB_KEY:-}
+  [ -n "$jkey" ] || case "$desc" in "hs "*) jkey=${desc#hs } ;; esac
+  if [ -n "$jkey" ]; then
+    extra+=(-E "HS_JOB_KEY=$jkey")
+    [ -z "$jid" ] || hs_job_record key "$jid" "$jkey" 2>/dev/null || true
+  fi
   HS_JOB_LAST_ID=$jid   # for a caller that runs hs_job in its own shell (the orchestrator follows its sub-job by it)
   [ -z "${HS_JOBS_DIR:-}" ] || extra+=(-E "HS_JOBS_DIR=$HS_JOBS_DIR")   # the unit writes to the same directory as hs_job
   [ -z "${HS_ASK_DIR:-}" ] || extra+=(-E "HS_ASK_DIR=$HS_ASK_DIR")   # the question folder of an orchestration (a path; ADR 0018)

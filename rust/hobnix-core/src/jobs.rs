@@ -123,6 +123,9 @@ pub struct Record {
     pub kind: Option<String>,
     /// ADR 0018: the pending question while the state is `waiting`.
     pub waiting: Option<Waiting>,
+    /// The row key (web/src/jobkey.js: area and arguments, "apps remove nextcloud"); set by the Python writer, kept by every rewrite here.
+    #[serde(default)]
+    pub key: Option<String>,
 }
 
 impl Record {
@@ -1126,7 +1129,7 @@ mod tests {
         assert!(text.contains("\"initiator\": null"));
         assert!(text.contains("\"state\": \"queued\""));
         assert!(text.contains(
-            "\"version\": 1,\n  \"parent\": null,\n  \"kind\": null,\n  \"waiting\": null\n}\n"
+            "\"version\": 1,\n  \"parent\": null,\n  \"kind\": null,\n  \"waiting\": null,\n  \"key\": null\n}\n"
         ));
         #[cfg(unix)]
         {

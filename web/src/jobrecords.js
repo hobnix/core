@@ -13,6 +13,7 @@ export function parseRecord(r) {
     queued: val(r[4]), started: val(r[5]), ended: val(r[6]), exit: num(r[7]),
     step: num(r[9]) === null && !val(r[10]) ? null : { n: num(r[8]), of: num(r[9]), text: val(r[10]) },
     progress: num(r[11]) === null && num(r[12]) === null ? null : { done: num(r[11]), total: num(r[12]), unit: val(r[13]) },
+    key: val(r[14]),   // the row key of jobkey.js; "-" or no column (an older server) = null
   };
 }
 

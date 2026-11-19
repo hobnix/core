@@ -26,7 +26,7 @@ From the audit of #129 (docs/PLAN-jobs.md has the older one):
 3. **Fields** (all times ISO 8601 in UTC, an absent value is `null`):
    `id`, `slug`, `description`, `source` (`cli` | `web` | `timer` | `extension`), `initiator` (login name or null), `unit`, `queued`,
    `started`, `ended`, `state`, `exit`, `step` (`{n, of, text}`), `progress` (`{done, total, unit}`), `error` (`{category, message}`),
-   `result` (object, per job kind), `cancel` (`{requested_by, at, safe}`), `version` (1).
+   `result` (object, per job kind), `cancel` (`{requested_by, at, safe}`), `version` (1); additive since 0.10: `key` (the row key of web/src/jobkey.js, for example `apps remove nextcloud`; Python writer, kept by the Rust one).
 4. **States:** `queued`, `running`, `ok`, `failed`, `cancelled`, `interrupted`. Only these; the old `never` and `unknown` stay in the old
    `jobs.sh` output and map to no record.
 5. **One writer.** The `hs_job` wrapper writes the record: `running` before the command, the final state after. The job reports progress through
