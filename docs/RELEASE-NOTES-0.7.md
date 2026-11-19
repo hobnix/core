@@ -4,10 +4,10 @@ Draft for the release "0.7 Storage and NAS", built from the changelog entries of
 issues of the milestone. Written 2026-11-18. The same text is the body of the release pull request and of the GitHub release.
 
 **Read this first.** 0.7.0 is about disks, pools and backups: taking over old disks and an Unraid server, a trash in the file manager, off-site backup
-targets, backups of only chosen parts of an instance, automatic reactions to a full pool, and sleep times for disks. LAB_RESULT Stage 6 (browser) never ran
+targets, backups of only chosen parts of an instance, automatic reactions to a full pool, and sleep times for disks. In a virtual machine on the real test-lab server the stages install, smoke check, rollback, backup and restore and pool passed on the tip of `0.7` (2026-11-19, commit f751607b); the upgrade from v0.6.0 passed on the same commit. Stage 6 (browser) never ran
 there (no playwright on the server). Almost everything here touches data or disks and was written and tested with fakes, fixtures, loop devices and
 virtual disks, not on real hardware: items marked **Not tested on hardware yet** have not been tried on real disks, and the web interface of this version
-was WEB_RESULT. Do not trust this release with the only copy of your data, and keep a copy of anything on a disk you let it adopt.
+was not looked at by the owner yet. Do not trust this release with the only copy of your data, and keep a copy of anything on a disk you let it adopt.
 
 ## What 0.7.0 is
 Storage you can take over and look after: old disks and Unraid servers come in with clear reasons when they cannot, the file manager gets a trash, the
@@ -48,7 +48,7 @@ backup reaches off-site targets and rotating disks, and the server reacts before
   shows asleep or spinning; `hs disk spindown power` lists sleep state, wakes today and the measured power with the source of each number.
 
 ## Test-lab
-Everything the 0.6 notes say; stage 5 names the virtual disks by their by-id names and reads the answer of the pool job as one line.
+Everything the 0.6 notes say; stage 5 names the virtual disks by their by-id names, reads the answer of the pool job as one line, knows the file manager trash (plain delete moves, `--permanent` asks for the confirmation) and waits for a stopped file manager job to report. The stage found one real bug, fixed in this release: `hs sys fm progress` showed a job stopped before its first state as running for good (it says cancelled now).
 
 ## Not in this release
 - Apps that update themselves (hidden and off), importing a Docker Compose file as an app (see the 0.6 notes).
