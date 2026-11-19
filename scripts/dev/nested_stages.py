@@ -205,12 +205,15 @@ def write_checks(tag, la, pa, ra, lb, pb, rb, confirm):
         step("run", "fmgo %s copy %s %s --conflict overwrite --confirm '%s'" % (s, fa, to, confirm), timeout=400,
              what="[%s] overwrite with the confirmation" % tag),
         step("run", "[ \"$(cs %s)\" = \"$(cat /tmp/%s.c3)\" ]" % (b, tag), what="[%s] the target now has the changed content" % tag),
-        # delete: the plan names the confirmation, a wrong one is refused, the right one deletes
-        step("run", "cn=$(fmcn %s-moved delete %s); echo \"$cn\" | grep -q '^delete [0-9]* file' && echo \"$cn\" > /tmp/%s.cn" % (tag, fb, tag),
-             what="[%s] the delete plan asks for 'delete N files'" % tag),
-        step("run", "! (printf '%s-moved\\0' | HS_CALLER=test hs sys fm start delete %s --confirm 'delete 99 files') && [ -d %s/%s-moved ]" % (tag, fb, rb, tag),
+        # delete: without --permanent it moves into the trash (no confirmation)
+        step("run", "fmgo %s-made delete %s && [ ! -e %s/%s-made ]" % (tag, fb, rb, tag), timeout=120,
+             what="[%s] delete moves a folder into the trash" % tag),
+        # permanent delete: the plan names the confirmation, a wrong one is refused, the right one deletes
+        step("run", "cn=$(fmcn %s-moved delete %s --permanent); echo \"$cn\" | grep -q '^delete [0-9]* file' && echo \"$cn\" > /tmp/%s.cn" % (tag, fb, tag),
+             what="[%s] the permanent delete plan asks for 'delete N files'" % tag),
+        step("run", "! (printf '%s-moved\\0' | HS_CALLER=test hs sys fm start delete %s --permanent --confirm 'delete 99 files') && [ -d %s/%s-moved ]" % (tag, fb, rb, tag),
              what="[%s] delete with a wrong confirmation is refused, the folder is still there" % tag),
-        step("run", "fmgo %s-moved delete %s --confirm \"$(cat /tmp/%s.cn)\" && [ ! -e %s/%s-moved ]" % (tag, fb, tag, rb, tag), timeout=120,
+        step("run", "fmgo %s-moved delete %s --permanent --confirm \"$(cat /tmp/%s.cn)\" && [ ! -e %s/%s-moved ]" % (tag, fb, tag, rb, tag), timeout=120,
              what="[%s] delete with the right confirmation" % tag),
         # cancel: a big move is stopped; afterwards the data is whole in one place: intact at the source, or gone from it and complete at the target
         step("run", "mkdir -p %s/%s-big && head -c 1500000000 /dev/zero > %s/%s-big/big && cs %s/%s-big > /tmp/%s.c5" % (ra, tag, ra, tag, ra, tag, tag),
@@ -233,13 +236,13 @@ def _bulk_steps(params, kind):
         disk_id_by_name(params, "pool1", "i1"),
         disk_id_by_name(params, "pool2", "i2"),
         step("run_var", "test -b {d1} && test -b {d2}", what="both virtual disks are block devices"),
-        step("capture", "HS_CALLER=test hs sys pool start %s add --disks {i1},{i2} --use data --kind %s%s --confirm %s" % (POOL, kind, extra, POOL), var="start", fmt=True,
+        step("capture", "HS_CALLER=test hs sys pool start %s add --disks {i1},{i2} --use data --kind %s%s --confirm %s | tr -s '[:space:]' ' '; echo" % (POOL, kind, extra, POOL), var="start", fmt=True,
              timeout=120, strip=True, what="the %s pool is created as a background job" % kind),
         step("run_var", "echo {start} | grep -q 'status.*started'", what="the job started"),
         step("run", "for i in $(seq 1 360); do systemctl list-units 'hs-job-pool-*' --state=active,activating --no-legend | grep -q . || break; sleep 5; done",
              timeout=1800, what="the pool job finishes"),
         # a SnapRAID pool needs mergerfs and its mount unit: on a server that had none, the rebuild after `hs pool` brings them (docs/install.md)
-    ] + ([step("run", "hs rebuild --foreground", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
+    ] + ([step("run", "(unset HS_CALLER; hs rebuild --foreground)", timeout=1800, what="the rebuild after the pool (mergerfs and the mount unit come with it)")] if kind == "snapraid" else []) + [
         step("run", "hs pool %s | grep -q data" % POOL, what="hs pool lists the pool"),
         step("run", "mountpoint -q " + ROOT, what="the pool is mounted"),
         step("run", "hs config set fileManagerWrite true", what="the file manager may write"),
