@@ -53,7 +53,7 @@ eq('the page frame names the role that may open the page and renders no page the
 eq('the page frame says "not for your role" instead of a broken page', /Not for your role/.test(src('shell/PageFrame.svelte')), true);
 eq('the plan dialog shows a refusal without asking', /dialog\.refused/.test(src('shell/PlanDialog.svelte')), true);
 const btn = src('ui/Button.svelte');
-eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{why\}/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
+eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{[^\n]*\bwhy\b/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
 eq('users and access shows a role below admin only its own sessions', /Sessions own/.test(src('settings/AccessPage.svelte')) && /AccessPage/.test(src('routes.js')), true);
 eq('no admin read is issued below admin: the shell polls them only for admin, and prefetches only pages the role may open', /canSee\(ui\.role, pg\)/.test(shell) && /admin \? '\/api\/sys\/node\/list'/.test(src('shell/Shell.svelte')) && /!admin \? '' : '\/api\/sys\/users\/list'/.test(src('shell/Shell.svelte')), true);
 

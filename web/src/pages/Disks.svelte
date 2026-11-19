@@ -44,7 +44,7 @@
   const inv = poll('/api/sys/state/disks', 30000, 'disk-inventory');
   // data disks that are out of the pool by hand: member, detached | recovering, since (epoch)
   // sleep since / wakes today per disk and the measured power numbers (each with its source)
-  const powerPoll = poll('/api/sys/disk/power', 60000, 'disk-power');
+  const powerPoll = poll('/api/sys/disk/power', 60000, 'monitor-disks');
   const pw = $derived(parsePower(rows(powerPoll)));
   const marks = poll('/api/sys/disk/marks', 15000, 'disk-marks');
   const markOf = $derived(Object.fromEntries(rows(marks).map((r) => [r[0], r[1]])));
