@@ -120,6 +120,24 @@ hs health ack
 `sudo hs health ack <id>` silences the problem with that id, `sudo hs health unack <id>` undoes it. After an automatic pause of the sync, scrub and
 cache mover (the optional "notify and pause" reaction), `hs health resume` lifts the pause.
 
+An acknowledged problem is not sent, not counted in `hs health`, `hs doctor`, the top bar or the Overview, and shows dimmed as "acknowledged" on
+the Health page and in the bell. The acknowledgement ends by itself in three cases, so a real failure is never hidden for good:
+
+- the problem clears: the next failure is a new problem and sends its message again;
+- the problem gets worse: a worse state has its own key (a disk that was "SMART warning" and is now "SMART failing"), so it is not acknowledged;
+- the time you gave is over: `--for` takes minutes, hours, days or weeks.
+
+```bash
+sudo hs health ack <id> --for 7d --note "new disk arrives on Friday"
+hs health list-acks
+```
+
+`hs health list-acks` shows what is acknowledged, since when, until when, by whom and why. On the Health page and in the bell (the inbox in the
+top bar) an admin acknowledges with a button and takes it back with Undo. Each change writes the events `health.acked` and `health.unacked`
+(they show in the event log).
+
+Not tested on hardware yet.
+
 ## Check the disks
 
 ```bash

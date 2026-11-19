@@ -49,6 +49,8 @@ update.rollback-skipped	warn	-	a failed update was not rolled back, the system w
 update.rollback-failed	error	-	a failed update could not be rolled back
 health.new	warn	-	the health check found a problem it did not know before (subject: the problem key; once per change, not per run)
 health.resolved	info	-	a health problem is gone (subject: the problem key)
+health.acked	info	who,until	somebody acknowledged a health problem: it is no longer sent or counted (subject: the problem key; payload: who, and until: epoch second it ends by itself or -)
+health.unacked	info	reason	an acknowledgement ended: taken back, the problem cleared or its time ran out (subject: the problem key; payload: reason taken back, resolved or expired)
 ups.onbatt	warn	-	the mains power is out, the server runs on the UPS battery (subject: ups)
 ups.online	info	-	the mains power is back
 ups.lowbatt	error	-	the UPS battery is almost empty

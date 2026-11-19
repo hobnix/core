@@ -5675,6 +5675,40 @@
     }
    }
   },
+  "/health/acks": {
+   "get": {
+    "operationId": "health.acks",
+    "summary": "the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "health",
+      "acks"
+     ],
+     "script": "health-ack.sh",
+     "args": "list-acks",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/health/dry-run": {
    "get": {
     "operationId": "health.dry-run",
@@ -5712,7 +5746,7 @@
   "/health/list": {
    "get": {
     "operationId": "health.list",
-    "summary": "every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -)",
+    "summary": "every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {

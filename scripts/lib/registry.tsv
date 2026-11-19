@@ -202,8 +202,9 @@ user	job follow	jobs.sh	{rest} --follow	follow the journal of a running job	das 
 user	job stop	jobs.sh	stop {rest}	stop a running job	einen laufenden Auftrag stoppen	nohelp,topic:jobs,changes
 user	health	health.sh	-	the problems, each with the command that helps	die Probleme, jedes mit dem passenden Befehl	topic:system,reads,cheat:server
 user	health test	health.sh	test	send a test message	eine Testnachricht schicken	nohelp,topic:system,changes
-user	health ack	health-ack.sh	ack {rest}	list the problem ids, or silence one until it clears: hs health ack <id>	Problem-IDs anzeigen oder eines stummschalten, bis es verschwindet: hs health ack <ID>	topic:system,changes
+user	health ack	health-ack.sh	ack {rest}	list the problem ids, or silence one until it clears (or --for 7d), with --note <text>: hs health ack <id> [--for 7d] [--note <text>]	Problem-IDs anzeigen oder eines stummschalten, bis es verschwindet (oder --for 7d), mit --note <Text>: hs health ack <ID> [--for 7d] [--note <Text>]	topic:system,changes
 user	health unack	health-ack.sh	unack {rest}	take an acknowledgement back: hs health unack <id>	ein Quittieren zurücknehmen: hs health unack <ID>	nohelp,topic:system,changes
+user	health list-acks	health-ack.sh	list-acks	what is acknowledged: id, since, until, who, note	was quittiert ist: ID, seit, bis, wer, Notiz	topic:system,reads
 user	health resume	health-ack.sh	resume	lift the pause of the sync, scrub and cache mover that the health check set	die Pause von Sync, Scrub und Cache-Mover aufheben, die der Health-Check gesetzt hat	topic:system,changes
 user	report	report.sh	-	collect what a helper needs into one text file	sammelt, was ein Helfer braucht, in einer Textdatei	topic:system,changes,cheat:trouble
 user	migrate	migrate.sh	-	move from an old server step by step (resumable)	Umzug von einem alten Server Schritt für Schritt (wiederaufnehmbar)	topic:system,changes,capability:storage
@@ -406,7 +407,8 @@ sys	sys monitor disks	monitor.sh	--disks	disk table of the overview	-
 sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)	Schlafzustand der drehenden Platten (Platte, Zustand, seit, Aufwachen heute) und die gemessenen Leistungswerte mit Quelle (USV, CPU-Paket)	-
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
 sys	sys health next	health.sh	next	problems with their fix command (problem, next)	-
-sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -)	-
+sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)	-
+sys	sys health acks	health-ack.sh	list-acks	the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed	-
 sys	sys health plan <action>	health-change.sh	plan {1} {rest}	what acknowledging a problem, taking it back or lifting the pause of the bulk jobs would do, as data: status, plan lines (never asks)	-
 sys	sys health start <action>	health-change.sh	start {1} {rest}	do it (hs sys health start ack <id> | unack <id> | resume), answers status done	-
 sys	sys deck	deck-status.sh	-	one JSON document with the numbers for a status display (network and cpu counters, pools, disks, backup, problems, instances)	-

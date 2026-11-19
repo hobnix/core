@@ -90,6 +90,8 @@ The payload is optional extra data for programs. Rules:
 | `update.rollback-failed` | error | none | a failed update could not be rolled back |
 | `health.new` | warn | none | the health check found a problem it did not know before (subject: the problem key; once per change, not per run) |
 | `health.resolved` | info | none | a health problem is gone (subject: the problem key) |
+| `health.acked` | info | `who`, `until` | somebody acknowledged a health problem: it is no longer sent or counted (subject: the problem key; payload: who, and until: epoch second it ends by itself or -) |
+| `health.unacked` | info | `reason` | an acknowledgement ended: taken back, the problem cleared or its time ran out (subject: the problem key; payload: reason taken back, resolved or expired) |
 | `ups.onbatt` | warn | none | the mains power is out, the server runs on the UPS battery (subject: ups) |
 | `ups.online` | info | none | the mains power is back |
 | `ups.lowbatt` | error | none | the UPS battery is almost empty |

@@ -1518,7 +1518,9 @@ CHANGES = {
                       "--no-checksum": (None, False)}},
             [r"^remove$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.[iI][sS][oO]$"]],
     # acknowledge a health problem, take it back, lift the pause of the bulk jobs (health-change.sh checks the id against the listed problems)
-    "health": [[r"^(ack|unack)$", r"^[A-Za-z0-9][A-Za-z0-9:._ ()-]{0,100}$"], [r"^resume$"]],
+    "health": [{"fixed": [r"^ack$", r"^[A-Za-z0-9][A-Za-z0-9:._ ()-]{0,100}$"],
+                "opts": {"--for": (r"^[0-9]{1,4}[mhdw]$", False), "--note": (r"^[^\t\r\n\x00]{1,200}$", False)}},
+               [r"^unack$", r"^[A-Za-z0-9][A-Za-z0-9:._ ()-]{0,100}$"], [r"^resume$"]],
     # switching the update channel (release-change.sh): a newer channel needs its own name as the confirmation
     "release": [[r"^channel$", r"^(stable|beta|edge)$"]],
     "system": [[r"^(sync|scrub|update|rebuild|gc|rollback|reboot|shutdown)$"],

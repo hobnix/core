@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "Acknowledge a health problem for a while, with a note"
+body  = """hs health ack takes --for 7d and --note, hs health list-acks shows who acknowledged what and until when. An acknowledged problem ends by itself when it clears or the time is over, and the Health page and the bell have an Acknowledge button for admins."""
