@@ -33,6 +33,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
+| [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |
 | [PLAN-capabilities-on-machine](PLAN-capabilities-on-machine.md) | Derived files of an installed capability package |
 | [PLAN-recipe-orchestrator](PLAN-recipe-orchestrator.md) | Interactive recipe runs: the orchestrator and its API contract |
