@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "Instances and Docker rows show Starting, Stopping and other jobs at once, and a failed job shows its error"
+body  = """A job started in a terminal shows on the row too. When a job fails, the row goes back to its last real state and an error note says why."""
