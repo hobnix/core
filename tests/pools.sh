@@ -4,6 +4,7 @@
 . "$(dirname "$0")/lib.sh"
 T=$'\t'
 export HS_MACHINE_FILE=$WORK/machine.toml HS_BULK_TYPE_FILE=$WORK/bulk-type HS_POOLS_ROOT=$WORK/root
+export HS_STATE_DIR=$WORK/state
 mkdir -p "$HS_POOLS_ROOT"
 
 # run <snippet>: a fresh shell each time (the rows are cached per process)
