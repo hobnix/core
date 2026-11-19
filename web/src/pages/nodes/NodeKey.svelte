@@ -8,7 +8,7 @@
   import Button from '../../ui/Button.svelte';
 
   let { name, canChange = true } = $props();
-  const kl = poll(() => `/api/sys/node/keyline/${encodeURIComponent(name)}`, 8000);
+  const kl = poll(() => `/api/sys/node/keyline/${encodeURIComponent(name)}`, 8000, 'node-list');
   const info = $derived(keyInfo(rows(kl)));
   let copied = $state(false);
   async function copy() {

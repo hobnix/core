@@ -39,8 +39,8 @@
   const apps = $derived(rows(appsPoll).map(appOf).filter(Boolean));
   // for the live checks and the Bind share dialog: every container, what docker mounts, the shares, the user docker maps already
   const contPoll = poll('/api/sys/docker/containers', 30000);
-  const storPoll = poll('/api/sys/ct/storage/docker', 15000);
-  const sharesPoll = poll('/api/sys/shares/list', 30000);
+  const storPoll = poll('/api/sys/ct/storage/docker', 15000, 'ct-list');
+  const sharesPoll = poll('/api/sys/shares/list', 30000, 'shares-overview');
   const remotePoll = poll('/api/sys/remote/list', 30000);
   const statusPoll = poll('/api/sys/docker/status', 15000);
   const containers = $derived(rows(contPoll).filter((r) => r.length >= 3).map((r) => ({ name: r[0], project: r[1], state: r[2] })));

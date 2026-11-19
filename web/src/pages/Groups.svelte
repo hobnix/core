@@ -39,10 +39,10 @@
   const sel = $derived(groups.find((g) => g.name === selName));
 
   // share, level, via (the entries made for the group itself)
-  const acc = poll(() => (sel ? `/api/sys/users/group-access/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const acc = poll(() => (sel ? `/api/sys/users/group-access/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const reach = $derived(rows(acc).map((r) => ({ share: r[0], level: r[1], via: r[2] })));
   // field, value of the opened group ("-" = empty)
-  const det = poll(() => (sel ? `/api/sys/users/group-details/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const det = poll(() => (sel ? `/api/sys/users/group-details/${encodeURIComponent(sel.name)}` : ''), 30000, 'users-groups');
   const descr = $derived((() => { const v = rows(det).find((r) => r[0] === 'description')?.[1]; return v && v !== '-' ? v : ''; })());
   const reachColumns =[{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];
   const toShare = (s) => { setSelection('shares', s); go(sharesPath()); };
