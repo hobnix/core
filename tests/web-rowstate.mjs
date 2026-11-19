@@ -58,6 +58,7 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   const mk = applyEvents(new Map(), [ev(3, 'running', J2, { key: KI })], 0);
   check('marketplace: install pending from the event, failed shows the error', isPending(mk, [], 'apps', ['install', 'jellyfin'])
     && failureOf(applyEvents(mk, [ev(4, 'failed', J2, { exit: 2, key: KI })], 0), new Set(), 'apps', ['install', 'jellyfin'])?.error.code === 'job.failed');
+}
 // Instances and Docker rows (web/src/pages/instances/pending.js): start/stop from a terminal job, a failed job puts the row back
 {
   const { ctPending, ctFailed, dockerPending, dockerFailed } = await import('../web/src/pages/instances/pending.js');
