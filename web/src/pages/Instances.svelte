@@ -57,7 +57,7 @@
   // recipes list: name, description, containers (comma separated, - for none), state
   const recipes = $derived(rows(rec).map((r) => ({ name: r[0], cts: r[2] === '-' ? [] : r[2].split(',') })));
 
-  const bind = poll(() => (sel ? `/api/sys/ct/bindings/${encodeURIComponent(sel.name)}` : ''), 15000);
+  const bind = poll(() => (sel ? `/api/sys/ct/bindings/${encodeURIComponent(sel.name)}` : ''), 15000, 'ct-list');
   // binding, kind, pool, source, inside, mode, cache, backup, share, used_bytes, disks, also_used_by
   const bindings = $derived(rows(bind).map((r) => ({ device: r[0], kind: r[1], pool: r[2], source: r[3], inside: r[4], mode: r[5], backup: r[7], share: r[8], also: r[11] })));
   const snap = poll(() => (sel ? `/api/sys/ct/snapshots/${encodeURIComponent(sel.name)}` : ''), 15000);

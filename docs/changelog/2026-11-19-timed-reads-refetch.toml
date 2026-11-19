@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "Detail panels follow changes of their list instead of polling"
+body  = """The details of a user, a group, a share, a container or a node are read again when the list they belong to changes, not on a timer. Fewer requests while the live connection is open; without it the old interval still applies."""

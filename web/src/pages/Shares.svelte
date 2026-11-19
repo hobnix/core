@@ -87,9 +87,9 @@
   const openInstance = (name) => { setSelection('instances', name); go('/instances'); };
 
   // drawer data (ACL and snapshots are per share; read only for the selected one)
-  const acl = poll(() => (editable(sel) ? `/api/sys/shares/acl/${encodeURIComponent(sel.name)}` : ''), 30000);
-  const vis = poll(() => (editable(sel) ? `/api/sys/shares/visible/${encodeURIComponent(sel.name)}` : ''), 30000);
-  const hist = poll(() => (editable(sel) ? `/api/sys/shares/history/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const acl = poll(() => (editable(sel) ? `/api/sys/shares/acl/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
+  const vis = poll(() => (editable(sel) ? `/api/sys/shares/visible/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
+  const hist = poll(() => (editable(sel) ? `/api/sys/shares/history/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const backups = poll(() => (editable(sel) && tab === 'hist' ? '/api/sys/backup/snapshots?tag=shares' : ''), 60000);
   // sid, name, user|group, level
   const entries = $derived(rows(acl).map((r) => ({ sid: r[0], name: r[1], type: r[2], level: r[3] })));
