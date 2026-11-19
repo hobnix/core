@@ -696,6 +696,20 @@ impl Store {
         })
     }
 
+    /// `key`: the row key (web/src/jobkey.js). Same cleaning as job-record.py: only A-Za-z0-9 and space . _ : / = @ , + -, trimmed, 200 characters at most.
+    pub fn set_key(&self, id: &str, key: &str) -> Result<()> {
+        let clean: String = key
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || " ._:/=@,+-".contains(*c))
+            .collect();
+        let clean: String = clean.trim().chars().take(200).collect();
+        self.locked(id, || {
+            let mut rec = self.load(id)?;
+            rec.key = (!clean.is_empty()).then(|| clean.clone());
+            self.save(&rec)
+        })
+    }
+
     /// `wait`: a question is pending, the state is `waiting`.
     pub fn wait(&self, id: &str, q: &Question) -> Result<()> {
         if !ASK_KINDS.contains(&q.kind) {
@@ -1080,6 +1094,26 @@ mod tests {
         assert_eq!(shlex_split("'open"), None);
         assert_eq!(shlex_split("end\\"), None);
         assert_eq!(shlex_split("  "), Some(vec![]));
+    }
+
+    #[test]
+    fn the_row_key_is_cleaned_and_survives_a_rewrite() {
+        let t = Tmp::new();
+        let s = t.store();
+        let id = s
+            .new_record("pool-sync", "d", "u", "cli", "", "", "")
+            .unwrap();
+        s.set_key(&id, "bad;$(x) key").unwrap();
+        let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
+        assert!(text.contains("\"key\": \"badx key\""));
+        s.run(&id).unwrap();
+        s.finish(&id, 0).unwrap();
+        let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
+        assert!(text.contains("\"key\": \"badx key\""));
+        s.set_key(&id, "pool sync tank").unwrap();
+        assert!(String::from_utf8(s.get(&id).unwrap())
+            .unwrap()
+            .contains("\"key\": \"pool sync tank\""));
     }
 
     #[test]
