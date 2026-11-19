@@ -127,7 +127,7 @@
         <button class="btn sm pho" disabled={!!why('move')} use:tip={tipOf('move', 'Move to the other pane')} onclick={() => fm.plan('move')}><i class="ph ph-arrows-left-right"></i>Move<span class="kbd">F6</span></button>
         <button class="btn sm pho" disabled={!!why('rename')} use:tip={tipOf('rename', 'Rename')} onclick={() => fm.plan('rename')}><i class="ph ph-pencil-simple"></i>Rename<span class="kbd">F2</span></button>
         <button class="btn sm" disabled={!!why('mkdir')} use:tip={tipOf('mkdir', 'Make a new folder here')} onclick={() => fm.plan('mkdir')}><i class="ph ph-folder-plus"></i>New folder<span class="kbd">F7</span></button>
-        <button class="btn sm danger-o pho" disabled={!!why('delete')} use:tip={tipOf('delete', 'Delete for good')} onclick={() => fm.plan('delete')}><i class="ph ph-trash"></i>Delete<span class="kbd">F8</span></button>
+        <button class="btn sm danger-o pho" disabled={!!why('delete')} use:tip={tipOf('delete', 'Delete: moves to the trash, kept 14 days')} onclick={() => fm.plan('delete')}><i class="ph ph-trash"></i>Delete<span class="kbd">F8</span></button>
       </div>
       <div class="fmgrp">
         <button class="btn sm btn-ghost" disabled={!a.cur && !a.sel.size} use:tip={{ text: 'Size, time and which disks hold it', keys: 'F3' }} onclick={showInfo}><i class="ph ph-info"></i>Info<span class="kbd">F3</span></button>
