@@ -646,6 +646,16 @@ in
     onFailure = notifyFailure;
   };
 
+  # Live interface step 4 (docs/PLAN-live-interface.md, D4): one watcher on the system bus (busctl monitor, PropertiesChanged of the units) marks the
+  # topics of the units the interface shows (scripts/lib/unit-topics.tsv) so a stop or a crash shows without waiting for the collector, which stays
+  # the safety net. It only calls live_refresh; it never changes a unit. Exit 1 when the monitor ends: Restart = always. Not tested on hardware yet.
+  systemd.services.hs-unit-watch = lib.mkIf (webUi && isHome) {
+    description = "Mark the live-state topics of changed units (scripts/unit-watch.py)";
+    wantedBy = [ "multi-user.target" ];
+    path = [ "/run/current-system/sw" pkgs.python3 ];
+    serviceConfig = { ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/unit-watch.py"; Restart = "always"; RestartSec = 5; };
+  };
+
   # Notifications are a subscriber of the event log (docs/adr/0005-events.md, docs/notify-rules.md): this reads the rows after its cursor,
   # matches them with scripts/lib/notify-rules.tsv and calls `hs notify`; it also takes in the events the media helpers in containers
   # leave in the share `media`. One cheap read per run. Not on an edge node (no event log there).

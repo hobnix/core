@@ -326,6 +326,19 @@ The Users and Backup pages follow the same rule: the user and group lists, the d
 shares and instances with their backup switch come from Redis and update after a user, share, instance or backup change. One user's or group's details,
 the snapshots and the file search of the backup stay direct (they open the backup disk). Not tested on hardware yet.
 
+### Services that stop or crash
+
+A unit that stops, starts or fails while a page is open shows within a second or two, also when it was stopped from a terminal (`systemctl stop`) or crashed.
+The service `hs-unit-watch` (web interface on, not on an edge node) listens on the system bus and, for the units the interface shows, marks their
+topics: failed `hs-*` units (Health), job units, extension services, `bulk-mount`, `samba-smbd`, the ZFS import and scrub units, Incus, Docker and the gateway proxy.
+The list is `scripts/lib/unit-topics.tsv`. The collector's timer stays as the safety net: if the watcher is down, the pages are still right within
+their interval. Disk plug and pull events come from udev, not from this service. These topics stay timed, because nothing announces a change:
+SMART values (`disk-health`), free space and temperatures (`monitor-disks`, `temp-disks`), sensors (`hardware`), the UPS, waiting updates,
+traffic counters and the UniFi clients.
+
+Check that it works: `systemctl status hs-unit-watch`, open the Services page and run `sudo systemctl stop docker` (then `start`): the Docker row changes without a reload.
+Not tested on hardware yet.
+
 ## Inspect the live state
 
 When live state is on, one page lists every topic the collector reads and what is stored for it.
