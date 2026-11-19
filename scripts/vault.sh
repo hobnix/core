@@ -24,6 +24,7 @@ here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/vault.sh"
 . "$here/lib/live.sh" 2>/dev/null || true
+. "$here/lib/event.sh"   # event_emit: lock.done (best effort)
 
 usage() {
   say "usage: hs vault status            is the vault open, what is in it"
@@ -235,6 +236,7 @@ cmd_close() {
   ask_yes "$yes" "Close the vault? Everything that needs its secrets waits until hs unlock."
   vault_close || fail "The vault could not be closed."
   ok "Vault closed."
+  event_emit lock.done storage "The vault was closed"
   live_refresh status encryption vault-list vault-usage vault-uses || true
 }
 

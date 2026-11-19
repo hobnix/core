@@ -78,8 +78,8 @@ The payload is optional extra data for programs. Rules:
 | `ct.started` | info | `instance`, `project`, `action` | an Incus container or VM started (subject: the instance) |
 | `ct.stopped` | info | `instance`, `project`, `action` | an Incus container or VM stopped, also when nobody asked for it (subject: the instance) |
 | `ct.deleted` | info | `instance`, `project`, `action` | an Incus container or VM was deleted (subject: the instance) |
-| `backup.ok` | info | none | a backup run finished without errors (subject: backup) |
-| `backup.failed` | error | none | a backup run finished with errors (subject: backup) |
+| `backup.ok` | info | none | a backup run, or one part of it, finished without errors (subject: backup for the whole run; shares, host or ct:<name> for a part) |
+| `backup.failed` | error | none | a backup run, or one part of it, finished with errors (subject: backup for the whole run; shares, host or ct:<name> for a part) |
 | `backup.report` | info | `problems` | the monthly restore-drill report was sent (subject: the push category; level warn when something is overdue or failed; payload: the number of problems) |
 | `update.started` | info | none | hs update began to apply a new version (subject: the host) |
 | `update.stopped` | info | none | hs update fetched the new configuration and stopped before the rebuild, new options wait in machine.toml |
@@ -103,6 +103,7 @@ The payload is optional extra data for programs. Rules:
 | `power.stopping` | info | none | the server is going down (subject: reboot or poweroff) |
 | `unlock.needed` | warn | none | encrypted storage is locked and waits for hs unlock (subject: storage; once per boot) |
 | `unlock.done` | info | none | encrypted storage was unlocked (subject: storage) |
+| `lock.done` | info | none | the vault was closed on purpose with hs vault close, what needs its secrets waits for hs unlock (subject: storage) |
 | `testlab.started` | info | `ref`, `stage` | a test-lab run started (subject: the run id) |
 | `testlab.ok` | info | `ref`, `stage` | a test-lab run passed (subject: the run id) |
 | `testlab.failed` | error | `ref`, `stage` | a test-lab run failed or hit an error (subject: the run id; payload: the stage that failed) |
