@@ -1,0 +1,26 @@
+# The units the interface shows and what a change of their state marks (scripts/unit-watch.py, service hs-unit-watch; docs/PLAN-live-interface.md step 4, D4).
+# Tab separated. Kinds of row:
+#   watch  <unit pattern>  <when>  <topics>  <reason>
+#          pattern = fnmatch on the unit name (hs-job-*.service); when = all (every change of ActiveState) | failed (only into or out of `failed`);
+#          topics = comma list of topics of scripts/lib/live-topics.tsv or @<group> or @ext-%i (%i = the instance of a template unit).
+#          A unit that matches several rows marks the union of their topics.
+#   timed  <topic>  -  -  <reason>   a topic that stays timed in the collector (no event source): the reason is shown by the guide
+# tests/unit-watch.sh checks that every topic exists. The collector interval stays as the safety net for every topic.
+watch	hs-job-*.service	all	jobs-running	a job unit starts or ends (also one that dies without a record)
+watch	hs-*.service	failed	health-next,health-list	the health check lists a failed hs-* unit (scripts/health-check.sh); only into or out of failed, oneshots run all day
+watch	hs-ext-svc@*.service	all	@ext-%i	an extension service starts, stops or fails (its tile and page)
+watch	bulk-mount.service	all	pool-state-bulk,pool-info-bulk,pool-members-bulk,shares-overview,fm-locations,health-next,health-list	/bulk comes or goes
+watch	samba-smbd.service	all	shares-overview,shares-principals,health-next,health-list	the shares are served or not
+watch	zfs-import-*.service	all	pool-state-bulk,pool-state-fast,pool-info-bulk,pool-info-fast,health-next,health-list	a pool is imported or fails to import
+watch	zfs-scrub*.service	all	pool-state-bulk,pool-state-fast,health-next,health-list	a scrub runs or fails
+watch	incus.service	all	ct-list,ct-pools,iso-list,services-list,apps-list,apps-health	Incus is up or down: every instance row
+watch	docker.service	all	docker-list,docker-apps	Docker is up or down
+watch	traefik.service	all	gateway-status,gateway-health,gateway-routes	the gateway proxy is up or down
+timed	disk-health	-	-	SMART values change slowly and are read through smartctl; no event exists (the disk half of #484 is udev: plug and pull only)
+timed	monitor-disks	-	-	free space and temperatures have no event; one collector reads them, not every browser (D3)
+timed	temp-disks	-	-	temperatures; the plug and pull part is marked by disk-event.sh
+timed	hardware	-	-	sensors and fans have no event
+timed	ups	-	-	the UPS is asked over its own protocol
+timed	system-updates	-	-	whether an update is waiting is asked of the update channel, not of a unit
+timed	services-stats	-	-	traffic counters
+timed	unifi-clients	-	-	the UniFi controller is polled over its API
