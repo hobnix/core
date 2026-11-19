@@ -12,7 +12,10 @@
   import { route, go } from '../route.svelte.js';
   import { filesLink } from '../files/links.js';
   import { setSelection } from '../select.svelte.js';
-  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { poolPending, syncPending, failedOf } from './storage/pending.js';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
   import MigrateUnraid from '../forms/storage/MigrateUnraid.svelte';
@@ -27,6 +30,13 @@
   let { deck } = $props();
 
   onMount(() => { loadPools(true); });
+  // a pool job (create, add, replace, remove, take over Unraid) that ends changes the pool list: read it again then, from the job, not from a timer
+  const anyPoolJob = $derived(rowstate.active('pool', []).length > 0 || rowstate.active('migrate', []).length > 0);
+  let wasBusy = false;
+  $effect(() => { const b = anyPoolJob; if (wasBusy && !b) loadPools(true); wasBusy = b; });
+  // what a pool is doing now (any job that names it, also one started in a terminal; a SnapRAID sync names no pool) and the newest failure of its jobs
+  const doingOf = (name, isSnapPool) => poolPending(name, rowstate.active) || (isSnapPool ? syncPending(rowstate.active) : '');
+  const failureOf = (name) => failedOf('pool', [name], rowstate.failedLead) ?? rowstate.failed('system', ['scrub', '--pool', name]) ?? rowstate.failed('system', ['sync']);
   const pool = $derived(route.path.startsWith('/storage/pools/') ? route.path.slice('/storage/pools/'.length) : '');
   const row = $derived(poolRow(pool));
   const role = $derived(row?.role ?? '');
@@ -58,6 +68,7 @@
     return {
       name: r.name, role: r.role, loaded: pools.loaded && (!isSnapRow || snapInfo.loaded), failed, created,
       layout: r.kind === 'snapraid' ? 'SnapRAID' : r.kind === 'zfs' ? 'ZFS' : layoutOf(f),
+      doing: doingOf(r.name, r.kind !== 'zfs'),
       state: r.state !== '-' ? r.state.toLowerCase() : (f.state ?? '').toLowerCase(), sync: f['last sync'] ?? '',
       size: dp?.size ?? 0, used: dp?.used ?? null, count: monitor.filter((d) => diskPool(d.role) === r.name).length,
     };
@@ -105,6 +116,8 @@
   const convertible = $derived(snap ? members.filter((m) => m.group === 'data' && m.state === 'ONLINE').map((m) => m.name) : []);
   const luks = $derived(members.some((m) => m.enc === 'luks'));
 
+  const doing = $derived(pool ? doingOf(pool, snap) : '');
+  const failure = $derived(doing || !pool ? null : failureOf(pool));
   const unavailable = $derived(locked || failed || !layout);
   const why = (t) => (locked ? 'The storage is locked: the pools are down' : unavailable ? 'The pool is not available' : t);
   const runTitle = $derived(why(snap ? 'Update the parity now (shows the plan first)' : `Scrub ${pool} now (shows the plan first)`));
@@ -154,7 +167,7 @@
           {#if col.key === 'name'}<Row gap="2" style="font-weight:500"><i class="ph {p.role === 'apps' ? 'ph-lightning' : 'ph-cylinder'}"></i>{p.name}</Row>
           {:else if col.key === 'layout'}{#if p.layout}<Chip>{p.layout}</Chip>{:else}–{/if}
           {:else if col.key === 'usage'}{#if p.size}<UsageBar used={p.used} size={p.size} />{:else}<Muted>{p.loaded ? 'not mounted' : '…'}</Muted>{/if}
-          {:else if col.key === 'state'}<StatusDot state={p.failed ? 'bad' : dotOf(p.state)} label={p.failed ? 'cannot be read' : p.state || (p.loaded ? 'unknown' : 'reading')} />
+          {:else if col.key === 'state'}{#if p.doing}<StatusDot state="info" label="{p.doing.toLowerCase()}…" />{:else}<StatusDot state={p.failed ? 'bad' : dotOf(p.state)} label={p.failed ? 'cannot be read' : p.state || (p.loaded ? 'unknown' : 'reading')} />{/if}
           {:else if col.key === 'count'}{p.count || '–'}
           {:else}<Muted>{p.sync || '–'}</Muted>{/if}
         {/snippet}
@@ -171,7 +184,7 @@
       <Button disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>
       {#if snap}<Button disabled={why('') !== ''} tooltip={why('Bring a disk that already holds files into the pool')} onclick={() => addPool('adopt')}><i class="ph ph-hand-arrow-down"></i>Adopt disks</Button>{/if}
       {#if snap}<Button disabled={why('') !== ''} tooltip={why('Take over the disks of an Unraid server: merged shares, the old parity disk becomes parity')} onclick={() => openCreate(MigrateUnraid, { pool })}><i class="ph ph-arrow-bend-down-right"></i>Take over Unraid</Button>{/if}
-      <Button variant="primary" icon={snap ? 'arrows-clockwise' : 'broom'} disabled={unavailable || notCreated} busy={snap ? jobRunning('system', ['sync']) : jobRunning('system', ['scrub', '--pool', pool])} tooltip={runTitle}
+      <Button variant="primary" icon={snap ? 'arrows-clockwise' : 'broom'} disabled={unavailable || notCreated} busy={snap ? rowstate.pending('system', ['sync']) : rowstate.pending('system', ['scrub', '--pool', pool])} tooltip={runTitle}
         onclick={() => (snap ? openPlan('system', ['sync'], 'Sync parity') : openPlan('system', ['scrub', '--pool', pool], `Scrub ${pool}`))}>{snap ? 'Sync parity now' : 'Scrub now'}</Button>
     {/snippet}
   </PageHeader>
@@ -183,6 +196,8 @@
       </Banner>
     {:else}
      <Stack gap="4">
+      {#if doing}<Banner tone="info">{doing}… a job is running on {pool}; this page follows it.</Banner>{/if}
+      {#if failure}<ErrorNote error={failure.error} ondismiss={() => rowstate.dismiss(failure.id)} />{/if}
       {#if paused}<Banner tone="warn">The health check paused the parity sync, scrub and upload cache mover because of a failing disk or pool. Lift it under Health (<code>hs health resume</code>).</Banner>{/if}
       {#if lockState === 'pool-change'}<Banner tone="info">A pool change is running and owns the bulk lock: syncs, scrubs and share renames wait or are skipped until it is done.</Banner>
       {:else if lockState === 'busy'}<Banner tone="info">{running ? 'A sync or scrub is running.' : 'Something holds the bulk lock (a parity sync, scrub, upload cache mover, share rename or disk move).'} Changes that need the lock wait until it is free.</Banner>{/if}

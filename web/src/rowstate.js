@@ -1,7 +1,7 @@
 // The pending state of a row, derived from the job records and the job events (docs/PLAN-live-interface.md step 2, #483). Plain JS so node can test it
 // (tests/web-rowstate.mjs); the reactive part is rowstate.svelte.js. A job counts for a row by its key (jobkey.js: area and arguments, "apps remove nextcloud"),
 // the same key a button of this browser puts on its task, so a job started in a terminal makes the row pending too.
-import { jobMatches } from './jobkey.js';
+import { jobMatches, jobMatchesLead } from './jobkey.js';
 
 export const ACTIVE = ['queued', 'running', 'waiting'];
 export const FAILED = ['failed', 'interrupted'];
@@ -66,4 +66,19 @@ export function failureOf(jobs, dismissed, area, args) {
     id: newest.id,
     error: { code: newest.state === 'interrupted' ? 'job.interrupted' : 'job.failed', what: newest.exit !== null ? `${what} (exit ${newest.exit})` : what, why: '', next: '', guide: '' },
   };
+}
+
+// The same by the LEADING arguments only (a pool or disk row: any job whose arguments start with the pool or disk name, whatever else follows).
+// activeKeys lists the keys of the running jobs, so a page can name what is happening ("pool bulk replace --member ..." -> Replacing).
+export function activeKeys(jobs, tasks, area, lead) {
+  const out = [];
+  for (const j of jobs.values()) if (ACTIVE.includes(j.state) && jobMatchesLead(j.key, area, lead)) out.push(j.key);
+  for (const t of tasks ?? []) if (t.state === 'running' && jobMatchesLead(t.key, area, lead)) out.push(t.key);
+  return out;
+}
+
+export function failureOfLead(jobs, dismissed, area, lead) {
+  const sub = new Map();   // the matching jobs, keyed so that failureOf's exact match (area, no args) takes them
+  for (const [id, j] of jobs) if (jobMatchesLead(j.key, area, lead)) sub.set(id, { ...j, key: area });
+  return failureOf(sub, dismissed, area, []);
 }
