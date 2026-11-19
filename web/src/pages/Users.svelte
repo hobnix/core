@@ -37,10 +37,10 @@
   const sel = $derived(users.find((u) => u.name === selName));
 
   // share, level, via (reads every share ACL: only for the opened user)
-  const acc = poll(() => (sel ? `/api/sys/users/access/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const acc = poll(() => (sel ? `/api/sys/users/access/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const reach = $derived(rows(acc).map((r) => ({ share: r[0], level: r[1], via: r[2] })));
   // full, mail, description of the opened user ("-" = empty)
-  const det = poll(() => (sel ? `/api/sys/users/details/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const det = poll(() => (sel ? `/api/sys/users/details/${encodeURIComponent(sel.name)}` : ''), 30000, 'users-list');
   const detail = (k) => { const v = rows(det).find((r) => r[0] === k)?.[1]; return v && v !== '-' ? v : ''; };
   const isAdmin =$derived(sel?.name.toLowerCase() === 'administrator' && !!sel?.enabled);
   const reachColumns = [{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];

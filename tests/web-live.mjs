@@ -80,5 +80,24 @@ import { LiveWatch } from '../web/src/livewatch.js';
 }
 const live = readFileSync(new URL('../web/src/live.svelte.js', import.meta.url), 'utf8');
 check('live: beat, watchdog, visibilitychange wired', /'beat'/.test(live) && /new LiveWatch/.test(live) && /visibilitychange/.test(live) && /resyncAll\(\); \}/.test(live));
+// Refetch on the list's topic (D5 a): a read with a free argument follows the topic of the list it belongs to, no timer while live.
+const refetch = [
+  ['pages/Users.svelte', 'users/access', 'shares-overview'], ['pages/Users.svelte', 'users/details', 'users-list'],
+  ['forms/users/EditUser.svelte', 'users/details', 'users-list'],
+  ['pages/Groups.svelte', 'users/group-access', 'shares-overview'], ['pages/Groups.svelte', 'users/group-details', 'users-groups'],
+  ['pages/identity/GroupShares.svelte', 'users/group-access', 'shares-overview'], ['forms/users/EditGroup.svelte', 'users/group-details', 'users-groups'],
+  ['pages/Instances.svelte', 'ct/bindings', 'ct-list'],
+  ['pages/docker/AppEditPage.svelte', 'ct/storage', 'ct-list'], ['pages/docker/AppEditPage.svelte', 'shares/list', 'shares-overview'],
+  ['pages/docker/AppWizardPage.svelte', 'ct/storage', 'ct-list'], ['pages/docker/AppWizardPage.svelte', 'shares/list', 'shares-overview'],
+  ['pages/nodes/NodeKey.svelte', 'node/keyline', 'node-list'],
+  ['pages/Shares.svelte', 'shares/acl', 'shares-overview'], ['pages/Shares.svelte', 'shares/visible', 'shares-overview'],
+  ['pages/Shares.svelte', 'shares/history', 'shares-overview'], ['pages/protection/ShareSnapRow.svelte', 'shares/history', 'shares-overview'],
+];
+const topicNames = new Set(readFileSync(new URL('../scripts/lib/live-topics.tsv', import.meta.url), 'utf8').split(String.fromCharCode(10)).filter((l) => l && l[0] !== '#').map((l) => l.split(String.fromCharCode(9))[0]));
+for (const [f, path, topic] of refetch) {
+  const src = readFileSync(new URL('../web/src/' + f, import.meta.url), 'utf8');
+  const line = src.split(String.fromCharCode(10)).find((l) => l.includes('poll(') && l.includes('/api/sys/' + path)) || '';
+  check(`refetch: ${f} ${path} follows ${topic}`, line.includes(`, '${topic}');`) && topicNames.has(topic));
+}
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

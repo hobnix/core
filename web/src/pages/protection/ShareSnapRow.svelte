@@ -7,7 +7,7 @@
 
   let { name, pool } = $props();
   // name, created, auto|manual, used
-  const hist = poll(() => `/api/sys/shares/history/${encodeURIComponent(name)}`, 30000);
+  const hist = poll(() => `/api/sys/shares/history/${encodeURIComponent(name)}`, 30000, 'shares-overview');
   // oldest first, whatever the order of the answer ("YYYY-MM-DD HH:MM" sorts as text)
   const snaps = $derived([...rows(hist)].sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)));
   const auto = $derived(snaps.some((r) => r[2] === 'auto'));

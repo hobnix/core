@@ -6,7 +6,7 @@
   import { Field, TextInput, Muted } from '../../ui';
 
   let { user, ondone = () => {} } = $props();
-  const det = poll(`/api/sys/users/details/${encodeURIComponent(user)}`, 30000);
+  const det = poll(`/api/sys/users/details/${encodeURIComponent(user)}`, 30000, 'users-list');
   const have = $derived(Object.fromEntries(rows(det).map((r) => [r[0], r[1] === '-' ? '' : (r[1] ?? '')])));
   let edited = $state({});
   const val = (k) => (k in edited ? edited[k] : (have[k] ?? ''));
