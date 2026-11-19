@@ -1,7 +1,12 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
+  import { tip } from '../ui/tooltip.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import { poll, rows } from '../data.svelte.js';
-  import { openCreate, openPlan, jobRunning } from '../ui.svelte.js';
+  import { openCreate, openPlan } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { expiryFailed } from './rows.js';
   import Button from '../ui/Button.svelte';
   import ExpiryForm from '../forms/ops/ExpiryForm.svelte';
   import Table from '../shell/Table.svelte';
@@ -47,11 +52,11 @@
   <Card>
     <Table id="expiry" {columns} rows={items} key="name" loading={!ex.loaded} empty={ex.error ? 'The list could not be read.' : 'Nothing is entered yet. On the server: hs expiry add <name> <YYYY-MM-DD>.'}>
       {#snippet cell(i, col)}
-        {#if col.key === 'name'}{i.name}
+        {#if col.key === 'name'}{i.name}{#if expiryFailed(i.name, rowstate.failed) && !rowstate.pending('expiry', ['remove', i.name])}{@const ef = expiryFailed(i.name, rowstate.failed)} <span use:tip={ef.error.what}><Chip tone="bad">failed</Chip></span> <Button size="sm" variant="ghost" onclick={() => rowstate.dismiss(ef.id)}>Dismiss</Button>{/if}
         {:else if col.key === 'date'}<Muted style="white-space:nowrap">{i.date}</Muted>
         {:else if col.key === 'days'}<Progress value={pct(i)} total={100} tone={tone(i)} size="sm" label="Time left on {i.name}" text={left(i)} />
         {:else if col.key === 'note'}<Muted>{i.note}</Muted>
-        {:else}<Button variant="ghost" class="btn-icon expiry-rm" icon="x" busy={jobRunning('expiry', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={`Remove ${i.name} from the list`} onclick={() => openPlan('expiry', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
+        {:else}<Button variant="ghost" class="btn-icon expiry-rm" icon="x" busy={rowstate.pending('expiry', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={`Remove ${i.name} from the list`} onclick={() => openPlan('expiry', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
       {/snippet}
     </Table>
   </Card>
