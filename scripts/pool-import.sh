@@ -17,6 +17,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/lib/ui.sh"
 # shellcheck source=scripts/lib/pools.sh
 . "$here/lib/pools.sh"
+# shellcheck source=scripts/lib/admin.sh
+. "$here/lib/admin.sh"
 # shellcheck source=scripts/lib/pools-write.sh
 . "$here/lib/pools-write.sh"
 # shellcheck source=scripts/lib/effect.sh
@@ -172,8 +174,8 @@ do_import() {   # do_import <pool>: the job body
     done < <("$zfs" list -H -o name,canmount -r "$p")
     if ! "$zfs" list -H -o name "$p/shares" >/dev/null 2>&1; then "$zfs" create "$p/shares" && made=true || warn "$(t 'Could not create %s' "$p/shares")"; fi
     "$zfs" list -H -o name "$p/sensitive" >/dev/null 2>&1 || "$zfs" create "$p/sensitive" || warn "$(t 'Could not create %s' "$p/sensitive")"
-    # a new shares dataset is written as adminuser, like a pool made here (an existing one is not touched)
-    if $made && id adminuser >/dev/null 2>&1; then chown adminuser:users "/$p/shares"; chmod 2775 "/$p/shares"; fi
+    # a new shares dataset is written as the admin user, like a pool made here (an existing one is not touched)
+    if $made && id "$(admin_user)" >/dev/null 2>&1; then chown "$(admin_user)":users "/$p/shares"; chmod 2775 "/$p/shares"; fi
   fi
   step "Recording $p"
   effect_say rebuild
