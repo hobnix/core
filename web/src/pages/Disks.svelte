@@ -15,7 +15,10 @@
   import { route, go } from '../route.svelte.js';
   import { healthDot } from '../format.js';
   import { sleepOf, sleepText, sleepDot, parsePower, powerText } from '../disk-sleep.js';
-  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { diskPending, failedOf } from './storage/pending.js';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
   import WipeDisk from '../forms/storage/WipeDisk.svelte';
@@ -29,6 +32,10 @@
   let { deck } = $props();
 
   onMount(() => { loadPools(); });
+  // a pool job that ends may have added or removed a pool: read the pool list again then (from the job, not from a timer)
+  const anyPoolJob = $derived(rowstate.active('pool', []).length > 0 || rowstate.active('migrate', []).length > 0);
+  let wasBusy = false;
+  $effect(() => { const b = anyPoolJob; if (wasBusy && !b) loadPools(true); wasBusy = b; });
   // the one SnapRAID pool (its disks are labelled "bulk data-01" by monitor disks, an internal prefix) and the filter chips of every pool
   const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? '');
   const TABS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name })), { id: 'none', label: 'Free' }, { id: 'missing', label: 'Missing' }]);
@@ -99,6 +106,10 @@
     const g = membRows(poolOf(d)).find((r) => r[0] === memberOf(d))?.[3];
     return g && g !== '-' ? g : roleLabel(d.role);
   };
+  // what a disk is doing (format, test, detach, recover, move, forget): any job that names the device, its pool member or its serial; also one started in a terminal
+  const namesOf = (d) => [d.name, memberOf(d), serialOf(d)];
+  const doingOf = (d) => diskPending(namesOf(d), rowstate.active);
+  const failureOfDisk = (d) => failedOf('disk', namesOf(d), rowstate.failedLead);
   const poolText = (d) => poolOf(d) || (isLoose(d) ? 'free' : d.role);
   // the pane next to a disk in the file manager: another data disk (a pool disk and its own pool never meet there)
   const otherDisk = (member) => { const o = dataMembers(snapName).find((n) => n !== member); return o ? `disk:${o}` : ''; };
@@ -201,7 +212,7 @@
           <div style="overflow-x:auto"><Table id="disks" {columns} rows={visible} key="name" compact selected={sel?.name} onrow={(d) => { selName = d.name; tab = 'info'; }}
                  empty={filter === 'none' ? 'Every disk belongs to a pool, the system or the backup.' : 'No disks here.'}>
             {#snippet cell(d, col)}
-              {#if col.key === 'name'}<code>{d.name}</code>
+              {#if col.key === 'name'}<code>{d.name}</code>{#if doingOf(d)} <Chip>{doingOf(d).toLowerCase()}…</Chip>{/if}
               {:else if col.key === 'pool'}<Chip>{poolText(d)}</Chip>
               {:else if col.key === 'role'}<Muted>{diskPool(d.role) ? roleText(d) : ''}</Muted>
               {:else if col.key === 'model'}<Muted>{modelOf(d)}</Muted>
@@ -229,6 +240,8 @@
                   { k: 'Sleep', v: sleepText(sel.sleep) ? `${sleepText(sel.sleep)}${pw.disks[sel.name]?.wakes ? `, woke ${pw.disks[sel.name].wakes}x today` : ''}` : '' },
                   { k: 'Free space', v: sel.free && sel.free !== '-' ? sizeTxt(Number(sel.free)) : '' }, { k: 'First seen', v: rec?.first ? dateOf(rec.first) : '' },
                 ]} />
+                {#if doingOf(sel)}<div style="padding:12px 16px;margin:0"><Banner tone="info">{doingOf(sel)}… a job is running on this disk; this page follows it.</Banner></div>
+                {:else if failureOfDisk(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={failureOfDisk(sel).error} ondismiss={() => rowstate.dismiss(failureOfDisk(sel).id)} /></div>{/if}
                 {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p style="padding:12px 16px;margin:0">{verdicts[sel.name].reason}</p>{/if}
                 {#if markOf[member]}<div style="padding:12px 16px;margin:0"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
                 <Row gap="2" wrap style="padding:12px 16px;margin:0">
@@ -262,8 +275,8 @@
               {/if}
             {/snippet}
             {#snippet actions()}
-              <Button size="sm" icon="pulse" busy={jobRunning('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
-              <Button size="sm" icon="pulse" busy={jobRunning('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
+              <Button size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
+              <Button size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
               {#if isLoose(sel)}
                 <Button variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
                 <Button size="sm" disabled={locked} tooltip={lockTip('Mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Mount read-only…</Button>
