@@ -115,7 +115,7 @@ check_eq "the forged kinds never reached the log" "0" "$(python3 "$SD" event-lis
 check_eq "a package the server does not list is not taken in" "0" "$(python3 "$SD" event-list 50 --source pkg | grep -c someother)"
 check_eq "the nested payload key was dropped" "0" "$(tail -n1 "$NLOG" | grep -c evil)"
 check_eq "taken files are gone, other files and the half-written one stay" ".tmp-1-1
-other.txt" "$(ls -A "$SP" | sort)"
+other.txt" "$(ls -A "$SP" | LC_ALL=C sort)"
 if ln -s "$WORK/notify-stub" "$SP/ev-6-1.json" 2>/dev/null && [ -L "$SP/ev-6-1.json" ]; then
   before=$(lines); HS_EVENT_SPOOL=$(wp "$SP") bash "$SCRIPTS/event-notify.sh" 2>/dev/null
   check_eq "a link is not followed and not read" "$before" "$(lines)"
