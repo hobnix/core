@@ -614,7 +614,9 @@ The open editor reads `hs sys docker rev <app>` every 30 seconds to notice a cha
 disk"; it never reloads by itself.
 
 In the web interface the list shows the chips "Changed, not applied" and "New, not started" next to the name, with an Apply button that
-opens the plan of `recreate` (`docker compose up -d` from the folder: it never pulls, builds or removes a volume). For `invalid` files Apply is disabled and says why. "Unmanaged" rows
+opens the plan of `recreate` (`docker compose up -d` from the folder: it never removes a volume, and it pulls or builds only images that are
+not in Docker yet). When images are missing, for example after the app moved to a new Docker container, the plan names them and the recreate
+runs as a background job under Jobs. Not tested on hardware yet. For `invalid` files Apply is disabled and says why. "Unmanaged" rows
 have no Start, Stop or Edit. The editor also warns when a `user:` of a service differs from the user Docker maps for all shares.
 
 Giving a person access to a share that holds a `.env` file (the share `apps` always) shows a warning in the plan: those files can
