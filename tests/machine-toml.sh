@@ -144,6 +144,8 @@ printf '#!/bin/sh\nexit 0\n' > "$BIN/logger"; chmod +x "$BIN/logger"
 unset HS_MACHINE_EXAMPLE   # the example of the checkout (scripts/..) is the one that counts here
 export HS_REPO=$REPO HS_LOCKED_MARKER=$WORK/nolock
 U="bash $SCRIPTS/update.sh"
+export HS_EVENT_NOROOT=1 HS_STATE_DB=$WORK/ev.db   # event_emit writes here (update.started, update.stopped)
+evs() { python3 "$SCRIPTS/state-db.py" event-list 100 | cut -f3-6 | tr '	' ' '; }
 upstream() {   # upstream <name>: a new option in the example, pushed
   printf '\n# %s does a thing\n# %s = true\n' "$1" "$1" >> "$PUSHER/machine.toml.example"
   ( cd "$PUSHER" && $G add -A && $G commit -q -m "add $1" && git push -q origin HEAD 2>/dev/null )
@@ -168,9 +170,11 @@ check_eq "and the option is in the file" "1" "$(grep -c '^# optionThree = true' 
 upstream optionFour
 env PATH="$BIN:$PATH" $U --stop-on-new > "$WORK/u.out" 2>&1 < /dev/null
 check_eq "--stop-on-new stops without asking" "0" "$(grep -c 'REBUILD RAN' "$WORK/u.out")"
+check_out "event: update.stopped when it stops for the new options" "update stopped .* info" evs
 upstream optionFive
 env PATH="$BIN:$PATH" HS_GUIDED_TTY=1 $U --yes > "$WORK/u.out" 2>&1 < /dev/null
 check_out "--yes rebuilds without asking" "REBUILD RAN" cat "$WORK/u.out"
+check_out "event: update.started when it applies" "update started .* info" evs
 check_eq "the question was not asked" "0" "$(grep -c 'Rebuild now' "$WORK/u.out")"
 
 

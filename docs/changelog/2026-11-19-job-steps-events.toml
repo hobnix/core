@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "Backup checks, restores and pool changes show their steps"
+body  = """A background backup check (verify), restore drill, share restore and pool change (add, replace, remove, convert) now report "step n of m" with the work that is running, not only the plan. The file manager job progress also follows the shared job record. The event log gets one backup.ok or backup.failed event per part of a backup (shares, host, each instance) and a lock.done event when the vault is closed."""

@@ -139,6 +139,9 @@ disk_pick() {   # disk_pick <title> <question> <id> <text> OFF ...: the chosen i
 # compares the plain output with the old script.
 fancy() { [ "$ui" = gum ]; }
 pblank() { fancy || echo; }                        # the blank lines of the plain layout; the headings bring their own
+# A real step after the plan (#389): pplan_steps <n> declares the n steps that follow, step prints each; a background job shows "step n of m"
+# with the work that is running, not only the plan heading.
+pplan_steps() { export HS_STEP_TOTAL=$(( ${HS_STEP_N:-0} + $1 )); }
 phead() { if fancy; then step "${2:-${1#Plan: }}"; else echo "$1"; fi; }   # phead <plain line> [heading with gum]
 pl() { if fancy; then paint "$c_text" "  $1"; else echo "$1"; fi; }         # a line as it is
 plt() {                                              # a translated line (say); numbered steps stand out, prose is dimmed
@@ -812,6 +815,7 @@ if [ -n "$action" ]; then
         pdanger "ALL DATA on the disk is erased after it was moved."
       fi
       confirm_plan
+      pplan_steps 2
       # the disk as the system names it, also when it sits under LUKS
       base=$src
       # climb to the whole disk: through LUKS (mapper) and from a partition (an adopted Unraid disk is sdX1)
@@ -824,10 +828,13 @@ if [ -n "$action" ]; then
       [ -n "$byid" ] || { echo "Can't find the stable name of $base in /dev/disk/by-id."; exit 1; }
       if $encrypt; then crypt_new_pass || exit 1; fi
       if $discard; then
+        step "Taking $member out of the array without moving its files"
         discard_disk || exit 1
       else
+        step "Moving the files of $member onto the other data disks"
         SPIN_STREAM=1 SPIN_TAIL=15 spin "Moving the files of $member onto the other data disks ($(human "$used"); hours, the lines below show where it is)" evacuate_disk || exit 1
       fi
+      step "Erasing and formatting $member"
       case "$src" in /dev/mapper/*) cryptsetup close "${src##*/}" 2>/dev/null || true ;; esac
       old=$(blkid -L "$label" 2>/dev/null || true); [ -z "$old" ] || wipefs -a -q "$old" || true
       clean_disk "$byid"
@@ -863,8 +870,10 @@ if [ -n "$action" ]; then
       plt "Step 3 reads every disk completely and can take many hours."
       pdanger "ALL DATA on $new will be erased.$($encrypt && echo ' It will be encrypted (LUKS).')"
       confirm_plan
+      if [ "$mgroup" = parity ]; then pplan_steps 3; else pplan_steps 4; fi
       if $encrypt; then crypt_new_pass || exit 1; fi
 
+      step "Taking the old disk out of the array"
       if mountpoint -q "$dir"; then
         [ "$mgroup" = parity ] || for m in "$root" /mnt/bulk/pool; do
           setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
@@ -873,13 +882,18 @@ if [ -n "$action" ]; then
       fi
       old=$(blkid -L "$label" 2>/dev/null || true)
       [ -z "$old" ] || wipefs -a -q "$old" || true     # so it is never mounted as $member again
+      step "Formatting $new as $member"
       clean_disk "$new"
       format_member "$new" "$label"
       udevadm settle 2>/dev/null || true
       bash "$here/bulk-mount.sh"
+      step "Restoring $member from the parity"
       SPIN_STREAM=1 SPIN_TAIL=15 spin "Restoring $member from the parity (reads every disk, hours)" \
         snapraid -c "$conf" -d "$sname" -l "/var/lib/snapraid/fix-$member.log" fix || exit 1
-      [ "$mgroup" = parity ] || SPIN_STREAM=1 SPIN_TAIL=15 spin "Updating the parity (hours)" snapraid -c "$conf" sync || exit 1
+      if [ "$mgroup" != parity ]; then
+        step "Updating the parity"
+        SPIN_STREAM=1 SPIN_TAIL=15 spin "Updating the parity (hours)" snapraid -c "$conf" sync || exit 1
+      fi
       pblank
       pdone "$member is replaced. Log: /var/lib/snapraid/fix-$member.log"
       done_refresh
@@ -890,6 +904,8 @@ if [ -n "$action" ]; then
       phead "Plan: remove the parity disk $member from '$pool'"
       [ "$min_parity" -gt 0 ] || pl "  This is the only parity disk: afterwards a failed disk loses its data."
       confirm_plan
+      pplan_steps 1
+      step "Taking $member out of the array"
       mountpoint -q "$dir" && { umount "$dir" || umount -l "$dir"; }
       old=$(blkid -L "$label" 2>/dev/null || true); [ -z "$old" ] || wipefs -a -q "$old" || true
       case "$old" in /dev/mapper/*) crypt_close_forget "$old" ;; esac   # closed and no longer ours: hs unlock must not call it locked
@@ -922,6 +938,7 @@ if [ -n "$action" ]; then
       plt "  2. take it out of the array (the parity follows with the next scheduled sync, or now if you ask for it)"
       plt "The disk itself is not erased, only unlabelled; format it afterwards."
       confirm_plan
+      pplan_steps 1
       for m in "$root" /mnt/bulk/pool; do
         setfattr -n user.mergerfs.branches -v "-$dir" "$m/.mergerfs" 2>/dev/null || true
       done
@@ -934,8 +951,11 @@ if [ -n "$action" ]; then
     plt "  3. take it out of the array (the parity follows with the next scheduled sync, or now if you ask for it)"
     plt "Moving the files can take hours. The disk itself is not erased, only unlabelled."
     confirm_plan
+    pplan_steps 2
+    step "Moving the files of $member onto the other data disks"
     SPIN_STREAM=1 SPIN_TAIL=15 spin "Moving the files of $member onto the other data disks ($(human "$used"); hours, the lines below show where it is)" evacuate_disk || exit 1
     fi
+    step "Taking $member out of the array"
     old=$(blkid -L "$label" 2>/dev/null || true); [ -z "$old" ] || wipefs -a -q "$old" || true
     case "$old" in /dev/mapper/*) crypt_close_forget "$old" ;; esac   # an encrypted disk stays open otherwise, and would show as locked
     udevadm settle 2>/dev/null || true   # let the system notice the label is gone
@@ -974,7 +994,10 @@ if [ -n "$action" ]; then
     plt "ZFS copies the data onto the new disk in the background (resilver); the pool stays usable."
     pdanger "ALL DATA on $new will be erased."
     confirm_plan
+    pplan_steps 2
+    step "Preparing the new disk $new"
     clean_disk "$new"
+    step "Starting the replacement (the data is copied in the background)"
     zpool replace "$pool" "$full" "/dev/disk/by-id/$new"
     zpool status "$pool" | sed 's/^/      /'
     if fancy; then ok "$(t 'Resilvering %s: the pool stays usable; watch it with zpool status' "$new")"; fi
@@ -1005,6 +1028,8 @@ if [ -n "$action" ]; then
         pwarn "the other disk of $mgroup will be alone in its vdev: no redundancy, a failure of it loses the data of this vdev."
       fi
       confirm_plan
+      pplan_steps 1
+      step "Taking $member out of $mgroup"
       zpool detach "$pool" "$full"
       zpool status "$pool" | sed 's/^/      /'
       if fancy; then ok "$(t '%s is out of %s' "$member" "$mgroup")"; fi
@@ -1026,6 +1051,8 @@ if [ -n "$action" ]; then
   plt "This can take hours; the pool stays usable. Cancel with: zpool remove -s $pool"
   plt "ZFS keeps a small mapping table for the removed data until it is rewritten."
   confirm_plan
+  pplan_steps 1
+  step "Removing the mirror $mgroup"
   zpool remove "$pool" "$mgroup"
   zpool status "$pool" | sed 's/^/      /'
   if fancy; then ok "$(t 'The mirror %s is being removed; the pool stays usable' "$mgroup")"; fi
@@ -1343,12 +1370,15 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
   $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job (hs sys pool start), the typed name was checked before
   if $encrypt; then crypt_new_pass || exit 1; fi
 
+  pplan_steps 2
+  step "Erasing and formatting ${#todo[@]} disk(s)"
   for t in "${todo[@]}"; do
     IFS=$'\t' read -r id label <<<"$t"
     clean_disk "$id"
     format_member "$id" "$label"
   done
   udevadm settle 2>/dev/null || true
+  step "Adding the disks to the array"
   snap_new_pool
   snap_mount
   # (df exits 1 for the parity-* that matches nothing while there is no parity disk yet: under pipefail that ended the job right here, with the pool
@@ -1471,11 +1501,14 @@ if $encrypt && [ "$mode" = "create the new pool" ]; then
 elif $encrypt; then
   echo "Note: --encrypt only applies to a new pool; '$pool' keeps the encryption it has."
 fi
+pplan_steps 2
+step "Erasing ${#sel[@]} disk(s)"
 for d in "${sel[@]}"; do clean_disk "${d%%$'\t'*}"; done
 if [ -n "${leftover:-}" ]; then
   # deepest first; rmdir only removes what is empty
   find "$leftover" -mindepth 1 -depth -type d -exec rmdir {} +
 fi
+step "Changing the pool"
 if $encrypt && [ "$mode" = "create the new pool" ]; then
   printf '%s\n' "$crypt_pass" | "${cmd[@]}"
 else
