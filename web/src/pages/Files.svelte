@@ -75,7 +75,7 @@
       case ' ': case 'Insert': if (onBtn) return; return act(() => fm.spaceToggle());
       case 'Enter': if (onBtn) return; return act(() => { const p = fm.panes[fm.active]; const r = p.rows.find((x) => x.name === p.cur); if (r?.type === 'd') fm.open(fm.active, r.name); else if (r) showInfo(); });
       case 'Backspace': return act(() => fm.up(fm.active));
-      case 'Tab': if (e.shiftKey) return; return act(() => fm.activate(fm.active === 'L' ? 'R' : 'L'));
+      case 'Tab': if (e.shiftKey || !fm.dual) return; return act(() => fm.activate(fm.active === 'L' ? 'R' : 'L'));
       case 'Escape': return act(() => { if (fm.info) fm.info = null; else if (fm.patOpen) fm.patOpen = false; else if (fm.panes[fm.active].sel.size) fm.clear(); else fm.clearTray(); });
       case 'F2': return act(() => fm.plan('rename'));
       case 'F3': return act(showInfo);
@@ -136,8 +136,11 @@
       </div>
       <span class="grow"></span>
       <div class="fmgrp">
+        <button class="btn sm btn-ghost" aria-pressed={fm.dual} use:tip={fm.dual ? 'Close the second pane: delete, new folder and rename work on one pane' : 'Open a second pane: copy and move need it as the target'} onclick={() => fm.setDual(!fm.dual)}><i class="ph ph-columns"></i>{fm.dual ? 'Close second pane' : 'Second pane'}</button>
+        {#if fm.dual}
         <button class="btn sm btn-ghost pho" use:tip={'Show the same place in the active pane'} onclick={() => fm.same(fm.active)}>Same as other pane</button>
         <button class="btn sm btn-ghost" use:tip={'Exchange the two panes'} onclick={() => fm.swap()}><i class="ph ph-arrows-left-right"></i>Swap panes</button>
+        {/if}
         <button class="btn btn-ghost btn-icon sq" aria-label="Refresh" use:tip={{ text: 'Read both lists again', keys: 'Ctrl R' }} onclick={() => fm.refresh()}><i class="ph ph-arrow-clockwise"></i></button>
       </div>
     </div>
@@ -161,14 +164,14 @@
       </div>
     {/if}
 
-    <div class="fmsw" role="group" aria-label="Pane">
+    <div class="fmsw" class:one={!fm.dual} role="group" aria-label="Pane">
       <button aria-pressed={fm.mobile === 'L'} onclick={() => fm.activate('L')}>Left</button>
       <button aria-pressed={fm.mobile === 'R'} onclick={() => fm.activate('R')}>Right</button>
     </div>
 
     <Split open={!!infoRow}>
       {#snippet list()}
-        <div class="fmpanes"><FmPane {fm} side="L" /><FmPane {fm} side="R" /></div>
+        <div class="fmpanes"><FmPane {fm} side="L" />{#if fm.dual}<FmPane {fm} side="R" />{/if}</div>
       {/snippet}
       {#snippet side()}
         <Drawer title={infoRow.name} chip={infoRow.type === 'd' ? 'folder' : infoRow.type === 'l' ? 'link' : 'file'} onclose={() => (fm.info = null)}>
@@ -250,6 +253,7 @@
   .duact { margin-top: 8px; }
   @media (max-width: 860px) {
     .fmsw { display: flex; }
+    .fmsw.one { display: none; }
     .fmpanes { flex-direction: column; }
     .fmgrp + .fmgrp { padding-left: 0; border-left: 0; }
     .fmgrp .pho, .kbd { display: none; }

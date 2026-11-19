@@ -7,6 +7,8 @@ import { pools } from '../pools.svelte.js';
 
 const remember = (k, v) => { try { v === undefined ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 const recall = (k) => { try { return JSON.parse(sessionStorage.getItem(k) ?? 'null'); } catch { return null; } };
+const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
+const kept = (k) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null'); } catch { return null; } };
 const other = (side) => (side === 'L' ? 'R' : 'L');
 
 class Pane {
@@ -50,8 +52,17 @@ export class Fm {
   job = $state(null);               // { unit, op, title, from, to, state, p, result }
   result = $state(false);           // the result dialog of a finished job
   mobile = $state('L');             // the pane the phone shows
+  dual = $state(kept('fm:dual') === true);   // the second (right) pane is open; one pane is the start, delete, new folder and rename need no second pane
   timer = 0;
   ticks = 0;
+
+  // open or close the second pane; closing it leaves the left one active
+  setDual(on) {
+    this.dual = !!on;
+    keep('fm:dual', this.dual);
+    if (!this.dual) { this.active = 'L'; this.mobile = 'L'; this.picker = null; return; }
+    return this.load('R');
+  }
 
   // ── start ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   async init(query = {}) {
@@ -68,8 +79,9 @@ export class Fm {
     pick('R', query.right || saved.R?.loc || S.defaultRight(this.locs, this.panes.L.loc || first?.id), query.right ? query.rpath : saved.R?.path);
     if (!this.panes.L.loc) pick('L', first?.id, '/');
     if (!this.panes.R.loc) pick('R', this.panes.L.loc, '/');
+    if (query.right) this.dual = true;   // a link that names the right pane opens it
     if (query.select) this.panes.L.preselect = query.select;
-    await Promise.all([this.load('L'), this.load('R')]);
+    await Promise.all(this.dual ? [this.load('L'), this.load('R')] : [this.load('L')]);
     const want = this.panes.L.preselect;
     if (want) {
       const r = this.panes.L.rows.find((x) => x.name === want);
@@ -147,7 +159,7 @@ export class Fm {
       if (seq === p.seq) p.busy = false;
     }
   }
-  refresh(side) { return side ? this.load(side) : Promise.all([this.load('L'), this.load('R')]); }
+  refresh(side) { return side ? this.load(side) : Promise.all(this.dual ? [this.load('L'), this.load('R')] : [this.load('L')]); }
 
   navigate(side, loc, path = '/') {
     const p = this.panes[side];
@@ -180,7 +192,7 @@ export class Fm {
   }
 
   // ── selection ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  activate(side) { this.active = side; this.mobile = side; }
+  activate(side) { if (!this.dual) side = 'L'; this.active = side; this.mobile = side; }
   rowClick(side, row, e = {}) {
     const p = this.panes[side];
     this.activate(side);
@@ -262,6 +274,7 @@ export class Fm {
       return src.modifiable ? '' : ro(src);
     }
     if (op === 'delete') return src.modifiable ? '' : ro(src);
+    if (!this.dual) return 'Open the second pane first: it is the target of a copy or move';
     if (!dst) return 'Open a location in the other pane first';
     if (!dst.writable) return dst.modifiable ? ro(dst) : `${dst.label} is read only: ${ro(dst)}`;
     if (op === 'move' && !src.modifiable) return `${src.label} is read only, so nothing can be moved out of it`;
@@ -405,7 +418,7 @@ export class Fm {
       // the unit is gone (the server restarted, or it ended long ago): after a few misses stop watching
       if (++j.bad >= 4) { j.state = 'gone'; clearInterval(this.timer); remember('fm:job', undefined); }
     }
-    if (++this.ticks % 2 === 0) { this.load('L', { silent: true }); this.load('R', { silent: true }); }   // the lists follow the job
+    if (++this.ticks % 2 === 0) { this.load('L', { silent: true }); if (this.dual) this.load('R', { silent: true }); }   // the lists follow the job
   }
   async cancelJob() {
     const j = this.job;
@@ -463,7 +476,7 @@ export class Fm {
   async openPicker(side) {
     this.picker = side;
     const fixed = this.panes[other(side)].loc;
-    if (!fixed) return;
+    if (!fixed || !this.dual) return;
     await this.refreshLocs();
     await Promise.all(this.locs.map(async (l) => {
       const k = `${fixed}|${l.id}`;
@@ -471,6 +484,7 @@ export class Fm {
     }));
   }
   pairOf(side, id) {
+    if (!this.dual) return { ok: true, reason: '' };
     const fixed = this.panes[other(side)].loc;
     return this.pairs[`${fixed}|${id}`] ?? { ok: true, reason: '' };
   }
