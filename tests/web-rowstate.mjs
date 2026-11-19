@@ -58,5 +58,22 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   const mk = applyEvents(new Map(), [ev(3, 'running', J2, { key: KI })], 0);
   check('marketplace: install pending from the event, failed shows the error', isPending(mk, [], 'apps', ['install', 'jellyfin'])
     && failureOf(applyEvents(mk, [ev(4, 'failed', J2, { exit: 2, key: KI })], 0), new Set(), 'apps', ['install', 'jellyfin'])?.error.code === 'job.failed');
+// Instances and Docker rows (web/src/pages/instances/pending.js): start/stop from a terminal job, a failed job puts the row back
+{
+  const { ctPending, ctFailed, dockerPending, dockerFailed } = await import('../web/src/pages/instances/pending.js');
+  const K1 = '20261119-120000-ct-start-dc1-abcd', K2 = '20261119-120100-ct-stop-dc1-efgh', K3 = '20261119-120200-docker-app-pull-web-ijkl';
+  const jobs = fromRecords([rec(K1, 'running', 'ct dc1 start', '-', 'hs ct dc1 start')]);
+  const pend = (a, g) => isPending(jobs, [], a, g), fail = (a, g) => failureOf(jobs, new Set(), a, g);
+  check('ct start from a terminal: Starting', ctPending('dc1', pend) === 'Starting' && ctPending('other', pend) === '');
+  const stop = fromRecords([rec(K2, 'running', 'ct dc1 stop --autostart off')]);
+  check('ct stop with --autostart off: Stopping', ctPending('dc1', (a, g) => isPending(stop, [], a, g)) === 'Stopping');
+  const bad1 = fromRecords([rec(K1, 'failed', 'ct dc1 start', '1', 'hs ct dc1 start')]);
+  const pf = (a, g) => failureOf(bad1, new Set(), a, g), pp = (a, g) => isPending(bad1, [], a, g);
+  check('failed start: not pending, error shown', ctPending('dc1', pp) === '' && ctFailed('dc1', pf)?.error.what === 'hs ct dc1 start failed (exit 1)' && ctFailed('x', pf) === null);
+  const dk = fromRecords([rec(K3, 'running', 'docker-app web pull')]);
+  check('docker pull: Pulling', dockerPending('web', (a, g) => isPending(dk, [], a, g)) === 'Pulling');
+  const dkf = fromRecords([rec(K3, 'failed', 'docker-app web pull', '2')]);
+  check('docker failed pull shows error', dockerFailed('web', (a, g) => failureOf(dkf, new Set(), a, g))?.error.code === 'job.failed');
+  void fail;
 }
 if (bad) process.exit(1);
