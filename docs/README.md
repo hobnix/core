@@ -34,6 +34,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
 | [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
+| [PLAN-live-interface](PLAN-live-interface.md) | Milestone 0.10: the interface follows events, pending rows, delay measured, acknowledge |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |
 | [PLAN-capabilities-on-machine](PLAN-capabilities-on-machine.md) | Derived files of an installed capability package |
