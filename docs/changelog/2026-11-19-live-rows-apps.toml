@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "Apps, Marketplace and Services rows follow their jobs"
+body  = """A row on Apps, Marketplace and Services shows Installing, Updating, Starting, Stopping or Removing as soon as its job runs, also when the job was started in a terminal. A job that fails puts the row back and shows its error on the row until you dismiss it. The pages no longer read again after a timer."""

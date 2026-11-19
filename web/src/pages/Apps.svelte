@@ -1,8 +1,10 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import { ErrorNote } from '../ui/index.js';
   import { takeSelection } from '../select.svelte.js';
-  import { openCreate, openPlan, jobRunning, ui, track, showTab } from '../ui.svelte.js';
+  import { openCreate, openPlan, ui, track, showTab, tasks } from '../ui.svelte.js';
   import { start, get } from '../api.js';
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import RemoveApp from '../forms/ops/RemoveApp.svelte';
@@ -64,6 +66,15 @@
   // the form only writes the description: read the services and the plan again now, so the Services page's Apply count is right at once
   const services = (a) => openCreate(AppServices, { app: a.name, cts: a.cts ? a.cts.split(',') : [], ondone: () => refresh(['/api/sys/services/app', '/api/sys/services/list', '/api/sys/services/routes']) });
 
+  // what a row is doing, from its jobs (also one started in a terminal), and the newest failed job of the row
+  const instOf = (a) => (a.cts ? a.cts.split(',') : []);
+  const doing = (a) => (rowstate.pending('recipes', [a.name, 'run']) ? (a.state === 'installed' ? 'Updating…' : 'Installing…')
+    : instOf(a).some((c) => rowstate.pending('apps', ['remove', c])) ? 'Removing…'
+    : instOf(a).some((c) => rowstate.pending('ct', [c, 'start'])) ? 'Starting…'
+    : instOf(a).some((c) => rowstate.pending('ct', [c, 'stop'])) ? 'Stopping…' : '');
+  const failure = (a) => rowstate.failed('recipes', [a.name, 'run'])
+    ?? instOf(a).map((c) => rowstate.failed('apps', ['remove', c]) ?? rowstate.failed('ct', [c, 'start']) ?? rowstate.failed('ct', [c, 'stop'])).find(Boolean) ?? null;
+
   let q = $state('');
   let show = $state('all');
   const shown = $derived(apps.filter((a) => (show === 'all' || (show === 'installed' ? a.state === 'installed' : a.state !== 'installed'))
@@ -104,23 +115,15 @@
   let bulkSummary = $state([]);          // { name, ok, state, reason }
   let showSummary = $state(false);
 
-  // wait until a job unit reaches a terminal state, then return it ('ok' | 'failed' | 'unknown' | 'running' on timeout)
-  async function awaitJob(unit) {
-    let from = 0;
-    for (let i = 0; i < 600; i++) {   // up to about ten minutes
-      try {
-        const r = await get(`/api/sys/jobs/tail/${encodeURIComponent(unit)}?from=${from}`);
-        let state = 'running';
-        for (const row of r.rows ?? []) {
-          if (row[0] === 'next') from = Number(row[1]) || from;
-          else if (row[0] === 'state') state = row[1];
-        }
-        if (state !== 'running') return state;
-      } catch { /* the stream broke once: try again */ }
-      await new Promise((ok) => setTimeout(ok, 1000));
-    }
-    return 'running';
-  }
+  // wait until a job unit reaches a terminal state (the task follows the unit through the event stream), then return it ('ok' | 'failed' | ...)
+  const awaitJob = (unit) => new Promise((done) => {
+    const stop = $effect.root(() => {
+      $effect(() => {
+        const t = tasks.list.find((x) => x.unit === unit);
+        if (t && t.state !== 'running') { done(t.state); queueMicrotask(() => stop()); }
+      });
+    });
+  });
 
   // start one recipe as its own background job (install and update are both `hs sys recipes start <name> run`)
   const startOne = async (name) => {
@@ -217,9 +220,11 @@
           {/each}
         {:else if col.key === 'name'}
           <span id="app-{a.name}" class="nm" class:hl={hl === a.name}><i class="ph ph-{icons[a.name] ?? 'package'}" style="color:{on ? 'var(--accent-ink)' : 'var(--fg-3)'}"></i>{a.name}</span>
+          {#if failure(a)}{@const f = failure(a)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
         {:else if col.key === 'desc'}
           <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c)}>{c}</a>{/each}</div>{/if}
         {:else if col.key === 'state'}
+          {#if doing(a)}<Chip tone="info">{doing(a)}</Chip>{/if}
           {#if stageOf.get(a.name)}
             <StageBadge stage={stageOf.get(a.name).stage} flags={stageOf.get(a.name).flags.filter((f) => f !== 'unhealthy' || !healthOf.has(a.name))} />
           {:else}
@@ -232,12 +237,12 @@
           {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
             {#if c !== 'docker'}
               {@const live = stageOf.get(a.name).stage === 'running' || !stageOf.get(a.name).flags.includes('stopped')}
-              <Button need="app-manager" variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={jobRunning('ct', [c, 'stop']) || jobRunning('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon={live ? 'stop' : 'play'} busy={rowstate.pending('ct', [c, 'stop']) || rowstate.pending('ct', [c, 'start'])} tooltip={live ? `Stop ${c}` : `Start ${c}`} aria-label="{live ? 'Stop' : 'Start'} {c}" onclick={() => flipCt(c, live)} />
             {/if}
           {/each}
           {#each stageActions(stageOf.get(a.name)).instances ?? [] as c}
             {#if c !== 'docker'}
-              <Button need="app-manager" variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
             {/if}
           {/each}
           <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>

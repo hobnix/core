@@ -3,7 +3,10 @@
   // Reads: hs sys pkg market / repos. Changes: hs sys pkg plan|start (install, update, remove, fetch, repo-add, repo-remove); a package or repository
   // that came from a repository somebody added is red (the typed word is its name).
   import { poll, rows, refresh } from '../data.svelte.js';
-  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import Chip from '../ui/Chip.svelte';
+  import { rowstate } from '../rowstate.svelte.js';
+  import { ErrorNote } from '../ui/index.js';
   import { route, go } from '../route.svelte.js';
   import { start } from '../api.js';
   import RepoAdd from '../forms/ops/RepoAdd.svelte';
@@ -67,13 +70,18 @@
   // a package that came from an added repository is red: installing it needs the name typed, which a bulk run cannot do per item
   const red = (p) => repos.find((r) => r.name === p.repo)?.from === 'added';
 
-  // what a change did shows after its dialog closes
-  let was = false;
+  // what a change did shows when its job ends (from the job events, also for a job started in a terminal); no timer
+  const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
+  let wasBusy = false;
   $effect(() => {
-    const open = !!ui.dialog || !!ui.create;
-    if (was && !open) setTimeout(() => refresh(PATHS), 400);
-    was = open;
+    if (wasBusy && !busyNow) refresh(PATHS);
+    wasBusy = busyNow;
   });
+  // the pending word of a package row, from its job
+  const doing = (p) => (rowstate.pending('apps', ['install', p.name]) ? 'Installing…' : rowstate.pending('pkg', ['update', p.name]) ? 'Updating…'
+    : rowstate.pending('pkg', ['remove', p.name]) ? 'Removing…' : rowstate.pending('parts', ['enable', p.name]) ? 'Turning on…' : rowstate.pending('parts', ['disable', p.name]) ? 'Turning off…' : '');
+  const failure = (p) => rowstate.failed('apps', ['install', p.name]) ?? rowstate.failed('pkg', ['update', p.name]) ?? rowstate.failed('pkg', ['remove', p.name])
+    ?? rowstate.failed('parts', ['enable', p.name]) ?? rowstate.failed('parts', ['disable', p.name]);
 
   // ═══ bulk selection ═══
   let selected = $state(new Set());
@@ -132,7 +140,7 @@
 <PageHeader title="Marketplace" crumb={ui.host}
             sub={market.loaded && !market.error ? `${pkgs.length} packages from ${repos.length} repositories${updates ? ` · ${updates} update${updates > 1 ? 's' : ''}` : ''}` : 'Apps and extensions from the repositories you trust.'}>
   {#snippet actions()}
-    <Button icon="arrows-clockwise" busy={jobRunning('pkg', ['fetch'])} busyLabel="Checking…" tooltip={'Read the repositories again and find the newest releases'} onclick={fetchAll}>Check for updates</Button>
+    <Button icon="arrows-clockwise" busy={rowstate.pending('pkg', ['fetch'])} busyLabel="Checking…" tooltip={'Read the repositories again and find the newest releases'} onclick={fetchAll}>Check for updates</Button>
     <Button icon="hammer" tooltip={'Write the manifest of a new app or extension'} onclick={() => go('/marketplace/builder')}>Package builder</Button>
     <Button variant="primary" tooltip={'Add a repository of packages'} onclick={addRepo}><i class="ph ph-plus"></i>Add repository</Button>
   {/snippet}
@@ -172,18 +180,20 @@
             <Switch box checked={selected.has(p.name)} onchange={(c) => toggle(p.name, c)} label="Select {p.name}" />
           {:else if col.key === 'go'}
             {#if p.state === 'new'}
-              <Button variant="primary" size="sm" busy={jobRunning('apps', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
+              <Button variant="primary" size="sm" busy={rowstate.pending('apps', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
             {:else if p.state === 'update'}
-              <Button variant="primary" size="sm" busy={jobRunning('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
+              <Button variant="primary" size="sm" busy={rowstate.pending('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
             {/if}
           {:else if col.key === 'name'}
             <span class="nm"><i class="ph ph-{kindIcon(p.kind)}" style="color:{p.state === 'new' ? 'var(--fg-3)' : 'var(--accent-ink)'}"></i>{p.name}</span>
             <div class="in">{kindLabel(p.kind)}{p.core ? ' · the server needs it' : ''}</div>
+            {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
           {:else if col.key === 'title'}
             <span class="ds">{p.title}</span>
           {:else if col.key === 'repo'}
             {p.repo}
           {:else if col.key === 'state'}
+            {#if doing(p)}<Chip tone="info">{doing(p)}</Chip>{/if}
             {#if stageOf.get(p.name)}
               <StageBadge stage={stageOf.get(p.name).stage} flags={stageOf.get(p.name).flags} />
             {:else}
@@ -192,9 +202,9 @@
           {:else if p.state !== 'new'}
             {@const turnTo = stageActions(stageOf.get(p.name)).turn}
             {#if turnTo}
-              <Button size="sm" busy={jobRunning('parts', ['enable', p.name]) || jobRunning('parts', ['disable', p.name])} tooltip={turnTo === 'enable' ? 'Switch it on (shows the plan)' : 'Switch it off (shows the plan)'} onclick={() => turn(p, turnTo)}>{turnTo === 'enable' ? 'Turn on' : 'Turn off'}</Button>
+              <Button size="sm" busy={rowstate.pending('parts', ['enable', p.name]) || rowstate.pending('parts', ['disable', p.name])} tooltip={turnTo === 'enable' ? 'Switch it on (shows the plan)' : 'Switch it off (shows the plan)'} onclick={() => turn(p, turnTo)}>{turnTo === 'enable' ? 'Turn on' : 'Turn off'}</Button>
             {/if}
-            <Button variant="ghost" class="btn-icon" icon="trash" disabled={p.core} busy={jobRunning('pkg', ['remove', p.name])} tooltip={p.core ? 'The server refers to this package by name: it stays' : 'Remove the installed copy (data and containers stay)'} aria-label="Remove {p.name}" onclick={() => remove(p)} />
+            <Button variant="ghost" class="btn-icon" icon="trash" disabled={p.core} busy={rowstate.pending('pkg', ['remove', p.name])} tooltip={p.core ? 'The server refers to this package by name: it stays' : 'Remove the installed copy (data and containers stay)'} aria-label="Remove {p.name}" onclick={() => remove(p)} />
           {/if}
         {/snippet}
       </Table>
@@ -215,7 +225,7 @@
           {:else if col.key === 'from'}
             {r.from === 'default' ? 'this project' : 'added by you'}
           {:else if r.from === 'added'}
-            <Button variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
+            <Button variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
           {/if}
         {/snippet}
       </Table>
