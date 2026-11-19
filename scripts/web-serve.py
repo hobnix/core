@@ -438,12 +438,19 @@ def favicon_svg(accent):
 USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
+RC_TIMEOUT = 124      # the web server stopped waiting (the time limit passed); the shell's `timeout` uses the same number
+RC_NOT_RUN = 127      # the command could not be started
+
+
 def _run(cmd, stdin=None, timeout=10):
+    """-> (rc, stdout). A timeout is RC_TIMEOUT, a command that could not be started RC_NOT_RUN, both with empty output."""
     try:
         p = subprocess.run(cmd, input=stdin, capture_output=True, timeout=timeout)
         return p.returncode, p.stdout.decode("utf-8", "replace")
+    except subprocess.TimeoutExpired:
+        return RC_TIMEOUT, ""
     except (OSError, subprocess.SubprocessError):
-        return 127, ""
+        return RC_NOT_RUN, ""
 
 
 _run_plain = _run      # tests replace _run with a fake; while they do, plans go through that fake and the plan cache is off (see _change)
@@ -503,7 +510,7 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, start_new_session=hasattr(os, "killpg"))
     except (OSError, ValueError):
-        return 127, "", "run"
+        return RC_NOT_RUN, "", "run"
     end, data = time.monotonic() + timeout, stdin
     while True:
         try:
@@ -514,7 +521,7 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
             how = "gone" if gone is not None and gone() else "timeout" if time.monotonic() > end else None
             if how:
                 _kill_tree(p)
-                return 127, "", how
+                return RC_TIMEOUT, "", how
 
 
 class Auth:
@@ -1589,6 +1596,19 @@ def validate_change(body):
     return area, args, confirm, stdin
 
 
+CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
+
+
+def no_status_reason(rc):
+    """The reason for a plan or start that ended without its own status line."""
+    if rc == RC_TIMEOUT:
+        return ("The server stopped waiting after %d s. A start may still be running or be partly done: check Jobs and the page "
+                "before you try again." % CHANGE_LIMIT)
+    if rc == RC_NOT_RUN:
+        return "The server could not run the command (exit %d)." % rc
+    return "The server could not do this (exit %d)." % rc
+
+
 def parse_change(out, rc):
     """The key<TAB>value lines of a plan or start (scripts/*-change.sh) as one object. step, note, warn, danger, section and text (the update preview lists commits) keep their order."""
     d = {"exit": rc, "status": "", "reason": "", "heading": "", "command": "", "confirm_name": "", "long": False, "unit": "",
@@ -1638,7 +1658,7 @@ def parse_change(out, rc):
     if not d["status"]:
         d["status"] = "ok" if rc == 0 else "refused"
     if d["status"] == "refused" and not d["reason"]:
-        d["reason"] = "The server could not do this (exit %d)." % rc
+        d["reason"] = no_status_reason(rc)
     return d
 
 
@@ -1691,7 +1711,7 @@ def plan_cacheable(area, args, stdin):
 def plan_stable(out, rc, d):
     """Worth keeping: the script printed its own status line, it is ok/needs/refused, ok only with exit 0, no secret in it, not a failed run."""
     explicit = any(line.startswith("status\t") for line in out.splitlines())
-    return (explicit and rc != 127 and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
+    return (explicit and rc not in (RC_TIMEOUT, RC_NOT_RUN) and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
             and "secret" not in d)
 
 
@@ -1975,6 +1995,8 @@ class Reads:
 
     @staticmethod
     def _shape(spec, rc, out):
+        if rc == RC_TIMEOUT and not out.strip():
+            return 502, {"error": "The server stopped waiting for this answer (time limit).", "rc": rc}
         if rc != 0 and not out.strip():
             return 502, {"error": "The server could not answer this (exit %d)." % rc, "rc": rc}
         if spec["kind"] == "json":
@@ -2067,7 +2089,7 @@ def parse_unlock(rc, out, passphrase):
         return "ok", "Unlocked. The services are starting."
     text = out.replace(passphrase, "***") if passphrase else out
     low = text.lower()
-    if rc == 127:
+    if rc == RC_NOT_RUN:
         return "failed", UNLOCK_NOT_RUN
     if "opens nothing" in low or "not the passphrase" in low or "did not accept" in low or "vault did not open" in low:
         return "failed", "Wrong passphrase."
@@ -3090,7 +3112,7 @@ def make_handler(app):
                     _timing("plan", shape, t0, "cached", None, hit["status"])
                     return self._json(200, hit)
                 gen = app.plans.gen
-                rc, out, how = _run_watched(cmd, stdin=data, timeout=60, gone=lambda: _client_gone(self.connection))
+                rc, out, how = _run_watched(cmd, stdin=data, timeout=CHANGE_LIMIT, gone=lambda: _client_gone(self.connection))
                 if how == "gone":           # the browser asked something newer: no answer, the connection is closed
                     _timing("plan", shape, t0, how, None, None)
                     self.close_connection = True
@@ -3100,7 +3122,7 @@ def make_handler(app):
                     app.plans.put(key, gen, d)
                 _timing("plan", shape, t0, how, rc, d["status"])
                 return self._json(200, d)
-            rc, out = _run(cmd, stdin=data, timeout=60)
+            rc, out = _run(cmd, stdin=data, timeout=CHANGE_LIMIT)
             d = parse_change(out, rc)
             if verb == "start":
                 app.reads.clear()      # what the pages show next is read again, not served from before the change (clears the plan cache too)
