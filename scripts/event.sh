@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the event log: what happened on the server (disks, jobs, notifications), newest last
 # help.de: das Ereignisprotokoll: was auf dem Server passiert ist (Platten, Aufträge, Benachrichtigungen), das Neueste zuletzt
-# args: list [N] [--source S] [--after ID] | kinds [--package P] | emit <source.kind> <subject> [text] [--level info|warn|error] [--payload JSON] [--pkg NAME]
+# args: list [N] [--source S] [--after ID] [--before ID] | kinds [--package P] | emit <source.kind> <subject> [text] [--level info|warn|error] [--payload JSON] [--pkg NAME]
 # Front end of the event log in /var/lib/hs/state.db (scripts/state-db.py: `emit` is the ONE writer, root). `list` reads it without root;
 # a person at a terminal gets a table, `hs sys event list` and pipes get tab separated lines: id time source kind subject level text payload
 # (`-` for an empty field). Kinds are <source>.<kind>, registered in scripts/lib/event-kinds.tsv. docs/adr/0005-events.md.

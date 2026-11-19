@@ -33,7 +33,7 @@ backup find	free argument: a search term typed by the user, fetched per search
 backup snapshots	free query: depends on the chosen tag, no fixed topic
 changes list	free query: depends on the chosen range, no fixed topic
 disk ls	free argument: a folder of one data disk, polled every 10 s in the move-folder dialog
-event list	free query: depends on filters and the cursor, polled every 30 s as the safety net of the event stream
+event list	free query: depends on filters and the cursor; the Events page follows the domain events of the stream (topic name `event-log` in the browser only) and polls every 30 s only while the stream is closed
 fm ls	free argument: one page of a folder (path, cursor), no fixed topic
 fm pair	free argument: two places of the file manager, no fixed topic
 fm trash	free argument: the trash of one place of the file manager, no fixed topic

@@ -146,6 +146,11 @@ who started it and the error text of a failed job. The list updates when a job c
 event stream is down). A state this page does not know is shown as text. **Scheduled** is the list of timers with **Run now**.
 Not tested on hardware yet.
 
+**Events** (Operations > Events) shows what happened on the server, newest first, and every signed-in role may read it. New entries appear
+at once while the event stream is open; the page asks the server again every 30 s only while the stream is down. **Show more** loads the
+next 100 older entries (by their number, `hs event list --before <id>`), so a long list stays fast. Filter by source, level, kind and time.
+Not tested on hardware yet.
+
 | Page | What you do there |
 | --- | --- |
 | Summary | CPU, memory, disks per pool, UPS, important states; **Run health check** |

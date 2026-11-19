@@ -4184,7 +4184,7 @@
   "/event/list": {
    "get": {
     "operationId": "event.list",
-    "summary": "the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID]",
+    "summary": "the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID]",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -4204,7 +4204,8 @@
      "query": [
       "n",
       "source",
-      "after"
+      "after",
+      "before"
      ]
     },
     "responses": {
