@@ -101,13 +101,13 @@ check_out "the live one stays" "^zfs:tank:DEGRADED" cut -f1 "$WORK/ack"
 
 echo "-- since when, and which channels were told"
 rm -f "$WORK/health-since"
-check_out "a new problem is open since now" "^zfs:tank:DEGRADED	.*	acked	1000	-$" env HS_NOW=1000 $HC --list
-check_out "a later run keeps the first time" "acked	1000	-$" env HS_NOW=2000 $HC --list
+check_out "a new problem is open since now" "^zfs:tank:DEGRADED	.*	acked	1000	-	[^	]*	[^	]*$" env HS_NOW=1000 $HC --list
+check_out "a later run keeps the first time" "acked	1000	-	[^	]*	[^	]*$" env HS_NOW=2000 $HC --list
 mkdir -p "$WORK/state/notify-channels"
 printf 'zfs:tank:FAULTED	5	main,second
 ' > "$WORK/state/notify-channels/.told"
 echo FAULTED > "$WORK/state/poolstate"
-check_out "a changed key starts again, with the channels that were told" "^zfs:tank:FAULTED	.*	-	3000	main,second$" env HS_NOW=3000 $HC --list
+check_out "a changed key starts again, with the channels that were told" "^zfs:tank:FAULTED	.*	-	3000	main,second	[^	]*	[^	]*$" env HS_NOW=3000 $HC --list
 if grep -q '^zfs:tank:DEGRADED' "$WORK/health-since"; then fail "the cleared key is dropped from the since file"; else pass "the cleared key is dropped from the since file"; fi
 check_out "the acknowledge command still lists the problem" "^zfs:tank:FAULTED" $HA ack
 rm -f "$WORK/state/poolstate"
