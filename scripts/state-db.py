@@ -10,7 +10,7 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   events [N]                 time kind subject text (newest last)
   emit <source>.<kind> <subject> [text] [--level info|warn|error] [--payload JSON]
                              the ONE writer of the event log (root; scripts/lib/event.sh, hs event emit); docs/adr/0005-events.md
-  event-list [N] [--source S] [--after ID]  id time source kind subject level text payload (newest last; `-` for an empty field)
+  event-list [N] [--source S] [--after ID] [--before ID]  id time source kind subject level text payload (newest last; `-` for an empty field)
   event-kinds [--package P]  kind level payload keys meaning origin: the core kinds, then the kinds installed packages declare (origin core or the package; hs event kinds)
   audit-list [N]            id time actor result exit command (the audit.* events, newest last; hs audit, hs sys audit)
   disk-events [N]            local time TAB plugged in|taken out TAB text (newest last); the old file disk-events is imported once
@@ -707,20 +707,23 @@ def cmd_event_list(args):
     c = open_ro()
     if c is None:
         return 0
-    n, source, after = 50, None, 0
+    n, source, after, before = 50, None, 0, 0
     i = 0
     while i < len(args):
         if args[i] == "--source" and i + 1 < len(args):
             source = args[i + 1]; i += 2
         elif args[i] == "--after" and i + 1 < len(args):
             after = int(args[i + 1]) if args[i + 1].isdigit() else 0; i += 2
+        elif args[i] == "--before" and i + 1 < len(args):
+            before = int(args[i + 1]) if args[i + 1].isdigit() else 0; i += 2
         elif args[i].isdigit():
             n = int(args[i]); i += 1
         else:
             i += 1
     try:
-        rows = c.execute("SELECT id, time, source, kind, subject, level, text, payload FROM events WHERE id > ? AND (? IS NULL OR source = ?) "
-                         "ORDER BY id DESC LIMIT ?", (after, source, source, n)).fetchall()
+        # --before ID: the page of rows older than ID (0 = no upper bound); with --after ID both bound the page
+        rows = c.execute("SELECT id, time, source, kind, subject, level, text, payload FROM events WHERE id > ? AND (? = 0 OR id < ?) "
+                         "AND (? IS NULL OR source = ?) ORDER BY id DESC LIMIT ?", (after, before, before, source, source, n)).fetchall()
     except sqlite3.Error:
         return 0
     for r in reversed(rows):

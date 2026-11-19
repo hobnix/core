@@ -921,7 +921,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "event.list": {
-    /** the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] */
+    /** the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID] */
     words: ["event", "list"];
     path: "/event/list";
     method: "get";

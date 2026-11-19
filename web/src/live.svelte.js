@@ -8,6 +8,9 @@
 import { LiveWatch } from './livewatch.js';
 
 export const live = $state({ open: false, follow: false, gen: {}, topics: {}, events: [], lastId: 0, resyncs: 0 });
+// Topics that only the browser knows: the domain events of the stream are their signal (served in every mode), so a poll with one of these
+// has no timer while the stream is open, whatever the liveState mode is. The page merges the rows `live.events` brings itself.
+export const STREAM_TOPICS = new Set(['event-log']);
 const KEEP = 100;   // domain events kept in live.events
 
 // URL -> topic map from the session answer (features.topics): a poll without its own topic argument follows the stream through it.

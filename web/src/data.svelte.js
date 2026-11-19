@@ -1,7 +1,7 @@
 // Polled reads. `poll('/api/sys/ct/list', 5000)` gives a reactive { data, error, loaded }. The path may be a function (or return
 // '' to pause, e.g. while a panel is collapsed). A failed read keeps the last data, so a page never flashes empty on one bad answer.
 import { get } from './api.js';
-import { live } from './live.svelte.js';
+import { live, STREAM_TOPICS } from './live.svelte.js';
 import { nextDelay } from './polldelay.js';
 export { ageOf, stateOf } from './api.js';
 
@@ -48,7 +48,7 @@ export function poll(path, ms, topic) {
     const p = typeof path === 'function' ? path() : path;
     if (!p) return;
     const t = (typeof topic === 'function' ? topic() : topic) ?? live.topics[p];
-    const liveOpen = !!t && live.open && live.follow;
+    const liveOpen = !!t && live.open && (live.follow || STREAM_TOPICS.has(t));
     if (t) { live.gen[t]; live.resyncs; }   // a change of the topic (or a resync) re-runs this effect, which reads again
     if (cache.has(p)) { st.data = cache.get(p); st.error = null; st.loaded = true; }
     let alive = true;
