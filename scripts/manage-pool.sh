@@ -828,7 +828,7 @@ if [ -n "$action" ]; then
       [ -n "$byid" ] || { echo "Can't find the stable name of $base in /dev/disk/by-id."; exit 1; }
       if $encrypt; then crypt_new_pass || exit 1; fi
       if $discard; then
-        step "Taking $member out of /bulk without moving its files"
+        step "Taking $member out of the array without moving its files"
         discard_disk || exit 1
       else
         step "Moving the files of $member onto the other data disks"
