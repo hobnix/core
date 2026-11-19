@@ -46,6 +46,19 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   const intr = fromRecords([rec(J1, 'interrupted', 'apps remove nextcloud')]);
   check('interrupted shows its own code', failureOf(intr, new Set(), 'apps', ['remove', 'nextcloud'])?.error.code === 'job.interrupted');
 }
+// Apps and Marketplace rows: installing, updating, start/stop from a job (also one started in a terminal), and a failed install puts the row back with its error
+{
+  const K = 'recipes nextcloud run', KI = 'apps install jellyfin';
+  const run = fromRecords([rec(J1, 'running', K, '-', 'hs recipes nextcloud run')]);
+  check('apps: a recipe run in a terminal makes the row pending', isPending(run, [], 'recipes', ['nextcloud', 'run']) && !isPending(run, [], 'recipes', ['jellyfin', 'run']));
+  check('apps: a start job is pending for its instance only', isPending(fromRecords([rec(J1, 'running', 'ct nextcloud start')]), [], 'ct', ['nextcloud', 'start']) && !isPending(fromRecords([rec(J1, 'running', 'ct nextcloud start')]), [], 'ct', ['nextcloud', 'stop']));
+  const dead = applyEvents(run, [ev(8, 'failed', J1, { exit: 1, key: K })], 0);
+  const f = failureOf(dead, new Set(), 'recipes', ['nextcloud', 'run']);
+  check('apps: failed install: not pending, error shown', !isPending(dead, [], 'recipes', ['nextcloud', 'run']) && f && f.error.what === 'hs recipes nextcloud run failed (exit 1)');
+  const mk = applyEvents(new Map(), [ev(3, 'running', J2, { key: KI })], 0);
+  check('marketplace: install pending from the event, failed shows the error', isPending(mk, [], 'apps', ['install', 'jellyfin'])
+    && failureOf(applyEvents(mk, [ev(4, 'failed', J2, { exit: 2, key: KI })], 0), new Set(), 'apps', ['install', 'jellyfin'])?.error.code === 'job.failed');
+}
 // Instances and Docker rows (web/src/pages/instances/pending.js): start/stop from a terminal job, a failed job puts the row back
 {
   const { ctPending, ctFailed, dockerPending, dockerFailed } = await import('../web/src/pages/instances/pending.js');
