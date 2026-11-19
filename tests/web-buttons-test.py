@@ -9,8 +9,8 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / 'web' / 'src'
 # Deliberate exceptions, each with its reason.
 ALLOW = (
     'ui/Button.svelte',     # the component itself
-    'pages/Files.svelte',   # the file manager keeps its own buttons: its handlers return promises and a Button would turn them busy
-    'files/',               # (spinner, ignored clicks); to move it over, give those buttons an explicit busy state first
+    'pages/Files.svelte',   # the file manager keeps its own small buttons (toolbar, rows, dialogs); the ones that start or stop a job (Start, Pause, Continue,
+    'files/',               # Cancel, Calculate size, Go) are ui/Button.svelte with an explicit busy state
 )
 
 

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# The file manager's locations and path rules (docs/PLAN-file-manager.md). Sourced by scripts/fm.sh, not run.
+# The file manager's locations and path rules (docs/PLAN-storage-nas.md). Sourced by scripts/fm.sh, not run.
 #
 #   fm_resolve <id>        fills L*: LID LKIND LLABEL LROOT (real path) LFS LSIZE LFREE LADD (may receive files) LMOD (files may be removed/renamed in it)
 #                          LREASON (why not writable, or -) LPOOL LDISK LUSABLE (yes|no; LERR says why not) LAK (array key: what busy marks are keyed by)
@@ -9,6 +9,7 @@
 #   fm_same_files <a> <b>  prints the reason and returns 0 when the two locations show the same files (a pool disk and the pool view of its array)
 #   fm_clean_path <p>      the path relative to the root, no leading/trailing slash; returns 1 for .., control characters, empty parts
 #   fm_badname <name>      true when a name has control characters or is not valid UTF-8
+#   fm_trash_*, fm_today  the trash folder name (ONE constant FM_TRASH_NAME), its days, its date folders; see the end of this file
 #   fm_esc <name>          the name with every unsafe byte as \xNN (prints it)
 #
 # Test knobs: HS_FM_TEST=1 (every folder counts as mounted), HS_FM_POOL_ROOT, HS_FM_ZFS_ROOT, HS_FM_CACHE_ROOT, HS_FM_FAST_ROOT, HS_FM_TEMP_ROOT,
@@ -165,6 +166,7 @@ fm_protected() {   # sets PROT
   local rel=$1 name=$2
   PROT=""
   case $name in .hs-fm-partial.*) PROT=system; return 0 ;; esac
+  if fm_is_trash_name "$name"; then PROT=system; return 0; fi
   [ -z "$rel" ] || return 0
   [ "$LTOP" = yes ] || return 0
   if [ "$LKIND" = disk ]; then
@@ -205,4 +207,37 @@ fm_free_name() {
     i=$((i + 1))
   done
   printf '%s\n' "$cand"
+}
+
+# ---- the trash (docs/PLAN-storage-nas.md, D2) ----
+# Delete in the file manager is a RENAME into <root of the file system>/<FM_TRASH_NAME>/<YYYY-MM-DD>/<path below that root>, never a copy; the
+# list <date>/.origin holds one line per trashed item: <path below the date folder> TAB <path it came from, below the file system root>.
+# The folder name lives HERE and nowhere else in the scripts (one line to change when hs becomes hn); capabilities/storage/module.nix lists the
+# same names in the Samba setting "veto files" (tests/fm.sh keeps the two in step). Old names are only read, so a trash made before a rename
+# is still found, restored and emptied.
+FM_TRASH_NAME=.hn-trash
+FM_TRASH_OLD_NAMES=(.hs-trash)
+FM_TRASH_DAYS=14
+fm_trash_names() { printf '%s\n' "$FM_TRASH_NAME" "${FM_TRASH_OLD_NAMES[@]}"; }
+fm_is_trash_name() { local n; while IFS= read -r n; do [ "$1" != "$n" ] || return 0; done < <(fm_trash_names); return 1; }
+fm_trash_excludes() { local n; while IFS= read -r n; do printf '%s\n' --exclude "$n"; done < <(fm_trash_names); }   # for restic (scripts/backup.sh)
+fm_now() { echo "${HS_NOW:-$(date +%s)}"; }                      # the fake clock of the tests (epoch seconds)
+fm_date_of() { date -u -d "@$1" +%F; }                            # <epoch> -> YYYY-MM-DD
+fm_today() { fm_date_of "$(fm_now)"; }
+# the file system root of the resolved location (needs LROOT, LREL): sets TBASE (where the trash folder lives) and TREL (the location's path below it)
+fm_trash_base() {
+  TBASE=""
+  if [ "$fm_test" = 1 ]; then TBASE=$LROOT; [ -z "$LREL" ] || TBASE=${LROOT%/"$LREL"}
+  else TBASE=$(findmnt -no TARGET -T "$LROOT" 2>/dev/null | head -n1) || true; fi
+  [ -n "$TBASE" ] || TBASE=$LROOT
+  TREL=${LROOT#"$TBASE"}; TREL=${TREL#/}
+}
+# the date folders of one trash folder older than FM_TRASH_DAYS days (names only), by the fake clock
+fm_trash_expired() {   # fm_trash_expired <trash folder>
+  local d cut; cut=$(fm_date_of $(( $(fm_now) - FM_TRASH_DAYS * 86400 )))
+  for d in "$1"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    [[ ${d##*/} < $cut ]] && printf '%s\n' "${d##*/}"
+  done
+  return 0
 }

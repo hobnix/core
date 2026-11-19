@@ -15,7 +15,7 @@ difflines() { diff "$M" "$EX" | grep -c '^[<>]' || true; }
 
 echo "-- the example itself"
 check "the example parses" python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$EX"
-check_eq "every option paragraph has a key the tool finds" "67" "$(grep -cE '^(# )?[A-Za-z][A-Za-z0-9]* = ' "$EX")"
+check_eq "every option paragraph has a key the tool finds" "68" "$(grep -cE '^(# )?[A-Za-z][A-Za-z0-9]* = ' "$EX")"
 check_out "check against itself: only CHANGEME is wrong" "hostId.*still CHANGEME" $TOOL check "$EX" "$EX"
 
 echo "-- sync creates the file from the example"
@@ -202,5 +202,30 @@ rm -f "$HS_STATE_DIR/last-rebuild-rev"
 env PATH="$BIN:$PATH" $U > "$WORK/u.out" 2>&1 < /dev/null
 check_out "no stamp yet (first update of this kind): it rebuilds" "REBUILD RAN" cat "$WORK/u.out"
 check_eq "a skipped update sends no push message" "0" "$(grep -c 'update started' "$WORK/u.out")"
+
+echo "-- diskSpindownPools: unknown pool refused, ZFS with hourly snapshots warned"
+cp "$EX" "$WORK/sp.toml"; sed -i 's/^hostId = .*/hostId = "abcd1234"/' "$WORK/sp.toml"
+sp() { HS_MACHINE_FILE=$WORK/sp.toml bash "$SCRIPTS/machine-sync.sh" check 2>&1; }
+check_out "the shipped example is fine for the spindown check" "machine.toml is fine" sp
+printf '
+diskSpindownPools = { backup = 10, nosuch = 30 }
+' >> "$WORK/sp.toml"
+check_out "an unknown pool name is refused" 'unknown pool "nosuch"' sp
+check "and the check fails" bash -c "! HS_MACHINE_FILE=$WORK/sp.toml bash $SCRIPTS/machine-sync.sh check >/dev/null 2>&1"
+sed -i '/^diskSpindownPools/d' "$WORK/sp.toml"
+printf 'diskSpindownPools = { backup = 10, bulk = -5 }
+' >> "$WORK/sp.toml"
+check_out "a negative value is refused" "bulk must be a whole number" sp
+sed -i '/^diskSpindownPools/d' "$WORK/sp.toml"
+printf 'diskSpindownPools = { backup = 10, bulk = 30 }
+shareSnapshots = true
+' >> "$WORK/sp.toml"
+sed -i '/^# *shareSnapshots = /d;/^# *bulkType = /d' "$WORK/sp.toml"
+printf 'bulkType = "zfs"
+' >> "$WORK/sp.toml"
+check_out "ZFS pool with a sleep time and hourly snapshots: warned" "bulk is ZFS and shareSnapshots runs every hour" sp
+sed -i '/^diskSpindownPools/d' "$WORK/sp.toml"; printf 'diskSpindownPools = { bulk = 0 }
+' >> "$WORK/sp.toml"
+check "a pool set to 0 (never) gets no warning" bash -c "! HS_MACHINE_FILE=$WORK/sp.toml bash $SCRIPTS/machine-sync.sh check 2>&1 | grep -q 'every hour'"
 
 finish

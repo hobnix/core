@@ -1,5 +1,5 @@
 <script>
-  // Storage > Files: a two-pane file manager for disks, pools, shares and temporary disks (docs/PLAN-file-manager.md, web/design/HANDOFF.md "Files").
+  // Storage > Files: a two-pane file manager for disks, pools, shares and temporary disks (docs/PLAN-storage-nas.md, web/design/HANDOFF.md "Files").
   // Nothing runs from a click or a key: copy, move, delete, rename and new folder open a plan first (files/FmPlan.svelte). The same-files rule (a pool
   // disk and the pool of the same array never meet) is enforced by the server; the picker and the plan dialog only show its answer.
   // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:<name>[&rpath=/y][&select=<name>].
@@ -13,6 +13,7 @@
   import Drawer from '../ui/Drawer.svelte';
   import Kv from '../ui/Kv.svelte';
   import Chip from '../ui/Chip.svelte';
+  import Button from '../ui/Button.svelte';
   import { route } from '../route.svelte.js';
   import { Fm } from '../files/fm.svelte.js';
   import { loadPools } from '../pools.svelte.js';
@@ -48,12 +49,13 @@
   const why = (op) => fm.can(op);
   const infoRow = $derived(fm.info ? fm.panes[fm.info.side].rows.find((r) => r.name === fm.info.name) ?? null : null);
   const infoLoc = $derived(fm.info ? fm.locOf(fm.panes[fm.info.side].loc) : null);
+  const st = $derived(fm.detail.stat && fm.detail.key === (fm.info ? fm.infoKey() : '') ? fm.detail.stat : null);
 
   function showInfo() {
     if (fm.info) { fm.info = null; return; }
     const p = fm.panes[fm.active];
     const name = p.cur || [...p.sel][0];
-    if (name) fm.info = { side: fm.active, name };
+    if (name) fm.openInfo(fm.active, name);
   }
 
   // ── the keyboard (Midnight Commander habits); a key in a text field or on a button is that control's own ─────────────────────────────────
@@ -173,7 +175,24 @@
             { k: 'Modified', v: S.dateTxt(infoRow.mtime) },
             { k: 'Location', v: infoLoc?.label },
             { k: 'Type', v: infoRow.type === 'd' ? 'Folder' : infoRow.type === 'l' ? 'Symbolic link' : 'File' },
+            ...(st ? [
+              { k: 'Owner', v: `${st.owner} (${st.uid})` },
+              { k: 'Group', v: `${st.group} (${st.gid})` },
+              { k: 'Mode', v: `${st.mode} ${st.perms}` },
+            ] : []),
           ]} />
+          {#if fm.detail.statErr}<div class="ipath"><div class="k">Owner and mode</div><div class="sm">{fm.detail.statErr}</div></div>{/if}
+          {#if infoRow.type === 'd' && !infoRow.busy}
+            <div class="ipath"><div class="k">Size of the folder</div>
+              {#if fm.detail.du}
+                <div class="mono">{fm.detail.du.partial ? 'at least ' : ''}{S.bytesTxt(fm.detail.du.bytes)} · {S.plural(fm.detail.du.files, 'file')} in {S.plural(fm.detail.du.folders, 'folder')}</div>
+                <div class="sm">Measured {S.dateTxt(fm.detail.du.time)}{fm.detail.du.cached ? '; the folder has not changed since' : ''}.{fm.detail.du.partial ? ' The folder is very big: this is a first part only.' : ''}</div>
+              {/if}
+              <div class="duact"><Button size="sm" icon="ruler" busy={fm.detail.duBusy} busyLabel="Measuring…" tooltip="Reads every file entry below the folder as a background job and can wake sleeping disks" onclick={() => fm.measure()}>{fm.detail.du ? 'Measure again' : 'Calculate size'}</Button></div>
+              {#if fm.detail.duErr}<div class="sm">{fm.detail.duErr}</div>{/if}
+              {#if !fm.detail.du && !fm.detail.duBusy}<div class="sm">Reads the whole folder and can wake sleeping disks, so it runs only when you ask.</div>{/if}
+            </div>
+          {/if}
           <div class="ipath"><div class="k">Path</div><div class="mono">{S.joinPath(fm.panes[fm.info.side].path, infoRow.name)}</div></div>
           {#if infoRow.disks.length}
             <div class="ipath"><div class="k">Held by disks</div><div class="chips">{#each infoRow.disks as d}<Chip>{d}</Chip>{/each}</div>
@@ -226,6 +245,7 @@
   .ipath .k { font: 500 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 4px; }
   .chips { display: flex; gap: 4px; flex-wrap: wrap; }
   .sm { font-size: 12px; color: var(--fg-3); margin-top: 4px; }
+  .duact { margin-top: 8px; }
   @media (max-width: 860px) {
     .fmsw { display: flex; }
     .fmpanes { flex-direction: column; }

@@ -3,6 +3,7 @@
   // one that opens the result (moved, skipped, failed). The same job also has a row under Tasks in the bottom panel (ui.svelte.js track).
   import { tip } from '../ui/tooltip.svelte.js';
   import Banner from '../ui/Banner.svelte';
+  import Button from '../ui/Button.svelte';
   import * as S from './selection.js';
 
   let { fm } = $props();
@@ -11,7 +12,7 @@
   const pct = $derived(p && p.bytesTotal > 0 ? Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100)) : p && p.filesTotal > 0 ? Math.min(100, Math.round((p.filesDone / p.filesTotal) * 100)) : 0);
   const VERB = { copy: 'Copying', move: 'Moving', delete: 'Deleting', rename: 'Renaming', mkdir: 'Creating a folder' };
   const DONE = { copy: 'Copied', move: 'Moved', delete: 'Deleted', rename: 'Renamed', mkdir: 'Created' };
-  const tone = $derived(!j ? 'info' : j.state === 'running' ? 'info' : j.state === 'done' ? (p?.skipped.n || p?.failed.n ? 'warn' : 'ok') : j.state === 'cancelled' ? 'warn' : j.state === 'gone' ? 'info' : 'bad');
+  const tone = $derived(!j ? 'info' : j.state === 'running' ? 'info' : j.state === 'done' ? (p?.skipped.n || p?.failed.n ? 'warn' : 'ok') : j.state === 'cancelled' || j.state === 'paused' ? 'warn' : j.state === 'gone' ? 'info' : 'bad');
 </script>
 
 {#if j}
@@ -30,6 +31,9 @@
         </div>
         <div class="ub"><div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct} aria-label="Progress"><div class="fill" style="width:{pct}%"></div></div><span class="pc">{pct} %</span></div>
         {#if p?.current}<div class="cur mono">{p.current}</div>{/if}
+      {:else if j.state === 'paused'}
+        <b>Paused.</b> {j.title}
+        <div class="cur">The job was stopped and its list is kept: what was copied stays, nothing unverified was removed. Continue starts a new job over the same selection that skips what is at the target already.</div>
       {:else if j.state === 'gone'}
         <b>{j.title}</b> The server no longer knows this job. It has ended or the server was restarted; the lists show what is there now.
       {:else}
@@ -42,7 +46,13 @@
     </div>
     {#snippet action()}
       {#if j.state === 'running'}
-        <button class="btn sm" disabled={j.cancelling} use:tip={'Stops cleanly: what is copied stays, nothing unverified is removed'} onclick={() => fm.cancelJob()}>{j.cancelling ? 'Cancelling…' : 'Cancel'}</button>
+        {#if fm.canPause()}
+          <Button size="sm" icon="pause" busy={j.pausing} busyLabel="Pausing…" tooltip="Stops the job and keeps its list: Continue starts a new job that skips what is copied" onclick={() => fm.pauseJob()}>Pause</Button>
+        {/if}
+        <Button size="sm" busy={j.cancelling} busyLabel="Cancelling…" disabled={j.pausing} tooltip="Stops cleanly: what is copied stays, nothing unverified is removed" onclick={() => fm.cancelJob()}>Cancel</Button>
+      {:else if j.state === 'paused'}
+        <Button size="sm" variant="primary" icon="play" busy={j.continuing} busyLabel="Starting…" tooltip="A new job over the same selection: --conflict skip, size check" onclick={() => fm.continueJob()}>Continue</Button>
+        <button class="btn sm btn-ghost" aria-label="Dismiss" use:tip={'Dismiss'} onclick={() => fm.dismissJob()}><i class="ph ph-x"></i></button>
       {:else}
         {#if p && (p.skipped.n || p.failed.n || j.state !== 'done')}<button class="btn sm" onclick={() => (fm.result = true)}>Details</button>{/if}
         <button class="btn sm btn-ghost" aria-label="Dismiss" use:tip={'Dismiss'} onclick={() => fm.dismissJob()}><i class="ph ph-x"></i></button>

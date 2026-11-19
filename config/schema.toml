@@ -759,6 +759,22 @@ diskSpindownMinutes = 30'''
 
 [[item]]
 kind = "option"
+key = "diskSpindownPools"
+type = "table"
+required = false
+settable = false
+secret = false
+default = 'null'
+doc = '''
+# Sleep time per pool, in minutes, instead of `diskSpindownMinutes`: the key is a pool name (or `backup` for the
+# backup disk), 0 = never. One value per pool, none per disk. A raidz pool wakes all its disks at once, a mirror one
+# after the other, and hourly `shareSnapshots` on ZFS keeps the pool awake (`hs config check` warns about that pair).
+# Applies after `hs rebuild`; `hs disk spindown status` shows the state.'''
+value = '''
+diskSpindownPools = { backup = 10, bulk = 30 }'''
+
+[[item]]
+kind = "option"
 key = "fileManagerWrite"
 type = "bool"
 required = false
@@ -767,7 +783,7 @@ secret = false
 store = "settings"
 default = 'false'
 doc = '''
-# Allow the file manager to copy, move and delete files. Test it in a VM first (docs/PLAN-file-manager.md).
+# Allow the file manager to copy, move and delete files. Test it in a VM first (docs/PLAN-storage-nas.md).
 # false (default)  browsing and plans only: `hs sys fm start` refuses copy, move, delete, rename and new folder
 # true             the file manager changes files
 # This code has never run on real disks. Switch it on only after the VM test of the plan passed.'''
@@ -830,6 +846,24 @@ doc = '''
 # Containers that are in the backup stay in it.'''
 value = '''
 backupNewInstances = false'''
+
+[[item]]
+kind = "option"
+key = "offsiteDiskDays"
+page = "backups"
+type = "int"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '30'
+min = 1
+hint = "a whole number of days, 1 or more"
+doc = '''
+# The rotating off-site disk (label `backup-offsite`): after `hs backup offsite now` copied to it, the expiry entry
+# `offline-backup-disk` moves to today plus this many days, and the health check warns before that date. Default 30.'''
+value = '''
+offsiteDiskDays = 30'''
 
 [[item]]
 kind = "section"
@@ -991,10 +1025,40 @@ store = "settings"
 default = 'false'
 doc = '''
 # Level 1 of the automatic reaction: when a disk fails its SMART check, a pool is degraded or
-# a pool is nearly full, the health check pauses the parity sync, the scrub and the cache mover and says so in its
+# a pool is above 95 % full or will be full within a week, the health check pauses the parity sync, the scrub and the cache mover and says so in its
 # message. It never deletes, formats or moves anything. Off by default; lift a pause with: hs health resume.'''
 value = '''
 autoMitigate = true'''
+
+[[item]]
+kind = "option"
+key = "autoMitigateFreeze"
+type = "bool"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = 'false'
+doc = '''
+# Level 2 of the automatic reaction: when a pool is above 98 % full or will be full within a day, freeze the apps that write to it (Samba stays as it is)
+# and say so in one message. Nothing is deleted. Off by default; let the apps run again with: hs storage incident resume'''
+value = '''
+autoMitigateFreeze = true'''
+
+[[item]]
+kind = "option"
+key = "autoMitigateBackup"
+type = "bool"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = 'false'
+doc = '''
+# Level 3 of the automatic reaction: when a disk turns failing and the newest backup is older than 24 hours, start hs backup now (it only reads the pools and
+# writes the backup disk). A copy from disk to disk is never automatic: the message names hs disk <disk> move. Off by default.'''
+value = '''
+autoMitigateBackup = true'''
 
 [[item]]
 kind = "section"

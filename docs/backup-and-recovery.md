@@ -168,20 +168,56 @@ It deletes the leftovers of a run that ran out of space, clears stale locks, app
 only on Sundays, so this is the way to free space at once. `hs backup verify` checks part of the stored data.
 
 ## A second copy outside the house
-The backup disk usually sits in the same case as the server: fire, theft or a power surge takes both. Add a second repository with the
-same password: a folder on another disk (which you can carry away), another computer over SFTP, or a cloud bucket.
+The backup disk usually sits in the same case as the server: fire, theft or a power surge takes both. Add a second repository: a cloud
+bucket (S3-compatible), a restic REST server, another computer over SFTP, or a folder on another disk (which you can carry away).
+In the web interface use Backup > Set up off-site copy; on the server pick the kind and `hs` asks for its fields and writes the restic
+address itself:
 
 ```bash
-sudo hs backup offsite set /mnt/usb/hs-backup
-sudo hs backup offsite set sftp:user@host:/path
-sudo hs backup offsite set b2:my-bucket:homeserver
+sudo hs backup offsite set --kind s3 --endpoint s3.example.org --bucket my-bucket --prefix hobnix   # asks for the access key id and the secret key
+sudo hs backup offsite set --kind rest --url https://nas.example:8000/hobnix --user bob           # asks for the password
+sudo hs backup offsite set --kind sftp --host nas.example --user bob --path /backups/hobnix
+sudo hs backup offsite set --kind folder --path /mnt/offsite-disk/hobnix
+sudo hs backup offsite set b2:my-bucket:homeserver                                                 # a typed restic address stays possible
 sudo hs backup offsite now
 sudo hs backup offsite off
 ```
 
-Put credentials (`B2_ACCOUNT_ID=...`, `B2_ACCOUNT_KEY=...`, one per line) in `/var/lib/hs/backup-offsite.env`, readable by root only
-(`chmod 600`; the vault keeps it when a vault exists). Every nightly run then copies the new state along, for the shares and
-containers that are switched on.
+Where the secrets go: the address is in `/var/lib/hs/backup-offsite.repo` (restic reads it with `--repository-file`); S3 keys are in
+`/var/lib/hs/backup-offsite.credentials`, which restic reads by path; a REST password is part of the address in the repository file. All
+are root-only (mode 0600) and live inside the vault when there is one. You type them at the prompt (or the web form sends them on standard
+input); they are never part of a command line. SFTP logs in with the ssh key of root on the server (put it on the target first), because
+restic cannot hand a password to ssh. Kinds that restic reads only from the environment (B2, Azure, Google) keep using
+`/var/lib/hs/backup-offsite.env` (`KEY=VALUE` lines, never run as shell); `hs backup offsite migrate` turns S3 keys in an old env file into the
+credentials file.
+
+**A new off-site repository gets its own password**, different from the backup disk's. It is shown once when the repository is created:
+write it down and keep it with the address in your password manager. A repository that existed before keeps the password it has.
+
+**Old backups there:** for S3, SFTP and a folder, every nightly run forgets what is older than 7 daily, 4 weekly and 6 monthly backups and
+prunes on Sundays. A REST server is expected to run `rest-server --append-only`, so this server cannot delete there; the target prunes
+itself (run `restic forget --prune` with the same rule on the target, from a timer). Setting up such a target is not part of Hobnix yet.
+
+Read from it with the same commands: `hs backup list|find|restore|drill --repo offsite`.
+
+### A rotating disk as the off-site copy
+
+A second disk, labelled `backup-offsite`, that you swap by hand (one at your home, one elsewhere) is a folder target. It is never offered as a free
+disk and the nightly run never copies to it; a person starts every copy.
+
+```bash
+sudo hs backup offsite set --kind folder --path /mnt/backup-offsite/restic     # once, with the disk plugged in (it is mounted for the command only)
+sudo hs backup offsite now                                                      # every time you swap: mounts the disk, copies, unmounts
+hs expiry list                                                                  # offline-backup-disk: the date of the next swap
+```
+
+The routine: plug the disk in. The server sends the message "plugged in: copy now?" and does nothing else. Run `hs backup offsite now` (or press
+the button on the Backup page), wait for "Copied", take the disk out and keep it elsewhere. After each copy the `hs expiry` entry
+`offline-backup-disk` moves to today plus `offsiteDiskDays` days (default 30; `hs config set offsiteDiskDays 14`). The health check warns 30 and
+7 days before that date, so a disk that was never swapped shows up as a problem. A disk that is not plugged in gives "not plugged in" and the date
+stays. Not tested on hardware yet.
+
+Not tested on hardware yet.
 
 ## Databases and VMs
 A running database cannot be backed up by copying its files. Each container has a dump description, `/var/lib/hs/backup-dump/<container>`,
@@ -199,6 +235,36 @@ hs-dump sqlite-tree <container> <folder>
 To restore, put a `.pgdump` back with `pg_restore -d <database>` (inside the Docker Compose service:
 `docker compose exec -T <service> pg_restore -U <user> -d <database> < file`), and copy SQLite files back into place while the
 application is stopped.
+
+### Back up only parts of an instance
+By default an instance is backed up as a whole. For one with a lot of replaceable data, or an app that says in its manifest
+(`[app.backup] mode = "paths"`) where its data lives, only chosen paths go into the backup. The choice is the rule file
+`/var/lib/hs/backup-rules/<instance>`: lines `include <absolute path in the instance>` and `exclude <restic pattern>` (a pattern that starts
+with `/` is read from the instance's root; no `!`). No file means the whole instance. A recipe writes the file once when it is set up; if the
+file exists already it is left alone, so your edit wins.
+
+```bash
+hs backup ct <name> paths              # what is in and what is out, with sizes
+hs backup ct <name> include /var/lib/app
+hs backup ct <name> exclude '*.tmp'
+hs backup ct <name> reset              # the whole instance again (reset <path> forgets one rule)
+```
+
+The nightly run then saves only those paths, tagged `ct:<name>` and `partial`; the database dump files (`/var/backups/hs`) are always part
+of it. A partial backup **holds** the chosen paths and the dump files, nothing else. It **gives back** those paths only: the instance
+cannot boot from it.
+
+```bash
+hs backup restore ct <name> --dry-run   # the plan: what runs, which paths come back
+hs backup restore ct <name>             # you type the instance name; it offers a background job
+```
+
+The restore of a partial instance does two things, in this order: it runs the recipe of the app again from its package (that creates the
+instance, installs the app and connects it to this server; `--recipe <app>` names the app when it is not called like the instance), then
+it stops the app and puts the backed-up paths and the dump files back from the newest backup, and starts it again. What you get back is the
+recipe's fresh app plus your data paths; a file in those paths that is newer than the backup is overwritten, files outside them are the
+recipe's. The database dumps arrive in `/var/backups/hs` inside the instance; loading one into the database is the app's own import (see
+its guide). Not tested on hardware yet.
 
 `hs backup ct <name> on` also accepts a **VM**. restic cannot read a running VM disk, so the whole machine is exported to one file each
 night. That needs about the used size of the VM as free space in `/var/tmp` (or `HS_VM_EXPORT_DIR`); with too little space the run warns,
@@ -221,6 +287,8 @@ sudo hs backup drill ct radarr
   is older than 3 days (the report then adds "snapshot N days old"). Without a name it picks only containers that are in the backup;
   a container you switched off is not drilled (name it to drill it anyway), and the report shows an info line, not a warning, when
   no container is in the backup.
+  A **partial** instance (see above) cannot boot, so its drill restores the paths into a temporary folder and checks that every included
+  path and every dump file came back with data; nothing is booted. The report then says "partial: paths and dumps".
   Not tested on hardware yet.
 - On the 25th of every month a push message reports the state of the drills; `sudo hs backup report` sends it now (`--dry-run` only
   shows it).
@@ -506,15 +574,22 @@ purpose, and `hs update` and `hs rebuild` end with an error. `hs unlock --status
    The rehearsal did not cover a client domain join, a reboot or the real router.
 
 ### Case C: the server and the backup disk are both gone
-Only the off-site copy is left. Do Case A with a new vault, but read the host files from the off-site repository:
+Only the off-site copy is left. You need its address and its OWN password (written down when it was created; the backup disk's password does
+not open it, unless the repository is an old one). Do Case A with a new vault, but read the host files from the off-site repository:
 
 ```bash
 export RESTIC_REPOSITORY='<address from the password manager, e.g. sftp:user@host:restic>'
-export RESTIC_PASSWORD='<same password>'
+export RESTIC_PASSWORD='<the off-site password>'
+export AWS_ACCESS_KEY_ID='<only for S3>' AWS_SECRET_ACCESS_KEY='<only for S3>'
 restic snapshots
 ```
 
+The address, the S3 keys and the off-site password are deliberately NOT in any backup (a copy of the key inside the repository it protects would
+be worthless). On a rebuilt server, set the off-site target again with `hs backup offsite set ...` (type the saved password into
+`/var/lib/hs/restic-offsite-password`, root-only), then `hs backup restore latest <path> --repo offsite` and
+`hs backup find <name> --repo offsite` work.
 Afterwards set up a new backup disk with `hs backup init` and the off-site copy again with `hs backup offsite set ...`.
+Not tested on hardware yet.
 
 ### After a rebuild
 - [ ] `hs doctor` is green and `hs health` reports nothing.

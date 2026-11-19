@@ -18,6 +18,16 @@ case "$1" in
   init)
     [ -z "${FAKE_INIT_FAIL:-}" ] || { printf '  ✗ Refusing: %s is mounted, swap, or part of a pool.\n' "$2"; exit 1; }
     printf '  Backup disk\n  Disk   %s (3.6T ST4000)\n' "$2" ;;
+  offsite)
+    printf '%s
+' "$*" > "$WORK_LOG/offcall"; cat > "$WORK_LOG/offstdin"
+    [ -z "${FAKE_OFF_FAIL:-}" ] || { printf '  ✗ Could not create the repository
+' >&2; exit 1; }
+    printf 'status	done
+address	s3:https://x/y
+created	yes
+secret	password	abc123
+' ;;
   --overview)
     printf 'shares\tdocs\ton\t5000\nshares\tmedia\toff\t9000\nsensitive\timmich\ton\t-\nct\tweb\ton\t-\nalways\thost files\ton\t-\n' ;;
 esac
@@ -27,8 +37,10 @@ cat > "$WORK/incus" <<'FAKE'
 [ "$1 $2" = "info web" ] || [ "$1 $2" = "info jellyfin" ]
 FAKE
 chmod +x "$WORK/backup" "$WORK/incus"
+export WORK_LOG=$WORK
 export HS_BACKUP=$WORK/backup HS_INCUS=$WORK/incus
 run() { rc=0; out=$(timeout 20 bash "$SCRIPTS/backup-change.sh" "$@" </dev/null 2>/dev/null) || rc=$?; }
+runin() { rc=0; out=$(timeout 20 bash "$SCRIPTS/backup-change.sh" "$@" 2>/dev/null) || rc=$?; }   # stdin stays: the secrets of offsite-config
 has() { grep -q -- "$1" <<<"$out"; }
 T=$'\t'
 
@@ -131,6 +143,35 @@ run plan offsite-set --repo /mnt/../etc
 check_eq "no .. in an address" 1 "$rc"
 FAKE_DISK=absent run plan offsite-set --repo /mnt/other/restic
 check_eq "no disk: refused" 1 "$rc"
+echo "-- the guided off-site target"
+run plan offsite-config
+check_eq "a kind is needed" "2 status${T}needs
+needs${T}kind" "$rc $out"
+run plan offsite-config --kind s3 --endpoint s3.example.org
+has "^needs${T}bucket" && pass "s3 asks for the bucket" || fail "s3 needs: $out"
+run plan offsite-config --kind s3 --endpoint s3.example.org --bucket b
+has "^heading" && has "^note${T}The access key id and the secret key are asked for next" && has "^long${T}no$" && pass "s3 plan" || fail "s3 plan: $out"
+has "backup offsite set --kind s3 --endpoint s3.example.org --bucket b$" && pass "the command carries no secret" || fail "s3 command: $out"
+run plan offsite-config --kind rest --url 'https://nas:8000/r' --user bob
+has "rest-server --append-only" && pass "REST says append-only" || fail "rest note: $out"
+run plan offsite-config --kind sftp --host nas --user me --path /backup
+has "ssh key of root" && has "pruned on Sundays" && pass "sftp: key and Sunday prune" || fail "sftp: $out"
+run plan offsite-config --kind folder --path '/mnt/x;rm'
+check_eq "no shell characters in a field" 1 "$rc"
+run plan offsite-config --kind nope
+check_eq "an unknown kind is refused" 1 "$rc"
+runin start offsite-config --kind s3 --endpoint s3.example.org --bucket b <<<$'AKIA1
+SECRETKEY'
+check_eq "start offsite-config answers at once" 0 "$rc"
+has "^status${T}done" && has "^secret${T}password${T}abc123" && pass "done, and the new password once" || fail "start: $out"
+check_eq "the secrets came on stdin" "AKIA1
+SECRETKEY" "$(cat "$WORK/offstdin")"
+if grep -q 'AKIA1\|SECRETKEY' "$WORK/offcall"; then fail "a secret reached the command line"; else pass "no secret on the command line"; fi
+check_out "--machine is passed" "set .* --machine" cat "$WORK/offcall"
+FAKE_OFF_FAIL=1 runin start offsite-config --kind folder --path /mnt/x </dev/null
+check_eq "a failed creation is refused" 1 "$rc"
+has "^status${T}refused" && has "^reason${T}Could not create the repository" && pass "with the reason" || fail "fail reason: $out"
+
 run plan offsite-now
 check_eq "copy now without a repository" 1 "$rc"
 FAKE_OFFSITE=/mnt/old run plan offsite-now
@@ -175,6 +216,30 @@ check_eq "the wrong name is refused" 1 "$rc"
 FAKE_DISK=absent run start init --disk ata-ST4000_X --confirm sdz
 check_eq "start with the disk name" 0 "$rc"
 grep -q 'backup init .*ata-ST4000_X --yes' "$WORK/jobcalls" && pass "the job formats with --yes" || fail "init job: $(cat "$WORK/jobcalls")"
+
+echo "-- rules: back up chosen parts of an instance"
+run plan rules --name web
+check_eq "rules without a change asks for it" "2 status${T}needs
+needs${T}set" "$rc $out"
+run plan rules --name web --set include=/var/lib/app --set exclude='*.tmp'
+check_eq "a plan is allowed" 0 "$rc"
+has "^step${T}back up /var/lib/app" && has "^step${T}leave out \*.tmp" && has "partial backup" && has "^command${T}bash .*backup ct web apply include=/var/lib/app exclude=\*.tmp$" && has "^long${T}no$" && pass "the plan names each change and the command" || fail "rules plan: $out"
+run plan rules --name web --set reset=all
+has "^step${T}forget all rules" && pass "reset=all in the plan" || fail "reset plan: $out"
+run plan rules --name web --set include=var/lib
+check_eq "a relative include is refused" 1 "$rc"
+run plan rules --name web --set include=/a/../etc
+check_eq "an include with .. is refused" 1 "$rc"
+run plan rules --name web --set 'exclude=!keep'
+check_eq "an exclude with ! is refused" 1 "$rc"
+run plan rules --name web --set bogus=1
+check_eq "an unknown change is refused" 1 "$rc"
+run plan rules --name nosuch --set reset=all
+check_eq "an instance that does not exist is refused" 1 "$rc"
+rm -f "$WORK/jobcalls"
+run start rules --name web --set include=/var/lib/app
+check_eq "start" 0 "$rc"
+grep -q 'backup ct web apply include=/var/lib/app' "$WORK/jobcalls" && pass "the job applies the changes" || fail "rules job: $(cat "$WORK/jobcalls" 2>/dev/null)"
 
 echo "-- the usual refusals"
 run plan fly

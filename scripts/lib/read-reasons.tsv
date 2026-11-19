@@ -36,7 +36,10 @@ disk ls	free argument: a folder of one data disk, polled every 10 s in the move-
 event list	free query: depends on filters and the cursor, polled every 30 s as the safety net of the event stream
 fm ls	free argument: one page of a folder (path, cursor), no fixed topic
 fm pair	free argument: two places of the file manager, no fixed topic
+fm trash	free argument: the trash of one place of the file manager, no fixed topic
 fm progress	free argument: state of one job unit, no fixed topic
+fm du	free argument: the size of one folder (path), asked for by a click, no fixed topic
+fm stat	free argument: owner and mode of one item (path), no fixed topic
 jobs record	free argument: one job record, fetched on demand
 jobs records	free query: filtered job list, fetched on demand
 jobs tail	free argument: output of one job unit from a cursor, fetched on demand while following a job

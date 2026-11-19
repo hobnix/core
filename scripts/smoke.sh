@@ -84,6 +84,7 @@ default_probes() {
     $'hs sys pool list\tsys pool list\t0' \
     $'hs sys pool state\tsys pool state\t0' \
     $'hs sys storage discover\tsys storage discover\t0' \
+    $'hs sys disk power\tsys disk power\t0 1' \
     $'hs storage incident\tstorage incident\t0 1' \
     $'hs sys incident state\tsys incident state\t0 1' \
     $'hs sys parts pending\tsys parts pending\t0' \
@@ -98,6 +99,12 @@ default_probes() {
     $'hs sys preset list\tsys preset list\t0' \
     $'hs sys net check\tsys net check\t0 1' \
     $'hs sys fm locations\tsys fm locations\t0 1' \
+    $'hs sys fm trash\tsys fm trash disk:data-01\t0 1' \
+    $'hs sys fm du\tsys fm du disk:data-01 --path /\t0 1' \
+    $'hs sys fm stat\tsys fm stat disk:data-01 --path /x\t0 1' \
+    $'hs fm locations\tfm locations\t0 1' \
+    $'hs fm ls\tfm ls disk:data-01\t0 1' \
+    $'hs fm du\tfm du disk:data-01\t0 1' \
     $'hs user list\tuser list\t0' \
     $'hs user show\tuser Administrator show\t0 1' \
     $'hs group list\tgroup list\t0' \
@@ -162,7 +169,7 @@ default_probes() {
     printf '%s\t%s\t%s\n' "hs share $first_share show" "share $first_share show" "0" "hs share $first_share snapshots" "share $first_share snapshots" "0 1"
   fi
   if [ -n "$first_ct" ]; then
-    printf '%s\t%s\t%s\n' "hs ct $first_ct snapshots" "ct $first_ct snapshots" "0 1" "hs ct $first_ct storage list" "ct $first_ct storage list" "0 1" "hs ct $first_ct logs" "ct $first_ct logs 5" "0 1" "hs ct $first_ct device list" "ct $first_ct device list" "0 1"
+    printf '%s\t%s\t%s\n' "hs ct $first_ct snapshots" "ct $first_ct snapshots" "0 1" "hs ct $first_ct storage list" "ct $first_ct storage list" "0 1" "hs ct $first_ct logs" "ct $first_ct logs 5" "0 1" "hs ct $first_ct device list" "ct $first_ct device list" "0 1" "hs sys backup rules $first_ct" "sys backup rules $first_ct" "0" "hs backup ct $first_ct paths" "backup ct $first_ct paths" "0"
   fi
   if [ -n "$first_disk" ]; then
     printf '%s\t%s\t%s\t%s\n' "hs disk $first_disk health" "disk $first_disk health" "0 1" 120 "hs disk $first_disk results" "disk $first_disk results" "0 1" ""

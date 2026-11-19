@@ -39,10 +39,12 @@
   shareSnapshots = false;
   zfsArcMaxGB = 12;
   diskSpindownMinutes = 0;
+  diskSpindownPools = null;
   fileManagerWrite = false;
   setupDone = false;
   backupNewShares = false;
   backupNewInstances = true;
+  offsiteDiskDays = 30;
   adDomain = null;
   adminUser = "adminuser";
   notifyUrl = null;
@@ -52,6 +54,8 @@
   notifications = false;
   quietHours = null;
   autoMitigate = false;
+  autoMitigateFreeze = false;
+  autoMitigateBackup = false;
   metrics = false;
   metricsDays = 30;
   metricsMaxGB = 5;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the UPS (battery backup): charge, runtime, load; needs `ups` in machine.toml
 # help.de: die USV (Batterie-Notstrom): Ladung, Laufzeit, Last; braucht `ups` in machine.toml
-# args: [show | status | event <message> | deadline]
+# args: [show | status | power | event <message> | deadline]
 # show (default, hs ups): a person's view with the ui components. status (hs sys ups status): key<TAB>value lines from `upsc`, no root,
 # exit 0 also when the UPS cannot be read (reachable=no); keys: configured, name, reachable, status (raw ups.status), state
 # (online|battery|low|unknown), charge (%), runtime (s), load (%), input_voltage, model, replace (yes|no).
@@ -25,7 +25,7 @@ notify() { bash "${HS_NOTIFY:-$here/notify.sh}" "$@" || true; }
 
 # reading: fills r_* variables from upsc (5 s limit)
 read_ups() {
-  r_reach=no r_status="" r_charge="" r_runtime="" r_load="" r_vin="" r_model=""
+  r_reach=no r_status="" r_charge="" r_runtime="" r_load="" r_vin="" r_model="" r_rp="" r_rpn=""
   local out k v
   out=$(timeout 5 "${HS_UPSC:-upsc}" "$name@localhost" 2>/dev/null </dev/null) || return 0
   [ -n "$out" ] || return 0
@@ -36,6 +36,8 @@ read_ups() {
       battery.charge) r_charge=$v ;;
       battery.runtime) r_runtime=$v ;;
       ups.load) r_load=$v ;;
+      ups.realpower) r_rp=$v ;;
+      ups.realpower.nominal) r_rpn=$v ;;
       input.voltage) r_vin=$v ;;
       ups.model|device.model) [ -n "$r_model" ] || r_model=$v ;;
     esac
@@ -59,6 +61,19 @@ case "$cmd" in
     read_ups
     printf 'configured\tyes\nname\t%s\nreachable\t%s\nstatus\t%s\nstate\t%s\ncharge\t%s\nruntime\t%s\nload\t%s\ninput_voltage\t%s\nmodel\t%s\nreplace\t%s\n' \
       "$name" "$r_reach" "$r_status" "$(state_of "$r_status")" "$r_charge" "$r_runtime" "$r_load" "$r_vin" "$r_model" "$(replace_of "$r_status")"
+    ;;
+  power)
+    # hs ups power: the watts the UPS measures at its output, one number or "-" (ups.realpower, else load % of ups.realpower.nominal); plain, no root
+    w=-
+    if configured; then
+      read_ups
+      if [ "$r_reach" = yes ]; then
+        case "$r_rp" in ''|*[!0-9.]*) ;; *) w=${r_rp%%.*} ;; esac
+        if [ "$w" = - ] && [[ "$r_load" =~ ^[0-9]+$ ]] && [[ "$r_rpn" =~ ^[0-9]+$ ]]; then w=$(( r_rpn * r_load / 100 )); fi
+      fi
+    fi
+    printf '%s
+' "$w"
     ;;
   show)
     if ! configured; then

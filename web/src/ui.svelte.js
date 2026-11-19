@@ -8,6 +8,7 @@ export const ui = $state({
   features: { terminal: false, vps: false, capabilities: null },      // what the server switched on, from the session answer; capabilities = names of the parts that are on (null = not told: show everything)
   host: 'homeserver',                 // this node's name (the dialogs name the node they act on)
   panel: { open: true, tab: 'tasks', height: 214 },   // height in px while open; the grip drags it
+  offsitePass: '',                    // the own password of a NEW off-site repository: shown once on the Backup page, then dropped (never stored)
 });
 
 // After a change that waits for a rebuild was saved: tells the person so and offers "Rebuild now" (shell/PlanDialog.svelte, mode saved)

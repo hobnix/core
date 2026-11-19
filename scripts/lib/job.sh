@@ -94,6 +94,7 @@ hs_job() {
   # HS_JOB_ENV: more environment for the job, one KEY=VALUE per line (recipe answers; a secret is never put here, it travels as a file)
   while IFS= read -r kv; do [[ "$kv" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && extra+=(-E "$kv"); done <<<"${HS_JOB_ENV:-}"
   [ -z "${HS_DISK_PASSPHRASE_FILE:-}" ] || extra=(-E "HS_DISK_PASSPHRASE_FILE=$HS_DISK_PASSPHRASE_FILE")   # a path, not the secret
+  [ -z "${HS_UNRAID_PASSPHRASE_FILE:-}" ] || extra+=(-E "HS_UNRAID_PASSPHRASE_FILE=$HS_UNRAID_PASSPHRASE_FILE")   # the Unraid passphrase of hs migrate unraid: a path too
   # job record (docs/adr/0004-job-record.md): best effort, the job runs without one
   local src=cli jid=
   case "${HS_CALLER:-}" in web|ui) src=web ;; ext) src=extension ;; timer) src=timer ;; esac

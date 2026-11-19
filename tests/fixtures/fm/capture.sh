@@ -40,6 +40,11 @@ cap ls-folder fm ls disk:data-04 --path /shares/media
 cap ls-page fm ls disk:data-04 --path /shares/media --limit 2
 cap ls-pool-top fm ls pool:bulk --path /
 cap ls-refused fm ls disk:data-04 --path /nope
+cap du-pending fm du disk:data-04 --path /shares/media/movies
+cap du-cached fm du disk:data-04 --path /shares/media/movies
+cap du-refused fm du disk:data-04 --path /nope
+cap stat-file fm stat disk:data-04 --path /shares/media/readme.txt
+cap stat-refused fm stat disk:data-04 --path /shares/media/nope
 capsel plan-copy Avatar Heat -- fm plan copy --from disk:data-04 --path /shares/media/movies --to disk:data-05 --to-path /shares/media/movies
 capsel plan-copy-conflicts Avatar Heat -- fm plan copy --from disk:data-04 --path /shares/media/movies --to disk:data-05 --to-path /shares/media/movies --conflicts
 capsel plan-copy-overwrite readme.txt -- fm plan copy --from disk:data-04 --path /shares/media --to disk:data-05 --to-path /shares/media --conflict overwrite

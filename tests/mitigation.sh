@@ -112,6 +112,28 @@ if grep -q '^zfs:tank:DEGRADED' "$WORK/health-since"; then fail "the cleared key
 check_out "the acknowledge command still lists the problem" "^zfs:tank:FAULTED" $HA ack
 rm -f "$WORK/state/poolstate"
 
+echo "-- a pool above 95 % pauses, and the pause lifts itself"
+mkzp() { cat > "$WORK/bin/zpool" <<FAKE
+#!/usr/bin/env bash
+case "\$*" in
+  "list -H -o name") echo tank ;;
+  "status -x tank") echo "pool 'tank' is healthy" ;;
+  "list -Hp -o name,alloc,size") printf 'tank	100	1000
+' ;;
+  "list -H -o name,cap") printf 'tank	$1%%
+' ;;
+  "status tank") echo "  scan: scrub repaired 0B in 00:01:00 with 0 errors on Sun Oct  4 00:24:01 2099" ;;
+esac
+FAKE
+}
+rm -f "$WORK/paused" "$WORK/ack"; export HS_AUTO_MITIGATE=true
+mkzp 92; $HC >/dev/null 2>&1 || true
+[ ! -e "$WORK/paused" ] && pass "92 % full: a warning, no pause" || fail "92 % full: a warning, no pause"
+mkzp 97; $HC >/dev/null 2>&1 || true
+check_out "97 % full: the pool pauses" "^keys=space:pool:tank" cat "$WORK/paused"
+mkzp 10; $HC >/dev/null 2>&1 || true
+[ ! -e "$WORK/paused" ] && pass "space freed: the pause lifts" || fail "space freed: the pause lifts"
+
 echo "-- the daily SMART check: failing pauses, watch does not"
 if command -v python3 >/dev/null; then
   if command -v cygpath >/dev/null 2>&1; then export HS_TEST_BASH=$(cygpath -m "$BASH"); export HS_STATE_DIR=$(cygpath -m "$WORK/state"); fi
@@ -138,6 +160,85 @@ FAKE
   check_out "smart-failing pauses" "^keys=.*disk:S9:smart-failing" cat "$WORK/paused"
 else
   skip "python3 missing: the SMART check part not run"
+fi
+
+echo "-- level 2 (freeze) and level 3 (backup): off by default, each once"
+mkdir -p "$WORK/l"
+cat > "$WORK/l/inc.sh" <<'X'
+#!/usr/bin/env bash
+d=$(dirname "$0")
+case "$1" in
+  pause) echo "pause full=$HS_INCIDENT_FULL" >> "$d/calls"; echo immich > "$HS_INCIDENT_PAUSED" ;;
+  resume) echo resume >> "$d/calls"; rm -f "$HS_INCIDENT_PAUSED" ;;
+  --alert-line) ;;
+esac
+X
+cat > "$WORK/l/bak.sh" <<'X'
+#!/usr/bin/env bash
+echo run >> "$(dirname "$0")/bcalls"
+X
+chmod +x "$WORK/l/inc.sh" "$WORK/l/bak.sh"
+cat > "$WORK/bin/zpool" <<'FAKE'
+#!/usr/bin/env bash
+case "$*" in
+  "list -H -o name") echo tank ;;
+  "status -x tank") echo "pool 'tank' is healthy" ;;
+  "list -Hp -o name,alloc,size") printf 'tank	990	1000
+' ;;
+  "list -H -o name,cap") printf 'tank	99%%
+' ;;
+  "status tank") echo "  scan: scrub repaired 0B in 00:01:00 with 0 errors on Sun Oct  4 00:24:01 2099" ;;
+esac
+FAKE
+export HS_STORAGE_INCIDENT=$WORK/l/inc.sh HS_INCIDENT_PAUSED=$WORK/l/paused HS_AUTO_MITIGATE=false
+unset HS_AUTO_MITIGATE_FREEZE HS_AUTO_MITIGATE_BACKUP
+export HS_STATE_DIR=$WORK/lstate; mkdir -p "$HS_STATE_DIR"
+: > "$WORK/l/calls"
+$HC >/dev/null 2>&1 || true
+[ ! -s "$WORK/l/calls" ] && pass "freeze off by default: nothing is frozen" || fail "freeze off by default: nothing is frozen"
+export HS_AUTO_MITIGATE_FREEZE=true
+$HC >/dev/null 2>&1 || true
+$HC >/dev/null 2>&1 || true
+check_eq "pool at 99 %: the apps are frozen once" "1" "$(grep -c '^pause full=tank' "$WORK/l/calls")"
+check_out "the message names the app and the resume command" "immich.*hs storage incident resume" $HC --list
+check_eq "one message for the freeze" "1" "$(keys | grep -c '^mitigation:frozen$')"
+bash "$WORK/l/inc.sh" resume
+check_eq "after resume the notice is gone" "0" "$(keys | grep -c '^mitigation:frozen$')"
+unset HS_AUTO_MITIGATE_FREEZE
+rm -f "$WORK/l/paused" "$HS_STATE_DIR/mitigation-frozen"
+
+# a failing disk with an old backup
+printf 'last_ok=%s
+status=ok
+' "$(( $(date +%s) - 200000 ))" > "$WORK/bs"
+export HS_BACKUP_STATE=$WORK/bs HS_MITIGATE_BACKUP_CMD="bash $WORK/l/bak.sh"
+cat > "$WORK/l/sw.sh" <<'X'
+#!/usr/bin/env bash
+exit 0
+X
+export HS_FAKE_FAILING=1
+# the failing disk comes from the SMART path of the tests above: reuse the state database fixture when python3 is there
+if command -v python3 >/dev/null 2>&1; then
+  export HS_DISK_HEALTH=$WORK/dh HS_DISK_HEALTH_NOROOT=1
+  rdl() { printf 'sda	read	HDD	S8	W8	100	0	%s	0	%s	-	-	-	-	-	WDC
+' "$1" "$2"; }
+  printf '#!/usr/bin/env bash
+cat "$RD"
+' > "$WORK/dh"; chmod +x "$WORK/dh"; export RD=$WORK/rd2.txt
+  rdl 0 0 > "$RD"; bash "$SCRIPTS/state.sh" baseline-run
+  rdl 2 4 > "$RD"; bash "$SCRIPTS/state.sh" baseline-run
+  rm -f "$WORK/l/bcalls"
+  $HC >/dev/null 2>&1 || true; sleep 1
+  [ ! -e "$WORK/l/bcalls" ] && pass "backup off by default: no backup started" || fail "backup off by default: no backup started"
+  export HS_AUTO_MITIGATE_BACKUP=true
+  $HC >/dev/null 2>&1 || true; $HC >/dev/null 2>&1 || true; sleep 1
+  check_eq "failing disk, old backup: exactly one backup" "1" "$(grep -c run "$WORK/l/bcalls" 2>/dev/null || echo 0)"
+  check_out "the message names hs disk move" "hs disk <disk> move" $HC --dry-run
+  printf 'last_ok=%s
+status=ok
+' "$(date +%s)" > "$WORK/bs"; rm -f "$HS_STATE_DIR/mitigation-backup" "$WORK/l/bcalls"
+  $HC >/dev/null 2>&1 || true; sleep 1
+  [ ! -e "$WORK/l/bcalls" ] && pass "a fresh backup: nothing started" || fail "a fresh backup: nothing started"
 fi
 
 finish

@@ -32,6 +32,8 @@ in
         # access, so a group or user set to "none" in the share's permissions does not see it.
         # (`browseable = no` still hides it for everybody.)
         "access based share enum" = "yes";
+        # The file manager's trash (scripts/lib/fm.sh FM_TRASH_NAME and its old name; tests/fm.sh keeps them in step) is never shown.
+        "veto files" = "/.hn-trash/.hs-trash/";
       } // lib.optionalAttrs (ad != null) {
         # Domain member: join once with `net ads join -U Administrator`.
         "realm" = ad.realm;

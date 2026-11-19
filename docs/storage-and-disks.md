@@ -339,13 +339,44 @@ appeared, or many reallocated sectors, is `failing`; small changes and cable (CR
 the server sends a push message. `sudo hs disk baseline run` does the check now. Not tested on hardware yet.
 
 A `failing` disk also pauses the parity sync, the scrub and the cache mover when `autoMitigate` is on (`hs health resume` lifts the pause);
-`watch` never does. A long self-test runs every night in ONE disk, ordered by serial, so a disk is tested every N nights. A disk that cannot be
+`watch` never does.
+
+The automatic reaction has three levels, each its own switch in the machine settings, all off by default. None of them deletes, formats or
+moves anything. Not tested on hardware yet.
+
+| Level | Setting | When | What happens |
+| --- | --- | --- | --- |
+| 1 | `autoMitigate` | a failing disk, a degraded pool, a pool above 95 % or full within a week | the parity sync, the scrub and the cache mover pause; `hs health resume` lifts it |
+| 2 | `autoMitigateFreeze` | a pool above 98 % or full within a day | the apps that write to its shares are frozen (`incus pause`), Samba stays as it is; one push message names the apps; `hs storage incident resume` lets them run |
+| 3 | `autoMitigateBackup` | a disk turns `failing` and the newest backup is older than 24 hours | `hs backup now` runs once (it only reads the pools and writes the backup disk); a copy from disk to disk is never automatic, the message names `hs disk <disk> move` |
+
+A long self-test runs every night in ONE disk, ordered by serial, so a disk is tested every N nights. A disk that cannot be
 tested that night (still busy with its last test, or no self-test support) is skipped and the next one is tried; a long test that takes more
 than a day can overlap the next night's test of another disk. Disks in a ZFS mirror or raidz get a short error recovery time (7 seconds) at every boot (`hs disk erc list` shows them);
 single disks and SnapRAID disks keep the default. Not tested on hardware yet.
 
 To let spinning disks sleep, set `diskSpindownMinutes` (for example 30) in `machine.toml` and run `hs rebuild`. `hs disk spindown` shows the
 state. SSDs never sleep. The first access after sleep takes 10 to 20 seconds.
+
+A pool can have its own sleep time. `diskSpindownPools = { backup = 10, bulk = 30 }` in `machine.toml` (the keys are pool names, or `backup` for
+the backup disk) replaces `diskSpindownMinutes` for the disks of that pool; `0` means never. There is one value per pool and none per disk.
+`hs config check` refuses a name that is no pool of this server. On ZFS a raidz pool wakes all its disks at once and a mirror one after the
+other; with `shareSnapshots = true` a snapshot is taken every hour, so a ZFS pool hardly sleeps, and `hs config check` warns about that pair.
+Not tested on hardware yet.
+
+`hs disk spindown power` (the interface reads it as `hs sys disk power`) shows for each spinning pool disk whether it is asleep or spinning, since
+when, and how often it woke today (counted at each reading, so a short wake between two readings counts once). The Disks page shows
+asleep or spinning for each disk in the Sleep column. The same command lists the power that is *measured*, each number with its source: the
+UPS output in watts (`hs ups`, when the UPS reports real power or a load and its nominal power) and the CPU package through RAPL
+(`/sys/class/powercap`, readable by root only). Nothing is estimated, and there is no number per disk. Not tested on hardware yet.
+
+To find out what keeps a disk awake, measure it for a night: `sudo hs disk spindown log 24` samples the kernel I/O counters of each spinning
+bulk, parity and backup disk (`/sys/block/<disk>/stat`, no disk access) and its power state (`hdparm -C`, does not wake it) every minute for 24
+hours. Each minute in which a disk did I/O or left standby is written to `/var/log/hs-spindown.log` (time, disk, `woke` or `io`, state, number of
+I/Os) with the systemd units that started in that minute (from the journal). After a night, the lines should fall between 03:00 and about 06:30,
+the maintenance window, or on a moment when someone used a share. A line outside the window with a unit name points at the job to move or
+switch off; a line with `-` in the last column is I/O that no unit started (a person, a container or a share). Run it in a second terminal
+or in `tmux`; it stops after the given hours. Not tested on hardware yet.
 
 `hs health` lists problems with the command that helps, and the server sends a push message when the set of problems changes
 ([Operations](operations.md)).
@@ -465,9 +496,115 @@ erased.
 
    Leave out `--encrypt` if the disks are not encrypted.
 
+### One guided flow: `hs migrate unraid`
+
+The steps above as one command. It looks at the disks, shows **one plan**, asks you to type one name and then runs as a background job.
+In the web interface it is Pools, **Take over Unraid**. Not tested on hardware yet.
+
+```bash
+hs migrate unraid --dry-run        # asks which disks, shows the plan, changes nothing
+sudo hs migrate unraid --disks <data-disk>,<data-disk> --parity <old-parity-disk> --spare <spare-disk>
+```
+
+- `--disks` are the Unraid data disks (xfs, btrfs, or either inside LUKS). `--parity` is the old Unraid parity disk or disks, typed by
+  their `/dev/disk/by-id` name; a disk that holds a file system is refused as parity, so a mistyped data disk is never erased.
+  `--spare` is optional (see below). `hs migrate check` looks at the disks first.
+- **Shares are merged**, as in Unraid: a folder that exists on several disks becomes one share. `--per-disk` gives every folder its own
+  share `<disk>-<folder>` instead. A folder with a reserved name (`shares`, `sensitive`, `global`, `homes`, `printers`) is renamed with the
+  suffix `-adopted`; the plan lists each rename.
+- **Ownership:** files keep their owner `nobody:users` (99:100); Samba reads them through the share owner. `--chown` hands them over (slow on
+  big disks).
+- **With a spare disk** (at least as large as the largest data disk): the data disks are mounted read-only and nothing is written to them
+  until the parity on the spare disk is complete. You type the name of the spare disk. **Without one:** labels are written and folders move
+  first, the old parity disk is erased and added as the first parity, and the plan says the data is not protected until its sync ends. You
+  then type the name of the old parity disk.
+- **The old parity disks become parity only after the first sync has finished**, one after the other, each followed by a sync. They are
+  erased then, and the plan names each of them in red. There is no way back to Unraid afterwards.
+- **Encrypted disks:** the passphrase of the Unraid disks opens them. If this server has no encrypted disk yet, that passphrase becomes this
+  server's. Otherwise this server's passphrase is added to each disk as a **key slot** after a backup of its header
+  (`/var/lib/hs/luks-headers/<uuid>.img`, readable by root only; it still contains the Unraid key slot, so keep it as secret as the
+  passphrase). That is a write to the disk header; with a spare disk it happens only after the parity is complete. A disk that only a key
+  file opens is refused. In the web interface both passphrases travel on their own, never in the command.
+- Refused with a reason: ZFS array disks, a btrfs over several devices, a disk whose log was not replayed (an unclean stop), a data disk
+  larger than the parity disk.
+
+When it is done, publish the shares with `sudo hs share repair`.
+
+### With a spare disk: nothing is written to your data disks until the parity is finished
+
+If you have a spare disk at least as large as your largest data disk, use it instead of steps 4 and 6. **Adopted disks stay read-only
+and unlabelled until the parity is complete**, so a failure while the parity is built loses nothing. Not tested on hardware yet.
+
+```bash
+sudo hs pool bulk add --role adopt --disks <data-disk>,<data-disk> --spare <spare-disk> --dry-run
+sudo hs pool bulk add --role adopt --disks <data-disk>,<data-disk> --spare <spare-disk>
+```
+
+The plan lists the order. You type the name of the **spare disk** (it is erased and becomes the parity disk):
+
+1. Every data disk is mounted read-only by its file system UUID (a record `/var/lib/hs/adopting/<uuid>`); no label is written and an
+   xfs log is not replayed. SnapRAID keeps its content files on the system disk (`/var/lib/snapraid`), never on an adopted disk.
+2. The spare disk is formatted as the parity disk and the parity is built from the read-only disks. This takes hours to a day.
+3. Only after the sync has finished: the labels are written, the folders move into `shares/`, the records are removed and the disks
+   join `/bulk` for writing. One more short sync then follows.
+4. Your old Unraid parity disk is free afterwards; add it as a second parity with `sudo hs pool bulk add --role parity`.
+
+If the sync fails, no data disk has been written to: the records keep the disks read-only, and after the cause is fixed
+`hs pool bulk sync` finishes the parity. Without a spare disk the order above (steps 4 to 6) applies: labels first, parity last, and the
+data is **not** protected until that parity is synced.
+
 Before step 6 all files are still there and a folder can be moved back with `mv`. Afterwards the old parity is gone, but the files are on
 the disks and SnapRAID protects them after the first sync. Later, replace small old disks one by one with `hs pool bulk replace data-NN
 --disks <new-disk>`; it rebuilds from parity.
+
+## The file manager: sizes, owner, paths, pause, `hs fm`
+
+Storage > Files shows two panes. A few things in it work differently from what you may expect:
+
+- **The path above a pane is an input.** Type a path and press Enter. The server checks it (the same check as opening a folder); if it
+  refuses, the reason is shown under the input and the pane stays where it was. `..` and links are never resolved by the browser.
+- **Info (F3)** shows owner, group and mode of the item, read from `stat`. You cannot change them in the file manager.
+- **The size of a folder is measured only when you ask** ("Calculate size" in Info). It reads every file entry below the folder and can
+  wake sleeping disks, so it runs as a background job. The answer is kept for that folder together with its modification time: asking again
+  while the folder has not changed answers at once. Changes deeper down do not change the time of the top folder: use "Measure again".
+- **Pause and Continue** (copy and move). Pause stops the job cleanly and keeps its list: what was copied stays, nothing unverified is removed,
+  and the pool lock is released (a paused job holds nothing; the parity sync or the cache mover may run meanwhile). Continue starts a
+  **new** job over the same selection with "skip what exists, size check", so it goes on where the first stopped. A file that was copied but
+  whose source had not been removed yet stays at the source and is listed as skipped.
+- Buttons that start a job show a spinner and ignore a second click while the job starts.
+
+On the command line the same thing is `hs fm`:
+
+```bash
+hs fm locations
+hs fm ls disk:data-04 --path /shares/media
+hs fm du disk:data-04 --path /shares/media
+hs fm copy disk:data-04 pool:tank film.mkv --path /shares/media --to-path /shares/media
+hs fm delete disk:data-04 film.mkv --path /shares/media
+```
+
+`locations`, `ls` and `du` only read (`du` waits for the measurement unless you add `--no-wait`). `copy`, `move` and `delete` show the plan
+first, ask you to type the confirmation, then start a background job (`hs job log <unit>` follows it). Without a terminal, pass the typed
+text with `--confirm`. The same rules as in the web interface apply, because `hs fm` only calls `hs sys fm`: nothing is changed while
+`fileManagerWrite` is off.
+
+Not tested on hardware yet.
+
+## The trash of the file manager
+
+Delete in the file manager does not remove files at once: it moves them into a trash folder at the root of the same file system
+(`.hn-trash/<date>/<old path>`). That is a rename, never a copy, so it is instant and works for a whole folder.
+
+- **The trash keeps the space used.** Free space grows only when the trash is emptied or when you choose "delete for good".
+  `hs sys fm locations` shows the real free space, trash included.
+- **14 days.** Every night at 03:35 (inside the maintenance window) the date folders older than 14 days are removed.
+- **Put back:** `hs sys fm trash <place>` lists the trash of a place and the `restore` operation of `hs sys fm` puts an item back where it came
+  from. An item is never put over a file that is at its old place now; it stays in the trash. The Files page has no trash view yet, and
+  `hs fm` has no restore command (`hs fm delete` moves into the trash too).
+- **Delete for good** skips the trash and still needs the typed confirmation ("delete N files").
+- The trash is hidden from the file manager's listing, from Samba (`veto files`) and from the backup.
+
+Not tested on hardware yet.
 
 ## Snapshots of shares (ZFS only)
 A snapshot is a frozen state of a share that costs almost nothing while little changes. Take one before a big clean-up.

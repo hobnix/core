@@ -1,0 +1,10 @@
+status	ok
+type	f
+owner	wolsch
+group	wolsch
+uid	1000
+gid	1000
+mode	644
+perms	rw-r--r--
+bytes	5
+mtime	1794879100

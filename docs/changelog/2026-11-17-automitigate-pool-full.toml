@@ -1,0 +1,6 @@
+date  = "2026-11-17"
+type  = "fix"
+title = "Automatic mitigation also reacts to a full pool"
+body  = """
+With the setting autoMitigate on, a pool that is above 95 % full or will be full within a week now pauses the parity sync, the scrub and the cache mover, as the setting always said. The pause lifts itself when there is space again.
+"""

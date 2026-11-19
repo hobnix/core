@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: menu to create the pools "fast" and "bulk" from mirror pairs, or add pairs to them
 # help.de: Menü, um die Pools "fast" und "bulk" aus Spiegelpaaren anzulegen oder Paare hinzuzufügen
-# args: [pool] [--dry-run] [--plain] [--disks <id,...>] [--use data|apps] [--role data|parity|adopt] [--encrypt] [--chown] [--merge] [--replace [member]] [--remove [member]] [--convert [member] [--discard]] [--close [member] [--drain]] [--open [member]]
+# args: [pool] [--dry-run] [--plain] [--disks <id,...>] [--use data|apps] [--role data|parity|adopt] [--encrypt] [--chown] [--merge] [--spare <id>] [--replace [member]] [--remove [member]] [--convert [member] [--discard]] [--close [member] [--drain]] [--open [member]]
 # Bare use (a terminal): --replace/--remove/--convert without a member ask which one (the registry rows "hs pool <pool> replace|remove|convert" are guided).
 # Stand-in for tests: HS_GUIDED_TTY=1 = "there is a terminal" (answers on stdin).
 set -euo pipefail
@@ -9,6 +9,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib/diskpath.sh"
 . "$(dirname "$0")/lib/diskused.sh"
 . "$(dirname "$0")/lib/bulkpath.sh"
+. "$(dirname "$0")/lib/adopt-check.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/pools.sh"
 . "$(dirname "$0")/lib/pools-write.sh"
@@ -36,6 +37,8 @@ usage() {
   say "  --chown     with --role adopt: hand the files over to adminuser:users (slow on big disks)"
   say "  --merge     with --role adopt: put the folders of all disks into one shares/<name> (default: one"
   say "              share per disk and folder, shares/<disk>-<name>, e.g. data-02-media)"
+  say "  --spare     with --role adopt: a spare disk (at least as large as the largest adopted disk) that becomes the parity disk: the"
+  say "              adopted disks stay read-only and unlabelled until the parity is built (it ERASES the spare disk)"
   say "  --replace   swap a member (name as shown by --members) for the disk given with --disks"
   say "  --mode      ZFS remove of a disk in a 2-disk mirror: detach (the other disk stays alone) or vdev (whole mirror, data moves)"
   say "              snapraid remove of a data disk: move (default, files go to the other disks) or nomove (files stay on the disk)"
@@ -58,6 +61,7 @@ kind=""   # --kind zfs|snapraid: the layout of a NEW data pool
 plain=false
 chown_files=false
 merge_folders=false
+spare=""   # --role adopt --spare <by-id>: parity is built on it before the adopted disks are touched
 drain=false   # --close: also move the files off the disk onto the others
 discard=false   # --convert: erase the disk without moving its files (the data is not needed any more)
 encrypt=false
@@ -81,6 +85,7 @@ while [ $# -gt 0 ]; do
     --plain)   plain=true; shift ;;
     --chown)   chown_files=true; shift ;;
     --merge)   merge_folders=true; shift ;;
+    --spare)   [ $# -ge 2 ] || usage; spare="$2"; shift 2 ;;
     --mode)    [ $# -ge 2 ] || usage; zfs_how="$2"; shift 2 ;;
     --encrypt) encrypt=true; shift ;;
     --fs)      [ $# -ge 2 ] || usage; fs_type="$2"; shift 2
@@ -282,7 +287,7 @@ candidates() {
     # a member of the snapraid array, even while it isn't mounted
     lsblk -nr -o LABEL "/dev/$name" | grep -q '^bulk-' && continue
     # the disk of hs backup is unmounted between runs: it must not look free (label "backup")
-    has_label_disk "/dev/$name" '^(bulk-.*|backup)$' && continue
+    has_label_disk "/dev/$name" '^(bulk-.*|backup|backup-offsite)$' && continue
     # stable name; prefer the readable ata-/nvme-/scsi- name over wwn-
     id=$(stable_id "$name" || true)   # a dual-port disk: udev gave the names to its other path
     [ -n "$id" ] || continue
@@ -310,9 +315,50 @@ adopt_entries=()
 adopt_loose=0
 # the folder an adopted folder becomes inside shares/: per disk by default
 # ("Media" on data-02 -> data-02-media: lowercase, spaces to dashes), or the same name (merge)
+# a folder with a name the share code keeps for itself is renamed with a suffix when merged (docs/PLAN-storage-nas.md D10)
+adopt_reserved() { case "$(tr 'A-Z' 'a-z' <<<"$1")" in shares|sensitive|global|homes|printers) return 0 ;; esac; return 1; }
 adopt_target() {   # adopt_target <label> <folder>
-  if $merge_folders; then printf '%s\n' "$2"
+  if $merge_folders; then
+    if adopt_reserved "$2"; then printf '%s-adopted\n' "$2"; else printf '%s\n' "$2"; fi
   else printf '%s-%s\n' "${1#bulk-}" "$(tr 'A-Z ' 'a-z-' <<<"$2")"; fi
+}
+# Encrypted Unraid disks (D11). HS_UNRAID_PASSPHRASE_FILE holds the Unraid passphrase (0600, read once, deleted). When this server has no encrypted
+# disk yet, that passphrase becomes the server's; otherwise it only opens the disk and a key slot with this server's passphrase is added after the
+# header backup, once the parity is complete (adopt_luks_slot), because it writes to the disk.
+unraid_pass=""
+adopt_slots=()   # LUKS partitions opened with the Unraid passphrase only
+adopt_unraid_pass() {
+  [ -z "$unraid_pass" ] || return 0
+  if [ -n "${HS_UNRAID_PASSPHRASE_FILE:-}" ] && [ -f "$HS_UNRAID_PASSPHRASE_FILE" ]; then
+    unraid_pass=$(cat "$HS_UNRAID_PASSPHRASE_FILE"); rm -f "$HS_UNRAID_PASSPHRASE_FILE"
+  fi
+  [ -n "$unraid_pass" ]
+}
+adopt_luks_open() {   # adopt_luks_open <luks partition>: 0 when it is open afterwards (crypt_pass or unraid_pass opened it)
+  local p=$1
+  if adopt_unraid_pass && [ -z "$crypt_pass" ] && [ -z "${HS_DISK_PASSPHRASE:-}" ] && [ -z "${HS_DISK_PASSPHRASE_FILE:-}" ]      && [ ! -f "$crypt_keyfile" ] && [ ! -s "$crypt_uuids" ] && [ ! -s "$crypt_state/vault-uuid" ]; then
+    crypt_pass=$unraid_pass          # the first encrypted disk: the Unraid passphrase becomes this server's
+    luks_open "$p"; return
+  fi
+  if crypt_get_pass && luks_open "$p"; then return 0; fi
+  adopt_unraid_pass || return 1
+  printf %s "$unraid_pass" | cryptsetup open --key-file - "$p" "$(luks_name "$p")" 2>/dev/null || return 1
+  adopt_slots+=("$p")
+}
+adopt_luks_slot() {   # adopt_luks_slot <luks partition>: header backup, then this server's passphrase as one more key slot
+  local p=$1 hdr=${HS_LUKS_HEADERS:-$crypt_state/luks-headers} f k1 k2 u
+  case " ${adopt_slots[*]} " in *" $p "*) ;; *) return 0 ;; esac
+  u=$(cryptsetup luksUUID "$p")
+  mkdir -p "$hdr"; chmod 700 "$hdr"
+  f=$hdr/$u.img
+  [ -e "$f" ] || (umask 077; cryptsetup luksHeaderBackup "$p" --header-backup-file "$f") || { echo "Header backup of $p failed: nothing was changed on it." >&2; return 1; }
+  crypt_get_pass || return 1
+  mkdir -p "$crypt_run"; chmod 700 "$crypt_run"
+  k1=$(mktemp "$crypt_run/slot-old.XXXXXX"); k2=$(mktemp "$crypt_run/slot-new.XXXXXX")
+  printf %s "$unraid_pass" > "$k1"; printf %s "$crypt_pass" > "$k2"
+  cryptsetup luksAddKey --batch-mode --key-file "$k1" "$p" "$k2" >/dev/null 2>&1; local rc=$?
+  rm -f "$k1" "$k2"
+  [ "$rc" -eq 0 ] || { echo "Could not add this server's passphrase to $p (header backup: $f)." >&2; return 1; }
 }
 adopt_fs() {   # adopt_fs <by-id name>  ->  "device fstype luksdevice|-"  (LUKS: the opened /dev/mapper device)
   local dev="/dev/disk/by-id/$1" path type fstype found=() luks="-" mapper inner
@@ -321,17 +367,20 @@ adopt_fs() {   # adopt_fs <by-id name>  ->  "device fstype luksdevice|-"  (LUKS:
     # probe the device itself: lsblk only knows what udev has noticed so far
     fstype=$(blkid -p -o value -s TYPE "$path" 2>/dev/null || true)
     case "$fstype" in
-      xfs|ext4|btrfs) found+=("$path $fstype -") ;;
+      xfs|ext4|btrfs) adopt_refusal "$path" "$fstype" >&2 || return 1; found+=("$path $fstype -") ;;
+      zfs_member) echo "$1 is formatted with ZFS (an Unraid 6.12 ZFS array disk): it can not be adopted as it is, adopting needs xfs, ext4 or btrfs. Import its ZFS pool instead." >&2; return 1 ;;
       crypto_LUKS)
         # already open (unlocked at boot, or through the twin path of a dual-port disk): no passphrase needed, the mapper has the same name
         if [ ! -e "/dev/mapper/$(luks_name "$path")" ]; then
-          crypt_get_pass || { echo "No passphrase for $1." >&2; return 1; }
+          if ! adopt_luks_open "$path"; then
+            echo "$1: neither this server's passphrase nor the Unraid passphrase opens $path (a disk that is opened with a key file only can not be adopted: copy it with hs disk temp)." >&2; return 1
+          fi
         fi
-        if ! luks_open "$path"; then echo "$1: the passphrase does not open $path (is it the passphrase of these disks?)." >&2; return 1; fi
+        if ! luks_open "$path"; then echo "$1: the passphrase does not open $path (is it the passphrase of these disks? A disk that is opened with a key file only can not be adopted: copy it with hs disk temp)." >&2; return 1; fi
         mapper="/dev/mapper/$(luks_name "$path")"
         inner=$(blkid -p -o value -s TYPE "$mapper" 2>/dev/null || true)
         case "$inner" in
-          xfs|ext4|btrfs) found+=("$mapper $inner $path") ;;
+          xfs|ext4|btrfs) adopt_refusal "$mapper" "$inner" >&2 || return 1; found+=("$mapper $inner $path") ;;
           *) echo "$1 is encrypted and holds '${inner:-nothing}' inside: adopting needs xfs, ext4 or btrfs." >&2; return 1 ;;
         esac ;;
       ntfs|exfat|vfat) echo "$1 holds $fstype: copy it with hs disk temp instead, adopting needs xfs, ext4 or btrfs." >&2; return 1 ;;
@@ -1083,7 +1132,8 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       for d in "${disks[@]}"; do [ "${d%%$'\t'*}" = "$c" ] && line="$d"; done
       [ -n "$line" ] || { echo "'$c' is not a free disk (unknown, mounted, or already in use)."; exit 1; }
       IFS=$'\t' read -r id size _ _ <<<"$line"
-      part_fs=$(adopt_fs "$id") || exit 1
+      # not in $(...): the passphrases and the key-slot list it learns must stay in this shell
+      fsout=$(mktemp); adopt_fs "$id" >"$fsout" || { rm -f "$fsout"; exit 1; }; part_fs=$(<"$fsout"); rm -f "$fsout"
       read -r part fs luksdev <<<"$part_fs"
       adopt_inspect "$part" "$fs" || exit 1
       next_data_label
@@ -1100,10 +1150,17 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
         fi
       fi
       for e in "${adopt_entries[@]}"; do
-        case "$(adopt_target "$label" "$e" | tr A-Z a-z)" in shares|sensitive|global|homes|printers)
-          pl "      note: '$e' is a reserved share name, hs share repair will not publish it" ;;
-        esac
+        if adopt_reserved "$e"; then
+          if $merge_folders; then pl "      renamed: '$e' is a reserved share name, it becomes '$(adopt_target "$label" "$e")'"
+          else pl "      note: '$e' is a reserved share name, hs share repair will not publish it"; fi
+        fi
       done
+      if [ "$luksdev" != - ]; then
+        case " ${adopt_slots[*]} " in
+          *" $luksdev "*) pl "      encryption: this server's passphrase is added as a key slot after the header backup (a write to the disk header, after the parity is complete)" ;;
+          *) pl "      encryption: the passphrase of this server opens it" ;;
+        esac
+      fi
       [ "$adopt_loose" -eq 0 ] || pl "      $adopt_loose loose file(s) in the top folder stay where they are"
       todo+=("$part"$'\t'"$fs"$'\t'"$label"$'\t'"$luksdev")
     done
@@ -1112,7 +1169,26 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       warn "$(t 'Not possible: a data disk (%s) would be larger than a parity disk (%s).' "$(human "$max_data")" "$(human "$min_parity")")"
       exit 1
     fi
-    [ "$min_parity" -gt 0 ] || pnote "no parity disk yet. Add one afterwards: hs pool $pool add --role parity (it ERASES that disk)."
+    if [ -n "$spare" ]; then
+      [ "$min_parity" -eq 0 ] || { echo "--spare is for an array without a parity disk (this one has one)."; exit 1; }
+      case ",$(IFS=,; echo "${chosen[*]}")," in *",$spare,"*) echo "--spare: $spare is also in --disks."; exit 1 ;; esac
+      line=""
+      for d in "${disks[@]}"; do [ "${d%%$'	'*}" = "$spare" ] && line="$d"; done
+      [ -n "$line" ] || { echo "--spare: '$spare' is not a free disk (unknown, mounted, or already in use)."; exit 1; }
+      IFS=$'	' read -r _ spare_size _ _ <<<"$line"
+      if [ "$max_data" -gt "$spare_size" ]; then
+        warn "$(t 'Not possible: the spare disk (%s) is smaller than the largest data disk (%s).' "$(human "$spare_size")" "$(human "$max_data")")"
+        exit 1
+      fi
+      plt "  Order (no write to an adopted disk until the parity is finished):"
+      pl "    1. the adopted disks are mounted read-only; no label is written"
+      pl "    2. $spare ($(human "$spare_size")) is ERASED and becomes the parity disk; the parity is built from the read-only disks"
+      pl "    3. only after the sync has finished: the labels are written and the folders move into shares/"
+      pl "    4. then the old parity disk of the other system, if any, is free"
+    else
+      pnote "no parity disk yet. Add one afterwards: hs pool $pool add --role parity (it ERASES that disk)."
+      pnote "Without a spare disk the labels are written and the folders move first; until a parity disk is added and synced, the data is NOT protected."
+    fi
     if $newname; then
       pnote "This is a NEW pool '$pool' with role data (SnapRAID). It is added to the pools line of machine.toml when it is created."
       pblank
@@ -1121,15 +1197,62 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       pdry
       exit 0
     fi
-    say "The disks keep all their files. Their label is written and their folders are renamed."
-    $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
+    if [ -n "$spare" ]; then
+      say "The spare disk is erased. The adopted disks are not written to until the parity is finished."
+      $assume_yes || confirm_name "$spare" "the spare disk" || fail "cancelled"   # the disk that is erased; --yes: a job, the typed name was checked before
+    else
+      say "The disks keep all their files. Their label is written and their folders are renamed."
+      $assume_yes || confirm_name "$pool" "the pool name" || fail "cancelled"   # --yes: a background job, the typed name was checked before
+    fi
+
+    adoptdir=${HS_ADOPTING_DIR:-/var/lib/hs/adopting}
+    if [ -n "$spare" ]; then
+      # 1. a record per file system (the mount script mounts it read-only by UUID, its label to come is the content); nothing is written to the disks
+      mkdir -p "$adoptdir"
+      for t in "${todo[@]}"; do
+        IFS=$'	' read -r part fs label luksdev <<<"$t"
+        u=$(blkid -p -o value -s UUID "$part" 2>/dev/null || true)
+        [ -n "$u" ] || fail "$(t 'No file system UUID on %s: nothing was changed.' "$part")"
+        printf '%s
+' "$label" > "$adoptdir/$u"
+      done
+      # 2. the parity on the spare disk, built from the read-only disks
+      here=$(dirname "$0")
+      clean_disk "$spare"
+      format_member "$spare" "${label%%-*}-parity-1"
+      udevadm settle 2>/dev/null || true
+      snap_new_pool; newname=false   # the row is written once
+      if [ -z "${HS_ADOPT_SKIP_MERGE:-}" ]; then
+        snap_mount
+        for t in "${todo[@]}"; do
+          IFS=$'	' read -r part fs label luksdev <<<"$t"
+          mountpoint -q "$(disk_dir "$label")" || fail "$(t '%s is not mounted read-only. Nothing was written to it; the record in %s stays, fix the cause and run this again.' "${label#*-}" "$adoptdir")"
+        done
+      fi
+      sync_script=${HS_BULK_SYNC:-$here/bulk-sync.sh}
+      bash "$sync_script" --no-mover --force || fail "$(t 'The parity sync did not finish. No adopted disk was written to (no label, no folder moved); the records in %s keep them read-only.' "$adoptdir")"
+      ok "The parity is complete. Now the adopted disks are labelled."
+      # 3. let go of the read-only mounts (out of the merge first), then label them below
+      for t in "${todo[@]}"; do
+        IFS=$'	' read -r part fs label luksdev <<<"$t"
+        d=$(disk_dir "$label")
+        mountpoint -q "$d" 2>/dev/null || continue
+        while read -r m; do   # every merge that has it as a branch (the pool, its view without caches)
+          setfattr -n user.mergerfs.branches -v "-$d" "$m/.mergerfs" 2>/dev/null || true
+        done < <(findmnt -rn -t fuse.mergerfs -o TARGET 2>/dev/null || true)
+        umount "$d" || fail "$(t 'Could not release %s. Nothing was written to it.' "$d")"
+      done
+    fi
 
     for t in "${todo[@]}"; do
       IFS=$'\t' read -r part fs label luksdev <<<"$t"
+      if [ "$luksdev" != - ]; then adopt_luks_slot "$luksdev" || exit 1; fi
       mp=$(disk_dir "$label")
+      u=$(blkid -p -o value -s UUID "$part" 2>/dev/null || true)
       adopt_label "$part" "$fs" "$label" || { rc=$?
         [ "$rc" = 2 ] || echo "Could not write the label on $part. A filesystem that was not unmounted cleanly needs a repair first." >&2
         exit 1; }
+      [ -z "$u" ] || rm -f "${adoptdir:?}/$u"           # labelled: the record is not needed any more
       [ "$luksdev" = - ] || crypt_record "$luksdev"      # from now on hs unlock opens it at every boot
       udevadm settle 2>/dev/null || true
       mkdir -p "$mp"
@@ -1157,7 +1280,12 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
     else pdone "Done. Every folder is now its own share /bulk/shares/<disk>-<name>. Move what belongs together by hand on the server, e.g.  mv /bulk/shares/data-02-media/Movies /bulk/shares/media/  (a rename on the same disk, copies nothing; always inside /bulk, never from /mnt/bulk/data-NN: those are the same files and a copy empties them); rename a share with: hs share <share> rename <new>"; fi
     say "Publish them over Samba: hs share repair (new shares start closed to Domain Admins; open them in hs share <share> perm)."
     $chown_files || echo "Files still belong to their old owner (Unraid: nobody:users). To make them adminuser's: sudo chown -R adminuser:users /bulk/shares (slow on big disks), or use --chown next time."
-    say "Parity is only written by the next sync: hs pool $pool sync."
+    if [ -n "$spare" ]; then
+      # the moved folders and the content files on the disks: one more (short) sync, the parity itself is already complete
+      [ -n "${HS_ADOPT_SKIP_MERGE:-}" ] || bash "$sync_script" --no-mover --force || warn "The sync after the move did not finish: run hs pool $pool sync."
+    else
+      say "Parity is only written by the next sync: hs pool $pool sync."
+    fi
     done_refresh
   fi
 

@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "A file manager job that was stopped before it started shows as cancelled"
+body  = """`hs sys fm progress <unit>` said "starting, running" forever for a job that was stopped before it wrote its first state. It now says cancelled (the job is not active), so the file manager no longer waits for it. Found by the test-lab stage that stops a big move right after it starts."""

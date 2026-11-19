@@ -1,0 +1,4 @@
+date  = "2026-11-17"
+type  = "feature"
+title = "Back up only chosen parts of an instance"
+body  = """An instance can have a rule file that names the paths inside it that are backed up (`hs backup ct <name> paths|include|exclude|reset`). A recipe whose manifest says `[app.backup] mode = "paths"` starts with those paths; your own changes always win. Not tested on hardware yet."""

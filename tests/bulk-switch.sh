@@ -54,6 +54,37 @@ mountpoint -q $old/data-91 && ! mountpoint -q "$new/data-91" && pass "the disks 
 case "$(br /bulk)" in *"$new/data"*) fail "a new branch is left: $(br /bulk)" ;; *"$old/data-91"*) pass "/bulk has the old branches again" ;; *) fail "branches: $(br /bulk)" ;; esac
 sum | grep -q ' shares/media/new.txt$' && [ "$(sum | wc -l)" = 5 ] && pass "all five files, once each" || fail "files after the way back: $(sum | wc -l)"
 
+echo "-- a disk that is being adopted: read-only by UUID, no label, nothing written, no content file on it"
+export HS_ADOPTING_DIR=$WORK/state/adopting HS_ADOPT_CONTENT2=$WORK/state/content2/snapraid.content
+mkdir -p "$HS_ADOPTING_DIR"
+adev=$(mkloop adopt93 64M)
+mkfs.ext4 -q -F "$adev" || { skip "mkfs.ext4 does not work here"; finish; exit $?; }
+am=$WORK/am; mkdir -p "$am"; mount "$adev" "$am"; mkdir -p "$am/Media"; echo film > "$am/Media/a.mkv"; umount "$am"
+auuid=$(blkid -s UUID -o value "$adev")
+asum=$(md5sum < "$adev")
+# without a record the disk is not touched (today's behaviour)
+HS_DISKS_ROOT=$old HS_DETACHED_ROOT=$old mm >/dev/null
+mountpoint -q $old/data-93 && fail "an unlabelled disk without a record was mounted" || pass "no record: the disk is left alone"
+grep -q 'content .*data-93' /var/lib/snapraid/snapraid.conf && fail "data-93 is in the config without a record" || pass "no record: not in the SnapRAID config"
+echo bulk-data-93 > "$HS_ADOPTING_DIR/$auuid"
+HS_DISKS_ROOT=$old HS_DETACHED_ROOT=$old mm >/dev/null
+mountpoint -q $old/data-93 && pass "the record mounts the disk by UUID" || fail "record: not mounted"
+case ",$(findmnt -no OPTIONS $old/data-93)," in *,ro,*) pass "it is mounted read-only" ;; *) fail "mount options: $(findmnt -no OPTIONS $old/data-93)" ;; esac
+case "$(br /bulk)" in *"$old/data-93=RO"*) pass "it is a read-only branch of /bulk" ;; *) fail "branches: $(br /bulk)" ;; esac
+grep -q "^data data-93 $old/data-93$" /var/lib/snapraid/snapraid.conf && pass "SnapRAID has it as a data disk" || fail "snapraid.conf has no data-93"
+grep -q "^content $old/data-93" /var/lib/snapraid/snapraid.conf && fail "a content file would be written to the adopted disk" || pass "no content file on the adopted disk"
+grep -q "^content $HS_ADOPT_CONTENT2$" /var/lib/snapraid/snapraid.conf && pass "the second content file is off the data disks" || fail "no second content file"
+grep -qx bulk-data-93 /var/lib/snapraid/members && fail "an unlabelled disk was recorded as a member" || pass "not a member before its label"
+echo x > /bulk/shares/media/try.txt 2>/dev/null; ls "$old/data-93"/shares/media/try.txt >/dev/null 2>&1 && fail "a new file landed on the read-only disk" || pass "a new file does not land on it"
+rm -f /bulk/shares/media/try.txt
+for m in /bulk /mnt/bulk/pool; do setfattr -n user.mergerfs.branches -v "-$old/data-93" "$m/.mergerfs" 2>/dev/null; done
+umount -l "$old/data-93" 2>/dev/null; rmdir "$old/data-93" 2>/dev/null
+check_eq "the block device is byte for byte what it was" "$asum" "$(md5sum < "$adev")"
+rm -f "$HS_ADOPTING_DIR/$auuid"
+HS_DISKS_ROOT=$old HS_DETACHED_ROOT=$old mm >/dev/null
+mountpoint -q $old/data-93 && fail "record removed but disk still mounted" || pass "record removed: back to today's behaviour"
+unset HS_ADOPTING_DIR HS_ADOPT_CONTENT2
+
 for n in 91 92; do umount -l "$old/data-$n" "$new/data-$n" 2>/dev/null; rmdir "$old/data-$n" "$new/data-$n" 2>/dev/null; done
 ! $made_user || userdel adminuser 2>/dev/null
 finish
