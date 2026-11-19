@@ -41,6 +41,49 @@ check_eq "the next run adds nothing" "$n" "$(hevs | grep -c . || true)"
 printf 'last_ok=%s\nstatus=ok\nused_pct=40\n' "$now" > "$WORK/backup.state"
 unset HS_SINCE_FILE
 
+echo "-- acknowledge: once, quiet, and the next failure after it cleared is new"
+export HS_ACK_FILE=$WORK/ack HS_NOTIFY_URL= HS_HEARTBEAT_URL= HS_CALLER=test
+rm -f "$HS_ACK_FILE" "$WORK/h.state"
+hlist() { bash "$SCRIPTS/health-check.sh" --list 2>/dev/null </dev/null | awk -F'	' '$1 == "backup:failed"'; }
+hrun() { bash "$SCRIPTS/health-check.sh" >/dev/null 2>&1 </dev/null || true; }
+printf 'last_ok=%s
+status=failed
+used_pct=40
+' "$now" > "$WORK/backup.state"
+hrun
+check_out "the failure was sent (it is in the state file)" "backup:failed" cat "$WORK/h.state"
+bash "$SCRIPTS/health-ack.sh" ack backup:failed --for 2d --note "disk swap on Friday" >/dev/null
+check_eq "the ack row has five columns, until and who set" 5 "$(awk -F'	' '{ print NF }' "$HS_ACK_FILE")"
+check_out "list-acks names id, until and note" "^backup:failed.[0-9]+.[0-9]+.[^	]+.disk swap on Friday$" bash "$SCRIPTS/health-ack.sh" list-acks
+check_out "--list shows it acknowledged with the until" "backup:failed.*acked" hlist
+hrun
+check_eq "an acknowledged problem is not in the state file" 0 "$(grep -c "backup:failed" "$WORK/h.state" || true)"
+out=$(bash "$SCRIPTS/health-check.sh" --dry-run 2>&1 </dev/null || true)
+if grep -q "errors" <<<"$out"; then fail "an acknowledged problem is not in the report"; else pass "an acknowledged problem is not in the report"; fi
+printf 'last_ok=%s
+status=ok
+used_pct=40
+' "$now" > "$WORK/backup.state"
+hrun
+check_eq "the acknowledgement is dropped when the problem clears" "" "$(cat "$HS_ACK_FILE")"
+printf 'last_ok=%s
+status=failed
+used_pct=40
+' "$now" > "$WORK/backup.state"
+hrun
+check_out "the second failure is new: it is sent again" "backup:failed" cat "$WORK/h.state"
+printf 'backup:failed	%s	%s	root	-
+' "$((now - 120))" "$((now - 60))" > "$HS_ACK_FILE"
+check_eq "an ended acknowledgement is not listed" "" "$(bash "$SCRIPTS/health-ack.sh" list-acks)"
+hrun
+check_out "when its time is over the problem is sent again" "backup:failed" cat "$WORK/h.state"
+check_eq "and the row is gone" "" "$(cat "$HS_ACK_FILE")"
+printf 'last_ok=%s
+status=ok
+used_pct=40
+' "$now" > "$WORK/backup.state"
+unset HS_ACK_FILE HS_NOTIFY_URL HS_HEARTBEAT_URL HS_CALLER
+
 echo "-- a temp disk left mounted"
 mount -t tmpfs t "$WORK/t/old"; mount -t tmpfs t "$WORK/t/new"
 echo $((now - 3 * 86400)) > "$WORK/run/temp-old.since"; echo "$now" > "$WORK/run/temp-new.since"

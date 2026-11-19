@@ -180,6 +180,7 @@ disk power	viewer	read
 health dry-run	viewer	read
 health next	viewer	read
 health list	viewer	read
+health acks	admin	read
 health plan <action>	admin	plan
 health start <action>	admin	start
 deck	viewer	read

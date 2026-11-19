@@ -1204,6 +1204,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "health.acks": {
+    /** the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed */
+    words: ["health", "acks"];
+    path: "/health/acks";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "health.dry-run": {
     /** current problems, nothing is sent */
     words: ["health", "dry-run"];
@@ -1217,7 +1229,7 @@ export interface SysOperations {
     lines: string;
   };
   "health.list": {
-    /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -) */
+    /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -) */
     words: ["health", "list"];
     path: "/health/list";
     method: "get";

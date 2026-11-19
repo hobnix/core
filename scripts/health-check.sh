@@ -2,7 +2,7 @@
 # help: check pools, disks, free space and scheduled jobs; push a message when something changes (also runs every 15 minutes)
 # help.de: prüft Pools, Platten, freien Platz und geplante Aufgaben; schickt eine Nachricht, wenn sich etwas ändert (läuft auch alle 15 Minuten)
 # args: [--test] [--dry-run]
-# --keys (used by `hs update` to compare before and after a switch): only the key of every problem, one per line; sends and writes nothing. --list (used by `hs health ack` and the web Health page): key, text, acked or -, since (epoch seconds: the first run that saw the key, file health-since next to health-ack), channels that took the last message (notify.sh keeps them in the channel folder; comma separated or -), tab-separated. Columns are only ever added at the end.
+# --keys (used by `hs update` to compare before and after a switch): only the key of every problem, one per line; sends and writes nothing. --list (used by `hs health ack` and the web Health page): key, text, acked or -, since (epoch seconds: the first run that saw the key, file health-since next to health-ack), channels that took the last message (notify.sh keeps them in the channel folder; comma separated or -), tab-separated, then until (epoch seconds when an acknowledgement ends by itself, else -) and who acknowledged (- when none). Columns are only ever added at the end.
 set -euo pipefail
 
 max_temp=55      # °C, at or above this a disk is reported
@@ -379,10 +379,14 @@ if capability_on notifications && ! { [ -d "$(chan_dir)" ] && [ ! -r "$(chan_dir
 fi
 
 # ── Acknowledged problems (hs health ack <id>): not sent and not counted until they clear ──
-declare -A acked=()
+# Columns: key, time, until (epoch or -), who, note (older rows have only the first two). An entry past its until is over: it is dropped below.
+declare -A acked=() ack_until=() ack_who=()
+expired=()
 if [ -r "$ack_file" ]; then
-  while IFS=$'\t' read -r ak _; do
-    [ -z "$ak" ] || acked["$ak"]=1
+  while IFS=$'\t' read -r ak _ au aw _; do
+    [ -n "$ak" ] || continue
+    if [[ "${au:-}" =~ ^[0-9]+$ ]] && [ "$au" -lt "$now" ]; then expired+=("$ak"); continue; fi
+    acked["$ak"]=1; ack_until["$ak"]=${au:--}; ack_who["$ak"]=${aw:--}
   done < "$ack_file"
 fi
 
@@ -493,15 +497,16 @@ fi
 if $list_only; then
   # key, text, acked|-, since (epoch seconds), channels that took the last message (comma separated or -)
   for i in "${!keys[@]}"; do
-    printf '%s\t%s\t%s\t%s\t%s\n' "${keys[$i]}" "${texts[$i]}" "$([ -n "${acked[${keys[$i]}]:-}" ] && echo acked || echo -)" \
-      "${since[${keys[$i]}]:-$now}" "$(chan_told_get "${keys[$i]}" 2>/dev/null || echo -)"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${keys[$i]}" "${texts[$i]}" "$([ -n "${acked[${keys[$i]}]:-}" ] && echo acked || echo -)" \
+      "${since[${keys[$i]}]:-$now}" "$(chan_told_get "${keys[$i]}" 2>/dev/null || echo -)" \
+      "${ack_until[${keys[$i]}]:--}" "${ack_who[${keys[$i]}]:--}"
   done
   exit 0
 fi
 
 # the acknowledged ones leave the lists; an entry whose problem is gone is dropped from the file
 n_acked=0
-if [ ${#acked[@]} -gt 0 ]; then
+if [ ${#acked[@]} -gt 0 ] || [ ${#expired[@]} -gt 0 ]; then
   nk=(); nt=(); present=""
   for i in "${!keys[@]}"; do
     if [ -n "${acked[${keys[$i]}]:-}" ]; then n_acked=$((n_acked + 1)); present+="${keys[$i]}"$'\n'; continue; fi
@@ -509,6 +514,11 @@ if [ ${#acked[@]} -gt 0 ]; then
   done
   keys=("${nk[@]}"); texts=("${nt[@]}")
   if ! $dry && [ -w "$ack_file" ]; then
+    # the acknowledgement ends: the problem is gone (a later return is new and is sent) or its time is over (the problem is sent again)
+    for k in "${!acked[@]}"; do
+      case $'\n'"$present" in *$'\n'"$k"$'\n'*) ;; *) event_emit health.unacked "$k" "The problem cleared" --payload '{"reason":"resolved"}' ;; esac
+    done
+    for k in "${expired[@]}"; do event_emit health.unacked "$k" "The acknowledgement ran out" --payload '{"reason":"expired"}'; done
     awk -F'\t' 'NR == FNR { p[$0] = 1; next } ($1 in p)' <(printf '%s' "$present") "$ack_file" > "$ack_file.tmp" 2>/dev/null &&
       mv "$ack_file.tmp" "$ack_file" || rm -f "$ack_file.tmp"
   fi

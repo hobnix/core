@@ -730,6 +730,9 @@ role = "viewer"
 ["health list"]
 role = "viewer"
 
+["health acks"]
+role = "admin"
+
 ["health plan <action>"]
 role = "admin"
 
