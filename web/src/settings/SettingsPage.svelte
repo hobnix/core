@@ -60,6 +60,7 @@
   const updates = poll(() => (page === 'updates' && !deck?.data?.locked ? '/api/sys/system/updates' : ''), 60000);
   const upd = $derived(Object.fromEntries(rows(updates).map((r) => [r[0], r[1]])));
   const behind = $derived(Number(upd.behind) || 0);
+  const utag = $derived(updatesTag(rows(updates)));
   const fetched = $derived(upd.fetched && upd.fetched !== '-' ? new Date(Number(upd.fetched) * 1000).toLocaleString() : 'never');
   $effect(() => { if (page === 'updates' && !changes.loaded) load(); });
   // Updates: the channel and the ref the next update installs (`hs sys release show`, fetched refs only)
