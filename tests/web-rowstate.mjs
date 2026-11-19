@@ -1,6 +1,7 @@
 // The pending state of a row from job events and job records (web/src/rowstate.js), run with node.
 import { fromRecords, applyEvents, isPending, failureOf, jobEventState } from '../web/src/rowstate.js';
 import { parseRecord } from '../web/src/jobrecords.js';
+import { sharePending, shareFailed, userPending, userFailed, groupPending, backupPending, backupFailed, vaultFailed } from '../web/src/pages/rows.js';
 let bad = 0;
 const check = (n, ok) => { if (!ok) { bad++; console.log('FAIL: ' + n); } };
 const J1 = '20261119-100000-app-remove-nextcloud-abcd', J2 = '20261119-110000-app-remove-nextcloud-wxyz';
@@ -76,5 +77,21 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   const dkf = fromRecords([rec(K3, 'failed', 'docker-app web pull', '2')]);
   check('docker failed pull shows error', dockerFailed('web', (a, g) => failureOf(dkf, new Set(), a, g))?.error.code === 'job.failed');
   void fail;
+}
+// Shares, Users, Groups, Backup, Vault: pending words and failures per row (web/src/pages/rows.js)
+{
+  const K = 'shares photos snapshot', KU = 'users anna lock', KB = 'backup now';
+  const pend = (jobs) => (a, args) => isPending(jobs, [], a, args);
+  const fld = (jobs) => (a, args) => failureOf(jobs, new Set(), a, args);
+  const run = fromRecords([rec(J1, 'running', K, '-', 'hs shares photos snapshot'), rec(J2, 'running', KU, '-', 'hs users anna lock')]);
+  check('shares: a snapshot started in a terminal shows on its row only', sharePending('photos', pend(run)) === 'Snapshotting' && sharePending('docs', pend(run)) === '');
+  check('users: lock shows on its user, not on a group', userPending('anna', pend(run)) === 'Locking' && userPending('bob', pend(run)) === '' && groupPending('anna', pend(run)) === '');
+  const dead = applyEvents(run, [ev(9, 'failed', J1, { exit: 3, key: K }), ev(10, 'ok', J2, { key: KU })], 0);
+  check('shares: failed snapshot is not pending and shows its error', sharePending('photos', pend(dead)) === '' && shareFailed('photos', fld(dead))?.error.what === 'hs shares photos snapshot failed (exit 3)');
+  check('users: an ok job leaves no failure', userFailed('anna', fld(dead)) === null);
+  const bk = fromRecords([rec(J1, 'running', KB, '-', 'hs backup now')]);
+  check('backup: running now is pending, failed shows the error', backupPending(pend(bk)) === 'Backing up'
+    && backupFailed(fld(applyEvents(bk, [ev(4, 'failed', J1, { exit: 1, key: KB })], 0)))?.error.code === 'job.failed');
+  check('vault: failed close shows the error', vaultFailed(fld(fromRecords([rec(J1, 'failed', 'secrets close', 2, 'hs secrets close')])))?.error.what === 'hs secrets close failed (exit 2)');
 }
 if (bad) process.exit(1);

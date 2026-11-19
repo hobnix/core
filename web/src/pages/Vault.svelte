@@ -1,7 +1,10 @@
 <script>
   import { poll, rows } from '../data.svelte.js';
   import { bytes } from '../format.js';
-  import { openPlan, jobRunning } from '../ui.svelte.js';
+  import { openPlan } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { vaultFailed } from './rows.js';
   import Button from '../ui/Button.svelte';
   import { go } from '../route.svelte.js';
   import Table from '../shell/Table.svelte';
@@ -42,12 +45,13 @@
 
 <PageHeader title="Vault" crumb="Storage" sub="Secrets for the server's own services, in a LUKS partition of their own.">
   {#snippet actions()}
-    <Button icon="floppy-disk" busy={jobRunning('secrets', ['header-backup'])} disabled={u.state !== 'open'} tooltip={'Save the LUKS header outside the vault'} onclick={() => openPlan('secrets', ['header-backup'], 'Save the LUKS header')}>Save header</Button>
-    <Button icon="arrow-square-in" busy={jobRunning('secrets', ['move'])} disabled={u.state !== 'open'} tooltip={'Move the usual secrets into the vault'} onclick={() => openPlan('secrets', ['move'], 'Move secrets into the vault')}>Move secrets in</Button>
-    <Button icon="shield-check" busy={jobRunning('secrets', ['secrets-fix'])} tooltip={'Root-only permissions on the secret files'} onclick={() => openPlan('secrets', ['secrets-fix'], 'Fix the permissions of the secrets')}>Fix permissions</Button>
-    <Button icon="lock-simple" busy={jobRunning('secrets', ['close'])} disabled={u.state !== 'open'} tooltip={'Close the vault (refused while something uses it)'} onclick={() => openPlan('secrets', ['close'], 'Close the vault')}>Close…</Button>
+    <Button icon="floppy-disk" busy={rowstate.pending('secrets', ['header-backup'])} disabled={u.state !== 'open'} tooltip={'Save the LUKS header outside the vault'} onclick={() => openPlan('secrets', ['header-backup'], 'Save the LUKS header')}>Save header</Button>
+    <Button icon="arrow-square-in" busy={rowstate.pending('secrets', ['move'])} disabled={u.state !== 'open'} tooltip={'Move the usual secrets into the vault'} onclick={() => openPlan('secrets', ['move'], 'Move secrets into the vault')}>Move secrets in</Button>
+    <Button icon="shield-check" busy={rowstate.pending('secrets', ['secrets-fix'])} tooltip={'Root-only permissions on the secret files'} onclick={() => openPlan('secrets', ['secrets-fix'], 'Fix the permissions of the secrets')}>Fix permissions</Button>
+    <Button icon="lock-simple" busy={rowstate.pending('secrets', ['close'])} disabled={u.state !== 'open'} tooltip={'Close the vault (refused while something uses it)'} onclick={() => openPlan('secrets', ['close'], 'Close the vault')}>Close…</Button>
   {/snippet}
 </PageHeader>
+{#if vaultFailed(rowstate.failed)}{@const vf = vaultFailed(rowstate.failed)}<ErrorNote error={vf.error} ondismiss={() => rowstate.dismiss(vf.id)} />{/if}
 
 <Stack gap="4">
 <Card>
