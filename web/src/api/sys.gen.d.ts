@@ -1382,7 +1382,7 @@ export interface SysOperations {
     params: { id: string; };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.list": {
     /** timers and services with next and last run */
@@ -1442,7 +1442,7 @@ export interface SysOperations {
     params: { };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.running": {
     /** background jobs that are running now */

@@ -53,9 +53,9 @@ The payload is optional extra data for programs. Rules:
 | `storage.smart-failing` | info | none | the daily SMART check rates a disk as failing |
 | `storage.smart-healthy` | info | none | the daily SMART check rates a disk as healthy again |
 | `job.queued` | info | none | a job was accepted and waits |
-| `job.running` | info | none | a job started |
-| `job.ok` | info | none | a job finished successfully |
-| `job.failed` | error | `exit` | a job failed |
+| `job.running` | info | `key` | a job started |
+| `job.ok` | info | `key` | a job finished successfully |
+| `job.failed` | error | `exit`, `key` | a job failed |
 | `job.cancelled` | info | none | a job was stopped on purpose |
 | `job.interrupted` | warn | none | a job was running when the server restarted |
 | `job.waiting` | info | `key`, `kind` | a job waits for an answer to a question (subject: the job id; the payload names the question key and kind, never a label or a value) |

@@ -6797,10 +6797,14 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "progress_unit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key"
            }
           ],
-          "minItems": 14,
-          "maxItems": 14
+          "minItems": 15,
+          "maxItems": 15
          }
         }
        }
@@ -7034,7 +7038,7 @@
      }
     ],
     "x-hs-described": false,
-    "description": "One job record (docs/adr/0004-job-record.md): id, slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
+    "description": "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
     "responses": {
      "0": {
       "description": "ok",
@@ -7151,10 +7155,14 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "progress_unit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key"
            }
           ],
-          "minItems": 14,
-          "maxItems": 14
+          "minItems": 15,
+          "maxItems": 15
          }
         }
        }

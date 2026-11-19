@@ -5,7 +5,7 @@ usage: job-records.py [--state <state>] [--parent <id>] [<limit>]     (--parent:
 
 Reads HS_JOBS_DIR (default /var/lib/hs/jobs) read-only; a file that is not a valid record is skipped.
 Columns: id, slug, description, state, queued, started, ended, exit, step_n, step_of, step_text,
-progress_done, progress_total, progress_unit.
+progress_done, progress_total, progress_unit, key (the row key, web/src/jobkey.js; "-" when the job has none).
 """
 import json
 import os
@@ -66,7 +66,7 @@ def main():
         prog = r.get("progress") if isinstance(r.get("progress"), dict) else {}
         row = [jid, r.get("slug"), r.get("description"), r.get("state"), r.get("queued"), r.get("started"),
                r.get("ended"), r.get("exit"), step.get("n"), step.get("of"), step.get("text"),
-               prog.get("done"), prog.get("total"), prog.get("unit")]
+               prog.get("done"), prog.get("total"), prog.get("unit"), r.get("key")]
         sys.stdout.write("\t".join(cell(c) for c in row) + "\n")
         shown += 1
     return 0

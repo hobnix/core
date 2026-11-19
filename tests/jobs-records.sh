@@ -27,7 +27,7 @@ $J --record >/dev/null 2>&1; check "no id fails" "1" "$?"
 rows=$($J --records)
 check "two rows" "2" "$(grep -c '' <<<"$rows")"
 check "newest first" "$b" "$(head -n1 <<<"$rows" | cut -f1)"
-check "14 columns per row" "14" "$(head -n1 <<<"$rows" | awk -F'\t' '{print NF}')"
+check "15 columns per row" "15" "$(head -n1 <<<"$rows" | awk -F'\t' '{print NF}')"
 check "step and progress of a running job" "running	2	5	Copy data	10	100	files" "$(head -n1 <<<"$rows" | cut -f4,9-14)"
 check "a tab in the description becomes a space" "second job" "$(head -n1 <<<"$rows" | cut -f3)"
 check "empty fields are -" "-" "$(sed -n 2p <<<"$rows" | cut -f9)"
@@ -49,7 +49,7 @@ c2=$($W new --slug orch-two --desc "step two" --unit hs-job-orch-two-1 --parent 
 $W wait "$o" --seq 1 --key K --label Q --kind text
 check "waiting is listed and can be filtered" "$o" "$($J --records --state waiting | cut -f1)"
 check "children: the sub-jobs, oldest first" "$c1 $c2" "$($J --children "$o" | cut -f1 | tr '\n' ' ' | sed 's/ $//')"
-check "children: the columns of records" "14" "$($J --children "$o" | head -n1 | awk -F'\t' '{print NF}')"
+check "children: the columns of records" "15" "$($J --children "$o" | head -n1 | awk -F'\t' '{print NF}')"
 check "children of a job without any is empty" "" "$($J --children "$a")"
 $J --children nope >/dev/null 2>&1; check "children with a bad id fails" "1" "$?"
 $J --children >/dev/null 2>&1; check "children without an id fails" "1" "$?"

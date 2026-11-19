@@ -20,7 +20,12 @@ check "a new record is queued" "queued" "$(jf "$id" state)"
 check "unit stored" "hs-job-pool-sync-120000" "$(jf "$id" unit)"
 check "initiator stored" "alice" "$(jf "$id" initiator)"
 check "version is 1" "1" "$(jf "$id" version)"
-check "fields are exactly the ADR list" "id,slug,description,source,initiator,unit,queued,started,ended,state,exit,step,progress,error,result,cancel,version,parent,kind,waiting" \
+$W key "$id" "pool sync tank" >/dev/null
+check "the row key is stored" "pool sync tank" "$(jf "$id" key)"
+$W key "$id" 'bad;$(x) key' >/dev/null
+check "a key keeps only its characters" "badx key" "$(jf "$id" key)"
+$W key "$id" "pool sync tank" >/dev/null
+check "fields are exactly the ADR list" "id,slug,description,source,initiator,unit,queued,started,ended,state,exit,step,progress,error,result,cancel,version,parent,kind,waiting,key" \
   "$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))))' "$HS_JOBS_DIR/$id.json")"
 check "absent values are null" "null" "$(jf "$id" started)"
 check "directory mode 0755" "755" "$(stat -c %a "$HS_JOBS_DIR")"

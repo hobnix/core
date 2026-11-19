@@ -231,6 +231,11 @@ pub fn run(args: &[String]) -> Result<u8> {
             let [id, done, total, unit] = exact::<4>(&p)?;
             store.progress(id, parse_int(done)?, parse_int(total)?, unit)?;
         }
+        "key" => {
+            let p = parse(rest, &[])?;
+            let [id, key] = exact::<2>(&p)?;
+            store.set_key(id, key)?;
+        }
         "finish" => {
             let p = parse(rest, &[])?;
             let [id, code] = exact::<2>(&p)?;
