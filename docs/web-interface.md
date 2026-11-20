@@ -333,6 +333,14 @@ The Users and Backup pages follow the same rule: the user and group lists, the d
 shares and instances with their backup switch come from Redis and update after a user, share, instance or backup change. One user's or group's details,
 the snapshots and the file search of the backup stay direct (they open the backup disk). Not tested on hardware yet.
 
+### How fast a change shows
+
+The limits are in `scripts/lib/live-limits.tsv`: 5 seconds for a topic whose change script announces it, 20 seconds for a topic that is only read on a timer.
+`tests/live-e2e.sh` (run by `scripts/dev/t quick live-e2e`) starts the web server on a real state database, opens a page model that has no timer and
+follows `/api/events`, and then changes an app list, a container and the storage state: the page must show the new state within the limit and read
+exactly once. It fails when the limit is passed. It does not run the Svelte code or a browser and has no real Incus or storage behind it
+(the browser stage of the test-lab and the timing on a server are #485 and #486). Not tested on hardware yet.
+
 ### Services that stop or crash
 
 A unit that stops, starts or fails while a page is open shows within a second or two, also when it was stopped from a terminal (`systemctl stop`) or crashed.
