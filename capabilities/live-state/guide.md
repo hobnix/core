@@ -27,6 +27,9 @@ guide is for the owner of a server with the web interface: what runs, what you s
 - **The Diagnostics page** (Monitoring) lists every live topic with its status, interval, age, generation, exit code and error. Above the table it says
   when the collector made its last round ("Collector heartbeat: last round 4 s ago") and warns when there is no heartbeat. While the stream is lost the
   page polls every 5 seconds.
+- **Lists with an argument** (snapshots of a backup tag or of one instance, the free disks of a pool dialog, the SMART history of one disk, the facts
+  of one service) have no topic of their own. The page reads them again when the topic of its list changes (`backup-state`, `ct-list`, `pool-disks`,
+  `disk-health`, `services-list`) and keeps no timer while the stream is open.
 
 Not tested on hardware yet.
 

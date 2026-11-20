@@ -118,7 +118,7 @@
   // ── the drawer: SMART history and self-tests
   const rec = $derived(known.find((k) => k.dev === sel?.name && k.state !== 'missing'));
   const serial = $derived(rec?.serial ?? '');
-  const hist = poll(() => (serial ? `/api/sys/state/smart/${encodeURIComponent(serial)}` : ''), 60000);
+  const hist = poll(() => (serial ? `/api/sys/state/smart/${encodeURIComponent(serial)}` : ''), 60000, 'disk-health');
   const results = poll(() => (sel ? `/api/sys/disk/results/${encodeURIComponent(sel.name)}` : ''), 60000);
   // state smart: time, realloc, pending, crc, temp, hours (newest first)
   const readings = $derived(rows(hist).map((r) => ({ t: Number(r[0]), pending: Number(r[2]), temp: Number(r[4]) })).filter((x) => !isNaN(x.t)).reverse());

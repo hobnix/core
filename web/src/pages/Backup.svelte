@@ -30,8 +30,8 @@
 
   const st = poll('/api/sys/backup/state', 15000);
   const ov = poll('/api/sys/backup/overview', 30000);
-  const snS = poll('/api/sys/backup/snapshots?tag=shares', 30000);
-  const snH = poll('/api/sys/backup/snapshots?tag=host', 30000);
+  const snS = poll('/api/sys/backup/snapshots?tag=shares', 30000, 'backup-state');
+  const snH = poll('/api/sys/backup/snapshots?tag=host', 30000, 'backup-state');
 
   // key, value rows
   const s = $derived(Object.fromEntries(rows(st).map((r) => [r[0], r[1] ?? ''])));

@@ -91,7 +91,7 @@
   const acl = poll(() => (editable(sel) ? `/api/sys/shares/acl/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const vis = poll(() => (editable(sel) ? `/api/sys/shares/visible/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const hist = poll(() => (editable(sel) ? `/api/sys/shares/history/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
-  const backups = poll(() => (editable(sel) && tab === 'hist' ? '/api/sys/backup/snapshots?tag=shares' : ''), 60000);
+  const backups = poll(() => (editable(sel) && tab === 'hist' ? '/api/sys/backup/snapshots?tag=shares' : ''), 60000, 'backup-state');
   // sid, name, user|group, level
   const entries = $derived(rows(acl).map((r) => ({ sid: r[0], name: r[1], type: r[2], level: r[3] })));
   // name, created, auto|manual, used (any order: sorted oldest first)

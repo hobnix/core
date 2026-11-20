@@ -31,7 +31,7 @@
   let proxied = $state(true);   // want reverse-proxy of the file, kept as it is
 
   // the facts of the service being edited: key, value rows (a dash is empty)
-  const cur = poll(() => (edit ? `/api/sys/services/show/${encodeURIComponent(edit)}` : ''), 600000);
+  const cur = poll(() => (edit ? `/api/sys/services/show/${encodeURIComponent(edit)}` : ''), 600000, 'services-list');
   let filled = false;
   $effect(() => {
     if (!edit || filled || !cur.loaded) return;
