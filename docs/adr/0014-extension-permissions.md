@@ -84,8 +84,8 @@ without its drop-in is still strict. A path that is relative, has `..`, `.` or `
 | `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
 | no `permissions` | the "always" row only, plus a warning |
 
-What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the whole file system stays readable
-(`fs.read` does not hide anything; `ProtectSystem=strict` only makes it read only); the network is open whatever `net` says; `host`, `secrets`
+What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the file system stays readable except the secret locations
+(since #947: `/var/lib/hs` is an empty tmpfs apart from the granted `ext`, `ext-svc` and own-name (`/var/lib/hs/<package>`) state, `/root`, `/etc/shadow`, `/etc/gshadow`, `/etc/ssh` and `/etc/nixos` are inaccessible, and an `fs.read` or `fs.write` that overlaps them, or an `fs.write` below `/etc`, `/boot` or `/nix`, is refused; everything else is only read only); the network is open whatever `net` says; `host`, `secrets`
 and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
 event is written by the bridge (scripts/lib/ext_service.py) into /var/lib/hs/state.db, which a confined unit may not write, so that event
 needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the unit is only evaluated in CI,
