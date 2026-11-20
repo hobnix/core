@@ -224,6 +224,13 @@ A line reads `web timing: plan pool bulk add --disks * 1834 ms run rc=0 status=o
 `run` (it ran), `cached` (answered again), `timeout` (took over 60 s) or `gone` (you changed the form, the check was stopped), the exit code and
 the result. Not tested on hardware yet.
 
+### Toasts report jobs
+**Start** closes the plan dialog at once. A small message (a toast) at the bottom right then says what happens: "Running in the background",
+"done", or, when the server refuses, the reason with a **Show plan** button that opens the plan again. When the job ends, a second toast says
+whether it worked and opens its log in **Tasks**. A job that stops to ask a question raises a toast with **Open the job**, on every page and
+also when you closed the install dialog; it goes away when the question is answered. The steps in the install dialog follow the job as it
+moves. Docker start, stop and restart still run inside the request, not as a job yet. Not tested on hardware yet.
+
 ### Install and remove apps
 The Apps page has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**
 and **Remove what was created**. **Remove** keeps the data unless you choose **Delete the data** and type the name. Each app shows its stage

@@ -1,5 +1,5 @@
 // The job record helpers of the Jobs panel (web/src/jobrecords.js), run with node.
-import { parseRecord, stateDot, stateKnown, stepText, percent, progressText, duration, isJobEvent, lastJobEvent, latestOnly } from '../web/src/jobrecords.js';
+import { parseRecord, stateDot, stateKnown, stepText, percent, progressText, duration, isJobEvent, lastJobEvent, latestOnly, jobChanged, askDiff } from '../web/src/jobrecords.js';
 let bad = 0;
 const check = (n, ok) => { if (!ok) { bad++; console.log('FAIL: ' + n); } };
 const run = parseRecord(['20261109-101010-update-abcd', 'update', 'Update', 'running', '-', '2026-11-09T10:10:10Z', '-', '-', '2', '5', 'Fetching', '30', '120', 'files']);
@@ -35,5 +35,36 @@ check('step of an ok job is empty, of a running and a failed job shown', stepTex
   check('lastJobEvent: the newest job row', lastJobEvent(evs)?.id === 6);
   check('lastJobEvent: none without a job row, and for an empty or missing log', lastJobEvent([{ id: 1, source: 'audit', kind: 'ok' }]) === null && lastJobEvent([]) === null && lastJobEvent(undefined) === null);
   check('lastJobEvent: a first job row on a page without any is found (id 5 differs from the baseline 0)', lastJobEvent([{ id: 5, source: 'job', kind: 'queued' }])?.id === 5);
+}
+// hobnix/server#972: a job that moves through three steps. A step writes no log row, it only counts `reads:jobs-records` up: that alone must read again.
+{
+  const evs = [{ id: 5, source: 'job', kind: 'running' }];
+  let c = jobChanged(evs, 1, { ev: 5, gen: 1 });
+  check('jobChanged: nothing new, nothing to read', !c.changed);
+  c = jobChanged(evs, 2, c.seen);
+  check('jobChanged: step 2 (gen bump, no event) reads again', c.changed && c.seen.gen === 2);
+  c = jobChanged(evs, 2, c.seen);
+  check('jobChanged: seen again is quiet', !c.changed);
+  c = jobChanged(evs, 3, c.seen);
+  check('jobChanged: step 3 (gen bump again) reads again', c.changed);
+  c = jobChanged([...evs, { id: 6, source: 'job', kind: 'waiting' }], 3, c.seen);
+  check('jobChanged: a job event reads again', c.changed && c.seen.ev === 6);
+  check('jobChanged: no gen yet is 0, not a change after the baseline', !jobChanged([], undefined, { ev: 0, gen: 0 }).changed);
+}
+// a job that asks a question raises one toast; it goes when the question is answered or the job ends
+{
+  const rec = (id, state) => parseRecord([id, 'recipe-bazarr', 'Install bazarr', state, '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']);
+  const shown = new Set();
+  let d = askDiff([rec('a', 'running')], shown);
+  check('askDiff: a running job raises nothing', d.raise.length === 0 && d.dismiss.length === 0);
+  d = askDiff([rec('a', 'waiting'), rec('b', 'ok')], shown);
+  check('askDiff: a waiting job raises one toast for that job', d.raise.length === 1 && d.raise[0].id === 'a' && d.raise[0].description === 'Install bazarr');
+  shown.add('a');
+  d = askDiff([rec('a', 'waiting')], shown);
+  check('askDiff: not raised twice', d.raise.length === 0 && d.dismiss.length === 0);
+  d = askDiff([rec('a', 'running')], shown);
+  check('askDiff: answered, the toast goes', d.dismiss.join() === 'a');
+  d = askDiff([], shown);
+  check('askDiff: a record that is gone dismisses too', d.dismiss.join() === 'a' && askDiff(undefined, new Set()).raise.length === 0);
 }
 if (bad) process.exit(1);

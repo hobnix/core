@@ -130,7 +130,7 @@ const de = {
   'Preferences the recipe does not ask here (memory, port, share ...) use the answers stored last time, or the defaults; to choose them yourself run': 'Einstellungen, die das Rezept hier nicht fragt (Speicher, Port, Freigabe ...), nehmen die zuletzt gespeicherten Antworten oder die Vorgaben; um sie selbst zu wählen, führe aus:',
   'in the terminal.': 'im Terminal.',
   // Interactive recipe runs (InstallDialog.svelte, shell/JobRecords.svelte, ADR 0018 stage 3)
-  'Waiting for your answer': 'Warte auf deine Antwort', 'waiting for input': 'wartet auf Eingabe', waiting: 'wartet auf Eingabe', 'Answer the question': 'Frage beantworten',
+  'needs an answer': 'braucht eine Antwort', 'Open the job': 'Auftrag öffnen', 'Waiting for your answer': 'Warte auf deine Antwort', 'waiting for input': 'wartet auf Eingabe', waiting: 'wartet auf Eingabe', 'Answer the question': 'Frage beantworten',
   Send: 'Senden', Done: 'Fertig', 'Running…': 'Läuft…', 'The job could not be read.': 'Der Auftrag konnte nicht gelesen werden.',
   'Leave it empty to use': 'Leer lassen, um zu verwenden:',
   'Closing this window does not stop the run: it waits for your answer on the Jobs page.': 'Das Schließen dieses Fensters hält den Lauf nicht an: Er wartet auf der Seite Aufträge auf deine Antwort.',

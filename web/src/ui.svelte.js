@@ -1,6 +1,7 @@
 // State that several parts of the shell share: the open plan dialog, the bottom panel, and the tasks started from this browser.
 import { get } from './api.js';
 import { jobMatches } from './jobkey.js';
+import { toast } from './ui/toast.svelte.js';
 import { roleOk, areaRole, refusal } from './roles.js';
 
 export const ui = $state({
@@ -53,7 +54,9 @@ export function track(unit, title, key = '') {
 
 // Does a job started from this browser for that plan still run? `args` left out = any job of the area. Only this page's jobs are known:
 // after a reload the button is idle again (the job itself runs on and the plan refuses a second start).
-export const jobRunning = (area, args) => tasks.list.some((t) => t.state === 'running' && jobMatches(t.key, area, args));
+// Between the click on Start and the answer of the server nothing is a task yet: `starting` holds the keys, so the button is busy from the click.
+export const starting = $state({ keys: [] });
+export const jobRunning = (area, args) => starting.keys.some((k) => jobMatches(k, area, args)) || tasks.list.some((t) => t.state === 'running' && jobMatches(t.key, area, args));
 
 // a change that finished at once (no background job): it still leaves a line in Tasks, so there is a trace of what was done
 let doneSeq = 0;
@@ -73,6 +76,12 @@ function apply(t, rows) {
     else if (row[0] === 'line') t.lines.push(row.slice(1).join('\t'));
     else if (row[0] === 'next') t.next = Number(row[1]) || t.next;
   }
+}
+
+// The second toast of a job: how it ended, with a link to its log in Tasks (a job.* event of the stream ends the follow, nothing polls for it).
+export function endToast(t) {
+  const ok = t.state === 'ok' || t.state === 'done';
+  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${ok ? 'finished' : 'failed'}`, action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: 'Show log' });
 }
 
 // Follow a job: a server-sent-events stream (GET /api/sys/jobs/stream/<unit>) while it works, polling the same journal every 2 s when
@@ -99,7 +108,7 @@ function stream(unit) {
       apply(t, rows);
       // a unit that was just started may not exist for a moment: not "gone" yet
       if (t.state === 'unknown' && ++gone < 4) t.state = 'running';
-      if (t.state !== 'running') { t.ended = new Date(); done(true); }
+      if (t.state !== 'running') { t.ended = new Date(); endToast(t); done(true); }
     };
     // the stream ends on its own (event: end) when the unit ended; if the task still runs then (session ended, stream time limit), poll
     es.addEventListener('end', () => {
@@ -120,7 +129,7 @@ async function poll(unit) {
       apply(t, r.rows);
       // a unit that was just started may not exist for a moment: give it a few tries before calling it gone
       if (t.state === 'unknown' && ++t.gone < 4) t.state = 'running';
-      if (t.state !== 'running') { t.ended = new Date(); return; }
+      if (t.state !== 'running') { t.ended = new Date(); endToast(t); return; }
     } catch (e) {
       if (e.status === 401) return;
     }

@@ -17,7 +17,7 @@
   import { lang } from '../../lang.svelte.js';
   import { tr } from '../../i18n.js';
   import { ui, track } from '../../ui.svelte.js';
-  import { isJobEvent } from '../../jobrecords.js';
+  import { jobChanged } from '../../jobrecords.js';
   import { activeAsks, choicesOf } from './recipeSteps.js';
   import { isActive, pending, answerError, answerRequest, replyKind, questionLabel, errorLabel, recipeOf } from './recipeQuestions.js';
   import { questionTexts } from './recipeQuestionTexts.js';
@@ -105,11 +105,14 @@
     } catch (e) { recError = e.message || 'The job could not be read.'; }
   }
   $effect(() => { if (jobId) load(); });
-  let lastEv = 0;
+  // a job.* event (state) or a records generation bump (a step or progress update writes no log row) reads the record again
+  let seen = { ev: 0, gen: live.gen['reads:jobs-records'] ?? 0 };
   $effect(() => {
     if (!jobId) return;
-    const ev = live.events.findLast?.(isJobEvent) ?? [...live.events].reverse().find(isJobEvent);
-    if (ev && ev.id !== lastEv) { lastEv = ev.id; load(); }
+    const c = jobChanged(live.events, live.gen['reads:jobs-records'], seen);
+    if (!c.changed) return;
+    seen = c.seen;
+    load();
   });
   $effect(() => {
     if (!jobId || live.open) return;

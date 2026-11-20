@@ -1,0 +1,4 @@
+date  = "2026-11-20"
+type  = "fix"
+title = "The install steps follow the job, and a job that asks a question shows a toast"
+body  = "The step list of the install dialog now moves with the job (it kept showing step 1 until you reopened it). A job that waits for an answer raises a toast with a link to the job, also when the dialog is closed. Start in a plan dialog closes it at once and a toast reports the change."
