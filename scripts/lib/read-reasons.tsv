@@ -48,10 +48,12 @@ live raw	free argument: one topic's stored output, fetched on demand on the Live
 logs show	free query: unit, level and time chosen by the user, polled every 10 s while the logs tab is open
 pool list	rows change only through hs pool; the web store reads them once per page load, no timer
 pool disks	free query: depends on the role, no fixed topic
+share parity state	free argument: the settings of one share, polled while its drawer is open
 state events	free query: the number of rows asked for, polled every 15 s while the events tab is open
 token list	free query: an admin sees all tokens, anybody else their own (the owner is part of the key); fetched when the page opens and after a change
 
 # No arguments and no topic yet: the page asks again on a timer or on demand
+bulk sync-refused	no producer for a topic yet; a few lines, polled every 15 s on the Pools page
 cache state	no producer for a topic yet
 config check	no producer for a topic yet; fetched on demand by the settings page
 disk power	no topic of its own; the Disks page re-reads it with monitor-disks (sleep state and measured watts)

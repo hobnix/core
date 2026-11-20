@@ -297,9 +297,37 @@ sudo hs pool bulk sync --scrub
 
 - A disk is missing. SnapRAID would treat all its files as deleted and overwrite the very parity that can rebuild them. Fix the disk
   ([Replace a disk](#replace-a-disk)) first.
-- More than 100 files were deleted since the last sync. Check that this was on purpose, and only then add `--force`.
+- More files were deleted from a share since the last sync than its limit allows (default: the higher of 100 files and 1 % of the files of
+  the share). The sync prints a table of share, folder, removed files and limit, and changes nothing. Check that the deletions were on purpose,
+  and only then add `--force`, or press "These deletions are expected, sync now" on the pool page of the web interface.
 
 On a ZFS server `hs pool bulk sync` just says there is nothing to do.
+
+### Folders the parity leaves out, and the limit per share
+
+Apps such as Sonarr, Radarr and SABnzbd create, change and delete thousands of files in a download folder. SnapRAID reports files that change
+while it reads them as errors, and a night of normal app work can look like a mass deletion. Two settings per share (SnapRAID only):
+
+```bash
+sudo hs share media parity
+sudo hs share media parity skip downloads
+sudo hs share media parity keep downloads
+sudo hs share media parity limit 500
+sudo hs share media parity limit default
+```
+
+- `parity` lists the skipped folders and the limit of the share.
+- `skip <folder>` shows a plan (how many files, and that they lose their protection) and asks you to type the folder name. The folder is
+  written as `exclude /shares/<share>/<folder>/` into the SnapRAID config; its files are dropped from the parity at the next sync, and a failed disk
+  cannot bring them back. Removed files in a skipped folder do not count towards the limit.
+- `keep <folder>` protects it again; the next sync adds its files to the parity (the first one can take a while).
+- `limit <N>` sets how many removed files stop the sync for this share. `limit off` never stops it and asks you to type the share name.
+  `limit default` goes back to the higher of `syncMaxRemoved` (100) and `syncMaxRemovedPercent` (1 %) of the share's files; change those two with
+  `hs config set`.
+
+A sync that is stopped keeps the table in `/var/lib/hs/sync-refused` (`hs sys bulk sync-refused`); the pool page shows it. A sync that fails prints
+SnapRAID's `Unexpected ...` and `WARNING` lines (each once, at most 30), so the log names the files. In the web interface the same settings are in
+the drawer of a share (Parity). Not tested on hardware yet.
 
 ## Upload cache (SnapRAID only)
 A new file is unprotected until the next sync. The upload cache closes that gap for the shares where it matters: new files land first on
@@ -631,7 +659,7 @@ With SnapRAID use the backup: `hs share <share> restore` brings files back ([Bac
 | --- | --- | --- |
 | `cat /etc/hs/bulk-type` prints `zfs` on a SnapRAID plan | `bulkType` was missing at install time | stop; reinstall with `bulkType = "snapraid"` |
 | `hs pool bulk sync` refuses: a disk is missing | a disk is out or failed | replace or re-attach it before any sync |
-| `hs pool bulk sync` refuses: files deleted | more than 100 deletions since the last sync | check them; `--force` only if intended |
+| `hs pool bulk sync` refuses: files deleted | more removed files in a share than its limit | read the table; normal app folder: `hs share <share> parity skip <folder>`; otherwise `--force` only if intended |
 | a command says a disk is in use | a program still uses it; nothing was changed | `fuser -vm /var/lib/hs/disks/data-04` shows which |
 | a disk is `MISSING` | gone or unplugged | plug it in, or replace it |
 | files are missing in `/bulk` | a disk is detached or in recovery | `hs pool bulk` shows `detached` or `recovery`; `attach` or `recover-finish` |

@@ -85,6 +85,8 @@ default_probes() {
     $'hs pool bulk\tpool bulk\t0 1' \
     $'hs sys pool list\tsys pool list\t0' \
     $'hs sys pool state\tsys pool state\t0' \
+    $'hs sys bulk sync-refused\tsys bulk sync-refused\t0' \
+    $'hs sys share parity state\tsys share parity state nothing\t0' \
     $'hs sys storage discover\tsys storage discover\t0' \
     $'hs sys disk power\tsys disk power\t0 1' \
     $'hs storage incident\tstorage incident\t0 1' \

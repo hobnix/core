@@ -21,6 +21,7 @@
   import DeleteShare from '../forms/shares/DeleteShare.svelte';
   import RestoreShare from '../forms/shares/RestoreShare.svelte';
   import AddAccess from '../forms/shares/AddAccess.svelte';
+  import ShareParity from './storage/ShareParity.svelte';
   import { parseSize } from './storage/pool.js';
   import { filesLink } from '../files/links.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
@@ -187,6 +188,7 @@
                     <Row style="margin-bottom:8px"><b>Mounted by</b></Row>
                     <Row wrap gap="3" style="margin-bottom:8px">{#each mountedBy(sel) as m}<Button size="sm" tooltip={`Open the instance ${m.name}`} onclick={() => openInstance(m.name)}><i class="ph ph-cube"></i>{m.text}</Button>{/each}</Row>
                   {:else}<Muted as="p">No instance mounts this {sel.volume ? 'volume' : 'share'}.</Muted>{/if}
+                  {#if !sel.volume && sel.kind !== 'other' && /^data-/.test(sel.disks)}<ShareParity share={sel.name} {locked} />{/if}
                   {#if sel.volume}<Muted as="p">An instance volume belongs to its instance: change it there.</Muted>{:else if sel.kind !== 'other'}
                     <Muted as="p">Whether it is in the backup is set on <button class="link-btn" onclick={() => go('/protection/backup')}>Backup</button>.</Muted>
                   {/if}

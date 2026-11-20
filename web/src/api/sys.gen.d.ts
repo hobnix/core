@@ -295,6 +295,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "bulk.sync-refused": {
+    /** the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused) */
+    words: ["bulk", "sync-refused"];
+    path: "/bulk/sync-refused";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [share: Field, folder: Field, removed: Field, limit: Field, share_total: Field][];
+  };
   "cache.state": {
     /** upload cache state per share */
     words: ["cache", "state"];
@@ -2624,6 +2636,20 @@ export interface SysOperations {
     stdin: "none";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "share.parity.state.by_share": {
+    /** the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder */
+    words: ["share", "parity", "state", "<share>"];
+    path: "/share/parity/state/{share}";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { share: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "limit", mode: "default" | "custom" | "off", value: Field]
+      | [tag: "default", floor: Field, percent: Field]
+      | [tag: "skip", folder: Field])[];
   };
   "shares.acl": {
     /** who may use a share */

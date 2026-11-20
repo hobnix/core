@@ -58,6 +58,8 @@
   "fileManagerWrite": "storage",
   "setupDone": "general",
   "backupNewShares": "backups",
+  "syncMaxRemoved": "backups",
+  "syncMaxRemovedPercent": "backups",
   "backupNewInstances": "backups",
   "offsiteDiskDays": "backups",
   "adDomain": "access",

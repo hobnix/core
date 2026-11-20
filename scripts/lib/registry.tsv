@@ -83,6 +83,7 @@ user	share cleanup	share-cleanup.sh	-	remove the Samba shares whose folder is go
 user	share <share> perm	share-perm.sh	{1} {rest}	who may use a share (guided, or: hs share <share> perm <name>=<level>)	wer eine Freigabe nutzen darf (geführt, oder: hs share <Freigabe> perm <Name>=<Stufe>)	guided,topic:shares,changes,cheat:shares,capability:samba
 user	share <share> show	share-perm.sh	{1} --show	who may use a share	wer eine Freigabe nutzen darf	guided,topic:shares,reads,cheat:shares,capability:samba
 user	share <share> cache	share-cache.sh	{1} {rest}	upload cache of a share: hs share <share> cache on|off	Upload-Cache einer Freigabe: hs share <Freigabe> cache on|off	topic:shares,changes,capability:storage
+user	share <share> parity	share-parity.sh	{1} parity {rest}	SnapRAID layout: folders the parity leaves out and how many removed files stop the sync, per share: hs share <share> parity [skip|keep <folder>] [limit <N>|off|default]	Bauart snapraid: Ordner, die die Parität auslässt, und wie viele gelöschte Dateien die Synchronisation anhalten, je Freigabe: hs share <Freigabe> parity [skip|keep <Ordner>] [limit <N>|off|default]	topic:shares,changes,capability:storage
 user	share <share> rename	manage-shares.sh	{1} --rename {rest}	rename a share: hs share <share> rename <new>	Freigabe umbenennen: hs share <Freigabe> rename <neu>	topic:shares,changes,capability:storage
 user	share restore-kept <kept>	share-undelete.sh	{1} {rest}	bring the kept folder of a deleted share back under its old name: hs share restore-kept <share>.deleted-<date> [--dry-run] (nothing is overwritten or removed)	den aufbewahrten Ordner einer gelöschten Freigabe unter dem alten Namen zurückholen: hs share restore-kept <Freigabe>.deleted-<Datum> [--dry-run] (nichts wird überschrieben oder entfernt)	topic:shares,changes,capability:storage
 user	share <share> restore	share-restore.sh	{1} {rest}	bring files of a share back from the backup (guided)	Dateien einer Freigabe aus dem Backup zurückholen (geführt)	guided,topic:shares,changes,cheat:backup,capability:storage
@@ -317,6 +318,8 @@ sys	sys audit	audit.sh	{rest}	who did what: the commands that changed the server
 sys	sys event list	event.sh	list {rest}	the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID]	-
 sys	sys temp-disk raw	temp-disk.sh	raw	disks that can be mounted as temp disk	-
 sys	sys cache state	share-cache.sh	--state	upload cache state per share	-
+sys	sys share parity state <share>	share-parity.sh	--state {1}	the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder	-
+sys	sys bulk sync-refused	share-parity.sh	--refused	the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)	-
 sys	sys unifi used	unifi.sh	used	addresses in use at the router	-
 sys	sys unifi reserved	unifi.sh	reserved	reserved addresses at the router	-
 sys	sys unifi networks	unifi.sh	networks	the router's networks, no header: name, subnet, dhcp true|false, first, last address of the DHCP range	-
