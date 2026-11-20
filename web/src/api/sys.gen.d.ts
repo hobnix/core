@@ -1520,7 +1520,7 @@ export interface SysOperations {
       | [tag: "next", count: Field])[];
   };
   "live.check": {
-    /** problems of the live state (Redis down, a topic older than three intervals): key and text */
+    /** problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text */
     words: ["live", "check"];
     path: "/live/check";
     method: "get";
@@ -1568,7 +1568,7 @@ export interface SysOperations {
     lines: string;
   };
   "live.status": {
-    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat) */
+    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet) */
     words: ["live", "status"];
     path: "/live/status";
     method: "get";

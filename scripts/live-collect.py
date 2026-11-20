@@ -315,6 +315,7 @@ class DbStore:
             raise OSError("state.db: %s" % e)
         self.started = int(clock())
         self.counts = {"beats": 0, "docs": 0, "fails": 0, "bytes": 0, "slow": 0, "wait_ms": 0}
+        self.times = {}       # topic -> seconds of the last change of its counter (read by counters())
         self.seen = None      # topic -> gen of the table `topics` as listen() saw it last; None = not read yet
 
     def _tx(self, fn, *a):
@@ -347,10 +348,17 @@ class DbStore:
         self.counts["fails"] += 1
 
     def counters(self):
-        """-> {topic: gen} of the change counters (table topics); the hooks of `hs` count a topic up there (live_refresh)"""
+        """-> {topic: gen} of the change counters (table topics); the hooks of `hs` count a topic up there (live_refresh). self.times keeps the
+        time (seconds) of each counter's last change: the start of the delay measure of a hook (#486)."""
         def read(c):
-            return {t: int(g) for t, g in c.execute("SELECT topic, gen FROM topics")}
+            rows = c.execute("SELECT topic, gen, time FROM topics").fetchall()
+            self.times = {t: int(tm or 0) for t, _, tm in rows}
+            return {t: int(g) for t, g, _ in rows}
         return self._tx(read)
+
+    def delay(self, topic, ms, now):
+        """one delay sample of a topic (#486): last, worst and the recent list in table live_delay"""
+        self._tx(self.sdb.live_delay_put, topic, ms, int(now), False)
 
     def delete(self, topic):
         self._tx(self.sdb.live_delete, topic)
@@ -481,6 +489,7 @@ class Collector:
         self.min_gap = gap if math.isfinite(gap) and gap >= 0 else 5.0      # inf and NaN fall back
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
+        self.trig = {}                           # topic -> time (epoch seconds) of the trigger that waits for its read (#486 delay measure)
         self.last_read = {}                      # topic -> time of its last read (by its thread or a wave)
         self.busy = {}                           # topic -> lock: one read of a topic at a time
         self._said = set()
@@ -505,21 +514,25 @@ class Collector:
     def locked(self):
         return os.path.exists(os.environ.get("HS_LOCKED_MARKER", "/run/hs/storage-locked"))
 
-    def refresh(self, topic):
-        """"*" = every topic; "@g" = the topics that list the group g or `any`; else the topic of that name."""
+    def refresh(self, topic, since=None):
+        """"*" = every topic; "@g" = the topics that list the group g or `any`; else the topic of that name. since = the time the change was
+        counted (seconds), the start of the delay measure; default now."""
         if topic.startswith("ext-") and topic not in self.events:
             self.rescan(self.RESCAN_MIN)      # a package was switched on a moment ago: the web interface asks for its topic
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
         woken = []
+        t_trig = since if since else time.time()
         for t, ev in items:
             if topic == "*" or topic == t:
+                self.trig.setdefault(t, t_trig)
                 ev.set()
                 woken.append(t)
             elif topic.startswith("@"):
                 groups = (info.get(t) or {}).get("groups", set())
                 if topic[1:] in groups or "any" in groups:
+                    self.trig.setdefault(t, t_trig)
                     ev.set()
                     woken.append(t)
         # one journal line per request (journalctl -u hs-live): which topics it woke, so a stale page can be traced to a missing or late refresh
@@ -527,6 +540,7 @@ class Collector:
 
     def collect(self, topic, words, mode="run"):
         """One read of one topic. Returns True when the output differs from the last read (new gen, published); an identical read writes nothing."""
+        trig = self.trig.pop(topic, None)      # a trigger that arrives during this read stays for the next one
         if mode == "skip" and self.locked():
             return False
         if not ls.cap_on((self.info.get(topic) or {}).get("cap")):
@@ -542,10 +556,23 @@ class Collector:
             self.last_read[topic] = now
             ev = []
             try:
-                return self._store(topic, rc, out, err, now, ev)
+                new = self._store(topic, rc, out, err, now, ev)
+                if new and trig is not None:      # only a read that made a new gen counts: an unchanged answer has no delay to show
+                    self._delay(topic, trig)
+                return new
             finally:
                 for kind, text in ev:      # outside the lock: writing an event must not hold the other topics back
                     self.emit(kind, topic, text)
+
+    def _delay(self, topic, trig):
+        """record the time from the trigger to the new gen (#486); a database that cannot be written now loses the sample, never the read"""
+        ms = int(max(0.0, time.time() - trig) * 1000)
+        if not hasattr(self.db, "delay"):
+            return
+        try:
+            self.db.delay(topic, ms, time.time())
+        except OSError as e:
+            log("delay of %s not written (%s)" % (topic, e))
 
     def _meta(self, topic):
         """(src, ttl) of a topic for its document: the words of the read and the seconds it counts as fresh (live-topics.tsv column 8, else 3 x interval)"""
@@ -711,7 +738,7 @@ class Collector:
                 with self.tlock:
                     known = t in self.events
                 if known or t.startswith("ext-"):
-                    self.refresh(t)
+                    self.refresh(t, (getattr(self.db, "times", None) or {}).get(t))
 
     def beat(self):
         """The heartbeat thread: one row every beat_every seconds; the web says `down` when it gets old."""

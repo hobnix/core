@@ -10,6 +10,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/changes/seen   the revision this user has seen in What's new ({rev}, "" = never); session needed
   POST /api/changes/seen   {rev: 40 hex}: remember it for the signed-in user (web-changes-seen.json in the state folder); session + CSRF
   POST /api/live/refresh   {topic}: ask the live collector to read that topic again (the collector counts it up and reads it again); session + CSRF
+  POST /api/live/sample    {topic, ms}: the Live state page says how long after `changed` it showed the new data (#486); any signed-in role, session + CSRF, rate limited, only the numbers are kept (state-db.py live-sample)
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
@@ -2338,6 +2339,30 @@ class LiveStore:
         threading.Thread(target=ls.cli_refresh, args=(["--all"] if topic == "*" else [topic],), daemon=True).start()
 
 
+class SampleGate:
+    """Rate limit of the delay samples of the Live state page (#486): per session and in total, a sliding minute. In memory only."""
+    SAMPLE_PER_SESSION = 20
+    SAMPLE_TOTAL = 120
+
+    def __init__(self, clock=time.time):
+        self.clock, self.lock, self.by, self.all = clock, threading.Lock(), {}, []
+
+    def allow(self, key):
+        now = self.clock()
+        with self.lock:
+            self.all = [t for t in self.all if now - t < 60]
+            mine = [t for t in self.by.get(key, ()) if now - t < 60]
+            if len(mine) >= self.SAMPLE_PER_SESSION or len(self.all) >= self.SAMPLE_TOTAL:
+                self.by[key] = mine
+                return False
+            mine.append(now)
+            self.all.append(now)
+            self.by[key] = mine
+            if len(self.by) > 500:      # sessions that are gone
+                self.by = {k: v for k, v in self.by.items() if v}
+            return True
+
+
 class Events:
     """The hub behind /api/events: a watcher follows the change counters and the heartbeat of the collector and hands every change to each open stream. A stream is a
     queue of ("changed", topic, gen) | ("domain", row) | ("resync",) | ("down",) | ("up",). feed() is also how tests push a message."""
@@ -2609,6 +2634,7 @@ class App:
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
         self.store = LiveStore(self.cfg, self.reads)
+        self.samples = SampleGate()      # rate limit of POST /api/live/sample (#486)
         self.events = Events(self.cfg)       # main() starts the watcher of the counters and the heartbeat
         self.events.on_change = self.reads.clear
         self.proxy = Proxy(self.cfg)
@@ -3126,7 +3152,7 @@ def make_handler(app):
                 return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
-            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
+            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
             if bearer and path not in ("/api/plan", "/api/start"):
@@ -3158,6 +3184,8 @@ def make_handler(app):
                 return self._sessions_end(path, body, gate)
             if path == "/api/live/refresh":
                 return self._live_refresh(body)
+            if path == "/api/live/sample":
+                return self._live_sample(body)
             if path in ("/api/plan", "/api/start"):
                 return self._change(path[len("/api/"):], body)
             if path == "/api/logout":
@@ -3213,6 +3241,28 @@ def make_handler(app):
                 return self._json(400, {"error": "That topic is not known."})
             app.store.request(topic)      # the same message ?fresh=1 sends
             print("web live refresh: %s %s" % (re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), topic), flush=True)
+            return self._json(200, {"ok": True})
+
+        def _live_sample(self, body):
+            """#486 (D8): the Live state page says how long after `changed` it showed the new data. Any signed-in role (a viewer too); only numbers
+            are kept (topic, milliseconds), nothing about the person; at most SAMPLE_PER_SESSION a minute per session and SAMPLE_TOTAL for all."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            if not self._csrf_ok(s):
+                return self._json(403, {"error": "csrf"})
+            topic, ms = body.get("topic"), body.get("ms")
+            if not isinstance(topic, str) or not re.fullmatch(NAME, topic) or topic not in {t[0] for t in ls.topics()}:
+                return self._json(400, {"error": "That topic is not known."})
+            if isinstance(ms, bool) or not isinstance(ms, int) or not 0 <= ms <= 600000:
+                return self._json(400, {"error": "ms must be a whole number of milliseconds from 0 to 600000."})
+            if not app.samples.allow(self._token()):
+                return self._json(429, {"error": "Too many samples; try again in a minute."})
+            try:
+                subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state-db.py"), "live-sample", topic, str(ms)],
+                               capture_output=True, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                pass      # a sample is best effort
             return self._json(200, {"ok": True})
 
         def _change(self, verb, body):

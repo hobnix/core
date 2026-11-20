@@ -50,6 +50,8 @@ export const vmConsoleTicket = (target) => call('POST', '/api/vmconsole', { targ
 export const settingsLayout = () => call('GET', '/api/settings-layout');
 export const changesSeen = () => call('GET', '/api/changes/seen');
 export const liveRefresh = (topic) => call('POST', '/api/live/refresh', { topic });
+// the delay sample of the Live state page (#486): topic and milliseconds, nothing else
+export const liveSample = (topic, ms) => call('POST', '/api/live/sample', { topic, ms });
 export const markChangesSeen = (rev) => call('POST', '/api/changes/seen', { rev });
 
 export const hello = () => call('GET', '/api/hello');

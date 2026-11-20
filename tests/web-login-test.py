@@ -168,7 +168,7 @@ class Csrf(Base):
 
 class CsrfGate(Base):
     """Issue #433: every changing request needs a session and the CSRF token, whatever its handler does. The list is every POST path of do_POST."""
-    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh",
+    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample",
                      "/api/sessions/end", "/api/sessions/end-others"]
 
     def test_every_changing_request_needs_session_and_token(self):

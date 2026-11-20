@@ -233,7 +233,7 @@ class Listen(Base):
     def test_a_counted_topic_is_asked_for_again_and_our_own_counters_are_not(self):
         c, db, _ = self.make([])
         asked = []
-        c.refresh = asked.append
+        c.refresh = lambda t, since=None: asked.append(t)
 
         class Stop:      # four rounds, then the collector stops
             n = 4
@@ -251,6 +251,134 @@ class Listen(Base):
         c, db, _ = self.make([(0, "a\n", "")])
         self.read(c)
         self.assertEqual(db.counters().get("live:status"), 1)
+
+
+class Delay(Base):
+    """#486: the delay from the trigger to the new generation, the health note, the status columns, the additive table."""
+
+    def trigger_read(self, c, at, read_at):
+        real = time.time
+        time.time = lambda: float(at)
+        try:
+            c.refresh("status")
+        finally:
+            time.time = real
+        return self.read(c, read_at)
+
+    def test_a_triggered_read_with_a_new_gen_records_last_and_worst(self):
+        c, db, _ = self.make([(0, "a\n", ""), (0, "b\n", ""), (0, "c\n", "")])
+        self.read(c, 1000)      # no trigger: no sample
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+        self.assertTrue(self.trigger_read(c, 1010, 1012))
+        self.assertTrue(self.trigger_read(c, 1020, 1021))
+        self.assertEqual(q("SELECT ms_last, ms_worst, ms_n, ms_recent FROM live_delay WHERE topic='status'"), [(1000, 2000, 2, "2000,1000")])
+
+    def test_an_unchanged_read_leaves_no_sample_and_clears_the_trigger(self):
+        c, db, _ = self.make([(0, "a\n", ""), (0, "a\n", ""), (0, "b\n", "")])
+        self.read(c, 1000)
+        self.assertFalse(self.trigger_read(c, 1010, 1011))
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+        self.assertEqual(c.trig, {})
+        self.read(c, 5000)      # a later change without a trigger does not inherit the old one
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+
+    def test_a_hook_counts_from_the_time_the_counter_moved(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        c.refresh("status", 990)
+        self.assertEqual(c.trig["status"], 990)
+        c.refresh("status", 995)      # the first trigger of a read that has not run yet keeps its time
+        self.assertEqual(c.trig["status"], 990)
+
+    def test_only_the_last_20_samples_are_kept(self):
+        c, db, _ = self.make([])
+        for i in range(25):
+            db.delay("status", i, 1000 + i)
+        rec = q("SELECT ms_recent, ms_worst, ms_n FROM live_delay")[0]
+        self.assertEqual((rec[0].split(",")[0], len(rec[0].split(",")), rec[1], rec[2]), ("5", 20, 24, 25))
+
+    def test_a_slow_topic_raises_the_health_note_and_a_fast_one_does_not(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        db.delay("status", 11000, 1000)
+        notes = ls.slow_notes(ls.delays_read(), {"status"}, 10.0)
+        self.assertEqual([k for k, _ in notes], ["live:slow:status"])
+        self.assertIn("11.0 s", notes[0][1])
+        self.assertEqual(ls.slow_notes(ls.delays_read(), {"status"}, 12.0), [])
+        self.assertEqual(ls.slow_notes(ls.delays_read(), {"other"}, 10.0), [])      # a topic that is gone says nothing
+        sdb_c = sdb.open_rw()
+        sdb.live_delay_put(sdb_c, "status", 30000, 1001, web=True)
+        sdb_c.close()
+        self.assertEqual([k for k, _ in ls.slow_notes(ls.delays_read(), {"status"}, 12.0)], ["live:slowweb:status"])
+
+    def test_check_prints_the_slow_note_with_a_running_collector(self):
+        import io
+        now = time.time()
+        doc = {"status": {"out": "x", "rc": 0, "gen": 1, "ts": now, "err": None, "ts_err": None, "ttl": 100, "src": "t"}}
+        real = ls.topics
+        ls.topics = lambda *a: [("status", ["status"], 15, "run")]
+        try:
+            buf = io.StringIO()
+            rc = ls.cli_check(buf, (doc, (int(now), 5)), {"status": {"ms_recent": [200, 15000], "web_recent": []}})
+            quiet = io.StringIO()
+            rc2 = ls.cli_check(quiet, (doc, (int(now), 5)), {"status": {"ms_recent": [200, 900], "web_recent": []}})
+        finally:
+            ls.topics = real
+        self.assertEqual(rc, 1)
+        self.assertTrue(buf.getvalue().startswith("live:slow:status	live state 'status' is slow"), buf.getvalue())
+        self.assertEqual((rc2, quiet.getvalue()), (0, ""))
+
+    def test_the_limit_is_read_from_the_limits_file(self):
+        path = os.path.join(TMP, "limits.tsv")
+        with open(path, "w") as f:
+            f.write("# c\nnote\t3\tx\nhook\t1\tx\n")
+        self.assertEqual((ls.limits(path)["note"], ls.limits(path)["timed"]), (3.0, 20.0))
+        self.assertEqual(ls.limits(os.path.join(TMP, "none.tsv"))["note"], 10.0)
+        self.assertEqual(ls.limits()["note"], 10.0)      # the shipped file
+
+    def test_status_has_the_delay_columns_at_the_end_with_a_dash_for_none(self):
+        import io
+        doc = {"status": {"out": "x", "rc": 0, "gen": 1, "ts": 1000, "err": None, "ts_err": None, "ttl": 100, "src": "t"}}
+        real = ls.topics
+        ls.topics = lambda *a: [("status", ["status"], 15, "run"), ("other", ["o"], 15, "run")]
+        try:
+            buf = io.StringIO()
+            ls.cli_status(buf, (doc, (1000, 5)), {"status": {"ms_last": 40, "ms_worst": 900, "web_last": None, "web_worst": None}})
+        finally:
+            ls.topics = real
+        rows = [l.split("\t") for l in buf.getvalue().splitlines()]
+        self.assertEqual([len(r) for r in rows], [14, 14])
+        self.assertEqual(rows[0][10:], ["40", "900", "-", "-"])
+        self.assertEqual(rows[1][10:], ["-", "-", "-", "-"])
+        self.assertEqual(len(rows[0][:10]), 10)      # the first ten keep their place
+
+    def test_an_old_database_without_the_table_gets_it_and_reads_empty(self):
+        reset()
+        c = sqlite3.connect(DB)
+        c.executescript(sdb.SCHEMA + sdb.LIVE_SCHEMA.split("-- #486")[0])      # a state.db of the release before: live and heartbeat, no live_delay
+        c.execute("INSERT INTO live (topic, payload, updated, gen) VALUES ('status', 'old', 5, 3)")
+        c.commit()
+        c.close()
+        self.assertEqual(ls.delays_read(), {})      # a reader does not fail on the missing table
+        r = subprocess.run([sys.executable, os.path.join(scripts, "live_state.py"), "status"], capture_output=True, text=True, env=dict(os.environ))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(all(len(l.split("\t")) == 14 and l.split("\t")[10:] == ["-"] * 4 for l in r.stdout.splitlines() if l))
+        db = lc.DbStore(sdb)      # the collector opens it: the table is added, the old document stays
+        OPEN.append(db)
+        self.assertEqual(q("SELECT payload, gen FROM live WHERE topic='status'"), [("old", 3)])
+        db.delay("status", 7, 100)
+        self.assertEqual(q("SELECT ms_last, ms_n FROM live_delay"), [(7, 1)])
+        db2 = lc.DbStore(sdb)      # and a second open does not fail or clear it
+        OPEN.append(db2)
+        self.assertEqual(q("SELECT ms_n FROM live_delay"), [(1,)])
+
+    def test_the_sample_command_stores_a_browser_number(self):
+        reset()
+        env = dict(os.environ)
+        run = lambda *a: subprocess.run([sys.executable, os.path.join(scripts, "state-db.py"), "live-sample"] + list(a), capture_output=True, text=True, env=env).returncode
+        self.assertEqual(run("status", "250"), 0)
+        self.assertEqual(run("status", "1500"), 0)
+        self.assertEqual(run("status", "x"), 1)
+        self.assertEqual(run("bad topic!", "5"), 1)
+        self.assertEqual(q("SELECT web_last, web_worst, web_n, ms_n FROM live_delay"), [(1500, 1500, 2, 0)])
 
 
 class Bump(unittest.TestCase):

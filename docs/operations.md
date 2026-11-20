@@ -508,9 +508,20 @@ journalctl -u hs-live --no-pager -n 30
 What you see: one line per minute (`minute 3 of 60: 18 probes, median 540 ms`), then the result as a list and a file `/var/lib/hs/live-measure-<date>.md`
 with a `.tsv` next to it. It holds writes per minute (documents, failures, heartbeats), payload per minute, commits over 100 ms, the growth of the
 database and its WAL, and the change latency (min, median, p95, max). The latency ends where the web interface puts the change into the stream queue;
-the network hop and the browser's drawing time are not in it. The result has no host name. Paste the `.md` file into issue #566.
+the network hop and the browser's drawing time are not in it. The result has no host name. Paste the `.md` file into issue #566. Not tested on hardware yet.
 
-Not tested on hardware yet.
+### Delay per topic
+
+The collector also keeps, for every topic that was asked to read again, the last and the worst time from the request to the new generation, and the
+Live state page sends how long it needed to show it. Look at them with:
+
+```bash
+hs sys live status
+```
+
+Columns 11 to 14 hold the milliseconds (`-` = no sample yet), and the Live state page shows the same. The request time of a change from a terminal is
+the second the counter was changed, so the server number is at most one second too large. A change that only comes from the timer has no trigger and no
+sample. Over 10 seconds in the worst of the last 20 samples of a topic, `hs sys live check` and the Health page say so. Not tested on hardware yet.
 
 ## Reach the server from outside
 

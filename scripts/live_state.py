@@ -72,6 +72,48 @@ def db_read(topic=None):
     return docs, ((int(hb[0]), int(hb[1])) if hb else None)
 
 
+DELAY_COLS = ("ms_last", "ms_worst", "ms_n", "ms_recent", "web_last", "web_worst", "web_n", "web_recent")
+
+
+def delays_read():
+    """-> {topic: {ms_last, ms_worst, ms_n, ms_recent (list of ints), web_last, web_worst, web_n, web_recent}} of the table live_delay (#486), read-only.
+    {} when there is no database or no such table (a state.db from before this release): the measure is additive, nothing else depends on it."""
+    try:
+        c = _db_open()
+        if c is None:
+            return {}
+        try:
+            rows = c.execute("SELECT topic, %s FROM live_delay" % ", ".join(DELAY_COLS)).fetchall()
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return {}
+    out = {}
+    for r in rows:
+        d = dict(zip(DELAY_COLS, r[1:]))
+        for k in ("ms_recent", "web_recent"):
+            d[k] = [int(x) for x in (d[k] or "").split(",") if x.isdigit()]
+        out[r[0]] = d
+    return out
+
+
+def limits(path=None):
+    """{class: seconds} of scripts/lib/live-limits.tsv (the one file with the numbers of D9: hook, timed, note)"""
+    out = {"hook": 5.0, "timed": 20.0, "note": 10.0}
+    try:
+        with open(path or os.environ.get("HS_LIVE_LIMITS", os.path.join(HERE, "lib", "live-limits.tsv")), encoding="utf-8") as f:
+            for line in f:
+                p = line.rstrip("\r\n").split("\t")
+                if len(p) >= 2 and p[0] and not p[0].startswith("#"):
+                    try:
+                        out[p[0]] = float(p[1])
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return out
+
+
 def ext_live(log=None):
     """(rows, info) of the live reads that extension packages declare (scripts/hs_ext.py); nothing when that cannot be read"""
     try:
@@ -272,13 +314,18 @@ def cli_refresh(args):
     return 0
 
 
-def cli_status(out=None, docs=None):
+def _ms(v):
+    return "-" if v is None else str(int(v))
+
+
+def cli_status(out=None, docs=None, delays=None):
     out = out or sys.stdout
     try:
         docs, hb = docs if docs is not None else db_read()
     except OSError as e:
         sys.stderr.write("live state failed: %s\n" % e)
         return 1
+    delays = delays if delays is not None else delays_read()
     now = time.time()
     needs = topic_needs()
     info = topic_info()
@@ -288,19 +335,23 @@ def cli_status(out=None, docs=None):
         age = int(now - d["ts"]) if d.get("ts") else -1
         err = clean(d.get("err") or "-")
         ts_err = str(int(d["ts_err"])) if d.get("ts_err") else "-"
-        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+        dl = delays.get(topic) or {}
+        # columns 11 to 14 (#486): delay from trigger to new gen, last and worst, then the browser sample, last and worst (milliseconds, - = none yet)
+        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
             topic, interval, age, d.get("gen", 0), d.get("rc", "-") if d.get("rc") is not None else "-", err, ts_err, ",".join(needs.get(topic, ())) or "-",
-            status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-", beat))
+            status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-", beat,
+            _ms(dl.get("ms_last")), _ms(dl.get("ms_worst")), _ms(dl.get("web_last")), _ms(dl.get("web_worst"))))
     return 0
 
 
-def cli_inspect(out=None, docs=None):
+def cli_inspect(out=None, docs=None, delays=None):
     out = out or sys.stdout
     try:
         docs, hb = docs if docs is not None else db_read()
     except OSError as e:
         sys.stderr.write("live state failed: %s\n" % e)
         return 1
+    delays = delays if delays is not None else delays_read()
     core = {t[0] for t in topics(os.path.join(HERE, "lib", "live-topics.tsv"))}
     info = topic_info()
     rows = topics()
@@ -331,6 +382,11 @@ def cli_inspect(out=None, docs=None):
             e["ttl"] = int(_ttl(d, interval, i))
             if isinstance(d.get("src"), str):
                 e["source"] = d["src"]
+        dl = delays.get(topic)
+        if dl:      # #486: milliseconds; the key is only there once a sample exists
+            for k in ("ms_last", "ms_worst", "ms_n", "web_last", "web_worst", "web_n"):
+                if dl.get(k) is not None:
+                    e["delay_" + k] = int(dl[k])
         entries.append(e)
     out.write(json.dumps({"now": int(now), "topics": entries}, sort_keys=True) + "\n")
     return 0
@@ -360,7 +416,22 @@ def cli_raw(args, out=None, docs=None):
     return 0
 
 
-def cli_check(out=None, docs=None):
+def slow_notes(delays, topics_known, limit_s):
+    """[(key, text)]: a topic whose worst of its last samples is over the limit (D9: the last 20 samples, 10 s). Server samples and browser
+    samples are judged apart; a topic that is not in the list any more (a package switched off) says nothing."""
+    notes = []
+    for topic in sorted(delays):
+        if topic not in topics_known:
+            continue
+        for kind, key, what in (("ms_recent", "live:slow:", "to a new generation"), ("web_recent", "live:slowweb:", "until a page showed it")):
+            rec = delays[topic].get(kind) or []
+            if rec and max(rec) > limit_s * 1000:
+                notes.append((key + topic, "live state '%s' is slow: the worst of its last %d changes took %.1f s %s (limit %g s). Details: hs sys live status" % (
+                    topic, len(rec), max(rec) / 1000.0, what, limit_s)))
+    return notes
+
+
+def cli_check(out=None, docs=None, delays=None):
     out = out or sys.stdout
     problems = []
     try:
@@ -392,6 +463,8 @@ def cli_check(out=None, docs=None):
             if st in ("expired", "error"):
                 problems.append(("live:stale:" + topic, "live state '%s' is %s (%d s old, read every %d s). Details: systemctl status hs-live" % (
                     topic, st, now - d["ts"], interval)))
+    if docs is not None and collector_alive(hb, now):
+        problems += slow_notes(delays if delays is not None else delays_read(), {t[0] for t in topics()}, limits()["note"])
     for k, t in problems:
         out.write("%s\t%s\n" % (k, t))
     return 1 if problems else 0

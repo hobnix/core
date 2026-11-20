@@ -7557,7 +7557,7 @@
   "/live/check": {
    "get": {
     "operationId": "live.check",
-    "summary": "problems of the live state (Redis down, a topic older than three intervals): key and text",
+    "summary": "problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7611,7 +7611,7 @@
      "query": []
     },
     "x-hs-described": false,
-    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322).",
+    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
     "responses": {
      "0": {
       "description": "ok",
@@ -7718,7 +7718,7 @@
   "/live/status": {
    "get": {
     "operationId": "live.status",
-    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat)",
+    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet)",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7738,6 +7738,7 @@
      "query": []
     },
     "x-hs-described": false,
+    "description": "Columns 11 to 14 since #486: delay_last_ms, delay_worst_ms (trigger to new generation, written by the collector), web_last_ms, web_worst_ms (the browser sample); - = no sample yet.",
     "responses": {
      "0": {
       "description": "ok",
