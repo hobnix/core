@@ -282,14 +282,15 @@ def cli_status(out=None, docs=None):
     now = time.time()
     needs = topic_needs()
     info = topic_info()
+    beat = str(max(0, int(now - hb[0]))) if hb else "-"  # age of the collector's last round, the same on every line (column 10)
     for topic, _, interval, _ in topics():
         d = checked_doc(docs.get(topic), hb, now) or {}
         age = int(now - d["ts"]) if d.get("ts") else -1
         err = clean(d.get("err") or "-")
         ts_err = str(int(d["ts_err"])) if d.get("ts_err") else "-"
-        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
             topic, interval, age, d.get("gen", 0), d.get("rc", "-") if d.get("rc") is not None else "-", err, ts_err, ",".join(needs.get(topic, ())) or "-",
-            status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-"))
+            status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-", beat))
     return 0
 
 
