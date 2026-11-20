@@ -1,5 +1,5 @@
 date  = "2026-11-20"
-type  = "improvement"
+type  = "change"
 title = "Docker status, pending rebuild and presets follow events"
 body  = """
 The Docker status and health, the registry logins, the container list of the app editor, the parts the next rebuild changes, the machine.toml changes that wait for a rebuild and the preset list no longer ask the server on a timer. The server keeps them in the live state and the open page shows a change without waiting. Not tested on hardware yet.
