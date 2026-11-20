@@ -91,14 +91,35 @@ check_eq "plan pull exit 0" 0 "$rc"
 echo "$out" | grep -qx "status${T}ok" && pass "plan pull status ok" || fail "plan pull status: $out"
 echo "$out" | grep -qx "long${T}yes" && pass "plan pull long yes" || fail "plan pull long: $out"
 
-echo "-- start/stop/restart run directly and use the right argv"
+echo "-- start/stop/restart run as a job (status started + unit), the job body uses the right argv"
 on webui
 for a in start stop restart; do
+  : > "$LOG"
   rc=0; out=$($D start arr "$a" </dev/null 2>&1) || rc=$?
   check_eq "start $a exit 0" 0 "$rc"
-  echo "$out" | grep -qx "status${T}done" && pass "start $a done" || fail "start $a: $out"
-  grep -qF "sh arr $a" "$LOG" && pass "start $a argv" || fail "start $a argv: $(cat "$LOG")"
+  echo "$out" | grep -qx "status${T}started" && pass "start $a status started" || fail "start $a: $out"
+  echo "$out" | grep -qE "^unit${T}hs-job-docker-app-$a-arr" && pass "start $a unit" || fail "start $a unit: $out"
+  grep -qF "sh arr $a" "$LOG" && fail "start $a ran inline: $(cat "$LOG")" || pass "start $a does not run inline"
+  rc=0; out=$($D --apply-action arr "$a" </dev/null 2>&1) || rc=$?
+  check_eq "apply-action $a exit 0" 0 "$rc"
+  grep -qF "sh arr $a" "$LOG" && pass "apply-action $a argv" || fail "apply-action $a argv: $(cat "$LOG")"
 done
+rc=0; $D --apply-action arr pull </dev/null >/dev/null 2>&1 || rc=$?
+check_eq "apply-action takes only start, stop and restart" 1 "$rc"
+echo "-- a refused check still answers at once (no job)"
+on webui
+rc=0; out=$($D start missing start </dev/null 2>&1) || rc=$?
+check_eq "start of an unknown app exit 1" 1 "$rc"
+echo "$out" | grep -qx "status${T}refused" && pass "start of an unknown app is refused, not started" || fail "start unknown: $out"
+echo "-- HS_DOCKER_NO_JOB runs start/stop/restart inline"
+export HS_DOCKER_NO_JOB=1
+for a in start stop restart; do
+  : > "$LOG"
+  rc=0; out=$($D start arr "$a" </dev/null 2>&1) || rc=$?
+  echo "$out" | grep -qx "status${T}done" && pass "inline $a done" || fail "inline $a: $out"
+  grep -qF "sh arr $a" "$LOG" && pass "inline $a argv" || fail "inline $a argv: $(cat "$LOG")"
+done
+unset HS_DOCKER_NO_JOB
 
 echo "-- normal pull runs as a job"
 on webui
@@ -223,6 +244,7 @@ case "$1" in
 esac
 FAKE
 : > "$LOG"
+export HS_DOCKER_NO_JOB=1
 rc=0; out=$($D start web1 start </dev/null 2>&1) || rc=$?
 check_eq "start of a stopped app exit 0" 0 "$rc"
 echo "$out" | grep -qx "status${T}done" && pass "start of a stopped app done" || fail "start stopped: $out"

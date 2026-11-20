@@ -23,6 +23,9 @@ const de = {
   Capabilities: 'Funktionen', Advanced: 'Erweitert', Backups: 'Datensicherungen',
   Next: 'Weiter', Back: 'Zurück', Review: 'Überprüfen', 'Back to the questions': 'Zurück zu den Fragen', Change: 'Ändern', 'Apply…': 'Anwenden…', recommended: 'empfohlen',   // the wizard's buttons
   'Sort by': 'Sortieren nach', 'Update all': 'Alle aktualisieren',
+  // The toasts of a started change (shell/PlanDialog.svelte, ui.svelte.js)
+  'Running in the background.': 'Läuft im Hintergrund.', 'Open Tasks': 'Aufgaben öffnen', 'Show plan': 'Plan anzeigen', done: 'erledigt', 'was refused': 'wurde abgelehnt',
+  'failed to start': 'konnte nicht gestartet werden', 'The server did not start it.': 'Der Server hat es nicht gestartet.', finished: 'beendet', 'Show log': 'Protokoll anzeigen',
   // Job records (shell/JobRecords.svelte, ADR 0004)
   'Job records': 'Auftragsprotokolle', Scheduled: 'Geplant', Started: 'Gestartet', Job: 'Auftrag', Step: 'Schritt', Progress: 'Fortschritt', Took: 'Dauer',
   queued: 'wartet', running: 'läuft', ok: 'erledigt', failed: 'fehlgeschlagen', cancelled: 'abgebrochen', interrupted: 'unterbrochen',

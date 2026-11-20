@@ -229,7 +229,7 @@ the result. Not tested on hardware yet.
 "done", or, when the server refuses, the reason with a **Show plan** button that opens the plan again. When the job ends, a second toast says
 whether it worked and opens its log in **Tasks**. A job that stops to ask a question raises a toast with **Open the job**, on every page and
 also when you closed the install dialog; it goes away when the question is answered. The steps in the install dialog follow the job as it
-moves. Docker start, stop and restart still run inside the request, not as a job yet. Not tested on hardware yet.
+moves. Docker start, stop and restart of an app are jobs too: the answer comes at once, the row shows pending until the job ends, and the end toast says how it went. Not tested on hardware yet.
 
 ### Install and remove apps
 The Apps page has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**

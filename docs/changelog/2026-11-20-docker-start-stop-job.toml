@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "change"
+title = "Docker start, stop and restart run in the background"
+body  = """
+Starting, stopping or restarting an app on the Docker page no longer holds the dialog open. The row shows it is busy until the job ends, and a message at the bottom says how it went. The texts of these messages are available in German.
+"""
