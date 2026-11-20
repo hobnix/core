@@ -14,7 +14,31 @@ cp "$SCRIPTS/lib/registry.tsv" "$WORK/reg.tsv"
 printf 'sys\tsys zz-test probe\tjobs.sh\t--list\tprobe\t-\t\n' >> "$WORK/reg.tsv"
 rc=0; err=$($GEN check --registry "$WORK/reg.tsv" 2>&1 >/dev/null) || rc=$?
 check_eq "check exits 1 with an extra row" "1" "$rc"
+check_out "check says the row has no role" "no role for 'sys zz-test probe'" echo "$err"
+
+echo "-- a new row with a role still makes the document stale"
+cp "$SCRIPTS/../docs/api/sys.toml" "$WORK/shapes.toml"
+printf '
+["zz-test probe"]
+role = "viewer"
+' >> "$WORK/shapes.toml"
+rc=0; err=$($GEN check --registry "$WORK/reg.tsv" --shapes "$WORK/shapes.toml" 2>&1 >/dev/null) || rc=$?
+check_eq "check exits 1 with a decided extra row" "1" "$rc"
 check_out "check says stale" "stale" echo "$err"
+
+echo "-- a plan row cannot be viewer; an unknown role is refused"
+printf 'sys	sys zz-test plan <action>	jobs.sh	--list	probe	-	
+' >> "$WORK/reg.tsv"
+printf '
+["zz-test plan <action>"]
+role = "viewer"
+' >> "$WORK/shapes.toml"
+rc=0; err=$($GEN check --registry "$WORK/reg.tsv" --shapes "$WORK/shapes.toml" 2>&1 >/dev/null) || rc=$?
+check_eq "check exits 1 for a viewer plan row" "1" "$rc"
+check_out "check names the rule" "cannot be viewer" echo "$err"
+sed -i 's/^role = "viewer"$/role = "root"/' "$WORK/shapes.toml"
+rc=0; err=$($GEN check --registry "$WORK/reg.tsv" --shapes "$WORK/shapes.toml" 2>&1 >/dev/null) || rc=$?
+check_out "check names the unknown role" "unknown role" echo "$err"
 
 echo "-- docs/api/sys.toml has no entry without a row"
 bad=$(python3 - "$ROOT" <<'EOF'
@@ -44,6 +68,20 @@ print("ok" if ops == rows and d["info"]["version"] == level else "operations %d,
 EOF
 )
 check_eq "one operation per sys row, version equals api-level" "ok" "$got"
+
+echo "-- every operation has a role, and the ADR table lists the same rows"
+got=$(python3 - "$ROOT" <<'EOF'
+import json, sys
+root = sys.argv[1]
+d = json.load(open(root + "/docs/api/openapi.json", encoding="utf-8"))
+roles = {"viewer", "app-manager", "admin"}
+ops = [o for v in d["paths"].values() for o in v.values()]
+bad = [o["operationId"] for o in ops if o.get("x-hs-role") not in roles or (o["x-hs-role"] == "viewer" and o["x-hs-sys"]["class"] in ("plan", "start"))]
+table = [l for l in open(root + "/docs/adr/0012-roles-sys-rows.tsv", encoding="utf-8") if l.strip() and not l.startswith("#")]
+print("ok" if not bad and len(table) == len(ops) else "bad roles %s, table rows %d, operations %d" % (bad, len(table), len(ops)))
+EOF
+)
+check_eq "x-hs-role on every operation, none viewer on plan or start, ADR table complete" "ok" "$got"
 
 echo "-- the status words the scripts print are in the document"
 got=$(python3 - "$ROOT" <<'EOF'

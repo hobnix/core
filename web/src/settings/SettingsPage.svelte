@@ -15,6 +15,7 @@
   import { releaseModel, channelCard } from './releases.js';
   import Fields from './Fields.svelte';
   import Sessions from './Sessions.svelte';
+  import Tokens from '../pages/Tokens.svelte';
   import WizardSteps from './WizardSteps.svelte';
   import { useLayout } from './layoutstate.svelte.js';
   import { fieldsFor } from './layout.js';
@@ -59,6 +60,7 @@
   const updates = poll(() => (page === 'updates' && !deck?.data?.locked ? '/api/sys/system/updates' : ''), 60000);
   const upd = $derived(Object.fromEntries(rows(updates).map((r) => [r[0], r[1]])));
   const behind = $derived(Number(upd.behind) || 0);
+  const utag = $derived(updatesTag(rows(updates)));
   const fetched = $derived(upd.fetched && upd.fetched !== '-' ? new Date(Number(upd.fetched) * 1000).toLocaleString() : 'never');
   $effect(() => { if (page === 'updates' && !changes.loaded) load(); });
   // Updates: the channel and the ref the next update installs (`hs sys release show`, fetched refs only)
@@ -134,7 +136,7 @@
     <div class="muted">{list.loaded ? (list.error ? `The settings could not be read${list.error?.message ? `: ${list.error.message}` : '.'}` : 'No settings on this page.') : 'Loading…'}</div>
   {/if}
 
-  {#if page === 'access'}<Sessions />{/if}
+  {#if page === 'access'}<Sessions /><Tokens />{/if}
 
   {#if page === 'general'}
     {#if Appearance}<Appearance />{/if}

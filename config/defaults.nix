@@ -14,6 +14,8 @@
   webUi = false;
   webPort = 8480;
   webAllowedHosts = "";
+  webViewerGroup = "hn-viewers";
+  webAppManagerGroup = "hn-app-managers";
   webAccent = "#9184d9";
   webTailscale = false;
   webLan = true;

@@ -29,11 +29,11 @@ Issue: hobnix/server#<n>
 | [0007](0007-branches-and-releases.md) | `develop` for work, `main` for releases, signed tags | Accepted (2026-11-10) |
 | [0008](0008-capabilities-and-packages.md) | Capabilities with a contract; apps and optional parts are signed packages in their own repositories | Accepted (2026-11-10) |
 | [0009](0009-capability-as-package-kind.md) | A capability is a third package kind; a short list stays in the core | Accepted (2026-11-10) |
-| [0010](0010-extension-command-protocol.md) | Command extensions speak versioned JSON lines over stdin/stdout, with a timeout and SIGTERM cancel | Accepted (2026-11-10) |
-| [0011](0011-extension-service-lifecycle.md) | Service extensions: one supervised process, JSON lines both ways, events delivered at least once | Accepted (2026-11-10) |
-| [0012](0012-roles-and-api-tokens.md) | Three roles (viewer, app manager, admin) checked in the web server; API tokens belong to a person | Accepted (2026-11-10) |
+| [0010](0010-extension-command-protocol.md) | Command extensions speak versioned JSON lines over stdin/stdout, with a timeout and SIGTERM cancel | Accepted, implemented in 0.8 |
+| [0011](0011-extension-service-lifecycle.md) | Service extensions: one supervised process, JSON lines both ways, events delivered at least once | Accepted, implemented in 0.8 |
+| [0012](0012-roles-and-api-tokens.md) | Three roles (viewer, app manager, admin) checked in the web server; API tokens belong to a person | Accepted, implemented in 0.8 (no TOTP or SSO yet) |
 | [0013](0013-cluster-state-and-partitions.md) | One owner per object, cached read-only copies, a partition degrades to stale (no consensus) | Accepted (2026-11-10) |
-| [0014](0014-extension-permissions.md) | Extension permissions: declare and disclose first, confine services next (options; nothing enforced yet) | Accepted (2026-11-10) |
+| [0014](0014-extension-permissions.md) | Extension permissions: declare and disclose first, confine services next (enforced in 0.8: events, services, opt-in commands) | Accepted, implemented in 0.8 |
 | [0015](0015-wasm-runtime-for-extensions.md) | WebAssembly for extension scripts: defer; keep the extension protocol transport-neutral | Accepted (2026-11-10) |
 | [0016](0016-isolating-package-web-components.md) | Package UI stays declarative; third-party code, if ever allowed, runs in a sandboxed iframe | Accepted (2026-11-10) |
 | [0017](0017-capabilities-repository-and-channels.md) | hobnix/capabilities: vendored `module.nix` (pure evaluation), overlay on the machine, CI across repositories, wizard step, channels, release flow | Accepted (2026-11-10) |

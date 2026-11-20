@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "Packages should declare their permissions"
+body  = """A package that does not declare `permissions` in its package.toml now fails the check of its repository. On a server, hs pkg install and hs ext enable still work, but warn that a later release will refuse such a package."""

@@ -32,6 +32,9 @@ class FakeAuth:
     def domain_is_admin(self, user):
         return False
 
+    def domain_role(self, user):
+        return "admin" if self.domain_is_admin(user) else None
+
     def local_fingerprint(self, user, fresh=False):
         return ""
 

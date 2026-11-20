@@ -1,0 +1,5 @@
+date  = "2026-11-20"
+type  = "security"
+title = "API tokens cannot start changes that outlive them, and a web session follows its person's role"
+docs  = "web-interface#api-tokens"
+body  = """A token now starts changes only for containers, backups, shares, Docker, apps, jobs, notifications, health, expiry and ISOs; SSH keys, packages, settings, system updates, routes, network, domain, nodes and migration are refused. A signed-in domain session is checked against the groups at least once an hour like a token: a disabled person is signed out, a lowered role applies."""

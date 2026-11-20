@@ -32,6 +32,10 @@ bad "an unknown key is refused" "unknown permission" 'permissions = ["root"]'
 bad "net needs one of its words" "net" 'permissions = ["net:everywhere"]'
 bad "a path must be absolute" "fs.write" 'permissions = ["fs.write:relative/x"]'
 bad "a path may not leave" "fs.read" 'permissions = ["fs.read:/etc/../root"]'
+bad "fs.read of a secret location is refused" "overlaps /var/lib/hs" 'permissions = ["fs.read:/var/lib/hs/restic-password"]'
+bad "fs.write below /etc is refused" "overlaps /etc" 'permissions = ["fs.write:/etc/hs"]'
+good "a package may write /var/lib/hs/<its name>" 'permissions = ["fs.write:/var/lib/hs/permext"]'
+bad "but not another package's folder" "overlaps /var/lib/hs" 'permissions = ["fs.write:/var/lib/hs/other"]'
 bad "web.read takes no argument" "takes no argument" 'permissions = ["web.read:x"]'
 bad "the same permission twice" "twice" 'permissions = ["host:incus", "host:incus"]'
 bad "events.emit must lie below the package's kinds" "events.emit must lie below" 'permissions = ["events.emit:pkg.other.x"]'
@@ -43,6 +47,32 @@ CAP='[[web.reads]]\nwords = "list"\nkind = "tsv"'
 printf 'name = "permext"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n%b\n' "$CAP" > "$T/capability.toml"
 bad "[[web.reads]] without web.read is refused" "not web.read" 'permissions = ["host:incus"]'
 good "[[web.reads]] with web.read" 'permissions = ["web.read"]'
+# step 18 (docs/PLAN-extensions-access.md): `role` per web entry, default admin
+cap_role() { printf 'name = "permext"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
+%b
+' "$1" > "$T/capability.toml"; }
+cap_role '[[web.reads]]
+words = "list"
+kind = "tsv"
+role = "app-manager"
+[[web.changes]]
+patterns = ["^x$"]
+role = "viewer"'
+good "a read and a change with a known role" 'permissions = ["web.read", "web.change"]'
+cap_role '[[web.reads]]
+words = "list"
+kind = "tsv"
+role = "root"'
+bad "an unknown role of a read is refused" "role must be one of" 'permissions = ["web.read"]'
+cap_role '[[web.changes]]
+patterns = ["^x$"]
+role = "Admin"'
+bad "an unknown role of a change is refused" "web.changes.0.: role must be one of" 'permissions = ["web.change"]'
 manifest ''
 check_out "perms says -  for a package without a declaration" "^-$" bash -c "HS_PACKAGES_ROOT=$WORK/tree $PKG perms permext"
 manifest 'permissions = ["web.read", "host:incus"]'
@@ -65,6 +95,7 @@ cd "$ROOT"
 $PKG repo add test "$R" --key "$WORK/signers" >/dev/null
 $PKG fetch test >/dev/null
 check_out "install shows that nothing is declared and that it is not enforced" "not declared" bash -c "$PKG install demo 2>&1"
+check_out "D5: install warns for a release without permissions (one release, no refusal)" "warning: permissions is missing" bash -c "$PKG install demo 2>&1"
 check_out "the installed copy says the same through perms" "^-$" bash -c "HS_PACKAGES_ROOT=$WORK/none $PKG perms demo"
 cd "$R"; release v1.1.0 1.1.0 'permissions = ["host:incus"]'; cd "$ROOT"
 $PKG fetch test >/dev/null
@@ -82,6 +113,14 @@ check_out "a typed wrong name does not accept (terminal not available: refused)"
 cd "$R"; release v1.4.0 1.4.0 'permissions = ["root"]'; cd "$ROOT"
 $PKG fetch test >/dev/null
 check_out "a release with an invalid permission is refused at install" "unknown permission" bash -c "$PKG update demo --yes --accept-permissions </dev/null 2>&1; true"
+echo "-- D5: required in a repository, a warning in hs for one release"
+RC=$WORK/rcheck; mkdir -p "$RC/extensions/nodecl"
+printf 'name = "nodecl"\nversion = "1.0.0"\nkind = "extension"\ntitle = "No decl"\nrequires_core = ">=1"\naudience = "generic"\n' > "$RC/extensions/nodecl/package.toml"
+printf '[package.nodecl]\nversion = "1.0.0"\nkind = "extension"\npath = "extensions/nodecl"\nrequires_core = ">=1"\n' > "$RC/index.toml"
+check_out "repo-check names a package without permissions" "nodecl: permissions is missing" bash -c "$PKG repo-check $RC; true"
+check "and fails" bash -c "! $PKG repo-check $RC >/dev/null"
+printf 'permissions = []\n' >> "$RC/extensions/nodecl/package.toml"
+check "an empty list is a declaration: repo-check passes" $PKG repo-check "$RC"
 echo "-- enforcement: a package may not use more than it declared (ADR 0014 step 1b)"
 E=$WORK/enf/permx; mkdir -p "$E"
 printf 'name = "permx"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n[[web.reads]]\nwords = "list"\nkind = "tsv"\nttl = 30\n' > "$E/capability.toml"
@@ -107,6 +146,8 @@ check_out "perms-check names what is missing" "web.read" bash -c "$PKG perms-che
 check "perms-check exits 1" bash -c "! $PKG perms-check '$E' permx >/dev/null"
 check_eq "web reads are NOT registered when the declaration does not cover them" "0" "$(webreads | sed -n "s/^reads //p")"
 check_out "hs ext enable refuses it" "uses more than it declares" bash -c "HS_PACKAGES_DIR=$WORK/enf HS_CAPABILITIES_FILE=$WORK/enf/caps2 HS_STATE_DIR=$WORK/enf/state bash $SCRIPTS/ext.sh enable permx 2>&1; true"
+pk ''
+check_out "hs ext enable warns about an undeclared package and turns it on" "does not declare permissions" bash -c "HS_PACKAGES_DIR=$WORK/enf HS_CAPABILITIES_FILE=$WORK/enf/caps3 HS_STATE_DIR=$WORK/enf/state bash $SCRIPTS/ext.sh enable permx 2>&1; true"
 pk 'permissions = ["host:incus", "web.read"]'
 check_eq "fixing the declaration loads the reads again" "1" "$(webreads | sed -n "s/^reads //p")"
 finish

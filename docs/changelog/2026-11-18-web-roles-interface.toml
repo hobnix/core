@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "The web interface shows each role only what it can use"
+body  = """A viewer or app manager no longer sees pages and buttons the server would refuse: the tree, the search and the buttons follow the role. Opening a page of a higher role by its address says so in words. Under Settings, Users and access, a role below admin sees its own sessions only."""

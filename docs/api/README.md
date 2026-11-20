@@ -20,5 +20,12 @@ Rows without an entry are marked `x-hs-described: false`. To describe one, add i
 - `columns = [...]` when every line has the same fields, or `records = {tag = [fields after the tag]}` when the first field names the line.
 - Optional `enums = {field = [...]}` (records: `"tag.field"`), `stdin = "line"|"bytes"`, `note`.
 
+## Give a row a role
+
+Every row needs `role = "viewer" | "app-manager" | "admin"` in `sys.toml` (ADR 0012); a row with only a `role` is enough. It is copied
+into `openapi.json` as `x-hs-role` and into `docs/adr/0012-roles-sys-rows.tsv` (generated). A row without a role, or a `plan` or `start` row
+marked `viewer`, fails `tests/openapi.sh`. A missing role would mean `admin`; the test makes the decision explicit. Nothing enforces the
+role yet.
+
 Then run `write`. Left out of v1: extension rows (`commands.tsv`) and `jobs stream`. Whether a change to a described shape bumps
 `scripts/lib/api-level` is not decided.

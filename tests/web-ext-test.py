@@ -135,7 +135,7 @@ opts = [ { flag = "--size", pattern = '^[0-9]{1,3}$' } ]
 
     def test_on_registers_the_declared_reads_and_changes(self):
         self.refresh(["demo"])
-        self.assertEqual(ws.READS[("ext", "demo", "list")], {"kind": "tsv", "ttl": 10})
+        self.assertEqual(ws.READS[("ext", "demo", "list")], {"kind": "tsv", "ttl": 10, "role": "admin"})
         self.assertEqual(ws.READS[("ext", "demo", "thing")]["args"], ["^[a-z]{1,8}$"])
         self.assertTrue(self.ok("ext/demo", ["go", "now"]))
         self.assertTrue(self.ok("ext/demo", ["make", "--size", "12"]))
@@ -313,6 +313,166 @@ class RecipePackage(unittest.TestCase):
         reads, _, pages = ws.ext_load_web()
         self.assertIn(("ext", "app", "status"), reads)
         self.assertEqual([p["name"] for p in pages], ["app"])
+
+
+class ExtRoles(unittest.TestCase):
+    """step 18 of docs/PLAN-extensions-access.md: `role` per [[web.reads]] / [[web.changes]] entry (default admin), enforced with the core check"""
+    USERS = {"vic": "viewer", "mia": "app-manager", "anna": "admin"}
+
+    def setUp(self):
+        import http.client
+        import json
+        import threading
+        self.http, self.json = http.client, json
+        self.tmp = tempfile.mkdtemp()
+        self.pk = os.path.join(self.tmp, "packages")
+        self.caps = os.path.join(self.tmp, "caps")
+        os.environ["HS_PACKAGES_DIR"] = self.pk
+        os.environ["HS_CAPABILITIES_FILE"] = self.caps
+        os.environ["HS_STATE_DIR"] = os.path.join(self.tmp, "state")
+        write(self.caps, "demo\n")
+        write(os.path.join(self.tmp, "index.html"), "<html>app</html>")
+        package(self.pk, "demo", [
+            ["sys", "sys ext demo old", "x.sh", "old", "h", "-"],
+            ["sys", "sys ext demo see", "x.sh", "see", "h", "-"],
+            ["sys", "sys ext demo manage", "x.sh", "manage", "h", "-"],
+            ["sys", "sys ext demo secret", "x.sh", "secret", "h", "-"],
+            ["sys", "sys ext demo plan <action>", "x.sh", "plan {1}", "h", "-"],
+            ["sys", "sys ext demo start <action>", "x.sh", "start {1}", "h", "-"],
+        ], '''
+[[web.reads]]
+words = "old"
+kind = "text"
+ttl = 5
+
+[[web.reads]]
+words = "see"
+kind = "text"
+ttl = 5
+role = "viewer"
+
+[[web.reads]]
+words = "manage"
+kind = "text"
+ttl = 5
+role = "app-manager"
+
+[[web.reads]]
+words = "secret"
+kind = "text"
+ttl = 5
+role = "admin"
+
+[[web.changes]]
+patterns = ['^light$']
+role = "app-manager"
+
+[[web.changes]]
+fixed = ['^wipe$']
+''')
+        cfg = ws.Config()
+        cfg.root, cfg.workgroup, cfg.realm, cfg.fail_delay = self.tmp, "HOME", "ad.home.lan", 0
+        cfg.hs, cfg.session_file = "/nonexistent/hs", ""
+        cfg.roles_file = os.path.join(here, "..", "scripts", "lib", "sys-roles.tsv")
+        users = self.USERS
+
+        class Auth:
+            def __init__(self, cfg):
+                self.cfg = cfg
+
+            def local_fingerprint(self, user, fresh=False):
+                return "fp"
+
+            def storage_locked(self):
+                return False
+
+            def domain_password_ok(self, user, password):
+                return user in users
+
+            def domain_role(self, user):
+                return users.get(user)
+
+        self.calls, self.real_run = [], ws._run
+        ws._run = lambda cmd, stdin=None, timeout=10: (self.calls.append(cmd) or (0, "ok\n"))
+        self.app = ws.App(cfg, Auth(cfg))
+        self.srv = ws.Server(("127.0.0.1", 0), ws.make_handler(self.app))
+        self.port = self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.sess = {}
+        ws.ext_refresh(force=True)
+
+    def tearDown(self):
+        ws._run = self.real_run
+        self.srv.shutdown()
+        self.srv.server_close()
+        write(self.caps, "")
+        ws.ext_refresh(force=True)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def req(self, method, path, body=None, headers=None):
+        h = dict(headers or {})
+        if body is not None:
+            h["Content-Type"] = "application/json"
+        if method == "POST":
+            h.setdefault("Origin", "http://127.0.0.1:%d" % self.port)
+        c = self.http.HTTPConnection("127.0.0.1", self.port)
+        c.request(method, path, self.json.dumps(body) if body is not None else None, h)
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        try:
+            return r.status, self.json.loads(raw), r
+        except ValueError:
+            return r.status, raw, r
+
+    def who(self, user):
+        if user not in self.sess:
+            s, d, r = self.req("POST", "/api/login", {"realm": "domain", "user": user, "password": "pw"})
+            self.assertEqual(s, 200)
+            self.sess[user] = ({"Cookie": r.getheader("Set-Cookie").split(";")[0]}, d["csrf"])
+        return self.sess[user]
+
+    def get(self, user, word):
+        return self.req("GET", "/api/sys/ext/demo/" + word, headers=self.who(user)[0])[0]
+
+    def post(self, user, verb, args):
+        ck, csrf = self.who(user)
+        return self.req("POST", "/api/" + verb, {"area": "ext/demo", "args": args}, dict(ck, **{"X-CSRF-Token": csrf}))[0]
+
+    def test_a_read_without_role_is_admin_only(self):      # an old manifest
+        self.assertEqual([self.get(u, "old") for u in ("vic", "mia", "anna")], [403, 403, 200])
+
+    def test_an_admin_read_is_403_for_a_viewer_and_an_app_manager(self):
+        self.assertEqual([self.get(u, "secret") for u in ("vic", "mia", "anna")], [403, 403, 200])
+
+    def test_an_app_manager_read_works_for_an_app_manager_and_refuses_a_viewer(self):
+        self.assertEqual([self.get(u, "manage") for u in ("vic", "mia", "anna")], [403, 200, 200])
+
+    def test_a_viewer_read_works_for_everybody(self):
+        self.assertEqual([self.get(u, "see") for u in ("vic", "mia", "anna")], [200, 200, 200])
+
+    def test_the_403_names_both_roles_and_nothing_runs(self):
+        s, d, _ = self.req("GET", "/api/sys/ext/demo/secret", headers=self.who("vic")[0])
+        self.assertEqual((s, d["required"], d["role"]), (403, "admin", "viewer"))
+        self.assertEqual(self.calls, [])
+
+    def test_changes_use_the_role_of_their_entry(self):
+        self.assertEqual([self.post(u, "plan", ["light"]) for u in ("vic", "mia", "anna")], [403, 200, 200])
+        self.assertEqual([self.post(u, "plan", ["wipe"]) for u in ("vic", "mia", "anna")], [403, 403, 200])
+
+    def test_a_token_never_exceeds_its_owners_role(self):
+        # a token session carries its owner's role (tokens.check), so the same check refuses it
+        self.assertFalse(ws.role_ok("viewer", ws.ext_need(["ext", "demo", "manage"], "viewer")))
+        self.assertTrue(ws.role_ok("app-manager", ws.ext_need(["ext", "demo", "manage"], "viewer")))
+
+    def test_an_unknown_role_drops_the_package(self):
+        package(self.pk, "demo", [["sys", "sys ext demo see", "x.sh", "see", "h", "-"]],
+                '[[web.reads]]\nwords = "see"\nkind = "text"\nttl = 5\nrole = "root"\n')
+        ws.ext_refresh(force=True)
+        self.assertNotIn(("ext", "demo", "see"), ws.READS)
+
+    def test_the_core_row_still_counts(self):
+        self.assertEqual(ws.ext_need(["ext", "demo", "see"], "admin"), "admin")      # the higher of the entry and the core row
 
 
 if __name__ == "__main__":

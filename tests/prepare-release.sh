@@ -11,7 +11,7 @@ git init -q --bare "$WORK/remote.git"
 R=$WORK/repo; mkdir -p "$R"; cd "$R" || exit 1
 git init -q -b develop . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
 git remote add origin "$WORK/remote.git"
-mkpkg() { mkdir -p "extensions/$1"; printf 'name = "%s"\nversion = "%s"\nkind = "extension"\ntitle = "T"\nrequires_core = ">=1"\n' "$1" "$2" > "extensions/$1/package.toml"
+mkpkg() { mkdir -p "extensions/$1"; printf 'name = "%s"\nversion = "%s"\nkind = "extension"\ntitle = "T"\nrequires_core = ">=1"\npermissions = []\n' "$1" "$2" > "extensions/$1/package.toml"
   printf '[package.%s]\nversion = "%s"\nkind = "extension"\npath = "extensions/%s"\nrequires_core = ">=1"\n' "$1" "$2" "$1" >> index.toml; }
 mkpkg alpha 1.0.0; mkpkg beta 2.3.4; mkpkg gamma 0.1.0
 git add -A && git commit -q -m first && git tag v1.0.0

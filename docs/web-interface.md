@@ -94,6 +94,46 @@ every one but yours. Do this when you left a browser signed in somewhere else, o
 
 Not tested on hardware yet.
 
+## Roles and sign-in of programs
+
+The web interface has three roles; each includes the one before. A call a role may not make is refused with a 403 that names both roles, and runs nothing. Not tested on hardware yet.
+
+| Role | May | Comes from |
+| --- | --- | --- |
+| viewer | look: every page that reads | the domain group `hn-viewers` |
+| app-manager | also change instances and apps (the `apps`, `ct`, `recipes`, `docker` and `jobs` areas) | the domain group `hn-app-managers` |
+| admin | everything, including users, secrets and the vault | Domain Admins, and the local account (`adminuser`) |
+
+The highest role of a person's groups wins; a person in none of the three cannot sign in. The group names can be changed in machine.toml (`webViewerGroup`, `webAppManagerGroup`). The role is read at sign-in and kept for that session. Every row of `hs sys` has its least role in [docs/adr/0012-roles-sys-rows.tsv](adr/0012-roles-sys-rows.tsv); a row without a decision is admin.
+
+```bash
+sudo hs group roles
+```
+
+Creates the two groups in the domain: it shows a plan first and asks you to type the domain name. Add people to them with the tools of [Users and shares](users-and-shares.md).
+
+The page shows every page to every role. A page or button the role may not use is greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role. The Vault and the identity pages need admin. Under Settings, Users and access, a role below admin sees its own sessions only. Roles are enforced in the web server only: anyone with `sudo` on the server is not limited, so a viewer is not safe against a person with a shell.
+
+The audit log names the signed-in person for every change made in the web interface (`<user>`, or `<user> via token <id>`): `hs audit`.
+
+### API tokens
+
+A program (curl, a script, a dashboard) signs in with a token instead of a cookie. A token belongs to a person and never has more than that person's role.
+
+```bash
+sudo hs token create <name> --role viewer --days 90
+```
+
+Prints the token once; it starts with `hn_`, and only its sha256 is kept, so it cannot be shown again. The default role is viewer, the default life 90 days, the longest 365; there is no token without an expiry. Use it like this:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://<server>:8480/api/sys/status
+```
+
+`hs token list` shows name, id, owner, role, expiry and state (never the token). `sudo hs token revoke <name>` asks you to type the name. The Tokens page under Settings, Users and access does the same for app managers and admins. A token can only plan and start changes and read; it cannot create tokens or use users, secrets, unlock, the terminal or the VM console, and it cannot start changes whose result would outlive it (SSH keys, packages, settings, system updates, routes, network, domain, nodes, migration, extension changes); it can change containers, backups, shares, Docker, apps, jobs, notifications, health, expiry and ISOs. A signed-in domain session is re-checked like a token: when its person is disabled or leaves the groups it ends, and a lowered role applies, within the hour. A token ends at its expiry and when its owner is no longer in a role group (checked at least once an hour). While no domain controller answers, a token above viewer is refused after one day. 60 wrong tries in a minute lock that token id for five minutes, and wrong tokens count against the address like wrong passwords.
+
+Planned, not built: a second factor (TOTP) and single sign-on (OpenID Connect). Both wait for the security review.
+
 ## Find your way around
 
 The tree on the left, the task panel at the bottom (Tasks, Jobs, Logs, disk events, reports) and search on top (press `/`). The top bar
@@ -311,6 +351,8 @@ says so. The page updates over the same stream as the others and polls every 5 s
 | A page stays empty or says "could not be read" | the command behind it does not answer, for example storage is locked | run it in a terminal: `sudo hs sys <area> <command>` |
 | A list looks old right after a change | the page re-reads every few seconds | wait, or press the refresh button |
 | The build stops with `hash mismatch ... got: sha256-...` | the frontend's dependencies changed | put the shown value into `npmDepsHash` in `pkgs/hs-web.nix`, rebuild |
+| 403 "Your role (viewer) may not do this" | the person's domain group gives a lower role | add them to `hn-app-managers` or Domain Admins, then sign in again |
+| 401 with a token | expired, revoked, or its owner left the groups | create a new one: `sudo hs token create <name>` |
 | The page is not reachable from another PC | wrong port or `webLan` is `false` | check `webPort`, use the Tailscale address |
 
 `journalctl -u hs-web -e` shows what the page logs (sign-ins and changes, never passwords).

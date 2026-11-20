@@ -1,0 +1,5 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "A guide for extensions: commands, services, permissions and events"
+docs  = "extensions"
+body  = """The new guide Extensions explains how extension commands and services run, what the server enforces of a package's permissions (events, services, opt-in command confinement) and what it only shows, and how package events work. The Web interface guide now covers the three roles and API tokens. Not tested on hardware yet."""

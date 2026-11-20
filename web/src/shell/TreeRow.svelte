@@ -7,7 +7,7 @@
   import { tr } from "../i18n.js";
   let {
     depth = 0, caret = null, icon = '', label = '', href = '#', active = false, dim = false, strong = false, gap = false,
-    chip = '', count = '', warn = false, dot = null, lock = false, title = '',
+    chip = '', count = '', warn = false, dot = null, lock = false, title = '', needs = '',
     onclick = null, ontoggle = null, onhover = null,
   } = $props();
 
@@ -18,21 +18,22 @@
   }
 </script>
 
-<div class="trow" class:active class:dim class:gap role="treeitem" aria-selected={active} aria-expanded={caret ? caret === 'open' : undefined} aria-level={depth + 1}>
+<div class="trow" class:active class:dim class:gap class:noRole={!!needs} role="treeitem" aria-selected={active} aria-expanded={caret ? caret === 'open' : undefined} aria-level={depth + 1}>
   {#each Array(depth) as _}<span class="g"></span>{/each}
   {#if caret}
     <button use:tip={caret === 'open' ? 'Collapse' : 'Expand'} class="caret" aria-label={caret === 'open' ? 'Collapse' : 'Expand'} tabindex="-1" onclick={(e) => { e.stopPropagation(); ontoggle?.(); }}>
       <i class="ph ph-caret-{caret === 'open' ? 'down' : 'right'}" style="font-size:11px"></i>
     </button>
   {:else}<span class="cs"></span>{/if}
-  <a class="tlink" {href} use:tip={title} aria-current={active ? 'page' : undefined} onclick={click} onpointerenter={onhover} onfocus={onhover}>
+  <a class="tlink" {href} use:tip={needs || title} aria-label={needs ? `${label}. ${needs}` : undefined} aria-current={active ? 'page' : undefined} onclick={click} onpointerenter={onhover} onfocus={onhover}>
     {#if icon}<i class="ph ph-{icon}" style="font-size:15px"></i>{/if}
     <span class="lbl" class:strong>{tr(label)}</span>
     {#if chip}<span class="chip">{chip}</span>{/if}
     <span class="rt">
       {#if count !== ''}<span class="cnt" class:warn>{count}</span>{/if}
       <span class="sl">
-        {#if lock}<i class="ph ph-lock-simple" style="font-size:12px;color:var(--fg-3)" use:tip={'Storage locked'}></i>
+        {#if needs}<i class="ph ph-lock-simple" style="font-size:12px;color:var(--fg-3)" aria-hidden="true"></i>
+        {:else if lock}<i class="ph ph-lock-simple" style="font-size:12px;color:var(--fg-3)" use:tip={'Storage locked'}></i>
         {:else if dot}<StatusDot bare state={dot.state} label={dot.title} />{/if}
       </span>
     </span>
@@ -46,7 +47,7 @@
   .trow.active { background: color-mix(in oklch, var(--accent) 17%, transparent); }
   .trow.active .tlink { color: var(--fg); font-weight: 500; }
   .trow.active .tlink i { color: var(--accent-ink); }
-  .trow.dim .tlink { opacity: 0.45; }
+  .trow.dim .tlink, .trow.noRole .tlink { opacity: 0.45; }
   .g { align-self: stretch; flex: none; width: 14px; margin-left: 5px; border-left: 1px solid var(--line); }
   .caret { flex: none; width: 20px; height: 24px; display: grid; place-items: center; border: 0; border-radius: var(--r); background: none; color: var(--fg-3); padding: 0; }
   .caret:hover { background: var(--panel-3); color: var(--fg); }

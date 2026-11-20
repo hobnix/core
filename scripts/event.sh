@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the event log: what happened on the server (disks, jobs, notifications), newest last
 # help.de: das Ereignisprotokoll: was auf dem Server passiert ist (Platten, Aufträge, Benachrichtigungen), das Neueste zuletzt
-# args: list [N] [--source S] [--after ID] | kinds [--package P] | emit <source.kind> <subject> [text] [--level info|warn|error] [--payload JSON]
+# args: list [N] [--source S] [--after ID] | kinds [--package P] | emit <source.kind> <subject> [text] [--level info|warn|error] [--payload JSON] [--pkg NAME]
 # Front end of the event log in /var/lib/hs/state.db (scripts/state-db.py: `emit` is the ONE writer, root). `list` reads it without root;
 # a person at a terminal gets a table, `hs sys event list` and pipes get tab separated lines: id time source kind subject level text payload
 # (`-` for an empty field). Kinds are <source>.<kind>, registered in scripts/lib/event-kinds.tsv. docs/adr/0005-events.md.
@@ -35,6 +35,24 @@ case "$cmd" in
   emit)
     . "$here/lib/ui.sh"
     if [ "$(id -u)" != 0 ] && [ -z "${HS_EVENT_NOROOT:-}" ]; then fail "$(t 'Writing to the event log needs root: sudo hs event emit ...')"; fi
+    # --pkg <name>: the call is made for that package; its kind must be covered by its `events.emit` permission (docs/PLAN-extensions-access.md step 9).
+    # An uncovered kind is dropped with one warning per kind (exit 0, like the same emit from a service); a package without `permissions` keeps the prefix check only.
+    args=(); pkgname=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --pkg) [ $# -ge 2 ] || fail "$(t '--pkg needs a package name')"; pkgname=$2; shift 2 ;;
+        *) args+=("$1"); shift ;;
+      esac
+    done
+    set -- ${args[@]+"${args[@]}"}
+    if [ -n "$pkgname" ]; then
+      perms=()
+      mapfile -t perms < <(python3 "$here/pkg.py" perms "$pkgname" 2>/dev/null) || true
+      [ "${#perms[@]}" -gt 0 ] || fail "$(t "Unknown package: %s" "$pkgname")"
+      rc=0; msg=$(python3 -I "$here/lib/ext_service.py" emit-check --name "$pkgname" --kind "${1:-}" --state-dir "${HS_STATE_DIR:-/var/lib/hs}/ext-emit" -- "${perms[@]}" 2>&1) || rc=$?
+      if [ "$rc" -eq 3 ]; then [ -z "$msg" ] || warn "$msg"; exit 0; fi
+      [ "$rc" -eq 0 ] || fail "$(t 'The permission check of the event failed')"
+    fi
     rc=0; db emit "$@" || rc=$?
     [ "$rc" -eq 0 ] || fail "$(t 'The event was not written (usage: hs event emit <source.kind> <subject> [text] [--level L] [--payload JSON])')"
     ;;

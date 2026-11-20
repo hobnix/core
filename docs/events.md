@@ -105,6 +105,7 @@ The payload is optional extra data for programs. Rules:
 | `testlab.ok` | info | `ref`, `stage` | a test-lab run passed (subject: the run id) |
 | `testlab.failed` | error | `ref`, `stage` | a test-lab run failed or hit an error (subject: the run id; payload: the stage that failed) |
 | `testlab.skipped` | warn | `ref`, `stage` | a test-lab run could not run on this machine (no KVM, no nested virtualization or no incus; subject: the run id) |
+| `ext.service-failed` | error | `package`, `code` | a service extension failed 5 times in 10 minutes and the unit gave up (subject: the package; payload: its name and the last failure code) |
 
 <!-- END generated -->
 
@@ -142,6 +143,11 @@ If an event has no `label` or `icon` in its payload, the notification fills them
 
 Transition: the events of the media helper (`pkg.sabnzbd.*`, `pkg.maintainerr.*`) are kept as a copy in the same format in
 `scripts/lib/pkg-events/` until hobnix/recipes declares them. An installed file of the same package replaces the copy completely.
+
+**Deprecated:** the recipes `sabnzbd` (1.1.0) and `maintainerr` (1.2.0) now declare these events in their own `package.toml`. The core copy stays for
+one release so that an older install keeps its notifications, then `scripts/lib/pkg-events/` is deleted and the table below comes from the installed
+packages only. Add no new `pkg.` kind for a media event here; declare it in the recipe.
+
 The table is generated from that folder:
 
 <!-- BEGIN package events generated from scripts/lib/pkg-events (python3 scripts/events-doc-gen.py write) -->

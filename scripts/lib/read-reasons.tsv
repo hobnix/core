@@ -49,6 +49,7 @@ logs show	free query: unit, level and time chosen by the user, polled every 10 s
 pool list	rows change only through hs pool; the web store reads them once per page load, no timer
 pool disks	free query: depends on the role, no fixed topic
 state events	free query: the number of rows asked for, polled every 15 s while the events tab is open
+token list	free query: an admin sees all tokens, anybody else their own (the owner is part of the key); fetched when the page opens and after a change
 
 # No arguments and no topic yet: the page asks again on a timer or on demand
 cache state	no producer for a topic yet

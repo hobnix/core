@@ -1,0 +1,6 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "Extension services get events, emit events and publish snapshots"
+body  = """
+A service extension now receives the events it subscribed to and does not lose one when it restarts: an event it did not acknowledge comes again. Its own events are limited to 50 a minute, and what it publishes as a snapshot is shown as live data.
+"""

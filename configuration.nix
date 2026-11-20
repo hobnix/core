@@ -442,6 +442,35 @@ in
     serviceConfig.Type = "oneshot";
     script = "bash ${./scripts}/ext.sh boot";
   };
+  # One supervised process per service extension (docs/adr/0011-extension-service-lifecycle.md rule 2): `hs ext svc-run <name>` is the bridge
+  # scripts/lib/ext_service.py. Restart is systemd's job: 5 starts in 10 minutes, then `failed`; the bridge emits ext.service-failed.
+  # Not started by wantedBy: `hs ext enable|start` and hs-ext-boot do that. TimeoutStopSec is above the bridge's stop (10 s + 2 s + kill).
+  # Confinement (ADR 0014 step 2, docs/PLAN-extensions-access.md step 10): the properties below are the floor, so a unit started without its drop-in is
+  # still strict. `hs ext start` writes /run/systemd/system/hs-ext-svc@<name>.service.d/10-confine.conf (scripts/lib/ext_confine.py) with the
+  # same lines plus the paths and devices the package declares. Only what systemd gives: no network limit (net is declared only, D6), and the
+  # service still runs as root. Not tested on hardware yet.
+  systemd.services."hs-ext-svc@" = {
+    description = "Service extension %i";
+    unitConfig = {
+      StartLimitIntervalSec = 600;
+      StartLimitBurst = 5;
+    };
+    path = [ "/run/current-system/sw" ];
+    serviceConfig = {
+      ExecStart = "/run/current-system/sw/bin/bash ${./scripts}/ext.sh svc-run %i";
+      Restart = "on-failure";
+      RestartSec = 2;
+      TimeoutStopSec = 20;
+      KillMode = "mixed";
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = "";
+      ReadWritePaths = [ "-/var/lib/hs/ext-svc" ];
+    };
+  };
   systemd.services.hs-shutdown-notice = {
     description = "Push message: the server is going down";
     wantedBy = [ "multi-user.target" ];

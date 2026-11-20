@@ -14,7 +14,7 @@
   let { dialog } = $props();            // { area, args, title, option?: { label, args } } (option = a checkbox that adds its args and asks the plan again)
 
   let p = $state(null);                 // the plan, as the backend parsed it
-  let loadError = $state('');
+  let loadError = $state(dialog.refused ?? '');   // refused: this role may not make the change (ui.svelte.js openPlan), nothing is asked
   let confirm = $state('');
   let busy = $state(false);
   let startError = $state('');
@@ -37,7 +37,7 @@
   }
 
   onMount(() => {
-    if (saved) return;
+    if (saved || dialog.refused) return;
     let open = true;       // the answer may be one a button already asked for (prefetchPlan): it is not cancelled with the dialog
     askPlan(dialog.area, args, undefined, undefined, undefined, dialog.document)
       .then((r) => { if (open && asked === 0) p = r; }, (e) => { if (open && asked === 0) loadError = e.message; });

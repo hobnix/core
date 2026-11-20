@@ -1,0 +1,6 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "API tokens for programs: hs token create, list, revoke"
+body  = """A program (curl, a dashboard, a script) can use the web interface with a token instead of a password: curl -H "Authorization: Bearer hn_..." reads as the role of the person who made it, never more.
+
+The token is shown once when it is created and only its hash is kept. It ends at its expiry (90 days by default, one year at most) and within an hour after its owner is disabled or loses the role. A token cannot create tokens or use users, secrets or the unlock. Too many wrong tries lock the token id for five minutes. Not tested on hardware yet."""

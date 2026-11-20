@@ -175,7 +175,7 @@
       </Table>
     </div>
 
-    <div class="card tc">
+    {#if ui.role === 'admin'}<div class="card tc">
       <div class="ctl"><b>Find a file</b><span class="cs">in every restore point</span></div>
       <form class="findrow" onsubmit={(e) => { e.preventDefault(); find(); }}>
         <input class="input" bind:value={q} placeholder="Part of a file name, e.g. Rechnung" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Part of a file name" />
@@ -194,7 +194,7 @@
         {#if found.length >= 200}<div class="muted">Only the first 200 hits are shown: use a longer word.</div>{/if}
         <div class="muted">To bring a file back: Restore files… above, with the path and the restore point.</div>
       {/if}
-    </div>
+    </div>{/if}
   {/if}
 </PageState>
 

@@ -438,6 +438,20 @@ class Repos:
         except (OSError, tomllib.TOMLDecodeError):
             return None
 
+    def confine_text(self, name, commit):
+        """The prompt lines about the commands of the package that run confined (flag `confine`, ADR 0014: partial). `commit` None = the installed copy."""
+        try:
+            if commit is None:
+                with open(os.path.join(self.state, "current", name, "commands.tsv"), encoding="utf-8") as f:
+                    text = f.read()
+            else:
+                r_name, entry, _, _ = self.choose_installed(name, self.recorded(name)["repo"])
+                text = git("show", "%s:%s/commands.tsv" % (commit, entry["path"]), cwd=self.clone_dir(r_name)).decode("utf-8", "replace")
+        except (OSError, Refused, subprocess.SubprocessError):
+            return []
+        proto = self.pkg.pkg_protocol
+        return proto.confine_lines([w for _, w in proto.confine_rows_of(text)])
+
     def new_permissions(self, name, commit):
         """The permissions the release `commit` declares: (declared list or None, the ones the installed copy lacks)."""
         r_name, entry, _, _ = self.choose_installed(name, self.recorded(name)["repo"])
@@ -719,6 +733,10 @@ def run(pkg, cmd, rest):
             v, r_name, tag = R.install(rest[0], repo, want)
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(R.last_permissions))
+            for ln in R.confine_text(rest[0], None):
+                print(ln)
+            if R.last_permissions is None:
+                print("warning: %s" % pkg.pkg_perms.missing_text(rest[0]), file=sys.stderr)
         elif cmd == "update":
             res = R.diff(rest[0])
             if res is None:
@@ -728,6 +746,8 @@ def run(pkg, cmd, rest):
             print(text)
             new, fresh = R.new_permissions(rest[0], commit)
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(new))
+            for ln in R.confine_text(rest[0], commit):
+                print(ln)
             if fresh:
                 print("NEW permissions compared with the installed version: %s" % ", ".join(fresh))
                 if "--accept-permissions" not in rest:

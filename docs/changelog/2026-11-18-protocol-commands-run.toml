@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "Extension commands can speak the command protocol"
+body  = """A package that says `protocol = [1]` in its `package.toml` (API level 10) has its commands run through the command protocol: the core sends one request, prints the answer as text or tab-separated lines and stops a command that runs past its `timeout:` together with everything it started. Existing packages are unchanged. Not tested on hardware yet."""
