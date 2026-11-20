@@ -5,7 +5,7 @@
   import { onMount } from 'svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import Chip from '../ui/Chip.svelte';
-  import { sizeTxt } from '../pages/storage/pool.js';
+  import UsageBar from '../shell/UsageBar.svelte';
 
   let { fm, side } = $props();
   let root;
@@ -24,7 +24,6 @@
     { title: 'Other', rows: fm.locs.filter((l) => !['pool', 'disk', 'cache', 'share', 'temp'].includes(l.kind)).map((l) => ({ l, child: false })) },
   ].filter((g) => g.rows.length));
 
-  const pct = (l) => (l.size > 0 && Number.isFinite(l.free) ? Math.round((1 - l.free / l.size) * 100) : 0);
   const why = (l) => { const pr = fm.pairOf(side, l.id); return pr.ok ? '' : pr.reason || 'Not possible together with the other pane'; };
   function pick(l) { if (!why(l)) fm.pickLocation(side, l.id); }
   function key(e) {
@@ -47,11 +46,11 @@
         {@const no = why(l)}
         <button type="button" class="fmpr" class:cur={l.id === cur} class:child class:locked={!!no} role="option" aria-selected={l.id === cur} aria-disabled={!!no} use:tip={no} onclick={() => pick(l)}>
           <span class="pl"><b class="mono">{l.label}</b><Chip>{l.kind}</Chip>{#if l.fs}<span class="fsx">{l.fs}</span>{/if}{#if !l.writable}<Chip>{l.modifiable ? 'closed' : 'read only'}</Chip>{/if}</span>
-          <span class="pm">{l.size > 0 ? `${sizeTxt(l.size)}${Number.isFinite(l.free) ? `, ${sizeTxt(l.free)} free` : ''}` : ''}{#if !l.writable && l.reason} · {l.reason}{/if}</span>
+          <span class="pm">{#if !l.writable && l.reason}{l.reason}{/if}</span>
           {#if no}
             <span class="pr2"><i class="ph ph-lock"></i>{no}</span>
-          {:else if l.size > 0 && Number.isFinite(l.free)}
-            <span class="pb"><span class="bar" class:hot={pct(l) >= 90}><span style="width:{pct(l)}%"></span></span><span class="pc">{pct(l)} %</span></span>
+          {:else if l.size > 0}
+            <span class="pb"><UsageBar free={Number.isFinite(l.free) ? l.free : null} size={l.size} width={70} /></span>
           {/if}
         </button>
       {/each}
@@ -75,10 +74,6 @@
   .fsx { font-size: 12px; color: var(--fg-3); }
   .pm { grid-column: 1; font-size: 12px; color: var(--fg-3); }
   .pb { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 8px; align-self: center; }
-  .bar { position: relative; width: 70px; height: 8px; background: var(--panel-3); overflow: hidden; -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); }
-  .bar span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
-  .bar.hot span { background: var(--warn); }
-  .pc { font: 12px var(--mono); color: var(--fg-2); min-width: 3em; text-align: right; }
   .pr2 { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 6px; color: var(--warn-ink); font-size: 12px; align-self: center; max-width: 220px; }
   @media (max-width: 860px) { .fmpick { position: fixed; left: 8px; right: 8px; top: 70px; } }
 </style>

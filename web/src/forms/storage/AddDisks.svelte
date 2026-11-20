@@ -1,4 +1,5 @@
 <script>
+  import { Field, TextInput, Select, Checkbox, Segmented, Row } from '../../ui/index.js';
   // Add disks (design: "Create dialog" > "Add disks", three variants):
   //   ZFS pool        : exactly 2 free disks become a new mirror vdev (red, the pool name is typed to confirm)
   //   SnapRAID pool   : "Add empty disks" (role, filesystem, optional LUKS) or "Adopt disks" (one disk that already holds files)
@@ -50,70 +51,37 @@
 
 <CreateDialog {title} kicker="Pool" area="pool" {args} {stdin}>
   {#snippet form()}
-    <div class="field">
-      <label for="ad-pool">Pool</label>
-      <div class="seg" id="ad-pool" role="radiogroup" aria-label="Pool">
-        {#each pools.rows as { name: p }}
-          <label class="seg-opt"><input type="radio" name="ad-pool" checked={pool === p} onchange={() => setPool(p)} />{p}</label>
-        {/each}
-      </div>
-    </div>
+    <Field label="Pool" id="ad-pool">
+      <Segmented label="Pool" value={pool} options={pools.rows.map((r) => r.name)} onchange={setPool} />
+    </Field>
 
     {#if snap}
-      <div class="field">
-        <label for="ad-var">What to add</label>
-        <div class="seg" id="ad-var" role="radiogroup" aria-label="What to add">
-          <label class="seg-opt"><input type="radio" name="ad-var" checked={variant === 'empty'} onchange={() => setVariant('empty')} />Add empty disks</label>
-          <label class="seg-opt"><input type="radio" name="ad-var" checked={variant === 'adopt'} onchange={() => setVariant('adopt')} />Adopt disks</label>
-        </div>
-      </div>
+      <Field label="What to add" id="ad-var">
+        <Segmented label="What to add" value={variant} options={[{ value: 'empty', label: 'Add empty disks' }, { value: 'adopt', label: 'Adopt disks' }]} onchange={setVariant} />
+      </Field>
     {/if}
 
-    <div class="field">
-      <label for="ad-disks">
-        {#if adopting}A disk with files on it (it stays as it is, its files are brought into the pool){:else if snap}Free disks (they are erased){:else}Two free disks for the new mirror (they are erased){/if}
-      </label>
+    <Field id="ad-disks" label={adopting ? 'A disk with files on it (it stays as it is, its files are brought into the pool)' : snap ? 'Free disks (they are erased)' : 'Two free disks for the new mirror (they are erased)'}
+           help={!snap && !adopting ? `${picked.length} of 2 picked${picked.length > 2 ? ': pick exactly two' : ''}` : ''}>
       <div id="ad-disks">
         <DiskPicker disks={list} loaded={free.loaded} bind:picked single={adopting} empty={adopting ? 'No disk with files on it.' : 'No free disks.'} />
       </div>
-      {#if !snap && !adopting}<div class="hint">{picked.length} of 2 picked{picked.length > 2 ? ': pick exactly two' : ''}</div>{/if}
-    </div>
+    </Field>
 
     {#if adopting}
-      <label class="check"><input type="checkbox" bind:checked={merge} />Merge its folders into the existing shares</label>
-      <label class="check"><input type="checkbox" bind:checked={chown} />Give the files to the file owner of the shares (chown)</label>
+      <Checkbox bind:checked={merge} label="Merge its folders into the existing shares" />
+      <Checkbox bind:checked={chown} label="Give the files to the file owner of the shares (chown)" />
     {:else if snap}
-      <div class="two">
-        <div class="field">
-          <label for="ad-role">Role</label>
-          <select id="ad-role" class="input" bind:value={role}>
-            <option value="data">data</option>
-            <option value="parity">parity</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="ad-fs">Filesystem</label>
-          <select id="ad-fs" class="input" bind:value={fs}>
-            {#each FS as [v, t]}<option value={v}>{t}</option>{/each}
-          </select>
-        </div>
-      </div>
-      <label class="check"><input type="checkbox" bind:checked={encrypt} />Encrypt with LUKS</label>
+      <Row gap="3" align="start">
+        <div style="flex:1"><Field label="Role"><Select bind:value={role} options={['data', 'parity']} /></Field></div>
+        <div style="flex:1.6"><Field label="Filesystem"><Select bind:value={fs} options={FS.map(([value, label]) => ({ value, label }))} /></Field></div>
+      </Row>
+      <Checkbox bind:checked={encrypt} label="Encrypt with LUKS" />
       {#if encrypt}
-        <div class="field">
-          <label for="ad-pass">Passphrase (the one for all encrypted disks of this server; the first time it sets it)</label>
-          <input id="ad-pass" class="input" type="password" bind:value={pass} autocomplete="new-password" spellcheck="false" />
-          <div class="hint">It is sent to the server on its own and never appears in the command.</div>
-        </div>
+        <Field label="Passphrase (the one for all encrypted disks of this server; the first time it sets it)" help="It is sent to the server on its own and never appears in the command.">
+          <TextInput type="password" bind:value={pass} autocomplete="new-password" spellcheck={false} />
+        </Field>
       {/if}
     {/if}
   {/snippet}
 </CreateDialog>
-
-<style>
-  .two { display: grid; grid-template-columns: 1fr 1.6fr; gap: 12px; }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
-  .check input { accent-color: var(--color-accent); }
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 5px; }
-  select.input { cursor: pointer; }
-</style>

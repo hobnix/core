@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "The Events page is a timeline"
+body  = """Events are listed newest first, grouped by day, with the level written as a word and the filters above the list. The filters work as before; a new row still appears at once without reloading."""

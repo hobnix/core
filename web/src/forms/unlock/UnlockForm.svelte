@@ -1,10 +1,11 @@
 <script>
   import Button from '../../ui/Button.svelte';
+  import TextInput from '../../ui/TextInput.svelte';
   // The passphrase field and the Unlock button. The passphrase lives only in the input and in the one request; it is cleared after every attempt.
   // On success nothing else happens here: the Shell polls the status document and the page shows the open storage by itself.
   let { width = '100%' } = $props();
 
-  let input;
+  let passphrase = $state('');
   let busy = $state(false);
   let error = $state('');
   let done = $state(false);
@@ -27,9 +28,9 @@
 
   async function unlock(e) {
     e?.preventDefault();
-    if (busy || !input || !input.value) return;
-    const pass = input.value;
-    input.value = '';
+    if (busy || !passphrase) return;
+    const pass = passphrase;
+    passphrase = '';
     busy = true;
     error = '';
     try {
@@ -46,8 +47,8 @@
 <form class="uf" onsubmit={unlock} style="width:{width}">
   <label class="lab" for="unlock-pp">Passphrase</label>
   <div class="unl">
-    <input id="unlock-pp" type="password" autocomplete="off" spellcheck="false" maxlength="256" bind:this={input}
-      placeholder="One passphrase for every encrypted disk" disabled={busy || done}>
+    <TextInput id="unlock-pp" type="password" autocomplete="off" spellcheck={false} maxlength={256} bind:value={passphrase} style="padding-right:110px"
+      placeholder="One passphrase for every encrypted disk" disabled={busy || done} />
     <Button size="sm" type="submit" icon="lock-key-open" busy={busy} busyLabel="Unlocking…" disabled={done} tooltip={done ? 'Already unlocked' : busy ? 'Unlocking' : 'Unlock the encrypted storage with the passphrase'}>Unlock</Button>
   </div>
   {#if busy}
@@ -64,9 +65,6 @@
   .uf { display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
   .lab { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   .unl { position: relative; width: 100%; }
-  .unl input { width: 100%; height: 36px; padding: 0 110px 0 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel-2); color: var(--fg); font: inherit; }
-  .unl input::placeholder { color: var(--fg-3); }
-  .unl input:focus-visible { border-color: var(--accent); outline: none; }
   .unl .btn { position: absolute; right: 4px; top: 4px; background: var(--panel-3); }
   .unl .btn:hover { background: var(--panel); border-color: var(--fg-3); }
   .muted { font-size: 12px; color: var(--fg-3); }

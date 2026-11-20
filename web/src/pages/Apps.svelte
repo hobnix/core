@@ -11,6 +11,7 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
+  import { TextInput, Switch, Dialog, Muted } from '../ui/index.js';
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import Chip from '../ui/Chip.svelte';
@@ -175,7 +176,7 @@
     {#each [['all', 'All'], ['installed', 'Installed'], ['todo', 'Not installed']] as [k, l]}
       <Button variant={show === k ? 'primary' : 'ghost'} size="sm" onclick={() => (show = k)}>{l}</Button>
     {/each}
-    <input class="input find" bind:value={q} placeholder="Search apps" aria-label="Search apps" autocomplete="off" />
+    <div class="find"><TextInput bind:value={q} placeholder="Search apps" ariaLabel="Search apps" autocomplete="off" /></div>
   </div>
 
   {#if selected.size}
@@ -192,7 +193,7 @@
       {#snippet cell(a, col)}
         {@const on = a.state === 'installed'}
         {#if col.key === 'sel'}
-          <input type="checkbox" checked={selected.has(a.name)} onchange={(e) => toggle(a.name, e.target.checked)} aria-label="Select {a.name}" />
+          <Switch box checked={selected.has(a.name)} onchange={(c) => toggle(a.name, c)} label="Select {a.name}" />
         {:else if col.key === 'go'}
           {@const act = appAction(a)}
           <Button need="app-manager" variant={act.primary ? 'primary' : 'secondary'} size="sm" class="apps-go" disabled={a.state === 'parked'} tooltip={act.tip} onclick={() => run(a)}><i class="ph ph-{act.icon}"></i>{act.label}</Button>
@@ -248,35 +249,35 @@
 </PageState>
 
 {#if bulkOpen}
-  <div class="dialog-backdrop" onclick={cancelBulk}>
-    <div class="bulk-dialog" onclick={(e) => e.stopPropagation()}>
+  <Dialog title="Bulk change" panel="dialog" width="460px" onclose={cancelBulk}>
+    <div class="bulkd">
       <h3>{bulkOpen.action === 'install' ? 'Install the selected apps' : 'Update the selected apps'}</h3>
       <p>Each app gets its own background job and the jobs run one after another. The result appears under Jobs.</p>
       <ul class="bulk-list">
-        {#each bulkOpen.items as a}<li>{a.name} <span class="bulk-note">({a.state})</span></li>{/each}
+        {#each bulkOpen.items as a}<li>{a.name} <Muted>({a.state})</Muted></li>{/each}
       </ul>
       <div class="bulk-foot">
         <Button onclick={cancelBulk}>Cancel</Button>
         <Button need="app-manager" variant="primary" disabled={bulkBusy} onclick={confirmBulk}>Start {bulkOpen.items.length} job{bulkOpen.items.length === 1 ? '' : 's'}</Button>
       </div>
     </div>
-  </div>
+  </Dialog>
 {/if}
 
 {#if showSummary}
-  <div class="dialog-backdrop" onclick={dismissSummary}>
-    <div class="bulk-dialog" onclick={(e) => e.stopPropagation()}>
+  <Dialog title="Result" panel="dialog" width="460px" onclose={dismissSummary}>
+    <div class="bulkd">
       <h3 class:{bad}={failedCount > 0}>{failedCount > 0 ? 'Some jobs failed' : 'All jobs finished'}</h3>
       <ul class="bulk-list">
         {#each bulkSummary as r}
-          <li class:{bad}={!r.ok}>{r.name} <span class="bulk-note">{r.ok ? 'finished' : (r.reason ?? ('state: ' + (r.state ?? 'failed')))}</span></li>
+          <li class:{bad}={!r.ok}>{r.name} <Muted>{r.ok ? 'finished' : (r.reason ?? ('state: ' + (r.state ?? 'failed')))}</Muted></li>
         {/each}
       </ul>
       <div class="bulk-foot">
         <Button variant="primary" onclick={dismissSummary}>Done</Button>
       </div>
     </div>
-  </div>
+  </Dialog>
 {/if}
 
 <style>
@@ -294,15 +295,13 @@
   .vnew { color: var(--accent-ink); }
   .bulk { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 10px 0 6px; }
   .bulk-count { font: 500 12.5px var(--mono); color: var(--fg-2); }
-  .bulk-dialog { background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 24px 64px oklch(0 0 0 / 0.5); width: min(460px, 92vw); max-height: 82vh; overflow: auto; margin: 2vh auto; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
-  .bulk-dialog h3 { margin: 0 0 2px; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
-  .bulk-dialog h3.bad { color: var(--bad-ink); }
-  .bulk-dialog p { margin: 0; font-size: 12.5px; color: var(--fg-3); }
+  .bulkd { display: flex; flex-direction: column; gap: 12px; }
+  .bulkd h3 { margin: 0 0 2px; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+  .bulkd h3.bad { color: var(--bad-ink); }
+  .bulkd p { margin: 0; font-size: 12.5px; color: var(--fg-3); }
   .bulk-list { margin: 0; padding: 0 0 0 20px; font-size: 13px; color: var(--fg); gap: 6px; display: flex; flex-direction: column; }
   .bulk-list li { display: flex; justify-content: space-between; gap: 10px; }
   .bulk-list li.bad { color: var(--bad-ink); }
-  .bulk-note { color: var(--fg-2); font-size: 12px; }
   .bulk-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--line); }
-  .dialog-backdrop { position: fixed; inset: 0; background: oklch(0 0 0 / 0.45); display: grid; place-items: center; z-index: 60; }
   .bad { color: var(--bad-ink); }
 </style>

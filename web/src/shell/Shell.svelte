@@ -7,6 +7,7 @@
   import PageFrame from './PageFrame.svelte';
   import NodeProbe from './NodeProbe.svelte';
   import PlanDialog from './PlanDialog.svelte';
+  import Toast from '../ui/Toast.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import { readsFor } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
@@ -61,7 +62,7 @@
       const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
         '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
       prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
-        '/api/sys/jobs/running', '/api/sys/unifi/used', '/api/sys/unifi/reserved'])]);
+        '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });
 
@@ -171,6 +172,7 @@
 <BottomPanel user={who} />
 {#if ui.dialog}<PlanDialog dialog={ui.dialog} />{/if}
 {#if ui.create}{@const Form = ui.create.component}<Form {...ui.create.props} />{/if}
+<Toast />
 
 <style>
   .body { position: relative; flex: 1; min-height: 0; display: flex; }

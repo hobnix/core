@@ -1,5 +1,6 @@
 <script>
   import Button from '../ui/Button.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   // Jump-to search of the top bar. Client side only: the lists are the reads the pages already use, fetched when the box gets focus.
   import { nodeItems, vpsTree, visible } from '../nav.js';
   import { pools, poolNames, poolOfRole } from '../pools.svelte.js';
@@ -152,7 +153,7 @@
   <Button variant="ghost" class="search-icon" aria-label="Search" tooltip={'Search'} onclick={showInput}><i class="ph ph-magnifying-glass" style="font-size:16px"></i></Button>
   <div class="field">
     <i class="ph ph-magnifying-glass"></i>
-    <input class="input" bind:this={input} bind:value={q} type="text" placeholder="Search shares, instances, users…" aria-label="Search" autocomplete="off" spellcheck="false"
+    <TextInput bind:el={input} bind:value={q} placeholder="Search shares, instances, users…" ariaLabel="Search" autocomplete="off" spellcheck={false}
       role="combobox" aria-expanded={open && searching} aria-controls="search-list" aria-autocomplete="list" aria-activedescendant={open && flat.length ? `sr-${active}` : undefined}
       onfocus={() => { focused = true; open = true; }} onblur={blur} oninput={() => (open = true)} onkeydown={onkey} />
     {#if open && searching}
@@ -178,7 +179,7 @@
   .search { position: relative; width: min(340px, 30vw); }
   .field { position: relative; }
   .field > i { position: absolute; left: 10px; top: 9px; color: var(--color-neutral-500); pointer-events: none; }
-  .field .input { min-height: 30px; padding: 4px 10px 4px 30px; font-size: 13px; background: var(--color-bg); }
+  .field :global(.input) { min-height: 30px; padding: 4px 10px 4px 30px; font-size: 13px; background: var(--color-bg); }
   :global(.btn.search-icon) { display: none; padding: 5px 6px; }
   .drop { position: absolute; top: calc(100% + 6px); left: 0; width: max(100%, 320px); max-height: 60vh; overflow: auto; padding: 4px; background: var(--color-surface); display: flex; flex-direction: column; z-index: 50; }
   .gh { padding: 8px 8px 3px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-neutral-500); }

@@ -5,6 +5,7 @@
   import Halftone from '../shell/Halftone.svelte';
   import Combobox from '../ui/Combobox.svelte';
   import Switch from '../ui/Switch.svelte';
+  import Slider from '../ui/Slider.svelte';
   import { ht, setHalftone, resetHalftone, isDefault, LIMITS, MODES } from '../halftone.svelte.js';
   import { MATRIX_SIZES } from '../shell/bayer.js';
   import { theme, toggleTheme } from '../theme.svelte.js';
@@ -27,7 +28,6 @@
     { k: 'grain', label: 'Grain', hint: '0 = the clean regular pattern, more breaks it up', show: (v) => `${Math.round(v * 100)} %` },
   ];
 
-  const pct = (k) => ((ht[k] - LIMITS[k][0]) / (LIMITS[k][1] - LIMITS[k][0])) * 100;
   const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 </script>
 
@@ -60,8 +60,8 @@
       {#each rows as r (r.k)}
         <div class="field">
           <label for={'ht-' + r.k}>{r.label}<b>{r.show(ht[r.k])}</b></label>
-          <input id={'ht-' + r.k} type="range" min={LIMITS[r.k][0]} max={LIMITS[r.k][1]} step={LIMITS[r.k][2]} value={ht[r.k]}
-                 style:--p={pct(r.k) + '%'} oninput={(e) => setHalftone({ [r.k]: e.currentTarget.valueAsNumber })} />
+          <Slider id={'ht-' + r.k} min={LIMITS[r.k][0]} max={LIMITS[r.k][1]} step={LIMITS[r.k][2]} value={ht[r.k]}
+                  oninput={(e) => setHalftone({ [r.k]: e.currentTarget.valueAsNumber })} />
           <span class="hint">{r.hint}</span>
         </div>
       {/each}
@@ -88,14 +88,4 @@
   .hint { font-size: 12px; color: var(--fg-3); }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .note { margin: 0; font-size: 12px; color: var(--fg-3); }
-
-  /* range: a hard-edged track filled with the accent up to the value, a square thumb */
-  input[type='range'] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
-  input[type='range']::-webkit-slider-runnable-track { height: 6px; background: linear-gradient(to right, var(--accent) var(--p), var(--panel-3) var(--p)); border: 1px solid var(--line-2); border-radius: 0; }
-  input[type='range']::-moz-range-track { height: 6px; background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 0; }
-  input[type='range']::-moz-range-progress { height: 6px; background: var(--accent); border-radius: 0; }
-  input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 18px; margin-top: -7px; background: var(--fg); border: 1px solid var(--bg); border-radius: 0; }
-  input[type='range']::-moz-range-thumb { width: 10px; height: 16px; background: var(--fg); border: 1px solid var(--bg); border-radius: 0; }
-  input[type='range']:hover::-webkit-slider-thumb { background: var(--accent-ink); }
-  input[type='range']:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 </style>

@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "Settings > Updates shows its page again"
+body  = """The Updates page of Settings stayed blank because its status tag was never computed. It now shows up to date or how many updates are waiting."""

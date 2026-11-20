@@ -6,6 +6,7 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import Wizard from '../ui/Wizard.svelte';
   import ChoiceList from '../ui/ChoiceList.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import { tr } from '../i18n.js';
   import { openPlan } from '../ui.svelte.js';
   import { stepKeys, draftFrom, applyPreset, optionOf, freeKeys, withDefaults, visibleSteps, withRecommended, screens, diff, changed, changedAll, applyParts, readPath, withReadOptions } from './steps.js';
@@ -67,7 +68,7 @@
       <div class="fld">
         <div class="k"><code>{k}</code></div>
         <div class="v">
-          <input class="input in" bind:value={draft[k]} placeholder={dflt[k]} aria-label={k} />
+          <TextInput bind:value={draft[k]} placeholder={dflt[k]} ariaLabel={k} />
           <span class="hp" use:tip={help[k]}>{help[k]}</span>
         </div>
       </div>
@@ -110,7 +111,7 @@
         <div class="fld">
           <div class="k"><code>{k}</code></div>
           <div class="v">
-            <input class="input in" bind:value={draft[k]} placeholder={dflt[k]} aria-label={k} />
+            <TextInput bind:value={draft[k]} placeholder={dflt[k]} ariaLabel={k} />
             <span class="hp" use:tip={help[k]}>{help[k]}</span>
           </div>
         </div>
@@ -130,7 +131,7 @@
   .k { padding-top: 7px; overflow-wrap: anywhere; }
   .k code { font-size: 12px; }
   .v { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .in { min-height: 32px; font-size: 13px; font-family: var(--font-mono, ui-monospace, monospace); }
+  .v :global(.input) { min-height: 32px; font-size: 13px; font-family: var(--font-mono, ui-monospace, monospace); }
   .hp { font-size: 11.5px; color: var(--fg-3); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .q { font-size: 20px; font-weight: 600; }
   .foot { display: flex; justify-content: flex-end; }

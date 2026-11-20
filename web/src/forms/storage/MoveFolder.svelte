@@ -1,4 +1,5 @@
 <script>
+  import { Field, Select, Row, Muted, Chip } from '../../ui/index.js';
   import Button from '../../ui/Button.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   // Move a folder (or file) from one SnapRAID data disk to another, disk to disk (hs sys disk plan|start <member> move --path <path> [--to <member>]).
@@ -28,12 +29,8 @@
 
 <CreateDialog title="Move a folder to another disk" kicker="Pool" area="disk" {args}>
   {#snippet form()}
-    <div class="field">
-      <span class="lab">From data disk</span>
-      <div class="fixed"><code>{member}</code> <span class="tag tag-neutral" style="padding:1px 7px">{pool}</span></div>
-    </div>
-    <div class="field">
-      <span class="lab">Folder or file</span>
+    <Field label="From data disk" id="mf-from"><Row gap="2" id="mf-from"><code>{member}</code><Chip>{pool}</Chip></Row></Field>
+    <Field label="Folder or file" id="mf-pick">
       <div class="crumbs">
         <button type="button" class="lnk" onclick={() => up(0)}>{member}</button>
         {#each crumbs as c, i}<span>/</span><button type="button" class="lnk" onclick={() => up(i + 1)}>{c}</button>{/each}
@@ -53,23 +50,16 @@
           <li class="sub">{list.loaded ? 'Nothing here.' : 'Loading…'}</li>
         {/each}
       </ul>
-      {#if picked}<div class="hint">Chosen: <code>{picked}</code></div>{:else}<div class="hint">Open shares or sensitive, then choose the folder or file to move.</div>{/if}
-    </div>
-    <div class="field">
-      <span class="lab">To data disk</span>
-      <select class="input" bind:value={to} aria-label="Target disk">
-        <option value="">The open disk with the most free space</option>
-        {#each others as t}<option value={t}>{t}</option>{/each}
-      </select>
-    </div>
-    <div class="hint">Disk to disk: /{pool} shows the same files at the same paths the whole time. A file that the target already has is never overwritten. To put the files in another folder or share, rename them inside /{pool} afterwards.</div>
+      {#if picked}<Muted as="div">Chosen: <code>{picked}</code></Muted>{:else}<Muted as="div">Open shares or sensitive, then choose the folder or file to move.</Muted>{/if}
+    </Field>
+    <Field label="To data disk">
+      <Select bind:value={to}><option value="">The open disk with the most free space</option>{#each others as t}<option value={t}>{t}</option>{/each}</Select>
+    </Field>
+    <Muted as="p">Disk to disk: /{pool} shows the same files at the same paths the whole time. A file that the target already has is never overwritten. To put the files in another folder or share, rename them inside /{pool} afterwards.</Muted>
   {/snippet}
 </CreateDialog>
 
 <style>
-  .lab { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-  .fixed { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 5px; }
   .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12.5px; margin-bottom: 6px; }
   .lnk { background: none; border: 0; padding: 0; color: var(--color-accent, inherit); cursor: pointer; font: inherit; text-align: left; }
   .files { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; border: 1px solid var(--color-border, rgba(128,128,128,.3)); border-radius: var(--r); }

@@ -1,5 +1,6 @@
 <script>
   import Button from '../ui/Button.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import { onMount } from 'svelte';
   import { plan as askPlan, start as doStart } from '../api.js';
   import { ui, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
@@ -10,6 +11,7 @@
   import Chip from '../ui/Chip.svelte';
   import Checkbox from '../ui/Checkbox.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import Dialog from '../ui/Dialog.svelte';
 
   let { dialog } = $props();            // { area, args, title, option?: { label, args } } (option = a checkbox that adds its args and asks the plan again)
 
@@ -70,10 +72,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
-
-<div class="dialog-backdrop" role="presentation">
-  <div class="pdlg" class:danger role="dialog" aria-modal="true" aria-labelledby="pdt">
+<Dialog labelledby="pdt" width="540px" onclose={close}>
+  <div class="pdlg" class:danger>
     {#if danger}<div class="stripe"></div>{/if}
     <div class="dh">
       <!-- halftone slot: the dialog header (not for a danger plan, whose header is tinted red) -->
@@ -110,7 +110,7 @@
     {#if !saved && allowed && p.confirm_name}
       <div class="confirm">
         <label for="cf">Type <code>{p.confirm_name}</code> to confirm</label>
-        <input id="cf" class="input" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck="false" />
+        <TextInput id="cf" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck={false} />
       </div>
     {/if}
     {#if saved}
@@ -134,10 +134,10 @@
     </div>
     {/if}
   </div>
-</div>
+</Dialog>
 
 <style>
-  .pdlg { position: relative; width: min(540px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 24px 64px oklch(0 0 0 / 0.5); }
+  .pdlg { display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .stripe { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--bad); z-index: 2; }
   .dh { position: relative; flex: none; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); overflow: hidden; }
   .pdlg.danger .dh { background: color-mix(in oklch, var(--bad) 10%, var(--panel)); }
@@ -151,7 +151,7 @@
   .confirm { padding: 14px 22px; border-top: 1px solid var(--line); }
   .confirm label { display: block; margin-bottom: 6px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   .confirm code { color: var(--fg); text-transform: none; letter-spacing: 0; }
-  .confirm .input { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
+  .confirm :global(.input) { border-color: color-mix(in oklch, var(--bad) 55%, var(--line-2)); font-family: var(--mono); }
   .dfoot { flex: none; display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 14px 22px; background: var(--panel-2); border-top: 1px solid var(--line); }
   .note { flex: 1; min-width: 180px; color: var(--fg-3); font-size: 12.5px; }
 </style>

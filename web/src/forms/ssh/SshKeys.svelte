@@ -1,5 +1,7 @@
 <script>
+  import Chip from '../../ui/Chip.svelte';
   import Button from '../../ui/Button.svelte';
+  import { Field, Textarea } from '../../ui/index.js';
   // SSH keys of adminuser: the list (`hs sys ssh-key list`: id, type, comment, session) with a remove button per key (plan dialog,
   // red, you type the word), and a field to add a public key (`hs sys ssh-key plan|start add <key>`). Both only change machine.toml;
   // the change takes effect with `hs rebuild` (the plan says so).
@@ -33,7 +35,7 @@
         <tbody>
           {#each keys as k}
             <tr>
-              <td>{k.comment || '(no comment)'}{#if k.session} <span class="tag tag-accent">this session</span>{/if}</td>
+              <td>{k.comment || '(no comment)'}{#if k.session} <Chip tone="accent">this session</Chip>{/if}</td>
               <td class="n400 opt">{k.type}</td>
               <td class="n400 fp">{k.id}</td>
               <td class="act">
@@ -47,12 +49,9 @@
         </tbody>
       </table></div>
     </div>
-    <div class="field">
-      <label for="sk-key">Add a key</label>
-      <textarea id="sk-key" class="input" rows="4" bind:value={text} placeholder="ssh-ed25519 AAAA... name@pc" autocomplete="off" spellcheck="false"></textarea>
-      {#if line && !oneLine}<div class="hint bad">One line only: the content of the .pub file.</div>
-      {:else if line && !shapeOk}<div class="hint bad">That is not a public key line. It starts with ssh-ed25519, ssh-rsa or ecdsa-sha2-... and is the .pub file, never the private key.</div>{/if}
-    </div>
+    <Field label="Add a key" id="sk-key" error={line && !oneLine ? 'One line only: the content of the .pub file.' : line && !shapeOk ? 'That is not a public key line. It starts with ssh-ed25519, ssh-rsa or ecdsa-sha2-... and is the .pub file, never the private key.' : ''}>
+      <Textarea rows={4} bind:value={text} placeholder="ssh-ed25519 AAAA... name@pc" autocomplete="off" spellcheck={false} mono />
+    </Field>
     <div class="hint">Paste the line from <code>~/.ssh/id_ed25519.pub</code> on the PC that should get access. Adding or removing only changes machine.toml; it takes effect with <code>hs rebuild</code>.</div>
   {/snippet}
 </CreateDialog>
@@ -66,7 +65,6 @@
   .fp { font-family: monospace; font-size: 11px; word-break: break-all; }
   .act { text-align: right; white-space: nowrap; }
   .danger { color: var(--st-bad); }
-  textarea.input { resize: vertical; font-family: monospace; font-size: 12px; }
   .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 4px; }
   .hint.bad { color: var(--st-bad); }
 </style>

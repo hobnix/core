@@ -3,6 +3,7 @@
   // Local = a name on the gateway proxy (capability gateway), public = a route on the reverse proxy. Only the description is changed; the
   // routes are made by "Apply" on the Services page. Public is red (the typed word is the service name); an admin page is never public.
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { Field, TextInput, Select } from '../../ui/index.js';
   import Switch from '../../ui/Switch.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { ui } from '../../ui.svelte.js';
@@ -52,12 +53,11 @@
       <div class="hint">{app} has not described a service yet. Run it again from the Apps page, or describe one on the Services page.</div>
     {:else}
       {#if mine.length > 1}
-        <div class="field">
-          <label for="as-svc">Service</label>
-          <select id="as-svc" class="input" bind:value={pick}>
+        <Field label="Service" id="as-svc">
+          <Select bind:value={pick}>
             {#each mine as s}<option value={s.name}>{s.title} ({s.name})</option>{/each}
-          </select>
-        </div>
+          </Select>
+        </Field>
       {/if}
       <div class="row">
         <Switch bind:checked={local} disabled={!gateway} reason="The gateway extension is not on, so there are no local names" label="Local" />
@@ -68,10 +68,9 @@
         <div><b>Public</b><span>Reachable from the internet through the reverse proxy.</span></div>
       </div>
       {#if pub && !sel?.admin}
-        <div class="field">
-          <label for="as-name">Public name</label>
-          <input id="as-name" class="input" bind:value={fqdn} placeholder="media.example.org" autocomplete="off" spellcheck="false" />
-        </div>
+        <Field label="Public name" id="as-name">
+          <TextInput bind:value={fqdn} placeholder="media.example.org" autocomplete="off" spellcheck={false} />
+        </Field>
       {/if}
       <div class="hint">This changes the description only. Nothing reaches the proxies until you press Apply on the Services page.</div>
     {/if}

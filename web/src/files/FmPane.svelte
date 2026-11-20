@@ -126,13 +126,13 @@
         {#if loc}<Chip>{loc.kind}</Chip><b class="mono">{loc.label}</b>{#if loc.fs}<span class="fsx">{loc.fs}</span>{/if}{:else}<span class="fsx">{p.loc || 'Choose a location'}</span>{/if}
         <span class="cv" aria-hidden="true"></span>
       </button>
-      {#if loc && !loc.writable}<span class="tag tag-neutral warnchip" use:tip={loc.reason || 'Nothing can be written here'}>{loc.modifiable ? 'closed' : 'read only'}</span>{/if}
+      {#if loc && !loc.writable}<Chip tone="warn" title={loc.reason || 'Nothing can be written here'}>{loc.modifiable ? 'closed' : 'read only'}</Chip>{/if}
       <span class="grow"></span>
-      <input class="input fmfilter" type="search" placeholder="Filter" aria-label="Filter the list" data-fmfilter={side} bind:value={p.filter} onkeydown={(e) => { if (e.key === 'Escape') { p.filter = ''; e.currentTarget.blur(); e.stopPropagation(); } else if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key !== 'Tab') e.stopPropagation(); }} />
-      <button class="btn btn-ghost btn-icon sq" aria-pressed={p.hidden} aria-label="Show hidden files" use:tip={p.hidden ? 'Hide dot files' : 'Show dot files'} onclick={() => (p.hidden = !p.hidden)}><i class="ph ph-{p.hidden ? 'eye' : 'eye-slash'}"></i></button>
+      <span class="fmfilter" data-fmfilter={side}><TextInput placeholder="Filter" ariaLabel="Filter the list" bind:value={p.filter} onkeydown={(e) => { if (e.key === 'Escape') { p.filter = ''; e.currentTarget.blur(); e.stopPropagation(); } else if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key !== 'Tab') e.stopPropagation(); }} /></span>
+      <Button variant="ghost" size="sm" icon={p.hidden ? 'eye' : 'eye-slash'} aria-pressed={p.hidden} label="Show hidden files" tooltip={p.hidden ? 'Hide dot files' : 'Show dot files'} onclick={() => (p.hidden = !p.hidden)} />
     </div>
     <div class="fmcrumb" aria-label="Path">
-      <button class="btn btn-ghost btn-icon sq" aria-label="Up one folder" disabled={p.path === '/'} use:tip={{ text: 'Up one folder', keys: 'Backspace' }} onclick={() => fm.up(side)}><i class="ph ph-arrow-up"></i></button>
+      <Button variant="ghost" size="sm" icon="arrow-up" label="Up one folder" disabled={p.path === '/'} keys="Backspace" onclick={() => fm.up(side)} />
       <button class="crumbbtn" class:last={!crumbs.length} onclick={() => fm.goPath(side, '/')}>{loc?.label ?? '/'}</button>
       {#each crumbs as c, i (c.path)}<span class="sep" aria-hidden="true">/</span><button class="crumbbtn" class:last={i === crumbs.length - 1} onclick={() => fm.goPath(side, c.path)}>{c.name}</button>{/each}
     </div>
@@ -153,8 +153,8 @@
     <span>{S.selText(totals)}</span>
     <span class="grow"></span>
     {#if totals.n}
-      <button class="btn sm btn-ghost" use:tip={'Keep these and go on collecting in other folders'} onclick={() => { fm.active = side; fm.collect(); }}><i class="ph ph-stack-plus"></i>Add to tray</button>
-      <button class="btn sm btn-ghost" use:tip={{ text: 'Clear the selection', keys: 'Esc' }} onclick={() => fm.clear(side)}>Clear</button>
+      <Button size="sm" variant="ghost" icon="stack-plus" tooltip="Keep these and go on collecting in other folders" onclick={() => { fm.active = side; fm.collect(); }}>Add to tray</Button>
+      <Button size="sm" variant="ghost" tooltip="Clear the selection" keys="Esc" onclick={() => fm.clear(side)}>Clear</Button>
     {/if}
   </div>
 
@@ -162,7 +162,7 @@
   {#if jobHere}<div class="fmnote info"><i class="ph ph-arrows-clockwise"></i>A {fm.job.op} is running here; the list may change.</div>{/if}
   {#if p.status === 'error'}
     <div class="fmnote bad"><i class="ph ph-warning-octagon"></i><span class="grow">{p.error || 'This location stopped answering.'}{#if p.rows.length} Showing the last listing, greyed.{/if}</span>
-      <button class="btn sm" onclick={() => fm.load(side)}><i class="ph ph-arrow-clockwise"></i>Try again</button></div>
+      <Button size="sm" icon="arrow-clockwise" onclick={() => fm.load(side)}>Try again</Button></div>
   {/if}
 
   {#if p.status === 'loading'}
@@ -188,14 +188,14 @@
                 <i class="ph ph-{r.type === 'd' ? 'folder' : r.type === 'l' ? 'arrow-bend-down-right' : 'file'} ftype"></i>
                 <span class="nmtxt">{r.name}</span>
                 {#if r.flags.includes('link')}<span class="muted lk">link</span>{/if}
-                {#if r.flags.includes('badname')}<span class="tag tag-neutral" use:tip={'The name has odd characters. It is shown escaped and cannot be renamed here.'}>odd name</span>{/if}
-                {#if l.locked}<span class="tag lk-{l.tone}" use:tip={l.reason}>{l.tag}</span>{/if}
-                {#if r.type === 'd' && l.openable}<button class="btn btn-ghost btn-icon sq opn" aria-label={`Open ${r.name}`} use:tip={'Open this folder'} onclick={() => fm.open(side, r.name)}><i class="ph ph-caret-right"></i></button>{/if}
+                {#if r.flags.includes('badname')}<Chip title="The name has odd characters. It is shown escaped and cannot be renamed here.">odd name</Chip>{/if}
+                {#if l.locked}<Chip tone={l.tone === 'off' ? '' : l.tone} title={l.reason}>{l.tag}</Chip>{/if}
+                {#if r.type === 'd' && l.openable}<Button variant="ghost" size="sm" class="opn" icon="caret-right" label={`Open ${r.name}`} tooltip="Open this folder" onclick={() => fm.open(side, r.name)} />{/if}
                 {#if showDisks && r.disks.length}<span class="dkb">{#each r.disks as d}<Chip>{d.replace('data-', 'd')}</Chip>{/each}</span>{/if}
               </div>
             {:else if col.key === 'size'}
               {#if r.type === 'd' && !Number.isFinite(r.bytes)}
-                <button class="btn btn-ghost sm szb" aria-label={`Calculate the size of ${r.name}`} use:tip={'Calculate the size of this folder (reads everything below it, can wake disks)'} onclick={(e) => { e.stopPropagation(); fm.sizeOf(side, r.name); }}><i class="ph ph-ruler"></i>Size</button>
+                <Button size="sm" variant="ghost" class="szb" icon="ruler" aria-label={`Calculate the size of ${r.name}`} tooltip="Calculate the size of this folder (reads everything below it, can wake disks)" onclick={(e) => { e.stopPropagation(); fm.sizeOf(side, r.name); }}>Size</Button>
               {:else}<span class="mono" class:dim={l.locked}>{S.bytesTxt(r.bytes)}</span>{/if}
             {:else if col.key === 'mod'}
               <span class:dim={l.locked}>{S.dateTxt(r.mtime)}</span>
@@ -205,7 +205,7 @@
           {/snippet}
         </Table>
         {#if p.next}
-          <div class="more"><button class="btn sm" disabled={p.busy} onclick={() => fm.load(side, { more: true })}><i class="ph ph-dots-three"></i>Load more</button><span class="muted">{p.rows.length} shown. The folder has more.</span></div>
+          <div class="more"><Button size="sm" icon="dots-three" busy={p.busy} onclick={() => fm.load(side, { more: true })}>Load more</Button><span class="muted">{p.rows.length} shown. The folder has more.</span></div>
         {/if}
       {:else}
         <div class="fmnone"><EmptyState icon="folder" title="This folder is empty" text="Drop files here, or copy them from the other pane." /></div>
@@ -226,11 +226,10 @@
   .fmlocbtn[aria-expanded='true'] { border-color: var(--accent); }
   .cv { flex: none; width: 6px; height: 6px; border: solid var(--fg-3); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg) translate(-2px, -2px); }
   .fmlocbtn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .szb { height: 24px; padding: 0 6px; font-size: 12px; color: var(--fg-3); }
+  :global(.szb) { height: 24px; padding: 0 6px; font-size: 12px; color: var(--fg-3); }
   .fsx { font-size: 12px; color: var(--fg-3); }
-  .warnchip { color: var(--warn-ink); border-color: color-mix(in oklch, var(--warn) 50%, var(--line)); }
-  .fmfilter { width: 118px; min-height: 28px; height: 28px; padding: 2px 8px; font-size: 12.5px; }
-  .sq { width: 28px; min-height: 28px; height: 28px; padding: 0; }
+  .fmfilter { width: 118px; }
+  .fmfilter :global(.input) { min-height: 28px; height: 28px; padding: 2px 8px; font-size: 12.5px; }
   .fmcrumb { display: flex; align-items: center; gap: 2px; overflow-x: auto; white-space: nowrap; }
   .fmcrumb .sep { color: var(--fg-3); }
   .crumbbtn { all: unset; cursor: pointer; padding: 2px 5px; color: var(--fg-2); font: 12.5px var(--mono); }
@@ -265,12 +264,9 @@
   .nmtxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; min-width: 0; }
   .ftype { flex: none; color: var(--fg-3); font-size: 16px; }
   .lk { white-space: nowrap; font-size: 12px; }
-  .opn { margin-left: auto; opacity: 0.5; flex: none; }
-  tr:hover .opn { opacity: 1; }
+  .nm :global(.opn) { margin-left: auto; opacity: 0.5; flex: none; }
+  :global(tr:hover .opn) { opacity: 1; }
   .dim { opacity: 0.5; }
-  .lk-warn { color: var(--warn-ink); border-color: color-mix(in oklch, var(--warn) 50%, var(--line)); }
-  .lk-info { color: var(--info-ink); border-color: color-mix(in oklch, var(--info) 55%, var(--line)); background: color-mix(in oklch, var(--info) 12%, transparent); }
-  .lk-off { color: var(--fg-3); }
   .dks { display: flex; gap: 4px; flex-wrap: wrap; }
   .dkb { display: none; gap: 4px; flex-wrap: wrap; }
   @media (max-width: 860px) {

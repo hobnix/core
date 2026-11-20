@@ -1,5 +1,6 @@
 <script>
   import PageHeader from '../shell/PageHeader.svelte';
+  import { Banner, Card, Stack, Muted } from '../ui/index.js';
   import { poll, rows } from '../data.svelte.js';
   import Table from '../shell/Table.svelte';
   import { ui } from '../ui.svelte.js';
@@ -71,17 +72,15 @@
   ];
 </script>
 
-<div class="page">
+<Stack gap="4">
   <PageHeader title="Diagnostics" crumb="Monitoring" sub="How fresh the pages are, and what makes them slow." />
 
   {#if !ui.features.live}
-    <div class="note"><i class="ph ph-info"></i>
-      <span>A timer reads these every few seconds and keeps the output in the state database, so a page opens without waiting for the scripts.
-        {#if reads.length}{late ? `${late} read(s) are late or were never kept: is hs-reads-collect running? ` : 'All of them are on time. '}{slow ? `${slow} take 5 s or more. ` : ''}{/if}
-        The refresh button in the top bar runs a page's scripts at once.</span>
-    </div>
+    <Banner tone="info">A timer reads these every few seconds and keeps the output in the state database, so a page opens without waiting for the scripts.
+      {#if reads.length}{late ? `${late} read(s) are late or were never kept: is hs-reads-collect running? ` : 'All of them are on time. '}{slow ? `${slow} take 5 s or more. ` : ''}{/if}
+      The refresh button in the top bar runs a page's scripts at once.</Banner>
 
-    <div class="card elev-sm" style="padding:12px 14px">
+    <Card>
       <Table id="data-reads" columns={offColumns} rows={reads} key="read" compact loading={!offSt.loaded}
              empty={offSt.error ? 'The list could not be read.' : 'No read is collected (the list scripts/lib/collected-reads.tsv is empty or not there).'}>
         {#snippet cell(r, col)}
@@ -94,32 +93,24 @@
           {:else}<span class="c">{kb(r.bytes)}</span>{/if}
         {/snippet}
       </Table>
-    </div>
-    <div class="muted">The list of reads is <code>scripts/lib/collected-reads.tsv</code> in the repository (the words of the read, and how often in seconds). <code>hs sys state reads</code> and <code>hs sys reads status</code> show the same on the command line.</div>
+    </Card>
+    <Muted as="p">The list of reads is <code>scripts/lib/collected-reads.tsv</code> in the repository (the words of the read, and how often in seconds). <code>hs sys state reads</code> and <code>hs sys reads status</code> show the same on the command line.</Muted>
   {:else}
     {#if liveDown}
-      <div class="note bad"><i class="ph ph-warning-circle"></i>
-        <span>The live state service is down. The table shows the last data; polling every 5 s until it comes back. Check <code>systemctl status redis-hobnix hs-live</code>.</span>
-      </div>
+      <Banner tone="bad">The live state service is down. The table shows the last data; polling every 5 s until it comes back. Check <code>systemctl status redis-hobnix hs-live</code>.</Banner>
     {:else if liveRefreshing}
-      <div class="note"><i class="ph ph-circle-notch spin"></i>
-        <span>Live state is starting; the first reading should arrive in a few seconds.</span>
-      </div>
+      <Banner tone="info" icon="circle-notch">Live state is starting; the first reading should arrive in a few seconds.</Banner>
     {:else if !live.open}
-      <div class="note"><i class="ph ph-pause-circle"></i>
-        <span>Live updates are paused; polling every 5 s until the stream reconnects.</span>
-      </div>
+      <Banner tone="info" icon="pause-circle">Live updates are paused; polling every 5 s until the stream reconnects.</Banner>
     {/if}
 
     {#if problemRows.length}
-      <div class="note bad"><i class="ph ph-warning-circle"></i>
-        <span>{problemRows.length} topic(s) are stale, never read, or failing. See <button class="link-btn" onclick={() => go('/operations/health')}>Health</button> and <code>hs-live</code> for details.</span>
-      </div>
+      <Banner tone="bad">{problemRows.length} topic(s) are stale, never read, or failing. See <button class="link-btn" onclick={() => go('/operations/health')}>Health</button> and <code>hs-live</code> for details.</Banner>
     {:else if liveRows.length}
-      <div class="note"><i class="ph ph-check-circle"></i><span>All live topics are fresh.</span></div>
+      <Banner tone="ok">All live topics are fresh.</Banner>
     {/if}
 
-    <div class="card elev-sm" style="padding:12px 14px">
+    <Card>
       <Table id="data-live" columns={liveColumns} rows={liveRows} key="topic" compact loading={!liveSt.loaded}
              empty={liveSt.error ? 'The live topics could not be read.' : 'No live topics are configured.'}>
         {#snippet cell(r, col)}
@@ -133,19 +124,11 @@
           {:else}<span class="c">{when(r.tsErr)}</span>{/if}
         {/snippet}
       </Table>
-    </div>
-    <div class="muted">These are the live-state topics in Redis. The <code>live</code> row describes the previous collection by design. <code>hs sys live status</code> shows the same on the command line. <button class="link-btn" onclick={() => go('/monitoring/live-state')}>Live state</button> has the details per topic.</div>
+    </Card>
+    <Muted as="p">These are the live-state topics in Redis. The <code>live</code> row describes the previous collection by design. <code>hs sys live status</code> shows the same on the command line. <button class="link-btn" onclick={() => go('/monitoring/live-state')}>Live state</button> has the details per topic.</Muted>
   {/if}
-</div>
+</Stack>
 
 <style>
-  .page { display: flex; flex-direction: column; gap: 14px; }
-  .head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .crumb { font-size: 11px; color: var(--color-neutral-500); }
-  .tl { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .ttl { font-size: 20px; font-weight: 500; }
-  .sub, .muted { font-size: 12px; color: var(--color-neutral-500); }
-  .c { padding: 6px 8px; color: var(--color-neutral-300); font-variant-numeric: tabular-nums; }
-  .note { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--r); background: var(--color-neutral-900); box-shadow: inset 0 0 0 1px var(--color-neutral-800); font-size: 12.5px; color: var(--color-neutral-300); }
-  .note.bad { background: color-mix(in oklch, var(--st-bad) 12%, var(--color-neutral-900)); color: var(--color-neutral-200); }
+  .c { padding: 6px 8px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 </style>

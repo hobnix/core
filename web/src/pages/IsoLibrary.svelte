@@ -7,6 +7,7 @@
   import Table from '../shell/Table.svelte';
   import Button from '../ui/Button.svelte';
   import Chip from '../ui/Chip.svelte';
+  import { Muted } from '../ui/index.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { openCreate, openPlan, jobRunning } from '../ui.svelte.js';
   import { bytes } from '../format.js';
@@ -50,13 +51,12 @@
       {/snippet}
     </Table>
   </div>
-  <div class="hint">Folder: set with <code>isoDir</code> on the Incus settings page (default /var/lib/hs/iso). <code>hs iso</code> does the same on the console.</div>
+  <Muted as="div" style="margin-top:10px">Folder: set with <code>isoDir</code> on the Incus settings page (default /var/lib/hs/iso). <code>hs iso</code> does the same on the console.</Muted>
 </PageState>
 
 <style>
   .nm { display: inline-flex; align-items: center; gap: 8px; }
   .mono { font-family: var(--mono); font-size: 12px; }
   .src { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); vertical-align: bottom; }
-  .hint { font-size: 12px; color: var(--fg-3); margin-top: 10px; }
   :global(.btn.iso-rm) { width: 26px; height: 26px; }
 </style>

@@ -1,0 +1,255 @@
+{
+ "title": "A degraded pool: bulk lost data-2, parity can rebuild it; two problems are listed.",
+ "locked": false,
+ "reads": {
+  "pool/list": [
+   [
+    "bulk",
+    "data",
+    "snapraid",
+    "degraded"
+   ],
+   [
+    "fast",
+    "apps",
+    "zfs",
+    "online"
+   ]
+  ],
+  "pool/members?pool=bulk": [
+   [
+    "data-1",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "data-2",
+    "8000000000000",
+    "missing",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "data-3",
+    "8000000000000",
+    "online",
+    "data",
+    "ext4",
+    "-",
+    "-"
+   ],
+   [
+    "parity-1",
+    "8000000000000",
+    "online",
+    "parity",
+    "ext4",
+    "-",
+    "-"
+   ]
+  ],
+  "pool/info?pool=bulk": [
+   [
+    "layout: SnapRAID + mergerfs"
+   ],
+   [
+    "disks: 3 data, 1 parity"
+   ],
+   [
+    "size: 22T"
+   ],
+   [
+    "used: 9.8T (45%)"
+   ],
+   [
+    "free: 12T"
+   ],
+   [
+    "state: DEGRADED: data-2 is missing"
+   ],
+   [
+    "last sync: 18.11. 03:00"
+   ],
+   [],
+   [
+    "data-1",
+    "7.3T",
+    "61% used"
+   ],
+   [
+    "data-2",
+    "7.3T",
+    "44% used"
+   ],
+   [
+    "data-3",
+    "7.3T",
+    "30% used"
+   ],
+   [
+    "parity-1",
+    "7.3T",
+    ""
+   ]
+  ],
+  "status": [
+   [
+    "backup",
+    "ok",
+    "7200"
+   ],
+   [
+    "encryption",
+    "open"
+   ],
+   [
+    "job",
+    "hs-bulk-sync.service",
+    "ok",
+    "2026-11-18 03:00",
+    "2026-11-19 03:00"
+   ],
+   [
+    "job",
+    "hs-bulk-scrub.service",
+    "ok",
+    "2026-11-01 04:00",
+    "2026-12-01 04:00"
+   ],
+   [
+    "cache",
+    "120 GB of 500 GB",
+    "24"
+   ],
+   [
+    "smart",
+    "6",
+    "data-2 BAD"
+   ],
+   [
+    "instances",
+    "6",
+    "8"
+   ],
+   [
+    "hottest",
+    "sdb",
+    "41"
+   ],
+   [
+    "event",
+    "2026-11-17 22:10",
+    "sdc: temperature back to normal"
+   ],
+   [
+    "version",
+    "v0.9.0"
+   ]
+  ],
+  "deck": {
+   "schema": 1,
+   "kind": "server",
+   "host": "demo",
+   "locked": false,
+   "uptime_s": 864000,
+   "load": [
+    0.42,
+    0.38,
+    0.31
+   ],
+   "encryption": "open",
+   "problems": 2,
+   "mem": {
+    "total": 34359738368,
+    "available": 23622320128
+   },
+   "pools": {
+    "bulk": {
+     "size": 22000000000000,
+     "used": 9800000000000,
+     "free": 12000000000000,
+     "health": "degraded"
+    },
+    "fast": {
+     "size": 1800000000000,
+     "used": 410000000000,
+     "free": 1400000000000,
+     "health": "online"
+    }
+   }
+  },
+  "disk-health/list": [
+   [
+    "data-1",
+    "OK",
+    "-"
+   ],
+   [
+    "data-2",
+    "BAD",
+    "not responding"
+   ],
+   [
+    "data-3",
+    "OK",
+    "-"
+   ],
+   [
+    "parity-1",
+    "OK",
+    "-"
+   ]
+  ],
+  "health/list": [
+   [
+    "pool-bulk",
+    "Pool bulk is degraded: data-2 is missing",
+    "-",
+    "1763400000",
+    "-"
+   ],
+   [
+    "smart-data-2",
+    "data-2 does not answer",
+    "-",
+    "1763400000",
+    "-"
+   ]
+  ],
+  "health/next": [
+   [
+    "Pool bulk is degraded",
+    "hs pool bulk replace"
+   ],
+   [
+    "data-2 does not answer",
+    "hs disk data-2"
+   ]
+  ],
+  "incident/state": [
+   [
+    "incident",
+    "inc-1",
+    "bulk",
+    "member-missing",
+    "warn",
+    "data-2 is missing from bulk"
+   ],
+   [
+    "member",
+    "bulk",
+    "data-2",
+    "missing",
+    "data",
+    "data-2",
+    "not responding"
+   ]
+  ]
+ }
+}
