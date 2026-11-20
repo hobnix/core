@@ -170,9 +170,9 @@ class SignIn(Base):
         self.assertIsNone(a.domain_role("x"))
 
     def test_a_session_without_a_role_is_an_admin_and_a_strange_one_a_viewer(self):
-        old = self.app.sessions.create("HOME\\old", "domain", "127.0.0.1")
+        old = self.app.sessions.create("old", "local", "127.0.0.1")
         self.app.sessions.items[old].pop("role")        # written before roles existed: only admins could sign in then
-        odd = self.app.sessions.create("HOME\\odd", "domain", "127.0.0.1", role="root")
+        odd = self.app.sessions.create("odd", "local", "127.0.0.1", role="root")
         self.assertEqual(self.req("GET", "/api/session", headers={"Cookie": "hs_session=" + old})[1]["role"], "admin")
         self.assertEqual(self.req("GET", "/api/session", headers={"Cookie": "hs_session=" + odd})[1]["role"], "viewer")
 
