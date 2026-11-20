@@ -74,6 +74,21 @@ rc=0; $EC fs.read:/etc/hs >/dev/null 2>&1 || rc=$?
 check_eq "fs.read:/etc/hs stays grantable" "0" "$rc"
 rc=0; $EC fs.write:/var/lib/hs/ext/x fs.read:/var/lib/hs/ext-svc/y >/dev/null 2>&1 || rc=$?
 check_eq "state below /var/lib/hs/ext and ext-svc stays grantable" "0" "$rc"
+rc=0; $EC fs.write:/var/lib/hs/fixsvc fs.read:/var/lib/hs/fixsvc/sub >/dev/null 2>&1 || rc=$?
+check_eq "a package may use /var/lib/hs/<its own name>" "0" "$rc"
+check_eq "and it is bound back into the empty /var/lib/hs" "1" "$($EC fs.write:/var/lib/hs/fixsvc | grep -c '^BindPaths=-/var/lib/hs/ext-svc -/var/lib/hs/fixsvc$')"
+rc=0; $EC fs.write:/var/lib/hs/other >/dev/null 2>&1 || rc=$?
+check_eq "but not the folder of another package or one with the same prefix" "1" "$rc"
+rc=0; $EC fs.write:/var/lib/hs/fixsvcx >/dev/null 2>&1 || rc=$?
+check_eq "fixsvcx is not fixsvc" "1" "$rc"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name passthrough -- fs.write:/etc/hs/gateway-public >/dev/null 2>&1 || rc=$?
+check_eq "passthrough may write /etc/hs/gateway-public (named exception)" "0" "$rc"
+rc=0; $EC fs.write:/etc/hs/gateway-public >/dev/null 2>&1 || rc=$?
+check_eq "any other package may not" "1" "$rc"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name passthrough -- fs.write:/etc/hs >/dev/null 2>&1 || rc=$?
+check_eq "the exception is that one file, not /etc/hs" "1" "$rc"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" props --name fixsvc -- fs.write:/var/lib/hs/fixsvc >/dev/null 2>&1 || rc=$?
+check_eq "props takes the package name too (confined commands)" "0" "$rc"
 check_eq "the refusal names the secret it overlaps" "1" "$($EC fs.read:/var/lib/hs/restic-password 2>&1 | grep -c 'overlaps /var/lib/hs')"
 
 echo "-- the template unit is the floor"
