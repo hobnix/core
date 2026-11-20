@@ -27,9 +27,12 @@ hobnix/extensions (docs/PLAN-packages.md); the core fetches them with `hs pkg`.
   main. A hotfix branches from main, goes into main, then back into develop. Details: docs/dev-environment.md "Branches and releases".
 - **Git:** never edit, commit or switch branches in the primary checkout (stays on main; work in your own worktree; guard: scripts/dev/guard-primary-checkout.sh, `bash scripts/dev/install-guards.sh` once per clone); stage files by name after `git status`; no `Co-Authored-By` or "generated with" lines about any AI tool in commits or PRs; every commit carries `Signed-off-by` of the configured git user (`git commit -s`, or the hook from install-guards.sh adds it); the DCO check has no exemption for agent PRs.
 - **Honest reports:** say what failed or was not run. Never claim a result that was not seen.
-- **Board:** In Review = pull request open; Testing = merged, not run on a real server (issue stays open); Done = the issue's "Hardware test"
-  boxes are ticked with a comment on what was seen, then closed. Never move an issue to Done for a run nobody saw. Write the "Hardware
-  test" steps into the issue when the pull request is opened. `python3 scripts/dev/untested.py` lists the untested steps per guide.
+- **Board:** development and hardware testing are tracked apart. A dev issue: In Review = pull request open; Done = merged and closed (`Closes #N`),
+  so milestone progress means "built". The run on a real server is a box in the milestone's tracker issue "Hardware test: <milestone>" (label
+  `hardware-test`, no milestone, column Testing while a box is open): `bash scripts/dev/hwtest.sh add <issue> [step ...]` when the PR is merged,
+  `hwtest.sh tick <issue> "<what was seen>"` after a run somebody saw, `hwtest.sh list` is the queue for the server. Never tick a box for a run nobody
+  saw. An unticked box is postponed, not a blocker: it moves on with the next release. Write the "Hardware test" steps into the PR when it is opened.
+  `python3 scripts/dev/untested.py` lists the untested steps per guide.
 
 ## Where the detail is
 Area rules load by themselves when you touch matching files (`.claude/rules/`): storage, web, packages, commands, shell, config, monitoring,

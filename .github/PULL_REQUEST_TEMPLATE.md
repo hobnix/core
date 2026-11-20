@@ -6,7 +6,7 @@
 
 ## Hardware test
 
-<!-- Run on a real server? Say what you saw. Not run: the steps stand in the issue under "Hardware test", and the issue moves to the board column Testing at merge (not Done). Nothing to run on a server: "none". -->
+<!-- Run on a real server? Say what you saw. Not run: list the steps here; at merge they go into the milestone's tracker (`bash scripts/dev/hwtest.sh add <issue> "step" ...`) and the issue closes. Nothing to run on a server: "none". -->
 
 ## Touches packages?
 
