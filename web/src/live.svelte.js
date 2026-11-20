@@ -2,7 +2,7 @@
 // While the stream is closed or the server says `down` (its state service is lost), live.open is false and the polls use their timers.
 // `domain` is a row of the event log (id = log id; EventSource sends Last-Event-ID on a reconnect, the server replays the rows after it).
 // `resync` says rows or changes may be lost (gap too big, queue full): every followed topic is read again.
-// `open` = the stream is up. `follow` = the polls may rely on it for the live-state topics (only in mode redis; otherwise those topics never change and the polls keep their timers).
+// `open` = the stream is up. `follow` = the polls may rely on it for the live-state topics (only in mode redis or db; otherwise those topics never change and the polls keep their timers).
 // The domain events (`events`) are served in every mode (ADR 0005), so a page that reads them (the job records) uses `open` alone.
 // EventSource reconnects by itself. `beat` (the server sends it when the stream is idle) feeds a watchdog (livewatch.js): a stream that went silent is reopened.
 import { LiveWatch } from './livewatch.js';

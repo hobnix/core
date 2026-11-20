@@ -984,12 +984,12 @@ class DbMode(Base):
             out.append(self.q.get())
         return out
 
-    def test_db_mode_store_is_off_and_feature_false(self):
+    def test_db_mode_store_and_feature(self):
         self.assertEqual(ws.Config().live, "")
         cfg = ws.Config()
         cfg.live = "db"
-        self.assertFalse(ws.features(cfg)["live"])
-        self.assertIsInstance(ws.App(cfg, FakeAuth(cfg)).store, ws.OffStore)
+        self.assertTrue(ws.features(cfg)["live"])
+        self.assertIsInstance(ws.App(cfg, FakeAuth(cfg)).store, ws.DbStore)
 
     def test_heartbeat_fresh_then_old_feeds_down_then_up(self):
         self.beat(1000)
@@ -1030,7 +1030,7 @@ class DbMode(Base):
         self.hub.poll_counters()
         self.bump("live:status")
         self.hub.poll_counters()
-        self.assertEqual(self.drain(), [("changed", "live:status", 1)])
+        self.assertEqual(self.drain(), [("changed", "status", 1)])      # the page knows the topic by its own name
         self.assertEqual(cleared, [])
         self.bump("status")
         self.hub.poll_counters()
@@ -1062,6 +1062,151 @@ class DbMode(Base):
             r.fp.readline()
             self.assertEqual(r.fp.readline(), b"event: down\n")
             self.assertEqual(r.fp.readline(), b"data: {}\n")
+        finally:
+            c.close()
+
+
+_sdb_spec = importlib.util.spec_from_file_location("state_db_for_web", os.path.join(here, "..", "scripts", "state-db.py"))
+sdb = importlib.util.module_from_spec(_sdb_spec)
+os.environ.setdefault("HS_STATE_DB", os.path.join(tempfile.mkdtemp(), "x.db"))
+_sdb_spec.loader.exec_module(sdb)
+
+
+class DbRead(Base):
+    """liveState = "db" (ADR 0026 step 4): topic reads and /api/events come from the state database only (no Redis, no process)."""
+
+    def setUp(self):
+        self.real_env = os.environ.get("HS_WEB_LIVE")
+        os.environ["HS_WEB_LIVE"] = "db"
+        super().setUp()
+        import sqlite3
+        self.db = os.path.join(self.tmp, "state.db")
+        os.environ["HS_STATE_DB"] = self.db
+        self.c = sqlite3.connect(self.db)
+        self.c.executescript(sdb.SCHEMA + sdb.LIVE_SCHEMA)
+        self.c.commit()
+        self.hub = self.app.events
+        self.hub.cfg.probe_file = ""
+        self.q = self.hub.add()
+
+    def tearDown(self):
+        self.c.close()
+        os.environ.pop("HS_STATE_DB", None)
+        if self.real_env is None:
+            os.environ.pop("HS_WEB_LIVE", None)
+        else:
+            os.environ["HS_WEB_LIVE"] = self.real_env
+        super().tearDown()
+
+    def put(self, out="x\ty\n", t=None, topic="status"):
+        return sdb.live_put(self.c, topic, out, 0, 5, "test", 60, int(t or time.time()))
+
+    def beat(self, t=None, every=5):
+        sdb.live_beat(self.c, "hs-live", every, 0, int(t or time.time()), {}, 0)
+
+    def get(self, path="/api/sys/status"):
+        return self.req("GET", path, headers=self.ck)
+
+    def counters(self):
+        self.hub.poll_counters()
+        out = []
+        while not self.q.empty():
+            out.append(self.q.get())
+        return out
+
+    def test_store_and_feature(self):
+        self.assertIsInstance(self.app.store, ws.DbStore)
+        self.assertTrue(ws.features(self.cfg)["live"])
+        self.assertEqual(ws.features(self.cfg)["topics"].get("/api/sys/status"), "status")
+
+    def test_status_comes_from_the_row_and_starts_no_process(self):
+        self.put(t=time.time() - 400)
+        self.beat()
+        s, d, r = self.get()
+        self.assertEqual((s, json.loads(d)["rows"]), (200, [["x", "y"]]))
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(r.getheader("X-HS-Status"), "fresh")                 # unchanged for 400 s, but the collector checked just now
+        self.assertIn(r.getheader("X-HS-Age"), ("0", "1"))                    # the age is the heartbeat's
+        self.assertIn(int(r.getheader("X-HS-Updated")), range(int(time.time()) - 402, int(time.time()) - 397))
+
+    def test_collector_stopped_marks_the_document_expired(self):
+        self.put(t=time.time() - 400)
+        self.beat(t=time.time() - 120)
+        s, d, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-Status")), (200, "expired"))   # still served, only marked
+        self.assertEqual(self.fake.calls, [])
+
+    def test_no_row_and_no_collector_reads_directly(self):
+        s, d, r = self.get()
+        self.assertEqual(s, 200)
+        self.assertEqual(self.fake.calls, [("status",)])
+
+    def test_no_row_with_a_collector_asks_to_retry(self):
+        self.beat()
+        s, d, r = self.get()
+        self.assertEqual((s, json.loads(d)["error"], r.getheader("Retry-After")), (503, "refreshing", "2"))
+        self.assertEqual(self.fake.calls, [])
+
+    def test_unreadable_database_reads_directly_never_503(self):
+        os.environ["HS_STATE_DB"] = self.tmp                                   # a directory: sqlite cannot open it
+        s, d, r = self.get()
+        self.assertEqual(s, 200)
+
+    def test_fresh_runs_the_command(self):
+        self.put()
+        self.beat()
+        s, d, r = self.req("GET", "/api/sys/status?fresh=1", headers=self.ck)
+        self.assertEqual((s, self.fake.calls), (200, [("status",)]))
+
+    def test_newer_failure_marks_it_stale(self):
+        self.put(t=time.time() - 30)
+        self.beat()
+        sdb.live_fail(self.c, "status", 1, 3, "boom", "test", 60, int(time.time()))
+        s, d, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-State"), r.getheader("X-HS-Error"), r.getheader("X-HS-Status")), (200, "stale", "boom", "stale"))
+
+    def test_events_come_from_the_counters_only(self):
+        self.beat()
+        self.counters()                                                        # baseline
+        gen = self.put()
+        self.assertEqual(self.counters(), [("changed", "status", gen)])
+        self.assertEqual(self.counters(), [])
+
+    def test_an_unchanged_document_bumps_nothing(self):
+        gen = self.put("a\tb\n")
+        self.counters()
+        self.assertEqual(self.counters(), [])                                  # nothing written: no event
+        self.assertEqual(self.c.execute("SELECT gen FROM live WHERE topic = 'status'").fetchone()[0], gen)
+        self.assertEqual(self.counters(), [])
+
+    def test_a_hook_bump_does_not_double_the_event(self):
+        self.put()
+        self.counters()
+        with self.c:
+            sdb.bump(self.c, ["status"])                                       # live_refresh from a hook
+        self.assertEqual(self.counters(), [])                                  # the collector's live:status is the one event
+        gen = self.put("z\n")
+        self.assertEqual(self.counters(), [("changed", "status", gen)])
+
+    def test_down_and_up_follow_the_heartbeat(self):
+        self.beat(t=1000)
+        self.hub.poll_heartbeat(now=1005)
+        self.hub.poll_heartbeat(now=1030)
+        self.assertEqual(self.q.get_nowait(), ("down",))
+        self.beat(t=1031)
+        self.hub.poll_heartbeat(now=1032)
+        self.assertEqual(self.q.get_nowait(), ("up",))
+
+    def test_reconnect_after_a_gap_resyncs(self):
+        self.c.execute("INSERT INTO events (time, kind) VALUES (1, \"x\")")
+        self.c.commit()
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/api/events", headers=dict(self.ck, **{"Last-Event-ID": "99"}))
+        r = c.getresponse()
+        try:
+            self.assertEqual(r.fp.readline(), b"retry: 3000\n")
+            r.fp.readline()
+            self.assertEqual(r.fp.readline(), b"event: resync\n")
         finally:
             c.close()
 
