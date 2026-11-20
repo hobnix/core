@@ -1014,3 +1014,16 @@ note = "action create <name> [--role R] [--days N] or revoke <name>. The web ser
 ["token start <action>"]
 role = "app-manager"
 note = "create answers once with the line secret<TAB>token<TAB><token>; revoke needs --confirm <name>. A request that came with a token is refused (a token cannot create tokens)."
+
+["share parity state <share>"]
+role = "viewer"
+kind = "tsv"
+records = { limit = ["mode", "value"], default = ["floor", "percent"], skip = ["folder"] }
+enums = { "limit.mode" = ["default", "custom", "off"] }
+note = "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out."
+
+["share parity refused"]
+role = "viewer"
+kind = "tsv"
+columns = ["share", "folder", "removed", "limit", "share_total"]
+note = "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since."

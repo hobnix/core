@@ -23,6 +23,7 @@
   import RemoveMember from '../forms/storage/RemoveMember.svelte';
   import ConvertPool from '../forms/storage/ConvertPool.svelte';
   import CloseDisk from '../forms/storage/CloseDisk.svelte';
+  import SyncRefused from './storage/SyncRefused.svelte';
   import { parseInfo, percentOf, diskPool, serialIn, sizeTxt, parseSize, poolTopic } from './storage/pool.js';
   import { pools, loadPools, poolOfRole, poolRow } from '../pools.svelte.js';
   import { live } from '../live.svelte.js';
@@ -199,6 +200,7 @@
       {#if doing}<Banner tone="info">{doing}… a job is running on {pool}; this page follows it.</Banner>{/if}
       {#if failure}<ErrorNote error={failure.error} ondismiss={() => rowstate.dismiss(failure.id)} />{/if}
       {#if paused}<Banner tone="warn">The health check paused the parity sync, scrub and upload cache mover because of a failing disk or pool. Lift it under Health (<code>hs health resume</code>).</Banner>{/if}
+      {#if snap}<SyncRefused {locked} />{/if}
       {#if lockState === 'pool-change'}<Banner tone="info">A pool change is running and owns the bulk lock: syncs, scrubs and share renames wait or are skipped until it is done.</Banner>
       {:else if lockState === 'busy'}<Banner tone="info">{running ? 'A sync or scrub is running.' : 'Something holds the bulk lock (a parity sync, scrub, upload cache mover, share rename or disk move).'} Changes that need the lock wait until it is free.</Banner>{/if}
       <Card pad="lg">

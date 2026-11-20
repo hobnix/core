@@ -13019,6 +13019,185 @@
     }
    }
   },
+  "/share/parity/refused": {
+   "get": {
+    "operationId": "share.parity.refused",
+    "summary": "the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "refused"
+     ],
+     "script": "share-parity.sh",
+     "args": "--refused",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/refused",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "folder"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "removed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "limit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share_total"
+           }
+          ],
+          "minItems": 5,
+          "maxItems": 5
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/share/parity/state/{share}": {
+   "get": {
+    "operationId": "share.parity.state.by_share",
+    "summary": "the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "state",
+      "<share>"
+     ],
+     "script": "share-parity.sh",
+     "args": "--state {1}",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/state/<share>",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "parameters": [
+     {
+      "name": "share",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "limit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "mode",
+              "enum": [
+               "default",
+               "custom",
+               "off"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "value"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "default"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "floor"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "percent"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "skip"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "folder"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/shares/acl": {
    "get": {
     "operationId": "shares.acl",

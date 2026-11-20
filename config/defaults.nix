@@ -44,6 +44,8 @@
   fileManagerWrite = false;
   setupDone = false;
   backupNewShares = false;
+  syncMaxRemoved = 100;
+  syncMaxRemovedPercent = 1;
   backupNewInstances = true;
   offsiteDiskDays = 30;
   adDomain = null;

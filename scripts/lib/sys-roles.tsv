@@ -90,6 +90,8 @@ audit	admin	read
 event list	viewer	read
 temp-disk raw	viewer	read
 cache state	viewer	read
+share parity state <share>	viewer	read
+share parity refused	viewer	read
 unifi used	viewer	read
 unifi reserved	viewer	read
 unifi networks	viewer	read

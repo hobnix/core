@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: do something to the whole server without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: etwas mit dem ganzen Server tun, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <sync|scrub|update|rebuild|rollback|gc|reboot|shutdown> [--pool <pool>] [--days <N>] [--confirm <word>]
+# args: plan|start <sync|scrub|update|rebuild|rollback|gc|reboot|shutdown> [--pool <pool>] [--days <N>] [--confirm <word>] [--force]
 # System command (hs sys system plan|start): for the interface, timers and tests. It never asks and prints plain key<TAB>value lines like
 # pool-change.sh and ct-change.sh.
 #   sync                 SnapRAID layout: update the parity now (bulk-sync.sh); on ZFS there is nothing to sync
@@ -41,12 +41,13 @@ verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: system-change.sh plan|start <sync|scrub|update|rebuild|rollback|gc|reboot|shutdown> [options]" >&2; exit 1 ;; esac
 case "$action" in sync|scrub|update|rebuild|rollback|gc|reboot|shutdown) ;; *) refuse "unknown action (sync, scrub, update, rebuild, rollback, gc, reboot or shutdown)" ;; esac
 shift 2
-pool="" days=30
+pool="" days=30 force=no
 while [ $# -gt 0 ]; do
   case "$1" in
     --pool)    pool=${2:-}; shift 2 ;;
     --days)    days=${2:-}; shift 2 ;;
     --confirm) confirm=${2:-}; shift 2 ;;
+    --force)   force=yes; shift ;;
     *) refuse "unknown option $1" ;;
   esac
 done
@@ -55,6 +56,7 @@ if [ "$action" = scrub ] && [ -z "$pool" ]; then
   printf 'status\tneeds\nneeds\tpool\n'
   exit 2
 fi
+[ "$force" = no ] || [ "$action" = sync ] || refuse "--force is only for sync"
 [ -z "$pool" ] || [[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || refuse "invalid pool name"
 [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -ge 1 ] || refuse "--days is a number of days (1 or more)"
 
@@ -63,7 +65,7 @@ snapraid=false
 case "$action" in
   sync)
     [ "$bulk_type" = snapraid ] || refuse "This server keeps /bulk on ZFS: the parity is always current, there is nothing to sync."
-    cmd=(bash "$bulk_sync") ;;
+    cmd=(bash "$bulk_sync"); [ "$force" != yes ] || cmd+=(--force) ;;
   scrub)
     if $snapraid; then
       cmd=(bash "$bulk_sync" --scrub)
@@ -135,7 +137,8 @@ case "$action" in
     printf 'step\tfind what changed on the data disks since the last sync\n'
     printf 'step\tupdate the parity disk\n'
     printf 'note\tShares stay usable. A sync makes deletions permanent; it refuses when unusually many files vanished since the last one.\n'
-    printf 'note\tThe nightly timer skips its run while this one holds the bulk lock.\n' ;;
+    printf 'note\tThe nightly timer skips its run while this one holds the bulk lock.\n'
+    [ "$force" != yes ] || printf 'warn\tForced: the limits of removed files per share are not checked. The deletions that were stopped become permanent in the parity.\n' ;;
   scrub)
     if $snapraid; then
       printf 'heading\tcheck part of the bulk data against the parity\n'

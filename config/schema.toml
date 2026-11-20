@@ -850,6 +850,39 @@ backupNewShares = true'''
 
 [[item]]
 kind = "option"
+key = "syncMaxRemoved"
+type = "int"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '100'
+min = 0
+doc = '''
+# SnapRAID layout: the parity sync stops for a share when more files than this were removed from it since the last sync
+# (a mistake or malware would be made permanent by a sync). This is the lowest limit; the limit of a share is the higher of
+# this number and `syncMaxRemovedPercent` of its files. Per share: `hs share <share> parity limit <N>|off|default`.'''
+value = '''
+syncMaxRemoved = 100'''
+
+[[item]]
+kind = "option"
+key = "syncMaxRemovedPercent"
+type = "int"
+required = false
+settable = true
+secret = false
+store = "settings"
+default = '1'
+min = 0
+doc = '''
+# SnapRAID layout: percent of the files of a share that may be removed between two parity syncs before the sync stops for
+# that share (see syncMaxRemoved; the higher of the two numbers counts). Default 1.'''
+value = '''
+syncMaxRemovedPercent = 1'''
+
+[[item]]
+kind = "option"
 key = "backupNewInstances"
 type = "bool"
 required = false

@@ -1130,6 +1130,8 @@ READS = {
     ("ports", "list"): {"kind": "tsv", "ttl": 60, "topic": "ports-list"},
     ("dns", "list"): {"kind": "tsv", "ttl": 60, "topic": "dns-list"},
     ("cache", "state"): {"kind": "tsv", "ttl": 15},
+    ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},     # per share: limit, default, skip (share-parity.sh --state)
+    ("share", "parity", "refused"): {"kind": "tsv", "ttl": 10},     # the shares the last parity sync stopped for (share-parity.sh --refused)
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
     ("disk", "marks"): {"kind": "tsv", "ttl": 10, "topic": "disk-marks"},
@@ -1219,6 +1221,8 @@ CT = r"^[a-z][a-z0-9-]{0,40}$"
 SHARE = r"^[a-z0-9][a-z0-9-]{0,40}$"
 ONOFF = r"^(on|off)$"
 LABEL = r"^[A-Za-z0-9._-]{1,40}$"
+PARITY_FOLDER = r"^[A-Za-z0-9._ -]{1,80}(/[A-Za-z0-9._ -]{1,80}){0,6}$"     # a folder inside a share (share-parity.sh checks again, no ..)
+PARITY_LIMIT = r"^([0-9]{1,9}|off|default)$"
 # notification channels: the name, and the options of add / set (--set may repeat; the one secret is the first line of stdin)
 NOTIFY_CHANNEL = r"^[a-z][a-z0-9-]{0,30}$"
 NOTIFY_OPTS = {"--min-priority": (r"^(min|low|default|high|urgent)$", False), "--quiet": (r"^(respect|ignore)$", False),
@@ -1244,11 +1248,12 @@ CHANGE = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9._ -]{0,63}=(ad
 CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webViewerGroup|"
                "webAppManagerGroup|webAccent|webTerminal|recipeQuestionHours|webTerminalIdleMinutes|"
                "webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|incusUi|isoDir|syncEveryHours|shareSnapshots|"
-               "diskSpindownMinutes|fileManagerWrite|setupDone|backupNewShares|backupNewInstances|offsiteDiskDays|"
-               "notifySecondMinPriority|notifications|quietHours|autoMitigate|autoMitigateFreeze|autoMitigateBackup|"
-               "metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|"
-               "gatewayPublicHttp|gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|"
-               "gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
+               "diskSpindownMinutes|fileManagerWrite|setupDone|backupNewShares|syncMaxRemoved|syncMaxRemovedPercent|"
+               "backupNewInstances|offsiteDiskDays|notifySecondMinPriority|notifications|quietHours|autoMitigate|"
+               "autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|"
+               "dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
+               "gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|"
+               "gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS
 CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one --set key=value of `config apply` (hand-written, outside the generated block)
 # share forms: a folder name inside the instance (absolute) and inside a share (relative or absolute, both without ..), a SID with its level, a kept folder
@@ -1505,6 +1510,9 @@ CHANGES = {
                [SHARE, r"^snapshot$", r"^--label$", LABEL],
                [SHARE, r"^(backup|cache|auto)$", r"^--to$", ONOFF],
                [SHARE, r"^rollback$", r"^--snapshot$", SNAP],
+               # parity settings of a share (share-parity.sh): skip needs the folder name typed as --confirm, limit off the share name
+               [SHARE, r"^parity-(skip|keep)$", r"^--folder$", PARITY_FOLDER],
+               [SHARE, r"^parity-limit$", r"^--to$", PARITY_LIMIT],
                # forms (web/src/forms/shares): create, permissions, rename, delete, purge a kept folder, restore from the backup
                {"fixed": [SHARE, r"^add$"],
                 "opts": {"--kind": (r"^(shares|sensitive)$", False), "--tier": (r"^(bulk|fast)$", False), "--pool": (POOL, False), "--ct": (CT, False), "--path": (CT_PATH, False), "--as": (UIDGID, False)}},
@@ -1543,7 +1551,8 @@ CHANGES = {
     # switching the update channel (release-change.sh): a newer channel needs its own name as the confirmation
     "release": [[r"^channel$", r"^(stable|beta|edge)$"]],
     "system": [[r"^(sync|scrub|update|rebuild|gc|rollback|reboot|shutdown)$"],
-               [r"^(sync|scrub)$", r"^--pool$", POOL]],
+               [r"^(sync|scrub)$", r"^--pool$", POOL],
+               [r"^sync$", r"^--force$"]],     # "These deletions are expected, sync now" (the table of `sys share parity refused`)
     # the gateway setup (gateway-setup.sh): all changed keys as --set key=value (may repeat); the typed port comes as --confirm
     "gateway": [{"fixed": [r"^setup$"], "opts": {"--set": (GW_SET, True)}}],
     # turning Docker on (docker-setup.sh, which calls hs docker enable): the manager and the size as --set key=value; the plan changes nothing
