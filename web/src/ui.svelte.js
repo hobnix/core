@@ -3,6 +3,7 @@ import { get } from './api.js';
 import { jobMatches } from './jobkey.js';
 import { toast } from './ui/toast.svelte.js';
 import { roleOk, areaRole, refusal } from './roles.js';
+import { tr } from './i18n.js';
 
 export const ui = $state({
   dialog: null,                       // { area, args, title } while a plan dialog is open
@@ -81,7 +82,7 @@ function apply(t, rows) {
 // The second toast of a job: how it ended, with a link to its log in Tasks (a job.* event of the stream ends the follow, nothing polls for it).
 export function endToast(t) {
   const ok = t.state === 'ok' || t.state === 'done';
-  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${ok ? 'finished' : 'failed'}`, action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: 'Show log' });
+  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${tr(ok ? 'finished' : 'failed')}`, action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: tr('Show log') });
 }
 
 // Follow a job: a server-sent-events stream (GET /api/sys/jobs/stream/<unit>) while it works, polling the same journal every 2 s when

@@ -7,6 +7,7 @@
   import { toast, dismissToast } from '../ui/toast.svelte.js';
   import { offersRebuild, effectOf } from './effect.js';
   import { jobKey } from '../jobkey.js';
+  import { tr } from '../i18n.js';
   import PlanSteps from './PlanSteps.svelte';
   import Halftone from './Halftone.svelte';
   import Chip from '../ui/Chip.svelte';
@@ -67,19 +68,19 @@
       const r = await doStart(area, args, ask, undefined, undefined, document);
       if (r.status === 'started' && r.unit) {
         track(r.unit, name, jobKey(area, args));
-        toast({ key: tkey, kind: 'info', title: name, text: 'Running in the background.', action: () => showTab('tasks'), actionLabel: 'Open Tasks' });
+        toast({ key: tkey, kind: 'info', title: name, text: tr('Running in the background.'), action: () => showTab('tasks'), actionLabel: tr('Open Tasks') });
       } else if (r.status === 'done') {
         trackDone(name, steps);
         if (stay) { saved = true; dismissToast(tkey); }
-        else toast({ key: tkey, kind: 'ok', title: `${name}: done` });
+        else toast({ key: tkey, kind: 'ok', title: `${name}: ${tr('done')}` });
       } else {
-        const why = r.reason || 'The server did not start it.';
+        const why = r.reason || tr('The server did not start it.');
         if (stay) { startError = why; dismissToast(tkey); }
-        else toast({ key: tkey, kind: 'bad', title: `${name} was refused`, text: why, action: again, actionLabel: 'Show plan' });
+        else toast({ key: tkey, kind: 'bad', title: `${name} ${tr('was refused')}`, text: why, action: again, actionLabel: tr('Show plan') });
       }
     } catch (e) {
       if (stay) { startError = e.message; dismissToast(tkey); }
-      else toast({ key: tkey, kind: 'bad', title: `${name} failed to start`, text: e.message, action: again, actionLabel: 'Show plan' });
+      else toast({ key: tkey, kind: 'bad', title: `${name} ${tr('failed to start')}`, text: e.message, action: again, actionLabel: tr('Show plan') });
     } finally {
       const i = starting.keys.indexOf(pk);
       if (i >= 0) starting.keys.splice(i, 1);

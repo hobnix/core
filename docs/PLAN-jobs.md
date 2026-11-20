@@ -38,7 +38,8 @@ Legend: JOB = always a job; ASK = CLI offers a job (long_guard or own); FG = run
 | disk test short\|long, forget, recover-finish | test long runs in drive firmware | WEB-INLINE (unverified for forget/recover-finish) |
 | fm copy/move/delete… | long, delete destructive | JOB + own fm record |
 | docker-app pull/rebuild/app-save/delete | long; delete destructive | JOB |
-| docker-app start/stop/restart/recreate/app-write | `up -d` may pull images | WEB-INLINE (`timeout 30` on compose) |
+| docker-app start/stop/restart | compose may take many seconds (#896) | JOB (`--apply-action`, unit `docker-app-<action>-<app>`) |
+| docker-app recreate/app-write | `up -d` may pull images | WEB-INLINE (recreate: JOB when images are missing) |
 | docker enable (docker-setup.sh) / gateway-setup | long (rebuild) | JOB (docker.sh `--job`, gateway-setup l.252) |
 | services apply | long (rebuild/proxy) | JOB; all other services actions WEB-INLINE |
 | dc renew | long-ish | JOB; dc ca WEB-INLINE (unverified) |
