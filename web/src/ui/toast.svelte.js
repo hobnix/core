@@ -2,18 +2,19 @@
 //   - a job that asks for input: toast({ key: jobKey, kind: 'ask', title: 'Install nextcloud needs an answer', href: '#/jobs/<unit>', linkLabel: 'Open the job' }) - stays until
 //     the question is answered (dismissToast(key)) or the user closes it, never times out;
 //   - a short result that needs no dialog: toast({ kind: 'ok', title: 'Share created' }) - goes away after `ttl` ms (6 s; 0 = stays).
+//   - `action` + `actionLabel`: a button instead of a link ("Show plan" reopens the dialog that is already closed); `busy`: a spinner (a change that was just started).
 // A toast with a `key` that is already shown is replaced, not doubled. Closing is by the user or by dismissToast; nothing here reads a server or polls.
 export const toasts = $state({ list: [] });
 let seq = 0;
 const timers = new Map();
 
-export function toast({ key = '', kind = 'info', title = '', text = '', href = '', linkLabel = 'Open', ttl } = {}) {
+export function toast({ key = '', kind = 'info', title = '', text = '', href = '', linkLabel = 'Open', action = null, actionLabel = '', busy = false, ttl } = {}) {
   const id = key || `t${++seq}`;
-  const t = { id, kind, title, text, href, linkLabel };
+  const t = { id, kind, title, text, href, linkLabel, action, actionLabel, busy };
   const i = toasts.list.findIndex((x) => x.id === id);
   if (i >= 0) toasts.list[i] = t; else toasts.list.push(t);
   clearTimeout(timers.get(id));
-  const ms = ttl ?? (kind === 'ask' ? 0 : 6000);
+  const ms = ttl ?? (kind === 'ask' || busy ? 0 : kind === 'bad' ? 12000 : 6000);
   if (ms > 0) timers.set(id, setTimeout(() => dismissToast(id), ms));
   return id;
 }
