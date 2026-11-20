@@ -1,7 +1,7 @@
 # Live-state topics (scripts/live-collect.py). Columns, tab separated: topic, words of the `hs sys` read, interval in seconds,
-# while the storage is locked: run|skip. The key is hs:v1:<topic>.
+# while the storage is locked: run|skip. The row is in the table `live` of the state database (key = topic).
 # The `live` topic reads `hs sys live status`; it sees its own previous document because the collector runs the command before it takes
-# its own Redis lock or issues its own GET/SET. This means the `live` row is one collection behind, which is expected, not staleness.
+# its own database write. This means the `live` row is one collection behind, which is expected, not staleness.
 # Fixed storage reads: a topic holds the output of exactly one `hs sys` invocation. Pool reads with a fixed `pool=bulk|fast` argument
 # are mapped per request in web-serve.py; other pool names and no pool stay direct reads.
 # Columns 5 and 6: cap = the capability that must be on for the topic to run (`-` = always; a topic whose cap is off is not run and has no
