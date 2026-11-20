@@ -1,15 +1,18 @@
 <script>
   import Button from './Button.svelte';
+  import Stepper from './Stepper.svelte';
+  import { stepsAt } from './stepper.js';
   // Wizard: the frame of one question per screen. It knows no capability and no draft; the page puts the answer in `children`.
   //   index (0-based), total      "Step 1 of 3" and the bar (hidden while `advanced`)
   //   question, help              the heading and the grey line under it
   //   primary, canNext, onnext    the right-hand button (its text is translated by the page)
+  //   steps, onselect             the names of the steps as a Stepper (ui/Stepper.svelte) under the "Step n of m" line; a done step goes back to itself
   //   onback                      the arrow on the top left (not on index 0, not while `advanced`)
   //   <Wizard index={0} total={3} question="Which page?" help="..." primary="Next" onnext={go} onback={back}>...</Wizard>
   //   (the plain-fields Advanced view is not part of the frame: the capability page shows it instead of its tabs)
   import { tr } from '../i18n.js';
   import { progress } from '../settings/steps.js';
-  let { index = 0, total = 1, question = '', help = '', primary = 'Next', canNext = true, onnext = () => {}, onback = () => {}, children } = $props();
+  let { index = 0, total = 1, question = '', help = '', primary = 'Next', steps = null, onselect = null, canNext = true, onnext = () => {}, onback = () => {}, children } = $props();
   const p = $derived(progress(index, total));
 </script>
 
@@ -17,6 +20,7 @@
   <div class="prog">
     <span class="pt">{p.text}</span>
     <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={p.pct} aria-label={p.text}><div class="fill" style:width="{p.pct}%"></div></div>
+    {#if steps?.length}<Stepper steps={stepsAt(steps, index)} {onselect} />{/if}
   </div>
   {#if index > 0}
     <button type="button" class="back" aria-label={tr('Back')} onclick={onback}><i class="ph ph-arrow-left"></i></button>

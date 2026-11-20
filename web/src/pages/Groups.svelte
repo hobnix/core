@@ -19,6 +19,7 @@
   import Drawer from '../ui/Drawer.svelte';
   import Kv from '../ui/Kv.svelte';
   import Chip from '../ui/Chip.svelte';
+  import { Card, Muted, StatusDot, Row } from '../ui/index.js';
 
   const list = poll('/api/sys/users/groups', 30000);
   let selName = $state('');
@@ -59,16 +60,16 @@
   {#snippet emptyAction()}<Button variant="primary" tooltip={'Create a group of users'} onclick={() => openCreate(NewGroup, { existing: [] })}><i class="ph ph-plus"></i>New group</Button>{/snippet}
   <Split open={!!sel}>
     {#snippet list()}
-      <div class="card" style="padding:0">
+      <Card style="padding:0">
         <Table id="groups" {columns} rows={groups} key="name" selected={sel?.name} onrow={(g) => { selName = g.name; tab = 'info'; }}>
           {#snippet cell(g, col)}
             {#if col.key === 'name'}<b>{g.name}</b>
             {:else if col.key === 'count'}{g.members.length}
-            {:else if col.key === 'members'}<span class="muted">{g.members.join(', ') || '—'}</span>
-            {:else}<span class="muted"><GroupShares name={g.name} /></span>{/if}
+            {:else if col.key === 'members'}<Muted>{g.members.join(', ') || '—'}</Muted>
+            {:else}<Muted><GroupShares name={g.name} /></Muted>{/if}
           {/snippet}
         </Table>
-      </div>
+      </Card>
     {/snippet}
     {#snippet side()}
       {#if sel}
@@ -79,10 +80,10 @@
                 {#snippet cell(r, col)}
                   {#if col.key === 'share'}<button class="link-btn" use:tip={'Permissions are edited on the share'} onclick={() => toShare(r.share)}>{r.share}</button>
                   {:else if col.key === 'level'}<Chip>{r.level}</Chip>
-                  {:else}<span class="muted">{r.via}</span>{/if}
+                  {:else}<Muted>{r.via}</Muted>{/if}
                 {/snippet}
               </Table>
-              <p class="note">Read only. Change who may reach a share on the share itself (its Permissions tab).</p>
+              <Muted as="p" style="padding:10px 16px">Read only. Change who may reach a share on the share itself (its Permissions tab).</Muted>
             {:else}
               <Kv cols={1} items={[{ k: 'Description', v: descr }, { k: 'Members', v: sel.members.join(', ') }]} />
             {/if}
@@ -90,7 +91,7 @@
           {#snippet actions()}
             <Button disabled={builtin(sel.name)} tooltip={builtin(sel.name) ? 'A built-in group cannot be edited' : 'Change the description'} onclick={() => openCreate(EditGroup, { name: sel.name })}><i class="ph ph-pencil-simple"></i>Edit</Button>
             <Button disabled={sel.name.toLowerCase() === 'domain users'} tooltip={'Choose the members'} onclick={() => openCreate(Membership, { subject: 'group', name: sel.name, have: sel.members, options: userNames })}><i class="ph ph-user-plus"></i>Members</Button>
-            <Button variant="ghost" class="groups-danger" icon="trash" disabled={builtin(sel.name)} busy={jobRunning('users', [sel.name, 'group-delete'])} busyLabel="Deleting…" tooltip={builtin(sel.name) ? 'A built-in group cannot be deleted' : 'Delete the group (cannot be undone; you type the name)'}
+            <Button variant="danger" icon="trash" disabled={builtin(sel.name)} busy={jobRunning('users', [sel.name, 'group-delete'])} busyLabel="Deleting…" tooltip={builtin(sel.name) ? 'A built-in group cannot be deleted' : 'Delete the group (cannot be undone; you type the name)'}
               onclick={() => openPlan('users', [sel.name, 'group-delete'], `Delete ${sel.name}`)}>Delete</Button>
           {/snippet}
         </Drawer>
@@ -98,12 +99,3 @@
     {/snippet}
   </Split>
 </PageState>
-
-<style>
-  .muted { color: var(--fg-3); font-size: 12.5px; }
-  :global(.btn.groups-danger) { color: var(--bad); }
-  .note { margin: 0; padding: 10px 16px; font-size: 12.5px; color: var(--fg-3); }
-  .table { font-size: 12.5px; }
-  .link-btn { all: unset; cursor: pointer; color: var(--accent); }
-  .link-btn:hover { text-decoration: underline; }
-</style>

@@ -1,6 +1,7 @@
 <script>
   // Forward a domain: hs sys ext passthrough plan|start <domain> add --address <a> [--https-port N] [--http-port N | --no-http] [--proxy-protocol] [--container-ok]
   import CreateDialog from '../../shell/CreateDialog.svelte';
+  import { Field, TextInput } from '../../ui/index.js';
   import Switch from '../../ui/Switch.svelte';
 
   // `row` (from the Edit row action): the forwarded domain to change. `add` on a forwarded domain replaces its target, the plan says so.
@@ -32,22 +33,18 @@
 
 <CreateDialog title={row ? 'Change ' + row.domain : 'Forward a domain'} kicker={row ? 'Edit' : 'Add'} area="ext/passthrough" {args} {onclose} {ondone}>
   {#snippet form(plan)}
-    <div class="field">
-      <label for="pt-domain">Domain</label>
-      <input id="pt-domain" class="input" bind:value={domain} readonly={!!row} placeholder="example.com" maxlength="64" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="field">
-      <label for="pt-address">Address of the reverse proxy on the LAN</label>
-      <input id="pt-address" class="input" bind:value={address} placeholder="192.168.1.20" maxlength="39" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="field">
-      <label for="pt-https">HTTPS port of the target</label>
-      <input id="pt-https" class="input" bind:value={httpsPort} placeholder="443" maxlength="5" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="field">
-      <label for="pt-http">HTTP port of the target</label>
-      <input id="pt-http" class="input" bind:value={httpPort} placeholder="80" maxlength="5" disabled={!forwardHttp} autocomplete="off" spellcheck="false" />
-    </div>
+    <Field label="Domain" id="pt-domain">
+      <TextInput bind:value={domain} readonly={!!row} placeholder="example.com" maxlength={64} autocomplete="off" spellcheck={false} />
+    </Field>
+    <Field label="Address of the reverse proxy on the LAN" id="pt-address">
+      <TextInput bind:value={address} placeholder="192.168.1.20" maxlength={39} autocomplete="off" spellcheck={false} />
+    </Field>
+    <Field label="HTTPS port of the target" id="pt-https">
+      <TextInput bind:value={httpsPort} placeholder="443" maxlength={5} autocomplete="off" spellcheck={false} />
+    </Field>
+    <Field label="HTTP port of the target" id="pt-http">
+      <TextInput bind:value={httpPort} placeholder="80" maxlength={5} disabled={!forwardHttp} autocomplete="off" spellcheck={false} />
+    </Field>
     <div class="field">
       <span class="sw-row"><Switch bind:checked={forwardHttp} label="Forward HTTP (port 80)" /><span>Forward plain HTTP too (port 80, the Host name is kept)</span></span>
     </div>

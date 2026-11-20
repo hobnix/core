@@ -3,7 +3,7 @@
   // The command has no switches for backup, cache or snapshots at creation: those are separate changes on the share afterwards.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
-  import { Field, TextInput, Select, Checkbox, Banner } from '../../ui';
+  import { Field, TextInput, Select, Checkbox, Banner, Segmented, Row } from '../../ui';
   import { onMount } from 'svelte';
   import { pools, loadPools, poolsOfRole, poolOfRole, poolRow } from '../../pools.svelte.js';
 
@@ -48,21 +48,14 @@
     </Field>
 
     <Field label="Kind" id="ns-kind" help={kind === 'sensitive' ? 'Container-owned data: read-only for the Samba users.' : 'Read and write; everyone acts as adminuser. Only Domain Admins may use it until you set permissions.'}>
-      <div class="seg" id="ns-kind">
-        <label class="seg-opt"><input type="radio" bind:group={kind} value="shares" /><i class="ph ph-folder"></i>Shared folder</label>
-        <label class="seg-opt"><input type="radio" bind:group={kind} value="sensitive" /><i class="ph ph-folder-lock"></i>Sensitive</label>
-      </div>
+      <Segmented bind:value={kind} label="Kind" options={[{ value: 'shares', label: 'Shared folder', icon: 'folder' }, { value: 'sensitive', label: 'Sensitive', icon: 'folder-lock' }]} />
     </Field>
 
     {#if pools.loaded && !choices.length}
       <Banner tone="info">Shares wait for a pool: this server has none yet. Add one on Storage > Pools first.</Banner>
     {:else}
       <Field label="Where" id="ns-tier" help={isApps ? 'Fast and small: for app data and files used often.' : 'The big pool of disks: for media, photos and backups.'}>
-        <div class="seg" id="ns-tier">
-          {#each choices as c (c)}
-            <label class="seg-opt"><input type="radio" bind:group={chosen} value={c} checked={pool === c} /><i class="ph {poolRow(c)?.role === 'apps' ? 'ph-lightning' : 'ph-hard-drives'}"></i>{c}</label>
-          {/each}
-        </div>
+        <Segmented value={pool} label="Where" options={choices.map((c) => ({ value: c, label: c, icon: poolRow(c)?.role === 'apps' ? 'lightning' : 'hard-drives' }))} onchange={(v) => (chosen = v)} />
       </Field>
     {/if}
 
@@ -83,17 +76,13 @@
       <div class="field">
         <Checkbox bind:checked={mapUser} label="Write as an app user (uid:gid)" hint={mapUser ? 'One such user per instance; the instance restarts when the mapping changes.' : ''} />
         {#if mapUser}
-          <div class="row2">
+          <Row gap="2" style="margin-top:8px;max-width:220px">
             <TextInput bind:value={asUid} ariaLabel="uid" inputmode="numeric" />
             <span>:</span>
             <TextInput bind:value={asGid} ariaLabel="gid" inputmode="numeric" />
-          </div>
+          </Row>
         {/if}
       </div>
     {/if}
   {/snippet}
 </CreateDialog>
-
-<style>
-  .row2 { display: flex; align-items: center; gap: 8px; margin-top: 8px; max-width: 220px; }
-</style>

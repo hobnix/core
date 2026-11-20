@@ -11,6 +11,7 @@
   import Field from '../ui/Field.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import Select from '../ui/Select.svelte';
+  import Textarea from '../ui/Textarea.svelte';
   import { blank, manifestText, findingsOf, fieldOf, withKind, hasStoreFields, CATEGORIES } from './builder.js';
 
   let f = $state(blank());
@@ -56,30 +57,21 @@
 
 <div class="grid">
   <form class="card" onsubmit={(e) => e.preventDefault()}>
-    <label>{tr('Kind')}
-      <select value={f.kind} onchange={setKind}>
-        <option value="recipe">{tr('App (recipe)')}</option>
-        <option value="extension">{tr('Extension')}</option>
-        <option value="capability">{tr('Capability')}</option>
-      </select>
-    </label>
+    <Field label={tr('Kind')}>
+      <Select value={f.kind} onchange={setKind} options={[{ value: 'recipe', label: tr('App (recipe)') }, { value: 'extension', label: tr('Extension') }, { value: 'capability', label: tr('Capability') }]} />
+    </Field>
     {#each [['name', 'Name', 'my-app'], ['title', 'Title', 'What it is, in a few words'], ['version', 'Version', '0.1.0'], ['requires', 'Needs core', '>=1']] as [k, label, ph]}
-      <label>{tr(label)}
-        <input bind:value={f[k]} placeholder={ph} class:bad={forField(k).length} autocomplete="off" spellcheck="false" />
-        {#each forField(k) as x}<span class="why">{x.text}</span>{/each}
-      </label>
+      <Field label={tr(label)} error={err(k)}>
+        <TextInput bind:value={f[k]} placeholder={ph} autocomplete="off" spellcheck={false} />
+      </Field>
     {/each}
-    <label>{tr('For')}
-      <select bind:value={f.audience}>
-        <option value="generic">{tr('Everyone (generic)')}</option>
-        <option value="personal">{tr('One person (personal)')}</option>
-      </select>
-    </label>
+    <Field label={tr('For')}>
+      <Select bind:value={f.audience} options={[{ value: 'generic', label: tr('Everyone (generic)') }, { value: 'personal', label: tr('One person (personal)') }]} />
+    </Field>
     {#if f.kind === 'recipe'}
-      <label>{tr('Script')}
-        <input bind:value={f.script} class:bad={forField('script').length} autocomplete="off" spellcheck="false" />
-        {#each forField('script') as x}<span class="why">{x.text}</span>{/each}
-      </label>
+      <Field label={tr('Script')} error={err('script')}>
+        <TextInput bind:value={f.script} autocomplete="off" spellcheck={false} />
+      </Field>
     {/if}
     {#if hasStoreFields(f)}
       <Field label={tr('Description')} help={tr('One short paragraph for the store.')} error={err('description')}>
@@ -103,11 +95,9 @@
         <Select bind:value={f.instances} options={[{ value: 'one', label: tr('One') }, { value: 'many', label: tr('Many') }]} />
       </Field>
     {/if}
-    <label>{tr('Permissions')}
-      <textarea rows="3" bind:value={f.permissions} placeholder="web.read&#10;net:lan" spellcheck="false"></textarea>
-      <span class="hint">{tr('One per line, for example web.read or net:lan. Declared, not enforced (ADR 0014).')}</span>
-      {#each forField('permissions') as x}<span class="why">{x.text}</span>{/each}
-    </label>
+    <Field label={tr('Permissions')} help={tr('One per line, for example web.read or net:lan. Declared, not enforced (ADR 0014).')} error={err('permissions')}>
+      <Textarea rows={3} bind:value={f.permissions} placeholder={'web.read\nnet:lan'} spellcheck={false} />
+    </Field>
   </form>
 
   <div class="side">
@@ -132,11 +122,6 @@
   .card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
   .side { display: flex; flex-direction: column; gap: 12px; }
   .verdict { display: flex; flex-direction: column; gap: 8px; }
-  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-  input, select, textarea { padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); color: inherit; font: inherit; }
-  input.bad { border-color: var(--bad); }
-  .why { color: var(--bad); }
-  .hint { color: var(--muted, var(--dim)); }
   .head { display: flex; justify-content: space-between; align-items: center; }
   pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono, monospace); font-size: 13px; }
 </style>

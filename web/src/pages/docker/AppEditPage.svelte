@@ -14,6 +14,7 @@
   import PageHeader from '../../shell/PageHeader.svelte';
   import Banner from '../../ui/Banner.svelte';
   import Button from '../../ui/Button.svelte';
+  import { Field, TextInput, Textarea, Muted } from '../../ui/index.js';
   import { appOf, revOf, diskChanged } from './apps.js';
   import BindShare from '../../forms/docker/BindShare.svelte';
   import { ls } from '../../files/api.js';
@@ -288,18 +289,16 @@
 
 {#if isNew}
   <div class="newrow">
-    <label class="namef">Name
-      <input class="input" bind:value={name} placeholder="my-app" autocapitalize="off" autocorrect="off" spellcheck="false" />
-    </label>
+    <div class="namef"><Field label="Name"><TextInput bind:value={name} placeholder="my-app" autocomplete="off" spellcheck={false} /></Field></div>
     <Button icon="magic-wand" disabled={loading} tooltip="Answer a few questions instead; the text comes back here" onclick={() => go('/instances/docker/wizard')}>Guided</Button>
     <Button icon="terminal-window" disabled={loading || !editors} tooltip="Paste a docker run command and turn it into a compose file" onclick={() => { runOpen = !runOpen; }}>From docker run</Button>
   </div>
   {#if runOpen}
     <div class="runbox">
-      <textarea class="input" rows="4" bind:value={runText} placeholder="docker run -d --name my-app -p 8080:80 -e TZ=Europe/Vienna nginx:alpine" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      <Textarea rows={4} bind:value={runText} ariaLabel="docker run command" placeholder="docker run -d --name my-app -p 8080:80 -e TZ=Europe/Vienna nginx:alpine" spellcheck={false} />
       <div class="runact">
         <Button variant="primary" disabled={!runText.trim()} onclick={fromRun}>Convert</Button>
-        <span class="hint">This replaces the text in both panels. Secrets from -e go to the .env panel.</span>
+        <Muted>This replaces the text in both panels. Secrets from -e go to the .env panel.</Muted>
       </div>
     </div>
   {/if}
@@ -317,7 +316,7 @@
     <div class="box" bind:this={composeBox}></div>
   </section>
   <section class="panel">
-    <div class="ph">.env <span class="hint">values of PASS, TOKEN, SECRET and KEY names are hidden until you press show</span></div>
+    <div class="ph">.env <Muted style="margin-left:8px">values of PASS, TOKEN, SECRET and KEY names are hidden until you press show</Muted></div>
     <div class="box" bind:this={envBox}></div>
   </section>
 </div>
@@ -326,14 +325,13 @@
   .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; margin-top: 12px; }
   .panel { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--panel); }
   .ph { padding: 8px 12px; font: 12px var(--mono); color: var(--fg-2); border-bottom: 1px solid var(--line); }
-  .hint { color: var(--fg-3); margin-left: 8px; }
   .box { height: 60vh; min-height: 60vh; }
   .box :global(.cm-editor) { height: 100%; }
   .dirty { font: 12px var(--mono); color: var(--warn); margin-top: 8px; }
   .newrow { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; }
   .runbox { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
-  .runbox textarea { font: 12px var(--mono); }
+  .runbox :global(textarea) { font: 12px var(--mono); }
   .runact { display: flex; align-items: center; gap: 12px; }
-  .namef { display: flex; flex-direction: column; gap: 4px; max-width: 320px; }
+  .namef { max-width: 320px; }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 </style>

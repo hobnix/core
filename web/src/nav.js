@@ -49,6 +49,9 @@ export const tree = [
         { label: "What's new", icon: 'sparkle', path: '/operations/whats-new' },
       ] },
       { label: 'Docs', icon: 'book-open', path: '/docs', prefix: true, capability: 'docs' },
+      { label: 'Developer', icon: 'wrench', path: '/developer', children: [
+        { label: 'Components', icon: 'squares-four', path: '/developer/components' },
+      ] },
       { label: 'Nodes', icon: 'hard-drives', path: '/nodes' },
       { label: 'Setup', icon: 'list-checks', path: '/setup' },
       { label: 'Settings', icon: 'sliders', path: '/settings', children: [

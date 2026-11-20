@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import { poll, rows } from '../data.svelte.js';
   import { bytes, pct, duration } from '../format.js';
@@ -90,7 +91,7 @@
     </div>
 
     <div class="card elev-sm c">
-      <div class="ch"><i class="ph ph-graphics-card"></i><span class="ct">GPU</span>{#if cfg.gpu}<span class="tag tag-neutral" style="padding:1px 7px;margin-left:auto">gpu = {cfg.gpu}</span>{/if}</div>
+      <div class="ch"><i class="ph ph-graphics-card"></i><span class="ct">GPU</span>{#if cfg.gpu}<Chip style="margin-left:auto">gpu = {cfg.gpu}</Chip>{/if}</div>
       {#if d?.gpu}
         <div class="model">NVIDIA {d.gpu.name}</div>
         <div class="row"><span class="rl">Utilisation</span><span class="rv">{pct(d.gpu.util)} %</span></div>
@@ -103,7 +104,7 @@
     </div>
 
     <div class="card elev-sm c">
-      <div class="ch"><i class="ph ph-battery-charging"></i><span class="ct">UPS</span>{#if u.configured === 'yes'}<span class="tag tag-neutral" style="padding:1px 7px;margin-left:auto">ups = on</span>{/if}</div>
+      <div class="ch"><i class="ph ph-battery-charging"></i><span class="ct">UPS</span>{#if u.configured === 'yes'}<Chip style="margin-left:auto">ups = on</Chip>{/if}</div>
       {#if upsOk}
         {#if u.model}<div class="model">{u.model}</div>{/if}
         <div class="big"><span>{u.charge ?? '–'} %</span><span class="of">{upsState}</span></div>
@@ -131,7 +132,7 @@
     </div>
 
     <div class="card elev-sm c" style="gap:8px">
-      <div class="ch"><i class="ph ph-fan"></i><span class="ct">Fans</span>{#if fans.length}<span class="tag tag-neutral" style="padding:1px 7px;margin-left:auto">{spinning.length} of {fans.length} spinning</span>{/if}</div>
+      <div class="ch"><i class="ph ph-fan"></i><span class="ct">Fans</span>{#if fans.length}<Chip style="margin-left:auto">{spinning.length} of {fans.length} spinning</Chip>{/if}</div>
       {#each spinning as f}
         <div class="row"><span class="rl" style="width:150px">{f.name}</span><span class="rv">{f.rpm} rpm</span></div>
       {:else}

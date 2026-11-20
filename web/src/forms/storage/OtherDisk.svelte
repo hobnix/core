@@ -1,4 +1,5 @@
 <script>
+  import { Field, TextInput, Select, Segmented, Muted } from '../../ui/index.js';
   // Another disk (USB, hot-plug) with data on it: `hs sys disk plan|start <partition> temp-mount [--name <n>]` mounts it read-only and shares it
   // (only Domain Admins at first), `<name> temp-copy --to <share>` copies everything on it into a share (a background job), `<name> temp-eject`
   // removes the share and unmounts. The disk itself is never formatted or written. The list is `hs sys temp-disk raw`:
@@ -39,51 +40,31 @@
 
 <CreateDialog title="Other disk" kicker="Disk" area="disk" {args} {onclose} {ondone}>
   {#snippet form()}
-    <div class="field">
-      <label for="od-dev">Disk</label>
-      {#if parts.length}
-        <select id="od-dev" class="input" value={sel?.dev} onchange={(e) => { dev = e.currentTarget.value; action = 'copy'; }}>
-          {#each parts as p}<option value={p.dev}>{label(p)}</option>{/each}
-        </select>
-      {:else}
-        <div class="hint">{raw.loaded ? (raw.error ? 'The disks could not be read.' : 'No other disk found: plug it in, this list updates by itself.') : 'Loading…'}</div>
-      {/if}
-    </div>
+    {#if parts.length}
+      <Field label="Disk">
+        <Select value={sel?.dev} options={parts.map((p) => ({ value: p.dev, label: label(p) }))} onchange={(e) => { dev = e.currentTarget.value; action = 'copy'; }} />
+      </Field>
+    {:else}
+      <Field label="Disk" id="od-none"><Muted as="div" id="od-none">{raw.loaded ? (raw.error ? 'The disks could not be read.' : 'No other disk found: plug it in, this list updates by itself.') : 'Loading…'}</Muted></Field>
+    {/if}
     {#if sel && !sel.mounted}
-      <div class="field">
-        <label for="od-name">Name of the share (optional)</label>
-        <input id="od-name" class="input" bind:value={name} placeholder={sel.label || sel.dev} autocomplete="off" spellcheck="false" />
-        {#if !nameOk}<div class="err">Lower-case letters, digits and hyphens.</div>{/if}
-      </div>
-      <div class="hint">Mounted read-only and shared as <code>temp-name</code> for Domain Admins. Nothing on the disk is changed.</div>
+      <Field label="Name of the share (optional)" error={nameOk ? '' : 'Lower-case letters, digits and hyphens.'}>
+        <TextInput bind:value={name} placeholder={sel.label || sel.dev} autocomplete="off" spellcheck={false} />
+      </Field>
+      <Muted as="p">Mounted read-only and shared as <code>temp-name</code> for Domain Admins. Nothing on the disk is changed.</Muted>
     {:else if sel?.temp}
-      <div class="field">
-        <span class="lab">What to do</span>
-        <div class="seg" role="radiogroup" aria-label="Action">
-          <label class="seg-opt"><input type="radio" name="od-act" checked={act === 'copy'} onchange={() => (action = 'copy')} />Copy into a share</label>
-          <label class="seg-opt"><input type="radio" name="od-act" checked={act === 'eject'} onchange={() => (action = 'eject')} />Eject</label>
-        </div>
-      </div>
+      <Field label="What to do">
+        <Segmented value={act} label="Action" options={[{ value: 'copy', label: 'Copy into a share' }, { value: 'eject', label: 'Eject' }]} onchange={(v) => (action = v)} />
+      </Field>
       {#if act === 'copy'}
-        <div class="field">
-          <label for="od-to">Copy everything into the share</label>
-          <select id="od-to" class="input" bind:value={to}>
-            <option value="">Choose a share…</option>
-            {#each shares as s}<option value={s}>{s}</option>{/each}
-          </select>
-        </div>
-        <div class="hint">Runs as a background job; it checks first that there is room.</div>
+        <Field label="Copy everything into the share" help="Runs as a background job; it checks first that there is room.">
+          <Select bind:value={to}><option value="">Choose a share…</option>{#each shares as s}<option value={s}>{s}</option>{/each}</Select>
+        </Field>
       {:else}
-        <div class="hint">The share is removed and the disk unmounted. Afterwards it is safe to unplug.</div>
+        <Muted as="p">The share is removed and the disk unmounted. Afterwards it is safe to unplug.</Muted>
       {/if}
     {:else if sel}
-      <div class="hint">This partition is mounted somewhere this page does not manage.</div>
+      <Muted as="p">This partition is mounted somewhere this page does not manage.</Muted>
     {/if}
   {/snippet}
 </CreateDialog>
-
-<style>
-  .lab { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-  .err { font-size: 12px; color: var(--st-bad); margin-top: 4px; }
-  .hint { font-size: 12px; color: var(--color-neutral-500); }
-</style>

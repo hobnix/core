@@ -48,3 +48,4 @@ Issue: hobnix/server#<n>
 | [0025](0025-translation-scope.md) | Where translation lives: `hs` commands, web, or both; freeze `de.tsv`, web translates, codes only where the web needs them | Accepted (2026-11-10) |
 | [0027](0027-package-lifecycle-states.md) | Package lifecycle states: four stages (available, installed, on, running) and flags for every kind; `sys pkg states`; verbs Install/Remove/Update | Accepted (2026-11-16) |
 | [0028](0028-error-codes.md) | Error codes: a `code` line beside `reason`, dotted names in one catalogue (error-codes.tsv, generated docs), exit numbers stay 0/1/other | Proposed |
+| [0029](0029-component-gallery-instead-of-storybook.md) | The component gallery page (`Developer > Components`) instead of Storybook; triggers to revisit #193 | Accepted (2026-11-18) |

@@ -1,5 +1,7 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import Button from '../ui/Button.svelte';
+  import Select from '../ui/Select.svelte';
   import JobRecords from './JobRecords.svelte';
   import { tr } from '../i18n.js';
   import { onDestroy } from 'svelte';
@@ -124,7 +126,7 @@
       </button>
     {/each}
     <span style="flex:1"></span>
-    <span class="tag tag-neutral" style="padding:1px 8px;margin-right:8px">all nodes</span>
+    <Chip style="margin-right:8px">all nodes</Chip>
     <Button variant="ghost" class="btn-icon" tooltip={open ? 'Collapse the panel' : 'Expand the panel'} style="width:26px;height:26px;color:var(--color-neutral-400)" onclick={() => (ui.panel.open = !open)} aria-label={open ? 'Collapse' : 'Expand'}>
       <i class="ph ph-caret-{open ? 'down' : 'up'}"></i>
     </Button>
@@ -187,9 +189,9 @@
       {:else if tab === 'logs'}
         <div class="bar">
           <label for="lvl">Show</label>
-          <select id="lvl" class="input" style="width:auto;min-height:26px;padding:2px 8px;font-size:12px" bind:value={level}>
+          <Select id="lvl" style="width:auto;min-height:26px;padding:2px 8px;font-size:12px" bind:value={level}>
             <option value="err">errors</option><option value="warning">warnings and errors</option><option value="info">everything</option>
-          </select>
+          </Select>
           <span style="color:var(--color-neutral-500)">today, newest first</span>
         </div>
         <div class="loglist">
@@ -202,7 +204,7 @@
           <thead><tr><th>When</th><th>Disk</th><th>Event</th><th>Detail</th></tr></thead>
           <tbody>
             {#each eventRows as r}
-              <tr><td class="muted">{r[0]}</td><td><code style="font-size:11.5px">{r[2]}</code></td><td><span class="tag tag-neutral" style="padding:0 7px">{r[1]}</span></td><td class="soft">{r[3]}</td></tr>
+              <tr><td class="muted">{r[0]}</td><td><code style="font-size:11.5px">{r[2]}</code></td><td><Chip>{r[1]}</Chip></td><td class="soft">{r[3]}</td></tr>
             {:else}
               <tr><td colspan="4" class="empty">{events.loaded ? 'No disk events yet.' : 'Loading…'}</td></tr>
             {/each}

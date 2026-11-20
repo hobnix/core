@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "A bell in the top bar lists open problems and new warnings"
+body  = """The count is the problems nobody acknowledged plus the warnings that arrived since you opened the page. Each entry opens the page of what it is about. Errors can now show a code, the likely reason, one next step and a link to the guide."""

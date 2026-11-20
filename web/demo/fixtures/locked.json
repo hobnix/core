@@ -1,0 +1,237 @@
+{
+ "title": "Locked storage: the encrypted pool is closed, instances are down, only the status is readable.",
+ "locked": true,
+ "reads": {
+  "pool/list": [
+   [
+    "bulk",
+    "data",
+    "snapraid",
+    "locked"
+   ]
+  ],
+  "status": [
+   [
+    "backup",
+    "ok",
+    "7200"
+   ],
+   [
+    "encryption",
+    "locked"
+   ],
+   [
+    "job",
+    "hs-bulk-sync.service",
+    "ok",
+    "2026-11-18 03:00",
+    "2026-11-19 03:00"
+   ],
+   [
+    "job",
+    "hs-bulk-scrub.service",
+    "ok",
+    "2026-11-01 04:00",
+    "2026-12-01 04:00"
+   ],
+   [
+    "smart",
+    "6",
+    ""
+   ],
+   [
+    "event",
+    "2026-11-17 22:10",
+    "sdc: temperature back to normal"
+   ],
+   [
+    "version",
+    "v0.9.0"
+   ]
+  ],
+  "deck": {
+   "schema": 1,
+   "kind": "server",
+   "host": "demo",
+   "locked": true,
+   "uptime_s": 864000,
+   "load": [
+    0.42,
+    0.38,
+    0.31
+   ],
+   "encryption": "locked",
+   "problems": 0,
+   "mem": {
+    "total": 34359738368,
+    "available": 23622320128
+   },
+   "pools": {}
+  },
+  "ct/list": [
+   [
+    "nextcloud",
+    "container",
+    "stopped",
+    "192.168.1.21",
+    "4GiB",
+    "2",
+    "yes",
+    "yes",
+    "no",
+    "20GiB",
+    "3",
+    "2026-11-18 03:00",
+    "1200000000",
+    "5230",
+    "2",
+    "2026-11-10T08:00:00Z",
+    "-"
+   ],
+   [
+    "jellyfin",
+    "container",
+    "stopped",
+    "192.168.1.22",
+    "8GiB",
+    "4",
+    "yes",
+    "yes",
+    "no",
+    "40GiB",
+    "2",
+    "2026-11-18 03:00",
+    "2400000000",
+    "91200",
+    "1",
+    "2026-11-10T08:00:00Z",
+    "-"
+   ],
+   [
+    "home-assistant",
+    "vm",
+    "stopped",
+    "192.168.1.23",
+    "2GiB",
+    "2",
+    "yes",
+    "yes",
+    "no",
+    "16GiB",
+    "1",
+    "2026-11-17 03:00",
+    "1100000000",
+    "20110",
+    "0",
+    "2026-11-12T19:30:00Z",
+    "-"
+   ],
+   [
+    "docker",
+    "container",
+    "stopped",
+    "192.168.1.24",
+    "8GiB",
+    "4",
+    "yes",
+    "yes",
+    "yes",
+    "60GiB",
+    "2",
+    "2026-11-18 03:00",
+    "3100000000",
+    "48800",
+    "2",
+    "2026-11-10T08:00:00Z",
+    "docker"
+   ],
+   [
+    "dc1",
+    "container",
+    "stopped",
+    "192.168.1.10",
+    "1GiB",
+    "1",
+    "yes",
+    "yes",
+    "no",
+    "8GiB",
+    "2",
+    "2026-11-18 03:00",
+    "310000000",
+    "1720",
+    "0",
+    "2026-11-10T08:00:00Z",
+    "-"
+   ],
+   [
+    "uptime-kuma",
+    "container",
+    "stopped",
+    "192.168.1.25",
+    "1GiB",
+    "1",
+    "yes",
+    "yes",
+    "no",
+    "4GiB",
+    "1",
+    "2026-11-18 03:00",
+    "240000000",
+    "880",
+    "0",
+    "2026-11-14T10:15:00Z",
+    "-"
+   ],
+   [
+    "ntfy",
+    "container",
+    "stopped",
+    "-",
+    "512MiB",
+    "1",
+    "no",
+    "yes",
+    "no",
+    "2GiB",
+    "1",
+    "2026-11-16 03:00",
+    "0",
+    "0",
+    "0",
+    "2026-11-13T09:00:00Z",
+    "-"
+   ],
+   [
+    "test-box",
+    "container",
+    "stopped",
+    "-",
+    "1GiB",
+    "1",
+    "no",
+    "yes",
+    "no",
+    "8GiB",
+    "0",
+    "-",
+    "0",
+    "0",
+    "0",
+    "-",
+    "-"
+   ]
+  ],
+  "ct/pools": [],
+  "shares/list": [],
+  "shares/overview": [],
+  "fm/locations": [],
+  "fm/trash": [],
+  "vault/list": [],
+  "backup/shares": [],
+  "docker/list": [],
+  "docker/apps": [],
+  "docker/containers": [],
+  "services/tiles": []
+ }
+}

@@ -9,8 +9,6 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / 'web' / 'src'
 # Deliberate exceptions, each with its reason.
 ALLOW = (
     'ui/Button.svelte',     # the component itself
-    'pages/Files.svelte',   # the file manager keeps its own small buttons (toolbar, rows, dialogs); the ones that start or stop a job (Start, Pause, Continue,
-    'files/',               # Cancel, Calculate size, Go) are ui/Button.svelte with an explicit busy state
 )
 
 
@@ -38,7 +36,7 @@ for p in sorted(SRC.rglob('*.svelte')):
     rel = p.relative_to(SRC).as_posix()
     if any(rel == a or (a.endswith('/') and rel.startswith(a)) for a in ALLOW):
         continue
-    s = p.read_text()
+    s = p.read_text(encoding='utf-8')
     for m in re.finditer(r'<button\b', s):
         line_start = s.rfind('\n', 0, m.start()) + 1
         if s[line_start:m.start()].lstrip().startswith('//'):    # a usage example in a comment

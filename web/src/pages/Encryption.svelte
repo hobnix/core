@@ -6,7 +6,7 @@
   import UnlockForm from '../forms/unlock/UnlockForm.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
-  import { StatusDot } from '../ui/index.js';
+  import { StatusDot, Card, Row, Stack, Muted } from '../ui/index.js';
 
   let { deck } = $props();    // the shared status document
   const status = poll('/api/sys/status', 15000, 'status');
@@ -41,52 +41,35 @@
 
 <PageHeader title="Encryption" crumb="Storage" sub="One passphrase unlocks every LUKS disk and encrypted pool. Locked is a normal state after a boot: the system disk is plain and always reachable over SSH." />
 
-<div class="card xh hero">
-  <i class="ph {locked ? 'ph-lock' : 'ph-lock-open'} big-i {dot}"></i>
-  <div class="tx">
-    <div class="big">{title}</div>
-    <div class="desc">
-      {#if enc === 'none'}No disk or pool of this server is encrypted.
-      {:else if locked}Pools, shares and instances stay down until the passphrase is entered. Nothing is wrong.
-      {:else if known}Everything encrypted is open.
-      {:else if status.error}The state could not be read.{/if}
-    </div>
-  </div>
-  <StatusDot state={dot} label={locked ? 'locked' : enc === 'open' ? 'open' : enc === 'none' ? 'not encrypted' : 'unknown'} />
-  {#if locked}<div class="uf"><UnlockForm /></div>{/if}
-</div>
+<Stack gap="4">
+  <Card>
+    <Row gap="4" wrap>
+      <i class="ph {locked ? 'ph-lock' : 'ph-lock-open'}" style="font-size:30px;color:var(--{dot === 'bad' ? 'bad' : dot})"></i>
+      <div style="flex:1 1 320px">
+        <div style="font-size:18px;font-weight:600">{title}</div>
+        <Muted as="div">
+          {#if enc === 'none'}No disk or pool of this server is encrypted.
+          {:else if locked}Pools, shares and instances stay down until the passphrase is entered. Nothing is wrong.
+          {:else if known}Everything encrypted is open.
+          {:else if status.error}The state could not be read.{/if}
+        </Muted>
+      </div>
+      <StatusDot state={dot} label={locked ? 'locked' : enc === 'open' ? 'open' : enc === 'none' ? 'not encrypted' : 'unknown'} />
+      {#if locked}<div style="flex:0 1 340px;min-width:260px"><UnlockForm /></div>{/if}
+    </Row>
+  </Card>
 
-<div class="card sect">
-  <b>Encrypted storage</b>
-  <div class="scrollx">
-    <Table id="encryption" {columns} rows={vols} key="name" compact loading={!(status.loaded || deck?.loaded)} empty="No encrypted volumes.">
+  <Card title="Encrypted storage">
+    <div style="overflow-x:auto"><Table id="encryption" {columns} rows={vols} key="name" compact loading={!(status.loaded || deck?.loaded)} empty="No encrypted volumes.">
       {#snippet cell(v, col)}
-        {#if col.key === 'name'}<span class="nm"><i class="ph {v.icon}"></i>{#if diskOf(v)}<button class="link-btn" use:tip={'Open this disk'} onclick={() => go('/storage/disks')}>{v.name}</button>{:else}{v.name}{/if}</span>
-        {:else if col.key === 'kind'}<span class="mute">{v.kind}</span>
+        {#if col.key === 'name'}<Row gap="2"><i class="ph {v.icon}"></i>{#if diskOf(v)}<button class="link-btn" use:tip={'Open this disk'} onclick={() => go('/storage/disks')}>{v.name}</button>{:else}{v.name}{/if}</Row>
+        {:else if col.key === 'kind'}<Muted>{v.kind}</Muted>
         {:else if col.key === 'on'}<code>{v.on}</code>
-        {:else if col.key === 'size'}<span class="mute">{v.size}</span>
+        {:else if col.key === 'size'}<Muted>{v.size}</Muted>
         {:else}<StatusDot state={v.dot} label={v.state} />{/if}
       {/snippet}
-    </Table>
-  </div>
-  <div class="note">{list.error ? 'The list could not be read.' : 'Only the encrypted disks of this server are listed; a LUKS disk it does not know is never opened or shown.'}</div>
-  <div class="note">The secrets of the server's own services are in the <button class="link-btn" onclick={() => go('/storage/vault')}>Vault</button>.</div>
-</div>
-
-<style>
-  .hero { flex-direction: row; align-items: center; gap: 18px; padding: 16px 18px; flex-wrap: wrap; margin-bottom: 14px; }
-  .big-i { font-size: 30px; color: var(--off); }
-  .big-i.ok { color: var(--ok); }
-  .big-i.warn { color: var(--warn); }
-  .tx { flex: 1 1 320px; }
-  .big { font-size: 18px; font-weight: 600; }
-  .desc { color: var(--fg-2); }
-  .uf { flex: 0 1 340px; min-width: 260px; }
-  .sect { padding: 12px 14px; gap: 8px; }
-  .scrollx { overflow-x: auto; }
-  .nm { display: inline-flex; align-items: center; gap: 8px; }
-  .nm i { color: var(--fg-3); }
-  .mute { color: var(--fg-2); }
-  code { font-size: 12px; color: var(--fg-2); }
-  .note { font-size: 12px; color: var(--fg-3); }
-</style>
+    </Table></div>
+    <Muted as="p">{list.error ? 'The list could not be read.' : 'Only the encrypted disks of this server are listed; a LUKS disk it does not know is never opened or shown.'}</Muted>
+    <Muted as="p">The secrets of the server's own services are in the <button class="link-btn" onclick={() => go('/storage/vault')}>Vault</button>.</Muted>
+  </Card>
+</Stack>

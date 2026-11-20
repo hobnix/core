@@ -1,4 +1,6 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
+  import TextInput from '../ui/TextInput.svelte';
   import Button from '../ui/Button.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   // The guides: a navigation (language, search, groups with their pages), the page rendered from Markdown, an outline of the page and
@@ -202,8 +204,8 @@
     {/if}
     <div class="find">
       <i class="ph ph-magnifying-glass"></i>
-      <input class="input" type="search" placeholder="Search the guides" bind:value={q} oninput={typing} onkeydown={(e) => e.key === 'Escape' && clear()}
-        autocomplete="off" spellcheck="false" aria-label="Search the guides" />
+      <TextInput type="search" placeholder="Search the guides" bind:value={q} oninput={typing} onkeydown={(e) => e.key === 'Escape' && clear()}
+        autocomplete="off" spellcheck={false} ariaLabel="Search the guides" />
     </div>
     {#if info}
       <button class="navtoggle" aria-expanded={navOpen} aria-controls="docs-groups" onclick={() => (navOpen = !navOpen)}>
@@ -249,7 +251,7 @@
             {#each hits as h}
               <li>
                 <a class="hit" href={url(docPath(h.lang, h.slug)) + (h.anchor ? '#' + h.anchor : '')} onclick={(e) => pick(e, h.lang, h.slug, h.anchor)}>
-                  <span class="ht">{h.title}{#if h.lang !== lang}<span class="tag tag-neutral">{h.lang.toUpperCase()}</span>{/if}</span>
+                  <span class="ht">{h.title}{#if h.lang !== lang}<Chip>{h.lang.toUpperCase()}</Chip>{/if}</span>
                   {#if h.heading && h.heading !== h.title}<span class="hh"><i class="ph ph-hash"></i>{h.heading}</span>{/if}
                   {#if h.snippet && h.snippet !== h.heading}<span class="hs">{h.snippet}</span>{/if}
                 </a>

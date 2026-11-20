@@ -10,9 +10,10 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import Table from './Table.svelte';
   import Button from '../ui/Button.svelte';
+  import Progress from '../ui/Progress.svelte';
   import { openCreate } from '../ui.svelte.js';
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
-  import { parseRecord, stateDot, stateKnown, stepText, percent, progressText, clock, duration, lastJobEvent, latestOnly } from '../jobrecords.js';
+  import { parseRecord, stateDot, stateKnown, stepText, progressText, clock, duration, lastJobEvent, latestOnly } from '../jobrecords.js';
 
   let { onload = () => {} } = $props();
 
@@ -82,7 +83,6 @@
     { key: 'duration', label: 'Took', sort: false, optional: true },
   ];
   const word = (s) => (stateKnown(s) ? tr(s) : s || '?');
-  const bar = (r) => percent(r.progress);
   const kv = (d) => {
     const x = [];
     const add = (k, v) => { if (v !== null && v !== undefined && v !== '') x.push([k, v]); };
@@ -104,8 +104,7 @@
         {:else if col.key === 'step'}<span class="muted">{stepText(r.step, r.state)}</span>
         {:else if col.key === 'progress'}
           {#if r.progress}
-            {#if bar(r) !== null}<span class="pbar" role="progressbar" aria-valuenow={bar(r)} aria-valuemin="0" aria-valuemax="100"><span style="width:{bar(r)}%"></span></span>{/if}
-            <span class="muted">{progressText(r.progress, bytes)}</span>
+            <Progress value={r.progress.done} total={r.progress.total} size="sm" label={r.description} text={progressText(r.progress, bytes)} />
           {/if}
         {:else if col.key === 'duration'}<span class="muted">{duration(r.started, r.ended, now)}</span>
         {/if}
@@ -132,6 +131,4 @@
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
   .k { color: var(--fg-3); }
   .err { color: var(--bad); }
-  .pbar { display: inline-block; width: 70px; height: 6px; background: var(--line); margin-right: 8px; vertical-align: middle; }
-  .pbar > span { display: block; height: 100%; background: var(--accent); }
 </style>

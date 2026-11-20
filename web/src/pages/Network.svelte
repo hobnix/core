@@ -1,4 +1,5 @@
 <script>
+  import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
   import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
@@ -103,7 +104,7 @@
   // addresses of the router's clients that the map above cannot show (other ranges, other networks)
   const elsewhere = $derived(Object.keys(byIp).filter((ip) => !(ip.startsWith(prefix + '.') && Number(ip.split('.')[3]) >= 10 && Number(ip.split('.')[3]) < 50)).length);
 
-  const chain = [['Internet', 'tag-neutral'], ['Cloudflare Tunnel', 'tag-neutral'], ['cloudflared', 'tag-neutral'], ['Zoraxy', 'tag-accent'], ['instance', 'tag-neutral']];
+  const chain = [['Internet', ''], ['Cloudflare Tunnel', ''], ['cloudflared', ''], ['Zoraxy', 'accent'], ['instance', '']];
 
   const columns = [{ key: 'host', label: 'Name' }, { key: 'where', label: 'Goes to', value: (r) => `${r.where}:${r.port}` }];
   const remoteCols = [{ key: 'kind', label: 'Kind', value: (r) => kindWord(r.kind) }, { key: 'peer', label: 'Peer' }, { key: 'share', label: 'Share' }, { key: 'state', label: 'State' }, { key: 'actions', label: '', sort: false, align: 'right' }];
@@ -162,14 +163,14 @@
     <div class="chain">
       {#each chain as [name, cls], i}
         {#if i}<i class="ph ph-arrow-right" style="color:var(--fg-3)"></i>{/if}
-        <span class="tag {cls}">{name}</span>
+        <Chip tone={cls}>{name}</Chip>
       {/each}
     </div>
     <Table id="zoraxy-rules" {columns} rows={rules} key="host" compact loading={!portsRead.loaded}
            empty={portsRead.error && !listen.length ? 'The rules could not be read.' : 'No Zoraxy rule could be read (is Zoraxy running?).'}>
       {#snippet cell(r, col)}
         {#if col.key === 'host'}<span use:tip={r.note && r.note !== '-' ? r.note : ''}>{r.host}</span>
-        {:else}<span class="goes"><StatusDot state={ruleDot(r.status)} bare label={r.status} />{r.where}:{r.port}{#if r.status === 'WARN'}<span class="tag tag-neutral" style="color:var(--bad)">admin interface</span>{/if}</span>{/if}
+        {:else}<span class="goes"><StatusDot state={ruleDot(r.status)} bare label={r.status} />{r.where}:{r.port}{#if r.status === 'WARN'}<Chip style="color:var(--bad)">admin interface</Chip>{/if}</span>{/if}
       {/snippet}
     </Table>
     <div class="note">Every rule is reachable from the internet. Admin interfaces (Incus, Zoraxy, Arcane, Grafana, docs) have no rule on purpose. Games go through the proxyserver instead.</div>
@@ -227,7 +228,7 @@
       <Button variant="ghost" size="sm" tooltip={'Let another homeserver read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access…</Button></div>
     <Table id="remote-shares" columns={remoteCols} rows={rem} compact loading={!remote.loaded} empty={remote.error ? 'Remote shares could not be read.' : 'No shares with other servers.'}>
       {#snippet cell(r, col)}
-        {#if col.key === 'kind'}<span class="tag tag-neutral">{kindWord(r.kind)}</span>
+        {#if col.key === 'kind'}<Chip>{kindWord(r.kind)}</Chip>
         {:else if col.key === 'peer'}{r.peer}
         {:else if col.key === 'share'}<span class="kd">{r.share}</span>
         {:else if col.key === 'state'}<StatusDot state={remDot(r.state)} label={r.state} />

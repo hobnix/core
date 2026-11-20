@@ -6,7 +6,7 @@
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { StatusDot, Chip, Kv, Drawer, Split, Banner } from '../ui/index.js';
+  import { StatusDot, Chip, Kv, Drawer, Split, Banner, Card, Row, Muted, Segmented } from '../ui/index.js';
   import { onMount } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
   import { live } from '../live.svelte.js';
@@ -44,7 +44,7 @@
   const inv = poll('/api/sys/state/disks', 30000, 'disk-inventory');
   // data disks that are out of the pool by hand: member, detached | recovering, since (epoch)
   // sleep since / wakes today per disk and the measured power numbers (each with its source)
-  const powerPoll = poll('/api/sys/disk/power', 60000, 'disk-power');
+  const powerPoll = poll('/api/sys/disk/power', 60000, 'monitor-disks');
   const pw = $derived(parsePower(rows(powerPoll)));
   const marks = poll('/api/sys/disk/marks', 15000, 'disk-marks');
   const markOf = $derived(Object.fromEntries(rows(marks).map((r) => [r[0], r[1]])));
@@ -152,39 +152,35 @@
     <Button variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
   {/snippet}
 </PageHeader>
-{#if pw.power.length}<p class="mute">{#each pw.power as x, i}{i ? ' · ' : ''}{powerText(x)}{/each}</p>{/if}
+{#if pw.power.length}<Muted as="p">{#each pw.power as x, i}{i ? ' · ' : ''}{powerText(x)}{/each}</Muted>{/if}
 
-<div class="tabs seg" role="tablist" aria-label="Filter">
-  {#each TABS as t (t.id)}
-    <label class="seg-opt"><input type="radio" name="dfilter" checked={filter === t.id} onchange={() => setFilter(t.id)} />{t.label}<span class="cnt">{counts[t.id] ?? ''}</span></label>
-  {/each}
-</div>
+<div style="margin-bottom:14px;max-width:100%"><Segmented label="Filter" value={filter} options={TABS.map((t) => ({ value: t.id, label: t.label, count: counts[t.id] ?? '' }))} onchange={setFilter} /></div>
 
 <PageState loading={!mon.loaded} hasData={mon.data != null} error={mon.error?.message ?? ''} empty={mon.loaded && !all.length && !missing.length} emptyIcon="hard-drive" emptyTitle="No disks found"
            emptyText="The disks could not be listed. Is the storage locked or the collector not running?">
   {#if filter === 'missing'}
     <Split open={!!selMissing}>
       {#snippet list()}
-        <div class="card">
+        <Card>
           {#if missing.length}
             <Table id="disks-missing" columns={missCols} rows={missing} key="serial" compact selected={selMissing?.serial} onrow={(m) => (selName = m.serial)} empty="No disk is missing.">
               {#snippet cell(m, col)}
                 {#if col.key === 'model'}<StatusDot state="warn" label={m.model || m.serial} />
                 {:else if col.key === 'dev'}<code>{m.dev}</code>
                 {:else if col.key === 'serial'}<code>{m.serial}</code>
-                {:else}<span class="mute">{m.lastSeen ? dateOf(m.lastSeen) : '–'}</span>{/if}
+                {:else}<Muted>{m.lastSeen ? dateOf(m.lastSeen) : '–'}</Muted>{/if}
               {/snippet}
             </Table>
           {:else}
-            <p class="mute pad">Nothing is missing: every disk the server has seen is still connected.</p>
+            <Muted as="p">Nothing is missing: every disk the server has seen is still connected.</Muted>
           {/if}
-        </div>
+        </Card>
       {/snippet}
       {#snippet side()}
         {#if selMissing}
           <Drawer title={selMissing.model || selMissing.serial} chip="missing" state="warn" stateLabel="not connected" onclose={() => (selName = '')}>
             <Kv items={[{ k: 'Serial', v: selMissing.serial }, { k: 'Was', v: selMissing.dev }, { k: 'Size', v: sizeTxt(selMissing.size) }, { k: 'First seen', v: dateOf(selMissing.first) }, { k: 'Last seen', v: dateOf(selMissing.lastSeen) }, { k: 'Role', v: selMissing.role }]} />
-            <p class="mute pad">A missing disk can only be forgotten. If it is a pool member, replace it from its pool first.</p>
+            <Muted as="p" style="padding:12px 16px;margin:0">A missing disk can only be forgotten. If it is a pool member, replace it from its pool first.</Muted>
             {#snippet actions()}
               <Button variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
             {/snippet}
@@ -201,23 +197,23 @@
     {/if}
     <Split open={!!sel}>
       {#snippet list()}
-        <div class="card">
-          <Table id="disks" {columns} rows={visible} key="name" compact selected={sel?.name} onrow={(d) => { selName = d.name; tab = 'info'; }}
+        <Card>
+          <div style="overflow-x:auto"><Table id="disks" {columns} rows={visible} key="name" compact selected={sel?.name} onrow={(d) => { selName = d.name; tab = 'info'; }}
                  empty={filter === 'none' ? 'Every disk belongs to a pool, the system or the backup.' : 'No disks here.'}>
             {#snippet cell(d, col)}
               {#if col.key === 'name'}<code>{d.name}</code>
               {:else if col.key === 'pool'}<Chip>{poolText(d)}</Chip>
-              {:else if col.key === 'role'}<span class="mute">{diskPool(d.role) ? roleText(d) : ''}</span>
-              {:else if col.key === 'model'}<span class="mute">{modelOf(d)}</span>
-              {:else if col.key === 'size'}<span class="nw"><UsageBar free={d.free} size={d.size} width={96} /></span>
-              {:else if col.key === 'fs'}<span class="nw mute">{fsText(d)}</span>
+              {:else if col.key === 'role'}<Muted>{diskPool(d.role) ? roleText(d) : ''}</Muted>
+              {:else if col.key === 'model'}<Muted>{modelOf(d)}</Muted>
+              {:else if col.key === 'size'}<span style="white-space:nowrap"><UsageBar free={d.free} size={d.size} width={96} /></span>
+              {:else if col.key === 'fs'}<Muted style="white-space:nowrap">{fsText(d)}</Muted>
               {:else if col.key === 'smart'}<StatusDot state={stateOf(d)} label={wordOf(d)} />
-              {:else if col.key === 'temp'}<span class="nw">{d.temp && d.temp !== '-' ? `${d.temp} °C` : '–'}</span>
-              {:else if col.key === 'sleep'}{#if d.sleep}<StatusDot state={sleepDot(d.sleep)} label={sleepText(d.sleep)} />{:else}<span class="mute">–</span>{/if}
-              {:else}<span class="nw mute">{hoursTxt(d.hours)}</span>{/if}
+              {:else if col.key === 'temp'}<span style="white-space:nowrap">{d.temp && d.temp !== '-' ? `${d.temp} °C` : '–'}</span>
+              {:else if col.key === 'sleep'}{#if d.sleep}<StatusDot state={sleepDot(d.sleep)} label={sleepText(d.sleep)} />{:else}<Muted>–</Muted>{/if}
+              {:else}<Muted style="white-space:nowrap">{hoursTxt(d.hours)}</Muted>{/if}
             {/snippet}
-          </Table>
-        </div>
+          </Table></div>
+        </Card>
       {/snippet}
       {#snippet side()}
         {#if sel}
@@ -233,34 +229,34 @@
                   { k: 'Sleep', v: sleepText(sel.sleep) ? `${sleepText(sel.sleep)}${pw.disks[sel.name]?.wakes ? `, woke ${pw.disks[sel.name].wakes}x today` : ''}` : '' },
                   { k: 'Free space', v: sel.free && sel.free !== '-' ? sizeTxt(Number(sel.free)) : '' }, { k: 'First seen', v: rec?.first ? dateOf(rec.first) : '' },
                 ]} />
-                {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p class="pad">{verdicts[sel.name].reason}</p>{/if}
-                {#if markOf[member]}<div class="pad"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
-                <div class="pad links">
+                {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p style="padding:12px 16px;margin:0">{verdicts[sel.name].reason}</p>{/if}
+                {#if markOf[member]}<div style="padding:12px 16px;margin:0"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
+                <Row gap="2" wrap style="padding:12px 16px;margin:0">
                   {#if diskPool(sel.role)}<Button size="sm" tooltip={`Open the pool ${diskPool(sel.role)}`} onclick={() => go(`/storage/pools/${diskPool(sel.role)}`)}><i class="ph ph-cylinder"></i>Pool {diskPool(sel.role)}</Button>{/if}
                   <Button size="sm" tooltip={'Open the health page'} onclick={() => go('/operations/health')}><i class="ph ph-heartbeat"></i>Health</Button>
                   <Button size="sm" tooltip={'Open the encryption page'} onclick={() => go('/storage/encryption')}><i class="ph ph-lock-key"></i>Encryption</Button>
-                </div>
+                </Row>
               {:else if t === 'smart'}
                 <Kv items={[{ k: 'Pending sectors', v: num(sel.pending) }, { k: 'Reallocated', v: num(sel.realloc) }, { k: 'CRC errors', v: num(sel.crc) }, { k: 'Verdict', v: verdictOf(sel) }]} />
-                <div class="pad">
+                <div style="padding:12px 16px;margin:0">
                   {#if readings.length > 1}
-                    <div class="sh"><b>Pending sectors</b><span class="mute">{spanTxt}</span></div>
-                    <svg viewBox="0 0 400 60" preserveAspectRatio="none" class="chart" style="height:56px"><polygon points="0,60 {linePts} 400,60" fill="color-mix(in oklch, var(--accent) 22%, transparent)"></polygon><polyline points={linePts} fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"></polyline></svg>
-                    <div class="sh" style="margin-top:14px"><b>Temperature</b><span class="mute">{spanTxt}{temps.length ? ` · now ${temps[temps.length - 1]} °C` : ''}</span></div>
-                    <svg viewBox="0 0 400 40" preserveAspectRatio="none" class="chart" style="height:36px"><polyline points={tempPts} fill="none" stroke="var(--fg-3)" stroke-width="1.3" vector-effect="non-scaling-stroke"></polyline></svg>
+                    <Row gap="2" align="baseline" style="margin-bottom:6px"><b>Pending sectors</b><Muted>{spanTxt}</Muted></Row>
+                    <svg viewBox="0 0 400 60" preserveAspectRatio="none" style="width:100%;display:block;height:56px"><polygon points="0,60 {linePts} 400,60" fill="color-mix(in oklch, var(--accent) 22%, transparent)"></polygon><polyline points={linePts} fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"></polyline></svg>
+                    <Row gap="2" align="baseline" style="margin:14px 0 6px"><b>Temperature</b><Muted>{spanTxt}{temps.length ? ` · now ${temps[temps.length - 1]} °C` : ''}</Muted></Row>
+                    <svg viewBox="0 0 400 40" preserveAspectRatio="none" style="width:100%;display:block;height:36px"><polyline points={tempPts} fill="none" stroke="var(--fg-3)" stroke-width="1.3" vector-effect="non-scaling-stroke"></polyline></svg>
                   {:else}
-                    <div class="sh"><b>History</b></div>
-                    <p class="mute">{!serial ? 'This disk is not in the inventory yet.' : hist.loaded ? 'Not enough readings yet.' : 'Loading…'}</p>
+                    <Row gap="2" align="baseline" style="margin-bottom:6px"><b>History</b></Row>
+                    <Muted as="p">{!serial ? 'This disk is not in the inventory yet.' : hist.loaded ? 'Not enough readings yet.' : 'Loading…'}</Muted>
                   {/if}
                 </div>
               {:else}
-                <div class="pad">
-                  <div class="sh"><b>Self-tests</b><span class="mute">newest first</span></div>
-                  {#if running}<div class="trow"><span class="tk">now</span><span class="grow">{running.replace(/^A test is running:\s*/i, '')}</span><StatusDot state="info" label="running" /></div>{/if}
+                <div style="padding:12px 16px;margin:0">
+                  <Row gap="2" align="baseline" style="margin-bottom:6px"><b>Self-tests</b><Muted>newest first</Muted></Row>
+                  {#if running}<Row gap="3" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="width:50px;color:var(--fg-3);font:12px var(--mono)">now</span><span style="flex:1">{running.replace(/^A test is running:\s*/i, '')}</span><StatusDot state="info" label="running" /></Row>{/if}
                   {#each tests as x}
-                    <div class="trow"><span class="tk">{x.kind}</span><span class="grow">{x.when}</span><StatusDot state={/^Completed without error/i.test(x.result) ? 'ok' : 'warn'} label={x.result} /></div>
+                    <Row gap="3" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="width:50px;color:var(--fg-3);font:12px var(--mono)">{x.kind}</span><span style="flex:1">{x.when}</span><StatusDot state={/^Completed without error/i.test(x.result) ? 'ok' : 'warn'} label={x.result} /></Row>
                   {:else}
-                    {#if !running}<p class="mute">{results.loaded ? 'No self-tests on record.' : 'Loading…'}</p>{/if}
+                    {#if !running}<Muted as="p">{results.loaded ? 'No self-tests on record.' : 'Loading…'}</Muted>{/if}
                   {/each}
                 </div>
               {/if}
@@ -286,18 +282,3 @@
     </Split>
   {/if}
 </PageState>
-
-<style>
-  .tabs { margin-bottom: 14px; max-width: 100%; overflow-x: auto; }
-  .cnt { font: 500 10.5px var(--mono); color: var(--fg-3); }
-  .card { padding: 4px 8px; overflow-x: auto; }
-  .pad { padding: 12px 16px; margin: 0; }
-  .mute { color: var(--fg-3); font-size: 12px; }
-  .nw { white-space: nowrap; }
-  code { font-size: 12px; }
-  .links { display: flex; flex-wrap: wrap; gap: 8px; }
-  .sh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  .chart { width: 100%; display: block; }
-  .trow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
-  .tk { width: 50px; color: var(--fg-3); font: 12px var(--mono); }
-</style>

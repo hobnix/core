@@ -4,8 +4,7 @@
   // Passphrases of encrypted Unraid disks go on standard input as ONE JSON line, never into the arguments.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import DiskPicker from './DiskPicker.svelte';
-  import Checkbox from '../../ui/Checkbox.svelte';
-  import TextInput from '../../ui/TextInput.svelte';
+  import { Field, Checkbox, TextInput } from '../../ui/index.js';
   import { get } from '../../api.js';
   import { poolOfRole } from '../../pools.svelte.js';
   import { freeDisks } from './disks.js';
@@ -40,31 +39,26 @@
 
 <CreateDialog title="Take over an Unraid server" kicker="Pool" area="migrate" {args} {stdin}>
   {#snippet form()}
-    <div class="field">
-      <label for="mu-data">Disks that hold the files (they stay as they are)</label>
+    <Field label="Disks that hold the files (they stay as they are)" id="mu-data">
       <div id="mu-data"><DiskPicker disks={dataDisks} loaded={withFiles.loaded} bind:picked={data} empty="No disk with files on it. Plug the Unraid disks in." /></div>
-    </div>
-    <div class="field">
-      <label for="mu-old">The old Unraid parity disk(s) (erased after the first parity is complete, then used as parity)</label>
+    </Field>
+    <Field label="The old Unraid parity disk(s) (erased after the first parity is complete, then used as parity)" id="mu-old">
       <div id="mu-old"><DiskPicker disks={emptyDisks} loaded={plain.loaded} bind:picked={old} empty="No disk without a file system." /></div>
-    </div>
-    <div class="field">
-      <label for="mu-spare">A spare disk, at least as large as the largest data disk (optional: the parity is built on it first and nothing is written to the data disks until it is complete; it is erased)</label>
+    </Field>
+    <Field label="A spare disk, at least as large as the largest data disk (optional: the parity is built on it first and nothing is written to the data disks until it is complete; it is erased)" id="mu-spare"
+           help={spare.length ? '' : 'Without a spare disk the labels are written and folders move first; the data is not protected until the old parity disk is added and synced.'}>
       <div id="mu-spare"><DiskPicker disks={emptyDisks.filter((d) => !old.includes(d.id))} loaded={plain.loaded} bind:picked={spare} single empty="No other empty disk." /></div>
-      {#if !spare.length}<div class="hint" style="font-size:11.5px">Without a spare disk the labels are written and folders move first; the data is not protected until the old parity disk is added and synced.</div>{/if}
-    </div>
+    </Field>
     <Checkbox bind:checked={merge} label="Merge folders of the same name into one share (like Unraid's user shares)" />
     <Checkbox bind:checked={chown} label="Give the files to the share owner (chown; slow on big disks)" />
     {#if encrypted}
-      <div class="field">
-        <label for="mu-pass">Passphrase of the encrypted Unraid disks</label>
-        <TextInput id="mu-pass" type="password" bind:value={unraidPass} autocomplete="off" spellcheck={false} />
-      </div>
-      <div class="field">
-        <label for="mu-spass">This server's disk passphrase (only when this server has encrypted disks already; it is added as a key slot)</label>
-        <TextInput id="mu-spass" type="password" bind:value={serverPass} autocomplete="new-password" spellcheck={false} />
-        <div class="hint" style="font-size:11.5px">Both are sent to the server on their own and never appear in the command. A disk that only a key file opens is refused.</div>
-      </div>
+      <Field label="Passphrase of the encrypted Unraid disks">
+        <TextInput type="password" bind:value={unraidPass} autocomplete="off" spellcheck={false} />
+      </Field>
+      <Field label="This server's disk passphrase (only when this server has encrypted disks already; it is added as a key slot)"
+             help="Both are sent to the server on their own and never appear in the command. A disk that only a key file opens is refused.">
+        <TextInput type="password" bind:value={serverPass} autocomplete="new-password" spellcheck={false} />
+      </Field>
     {/if}
   {/snippet}
 </CreateDialog>

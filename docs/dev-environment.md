@@ -93,6 +93,46 @@ Limits: nested virtualization must be enabled on the host. Where it is not (exit
 on a machine with Incus; that tests our scripts on Ubuntu VMs, not the ISO. The rebuild rehearsal is not part of it yet. CI: the manual
 workflow `nested` (Actions, "Run workflow", give an ISO URL).
 
+## Demo mode: the web interface without a server
+
+`npm run demo` in `web/` starts the web interface with made-up data: no `hs`, no storage and no backend are needed (Node and `npm ci` are).
+A Vite plugin (`web/demo/plugin.js`, only in `--mode demo`) answers `/api/*` itself from the fixtures in `web/demo/fixtures/`. Use it to look at
+a page, to review the navigation or to take a screenshot.
+
+```bash
+cd web
+npm ci
+npm run demo
+```
+
+Pick the data with `?fixture=<name>` on any page (the choice is kept in a cookie), or set `HS_DEMO_FIXTURE` for the default.
+
+| Fixture | Shows |
+|---|---|
+| `healthy` (default) | two pools (bulk, fast), eight instances (six running), nothing to fix |
+| `degraded` | pool bulk lost a disk; two problems are listed |
+| `locked` | encrypted storage is closed, instances are down |
+| `one-pool` | a single pool |
+| `three-pools` | three pools, so the pool selector has something to choose |
+
+- **Reads:** every read of the `READS` allowlist in `scripts/web-serve.py` has an entry. `fixtures/base.json` and `fixtures/parts/*.json` (one
+  file per area of the interface) are the healthy server; a fixture file lays its own rows over them. A key is the words joined by `/`
+  (`pool/info`), optionally with the query (`pool/info?pool=bulk`) or an argument word (`ct/bindings/nextcloud`; the key without it is the
+  fallback). A tab-separated read is a list of rows, every cell a string, an empty field is `-`; the shape is the one the page's parser reads.
+  A read that is empty on a healthy server (no problems, no pending rebuild) is listed in `tests/web-demo-empty.txt`.
+- **Changes:** a plan opens with a plausible list of steps and a note; a destructive one (remove, wipe, replace ...) asks for the name of the
+  thing, as the real one does. A start is always refused with the note "Demo mode: ... Nothing was changed." No command runs, no file is
+  written, the terminal and the VM console are refused.
+- **Docs page:** a few made-up guides (`web/demo/docs.js`).
+- **Not covered:** reads of extension packages (declared in their manifests), the proxyserver pages (capability `vps` is off), job logs, and
+  `disk/power`, `unifi/used` and `unifi/reserved` (the pages ask for them, but they are not in the `READS` allowlist). Times in the fixtures are
+  fixed to 2026-11-18, so "ago" texts drift as the real date moves on.
+- A hosted demo is not part of this.
+- Test: `scripts/dev/t quick web-demo` checks that every allowlisted read has a fixture, that no read is empty in `healthy` unless it is listed
+  in `tests/web-demo-empty.txt`, that the number of reads with data per fixture does not fall below `tests/web-demo-min.tsv` (raise it when you
+  fill more; never lower it), and that plans open and starts are refused.
+  Not tested on hardware yet (it needs none; the browser check is in the issue).
+
 ## Branches and releases
 
 The same model in hobnix/server, hobnix/recipes and hobnix/extensions.

@@ -5,8 +5,7 @@
   // every app in it): the second step shows that, and Continue (onmount) opens the usual plan, whose steps carry the same warning.
   //   props: shares [names], peers [{ peer, shares: [names] }] (mounted remote offers), mounts (volumes.js mountsOf), mapped ('uid:gid' or ''),
   //   listDir(share, path) -> Promise<[folder names]>, onsubmit(line), onmount({ args, line }), onclose()
-  import Combobox from '../../ui/Combobox.svelte';
-  import Button from '../../ui/Button.svelte';
+  import { Combobox, Button, Dialog, Field, TextInput, Checkbox, Muted, Banner, Stack } from '../../ui/index.js';
   import {
     findMount, mountPathOf, joinHost, volumeEntryText, mountArgs, validContainerPath, validSub, validShareValue, DEFAULT_AS,
   } from '../../editor/volumes.js';
@@ -59,63 +58,53 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
-
-<div class="dialog-backdrop" role="presentation">
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="bs-t">
-    <div class="dialog-title" id="bs-t">Bind a share</div>
-    {#if step === 1}
-      <div class="dialog-body">Adds one volume line to the service your cursor is in. Docker sees a share at <code>/shares/&lt;share&gt;</code>.</div>
-      <div class="field">
-        <label for="bs-share">Share</label>
+<Dialog title="Bind a share" labelledby="bs-t" panel="dialog" {onclose}>
+  <div class="dialog-title" id="bs-t">Bind a share</div>
+  {#if step === 1}
+    <div class="dialog-body">Adds one volume line to the service your cursor is in. Docker sees a share at <code>/shares/&lt;share&gt;</code>.</div>
+    <Stack>
+      <Field label="Share" id="bs-share">
         <Combobox id="bs-share" wide options={options} bind:value={share} placeholder="Choose a share" />
-      </div>
-      <div class="field">
-        <label for="bs-sub">Subfolder</label>
+      </Field>
+      <Field label="Subfolder" id="bs-sub">
         <Combobox id="bs-sub" wide options={subOptions} bind:value={sub} placeholder="(the whole share)" disabled={!share} />
-      </div>
-      <div class="field">
-        <label for="bs-path">Path in the container</label>
-        <input id="bs-path" class="input" bind:value={cpath} placeholder="/data" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" />
-      </div>
-      <label class="check"><input type="checkbox" checked={effRo} disabled={forcedRo} onchange={(e) => { ro = e.currentTarget.checked; }} /> Read only{forcedRo ? ' (this share is read only here)' : ''}</label>
+      </Field>
+      <Field label="Path in the container">
+        <TextInput bind:value={cpath} placeholder="/data" autocomplete="off" spellcheck={false} />
+      </Field>
+      <Checkbox checked={effRo} disabled={forcedRo} onchange={(e) => { ro = e.currentTarget.checked; }} label={`Read only${forcedRo ? ' (this share is read only here)' : ''}`} />
       {#if line}<code class="preview">- {line}</code>{/if}
-      {#if share && !mount}<div class="hint">{remote ? `${share.slice(7)} is not in Docker yet: the next step adds it.` : `${share} is not in Docker yet: the next step gives it to Docker.`}</div>{/if}
-    {:else}
-      <div class="dialog-body">
-        {#if remote}
-          Add the shares of <code>{share.slice(7)}</code> to Docker at <code>{mountPath}</code>, read only.
-        {:else}
-          Mount <code>{share}</code> into Docker at <code>{mountPath}</code> as <code>{as}</code>.
-        {/if}
-      </div>
-      {#if !remote}
-        <div class="warn">Docker has one user for all shares. A changed user mapping restarts Docker, and with it every app in it. The plan lists the running apps.</div>
-        <div class="field">
-          <label for="bs-as">User (uid:gid)</label>
-          <input id="bs-as" class="input" bind:value={asText} placeholder={mapped || DEFAULT_AS} maxlength="21" autocomplete="off" spellcheck="false" />
-          <div class="hint">{mapped ? `Docker maps ${mapped} already; leave this empty to keep it.` : `Empty means ${DEFAULT_AS}. The app's PUID and PGID in .env should be the same.`}</div>
-        </div>
-      {/if}
-      <div class="hint">After the job the line <code>- {line}</code> is added to your compose file.</div>
-    {/if}
-    <div class="dialog-actions">
-      <Button onclick={onclose}>Cancel</Button>
-      {#if step === 2}<Button onclick={() => { step = 1; }}>Back</Button>{/if}
-      {#if step === 1}
-        <Button variant="primary" disabled={!valid} tooltip={valid ? '' : 'Choose a share and an absolute path in the container'} onclick={next}>{mount ? 'Insert' : 'Next'}</Button>
+      {#if share && !mount}<Muted as="div">{remote ? `${share.slice(7)} is not in Docker yet: the next step adds it.` : `${share} is not in Docker yet: the next step gives it to Docker.`}</Muted>{/if}
+    </Stack>
+  {:else}
+    <div class="dialog-body">
+      {#if remote}
+        Add the shares of <code>{share.slice(7)}</code> to Docker at <code>{mountPath}</code>, read only.
       {:else}
-        <Button variant="primary" disabled={!valid} onclick={mountIt}>Show the plan</Button>
+        Mount <code>{share}</code> into Docker at <code>{mountPath}</code> as <code>{as}</code>.
       {/if}
     </div>
+    <Stack>
+      {#if !remote}
+        <Banner tone="warn">Docker has one user for all shares. A changed user mapping restarts Docker, and with it every app in it. The plan lists the running apps.</Banner>
+        <Field label="User (uid:gid)" help={mapped ? `Docker maps ${mapped} already; leave this empty to keep it.` : `Empty means ${DEFAULT_AS}. The app's PUID and PGID in .env should be the same.`}>
+          <TextInput bind:value={asText} placeholder={mapped || DEFAULT_AS} autocomplete="off" spellcheck={false} />
+        </Field>
+      {/if}
+      <Muted as="div">After the job the line <code>- {line}</code> is added to your compose file.</Muted>
+    </Stack>
+  {/if}
+  <div class="dialog-actions">
+    <Button onclick={onclose}>Cancel</Button>
+    {#if step === 2}<Button onclick={() => { step = 1; }}>Back</Button>{/if}
+    {#if step === 1}
+      <Button variant="primary" disabled={!valid} tooltip={valid ? '' : 'Choose a share and an absolute path in the container'} onclick={next}>{mount ? 'Insert' : 'Next'}</Button>
+    {:else}
+      <Button variant="primary" disabled={!valid} onclick={mountIt}>Show the plan</Button>
+    {/if}
   </div>
-</div>
+</Dialog>
 
 <style>
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
   .preview { display: block; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg-2); font-size: 12px; overflow-wrap: anywhere; }
-  .hint { font-size: 12px; color: var(--fg-3); }
-  .warn { font-size: 12.5px; color: var(--warn); border-left: 3px solid var(--warn); padding: 4px 10px; }
 </style>

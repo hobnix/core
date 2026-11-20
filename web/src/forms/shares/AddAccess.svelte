@@ -2,7 +2,7 @@
   // Give a user or group access: `hs sys shares plan|start <share> perm --set <sid>=<level>`; the principals come from /api/sys/shares/principals.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
-  import { Field, Select } from '../../ui';
+  import { Field, Select, Segmented, Muted } from '../../ui';
 
   // taken: the SIDs that already have an entry
   let { share, taken = [], onclose, ondone = () => {} } = $props();
@@ -24,18 +24,9 @@
         {#each people as p}<option value={p.sid}>{p.name} ({p.type})</option>{/each}
       </Select>
     </Field>
-    <div class="field">
-      <label for="aa-level">Access</label>
-      <div class="seg" id="aa-level">
-        {#each ['none', 'read', 'write', 'full'] as l}
-          <label class="seg-opt"><input type="radio" bind:group={level} value={l} />{l}</label>
-        {/each}
-      </div>
-    </div>
-    <div class="hint">Permissions apply at the next connection.</div>
+    <Field label="Access" id="aa-level">
+      <Segmented bind:value={level} label="Access" options={['none', 'read', 'write', 'full']} />
+    </Field>
+    <Muted as="p">Permissions apply at the next connection.</Muted>
   {/snippet}
 </CreateDialog>
-
-<style>
-  .hint { font-size: 12.5px; color: var(--color-neutral-400); margin-top: 6px; }
-</style>

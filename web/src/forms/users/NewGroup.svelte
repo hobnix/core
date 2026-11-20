@@ -3,6 +3,7 @@
   // new group the chosen levels (manage-shares.sh --set) as soon as the domain knows its SID.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
+  import { Field, TextInput, Segmented, Muted } from '../../ui';
 
   let { existing = [], ondone = () => {} } = $props();
   let name = $state('');
@@ -21,36 +22,26 @@
 
 <CreateDialog title="New group" area="users" {args} {ondone}>
   {#snippet form()}
+    <Field label="Group name" id="ng-name" error={name && !nameOk ? 'Letters, digits, space, dot, dash and underscore; starts with a letter or digit.' : taken ? 'There is a group with this name already.' : ''}>
+      <TextInput bind:value={name} placeholder="Family" autocomplete="off" spellcheck={false} />
+    </Field>
     <div class="field">
-      <label for="ng-name">Group name</label>
-      <input id="ng-name" class="input" bind:value={name} placeholder="Family" autocomplete="off" spellcheck="false" />
-      {#if name && !nameOk}<div class="hint bad">Letters, digits, space, dot, dash and underscore; starts with a letter or digit.</div>{/if}
-      {#if taken}<div class="hint bad">There is a group with this name already.</div>{/if}
-    </div>
-    <div class="field">
-      <span class="lbl">Access to shares <span class="opt">(optional)</span></span>
+      <span class="lbl">Access to shares (optional)</span>
       <div class="grid">
         {#each shares as s (s)}
           <span class="sn">{s}</span>
-          <div class="seg" role="radiogroup" aria-label="Access to {s}">
-            {#each ['none', 'read', 'write', 'full'] as l}
-              <label class="seg-opt"><input type="radio" name="ng-{s}" value={l} checked={levelOf(s) === l} onchange={() => (levels = { ...levels, [s]: l })} />{l}</label>
-            {/each}
-          </div>
+          <Segmented label="Access to {s}" value={levelOf(s)} options={['none', 'read', 'write', 'full']} onchange={(l) => (levels = { ...levels, [s]: l })} />
         {:else}
-          <span class="hint">{sh.loaded ? (sh.error ? 'The shares could not be read.' : 'No shares yet.') : 'Loading…'}</span>
+          <Muted>{sh.loaded ? (sh.error ? 'The shares could not be read.' : 'No shares yet.') : 'Loading…'}</Muted>
         {/each}
       </div>
     </div>
-    <div class="hint">A new group has no members. Add them with the Members button. Levels can be changed later in Shares.</div>
+    <Muted as="p">A new group has no members. Add them with the Members button. Levels can be changed later in Shares.</Muted>
   {/snippet}
 </CreateDialog>
 
 <style>
-  .lbl { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-  .opt { color: var(--color-neutral-500); }
+  .lbl { display: block; font-size: 12px; margin-bottom: 5px; color: var(--fg-2); }
   .grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; max-height: 280px; overflow: auto; }
   .sn { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
-  .hint { font-size: 11.5px; color: var(--color-neutral-500); margin-top: 4px; }
-  .hint.bad { color: var(--st-bad); }
 </style>

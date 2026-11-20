@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "A components page under Developer shows every interface part in each of its states"
+body  = """The page Developer > Components lists the shared parts of the web interface (buttons, cards, dialogs, tables and more) in their sizes, busy, disabled and error states, in light or dark and at phone width."""
