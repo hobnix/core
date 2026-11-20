@@ -210,6 +210,13 @@ class CsrfGate(Base):
             self.assertIn(flag, c)
 
 
+class RunExitCodes(unittest.TestCase):
+    def test_a_timeout_is_124_and_a_missing_command_127(self):
+        import sys
+        self.assertEqual(ws._run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.5), (124, ""))
+        self.assertEqual(ws._run(["/nonexistent/hs-no-such-command"]), (127, ""))
+
+
 class ThrottleBounds(unittest.TestCase):
     def test_the_table_does_not_grow_without_a_bound(self):
         t = ws.Throttle()
@@ -613,6 +620,14 @@ class Changes(Base):
         self.assertEqual((d["status"], d["reason"], d["exit"]), ("refused", "Health check is running already.", 1))
         self.answer = (127, "")
         self.assertIn("exit 127", self.post("/api/plan", self.RUN)[1]["reason"])
+
+    def test_a_timeout_says_so(self):
+        # the web server stopped waiting (subprocess timeout): never "exit 127", and the reason says a start may still be running
+        self.answer = (124, "")
+        d = self.post("/api/start", self.RUN)[1]
+        self.assertEqual((d["status"], d["exit"]), ("refused", 124))
+        self.assertIn("stopped waiting after 60 s", d["reason"])
+        self.assertNotIn("exit", d["reason"])
 
     def test_danger_plan_and_start_with_confirm(self):
         self.answer = (0, "status\tok\nheading\tstop Parity sync\nstep\tstop it\ndanger\tHalf way is bad.\ncommand\tsystemctl stop x\nconfirm_name\tstop\nlong\tno\n")

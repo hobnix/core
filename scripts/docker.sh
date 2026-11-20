@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: Docker as part of hobnix: turn it on (a locked container with Docker inside), turn it off, list the apps that run in it
 # help.de: Docker als Teil von hobnix: einschalten (ein gesperrter Container mit Docker darin), ausschalten, die Apps darin auflisten
-# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines]
+# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | gpu [on|off] [--pci <address>] [--yes] [--dry-run] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines]
 # The capability docker (docs/PLAN-docker-instances.md, Decisions 12 to 14): the container `docker` is owned by it (user.hs.managed_by=docker),
 # so only this script deletes it (HS_OWNER=docker on the manage-ct.sh call, scripts/lib/instance.sh).
 #   hs docker status       key/value lines: on or off, the container, the manager, the size, the number of apps, the address
@@ -15,6 +15,8 @@
 #   hs docker move-apps    move /opt/apps/<app> into the share apps: plan, snapshot, the typed name docker, then per app down, copy, rewrite the
 #                          compose file (.prev kept), up from the share, rename the old folder to <app>.moved-<date>; a failing app is set back;
 #                          --finish removes the *.moved-* folders after the typed name
+#   hs docker gpu          the graphics chip (/dev/dri, Intel or AMD) for the apps in Docker: without on|off the state and the compose lines;
+#                          on|off shows a plan, then adds or removes the Incus device gpu (gid = the group render of docker); --pci picks a chip
 #   --health               the checks of the capability page as id<TAB>state<TAB>fix<TAB>detail<TAB>reason: container, share, mount (- when empty)
 #   --status, --list       the same as data (hs sys docker status|list): key<TAB>value, and one row per app with exactly 5 fields
 #                          name parent project state ports (`-` when empty); a stopped container or a failed read prints no row, exit 0
@@ -44,7 +46,7 @@ CT=docker
 OWNER=docker
 tab=$'\t'
 
-usage() { fail "$(t 'usage: hs docker status | list | enable | disable | mount | move-apps')" >&2; }
+usage() { fail "$(t 'usage: hs docker status | list | enable | disable | mount | move-apps | gpu [on|off]')" >&2; }
 interactive() { [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ]; }
 inc() { "${HS_INCUS:-incus}" "$@"; }
 ct_cmd() {   # ct_cmd <manage-ct args>: a call that changes the container, with the owner's pass
@@ -379,6 +381,7 @@ cmd_status() {
       address) kv "$(t 'Address')" "$v" ;;
     esac
   done < <(status_rows)
+  if [ "$own" = yes ]; then kv "$(t 'Graphics chip')" "$(if gpu_have; then t 'passed in (%s)' "$(dash "$(gpu_pci)")"; else t 'not passed in'; fi)"; fi
   if [ "$on" != on ]; then
     if [ "$own" = yes ]; then note "$(t 'The container docker exists, but Docker is not listed as on. Turn it on: hs docker enable')"
     elif [ "$inst" != - ]; then note "$(t 'A container named docker exists but hobnix does not own it. Nothing was changed.')"
@@ -677,6 +680,102 @@ cmd_mount() {   # mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--dry
   ok "$(t 'The container docker has the folder %s.' "$path")"
 }
 
+# ── hs docker gpu: the graphics chip (/dev/dri) for the apps in Docker (docs/PLAN-docker-instances.md, Decision 10) ──
+# The lock forbids a manual device change, so the capability adds and removes the Incus device `gpu` itself: a physical card
+# (Intel i915/xe, AMD amdgpu) by PCI address, /dev/dri/* owned by the group render of the container (gid=<render>, mode=0660).
+# An app then needs `devices: [/dev/dri:/dev/dri]` and `group_add: ["<gid>"]` in its compose file; `hs docker gpu` prints that gid.
+# NVIDIA is not covered here (it needs nvidia.runtime and the container toolkit, scripts/recipes/_lib.sh nvidia_docker).
+GPU_DEV=gpu
+gpu_cards() {   # the usable cards as pci<TAB>driver<TAB>product, one per line (Intel and AMD; nothing when Incus can't be asked)
+  inc query /1.0/resources </dev/null 2>/dev/null |
+    jq -r '.gpu.cards[]? | select(.driver == "i915" or .driver == "xe" or .driver == "amdgpu")
+           | [.pci_address, .driver, (if (.product // "") == "" then "-" else .product end)] | @tsv' 2>/dev/null || true
+}
+gpu_nvidia_only() {   # there is an NVIDIA card (and so maybe the reason no usable card was found)
+  inc query /1.0/resources </dev/null 2>/dev/null | jq -e '[.gpu.cards[]? | select(.driver == "nvidia")] | length > 0' >/dev/null 2>&1
+}
+gpu_have() { inc config device get "$CT" "$GPU_DEV" type >/dev/null 2>&1 </dev/null; }   # docker has the device gpu
+gpu_pci() { inc config device get "$CT" "$GPU_DEV" pci 2>/dev/null </dev/null || true; }
+gpu_group_gid() {   # the gid of the group render in docker (video when there is no render); nothing when neither or docker is stopped
+  local g gid
+  for g in render video; do
+    gid=$(inc exec "$CT" -- getent group "$g" </dev/null 2>/dev/null | cut -d: -f3 || true)   # getent exits 2 for a missing group
+    if [[ "$gid" =~ ^[0-9]+$ ]]; then printf '%s\t%s\n' "$g" "$gid"; return 0; fi
+  done
+  return 1
+}
+
+cmd_gpu() {   # gpu [on|off] [--pci <address>] [--yes] [--dry-run]: without on|off the state
+  local what=${1:-} pci= yes=0 dry=0 cards card drv name grp gid
+  if [ $# -gt 0 ]; then shift; fi
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --pci) [ $# -ge 2 ] || usage; pci=$2; shift 2 ;;
+      --yes) yes=1; shift ;;
+      --dry-run) dry=1; shift ;;
+      *) usage ;;
+    esac
+  done
+  owned || fail_fix "$(t 'Docker is not on.')" "hs docker enable"
+  case "$what" in
+    ""|status)
+      if gpu_have; then
+        kv "$(t 'Graphics chip')" "$(t 'passed in (%s)' "$(dash "$(gpu_pci)")")"
+        if running && IFS=$'\t' read -r grp gid < <(gpu_group_gid); then
+          kv "$(t 'Group in compose')" "group_add: [\"$gid\"]  ($grp)"
+          kv "$(t 'Device in compose')" "devices: [/dev/dri:/dev/dri]"
+        fi
+      else
+        kv "$(t 'Graphics chip')" "$(t 'not passed in')"
+        next_step "$(t 'give it to the apps in Docker: hs docker gpu on')"
+      fi ;;
+    on)
+      if gpu_have; then ok "$(t 'The container docker has the graphics chip already (%s).' "$(dash "$(gpu_pci)")")"; return 0; fi
+      running || fail_fix "$(t 'The container docker is stopped.')" "hs ct docker start"
+      cards=$(gpu_cards)
+      if [ -z "$cards" ]; then
+        if gpu_nvidia_only; then fail "$(t 'Only an NVIDIA card was found. NVIDIA in Docker is not covered by hs docker gpu yet; an app that needs it runs in its own container (lxc).')"; fi
+        fail "$(t 'No usable graphics chip found (Intel or AMD). Look at: incus info --resources')"
+      fi
+      if [ -n "$pci" ]; then
+        card=$(awk -F'\t' -v p="$pci" '$1 == p' <<<"$cards")
+        [ -n "$card" ] || fail "$(t "No Intel or AMD chip at %s. Found: %s" "$pci" "$(cut -f1 <<<"$cards" | paste -sd ' ')")"
+      else
+        card=$(head -n 1 <<<"$cards")
+      fi
+      IFS=$'\t' read -r pci drv name <<<"$card"
+      IFS=$'\t' read -r grp gid < <(gpu_group_gid) || fail "$(t 'The container docker has neither the group render nor video.')"
+      step "$(t 'Give the apps in Docker the graphics chip')"
+      line "$(t '1. Pass the chip %s (%s, %s) into the container docker as /dev/dri, for the group %s (gid %s).' "$pci" "$name" "$drv" "$grp" "$gid")"
+      line "$(t '2. Nothing restarts; an app sees the chip once it is created again with the lines below in its compose file.')"
+      if [ "$(wc -l <<<"$cards")" -gt 1 ]; then note "$(t 'More than one chip found; pick another with --pci <address>: %s' "$(cut -f1 <<<"$cards" | paste -sd ' ')")"; fi
+      note "$(t 'All apps in Docker share the chip without limits.')"
+      if [ "$dry" = 1 ]; then return 0; fi
+      if [ "$yes" = 0 ]; then
+        interactive || fail "$(t 'This needs a terminal or --yes.')"
+        confirm "$(t 'Do it?')" || { note "$(t 'Nothing changed.')"; return 0; }
+      fi
+      inc config device add "$CT" "$GPU_DEV" gpu gputype=physical "pci=$pci" "gid=$gid" mode=0660 >/dev/null </dev/null ||
+        fail "$(t 'Adding the graphics chip failed.')"
+      ok "$(t 'The container docker has the graphics chip %s.' "$pci")"
+      kv "$(t 'Group in compose')" "group_add: [\"$gid\"]"
+      kv "$(t 'Device in compose')" "devices: [/dev/dri:/dev/dri]" ;;
+    off)
+      if ! gpu_have; then ok "$(t 'The container docker has no graphics chip. Nothing to do.')"; return 0; fi
+      step "$(t 'Take the graphics chip from the apps in Docker')"
+      line "$(t '1. Remove the device %s (%s) from the container docker.' "$GPU_DEV" "$(dash "$(gpu_pci)")")"
+      warn "$(t 'Apps that use /dev/dri lose it at once; hardware transcoding falls back to the CPU or fails.')"
+      if [ "$dry" = 1 ]; then return 0; fi
+      if [ "$yes" = 0 ]; then
+        interactive || fail "$(t 'This needs a terminal or --yes.')"
+        confirm "$(t 'Do it?')" || { note "$(t 'Nothing changed.')"; return 0; }
+      fi
+      inc config device remove "$CT" "$GPU_DEV" >/dev/null </dev/null || fail "$(t 'Removing the graphics chip failed.')"
+      ok "$(t 'The container docker has no graphics chip any more.')" ;;
+    *) usage ;;
+  esac
+}
+
 # ── hs docker move-apps: /opt/apps/<app> -> the share apps (docs/PLAN-docker-instances.md, S3) ──
 dx() { inc exec "$CT" -- "$@" </dev/null; }   # one command inside docker
 ma_list() {   # the apps in /opt/apps with a compose file: name<TAB>web|recipe<TAB>KiB (web: has .hs-webui)
@@ -866,6 +965,7 @@ case "$verb" in
   disable) cmd_disable "$@" ;;
   mount) cmd_mount "$@" ;;
   move-apps) cmd_move_apps "$@" ;;
+  gpu) cmd_gpu "$@" ;;
   --status) status_rows ;;
   --health) health_rows ;;
   --list) children ;;
