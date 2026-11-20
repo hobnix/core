@@ -250,7 +250,7 @@ class WebTests(unittest.TestCase):
 
     def tearDown(self):
         ws._run = self.real_run
-        USERS["mia"] = "app-manager"
+        USERS.update({"vic": "viewer", "mia": "app-manager", "anna": "admin"})
         os.environ.pop("HS_TOKEN_FILE", None)
         self.srv.shutdown()
         self.srv.server_close()
@@ -333,6 +333,50 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.req("GET", "/api/session", headers=h)[0], 200)
         self.clock.t += 2
         self.assertEqual(self.req("GET", "/api/session", headers=h)[0], 401)
+
+    def test_a_token_starts_changes_of_allowed_areas_only(self):
+        # #944: an admin token must not start a row whose result outlives the token
+        h = self.token("HOME_anna", "admin")
+        key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIabcdefghijklmnop me"
+        for area, args in (("ssh-key", ["add", key]), ("pkg", ["install", "x"]), ("system", ["rebuild"]), ("routes", ["apply"]), ("dc", ["ca"]),
+                           ("node", ["remove", "x"]), ("preset", ["apply", "x"]), ("setup", ["wizard-done"]), ("incident", ["pause"])):
+            for verb in ("plan", "start"):
+                s, d = self.req("POST", "/api/" + verb, {"area": area, "args": args}, h)
+                self.assertEqual(s, 403, (verb, area, d))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.req("POST", "/api/start", {"area": "ct", "args": ["docker", "update"]}, h)[0], 200)
+
+    def test_every_change_area_is_allowed_or_denied_for_tokens(self):
+        # a new CHANGES area must be put in TOKEN_CHANGE_ALLOWED or TOKEN_CHANGE_DENIED on purpose
+        ws.ext_refresh()
+        self.assertEqual(ws.TOKEN_CHANGE_ALLOWED & ws.TOKEN_CHANGE_DENIED, frozenset())
+        known = ws.TOKEN_CHANGE_ALLOWED | ws.TOKEN_CHANGE_DENIED
+        self.assertEqual(sorted({a.split("/")[0] for a in ws.CHANGES} - known), [])
+
+    def test_a_demoted_domain_session_is_lowered_within_the_hour(self):
+        c = self.login("anna")
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[1]["role"], "admin")
+        USERS["anna"] = "viewer"
+        self.clock.t += 3599
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[1]["role"], "admin")
+        self.clock.t += 2
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[1]["role"], "viewer")
+
+    def test_a_disabled_domain_session_ends_within_the_hour(self):
+        c = self.login("mia")
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[0], 200)
+        USERS.pop("mia")
+        self.clock.t += 3601
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[0], 401)
+
+    def test_a_domain_session_keeps_its_role_a_day_while_the_dc_is_down(self):
+        c = self.login("anna")
+        self.app.auth.domain_role = lambda user: None
+        self.app.auth.domain_reachable = lambda: False
+        self.clock.t += 3601
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[1]["role"], "admin")
+        self.clock.t += 86400
+        self.assertEqual(self.req("GET", "/api/session", headers=c)[1]["role"], "viewer")
 
     def test_the_address_is_throttled_for_wrong_tokens(self):
         wrong = {"Authorization": "Bearer hn_" + "b" * 43}
