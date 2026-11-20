@@ -98,6 +98,10 @@ never merge it by hand); `docs/api/sys.toml`, `docs/api/openapi.json`, `web/src/
 `python3 scripts/dev/reads-inventory.py --check`); `web/src/ui.svelte.js` (2 only); `scripts/web-serve.py` (1, 5, 6: small, separate regions);
 `scripts/health-check.sh` (5, 7). Steps 4 and 7 add a service or timer to `configuration.nix`: one at a time.
 
+### Step 6, status (#886)
+
+The count at the start of the step was 47 call sites (the 66 of the plan text was counted earlier). First PR: the reads without a producer get a collector topic (`docker-status`, `docker-health`, `docker-containers`, `docker-registries`, `parts-pending`, `rebuild-pending`, `preset-list`); `timed-reads.max` 47 to 37. Still timed, with the reason in `scripts/lib/read-reasons.tsv`: free query/argument reads (backup snapshots, pool disks, logs, per-app/per-container/per-disk/per-node answers, services show), dynamic reads named by a page or capability declaration, node reads over ssh, the VPS probe, `release show`, `incident state`, `testlab results`. Next PRs take these by D5 (a) first.
+
 ## Shared with 0.10.1 (Network Map, epic #870)
 
 Only infrastructure: the event stream and `changed` topics, the counters stream of #873 ("sampled only while a page is open") which can reuse the

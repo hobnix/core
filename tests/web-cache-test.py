@@ -136,7 +136,7 @@ class Cache(unittest.TestCase):
     def test_warm_targets_hold_every_read_without_arguments(self):
         r = self.reads()
         names = {"/".join(k[0].words) if hasattr(k[0], "words") else "/".join(k[1]) for k in r.warm_targets()}
-        for must in ("net/nics", "system/doctor", "logs/units", "docker/health", "pool/list"):
+        for must in ("net/nics", "system/doctor", "logs/units", "testlab/results", "pool/list"):
             self.assertIn(must, names)
         for topic in ("ct/list", "shares/overview", "recipes/list", "services/list", "dc/state", "state/disks"):
             self.assertNotIn(topic, names)              # a live topic: the collector keeps it, the warm-up leaves it alone
@@ -165,7 +165,7 @@ class Cache(unittest.TestCase):
         self.cfg.warm_pause = 0
         w = ws.Warmer(app)
         n = w.once()
-        self.assertGreater(n, 25)                        # every read without arguments and without a live topic
+        self.assertGreater(n, 20)                        # every read without arguments and without a live topic
         self.assertEqual(w.once(), 0)                    # all warm now
         app.sessions = type("S", (), {"last_seen": staticmethod(lambda: time.time() - 99999)})()
         self.assertEqual(w.once(), 0)

@@ -463,6 +463,17 @@ ID_TOPICS = {
     'backup-shares': (['backup', 'shares'], 60, 'skip', 'backup', {'backup', 'shares', 'instances', 'disks', 'system'}),
     'docker-list': (['docker', 'list'], 300, 'skip', 'docker', {'instances', 'system', 'docker'}),
     'docker-apps': (['docker', 'apps'], 300, 'skip', 'docker', {'instances', 'system', 'docker'}),
+    'docker-status': (['docker', 'status'], 60, 'skip', None, {'instances', 'system', 'docker'}),
+    'docker-health': (['docker', 'health'], 60, 'skip', None, {'instances', 'system', 'docker'}),
+    'docker-containers': (['docker', 'containers'], 120, 'skip', 'docker', {'instances', 'system', 'docker'}),
+    'docker-registries': (['docker', 'registries'], 120, 'skip', 'docker', {'instances', 'system', 'docker'}),
+}
+
+# #886: reads that had no producer. Not in ID_TOPICS: they are not woken by every instance or system row.
+PENDING_TOPICS = {
+    'parts-pending': (['parts', 'pending'], 60, 'run', None, {'system', 'network'}),
+    'rebuild-pending': (['rebuild', 'pending'], 60, 'run', None, {'system', 'network', 'security', 'backup'}),
+    'preset-list': (['preset', 'list'], 3600, 'run', None, set()),
 }
 
 
@@ -499,6 +510,13 @@ class Cli(unittest.TestCase):
                 if f[1].split()[0] == "remote":
                     self.assertIn("remote-list", woken_by(g), f[1])
         self.assertTrue({"system", "network", "instances", "shares"} <= seen)
+
+    def test_pending_topics(self):
+        info = ls.topic_info()
+        rows = {t[0]: t for t in ls.topics()}
+        for name, (words, iv, lock, cap, groups) in PENDING_TOPICS.items():
+            self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
+            self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
 
     def test_identity_and_backup_topics(self):
         info = ls.topic_info()
@@ -694,14 +712,14 @@ class Cli(unittest.TestCase):
             ('expiry', ['expiry', 'list'], 300, 'run'),
             ('notify-channels', ['notify', 'channels'], 60, 'run'),
             ('notify-providers', ['notify', 'providers'], 3600, 'run'),
-        ] + [(n, v[0], v[1], v[2]) for n, v in INSTANCE_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in APP_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in NET_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in ID_TOPICS.items()])
+        ] + [(n, v[0], v[1], v[2]) for n, v in INSTANCE_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in APP_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in NET_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in ID_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in PENDING_TOPICS.items()])
 
     def test_status_shape(self):
         import time
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 73)
+        self.assertEqual(len(lines), 80)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)
@@ -724,7 +742,7 @@ class Cli(unittest.TestCase):
         self.assertTrue(all(l.split("\t")[8] == "-" for l in raw))
         lines = sorted("\t".join(l.split("\t")[:7]) for l in raw)
         old = ['disk-health	30	-1	0	-	-	-', 'disk-inventory	30	-1	0	-	-	-', 'disk-marks	15	-1	0	-	-	-', 'encryption	30	-1	0	-	-	-', 'fm-locations	15	-1	0	-	-	-', 'live	5	-1	0	-	-	-', 'monitor-disks	15	-1	0	-	-	-', 'pool-disks	30	-1	0	-	-	-', 'pool-info-bulk	15	-1	0	-	-	-', 'pool-info-fast	15	-1	0	-	-	-', 'pool-members-bulk	15	-1	0	-	-	-', 'pool-members-fast	15	-1	0	-	-	-', 'pool-state-bulk	10	-1	0	-	-	-', 'pool-state-fast	10	-1	0	-	-	-', 'shares-deleted	60	-1	0	-	-	-', 'shares-overview	30	-1	0	-	-	-', 'shares-principals	60	-1	0	-	-	-', 'state-history	30	-1	0	-	-	-', 'status	15	-1	0	-	-	-', 'temp-disks	30	-1	0	-	-	-', 'vault-list	60	-1	0	-	-	-', 'vault-usage	30	-1	0	-	-	-', 'vault-uses	60	-1	0	-	-	-']
-        self.assertEqual(lines, sorted(old + ["%s	%s	-1	0	-	-	-" % (t, iv) for t, iv in SYSTEM_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in INSTANCE_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in APP_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in NET_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in ID_TOPICS.items()]))
+        self.assertEqual(lines, sorted(old + ["%s	%s	-1	0	-	-	-" % (t, iv) for t, iv in SYSTEM_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in INSTANCE_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in APP_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in NET_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in ID_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in PENDING_TOPICS.items()]))
 
     def test_status_of(self):
         n = 1000.0
@@ -1184,7 +1202,7 @@ class DockerEvents(unittest.TestCase):
 
     def test_docker_group_wakes_the_docker_topics(self):
         got = {t for t, i in ls.topic_info().items() if "docker" in i["groups"]}
-        self.assertEqual(got, {"docker-list", "docker-apps"})
+        self.assertEqual(got, {"docker-list", "docker-apps", "docker-status", "docker-health", "docker-containers", "docker-registries"})
 
 
 FAKE_INCUS = r"""

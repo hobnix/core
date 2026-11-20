@@ -1099,9 +1099,9 @@ READS = {
     ("node", "list"): {"kind": "tsv", "ttl": 15, "topic": "node-list"},
     ("node", "show"): {"kind": "tsv", "ttl": 15, "args": [NAME]},
     ("changes", "list"): {"kind": "tsv", "ttl": 60, "query": {"from": (r"^[0-9a-f]{7,40}$", "--from"), "since": (r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "--since")}},   # What's new
-    ("parts", "pending"): {"kind": "tsv", "ttl": 15},
-    ("rebuild", "pending"): {"kind": "tsv", "ttl": 15},
-    ("preset", "list"): {"kind": "tsv", "ttl": 60},                                               # the presets (first-run wizard)
+    ("parts", "pending"): {"kind": "tsv", "ttl": 15, "topic": "parts-pending"},
+    ("rebuild", "pending"): {"kind": "tsv", "ttl": 15, "topic": "rebuild-pending"},
+    ("preset", "list"): {"kind": "tsv", "ttl": 60, "topic": "preset-list"},                                               # the presets (first-run wizard)
     ("net", "check"): {"kind": "tsv", "ttl": 5},                                                  # the network check rows (Network wizard)
     ("net", "nics"): {"kind": "tsv", "ttl": 15},                                                  # the physical network cards (Network wizard)
     ("parts", "list"): {"kind": "tsv", "ttl": 15, "topic": "parts-list"},                          # the optional parts and whether each is on (Settings)
@@ -1199,12 +1199,12 @@ READS = {
     ("docker", "list"): {"kind": "tsv", "ttl": 30, "topic": "docker-list"},
     ("docker", "apps"): {"kind": "tsv", "ttl": 30, "topic": "docker-apps"},
     ("docker", "logs"): {"kind": "text", "ttl": 3, "nocache": True, "args": [APP], "query": {"lines": (r"^[0-9]{1,4}$", "")}},     # logs and files of an app may hold secrets
-    ("docker", "containers"): {"kind": "tsv", "ttl": 30},     # name project state of every container (the editor checks container_name); no topic
+    ("docker", "containers"): {"kind": "tsv", "ttl": 30, "topic": "docker-containers"},     # name project state of every container (the editor checks container_name); no topic
     ("docker", "app"): {"kind": "json", "ttl": 0, "nocache": True, "args": [APP]},     # compose and the real .env text (admin editor); never cached, never in a topic
     ("docker", "rev"): {"kind": "text", "ttl": 0, "nocache": True, "args": [APP]},     # one line, the revision of compose + .env: the open editor polls it
-    ("docker", "registries"): {"kind": "tsv", "ttl": 15},     # host user state used_by; never a token
-    ("docker", "health"): {"kind": "tsv", "ttl": 15},      # container, share, mount: id state fix detail reason (the capability page, the Docker page and the tree read it)
-    ("docker", "status"): {"kind": "tsv", "ttl": 15},      # the docker wizard: is the container there and owned (key<TAB>value rows)
+    ("docker", "registries"): {"kind": "tsv", "ttl": 15, "topic": "docker-registries"},     # host user state used_by; never a token
+    ("docker", "health"): {"kind": "tsv", "ttl": 15, "topic": "docker-health"},      # container, share, mount: id state fix detail reason (the capability page, the Docker page and the tree read it)
+    ("docker", "status"): {"kind": "tsv", "ttl": 15, "topic": "docker-status"},      # the docker wizard: is the container there and owned (key<TAB>value rows)
     ("setup", "list"): {"kind": "tsv", "ttl": 5, "topic": "setup-list"},
     ("config", "list"): {"kind": "tsv", "ttl": 5, "topic": "config-list"},
     ("config", "check"): {"kind": "text", "ttl": 0},
