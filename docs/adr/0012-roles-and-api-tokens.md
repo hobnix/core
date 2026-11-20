@@ -77,7 +77,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
    | Group of rows | Read | Change |
    | --- | --- | --- |
-   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse) | viewer | admin |
+   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse: admin) | viewer | admin |
    | ct, docker, docker-app, recipes, pkg (recipes) | viewer | app-manager |
    | users, vault, secrets, unlock, ssh-key, admin, config, system, release, net, dc, edge, gateway, vps, node, peers, remote, power | admin | admin |
 
@@ -120,6 +120,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
 - **Logs are not for `viewer`.** `logs units` and `logs show` are `admin`; `ct logs` and `docker logs` are `app-manager` (the app's own page).
   Logs can hold secrets. The rows in `0012-roles-sys-rows.tsv` follow.
+- **File names are not for `viewer`** (security review of 0.8, #946). `fm locations`, `fm ls`, `fm du`, `fm stat` and `backup find` are `admin`: they list names, sizes and times of the files of every share, sensitive ones included, and search all backups. The rest of `fm` and `backup` stays as it was. The file manager page is greyed for other roles. A per-location filter (hide only `sensitive/*`) was not chosen: it needs a rule per share, and three global roles come first.
 - **The audit log is `admin` only** (it names people).
 - **`app-manager` sees an app's logs, never the console of an instance.**
 - **Three global roles first;** no per-object scope (this app, this share).
