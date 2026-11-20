@@ -35,7 +35,7 @@ Extensions that can run commands and services in a defined way, with permissions
   `/nix`, is refused with the reason. A service still runs as root and its network is not limited. Not tested on hardware yet.
 
 ## Roles and API tokens
-- **Three roles, viewer < app manager < admin** ([ADR 0012](adr/0012-roles-and-api-tokens.md)): people in the domain group `hn-viewers` can look, `hn-app-managers` can also
+- **Three roles, viewer < app manager < admin** (ADR 0012, `docs/adr/0012-roles-and-api-tokens.md`): people in the domain group `hn-viewers` can look, `hn-app-managers` can also
   change instances and apps, Domain Admins can do everything. Create the groups with `hs group roles`. A call a role may not make is refused with a 403.
   The local admin account is still an admin. The audit log names the signed-in person for changes made in the web interface.
 - **Role-aware pages**: every page is listed for every role; the ones a role may not open (the Vault and the Identity pages) are greyed with a lock and
