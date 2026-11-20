@@ -168,6 +168,8 @@ steps: no secret through argv or environment, tests with fakes (no real domain c
 | 11 | S | **#239 d** commands: opt-in confinement `confine = true` per row (D7) and the honest wording in install and update prompts | scripts/lib/ext_proto.py (wrapper), docs, tests | 10, D7 | a confined fixture command fails to write outside its paths |
 | 12 | M | **#313 a** audit of #378 against the acceptance boxes; finish core: level lookup, rules loader, catalogue "when installed", both forms accepted | scripts/state-db.py, scripts/event-notify.py, scripts/lib/pkg_events.py, scripts/events-doc-gen.py, docs/events.md, tests | none | each box of the issue ticked or a test added |
 | 13 | M | **#313 b** recipes: `[[events]]` in sonarr, radarr, sabnzbd, maintainerr; `hs-media-notify.py` only emits; core drops the old kinds one release later | recipes repository, scripts/lib/event-kinds.tsv | 12, 8 | recipe tests pass against the core; core kinds list has no `pkg.` media kinds |
+| 13a | M | **#926** manifest block `[integrations.media]` for media recipes: an extension lists installed media apps (radarr, sonarr, jellyfin, sabnzbd) and gets their local API key as a scoped credential through `scripts/lib/secret.sh` (never argv or environment). Parse and validate in `pkg validate`, then the four recipes declare it. **Not built yet.** | scripts/pkg.py, scripts/lib/pkg_*.py, scripts/hs_ext.py (listing and scoped credential), docs/Package-API.md, tests/pkg-validate (or tests/pkg.sh), tests/ext-sdk-*.sh, recipes repository (radarr, sonarr, jellyfin, sabnzbd; one PR) | 13, 8 | validate refuses a bad block and accepts the four recipes; an extension fixture lists installed media apps and reads a key without it appearing in argv or the environment |
+| 13b | M | **#927** event retention classes: each declared `[[events]]` entry carries `retention = "ephemeral\|audit\|metric"` (required, validated); housekeeping prunes by class; rollup helper for extensions (upsert by month, user, kind, documented in the SDK). **Not built yet; waiting for the store decision in #481**, because the rollup table and the pruning live in whatever store #481 picks. Part of #917 (1.0 showcase). | scripts/lib/pkg_events.py, scripts/pkg.py, scripts/state-db.py (or the store #481 names), scripts/event-notify.py, housekeeping script, scripts/lib/event-kinds.tsv, docs/events.md (generated), docs/extensions-sdk.md, SDK helpers (step 7), tests/pkg-events.sh, tests/state-db.sh | 12, #481 | an event without a class is refused by validate; housekeeping drops each class on its own schedule in a fake clock; the rollup helper upserts by (month, user, kind); a test with 5 years of fake data stays small |
 | 14 | M | **#434 a** regenerate the roles table for 279 rows; role field in `sys.toml`, generator, `x-hs-role`, ts types, tests (admin default, no viewer change) | docs/api/sys.toml, scripts/openapi-gen.py, scripts/openapi-ts-gen.py, docs/adr/0012-roles-sys-rows.tsv, web/src/api/sys.gen.d.ts, tests/openapi.sh | D1 | a new row without a decision fails CI |
 | 15 | L | **#434 b** the check in web-serve.py, role from groups, `HS_ACTOR`, `GET /api/session` role, 403 body; `hs users` creates the three groups (security) | scripts/web-serve.py, scripts/users.sh, scripts/lib/audit.sh, tests/web-login-test.py, tests/web-roles-test.py (new) | 14, D2 | a viewer, an app-manager and an admin session each get exactly the allowlisted calls; the audit line names the person |
 | 16 | M | **#434 c** role-aware web interface: hide what a role cannot use, Sessions page own-only for non-admins | web/src/**, web tests | 15 | fixture sessions per role show the right pages |
@@ -178,8 +180,8 @@ steps: no secret through argv or environment, tests with fakes (no real domain c
 | 21 | S | Docs: new guide `docs/extensions.md` (SDK, protocol, permissions, events), `web-interface.md` (roles, tokens, TOTP, SSO), `operations.md` (lost second factor), `docs/Package-API.md`, ADR 0012 and 0014 status lines, changelog | docs/ | 1 to 20 | tests/docs.sh green |
 | 22 | S | Hardware and VM test (table below); tick the issues' "Hardware test" boxes with what was seen | the issues | all | "Not tested on hardware yet." removed only for what was seen |
 
-Parallel lanes after the decisions: **A protocol** (1, 2, 3, then 4, 5, 6, 7), **B permissions** (8 first, then 9 after 4, then 10, 11), **C events** (12, 13, independent
-of everything else), **D roles** (14, 15, then 16, 17, 18), **E sign-in** (19, 20 after 15). Shared files: 15, 17, 19 and 20 all edit
+Parallel lanes after the decisions: **A protocol** (1, 2, 3, then 4, 5, 6, 7), **B permissions** (8 first, then 9 after 4, then 10, 11), **C events** (12, 13, then 13a and 13b; 12 and 13 are independent
+of everything else; 13b waits for #481), **D roles** (14, 15, then 16, 17, 18), **E sign-in** (19, 20 after 15). Shared files: 15, 17, 19 and 20 all edit
 `scripts/web-serve.py` and `tests/web-login-test.py`, and 18 edits its extension part: they merge one at a time (15, 17, 18, 19, 20), and the
 lane E steps rebase after each of them; 1, 4, 9 and 18 touch `scripts/pkg.py` or `scripts/hs_ext.py`; 4, 10 edit `configuration.nix`; 14, 17, 20 and 4 add
 `sys` rows, so openapi.json and sys.gen.d.ts are **regenerated on every rebase, never merged by hand**; 19 changes `config/schema.toml` (regenerate
@@ -207,6 +209,8 @@ Checked against docs/PLAN-web-design.md (sections 4.9, 6 and 7) on 2026-11-18. T
 | 19 | a real authenticator app (two apps), clock drift of a minute, recovery code, `hs web totp reset` over SSH |
 | 20 | one real provider (for example a self-hosted Keycloak or Authentik in an Incus container, then a public one); group claim mapping; sign in over the LAN and over Tailscale |
 | 13 | a real Sonarr/Radarr event reaches the notification channel with the new declarations |
+| 13a | an extension on a real server lists the installed media apps and reads a key that works against the app's API (Not tested on hardware yet.) |
+| 13b | housekeeping prunes a real state store by class after weeks of events (Not tested on hardware yet.) |
 
 Everything else is checked by tests with fakes (`t quick`) and, for units, in the nested VM (`t vm`, ADR 0023).
 
@@ -276,3 +280,5 @@ All Accepted by the owner on 2026-11-18. The accepted answer is the "Proposed" c
   expiry and when the owner is disabled.
 - With `webTotp = admins`, an admin sign-in asks for a code, refuses a replayed one, accepts a recovery code once, and `hs web totp reset adminuser`
   turns it off for that user; a fake OIDC provider signs in a `viewer` and an `admin` and refuses a wrong `state`, `nonce` or signature.
+- (Steps 13a and 13b, not built yet.) `pkg validate` refuses a media block or an event retention class it does not know and a declared event without
+  one; an extension fixture lists installed media apps and gets a scoped key; housekeeping prunes by class and five years of fake rollup data stay small.

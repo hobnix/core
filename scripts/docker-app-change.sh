@@ -693,27 +693,65 @@ apply_rebuild() {
 
 # ── recreate ──
 
+# missing_images <app>: the images of the app that are not in docker yet, one per line (up -d pulls or builds them first, which can take
+# minutes: an app moved to a new docker container has none). Prints nothing when every image is there or the list cannot be read.
+missing_images() {
+  local app=$1 dir
+  dir=${DOCKER_AUTH_DIR:-$(_auth_dir "$app")}
+  timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c '
+    cd "$2" || exit 0
+    docker compose -p "$1" config --images 2>/dev/null | sort -u | while IFS= read -r img; do
+      [ -n "$img" ] || continue
+      docker image inspect "$img" >/dev/null 2>&1 || printf "%s\n" "$img"
+    done' sh "$app" "$dir" </dev/null 2>/dev/null || true
+}
+
 cmd_plan_recreate() {
-  local app=$1
+  local app=$1 missing n
   base_checks "$app"
   auth_check "$app"
-  printf 'status	ok
-heading	recreate %s
-' "$app"
-  printf 'step	Recreate the containers whose settings changed and start the missing ones (docker compose up -d)
-'
-  printf 'note	No image is pulled or built and no volume is removed.
-'
-  printf 'long	no
-'
+  missing=$(missing_images "$app")
+  n=$(printf '%s\n' "$missing" | grep -c . || true)
+  printf 'status\tok\nheading\trecreate %s\n' "$app"
+  printf 'step\tRecreate the containers whose settings changed and start the missing ones (docker compose up -d)\n'
+  if [ "$n" -gt 0 ]; then
+    printf '%s\n' "$missing" | awk -v n="$n" '
+      NF && c < 3 { l = l (c++ ? ", " : "") $0 }
+      END { printf "note\t%s not in Docker yet (%s%s): downloaded or built first, so this runs as a background job.\n",
+              (n == 1 ? "1 image is" : n " images are"), l, (n > 3 ? ", ..." : "") }'
+    printf 'note\tNo volume is removed.\n'
+    printf 'long\tyes\n'
+  else
+    printf 'note\tNo image is pulled or built and no volume is removed.\n'
+    printf 'long\tno\n'
+  fi
 }
 
 cmd_start_recreate() {
-  local app=$1
+  local app=$1 unit
   base_checks "$app"
   auth_check "$app"
-  if docker_with_auth "$app" up -d; then printf 'status	done
-'; else refuse "The recreate of $app failed."; fi
+  if [ -z "${HS_DOCKER_NO_JOB:-}" ] && [ -n "$(missing_images "$app")" ]; then
+    # images to download or build: this can take longer than the web interface waits for an answer
+    unit=$(hs_job "docker-app-recreate-$app" "Recreate $app" -- bash "$0" --apply-recreate "$app") || refuse "The background job could not be started."
+    printf 'status\tstarted\nunit\t%s\n' "$unit"
+    return 0
+  fi
+  if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse "The recreate of $app failed."; fi
+}
+
+apply_recreate() {
+  local app=$1
+  [[ "$app" =~ $APP_RE ]] || fail "The app name is not valid."
+  docker_on_and_running || fail "Docker is not on or not running."
+  app_is_child "$app" || fail "No app called '$app' was found."
+  is_manager "$app" && fail "The app '$app' is the Docker manager."
+  step "$(t 'Recreate %s (missing images are downloaded or built first)' "$app")"
+  if docker_with_auth "$app" up -d; then
+    ok "$(t 'Recreated %s' "$app")"
+  else
+    fail "$(t 'The recreate of %s failed.' "$app")"
+  fi
 }
 
 # ── delete ──
@@ -856,6 +894,12 @@ fi
 if [ "${1:-}" = "--apply-rebuild" ]; then
   [ $# -eq 2 ] || exit 1
   apply_rebuild "$2"
+  exit 0
+fi
+
+if [ "${1:-}" = "--apply-recreate" ]; then
+  [ $# -eq 2 ] || exit 1
+  apply_recreate "$2"
   exit 0
 fi
 

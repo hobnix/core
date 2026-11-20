@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "Disks page: sleep state and watts load on a real server"
+body  = """The Disks page asked for the sleep state and measured power of the disks, but the web server did not allow that read, so the columns stayed empty. It is allowed now (read-only). The sidebar no longer requests two router reads that need an address; it warms the router's networks and clients instead."""

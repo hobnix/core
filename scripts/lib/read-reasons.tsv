@@ -54,6 +54,7 @@ token list	free query: an admin sees all tokens, anybody else their own (the own
 # No arguments and no topic yet: the page asks again on a timer or on demand
 cache state	no producer for a topic yet
 config check	no producer for a topic yet; fetched on demand by the settings page
+disk power	no topic of its own; the Disks page re-reads it with monitor-disks (sleep state and measured watts)
 docker containers	no producer for a topic yet; polled every 30 s by the app editor
 docker health	no producer for a topic yet; polled every 30 s
 docker registries	no producer for a topic yet

@@ -77,7 +77,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
    | Group of rows | Read | Change |
    | --- | --- | --- |
-   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse) | viewer | admin |
+   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse: admin) | viewer | admin |
    | ct, docker, docker-app, recipes, pkg (recipes) | viewer | app-manager |
    | users, vault, secrets, unlock, ssh-key, admin, config, system, release, net, dc, edge, gateway, vps, node, peers, remote, power | admin | admin |
 
@@ -92,9 +92,10 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
    or `unlock`, whatever its role. Tokens are listed and revoked by their owner and by an admin.
 5. **Tokens live on the system disk** (a file in `/var/lib/hs`, mode 0600, hashes only), not in the vault: a token must work after a boot
    before anyone unlocks. A stolen token gives what its role gives, so the three roles are the damage limit.
-6. **Roles come from AD groups when the domain controller answers.** The result is cached for the life of the session (so a short DC outage does
-   not sign everybody out) and read again at the next sign-in. A token takes its owner's role from the same cache, read again when the cache entry is older than one hour, so a lowered role or a disabled account reaches the token within the hour (not at once; decision 4 states the goal, this is the bound); when the DC has been
-   unreachable for more than a day, tokens above `viewer` are refused until it answers. The local account is `admin` and stays the way in when
+6. **Roles come from AD groups when the domain controller answers.** The result is read again at the next sign-in and, for a signed-in session, at most once an hour (the same
+   answer a token uses): a person who is disabled or in no group any more loses the session, a lowered role lowers it, and a short DC outage does
+   not sign everybody out (the last role is kept for a day, then `viewer`). A token takes its owner's role from the same cache, read again when the cache entry is older than one hour, so a lowered role or a disabled account reaches the token within the hour (not at once; decision 4 states the goal, this is the bound); when the DC has been
+   unreachable for more than a day, tokens above `viewer` are refused until it answers. A token starts changes only in an explicit list of areas (containers, backups, shares, Docker, apps, jobs, notifications, health, expiry, ISOs: `TOKEN_CHANGE_ALLOWED` in web-serve.py); areas that can leave access behind after the token is revoked (SSH keys, packages, settings, system, routes, network, domain, nodes, migration, people) are refused. The local account is `admin` and stays the way in when
    the DC is down.
 7. **No second user list.** The web server stores no password and no profile. People are Samba/AD users; the three groups are created by
    `hs users` (a follow-up). Linked to Samba means: same name, same password, same group membership; separate means: not at all. This record
@@ -120,6 +121,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
 - **Logs are not for `viewer`.** `logs units` and `logs show` are `admin`; `ct logs` and `docker logs` are `app-manager` (the app's own page).
   Logs can hold secrets. The rows in `0012-roles-sys-rows.tsv` follow.
+- **File names are not for `viewer`** (security review of 0.8, #946). `fm locations`, `fm ls`, `fm du`, `fm stat` and `backup find` are `admin`: they list names, sizes and times of the files of every share, sensitive ones included, and search all backups. The rest of `fm` and `backup` stays as it was. The file manager page is greyed for other roles. A per-location filter (hide only `sensitive/*`) was not chosen: it needs a rule per share, and three global roles come first.
 - **The audit log is `admin` only** (it names people).
 - **`app-manager` sees an app's logs, never the console of an instance.**
 - **Three global roles first;** no per-object scope (this app, this share).
