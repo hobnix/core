@@ -6,7 +6,7 @@
 
   let { name } = $props();
   // name, created
-  const csn = poll(() => `/api/sys/ct/snapshots/${encodeURIComponent(name)}`, 15000);
+  const csn = poll(() => `/api/sys/ct/snapshots/${encodeURIComponent(name)}`, 15000, 'ct-list');
   // oldest first, whatever the order of the answer ("YYYY-MM-DD HH:MM" sorts as text)
   const snaps = $derived([...rows(csn)].sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)));
   const newestName = $derived(snaps.length ? snaps[snaps.length - 1][0] : '');

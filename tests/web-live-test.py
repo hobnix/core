@@ -510,6 +510,33 @@ class StorageTopics(DbBase):
                 self.assertEqual(ws.live_topic_map()["/api/sys/pool/%s?pool=%s" % (kind, pool)], "pool-%s-%s" % (kind, pool))
         self.assertNotIn("topic", ws.READS[("pool", "disks")])
 
+    # D5 (a), #886 part 2: a free-argument read follows the topic of its list (refetch when it changes), no timer while the stream is open
+    FOLLOW = {
+        "forms/backup/SetupDisk.svelte": ["pool-disks"], "forms/storage/AddDisks.svelte": ["pool-disks"],
+        "forms/storage/ReplaceMember.svelte": ["pool-disks"],
+        "forms/shares/RestoreShare.svelte": ["backup-state"], "pages/Backup.svelte": ["backup-state", "backup-state"],
+        "pages/Shares.svelte": ["backup-state"],
+        "pages/Instances.svelte": ["ct-list"], "pages/protection/CtSnapRow.svelte": ["ct-list"],
+        "pages/Disks.svelte": ["disk-health"], "forms/ops/ServiceForm.svelte": ["services-list"],
+    }
+
+    def test_free_argument_reads_follow_the_topic_of_their_list(self):
+        import re
+        known = {r[0] for r in ws.ls.topics()}
+        root = os.path.join(here, "..", "web", "src")
+        needles = ("pool/disks", "backup/snapshots", "ct/snapshots", "state/smart", "services/show")
+        for rel, topics in self.FOLLOW.items():
+            src = open(os.path.join(root, rel), encoding="utf-8").read()
+            found = []
+            for line in src.splitlines():
+                if "poll(" in line and any(n in line for n in needles):
+                    m = re.search(r",\s*\d+,\s*'([a-z-]+)'\)", line)
+                    self.assertIsNotNone(m, rel + ": " + line.strip())
+                    found.append(m.group(1))
+            self.assertEqual(found, topics, rel)
+            for t in found:
+                self.assertIn(t, known)
+
     def test_resolution_picks_the_topic_per_pool(self):
         for kind in ("info", "members", "state"):
             for pool in ("bulk", "fast"):
