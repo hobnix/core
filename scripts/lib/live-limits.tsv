@@ -1,0 +1,4 @@
+# The limits of the live interface (#485, #486; docs/PLAN-live-interface.md D9): seconds from a change to the new data on an open page.
+# class	seconds	what
+hook	5	a topic whose change script says so (live_refresh, an event): the stream carries it
+timed	20	a topic that is only read on a timer
