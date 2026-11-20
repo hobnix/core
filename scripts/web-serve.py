@@ -13,7 +13,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
-  GET  /api/events    server-sent events `changed` ({topic, gen}) in every mode (a watcher reads the table `topics` of state.db once a second; Redis, when on, is the fast path), `down`/`up` when Redis goes (mode db: when the heartbeat of hs-live-db stops or returns); session, same Origin
+  GET  /api/events    server-sent events `changed` ({topic, gen}) in every mode (a watcher reads the table `topics` of state.db once a second; Redis, when on, is the fast path), `down`/`up` when Redis goes (mode db: when the heartbeat of hs-live-db stops or returns; there a `live:<topic>` counter is sent as `changed` <topic>); session, same Origin
   GET  /api/board     the dashboard tiles and their stats, only while the dashboard variant is web; a session, or (setting dashboardOpen) a private address
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
@@ -216,7 +216,7 @@ def docs_search(query, lang=""):
 
 def features(cfg, first_run=None):
     """what the server switched on, for the session answer; setup_wizard = the first-run wizard is still to be shown (never token or expiry)"""
-    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": cfg.live == "redis", "topics": live_topic_map() if cfg.live == "redis" else {}}   # host: the local node's name = the first part of every address (/node/<host>/...)
+    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": cfg.live in ("redis", "db"), "topics": live_topic_map() if cfg.live in ("redis", "db") else {}}   # host: the local node's name = the first part of every address (/node/<host>/...)
 
 
 def live_topic_map():
@@ -347,7 +347,7 @@ class Config:
         self.stream_max = int(env("HS_WEB_STREAM_MAX", "6"))              # streams open at once (one thread each)
         self.stream_hours = float(env("HS_WEB_STREAM_HOURS", "6"))        # a stream ends after this long; the page reconnects or falls back
         # live state (capability live-state): "redis" serves topic reads from Redis and pushes changes on /api/events; anything else = off;
-        # "db" (ADR 0026 step 1): topic reads stay direct, `down`/`up` come from the heartbeat row of the collector hs-live-db in state.db
+        # "db" (ADR 0026): topic reads come from the table `live` of state.db (DbStore), `changed` from the counters live:<topic>, `down`/`up` from the heartbeat row of the collector hs-live-db
         self.live = env("HS_WEB_LIVE", "")
         self.probe_file = env("HS_WEB_PROBE_FILE", "/run/hs-web/probe.tsv")      # hs live measure: when a live:probe counter reached the streams ("" = off)
         self.live_socket = env("HS_LIVE_SOCKET", "/run/redis-hobnix/redis.sock")
@@ -965,7 +965,13 @@ class Facts:
             return self.value
 
     def _stored(self):
-        """-> (rc, out) of the `status` topic in mode redis; None when the key or Redis is not there (then the command runs)."""
+        """-> (rc, out) of the `status` topic in mode redis or db; None when the key, Redis or the document is not there (then the command runs)."""
+        if self.cfg.live == "db":
+            try:
+                doc, _ = live_db_read("status")
+            except OSError:
+                return None
+            return (int(doc["rc"] or 0), str(doc["out"])) if doc and doc["out"] else None
         try:
             r = ls.Resp(self.cfg.live_socket, timeout=1.0)
             try:
@@ -980,7 +986,7 @@ class Facts:
         return None
 
     def _read(self, locked):
-        got = self._stored() if self.cfg.live == "redis" else None
+        got = self._stored() if self.cfg.live in ("redis", "db") else None
         rc, out = got if got else _run([self.cfg.hs, "sys", "status"], timeout=15)
         rows = {}
         for line in out.splitlines():
@@ -2140,7 +2146,7 @@ class Reads:
         def add(spec, argv, every):
             key = tuple(argv)
             # a resolved string topic belongs to the live collector, not the warm-up; a mapping without a match has no topic and can be warmed
-            is_topic = self.cfg.live == "redis" and isinstance(spec.get("topic"), str)
+            is_topic = self.cfg.live in ("redis", "db") and isinstance(spec.get("topic"), str)
             if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache"):
                 done.add(key)
                 out.append((spec, argv, key, every))
@@ -2423,6 +2429,99 @@ class RedisStore(StateStore):
             pass
 
 
+def state_db_path():
+    return env("HS_STATE_DB", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "state.db"))
+
+
+def collector_alive(hb, now=None):
+    """The heartbeat row (time, every) of the db collector is fresh: not older than max(15, 3 x every) seconds (one rule for `down` and for the status of a document)."""
+    t = time.time() if now is None else now
+    return bool(hb) and t - hb[0] <= max(15, 3 * hb[1])
+
+
+def live_db_read(topic):
+    """Mode db: -> (document, heartbeat) from the state database, read-only, no subprocess. The document is None when the topic has no row (or
+    there is no database yet), else a dict {out, rc, gen, ts (= updated), err, ts_err, ttl} in the shape of a stored Redis document; the heartbeat is
+    (time, every) or None. OSError when the database cannot be read now."""
+    db = state_db_path()
+    if not os.path.exists(db):
+        return None, None
+    try:
+        c = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=2)
+        try:
+            c.execute("PRAGMA query_only=1")
+            try:
+                row = c.execute("SELECT payload, rc, gen, updated, err, ts_err, ttl FROM live WHERE topic = ?", (topic,)).fetchone()
+                hb = c.execute("SELECT time, every FROM heartbeat WHERE name = 'hs-live'").fetchone()
+            except sqlite3.OperationalError as e:
+                if "no such table" in str(e):
+                    return None, None
+                raise
+        finally:
+            c.close()
+    except sqlite3.Error as e:
+        raise OSError("state.db: %s" % e)
+    doc = {"out": row[0], "rc": row[1], "gen": row[2], "ts": row[3], "err": row[4], "ts_err": row[5], "ttl": row[6]} if row else None
+    return doc, ((int(hb[0]), int(hb[1])) if hb else None)
+
+
+class DbStore(StateStore):
+    """Mode db (ADR 0026 step 4): a read with a topic is the row of the table `live` in state.db (written by the collector); no process is started
+    and there is no Redis. A read without a topic, one whose capability is off, ?fresh=1 and a state database that cannot be read are the direct
+    read (OffStore): this mode never answers 503 "state service down". No fresh heartbeat (the collector does not run) and no row for the
+    topic: also the direct read, so a server without its collector still shows data; a collector and no row yet: 503 "refreshing".
+    Freshness is the heartbeat, not the age of the document (a document changes only with its output): X-HS-Age is the time since the collector
+    last finished a round, the document's own change time is X-HS-Updated, and the status is `expired` as soon as the collector is not running."""
+
+    def __init__(self, cfg, reads):
+        self.cfg, self.off = cfg, OffStore(reads)
+        try:
+            self.caps = {t: i["cap"] for t, i in ls.topic_info().items()}
+        except OSError:
+            self.caps = {}
+        try:
+            self.ivals = {t[0]: t[2] for t in ls.topics()}
+        except OSError:
+            self.ivals = {}
+
+    def get(self, spec, argv, key, fresh=False):
+        topic = spec.get("topic")
+        cap = spec["cap"] if "cap" in spec else self.caps.get(topic)
+        if fresh or not isinstance(topic, str) or not ls.cap_on(cap):
+            return self.off.get(spec, argv, key, fresh=fresh)
+        try:
+            doc, hb = live_db_read(topic)
+        except OSError:
+            return self.off.get(spec, argv, key, fresh=fresh)
+        now = time.time()
+        alive = collector_alive(hb, now)
+        if doc is None:
+            if not alive:
+                return self.off.get(spec, argv, key, fresh=fresh)
+            return 503, {"error": "refreshing", "retry_after": 2}, None, (("Retry-After", "2"),)
+        try:
+            ts = float(doc.get("ts") or 0)
+            code, obj = Reads._shape(spec, int(doc.get("rc") or 0), str(doc.get("out") or ""))
+            failed = bool(doc.get("err")) and float(doc.get("ts_err") or 0) > ts
+        except (TypeError, ValueError):
+            return 502, {"error": "The stored answer is not readable."}, None, ()
+        checked = max(ts, float(hb[0])) if (hb and alive and ts) else ts      # the last time the collector looked and the answer was still this one
+        if failed:
+            status = ls.status_of(doc, self.ivals.get(topic, 60), now)
+        elif not alive:
+            status = "expired"
+        else:
+            status = ls.status_of(dict(doc, ts=checked), self.ivals.get(topic, 60), now)
+        more = (("X-HS-Status", status), ("X-HS-Updated", str(int(ts)) if ts else "-"))
+        if failed:
+            more += (("X-HS-Stale", str(int(float(doc["ts_err"])))),
+                     ("X-HS-State", "stale" if ts else "error"),
+                     ("X-HS-Last-Ok", str(int(ts)) if ts else "-"),
+                     ("X-HS-Topic", topic),
+                     ("X-HS-Error", ls.clean(doc["err"], 160).encode("ascii", "replace").decode()))
+        return code, obj, max(0.0, now - checked), more
+
+
 class Events:
     """The hub behind /api/events: one thread follows hs:v1:changed (mode redis) and hands every message to each open stream. A stream is a
     queue of ("changed", topic, gen) | ("domain", row) | ("resync",) | ("down",) | ("up",). feed() is also how tests push a message."""
@@ -2605,8 +2704,13 @@ class Events:
         moved = sorted((t, g) for t, g in now.items() if g != before.get(t))
         if any(not t.startswith(("reads:", "live:")) for t, _ in moved) and self.on_change:
             self.on_change()
+        db = self.cfg.live == "db"
         for t, g in moved:
-            if t.startswith(("reads:", "live:")) or not self.redis_up:
+            if db and t.startswith("live:"):
+                self.feed("changed", t[5:], g)      # mode db: the document of that topic has a new gen; a page knows the topic by its own name
+            elif db and "live:" + t in now:
+                pass                                # mode db: a hook asked for a new reading; the collector answers with live:<topic> (other gen, same event)
+            elif t.startswith(("reads:", "live:")) or not self.redis_up:
                 self.feed("changed", t, g)
             if t == "live:probe":
                 self.record_probe(t, g)
@@ -2747,7 +2851,7 @@ class App:
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
-        self.store = RedisStore(self.cfg, self.reads) if self.cfg.live == "redis" else OffStore(self.reads)
+        self.store = RedisStore(self.cfg, self.reads) if self.cfg.live == "redis" else DbStore(self.cfg, self.reads) if self.cfg.live == "db" else OffStore(self.reads)
         self.events = Events(self.cfg)       # main() starts the counter watcher always and the Redis subscription in mode redis
         self.events.on_change = self.reads.clear
         self.proxy = Proxy(self.cfg)
