@@ -20,6 +20,7 @@ disk-inventory	state disks	30	run	-	disks	-
 disk-marks	disk marks	15	run	-	disks	-
 pool-info-bulk	pool info bulk	15	skip	-	disks	-
 pool-info-fast	pool info fast	15	skip	-	disks	-
+pool-disks	pool disks	30	skip	-	disks	-
 pool-members-bulk	pool members bulk	15	skip	-	disks	-
 pool-members-fast	pool members fast	15	skip	-	disks	-
 pool-state-bulk	pool state bulk	10	run	-	disks	-

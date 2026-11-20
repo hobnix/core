@@ -131,6 +131,7 @@ def migrate_schema(c):
 def open_rw(threads=False):
     os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
     c = sqlite3.connect(DB, timeout=30, check_same_thread=not threads)
+    c.execute("PRAGMA busy_timeout=30000")      # several writers (hs-live, hooks, hs state): wait for the lock, never fail at once
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA synchronous=NORMAL")
     c.executescript(SCHEMA)
