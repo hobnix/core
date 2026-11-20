@@ -14,20 +14,14 @@
   }
 </script>
 
-<section class="card sec" id="browser-notifications">
+<section class="card sec" id="browser-notifications" style="display:flex;flex-direction:column;gap:8px">
   <div class="st">Browser notifications</div>
-  <div class="line">
+  <div style="display:flex;align-items:center;gap:10px">
     {#key tries}
       <Switch checked={nf.on} disabled={!support.ok && !nf.on} reason={support.reason} label="Browser notifications" onchange={change} />
     {/key}
     <span>Show a notification when a new problem, warning or error appears while this page is open in the background</span>
   </div>
-  {#if nf.reason || (!support.ok && !nf.on)}<p class="hp2 why" role="status">{nf.reason || support.reason}</p>{/if}
+  {#if nf.reason || (!support.ok && !nf.on)}<p class="hp2" role="status">{nf.reason || support.reason}</p>{/if}
   <p class="hp2">Off by default and kept in this browser only. The browser asks for permission once, when you turn this on. Nothing is sent to another service.</p>
 </section>
-
-<style>
-  .sec { display: flex; flex-direction: column; gap: 8px; }
-  .line { display: flex; align-items: center; gap: 10px; }
-  .why { color: var(--warn, var(--fg-2)); }
-</style>
