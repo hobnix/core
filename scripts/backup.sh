@@ -27,7 +27,7 @@ usage: hs backup [status]                    what is in the backup, last run, sp
        hs backup find <name>                 which snapshots contain a file name
        hs backup restore <snapshot|latest> <path> [--tag T] [--to DIR] [--keep-owner]
                                              restore one file or folder, by default
-                                             into /bulk/shares/restored (never over the live copy), owned by the admin user;
+                                             into /bulk/shares/restored (never over the live copy), owned by the admin account;
                                              --keep-owner keeps the owners of the snapshot, --to / (in place) always does
        hs backup config                      the host snapshots and which settings files each holds
        hs backup config restore [<snapshot|latest>] [--with-state] [--dry-run]

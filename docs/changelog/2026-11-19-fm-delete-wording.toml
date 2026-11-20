@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "File manager: Delete says it moves to the trash, not that it deletes for good"
+body  = """The Delete button's tooltip and the plan's start button said "for good" although the file manager moves items to the trash (kept 14 days). A view of the trash with Restore in the web is still to come; until then `hs sys fm trash` lists it."""

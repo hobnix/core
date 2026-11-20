@@ -155,11 +155,15 @@ The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
 5. A pull request is merged only when the check `ci-ok` is green (it is the one check the branch rule asks for). CI also runs on `develop`
    after each merge: two pull requests that pass alone can fail together. A red `develop` is fixed before anything else is merged.
 6. Code for a decision record (`docs/adr/`) is merged after the record is Accepted, or behind a switch that is off by default.
-7. Development and testing are two columns of the board. In Review: the pull request is open. Testing: merged, not run on a real server
-   yet; the issue stays open. Done: the "Hardware test" boxes of the issue are ticked, a comment says what was seen, the
-   "Not tested on hardware yet." lines of that change are removed, the issue is closed. A change with nothing to run on a server (a
-   decision record, CI, a text) goes from In Review to Done. The Testing column is the queue for the next session at the server;
-   `python3 scripts/dev/untested.py --steps` lists the same from the guides' side (every marker with its heading).
+7. Development and hardware testing are tracked apart, so the milestone bar shows what is built. A dev issue: In Review while the pull
+   request is open, Done when it is merged (the issue closes with `Closes #N`). What has to run on a real server is a box in the
+   **tracker issue of the milestone**, "Hardware test: <milestone title>" (label `hardware-test`, no milestone, board column Testing while a box
+   is open, Done when all are ticked and it closes). One line per merged issue (`- [ ] #N title`), the steps as sub-boxes. At merge:
+   `bash scripts/dev/hwtest.sh add <issue> "step" ...`. After a run somebody saw: `hwtest.sh tick <issue> "what was seen"`, and remove the
+   "Not tested on hardware yet." lines of that change. A change with nothing to run on a server (a decision record, CI, a text) is not added.
+   `hwtest.sh list` is the queue for the next session at the server; `python3 scripts/dev/untested.py --steps` lists the same from the guides'
+   side (every marker with its heading). A failed run becomes a bug issue linked from the box (it is in the milestone, so the bar drops for a
+   real reason). A box that is not ticked is **postponed, not a blocker**: nothing in the release depends on it.
 8. One milestone is *released* at a time, and at most three issues are In Progress. The next milestone may be built on its own long-lived
    branch (now `0.2`; `develop` is merged into it after every change). Right after the release tag, `main` is merged back into `develop` and
    the milestone branch is merged into `develop` (docs/RELEASE-PROCESS.md).
@@ -170,8 +174,9 @@ The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
 
 There is no fixed rhythm and there are no due dates (owner decision 2026-11-10; maybe after 1.0). **What is verified ships, what is not moves
 on.** A release holds only what ran on a real server or VM, with the date recorded; anything else is behind a switch that is off, or says
-"Not tested on hardware yet." On release day an issue with every "Done when" box ticked is closed; one that is merged but not run stays open
-(In Review) and moves to the next milestone, listed in the release notes as not verified; one that is not merged moves on with its branch.
+"Not tested on hardware yet." On release day a merged issue is closed (Done); its hardware boxes that were not ticked stay in the tracker, which moves on with the next
+release, and the release notes list them as not verified (`hwtest.sh list`). A tracker never blocks a release (owner decision 2026-11-20: maybe a
+gate later). One that is not merged moves on with its branch.
 
 ### What CI runs (.github/workflows/ci.yml)
 

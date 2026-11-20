@@ -1,4 +1,4 @@
-# 0028: The component gallery page, not Storybook (for now)
+# 0029: The component gallery page, not Storybook (for now)
 
 Status: Accepted (2026-11-18)
 Issue: hobnix/server#449 (gallery), hobnix/server#193 (Storybook epic)

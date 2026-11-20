@@ -146,6 +146,11 @@ If an event has no `label` or `icon` in its payload, the notification fills them
 
 Transition: the events of the media helper (`pkg.sabnzbd.*`, `pkg.maintainerr.*`) are kept as a copy in the same format in
 `scripts/lib/pkg-events/` until hobnix/recipes declares them. An installed file of the same package replaces the copy completely.
+
+**Deprecated:** the recipes `sabnzbd` (1.1.0) and `maintainerr` (1.2.0) now declare these events in their own `package.toml`. The core copy stays for
+one release so that an older install keeps its notifications, then `scripts/lib/pkg-events/` is deleted and the table below comes from the installed
+packages only. Add no new `pkg.` kind for a media event here; declare it in the recipe.
+
 The table is generated from that folder:
 
 <!-- BEGIN package events generated from scripts/lib/pkg-events (python3 scripts/events-doc-gen.py write) -->

@@ -22,7 +22,7 @@ eq('every role sees every page of the tree (no page is hidden)', ROLES.map(() =>
 eq('the tree does not depend on the role (nodeItems takes none)', nodeItems.length <= 5, true);
 eq('an admin has no greyed page', greyed('admin'), []);
 for (const r of ['viewer', 'app-manager'])
-  eq(`${r}: the greyed pages are exactly the admin ones`, greyed(r).every((p) => p === '/storage/vault' || p.startsWith('/identity')) && ['/identity', '/identity/users', '/storage/vault'].every((p) => greyed(r).includes(p)), true);
+  eq(`${r}: the greyed pages are exactly the admin ones`, greyed(r).every((p) => p === '/storage/vault' || p === '/storage/files' || p.startsWith('/identity')) && ['/identity', '/identity/users', '/storage/vault', '/storage/files'].every((p) => greyed(r).includes(p)), true);
 for (const p of ['/instances', '/instances/apps', '/storage/pools', '/storage/disks', '/storage/shares', '/protection/backup', '/operations/health', '/settings/access', '/settings/general', '/nodes', '/marketplace', '/extensions/demo'])
   eq(`${p}: open to every role (a viewer without plans, buttons disabled)`, ROLES.map((r) => lockedWhy(r, p)), ['', '', '']);
 eq('the reason names the role, as tooltip and accessible name', [lockedWhy('viewer', '/storage/vault'), lockedWhy('app-manager', '/identity/users'), lockedWhy('admin', '/identity')], ['Needs the admin role', 'Needs the admin role', '']);
@@ -33,7 +33,7 @@ eq('a remote node keeps its pages (they only read)', nodeItems('peer', ['storage
 eq('a page opened by address: admin pages refuse a viewer', [canSee('viewer', '/identity/users'), canSee('app-manager', '/storage/vault'), canSee('viewer', '/settings/access'), canSee('viewer', '/settings/general'), canSee('admin', '/identity')], [false, false, true, true, true]);
 eq('an unlisted page needs no more than a viewer', pageRole('/something/new'), 'viewer');
 eq('the longest prefix wins', [pageRole('/settings/general'), pageRole('/settings/access'), pageRole('/settings/access/x'), pageRole('/settings/capabilities/vps')], ['viewer', 'viewer', 'viewer', 'viewer']);
-eq('the secret pages need admin, with their sub-pages', [pageRole('/identity'), pageRole('/identity/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults')], ['admin', 'admin', 'admin', 'admin', 'viewer']);
+eq('the secret pages need admin, with their sub-pages', [pageRole('/identity'), pageRole('/identity/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults'), pageRole('/storage/files')], ['admin', 'admin', 'admin', 'admin', 'viewer', 'admin']);
 
 // the changes
 eq('the app areas are an app manager\'s', ['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'jobs'].map(areaRole), Array(7).fill('app-manager'));
@@ -53,7 +53,7 @@ eq('the page frame names the role that may open the page and renders no page the
 eq('the page frame says "not for your role" instead of a broken page', /Not for your role/.test(src('shell/PageFrame.svelte')), true);
 eq('the plan dialog shows a refusal without asking', /dialog\.refused/.test(src('shell/PlanDialog.svelte')), true);
 const btn = src('ui/Button.svelte');
-eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{[^}]*\bwhy\b/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
+eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{[^\n]*\bwhy\b/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
 eq('users and access shows a role below admin only its own sessions', /Sessions own/.test(src('settings/AccessPage.svelte')) && /AccessPage/.test(src('routes.js')), true);
 eq('no admin read is issued below admin: the shell polls them only for admin, and prefetches only pages the role may open', /canSee\(ui\.role, pg\)/.test(shell) && /admin \? '\/api\/sys\/node\/list'/.test(src('shell/Shell.svelte')) && /!admin \? '' : '\/api\/sys\/users\/list'/.test(src('shell/Shell.svelte')), true);
 
