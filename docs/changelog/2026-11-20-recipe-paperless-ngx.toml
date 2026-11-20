@@ -2,5 +2,5 @@ date  = "2026-11-20"
 type  = "feature"
 title = "New recipe Paperless-ngx: scanned documents with OCR and search"
 body  = """
-hs recipe paperless-ngx sets up Paperless-ngx 3.5.1 from its official compose file (pinned, checked with sha256) with the documents on a sensitive share, the database inside the container and a nightly database dump. It asks for the OCR languages, the time zone, optional office import (Tika, Gotenberg) and an optional share a scanner can save into. The route stays private. Not tested on hardware yet.
+hs recipe paperless-ngx sets up Paperless-ngx 3.5.1 from its official compose file (pinned, checked with sha256) with the documents on a sensitive share, the database inside the container and a nightly database dump. It asks for the OCR languages, the time zone, optional office import (Tika, Gotenberg) and an optional share a scanner can save into, and an optional public address (PAPERLESS_URL, only needed for a public route). The route stays private by default. Not tested on hardware yet.
 """
