@@ -67,4 +67,12 @@ check('step of an ok job is empty, of a running and a failed job shown', stepTex
   d = askDiff([], shown);
   check('askDiff: a record that is gone dismisses too', d.dismiss.join() === 'a' && askDiff(undefined, new Set()).raise.length === 0);
 }
+// the layout of the Jobs panel (#973): the record beside the list on wide screens, QuickLook on a phone, never below the list
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../web/src/shell/JobRecords.svelte', import.meta.url), 'utf8');
+  check('jobs layout: 60/40 grid', /grid-template-columns:\s*minmax\(0, 3fr\) minmax\(0, 2fr\)/.test(src));
+  check('jobs layout: phone uses the QuickLook', /import QuickLook/.test(src) && /<QuickLook[^>]*onclose=\{close\}/.test(src) && /max-width: 860px/.test(src));
+  check('jobs layout: the record is not rendered below the table any more', !/<\/Table>\s*<\/div>\s*\{#if open\}\s*<div class="detail">/.test(src));
+}
 if (bad) process.exit(1);
