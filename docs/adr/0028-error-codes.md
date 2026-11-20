@@ -1,9 +1,11 @@
 # 0028: Error codes: stable named codes in one catalogue, exit numbers stay 0/1/other
 
-Status: Proposed
+Status: Accepted (2026-11-20, owner)
 Issue: hobnix/server#900 (milestone 0.1 Trustworthy Foundation, epic #159 Reliability and Recovery)
 
 Nothing here was built or run on a server.
+
+The build is issue #488 in milestone 0.12.
 
 ## Context
 
