@@ -41,7 +41,7 @@
           <p class="hp2">{tr(WHO[c])}</p>
           <div class="kv"><span>{tr('Would install')}</span><code>{m.offers[c]?.ref ?? '-'}</code></div>
           {#if c !== m.channel}
-            <Button class="b13" busy={jobRunning('release', planArgs(c))} tooltip={tr('Shows the plan first; nothing is installed')}
+            <Button need="admin" class="b13" busy={jobRunning('release', planArgs(c))} tooltip={tr('Shows the plan first; nothing is installed')}
               onpointerenter={() => prefetchPlan('release', planArgs(c))} onfocus={() => prefetchPlan('release', planArgs(c))}
               onclick={() => openPlan('release', planArgs(c), `${tr('Switch to')} ${tr(labels[c])}`)}>{tr('Switch to')} {tr(labels[c])}…</Button>
           {/if}

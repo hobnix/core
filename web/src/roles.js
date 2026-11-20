@@ -22,7 +22,7 @@ export const canSee = (role, path) => roleOk(role, pageRole(path));
 export const lockedWhy = (role, path) => (canSee(role, path) ? '' : `Needs the ${pageRole(path)} role`);
 
 // the least role of a change by its area (the first word of the `hs sys` row): the app rows are open to an app manager, everything else is admin
-const APP_AREAS = new Set(['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'jobs']);
+const APP_AREAS = new Set(['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'token']);
 export const areaRole = (area) => (APP_AREAS.has(String(area).split('/')[0]) ? 'app-manager' : 'admin');
 
 // the sentence for a refusal: the same words whether the server said it (403 body) or the interface knew before asking

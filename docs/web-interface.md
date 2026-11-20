@@ -112,7 +112,7 @@ sudo hs group roles
 
 Creates the two groups in the domain: it shows a plan first and asks you to type the domain name. Add people to them with the tools of [Users and shares](users-and-shares.md).
 
-The page shows every page to every role. A page or button the role may not use is greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role. The Vault and the identity pages need admin. Under Settings, Users and access, a role below admin sees its own sessions only. Roles are enforced in the web server only: anyone with `sudo` on the server is not limited, so a viewer is not safe against a person with a shell.
+The page shows every page to every role. A page or button the role may not use is greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role. A button that starts a change (a plan, a form, a job) is greyed the same way for a role below the one the server asks for, and its tooltip says "Your role (viewer) may not do this. It needs admin."; the role of each button follows the area of its change in `scripts/lib/sys-roles.tsv`, the table the server uses, and `tests/web-roles-ui.sh` fails when a change button has no such gate. Not tested on hardware yet. The Vault and the identity pages need admin. Under Settings, Users and access, a role below admin sees its own sessions only. Roles are enforced in the web server only: anyone with `sudo` on the server is not limited, so a viewer is not safe against a person with a shell.
 
 The audit log names the signed-in person for every change made in the web interface (`<user>`, or `<user> via token <id>`): `hs audit`.
 

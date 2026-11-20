@@ -3,6 +3,7 @@
 import { ROLES, roleOk, pageRole, canSee, lockedWhy, areaRole, refusal } from '../web/src/roles.js';
 import { nodeItems } from '../web/src/nav.js';
 import { readFileSync } from 'node:fs';
+import { scan, lacking, serverAreaRoles } from './web-gate-scan.mjs';
 
 let ok = 0, bad = 0;
 const eq = (name, got, want) => { if (JSON.stringify(got) === JSON.stringify(want)) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); } };
@@ -36,8 +37,8 @@ eq('the longest prefix wins', [pageRole('/settings/general'), pageRole('/setting
 eq('the secret pages need admin, with their sub-pages', [pageRole('/identity'), pageRole('/identity/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults'), pageRole('/storage/files')], ['admin', 'admin', 'admin', 'admin', 'viewer', 'admin']);
 
 // the changes
-eq('the app areas are an app manager\'s', ['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'jobs'].map(areaRole), Array(7).fill('app-manager'));
-eq('every other area is an admin\'s', ['system', 'pool', 'shares', 'users', 'config', 'pkg/bundle'].map(areaRole), Array(6).fill('admin'));
+eq('the app areas are an app manager\'s', ['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'token'].map(areaRole), Array(7).fill('app-manager'));
+eq('every other area is an admin\'s', ['system', 'pool', 'shares', 'users', 'config', 'pkg/bundle', 'jobs'].map(areaRole), Array(7).fill('admin'));
 eq('a viewer may make no change', ['ct', 'system'].map((a) => roleOk('viewer', areaRole(a))), [false, false]);
 eq('an app manager may make app changes only', ['ct', 'system'].map((a) => roleOk('app-manager', areaRole(a))), [true, false]);
 eq('the refusal says both roles', refusal('viewer', 'admin'), 'Your role (viewer) may not do this. It needs admin.');
@@ -56,6 +57,13 @@ const btn = src('ui/Button.svelte');
 eq('the button is drawn disabled below its `need`, with the refusal as its tooltip, never removed', [/!!need && !can\(need\)/.test(btn), /disabled=\{off\}/.test(btn), /refusal\(ui\.role, need\)/.test(btn), /use:tip=\{[^\n]*\bwhy\b/.test(btn), /\{#if !need/.test(btn)], [true, true, true, true, false]);
 eq('users and access shows a role below admin only its own sessions', /Sessions own/.test(src('settings/AccessPage.svelte')) && /AccessPage/.test(src('routes.js')), true);
 eq('no admin read is issued below admin: the shell polls them only for admin, and prefetches only pages the role may open', /canSee\(ui\.role, pg\)/.test(shell) && /admin \? '\/api\/sys\/node\/list'/.test(src('shell/Shell.svelte')) && /!admin \? '' : '\/api\/sys\/users\/list'/.test(src('shell/Shell.svelte')), true);
+
+// one rule for the greying: areaRole (roles.js) is the server's table (scripts/lib/sys-roles.tsv), and every page button that starts a change carries a `need` at least as high
+const server = serverAreaRoles();
+eq('areaRole agrees with the server role table for every area with a plan or start row', Object.entries(server).filter(([a, r]) => areaRole(a) !== r), []);
+const changeButtons = scan();
+eq('the scan finds the change buttons of the pages', changeButtons.length > 100, true);
+eq('every page button that opens a plan or a change form has a `need` of the role the server asks (tests/web-gate-scan.mjs lists them)', lacking(changeButtons).map((r) => `${r.rel}:${r.line} wants ${r.want}`), []);
 
 console.log(`${ok} passed, ${bad} failed`);
 process.exit(bad ? 1 : 0);

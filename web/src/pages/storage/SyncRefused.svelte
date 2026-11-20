@@ -22,6 +22,6 @@
     The last parity sync stopped: {shares.length === 1 ? 'one share has' : `${shares.length} shares have`} more removed files than its limit. The files are still in the parity, so they can be restored.
     <Table id="sync-refused" {columns} rows={list} key="key" compact empty="" />
     <Muted as="p">Normal app work in a folder (downloads, unpacking)? Leave it out of the parity or raise the limit on the share's page. If the deletions are really expected, sync anyway.</Muted>
-    <Button size="sm" variant="primary" icon="arrows-clockwise" busy={rowstate.pending('system', ['sync', '--force'])} disabled={locked} tooltip={'Shows the plan first: the removals become permanent in the parity'} onclick={() => openPlan('system', ['sync', '--force'], 'Sync parity, deletions expected')}>These deletions are expected, sync now</Button>
+    <Button need="admin" size="sm" variant="primary" icon="arrows-clockwise" busy={rowstate.pending('system', ['sync', '--force'])} disabled={locked} tooltip={'Shows the plan first: the removals become permanent in the parity'} onclick={() => openPlan('system', ['sync', '--force'], 'Sync parity, deletions expected')}>These deletions are expected, sync now</Button>
   </Banner>
 {/if}

@@ -117,7 +117,7 @@
       {:else if !detail}<div class="muted">{tr('Loading…')}</div>
       {:else}
         <div class="kv">{#each kv(detail) as [k, v]}<span class="k">{tr(k)}</span><span class="mono">{v}</span>{/each}</div>
-        {#if detail.state === 'waiting'}<div><Button variant="primary" size="sm" onclick={() => openCreate(InstallDialog, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
+        {#if detail.state === 'waiting'}<div><Button need="app-manager" variant="primary" size="sm" onclick={() => openCreate(InstallDialog, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
         {#if detail.step && stepText(detail.step, detail.state)}<div>{tr('Step')}: {stepText(detail.step, detail.state)}</div>{/if}
         {#if detail.error}<div class="err"><strong>{detail.error.category ?? ''}</strong> {detail.error.message ?? ''}</div>{/if}
         {#if detail.cancel}<div class="muted">{tr('Cancel requested')}{detail.cancel.requested_by ? ` · ${detail.cancel.requested_by}` : ''}</div>{/if}

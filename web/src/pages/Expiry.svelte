@@ -46,7 +46,7 @@
 
 <Stack gap="4">
   <PageHeader title="Expiry dates" crumb="Protection" sub="The health check warns 30 and 7 days before.">
-    {#snippet actions()}<Button variant="primary" tooltip={'Write down something that runs out'} onclick={() => openCreate(ExpiryForm)}><i class="ph ph-plus"></i>Add</Button>{/snippet}
+    {#snippet actions()}<Button need="admin" variant="primary" tooltip={'Write down something that runs out'} onclick={() => openCreate(ExpiryForm)}><i class="ph ph-plus"></i>Add</Button>{/snippet}
   </PageHeader>
 
   <Card>
@@ -56,7 +56,7 @@
         {:else if col.key === 'date'}<Muted style="white-space:nowrap">{i.date}</Muted>
         {:else if col.key === 'days'}<Progress value={pct(i)} total={100} tone={tone(i)} size="sm" label="Time left on {i.name}" text={left(i)} />
         {:else if col.key === 'note'}<Muted>{i.note}</Muted>
-        {:else}<Button variant="ghost" class="btn-icon expiry-rm" icon="x" busy={rowstate.pending('expiry', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={`Remove ${i.name} from the list`} onclick={() => openPlan('expiry', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
+        {:else}<Button need="admin" variant="ghost" class="btn-icon expiry-rm" icon="x" busy={rowstate.pending('expiry', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={`Remove ${i.name} from the list`} onclick={() => openPlan('expiry', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
       {/snippet}
     </Table>
   </Card>
