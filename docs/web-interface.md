@@ -277,6 +277,25 @@ sudo hs config set webAccent '#4fb286'
 The logo, buttons and highlights follow the accent; light colours read better on the dark theme. The theme toggle in the top bar switches
 dark and light (it follows your system by default). No rebuild is needed.
 
+## Get a browser notification
+
+The bell in the top bar lists problems and warnings while you look at the page. If you want a message on your desktop while the page is open in
+another tab or window, turn it on: **Settings > General > Browser notifications**. It is off by default and is kept in this browser only: another
+browser, or another computer, has its own switch.
+
+1. Turn the switch on. The browser asks once for permission to show notifications; this is the only moment it asks, never when the page loads.
+2. Leave the page open in a background tab. A new problem that is not acknowledged, or a new warning or error, raises a notification with a short text
+   (no serial numbers or other identifiers). Clicking it brings the tab to the front and opens the page of the thing it is about.
+
+Nothing is raised for a problem you acknowledged, for something that was already open when you turned the switch on, twice for the same thing, or
+while you are looking at the page. This uses the notification function of the browser only: no push service, no account, and nothing leaves the server.
+
+It does not work everywhere. Browsers only allow notifications on a secure page. On plain HTTP over your home network (`http://server`) most
+browsers have no notification function, and the switch is greyed with the reason; use the HTTPS address of [Use HTTPS over Tailscale](#use-https-over-tailscale)
+or `localhost`. If you blocked notifications for the site once, the switch says so; allow them again in the site settings of the browser and turn the
+switch on again. A browser that is closed, or a page that is not open, shows nothing: the notification channels (email, push) of
+[Notification rules](notify-rules.md) stay the way to reach you then. Not tested on hardware yet.
+
 ## Pages for storage and backup
 
 - **Disks** has a **Sleep** column (asleep or spinning) and, in the detail of a disk, since when it sleeps and how often it woke today; the numbers
