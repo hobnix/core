@@ -85,3 +85,10 @@ backup-overview	backup overview	60	skip	backup	backup,shares,instances,disks,sys
 backup-shares	backup shares	60	skip	backup	backup,shares,instances,disks,system	-
 docker-list	docker list	300	skip	docker	instances,system,docker	-
 docker-apps	docker apps	300	skip	docker	instances,system,docker	-
+docker-status	docker status	60	skip	-	instances,system,docker	-
+docker-health	docker health	60	skip	-	instances,system,docker	-
+docker-containers	docker containers	120	skip	docker	instances,system,docker	-
+docker-registries	docker registries	120	skip	docker	instances,system,docker	-
+parts-pending	parts pending	60	run	-	system,network	-
+rebuild-pending	rebuild pending	60	run	-	system,network,security,backup	-
+preset-list	preset list	3600	run	-	-	-
