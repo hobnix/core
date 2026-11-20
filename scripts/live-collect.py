@@ -408,6 +408,23 @@ def ls_snapshots():
         return []
 
 
+def reads_intervals(rows, path=None):
+    """ADR 0026 step 2 (#561): in db mode the collector keeps the 27 slow reads of scripts/lib/collected-reads.tsv that reads-collect.sh keeps today. Each
+    one is a topic (same words); it is read at least as often as that file says, so a page loses no freshness when the table `reads` is retired.
+    A topic never gets a LONGER interval than its row in live-topics.tsv. -> rows with the shorter interval."""
+    path = path or os.environ.get("HS_COLLECTED_FILE") or os.path.join(ls.HERE, "lib", "collected-reads.tsv")
+    every = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                c = line.rstrip("\r\n").split("\t")
+                if c[0].strip() and not c[0].startswith("#") and len(c) > 1 and c[1].strip().isdigit() and int(c[1]) > 0:
+                    every[tuple(c[0].split())] = int(c[1])
+    except OSError:
+        return rows
+    return [(t, w, min(i, every.get(tuple(w), i)), lock) for t, w, i, lock in rows]
+
+
 def beat_every():
     try:
         n = int(os.environ.get("HS_LIVE_BEAT", "5"))
@@ -431,6 +448,8 @@ class Collector:
         self.store = store                       # Resp (or a fake) for writing
         self.run = run
         self.rows = topic_rows if topic_rows is not None else ls.topics()
+        if db is not None and topic_rows is None:
+            self.rows = reads_intervals(self.rows)
         self.connect = connect                   # () -> store; reconnect after an error
         self.events = {t[0]: threading.Event() for t in self.rows}
         self.stops = {t[0]: threading.Event() for t in self.rows}      # one per topic: set when the topic goes away (a package switched off)

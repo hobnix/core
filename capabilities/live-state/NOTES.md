@@ -142,4 +142,5 @@ its Health check and its pages stay redis-only) running scripts/live-collect.py 
 `updated` is the time of the last change) and bumps the counter `live:<topic>` in the same transaction; the web feeds `live:` counters as `changed` and does not clear its read
 cache for them. One row of the table `heartbeat` every `HS_LIVE_BEAT` seconds (default 5); the web says `down` when it is older than max(15, 3 x every) and `up` when fresh again.
 There is no refresh channel in this mode: `live_refresh` and the web refresh do not wake topics. The SQL is in scripts/state-db.py (`live_*`), called in-process by the collector.
+Step 2 and 3 (#561): the 27 keys of scripts/lib/collected-reads.tsv are all topics (`pool disks` got the topic `pool-disks`); in this mode a topic is read at least as often as that file says (`reads_intervals` in live-collect.py), never less often than its row in live-topics.tsv. `hs-reads-collect` keeps running unchanged and the web still reads the table `reads`; both go in #562/#563. Writers share state.db with `busy_timeout` 30 s and WAL (`open_rw`).
 Not tested on hardware yet.

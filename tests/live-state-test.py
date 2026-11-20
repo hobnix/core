@@ -669,6 +669,7 @@ class Cli(unittest.TestCase):
             ('disk-marks', ['disk', 'marks'], 15, 'run'),
             ('pool-info-bulk', ['pool', 'info', 'bulk'], 15, 'skip'),
             ('pool-info-fast', ['pool', 'info', 'fast'], 15, 'skip'),
+            ('pool-disks', ['pool', 'disks'], 30, 'skip'),
             ('pool-members-bulk', ['pool', 'members', 'bulk'], 15, 'skip'),
             ('pool-members-fast', ['pool', 'members', 'fast'], 15, 'skip'),
             ('pool-state-bulk', ['pool', 'state', 'bulk'], 10, 'run'),
@@ -707,7 +708,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(self.fake(time.time() - 7), out), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 72)
+        self.assertEqual(len(lines), 73)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 9)
@@ -728,7 +729,7 @@ class Cli(unittest.TestCase):
         self.assertEqual((by["services-routes"], by["status"]), ("services-list", "-"))
         self.assertTrue(all(l.split("\t")[8] == "-" for l in raw))
         lines = sorted("\t".join(l.split("\t")[:7]) for l in raw)
-        old = ['disk-health	30	-1	0	-	-	-', 'disk-inventory	30	-1	0	-	-	-', 'disk-marks	15	-1	0	-	-	-', 'encryption	30	-1	0	-	-	-', 'fm-locations	15	-1	0	-	-	-', 'live	5	-1	0	-	-	-', 'monitor-disks	15	-1	0	-	-	-', 'pool-info-bulk	15	-1	0	-	-	-', 'pool-info-fast	15	-1	0	-	-	-', 'pool-members-bulk	15	-1	0	-	-	-', 'pool-members-fast	15	-1	0	-	-	-', 'pool-state-bulk	10	-1	0	-	-	-', 'pool-state-fast	10	-1	0	-	-	-', 'shares-deleted	60	-1	0	-	-	-', 'shares-overview	30	-1	0	-	-	-', 'shares-principals	60	-1	0	-	-	-', 'state-history	30	-1	0	-	-	-', 'status	15	-1	0	-	-	-', 'temp-disks	30	-1	0	-	-	-', 'vault-list	60	-1	0	-	-	-', 'vault-usage	30	-1	0	-	-	-', 'vault-uses	60	-1	0	-	-	-']
+        old = ['disk-health	30	-1	0	-	-	-', 'disk-inventory	30	-1	0	-	-	-', 'disk-marks	15	-1	0	-	-	-', 'encryption	30	-1	0	-	-	-', 'fm-locations	15	-1	0	-	-	-', 'live	5	-1	0	-	-	-', 'monitor-disks	15	-1	0	-	-	-', 'pool-disks	30	-1	0	-	-	-', 'pool-info-bulk	15	-1	0	-	-	-', 'pool-info-fast	15	-1	0	-	-	-', 'pool-members-bulk	15	-1	0	-	-	-', 'pool-members-fast	15	-1	0	-	-	-', 'pool-state-bulk	10	-1	0	-	-	-', 'pool-state-fast	10	-1	0	-	-	-', 'shares-deleted	60	-1	0	-	-	-', 'shares-overview	30	-1	0	-	-	-', 'shares-principals	60	-1	0	-	-	-', 'state-history	30	-1	0	-	-	-', 'status	15	-1	0	-	-	-', 'temp-disks	30	-1	0	-	-	-', 'vault-list	60	-1	0	-	-	-', 'vault-usage	30	-1	0	-	-	-', 'vault-uses	60	-1	0	-	-	-']
         self.assertEqual(lines, sorted(old + ["%s	%s	-1	0	-	-	-" % (t, iv) for t, iv in SYSTEM_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in INSTANCE_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in APP_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in NET_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in ID_TOPICS.items()]))
 
     def test_status_of(self):
@@ -786,7 +787,7 @@ class Cli(unittest.TestCase):
         st = FakeResp()
         ls.cli_refresh(["--all"], st)
         self.assertEqual(sorted(p[1] for p in st.published), sorted([t[0] for t in ls.topics()]))
-        self.assertEqual(len(st.published), 72)
+        self.assertEqual(len(st.published), 73)
         os.environ["HS_LIVE_SOCKET"] = "/nonexistent/none.sock"
         try:
             self.assertEqual(ls.cli_refresh(["--all"]), 0)

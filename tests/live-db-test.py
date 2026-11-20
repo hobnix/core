@@ -168,6 +168,71 @@ class Db(Base):
         self.assertEqual(c2.backend, "redis")
 
 
+class TakeOver(Base):
+    """#561: the 27 slow reads of collected-reads.tsv are topics of the collector (db mode), two writers share the database."""
+
+    def keys(self):
+        out = []
+        with open(os.path.join(scripts, "lib", "collected-reads.tsv"), encoding="utf-8") as f:
+            for line in f:
+                c = line.rstrip("\r\n").split("\t")
+                if c[0].strip() and not c[0].startswith("#"):
+                    out.append((tuple(c[0].split()), int(c[1])))
+        return out
+
+    def test_every_collected_read_is_a_topic_and_never_slower(self):
+        keys = self.keys()
+        self.assertEqual(len(keys), 27)
+        topics = {tuple(w): i for _, w, i, _ in ls.topics(os.path.join(scripts, "lib", "live-topics.tsv"))}
+        rows = lc.reads_intervals(ls.topics(os.path.join(scripts, "lib", "live-topics.tsv")))
+        got = {tuple(w): i for _, w, i, _ in rows}
+        for words, every in keys:
+            self.assertIn(words, topics, "no topic for: " + " ".join(words))
+            self.assertLessEqual(got[words], every)
+            self.assertLessEqual(got[words], topics[words])
+        self.assertEqual(len(rows), len(topics))
+
+    def test_intervals_take_the_shorter_one(self):
+        d = tempfile.mkdtemp(prefix="reads-")
+        f = os.path.join(d, "c.tsv")
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write("# c\nstatus\t7\ndocker list\t30\nbad\tx\n")
+        rows = [("status", ["status"], 15, "run"), ("docker-list", ["docker", "list"], 300, "run"), ("other", ["other"], 20, "run")]
+        self.assertEqual([r[2] for r in lc.reads_intervals(rows, f)], [7, 30, 20])
+        self.assertEqual(lc.reads_intervals(rows, os.path.join(d, "none.tsv")), rows)
+
+    def test_busy_timeout_is_set(self):
+        c = sdb.open_rw()
+        try:
+            self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 30000)
+            self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+        finally:
+            c.close()
+
+    def test_two_writers_lose_nothing(self):
+        reset()
+        a, b = lc.DbStore(sdb, clock=lambda: 1000), lc.DbStore(sdb, clock=lambda: 1000)
+        OPEN.extend([a, b])
+        errs = []
+
+        def work(db, name):
+            try:
+                for i in range(40):
+                    db.put("%s-%d" % (name, i % 5), "v%d" % i, 0, 1, name, 45, 1000 + i)
+                    db.beat(5, None)
+            except Exception as e:      # noqa: BLE001
+                errs.append(e)
+        ts = [threading.Thread(target=work, args=(db, n)) for db, n in ((a, "a"), (b, "b"))]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(60)
+        self.assertEqual(errs, [])
+        self.assertEqual(q("SELECT COUNT(*) FROM live"), [(10,)])
+        self.assertEqual(q("SELECT SUM(gen) FROM live"), [(80,)])
+        self.assertEqual(q("SELECT SUM(gen) FROM topics WHERE topic LIKE 'live:%'"), [(80,)])
+
+
 class FakeResp:
     def __init__(self):
         self.data, self.published = {}, []
