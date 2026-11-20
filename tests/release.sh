@@ -14,7 +14,7 @@ git init -q --bare "$WORK/remote.git"
 R=$WORK/repo; mkdir -p "$R/recipes/demo"; cd "$R" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
 git remote add origin "$WORK/remote.git"
-printf 'name = "demo"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' > recipes/demo/package.toml
+printf 'name = "demo"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = ">=1"\naudience = "generic"\npermissions = []\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' > recipes/demo/package.toml
 printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\n' > recipes/demo/run.sh
 printf '[package.demo]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/demo"\nrequires_core = ">=1"\n' > index.toml
 git add -A && git commit -q -m first && git -c gpg.format=ssh -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m first && git push -q origin main --tags

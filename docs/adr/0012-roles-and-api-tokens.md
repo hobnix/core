@@ -1,7 +1,7 @@
 # 0012: Roles and API tokens: viewer, app manager, admin
 
-Status: Accepted (2026-11-10)
-Issue: hobnix/server#257 (part of #195). The owner decides; nothing here is built.
+Status: Accepted (2026-11-10); open points on group names and token lockout answered 2026-11-18 (below). Implemented in 0.8: roles, `HS_ACTOR`, `hs token`, role-aware web interface, package roles; not tested on hardware yet. Not built: the two-factor and single sign-on parts of #462 (steps 19 and 20, held for the security review #433). Guide: docs/web-interface.md
+Issue: hobnix/server#257 (part of #195).
 
 ## Context
 
@@ -34,7 +34,7 @@ Issue: hobnix/server#257 (part of #195). The owner decides; nothing here is buil
 | | A. Local accounts and tokens only | B. Roles are AD groups | C. AD groups for people, tokens owned by a person (recommended) |
 | --- | --- | --- | --- |
 | Identity | a table of web users on the server | the Samba/AD user | the Samba/AD user |
-| Role stored in | the same table | membership of three groups, for example `hs-viewers`, `hs-app-managers`, Domain Admins | the same groups |
+| Role stored in | the same table | membership of three groups, for example `hn-viewers`, `hn-app-managers`, Domain Admins | the same groups |
 | Change a role | `hs` command | `hs users` group membership, the tool people already use | same as B |
 | Works while the DC is down | yes | no, except for the local account | local account (admin) only; tokens keep working, see decision 6 |
 | A second user database | yes, to keep in line with Samba | no | no |
@@ -77,7 +77,7 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
    | Group of rows | Read | Change |
    | --- | --- | --- |
-   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse) | viewer | admin |
+   | state, health, jobs, event, disk, pool, shares, backup, deck, status, monitor, fm (browse: admin) | viewer | admin |
    | ct, docker, docker-app, recipes, pkg (recipes) | viewer | app-manager |
    | users, vault, secrets, unlock, ssh-key, admin, config, system, release, net, dc, edge, gateway, vps, node, peers, remote, power | admin | admin |
 
@@ -85,16 +85,17 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 3. **The check is one function in `scripts/web-serve.py`** that runs after the session or token is known and before the allowlist entry is run.
    A refused call is a 403 with the required role in the body; it runs nothing and is not an audit line. The page asks `GET /api/session` for the
    role and hides what the person cannot use; the 403 is the guard, the hiding is only help.
-4. **API tokens belong to a person and carry a role.** Format `hst_` + 32 random bytes in base64url, shown once, stored as sha256 hash with an
+4. **API tokens belong to a person and carry a role.** Format `hn_` + 32 random bytes in base64url, shown once, stored as sha256 hash with an
    id, the owner, the role, a label, the creation time and the expiry. The role of a token is at most the role its owner has now: a lowered role
    lowers the token, a disabled account kills it. Sent as `Authorization: Bearer`. A token never needs a CSRF header and never gets a cookie.
    Default lifetime 90 days, at most 1 year, no token without an expiry. A token cannot create tokens, change roles or use `users`, `secrets`
    or `unlock`, whatever its role. Tokens are listed and revoked by their owner and by an admin.
 5. **Tokens live on the system disk** (a file in `/var/lib/hs`, mode 0600, hashes only), not in the vault: a token must work after a boot
    before anyone unlocks. A stolen token gives what its role gives, so the three roles are the damage limit.
-6. **Roles come from AD groups when the domain controller answers.** The result is cached for the life of the session (so a short DC outage does
-   not sign everybody out) and read again at the next sign-in. A token takes its owner's role from the same cache, read again when the cache entry is older than one hour, so a lowered role or a disabled account reaches the token within the hour (not at once; decision 4 states the goal, this is the bound); when the DC has been
-   unreachable for more than a day, tokens above `viewer` are refused until it answers. The local account is `admin` and stays the way in when
+6. **Roles come from AD groups when the domain controller answers.** The result is read again at the next sign-in and, for a signed-in session, at most once an hour (the same
+   answer a token uses): a person who is disabled or in no group any more loses the session, a lowered role lowers it, and a short DC outage does
+   not sign everybody out (the last role is kept for a day, then `viewer`). A token takes its owner's role from the same cache, read again when the cache entry is older than one hour, so a lowered role or a disabled account reaches the token within the hour (not at once; decision 4 states the goal, this is the bound); when the DC has been
+   unreachable for more than a day, tokens above `viewer` are refused until it answers. A token starts changes only in an explicit list of areas (containers, backups, shares, Docker, apps, jobs, notifications, health, expiry, ISOs: `TOKEN_CHANGE_ALLOWED` in web-serve.py); areas that can leave access behind after the token is revoked (SSH keys, packages, settings, system, routes, network, domain, nodes, migration, people) are refused. The local account is `admin` and stays the way in when
    the DC is down.
 7. **No second user list.** The web server stores no password and no profile. People are Samba/AD users; the three groups are created by
    `hs users` (a follow-up). Linked to Samba means: same name, same password, same group membership; separate means: not at all. This record
@@ -120,9 +121,18 @@ There is one verifier (the web server on the node). Signed tokens solve a proble
 
 - **Logs are not for `viewer`.** `logs units` and `logs show` are `admin`; `ct logs` and `docker logs` are `app-manager` (the app's own page).
   Logs can hold secrets. The rows in `0012-roles-sys-rows.tsv` follow.
+- **File names are not for `viewer`** (security review of 0.8, #946). `fm locations`, `fm ls`, `fm du`, `fm stat` and `backup find` are `admin`: they list names, sizes and times of the files of every share, sensitive ones included, and search all backups. The rest of `fm` and `backup` stays as it was. The file manager page is greyed for other roles. A per-location filter (hide only `sensitive/*`) was not chosen: it needs a rule per share, and three global roles come first.
 - **The audit log is `admin` only** (it names people).
 - **`app-manager` sees an app's logs, never the console of an instance.**
 - **Three global roles first;** no per-object scope (this app, this share).
-- **Still open, as follow-up issues once accepted:** the names of the AD groups and how `hs users` creates them without surprising an
-  existing domain; a rate limit and lockout for token use (AD lockout does not apply to a token); the role field and its test, the check in
+- **Still open, as follow-up issues once accepted:** the role field and its test, the check in
   `web-serve.py`, `HS_ACTOR` from the web server, `hs token` (create, list, revoke) with its `sys` rows, the role-aware web interface, extension manifests.
+
+## Decided by the owner (2026-11-18)
+
+- **Group names (D2 of docs/PLAN-extensions-access.md).** `hn-viewers` and `hn-app-managers`, plus Domain Admins; the names are configurable in
+  machine.toml. `hn` is the future command and prefix (the rename from `hs` is a later milestone), and names that live in the domain, on user
+  disks or in token strings carry the final prefix now; any visible token prefix is `hn_` (this record's earlier `hst_` is replaced). `hs users`
+  creates the groups only after a plan and a typed name, and never into an existing domain without asking.
+- **Token rate limit and lockout (D4).** Both: per token id (60 failures in a minute lock that id for 5 minutes) and per address, on top of the
+  existing address throttle. AD lockout does not apply to a token, so this is the only brake.

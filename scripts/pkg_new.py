@@ -1,13 +1,13 @@
 """hs pkg new: start a package in a checkout of a package repository (docs/PLAN-packages.md). Standard library only.
 
-  pkg.py new <name> --template recipe|extension|capability [--dir <path>] [--title <text>] [--title-de <text>]
+  pkg.py new <name> --template recipe|extension|capability [--protocol shell|python] [--dir <path>] [--title <text>] [--title-de <text>]
          [--description <text>] [--description-de <text>] [--icon ph:<name>] [--category <id>] [--app-version <text>] [--instances one|many]
 
 Writes <dir>/recipes/<name>/ (recipe), <dir>/extensions/<name>/ (extension) or <dir>/capabilities/<name>/ (capability) and appends
 [package.<name>] to <dir>/index.toml, so that `pkg.py validate` (the folder linked as packages/ or capabilities/, as the repositories' CI
 does) and `pkg.py repo-check <dir>` pass without edits. Never overwrites anything.
 A recipe and an extension carry the store fields (docs/PLAN-app-lifecycle.md Q5: description, icon, category from
-config/package-categories.toml, app_version; requires_core ">=9"), a recipe also the [app] contract tables (Q4) and `instances`.
+config/package-categories.toml, app_version; requires_core ">=10"), a recipe also the [app] contract tables (Q4) and `instances`.
 A capability package carries neither (the checks refuse them there) and stays at level 1.
 Output, read by scripts/pkg.sh only (not a contract with the web interface):
   done:    folder TAB <absolute package folder>, then one `file TAB <path inside it>` per file, then `index TAB <absolute index.toml>`; exit 0
@@ -21,7 +21,7 @@ import tomllib
 SUB = {"recipe": "recipes", "extension": "extensions", "capability": "capabilities"}
 RESERVED = ("list", "enable", "disable")   # words of `hs ext`
 VERSION = "0.1.0"
-REQUIRES = {"recipe": ">=9", "extension": ">=9", "capability": ">=1"}   # the store fields and [app] tables came with API level 9
+REQUIRES = {"recipe": ">=10", "extension": ">=10", "capability": ">=1"}   # the store fields and [app] tables came with API level 9
 
 R_PACKAGE = '''# Manifest of a package (docs/PLAN-packages.md of the core). Raise version here AND in index.toml with every change.
 name = "{name}"
@@ -29,8 +29,9 @@ version = "0.1.0"
 kind = "recipe"
 title = {q_title}
 title_de = {q_title_de}
-requires_core = ">=9"
+requires_core = ">=10"
 audience = "generic"
+permissions = []
 needs = []
 uses = []
 runs = ["lxc"]
@@ -129,9 +130,10 @@ version = "0.1.0"
 kind = "extension"
 title = {q_title}
 title_de = {q_title_de}
-requires_core = ">=9"
+requires_core = ">=10"
 audience = "generic"
-{store}'''
+permissions = ["web.read"]
+{proto}{store}'''
 
 X_CAP = '''# Manifest of the extension (docs/PLAN-extensions.md of the core): the commands are in commands.tsv, the scripts in this folder (@/file).
 name = "{name}"
@@ -238,6 +240,7 @@ title = {q_title}
 title_de = {q_title_de}
 requires_core = ">=1"
 audience = "generic"
+permissions = []
 requires = []
 provides = []
 # Add module = "module.nix" and requires_nix_api = 1 for a NixOS module, options = "options.toml" for its settings.
@@ -272,6 +275,60 @@ hs pkg install {name}
 - [Containers and apps](containers-and-apps.md)
 '''
 
+XP_COMMANDS = '''# Commands of the extension package "{name}" (docs/extensions-sdk.md of the core). Same columns as scripts/lib/registry.tsv of the core:
+# kind	path	script	args	help	help.de	flags
+# The package says `protocol = [1]`, so every row runs the script with the command protocol (ADR 0010): the words after the name are the command.
+user	ext {name} list	@/{script}	-	the saved entries of {name}: name and value	die gespeicherten Einträge von {name}: Name und Wert	topic:system,reads
+sys	sys ext {name} list	@/{script}	-	the saved entries of {name} as data: name, value (- when empty)	-
+'''
+
+XP_SH = '''#!/usr/bin/env bash
+# The command `list` of {name}, in the command protocol (ADR 0010; helper scripts/lib/ext_sdk.sh, needs jq; guide docs/extensions-sdk.md).
+# It reads <state>/{name}/entries (name TAB value per line). HS_STATE_DIR points tests at another folder.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+. "${HS_SCRIPTS:-$here/../../scripts}/lib/ext_sdk.sh"   # hs sets HS_SCRIPTS
+ext_init
+file=${HS_STATE_DIR:-/var/lib/hs}/{name}/entries
+
+case "${EXT_WORDS[0]:-}" in
+  list)
+    rows='[]'
+    [ ! -s "$file" ] || rows=$(jq -Rsc 'split("\\n") | map(select(length > 0) | split("\\t") | [.[0], (.[1] // "")])' "$file")
+    ext_ok "" "$rows" ;;
+  *) ext_fail not_found "no such command" ;;
+esac
+'''
+
+XP_PY = '''#!/usr/bin/env python3
+"""The command `list` of {name}, in the command protocol (ADR 0010; helper scripts/lib/ext_sdk.py; guide docs/extensions-sdk.md).
+It reads <state>/{name}/entries (name TAB value per line). HS_STATE_DIR points tests at another folder."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.environ.get("HS_SCRIPTS", os.path.join(HERE, "..", "..", "scripts")), "lib"))   # python3 -I: name the folder yourself
+import ext_sdk  # noqa: E402
+
+FILE = os.path.join(os.environ.get("HS_STATE_DIR", "/var/lib/hs"), "{name}", "entries")
+
+
+def handle(req, ctx):
+    if req.words == ["list"]:
+        rows = []
+        if os.path.isfile(FILE):
+            with open(FILE, encoding="utf-8") as f:
+                for line in f:
+                    parts = line.rstrip("\\n").split("\\t")
+                    if parts[0]:
+                        rows.append([parts[0], parts[1] if len(parts) > 1 else ""])
+        return ext_sdk.ok(rows)
+    raise ext_sdk.Failure("not_found", "no such command")
+
+
+ext_sdk.run(handle)
+'''
+
 # (path inside the folder, text, mode)
 TEMPLATES = {
     "recipe": [("package.toml", R_PACKAGE, 0o644), ("run.sh", R_RUN, 0o755), ("guide.md", R_GUIDE, 0o644)],
@@ -279,9 +336,11 @@ TEMPLATES = {
                   ("list.sh", X_LIST, 0o755), ("NOTES.md", X_NOTES, 0o644), ("guide.md", X_GUIDE, 0o644)],
     "capability": [("package.toml", C_PACKAGE, 0o644), ("guide.md", C_GUIDE, 0o644)],
 }
+# `--protocol shell|python` swaps list.sh and commands.tsv of the extension template for a script that speaks the command protocol
+PROTO_FILES = {"shell": ("list.sh", XP_SH), "python": ("list.py", XP_PY)}
 
 STORE_OPTIONS = ("--description", "--description-de", "--icon", "--category", "--app-version")
-OPTIONS = ("--template", "--dir", "--title", "--title-de", "--instances") + STORE_OPTIONS
+OPTIONS = ("--template", "--dir", "--title", "--title-de", "--instances", "--protocol") + STORE_OPTIONS
 
 
 def refuse(code, detail="-"):
@@ -296,7 +355,7 @@ def bad_title(s):
 def render(text, name, title, title_de, q, extra=None):
     vals = {"q_title_de": q(title_de), "q_title": q(title), "title_de": title_de, "title": title, "name": name}
     vals.update(extra or {})
-    return re.sub(r"\{(q_title_de|q_title|title_de|title|name|store|q_instances)\}", lambda m: vals[m.group(1)], text)
+    return re.sub(r"\{(q_title_de|q_title|title_de|title|name|store|q_instances|proto|script)\}", lambda m: vals[m.group(1)], text)
 
 
 def store_fields(main, opts, title, title_de):
@@ -350,6 +409,9 @@ def run(main, argv):
     instances = opts.get("--instances", "one")
     if instances not in ("one", "many") or (template != "recipe" and "--instances" in opts):
         return refuse("field", "--instances")
+    proto = opts.get("--protocol")
+    if proto is not None and (template != "extension" or proto not in PROTO_FILES):
+        return refuse("field", "--protocol")
     store, idx = "", {}
     if template == "capability":
         used = [o for o in STORE_OPTIONS if o in opts]
@@ -376,12 +438,18 @@ def run(main, argv):
     entry = ('\n[package.%s]\nversion = "%s"\nkind = "%s"\npath = "%s/%s"\ntitle = %s\nrequires_core = "%s"\naudience = "generic"\n'
              % (name, VERSION, template, sub, name, main.q(title), REQUIRES[template]))
     entry += "".join("%s = %s\n" % (k, main.q(idx[k])) for k in ("icon", "category", "app_version") if k in idx)
-    extra = {"store": store, "q_instances": main.q(instances)}
+    extra = {"store": store, "q_instances": main.q(instances), "proto": "protocol = [1]\n" if proto else "",
+             "script": PROTO_FILES[proto][0] if proto else ""}
+    files_to_write = TEMPLATES[template]
+    if proto:   # the script and the rows that speak the protocol take the place of the shell contract's
+        script, text = PROTO_FILES[proto]
+        files_to_write = [f for f in files_to_write if f[0] not in ("list.sh", "commands.tsv")]
+        files_to_write += [("commands.tsv", XP_COMMANDS, 0o644), (script, text, 0o755)]
     new = index + ".new"
     files = []
     try:
         os.mkdir(folder)
-        for rel, text, mode in TEMPLATES[template]:
+        for rel, text, mode in files_to_write:
             p = os.path.join(folder, rel)
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8", newline="\n") as f:

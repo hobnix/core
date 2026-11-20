@@ -75,6 +75,23 @@ check_eq "kinds --package lists only that package" "1" "$($KINDS --package evapp
 if bash $SCRIPTS/event.sh kinds --bogus >/dev/null 2>&1; then fail "kinds rejects a bad flag"; else pass "kinds rejects a bad flag"; fi
 rm -f "$WORK/pe/evapp.tsv"
 
+echo "-- old form: pkg.* rows in the core event-kinds.tsv"
+OLD=$WORK/oldcore
+mkdir -p "$OLD"
+cp -r "$SCRIPTS/lib" "$OLD/lib"
+cp "$SCRIPTS/state-db.py" "$SCRIPTS/event-notify.py" "$SCRIPTS/event.sh" "$OLD/"
+printf 'pkg.oldapp.boom	error	name	an old-form event
+' >> "$OLD/lib/event-kinds.tsv"
+check "the old form is listed as a core kind" bash -c "bash $OLD/event.sh kinds | grep -q '^pkg.oldapp.boom${tab}error${tab}name${tab}an old-form event${tab}core\$'"
+check_eq "the old form gives the level" "error" "$(python3 -I -c '
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("sd", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.kind_level("pkg", "oldapp.boom"))' "$OLD/state-db.py")"
+check_eq "the old form is allowed in the spool, a stranger is not" "1 0" "$(python3 -I -c '
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("en", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+p = m.spool_packages(); print(int("oldapp" in p), int("nosuch" in p))' "$OLD/event-notify.py")"
+
 echo "-- the copy is well formed"
 n=$(cat "$SCRIPTS"/lib/pkg-events/*.tsv | grep -cv '^#\|^$')
 m=$(python3 -I -c '

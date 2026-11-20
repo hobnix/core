@@ -49,6 +49,12 @@ Nothing that was typed after those words is kept, so a password or a key given a
 the timers' own hooks and the event log itself are not recorded. The lines are kept as long as the rest of the event log. Not tested on
 hardware yet.
 
+A change made in the web interface names the signed-in person (`<user>`, or `<user> via token <id>` for an API token); the token itself is never logged. Roles and tokens are in [Web interface](web-interface.md#roles-and-sign-in-of-programs).
+
+### Locked out of the web interface
+
+The local account (`adminuser`) is always an admin and works while the domain controller is down. If sign-in is locked after wrong tries, run `sudo hs web unlock-login` on the server. A token above viewer stops working after a day without a domain controller; create a new one with `sudo hs token create <name>` once it is back, or revoke it with `sudo hs token revoke <name>`. Planned, not built: a second factor, with a reset command for a lost one. Not tested on hardware yet.
+
 ## Get push messages
 
 The server sends a message when its list of problems **changes**, not every 15 minutes. The route is ntfy: a service that passes messages

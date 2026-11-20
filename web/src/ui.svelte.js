@@ -1,11 +1,13 @@
 // State that several parts of the shell share: the open plan dialog, the bottom panel, and the tasks started from this browser.
 import { get } from './api.js';
 import { jobMatches } from './jobkey.js';
+import { roleOk, areaRole, refusal } from './roles.js';
 
 export const ui = $state({
   dialog: null,                       // { area, args, title } while a plan dialog is open
   create: null,                       // { component, props } while a create dialog (a form with a live plan) is open
   features: { terminal: false, vps: false, capabilities: null },      // what the server switched on, from the session answer; capabilities = names of the parts that are on (null = not told: show everything)
+  role: 'viewer',                     // the role of this session (GET /api/session): viewer | app-manager | admin; roles.js decides what it may see
   host: 'homeserver',                 // this node's name (the dialogs name the node they act on)
   panel: { open: true, tab: 'tasks', height: 214 },   // height in px while open; the grip drags it
   offsitePass: '',                    // the own password of a NEW off-site repository: shown once on the Backup page, then dropped (never stored)
@@ -16,7 +18,12 @@ export function openSaved(title) {
   ui.dialog = { saved: true, title };
 }
 
+// may this session do what `need` asks (a role name)? Buttons hide with it (ui/Button.svelte `need`); the server checks again
+export const can = (need) => roleOk(ui.role, need);
+
 export function openPlan(area, args, title, options = {}) {
+  // a change this role may not make is told here, in words, instead of a plan that comes back as a 403
+  if (!can(areaRole(area))) { ui.dialog = { refused: refusal(ui.role, areaRole(area)), title }; return; }
   ui.dialog = { area, args, title, ...options };
 }
 

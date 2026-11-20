@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "A button a role may not use is shown disabled, with the reason"
+body  = """In the web interface a viewer or app manager now sees every page, apart from the Vault and the Identity pages (users, groups, certificates), which stay admin only. A button the role may not use is no longer removed: it is greyed out and its tooltip says which role it needs. The server still refuses the action. Not tested on hardware yet."""

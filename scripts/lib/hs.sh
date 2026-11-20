@@ -32,7 +32,15 @@ row_command() {   # row_command <script> <flags>: sets run_cmd (the program and 
   local sub bin fb
   case "$1" in
     rust:*) ;;
-    *) run_cmd=(bash "$(script_file "$1")"); return 0 ;;
+    *)
+      # a row of a package that speaks the command protocol (flag proto, registry-load.sh): ext_proto.py runs the program and renders its answer
+      case ",${2:-}," in
+        *,proto,*)
+          local pk=${row_path#sys }; pk=${pk#ext }; pk=${pk%% *}
+          run_cmd=(python3 -I "$here/ext_proto.py" dispatch --kind "$row_kind" --package "$pk" --path "$row_path" --flags "${2:-}" -- "$(script_file "$1")")
+          return 0 ;;
+      esac
+      run_cmd=(bash "$(script_file "$1")"); return 0 ;;
   esac
   sub=${1#rust:}
   bin=${HOBNIX_BIN:-}
@@ -398,6 +406,8 @@ find_row "$@"
 if [ -z "$row_script" ] || [ "$row_script" = "-" ]; then
   ext_off_guard "$@"
   . "$here/ui.sh"
+  # a bare group word (hs fm, hs share): its commands are the help, not "unknown command"
+  if [ $# -eq 1 ] && [ "$1" != sys ] && help_for "$1" >/dev/null 2>&1; then help_for "$1"; exit 0; fi
   warn "$(tr_txt unknown) '$*'" >&2
   usage >&2
   exit 1

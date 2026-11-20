@@ -53,7 +53,7 @@
     return '';
   });
   const canStart = $derived(fm.write && !!p?.ok && !loading && !nameBad && (!need || confirm === need));
-  const verb = { copy: 'Copy', move: 'Move', delete: 'Delete permanently', rename: 'Rename', mkdir: 'Create folder' };
+  const verb = { copy: 'Copy', move: 'Move', delete: 'Move to the trash', rename: 'Rename', mkdir: 'Create folder' };
   const things = $derived(`${S.plural(spec.sum.n, 'item')}${spec.sum.dirs ? ` (${S.plural(spec.sum.dirs, 'folder')})` : ''}`);
   const title = $derived(p?.heading || ({ copy: `Copy ${things}`, move: `Move ${things}`, delete: `Delete ${things}`, rename: `Rename ${spec.name}`, mkdir: 'New folder' })[op]);
   const kicker = $derived(refused ? 'Plan · refused' : danger ? 'Plan · danger' : 'Plan');

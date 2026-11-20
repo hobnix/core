@@ -179,11 +179,14 @@ for pkg in $(HS_REGISTRY=$REG ext_package_names); do
   done < <(HS_REGISTRY=$REG _ext_filter "$pkg" "$ROOT/capabilities/$pkg" 0)
 done
 check_eq "package rows: scripts exist, help and help.de, topic, reads or changes" "" "$bad"
-check_eq "the core registry has no row inside a package namespace" "" "$(awk -F'	' '$1 == "user" && $2 ~ /^ext [a-z]/ && $2 !~ /^ext (list|enable|disable|<package>)/ { print $2 } $1 == "sys" && $2 ~ /^sys ext [a-z]/ && $2 != "sys ext list" { print $2 }' "$REG" | paste -sd, -)"
+check_eq "the core registry has no row inside a package namespace" "" "$(awk -F'	' '$1 == "user" && $2 ~ /^ext [a-z]/ && $2 !~ /^ext (list|enable|disable|status|start|stop|svc-run|<package>)/ { print $2 } $1 == "sys" && $2 ~ /^sys ext [a-z]/ && $2 != "sys ext list" && $2 != "sys ext status" { print $2 }' "$REG" | paste -sd, -)"
 pk=$WORK/pk; mkdir -p "$pk/demo"; printf 'name = "demo"\nextension = true\n' > "$pk/demo/capability.toml"
 printf 'sys\tsys ext demo x\trust:x\t-\tx\t-\t-\n' > "$pk/demo/commands.tsv"
 check_out "a package row may not name the Rust binary" "rust: rows belong to the core" env HS_PACKAGES_DIR="$pk" HS_REGISTRY="$REG" bash -c '. "$1/lib/registry-load.sh"; registry_refused demo' _ "$SCRIPTS"
 
+echo "-- a bare group word"
+check_eq "hs fm alone lists its commands" "yes" "$($HS fm 2>&1 | grep -q "hs fm locations" && echo yes || echo no)"
+check_eq "an unknown word is still unknown" "yes" "$($HS nonsense 2>&1 | grep -q "unknown command" && echo yes || echo no)"
 echo "-- pool commands"
 check_eq "hs pool <TAB> offers the pools and record" "bulk fast record" "$($HS sys complete pool | paste -sd' ')"
 check_eq "hs pool bulk <TAB> offers the verbs" "add close convert import open remove replace sync" "$($HS sys complete pool bulk | paste -sd' ')"

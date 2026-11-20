@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "change"
+title = "Every page is listed for every role; the ones a role may not open are greyed"
+body  = """The tree, the section cards and the search now show every page to every role. A page above your role (the Vault and the identity pages need admin) is drawn greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role that may open it. Nothing of it is read. Not tested on hardware yet."""

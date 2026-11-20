@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "File manager: folders list fast again; sleeping disks stay asleep"
+body  = """Listing a folder of a pool no longer touches every array disk for every entry, which woke sleeping disks one after another and could take about a minute. Disks that are in standby are now skipped: the "On disk" column then leaves them out until they are awake."""

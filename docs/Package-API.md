@@ -6,7 +6,7 @@ is in [PLAN-app-lifecycle](PLAN-app-lifecycle.md) (Q4 and Q5); the states of a p
 
 **These field names are a contract.** The Apps and Marketplace pages and the later steps of the lifecycle plan (0.11, 0.13) read them. The field
 names are stable for milestones 0.11 and 0.13: a field is renamed or removed only with an API level bump and one level in which the old name still
-works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 9. Adding an optional key
+works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 10. Adding an optional key
 is a bump too, because an older core would refuse the unknown key.
 
 ## Level 9: the app contract and store fields
@@ -75,3 +75,75 @@ An unknown key in any `[app]` table is an error. A route that is public-ok and m
 `pkg.py validate --warn` prints the same warnings for a tree. `pkg.py check-draft` (the package builder) reports errors only.
 
 Not tested on hardware yet. The fields are validated; the server does not read them until the later steps of the lifecycle plan.
+
+## Level 10 (milestone 0.8): protocol, timeout and service keys
+
+The core validates these keys (`scripts/lib/pkg_protocol.py`, called by `pkg.py validate`, `repo-check` and `check-draft`) and, since step 2 of
+[PLAN-extensions-access](PLAN-extensions-access.md), **runs the commands** of a package that says `protocol = [1]`. The `[service]` table is
+still only validated (the service runner is step 4). A package without these keys keeps the shell contract and validates unchanged (ADR 0010 rule 10).
+
+| Key | Value | Rule |
+| --- | --- | --- |
+| `protocol` | `[1]` | the command protocol versions the package speaks (ADR 0010); `[1]` is the only value; every row of `commands.tsv` of the package runs through the protocol |
+| `[service]` `exec` | `"@/<file>"` or `"scripts/..."` | the service's program, same rule as a `commands.tsv` script: a file in the package or a path under `scripts/`, no `..`, not absolute; required |
+| `[service]` `subscribe` | list of event kind globs | lower-case words, dots and `*`; may be empty (a pure collector) |
+| `[service]` `health_interval` | seconds | whole number from 5 to 300 (ADR 0011 rule 1; default 30) |
+| `timeout:<seconds>` | a flag in column 7 of a `commands.tsv` row | whole number from 1 to 3600 (ADR 0010 rule 6; the dispatcher's default is 30), at most once per row |
+| `confine` | a flag in column 7 of a `commands.tsv` row | opt in: the dispatcher runs this one command through `systemd-run` with the properties of the declared `permissions` (same mapping as the service unit, ADR 0014). The manifest must have `protocol = [1]` and a `permissions` list (`[]` is allowed); otherwise `pkg.py validate` refuses it. Partial: see below. |
+
+An unknown key in `[service]`, a wrong type or a value out of range is an error. A manifest that uses `protocol` or `[service]` must state
+`requires_core = ">=10"` or higher (decision D9: the API level is the promise that the core can run it); `pkg.py validate` names the missing level.
+
+### How a protocol row runs
+
+`scripts/lib/registry-load.sh` gives every row of a package with `protocol` the flag `proto`; `scripts/lib/hs.sh` then runs the row's script
+through `python3 -I scripts/lib/ext_proto.py dispatch` instead of starting it. The script column is the extension program (`@/demo.py`; `.py` runs
+with python3, `.sh` with bash, anything else directly).
+
+| Part of the request | Comes from |
+| --- | --- |
+| `command` | the words of the row after the package name (placeholders such as `<x>` end the list) |
+| `argv` | the arguments the dispatcher builds for the row (typed arguments, fixed arguments of the row) |
+| `lang`, `caller` | `HS_LANG` / `LANG` (`en` or `de`); `HS_CALLER` (`ui` and `job` = `web`, `timer` and `boot` = `boot`, else `cli`) |
+| `timeout_ms` | the row's `timeout:` flag, else 30 s |
+
+The core renders `result.data` (the extension does not format output):
+
+- a list: one line per item; an item that is a list is its cells joined by a tab, an item that is an object is its values in key order;
+- an object: one line `key<TAB>value` per member; a scalar: itself;
+- an empty string, `null` or `[]` is `-`; a nested value is compact JSON; tabs and line breaks inside a cell become a space.
+
+A `user` row prints `result.text` when the extension sent one and else the rendered `data`; progress and log text go to stderr. A `sys` row prints
+only the rendered `data` on stdout (the machine-readable contract of `hs sys ext ...` does not change). A failed call prints the error message on
+stderr and exits 1 (the extension said `ok=false`), 124 (timeout), 130 (cancelled), 70 (protocol error) or 69 (the program did not start). A timeout
+stops the whole process group of the extension: SIGTERM, five seconds of grace, then SIGKILL. Events sent by an extension are not used yet (step 5).
+
+A demo package is `protocol-demo` in the extensions repository. Tests: `tests/ext-proto.sh`.
+
+Not tested on hardware yet.
+
+## Roles of web entries (milestone 0.8, step 18)
+
+Every `[[web.reads]]` and `[[web.changes]]` entry of an extension's `capability.toml` may carry `role`. It is the least role of the web interface
+that may use the entry (ADR 0012, decision D13). `pkg.py validate` (`scripts/lib/pkg_roles.py`) refuses any other value.
+
+| Key | Value | Rule |
+| --- | --- | --- |
+| `role` | `"viewer"`, `"app-manager"` or `"admin"` | optional; **no `role` means `admin`**, so a manifest written before roles stays admin-only |
+
+The web interface applies the higher of this role and the role of the core `sys` row the entry calls. A package can therefore make something
+stricter, never wider than the core allows. A refused call is a 403 that names both roles and runs nothing; a token never has more than its
+owner's role. Not tested on hardware yet.
+
+## Confined commands (`confine`, partial)
+
+A command row with the flag `confine` is started as `systemd-run --pipe --wait --collect --quiet --property=... -- <program>`; the properties are the
+ones a service of the same package gets (`scripts/lib/ext_confine.py`): `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
+`NoNewPrivileges=yes`, no capabilities, `PrivateDevices=yes` unless `devices:gpu`, `ReadWritePaths=` from `fs.write` (plus `/var/lib/hs/ext-svc`),
+`ReadOnlyPaths=` from `fs.read`. Without `systemd-run`, without `permissions` or with a path that is not allowed the command does **not** run
+(exit 69); it is never started unconfined as a fallback.
+
+It does not cover: reading the file system (`fs.read` lists, it does not restrict), the network (`net` is declared only), calls to `hs`, `incus`
+and `systemctl` (a confined command that calls them still acts as root through them), and secrets. Commands without the flag run as root and
+unconfined, as before. The install and update prompts say this in the same words. A confined command cannot write `/etc/hs` or other state unless `fs.write` lists it: list the path or leave the row unconfined (ADR 0014, D7).
+Not tested on hardware yet: only a fake `systemd-run` that records its arguments has run (tests/ext-confine.sh).

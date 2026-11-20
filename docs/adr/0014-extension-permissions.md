@@ -1,6 +1,7 @@
 # 0014: Extension permissions: declare and disclose first, confine services next
 
 Status: Accepted (2026-11-10): declare and disclose (step 1 and 1b, built in hobnix/server#239). Step 2 (confining services) and step 3 (a command broker) are not decided; open points 2 and 3 stay open until third-party packages are a goal.
+Update 2026-11-18 (implemented in 0.8, not tested on hardware yet): `permissions` is required by the repository check; `events.emit` is enforced on every emit; services are confined by a systemd drop-in from `fs.*` and `devices`; a command row with `confine` runs through `systemd-run`; `net` stays declared only; there is no broker. Guide: docs/extensions.md. The owner accepted D5 to D8 of docs/PLAN-extensions-access.md (permissions required in CI; `net` declared only; opt-in confinement of commands; `events.emit` enforced on every emit); steps 2 and 3 follow that plan.
 Step 1 as built: `permissions = [...]` in package.toml (optional for now: absent shows as "not declared"), vocabulary and checks in scripts/lib/pkg_perms.py, validated by `pkg.py validate`, `repo-check` and at install; shown by `hs ext list`, `hs pkg install|update`; new permissions in an update need the typed package name or `--accept-permissions`. A declared permission is NOT a sandbox: commands run as root.
 Step 1b (#239): the declaration is enforced against the manifest at run time. `hs_ext.ext_declarations` (web reads, changes, pages, live topics) skips a package whose `permissions` do not cover what its manifests use, and `hs ext enable` refuses it (`pkg.py perms-check`); a package without `permissions` is not checked. Not tested on hardware yet.
 Issue: hobnix/server#239 (epic #197). Related: ADR 0010 (command protocol, #237), ADR 0011 (service lifecycle, #238); both Proposed in their own pull requests.
@@ -68,3 +69,31 @@ Do not claim enforcement for commands until step 3: root commands can read any f
 1. Is "trust the author, show what they ask for" (step 1) enough for v1, or must commands be confined too?
 2. What may `net = lan|internet` mean, and who enforces it (unit properties vs the firewall)? (touches network, firewall)
 3. May a package ever run as non-root (needs the broker)?
+
+## Step 2 as built: confinement of services (2026-11-18, docs/PLAN-extensions-access.md step 10, #239 c)
+`hs ext start|enable` writes `/run/systemd/system/hs-ext-svc@<name>.service.d/10-confine.conf` (scripts/ext.sh `svc_confine`, text made by
+scripts/lib/ext_confine.py) and runs `daemon-reload`; the template unit in configuration.nix carries the same strict floor, so a unit started
+without its drop-in is still strict. A path that is relative, has `..`, `.` or `//`, or is `/` is refused and the service is not started.
+
+| From the package | systemd property |
+| --- | --- |
+| always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` (the bridge's own state) |
+| `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
+| `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
+| `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
+| `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
+| no `permissions` | the "always" row only, plus a warning |
+
+What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the file system stays readable except the secret locations
+(since #947: `/var/lib/hs` is an empty tmpfs apart from the granted `ext`, `ext-svc` and own-name (`/var/lib/hs/<package>`) state, `/root`, `/etc/shadow`, `/etc/gshadow`, `/etc/ssh` and `/etc/nixos` are inaccessible, and an `fs.read` or `fs.write` that overlaps them, or an `fs.write` below `/etc`, `/boot` or `/nix`, is refused; everything else is only read only); the network is open whatever `net` says; `host`, `secrets`
+and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
+event is written by the bridge (scripts/lib/ext_service.py) into /var/lib/hs/state.db, which a confined unit may not write, so that event
+needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the unit is only evaluated in CI,
+the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
+
+## Step 3 as built: opt-in confinement of commands (2026-11-18, docs/PLAN-extensions-access.md step 11, #239 d)
+A row of `commands.tsv` with the flag `confine` is run by the dispatcher (scripts/lib/ext_proto.py) through `systemd-run --pipe --wait` with the
+same properties as a service (`ext_confine.properties`, one mapping). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
+at run time no `systemd-run`, no `permissions` or a bad path means exit 69 and no run. The install and update prompts print what it covers and what it
+does not (reads, network, `hs`/`incus`/`systemctl`, secrets). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
+hardware yet: the real `systemd-run` was not run, and whether SIGTERM to the runner stops the transient unit (cancel, timeout) is unverified.

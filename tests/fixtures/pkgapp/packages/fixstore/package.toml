@@ -4,6 +4,7 @@ version = "1.0.0"
 kind = "recipe"
 title = "Fixture store app"
 requires_core = ">=9"
+permissions = []
 needs = []
 uses = []
 input = "none"

@@ -2,6 +2,9 @@
   // The overview of a group in the tree (Storage, Identity, Protection, Operations): one card per child page with the note the tree shows,
   // and for Storage the capacity of the pools on top. Nothing is read here that the tree does not read already.
   import { route, go } from '../route.svelte.js';
+  import { lockedWhy } from '../roles.js';
+  import { ui } from '../ui.svelte.js';
+  import { tip } from "../ui/tooltip.svelte.js";
   import { tree, poolItems, poolIcon } from '../nav.js';
   import { pools as poolStore } from '../pools.svelte.js';
   import { bytes } from '../format.js';
@@ -20,7 +23,7 @@
   const locked = $derived(!!deck?.data?.locked);
 
   // a child may be a group itself (Pools holds one page per pool): its pages are listed under it
-  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
+  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, needs: lockedWhy(ui.role, c.path), kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
   const dim = (c) => locked && c.storage;
   const note = (it) => (dim(it) ? { text: 'locked', warn: true } : meta[it.path] ?? null);
   const shown = (n) => n.text ?? '●';
@@ -52,15 +55,16 @@
   <div class="grid">
     {#each cards as c}
       {@const n = note(c)}
-      <div class="card elev-sm item" class:dim={dim(c)}>
-        <button class="head" onclick={() => c.path && go(c.path)}>
+      <div class="card elev-sm item" class:dim={dim(c) || !!c.needs}>
+        <button class="head" use:tip={c.needs || ""} aria-label={c.needs ? `${c.label}. ${c.needs}` : undefined} onclick={() => c.path && go(c.path)}>
           <i class="ph ph-{c.icon}"></i><span class="nm">{c.label}</span>
           {#if n}<span class="meta" class:warn={n.warn}>{shown(n)}</span>{/if}
-          {#if dim(c)}<i class="ph ph-lock-simple" style="color:var(--color-neutral-600)"></i>{/if}
+          {#if dim(c) || c.needs}<i class="ph ph-lock-simple" style="color:var(--color-neutral-600)" aria-hidden="true"></i>{/if}
         </button>
         {#each c.kids as k}
           {@const kn = note(k)}
-          <button class="kid" onclick={() => go(k.path)}>
+          {@const kneeds = lockedWhy(ui.role, k.path)}
+          <button class="kid" class:grey={!!kneeds} use:tip={kneeds || ""} aria-label={kneeds ? `${k.label}. ${kneeds}` : undefined} onclick={() => go(k.path)}>
             <i class="ph ph-{k.icon}"></i><span>{k.label}</span>
             {#if kn}<span class="meta" class:warn={kn.warn}>{shown(kn)}</span>{/if}
           </button>
@@ -79,6 +83,7 @@
   .pool { text-align: left; padding: 14px 16px; gap: 8px; cursor: pointer; color: inherit; font: inherit; border: 0; }
   .item { padding: 6px; gap: 0; }
   .item.dim { opacity: 0.6; }
+  .kid.grey { opacity: 0.6; }
   .row { display: flex; align-items: center; gap: 8px; }
   .nm { font-size: 14px; font-weight: 500; }
   .sub { font-size: 12px; color: var(--color-neutral-500); }

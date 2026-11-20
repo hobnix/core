@@ -100,4 +100,69 @@ assert set(d["state"]["enum"]) == set(p.STATES)
 assert d["init"]["properties"]["v"]["const"] == p.VERSION
 assert {r["$ref"].split("/")[-1] for r in d["fromCore"]["oneOf"]} == {"init", "event", "shutdown"}
 PY
+
+echo "-- svc-run: the unit's bridge, five failures in ten minutes (fake supervisor = a loop that restarts like Restart=on-failure)"
+PKG=$WORK/pkgs/fixsvc; mkdir -p "$PKG" "$WORK/svcstate"
+printf 'name = "fixsvc"\n[service]\nexec = "@/run.sh"\nhealth_interval = 5\n' > "$PKG/package.toml"
+printf '#!/usr/bin/env bash\nexec python3 -I "%s" "${FIX_MODE:-crash}"\n' "$SVC" > "$PKG/run.sh"
+printf '#!/usr/bin/env bash\nprintf "%%s\n" "$*" >> "%s"\n' "$WORK/emitted" > "$WORK/emit.sh"; chmod +x "$WORK/emit.sh"
+export HS_EXT_EMIT=$WORK/emit.sh
+SR="python3 -I $SCRIPTS/lib/ext_service.py svc-run --name fixsvc --dir $PKG --state-dir $WORK/svcstate"
+check "has-service sees the [service] table" python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$PKG"
+check_eq "a folder without [service] has none" 1 "$(python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$WORK" >/dev/null 2>&1; echo $?)"
+fake_systemd() {   # fake_systemd <start-time> <gap-seconds>: starts the unit until it is refused (5 starts per 10 minutes), like systemd
+  local t=$1 gap=$2 starts=0 first=$1
+  while [ "$starts" -lt 5 ]; do
+    HS_NOW=$t $SR >/dev/null 2>&1 || true
+    starts=$((starts + 1)); t=$((t + gap))
+  done
+}
+rm -f "$WORK/emitted"
+HS_NOW=1000 $SR >/dev/null 2>&1; rc=$?
+check_eq "a crashing service makes the bridge exit 1" 1 "$rc"
+check_eq "one failure sends no event" 0 "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ')"
+rm -f "$WORK/svcstate/fixsvc.json" "$WORK/emitted"
+fake_systemd 2000 20
+check_eq "five failures within ten minutes send exactly one event" 1 "$(wc -l < "$WORK/emitted" | tr -d ' ')"
+check "the event is ext.service-failed for the package at level error" grep -q '^ext.service-failed fixsvc .* --level error --payload' "$WORK/emitted"
+check_eq "the payload names package and code" '{"package":"fixsvc","code":"exited"}' "$(sed -n 's/.*--payload //p' "$WORK/emitted")"
+HS_NOW=2200 $SR >/dev/null 2>&1 || true
+check_eq "a further failure does not send it again" 1 "$(wc -l < "$WORK/emitted" | tr -d ' ')"
+check_eq "the status after the failure is failed" "failed" "$(python3 -I "$SCRIPTS/lib/ext_service.py" status --name fixsvc --state-dir "$WORK/svcstate" --active no | cut -f1)"
+python3 -I "$SCRIPTS/lib/ext_service.py" reset --name fixsvc --state-dir "$WORK/svcstate"
+check_eq "reset (hs ext start) forgets the failure" "stopped	-	-" "$(python3 -I "$SCRIPTS/lib/ext_service.py" status --name fixsvc --state-dir "$WORK/svcstate" --active no)"
+rm -f "$WORK/emitted"
+fake_systemd 5000 200
+check_eq "five failures spread over more than ten minutes send nothing" 0 "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ')"
+check_eq "a stop by hand shows as stopped with its reason" "stopped	stopped by hand	-" "$(python3 -I "$SCRIPTS/lib/ext_service.py" status --name nox --state-dir "$WORK/svcstate" --stopped yes)"
+
+echo "-- svc-run: a healthy service stops on SIGTERM with exit 0 and shows running"
+rm -f "$WORK/svcstate/fixsvc.json" "$WORK/emitted"
+FIX_MODE=good $SR >/dev/null 2>&1 & pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q '"state": *"running"' "$WORK/svcstate/fixsvc.json" 2>/dev/null && break; sleep 0.5; done
+check_eq "while it runs: running" running "$(python3 -I "$SCRIPTS/lib/ext_service.py" status --name fixsvc --state-dir "$WORK/svcstate" --active yes | cut -f1)"
+check_eq "without a unit behind it the same file says stopped" stopped "$(python3 -I "$SCRIPTS/lib/ext_service.py" status --name fixsvc --state-dir "$WORK/svcstate" --active no | cut -f1)"
+kill -TERM "$pid"; wait "$pid"; rc=$?
+check_eq "SIGTERM: exit 0" 0 "$rc"
+check_eq "no event for a requested stop" 0 "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "-- hs ext status|start|stop with a fake systemctl"
+EXT=$WORK/ext; mkdir -p "$EXT/pk/svcpkg" "$EXT/state"
+printf 'name = "svcpkg"\ntitle = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n[service]\nexec = "@/run.sh"\n' > "$EXT/pk/svcpkg/capability.toml"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$EXT/pk/svcpkg/run.sh"
+printf '#!/usr/bin/env bash\necho "$*" >> "%s"\n[ "$1" = is-active ] && [ -e "%s" ]\nexit 0\n' "$EXT/ctl.log" "$EXT/active" > "$EXT/systemctl"; chmod +x "$EXT/systemctl"
+printf 'hostName = "t"\n' > "$EXT/machine.toml"; : > "$EXT/caps"
+xe() { HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$EXT/state HS_PACKAGES_DIR=$EXT/pk HS_CAPABILITIES_FILE=$EXT/caps HS_MACHINE_FILE=$EXT/machine.toml HS_SYSTEMCTL=$EXT/systemctl HS_CONFINE_DIR=$EXT/dropin bash "$SCRIPTS/ext.sh" "$@"; }
+check_eq "a package that is off has no status row" "" "$(xe --status)"
+echo svcpkg > "$EXT/caps"
+check_eq "on, never ran: stopped" "svcpkg	stopped	-	-" "$(xe --status)"
+xe start svcpkg >/dev/null; check "start asks systemd for the unit" grep -q '^start hs-ext-svc@svcpkg.service' "$EXT/ctl.log"
+xe stop svcpkg >/dev/null
+check "stop asks systemd to stop the unit" grep -q '^stop hs-ext-svc@svcpkg.service' "$EXT/ctl.log"
+check_eq "a stop by hand is shown" "svcpkg	stopped	stopped by hand	-" "$(xe --status)"
+xe start svcpkg >/dev/null; check_eq "start removes the stop by hand" "svcpkg	stopped	-	-" "$(xe --status)"
+check_out "boot starts the service of a package that is on" "^svcpkg	service ok" xe boot
+xe stop svcpkg >/dev/null; : > "$EXT/ctl.log"; xe boot >/dev/null
+check_eq "boot leaves a service stopped by hand alone" 0 "$(grep -c '^start' "$EXT/ctl.log")"
+check_out "start of an unknown package is refused" "No extension called" xe start nope || true
 finish

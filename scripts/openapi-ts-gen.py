@@ -95,6 +95,7 @@ def member(url, method, op):
         "    path: %s;" % q(url),
         "    method: %s;" % q(method),
         "    class: %s;" % q(xs["class"]),
+        "    role: %s;" % q(op["x-hs-role"]),
         "    params: { %s};" % params,
         "    stdin: %s;" % q(stdin),
         "    exit: %s;" % exits,

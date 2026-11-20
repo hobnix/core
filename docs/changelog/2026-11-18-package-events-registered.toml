@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "hs event kinds lists the events of core and installed packages"
+body  = """`hs event kinds [--package NAME]` shows every event kind with its level and meaning; packages declare theirs in `package.toml` and the old core list of package kinds still works until the recipes have moved. Not tested on hardware yet."""

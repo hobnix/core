@@ -75,6 +75,7 @@ default_probes() {
     $'hs disk inventory\tdisk inventory\t0 1' \
     $'hs disk baseline\tdisk baseline\t0 1' \
     $'hs event list\tevent list\t0' \
+    $'hs event kinds\tevent kinds\t0' \
     $'hs audit\taudit\t0' \
     $'hs sys audit\tsys audit\t0' \
     $'hs sys event list\tsys event list\t0' \
@@ -151,6 +152,7 @@ default_probes() {
     $'hs dc cert show\tdc cert show\t0 1' \
     $'hs update --preview\tupdate --preview\t0 1\t120' \
     $'hs ssh-key list\tssh-key list\t0 1' \
+    $'hs token list\ttoken list\t0' \
     $'hs node list\tnode list\t0' \
     $'hs notify channel list\tnotify channel list\t0' \
     $'hs notify channel providers\tnotify channel providers\t0' \
@@ -184,6 +186,7 @@ node status	needs a registered node that answers over ssh
 notify channel show	needs a channel name (probed by tests/notify-channel.sh)
 pc list	the old word of hs ext games list, which is probed
 ext list	the same script as hs ext games list, which is probed (the row `ext <name>` of the same length hides this one from the matcher)
+ext status	the same script as hs ext list, which has no probe either (the row `ext <name>` hides it from the matcher; tests/ext-service.sh runs it)
 pkg validate	checks one folder given as argument (tests/pkg.sh)
 pkg repo list	probed as pkg repo list is empty without repositories (tests/pkg-repo.sh)
 pkg available	needs a fetched repository (tests/pkg-repo.sh)

@@ -428,7 +428,7 @@ st_share() {   # the share apps on the apps pool, always in the backup, auto sna
   backup_cmd "$APPS_SHARE" on || return 1
   if [ -n "${HS_DOCKER_SNAPS:-}" ]; then "$HS_DOCKER_SNAPS" "$APPS_SHARE" on; else bash "$here/snapshots-auto.sh" "$APPS_SHARE" on; fi
 }
-st_give() {   # the share apps into docker at /shares/apps, as the one mapped user (else 1000:1000 = adminuser:users)
+st_give() {   # the share apps into docker at /shares/apps, as the one mapped user (else 1000:1000 = the admin account:users)
   local as
   inc config device get "$CT" "$APPS_SHARE" type >/dev/null 2>&1 && return 0
   as=$(mapped_user); [ -n "$as" ] || as=1000:1000

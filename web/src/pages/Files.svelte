@@ -51,6 +51,7 @@
   const infoLoc = $derived(fm.info ? fm.locOf(fm.panes[fm.info.side].loc) : null);
   const st = $derived(fm.detail.stat && fm.detail.key === (fm.info ? fm.infoKey() : '') ? fm.detail.stat : null);
 
+  const curIsFolder = $derived.by(() => { const p = fm.panes[fm.active]; return p.rows.find((x) => x.name === p.cur)?.type === 'd'; });
   function showInfo() {
     if (fm.info) { fm.info = null; return; }
     const p = fm.panes[fm.active];
@@ -74,7 +75,7 @@
       case ' ': case 'Insert': if (onBtn) return; return act(() => fm.spaceToggle());
       case 'Enter': if (onBtn) return; return act(() => { const p = fm.panes[fm.active]; const r = p.rows.find((x) => x.name === p.cur); if (r?.type === 'd') fm.open(fm.active, r.name); else if (r) showInfo(); });
       case 'Backspace': return act(() => fm.up(fm.active));
-      case 'Tab': if (e.shiftKey) return; return act(() => fm.activate(fm.active === 'L' ? 'R' : 'L'));
+      case 'Tab': if (e.shiftKey || !fm.dual) return; return act(() => fm.activate(fm.active === 'L' ? 'R' : 'L'));
       case 'Escape': return act(() => { if (fm.info) fm.info = null; else if (fm.patOpen) fm.patOpen = false; else if (fm.panes[fm.active].sel.size) fm.clear(); else fm.clearTray(); });
       case 'F2': return act(() => fm.plan('rename'));
       case 'F3': return act(showInfo);
@@ -126,16 +127,20 @@
         <button class="btn sm pho" disabled={!!why('move')} use:tip={tipOf('move', 'Move to the other pane')} onclick={() => fm.plan('move')}><i class="ph ph-arrows-left-right"></i>Move<span class="kbd">F6</span></button>
         <button class="btn sm pho" disabled={!!why('rename')} use:tip={tipOf('rename', 'Rename')} onclick={() => fm.plan('rename')}><i class="ph ph-pencil-simple"></i>Rename<span class="kbd">F2</span></button>
         <button class="btn sm" disabled={!!why('mkdir')} use:tip={tipOf('mkdir', 'Make a new folder here')} onclick={() => fm.plan('mkdir')}><i class="ph ph-folder-plus"></i>New folder<span class="kbd">F7</span></button>
-        <button class="btn sm danger-o pho" disabled={!!why('delete')} use:tip={tipOf('delete', 'Delete for good')} onclick={() => fm.plan('delete')}><i class="ph ph-trash"></i>Delete<span class="kbd">F8</span></button>
+        <button class="btn sm danger-o pho" disabled={!!why('delete')} use:tip={tipOf('delete', 'Delete: moves to the trash, kept 14 days')} onclick={() => fm.plan('delete')}><i class="ph ph-trash"></i>Delete<span class="kbd">F8</span></button>
       </div>
       <div class="fmgrp">
         <button class="btn sm btn-ghost" disabled={!a.cur && !a.sel.size} use:tip={{ text: 'Size, time and which disks hold it', keys: 'F3' }} onclick={showInfo}><i class="ph ph-info"></i>Info<span class="kbd">F3</span></button>
+        <button class="btn sm btn-ghost" disabled={!curIsFolder} use:tip={'Calculate the size of the current folder (reads everything below it, can wake disks)'} onclick={() => { const p = fm.panes[fm.active]; fm.sizeOf(fm.active, p.cur); }}><i class="ph ph-ruler"></i>Folder size</button>
         <button class="btn sm btn-ghost" use:tip={{ text: 'Select or deselect by a pattern such as *.mkv', keys: '+' }} onclick={() => (fm.patOpen = !fm.patOpen)}>Select by pattern<span class="kbd">+</span></button>
       </div>
       <span class="grow"></span>
       <div class="fmgrp">
+        <button class="btn sm btn-ghost" aria-pressed={fm.dual} use:tip={fm.dual ? 'Close the second pane: delete, new folder and rename work on one pane' : 'Open a second pane: copy and move need it as the target'} onclick={() => fm.setDual(!fm.dual)}><i class="ph ph-columns"></i>{fm.dual ? 'Close second pane' : 'Second pane'}</button>
+        {#if fm.dual}
         <button class="btn sm btn-ghost pho" use:tip={'Show the same place in the active pane'} onclick={() => fm.same(fm.active)}>Same as other pane</button>
         <button class="btn sm btn-ghost" use:tip={'Exchange the two panes'} onclick={() => fm.swap()}><i class="ph ph-arrows-left-right"></i>Swap panes</button>
+        {/if}
         <button class="btn btn-ghost btn-icon sq" aria-label="Refresh" use:tip={{ text: 'Read both lists again', keys: 'Ctrl R' }} onclick={() => fm.refresh()}><i class="ph ph-arrow-clockwise"></i></button>
       </div>
     </div>
@@ -159,14 +164,14 @@
       </div>
     {/if}
 
-    <div class="fmsw" role="group" aria-label="Pane">
+    <div class="fmsw" class:one={!fm.dual} role="group" aria-label="Pane">
       <button aria-pressed={fm.mobile === 'L'} onclick={() => fm.activate('L')}>Left</button>
       <button aria-pressed={fm.mobile === 'R'} onclick={() => fm.activate('R')}>Right</button>
     </div>
 
     <Split open={!!infoRow}>
       {#snippet list()}
-        <div class="fmpanes"><FmPane {fm} side="L" /><FmPane {fm} side="R" /></div>
+        <div class="fmpanes"><FmPane {fm} side="L" />{#if fm.dual}<FmPane {fm} side="R" />{/if}</div>
       {/snippet}
       {#snippet side()}
         <Drawer title={infoRow.name} chip={infoRow.type === 'd' ? 'folder' : infoRow.type === 'l' ? 'link' : 'file'} onclose={() => (fm.info = null)}>
@@ -248,6 +253,7 @@
   .duact { margin-top: 8px; }
   @media (max-width: 860px) {
     .fmsw { display: flex; }
+    .fmsw.one { display: none; }
     .fmpanes { flex-direction: column; }
     .fmgrp + .fmgrp { padding-left: 0; border-left: 0; }
     .fmgrp .pho, .kbd { display: none; }

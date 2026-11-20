@@ -4,7 +4,7 @@
   // nodes = [{ name, kind, local, dot }] for the switcher; onmenu opens the tree as a slide-over on a phone.
   let { host = 'homeserver', node = 'homeserver', nodes = [], pending = 0, locked = false, user = '', onsignout, onmenu = () => {}, menuOpen = false } = $props();
 
-  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, ui, can } from '../ui.svelte.js';
   import { prefetchPlan } from '../api.js';
   import { go } from '../route.svelte.js';
   import { theme, toggleTheme } from '../theme.svelte.js';
@@ -65,6 +65,7 @@
   <button class="ib" aria-label={theme.dark ? 'Switch to the light look' : 'Switch to the dark look'} use:tip={{ text: theme.dark ? 'Light look' : 'Dark look', side: 'bottom' }} onclick={toggleTheme}>
     <i class="ph ph-{theme.dark ? 'sun' : 'moon'}" style="font-size:16px"></i>
   </button>
+  {#if can('admin')}
   <button class="ib hide-s" disabled={!here || !ui.features.terminal} use:tip={{ text: ui.features.terminal ? 'A shell on this server, like an SSH login as adminuser' : 'Switch on webTerminal in machine.toml', side: 'bottom' }} aria-label="Terminal" onclick={() => openCreate(Terminal, { target: 'host', title: host })}><i class="ph ph-terminal-window" style="font-size:16px"></i></button>
   <button class="ib upd" disabled={!here || locked} use:tip={{ text: updTitle, side: 'bottom' }} aria-label={pending > 0 ? `Update, ${pending} new` : 'Update'} onpointerenter={() => prefetchPlan('system', ['update'])} onfocus={() => prefetchPlan('system', ['update'])} onclick={() => openPlan('system', ['update'], 'Update')}>
     <i class="ph ph-arrow-circle-up" style="font-size:16px"></i>{#if here && pending > 0}<span class="count" use:tip={{ text: `${pending} new change${pending === 1 ? '' : 's'} upstream (as of the last fetch)`, side: 'bottom' }}>{pending}</span>{/if}
@@ -78,6 +79,7 @@
       </div>
     {/if}
   </span>
+  {/if}
   <button class="user" onclick={onsignout} use:tip={{ text: 'Sign out', side: 'bottom' }} aria-label="Sign out">
     <span class="avatar">{(user || '?').slice(0, 1).toUpperCase()}</span><span class="lbl un">{user}</span><i class="ph ph-sign-out lbl" style="color:var(--fg-3)"></i>
   </button>

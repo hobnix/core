@@ -1,0 +1,6 @@
+date  = "2026-11-18"
+type  = "security"
+title = "Extension services run confined: they can write only where their permissions say"
+body  = """
+A service of an extension now starts with a read-only file system except its own state and the paths it declares under fs.write, no home folders, a private /tmp, no new privileges and no extra capabilities. A package that declares no permissions gets the same strict defaults. This is what systemd gives: the service still runs as root, the network is not limited (net is declared only), and commands are not confined.
+"""
