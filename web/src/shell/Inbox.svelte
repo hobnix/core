@@ -14,19 +14,22 @@
   import { openCreate } from '../ui.svelte.js';
   import AckProblem from '../forms/ops/AckProblem.svelte';
   import { problemItems, notificationItems, bellCount, newestId } from './inbox.js';
+  import { Watcher } from './notify.js';
+  import { nf, raiseNotification, pageFocused } from '../notify.svelte.js';
 
   const KEY = 'hs.inbox.read';
   const FALLBACK = 60000;
   let open = $state(false);
   let rows = $state([]);
   let failed = $state(false);
+  let loaded = $state(false);
   let readUpTo = $state(0);
   try { readUpTo = Number(localStorage.getItem(KEY)) || 0; } catch { /* storage may be blocked */ }
 
   // health events seen so far: a new one reads the list again
   const healthSeen = $derived(live.events.filter((e) => e.source === 'health' || String(e.kind).startsWith('health.')).length + live.resyncs);
   async function load() {
-    try { rows = (await get('/api/sys/health/list')).rows ?? []; failed = false; } catch { failed = true; }
+    try { rows = (await get('/api/sys/health/list')).rows ?? []; failed = false; loaded = true; } catch { failed = true; }
   }
   $effect(() => {
     healthSeen;
@@ -39,6 +42,14 @@
   const problems = $derived(problemItems(rows));
   const notes = $derived(notificationItems(live.events, lang.code));
   const count = $derived(bellCount(problems, notes, readUpTo));
+  // Browser notifications (#888): off unless the person turned them on in Settings. A new watcher each time the switch goes on, so what is already
+  // open then is not news.
+  let watcher = null;
+  $effect(() => {
+    if (!nf.on) { watcher = null; return; }
+    watcher ??= new Watcher({ raise: (i) => raiseNotification(i), focused: () => pageFocused() });
+    watcher.update(problems, notes, loaded);
+  });
   const label = $derived(count ? `Inbox, ${count} new` : 'Inbox');
 
   function toggle(e) {

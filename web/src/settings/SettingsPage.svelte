@@ -26,6 +26,7 @@
   // The look of the interface (settings/Appearance.svelte): mounted when the file exists. A glob import may find nothing, so a build without the file works.
   const appearance = import.meta.glob('./Appearance.svelte', { eager: true });
   const Appearance = Object.values(appearance)[0]?.default ?? null;
+  import BrowserNotifications from './BrowserNotifications.svelte';
 
   const TITLES = {
     general: ['General', 'The name, language and look of this server and its web interface.'],
@@ -140,6 +141,7 @@
 
   {#if page === 'general'}
     {#if Appearance}<Appearance />{/if}
+    <BrowserNotifications />
     <div class="cols">
       <div class="card sec" id="nodes">
         <div class="st">Nodes</div>

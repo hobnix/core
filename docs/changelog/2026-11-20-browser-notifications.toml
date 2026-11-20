@@ -1,0 +1,7 @@
+date  = "2026-11-20"
+type  = "feature"
+title = "Optional desktop notifications from the web interface"
+docs  = "web-interface#get-a-browser-notification"
+body  = """
+Settings > General has a switch for browser notifications, off by default and kept in this browser only. When on, a new problem or a new warning or error raises a notification while the page is open in the background; a click opens the page of the thing. It needs HTTPS or localhost; the switch says why when it cannot work.
+"""
