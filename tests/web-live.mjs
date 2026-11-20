@@ -41,6 +41,8 @@ check('live state older ts_err is fresh', parsed[6].state === 'fresh');
 const eight = parseLiveRows([['services-list', '30', '5', '2', '0', '-', '-', 'ct-list'], ['x', '5', '1', '1', '0', '-', '-', '-']], now);
 check('live rows: eight fields parse needs', eight.length === 2 && eight[0].needs.length === 1 && eight[0].needs[0] === 'ct-list' && eight[1].needs.length === 0);
 check('live rows: seven fields give no needs', parsed[0].needs.length === 0);
+const ten = parseLiveRows([['x', '5', '1', '1', '0', '-', '-', '-', 'fresh', '4'], ['y', '5', '1', '1', '0', '-', '-', '-', 'fresh', '-']], now);
+check('live rows: the tenth field is the heartbeat age, - is none', ten[0].beat === 4 && ten[1].beat === null && eight[0].beat === null);
 check('live rows: malformed rows are dropped', parseLiveRows([['only', 'five', 'fields', 'here', 'x']], now).length === 0);
 const ins = (o) => ({ topic: 't', words: ['a'], interval: 5, lock: 'run', origin: 'core', cap: null, cap_on: true, groups: [], age: 1, gen: 1, rc: 0, err: null, ts_err: null, bytes: 1, ...o });
 const pi = (o, now = 1000) => parseInspect({ now, topics: [ins(o)] });

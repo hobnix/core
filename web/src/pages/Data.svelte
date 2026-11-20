@@ -14,6 +14,9 @@
   const liveDown = $derived(liveSt.error?.status === 503 && !liveSt.error?.retryAfter);
   const liveRefreshing = $derived(liveSt.error?.status === 503 && liveSt.error?.retryAfter > 0);
 
+  // the collector heartbeat age is the same on every line
+  const beat = $derived(liveRows.length ? liveRows[0].beat : null);
+
   const secs = (s) => (s === null ? '' : s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
   // one status vocabulary (fresh, stale, error, expired, pending, never, failing)
   const tone = (s) => ({ fresh: 'var(--st-ok)', pending: 'var(--fg-2)', stale: 'var(--st-warn)', failing: 'var(--st-warn)', expired: 'var(--st-warn)', error: 'var(--st-bad)', never: 'var(--st-bad)' }[s] || 'var(--fg-2)');
@@ -41,6 +44,14 @@
       <Banner tone="info" icon="circle-notch">Live state is starting; the first reading should arrive in a few seconds.</Banner>
     {:else if !live.open}
       <Banner tone="info" icon="pause-circle">Live updates are paused; polling every 5 s until the stream reconnects.</Banner>
+    {/if}
+
+    {#if liveRows.length && !liveDown}
+      {#if beat === null}
+        <Banner tone="bad">The live state collector has no heartbeat. Check <code>systemctl status hs-live</code>.</Banner>
+      {:else}
+        <Muted as="p">Collector heartbeat: last round {secs(beat)} ago.</Muted>
+      {/if}
     {/if}
 
     {#if problemRows.length}
