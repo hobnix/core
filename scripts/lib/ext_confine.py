@@ -13,8 +13,7 @@ The mapping (what systemd gives, nothing more):
                          PrivateDevices=yes, ReadWritePaths=-<state dir of the bridge>
   secrets (#947)         TemporaryFileSystem=/var/lib/hs:ro (granted paths below it come back through BindPaths/BindReadOnlyPaths) and
                          InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos. A grant that overlaps these is refused
-                         (fs.write also /etc, /boot, /nix); /var/lib/hs/ext, /var/lib/hs/ext-svc and /var/lib/hs/<package name> stay grantable
-                         (plus /etc/hs/gateway-public for passthrough). Not limited: the network.
+                         (fs.write also /etc, /boot, /nix); /var/lib/hs/ext, /var/lib/hs/ext-svc and /var/lib/hs/<package name> stay grantable Not limited: the network.
   fs.write:<path>        ReadWritePaths=-<path>
   fs.read:<path>         ReadOnlyPaths=-<path>     (the file system is read only under ProtectSystem=strict; this lists what is meant to be read)
   devices:gpu            PrivateDevices=no, DevicePolicy=closed, DeviceAllow=char-drm rw (only the declared device classes)
@@ -32,8 +31,6 @@ DEVICES = {"gpu": ["char-drm rw"]}
 # Secrets: a grant (fs.read or fs.write) that is, lies below or contains one of these is refused (#947). The unit hides them too (properties()).
 SECRET = ["/var/lib/hs", "/root", "/etc/shadow", "/etc/gshadow", "/etc/ssh", "/etc/nixos"]
 SECRET_OPEN = ["/var/lib/hs/ext", "/var/lib/hs/ext-svc"]       # state of extensions: may be granted although /var/lib/hs is secret
-# named exceptions: (package, key, path) that may be granted although the path lies below a denied one (one file the package owns)
-EXCEPT = {("passthrough", "fs.write", "/etc/hs/gateway-public")}
 NO_WRITE = ["/etc", "/boot", "/nix"]                           # fs.write only: system files (reading /etc/hs and the like stays possible)
 
 
@@ -59,9 +56,9 @@ def _under(p, d):
 
 def check_secret(key, p, name=None):
     """The problem with a well-formed path `p` of `key` (fs.read|fs.write) of package `name` that touches a secret location, or None.
-    A package may use /var/lib/hs/<its own name> and the named EXCEPT files."""
+    The deny list is the three lists above; the only way in is /var/lib/hs/<its own name> (and SECRET_OPEN)."""
     p = p.rstrip("/") or p
-    if (name, key, p) in EXCEPT or (name and _under(p, "/var/lib/hs/" + name)):
+    if name and _under(p, "/var/lib/hs/" + name):
         return None
     if any(_under(p, o) for o in SECRET_OPEN):
         return None

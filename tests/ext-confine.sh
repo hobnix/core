@@ -82,11 +82,9 @@ check_eq "but not the folder of another package or one with the same prefix" "1"
 rc=0; $EC fs.write:/var/lib/hs/fixsvcx >/dev/null 2>&1 || rc=$?
 check_eq "fixsvcx is not fixsvc" "1" "$rc"
 rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name passthrough -- fs.write:/etc/hs/gateway-public >/dev/null 2>&1 || rc=$?
-check_eq "passthrough may write /etc/hs/gateway-public (named exception)" "0" "$rc"
-rc=0; $EC fs.write:/etc/hs/gateway-public >/dev/null 2>&1 || rc=$?
-check_eq "any other package may not" "1" "$rc"
-rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name passthrough -- fs.write:/etc/hs >/dev/null 2>&1 || rc=$?
-check_eq "the exception is that one file, not /etc/hs" "1" "$rc"
+check_eq "no package has an exception: not even passthrough may write below /etc" "1" "$rc"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name passthrough -- fs.read:/etc/hs fs.write:/var/lib/hs-gateway >/dev/null 2>&1 || rc=$?
+check_eq "reading /etc/hs and writing its own /var/lib/hs-gateway is fine" "0" "$rc"
 rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" props --name fixsvc -- fs.write:/var/lib/hs/fixsvc >/dev/null 2>&1 || rc=$?
 check_eq "props takes the package name too (confined commands)" "0" "$rc"
 check_eq "the refusal names the secret it overlaps" "1" "$($EC fs.read:/var/lib/hs/restic-password 2>&1 | grep -c 'overlaps /var/lib/hs')"
