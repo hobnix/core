@@ -234,6 +234,16 @@ class Matrix(Base):
         self.assertEqual(self.get("vic", "/api/sys/users/list")[0], 403)
         self.assertEqual(self.get("mia", "/api/sys/users/list")[0], 403)
 
+    def test_a_viewer_cannot_list_files_or_search_backups(self):
+        """#946: file names of every share (sensitive ones too) and a search over all backups are admin reads, not viewer reads"""
+        for path in ("/api/sys/fm/locations", "/api/sys/fm/ls/share:sensitive", "/api/sys/fm/du/share:sensitive", "/api/sys/fm/stat/share:sensitive?path=/a",
+                     "/api/sys/backup/find/secret"):
+            for user in ("vic", "mia"):
+                s, d, _ = self.get(user, path)
+                self.assertEqual(s, 403, (path, user))
+                self.assertEqual(d["required"], "admin", path)
+            self.assertNotEqual(self.get("anna", path)[0], 403, path)
+
     def test_the_403_body(self):
         s, d, _ = self.post("vic", "/api/start", {"area": "ct", "args": ["docker", "update"]})
         self.assertEqual(s, 403)

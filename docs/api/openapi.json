@@ -1002,7 +1002,7 @@
     "operationId": "backup.find.by_word",
     "summary": "files whose name contains a word, in every snapshot, as data: snapshot, time, path, type, bytes (at most 200; mounts the backup disk, can take a while)",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "backup",
@@ -4535,7 +4535,7 @@
     "operationId": "fm.du.by_location",
     "summary": "file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -4761,7 +4761,7 @@
     "operationId": "fm.locations",
     "summary": "file manager: the places a pane can show (disks of the array, pools, upload cache, shares, temporary disks) as loc rows: id, kind, label, filesystem, size, free, writable, reason, pool, disk",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -4801,7 +4801,7 @@
     "operationId": "fm.ls.by_location",
     "summary": "file manager: one page of a folder: row lines (type d|f|l, bytes, mtime, name, disks, flags, busy), then cursor or end; --path, --cursor, --limit",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -5091,7 +5091,7 @@
     "operationId": "fm.stat.by_location",
     "summary": "file manager: owner, group and mode of one item (--path), read from stat: type, owner, group, uid, gid, mode, perms, bytes, mtime; changes nothing",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
