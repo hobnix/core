@@ -23,6 +23,7 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   usage-record <key> <used> <size>  one reading of a pool / filesystem fill level (bytes; backup: percent and 100), at most one per hour and key
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
   read-get <key>             the kept output (nothing and exit 1 when there is none)
+  live-sample <topic> <ms>            a browser sample of the delay of a live topic (#486; the web interface calls it)
   topic-bump <topic|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
   read-fail <key> --err TEXT [--ms N] [--rc N]  a run with no output: keeps the old output, records err and ts_err (#324)
   reads                      key TAB age in seconds (-1 = never read well) TAB milliseconds TAB exit code TAB bytes TAB status TAB gen TAB err TAB err age, oldest first
@@ -1147,7 +1148,13 @@ CREATE TABLE IF NOT EXISTS live (topic TEXT PRIMARY KEY, payload TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS heartbeat (name TEXT PRIMARY KEY, time INTEGER NOT NULL, every INTEGER NOT NULL, started INTEGER NOT NULL,
   beats INTEGER NOT NULL DEFAULT 0, docs INTEGER NOT NULL DEFAULT 0, fails INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0,
   slow INTEGER NOT NULL DEFAULT 0, wait_ms INTEGER NOT NULL DEFAULT 0, read INTEGER);
+-- #486: the delay per topic in milliseconds, from the trigger to the new generation (collector: ms_*) and from `changed` to the page showing it
+-- (browser sample: web_*). last/worst since the row exists, n samples, recent = the last DELAY_KEEP samples as a comma list (the health note looks at it).
+CREATE TABLE IF NOT EXISTS live_delay (topic TEXT PRIMARY KEY, ms_last INTEGER, ms_worst INTEGER, ms_n INTEGER NOT NULL DEFAULT 0, ms_recent TEXT, ms_time INTEGER,
+  web_last INTEGER, web_worst INTEGER, web_n INTEGER NOT NULL DEFAULT 0, web_recent TEXT, web_time INTEGER);
 """
+
+DELAY_KEEP = 20
 
 
 def live_open():
@@ -1187,6 +1194,20 @@ def live_fail(c, topic, rc, ms, err, src, ttl, t):
 def live_delete(c, topic):
     with c:
         c.execute("DELETE FROM live WHERE topic = ?", (topic,))
+
+
+def live_delay_put(c, topic, ms, t, web=False):
+    """One delay sample (milliseconds) of a topic; web=True is a sample from a browser. Only numbers are stored."""
+    p = "web" if web else "ms"
+    ms = max(0, int(ms))
+    with c:
+        row = c.execute("SELECT %s_worst, %s_n, %s_recent FROM live_delay WHERE topic = ?" % (p, p, p), (topic,)).fetchone()
+        if row is None:
+            c.execute("INSERT INTO live_delay (topic) VALUES (?)", (topic,))
+            row = (None, 0, None)
+        recent = [x for x in (row[2] or "").split(",") if x.isdigit()][-(DELAY_KEEP - 1):] + [str(ms)]
+        c.execute("UPDATE live_delay SET %s_last = ?, %s_worst = ?, %s_n = ?, %s_recent = ?, %s_time = ? WHERE topic = ?" % ((p,) * 5),
+                  (ms, max(ms, row[0] or 0), (row[1] or 0) + 1, ",".join(recent), int(t), topic))
 
 
 def live_beat(c, name, every, started, t, counts, read):
@@ -1231,6 +1252,22 @@ def cmd_topic_bump(args):
         c = open_rw()
         with c:
             bump(c, names)
+        c.close()
+    except (sqlite3.Error, OSError):
+        pass
+    return 0
+
+
+def cmd_live_sample(args):
+    """live-sample <topic> <ms>: a browser sample of the delay of a topic (web-serve.py calls it). Best effort and silent like topic-bump."""
+    if len(args) != 2 or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,64}", args[0]) or not args[1].isdigit() or int(args[1]) > 600000:
+        return 1
+    if not os.path.isdir(os.path.dirname(DB) or "."):
+        return 0
+    try:
+        c = open_rw()
+        c.executescript(LIVE_SCHEMA)
+        live_delay_put(c, args[0], int(args[1]), now(), web=True)
         c.close()
     except (sqlite3.Error, OSError):
         pass
@@ -1348,6 +1385,8 @@ def main(argv):
         return cmd_read_put(args)
     if cmd == "topic-bump":
         return cmd_topic_bump(args)
+    if cmd == "live-sample":
+        return cmd_live_sample(args)
     if cmd == "read-fail":
         return cmd_read_fail(args)
     if cmd == "read-get":

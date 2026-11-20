@@ -35,6 +35,23 @@ prints nothing when all is well, and a line per problem otherwise (the collector
 The Diagnostics page shows the live topics. It follows the live stream (`/api/events`) and falls back to polling every 5 seconds when the stream is
 lost. If the collector stops, the pages keep showing the last data and mark it as old; they never wait for it.
 
+## See how fast a change shows
+Not tested on hardware yet.
+
+```bash
+hs sys live status
+```
+
+Columns 11 to 14 are the delay in milliseconds (`-` = no sample yet): the last and the worst time from the request to read a topic again (a change from
+a terminal, a container event) to its new generation in the database, then the last and the worst time a browser page needed from the `changed`
+message to showing the new data. The server numbers come from the collector; the browser numbers only while the Live state page is open and only
+for topics whose request the collector saw. Only numbers and the topic name are kept, nothing about who looked. The same two pairs are columns on
+the Live state page (Delay, Worst, Seen in page, Page worst).
+
+`hs sys live check` adds a line `live:slow:<topic>` (or `live:slowweb:<topic>` for the page numbers) when the worst of the last 20 samples of a topic is
+over 10 seconds. The limits (5 s for a topic with a hook, 20 s for a timed one, 10 s for the note) are in `scripts/lib/live-limits.tsv`.
+A server in a virtual machine shows numbers that say little about real hardware; do not tune from them.
+
 ## Measure the write load
 ```bash
 sudo hs live measure --minutes 30

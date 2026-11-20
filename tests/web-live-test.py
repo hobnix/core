@@ -32,13 +32,13 @@ class FakeAuth:
         return False
 
     def domain_password_ok(self, user, password):
-        return user == "anna" and password == "pw"
+        return user in ("anna", "vera") and password == "pw"
 
     def domain_is_admin(self, user):
         return user == "anna"
 
     def domain_role(self, user):
-        return "admin" if self.domain_is_admin(user) else None
+        return "admin" if self.domain_is_admin(user) else ("viewer" if user == "vera" else None)
 
     def local_fingerprint(self, user, fresh=False):
         return ""
@@ -308,6 +308,38 @@ class Topics(DbBase):
                 break
             time.sleep(0.02)
         self.assertEqual(self.asked, [["status"]])
+
+    def test_delay_sample_is_open_to_a_viewer_and_stores_only_numbers(self):
+        import sqlite3
+        r = self.req("POST", "/api/login", {"realm": "domain", "user": "vera", "password": "pw"})[2]
+        ck = {"Cookie": (r.getheader("Set-Cookie") or "").split(";")[0]}
+        csrf = json.loads(self.req("GET", "/api/session", headers=ck)[1])["csrf"]
+        ch = dict(ck, **{"X-CSRF-Token": csrf})
+        body = {"topic": "status", "ms": 1234}
+        self.assertEqual(self.req("POST", "/api/live/sample", body)[0], 401)
+        self.assertEqual(self.req("POST", "/api/live/sample", body, dict(ck, **{"X-CSRF-Token": "bad"}))[0], 403)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"topic": "nope", "ms": 5}, ch)[0], 400)
+        for bad in (-1, 600001, "5", 1.5, True, None):
+            self.assertEqual(self.req("POST", "/api/live/sample", {"topic": "status", "ms": bad}, ch)[0], 400, bad)
+        self.assertEqual(self.req("POST", "/api/live/sample", body, ch)[0], 200)
+        c = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(c.execute("SELECT web_last, web_worst, web_n, web_recent, ms_n FROM live_delay WHERE topic='status'").fetchall(),
+                             [(1234, 1234, 1, "1234", 0)])
+        finally:
+            c.close()
+
+    def test_delay_sample_is_rate_limited(self):
+        ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
+        self.app.samples.SAMPLE_PER_SESSION = 3
+        codes = [self.req("POST", "/api/live/sample", {"topic": "status", "ms": 10 + i}, ch)[0] for i in range(5)]
+        self.assertEqual(codes, [200, 200, 200, 429, 429])
+        g = ws.SampleGate(clock=lambda: 100.0)
+        g.SAMPLE_TOTAL = 2
+        self.assertEqual([g.allow("a"), g.allow("b"), g.allow("c")], [True, True, False])      # the total is shared by all sessions
+        later = ws.SampleGate(clock=iter([0.0, 0.0, 61.0]).__next__)
+        later.SAMPLE_PER_SESSION = 2
+        self.assertEqual([later.allow("a"), later.allow("a"), later.allow("a")], [True, True, True])      # a minute later the window is free
 
     def test_login_facts_read_the_stored_status(self):
         self.put("instances\t3\t4\n")

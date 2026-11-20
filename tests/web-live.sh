@@ -7,5 +7,6 @@ echo "-- live state (LiveStore on the state database, /api/events)"
 if out=$(python3 -I "$ROOT/tests/web-live-test.py" 2>&1); then pass "live state tests ($(grep -E '^Ran ' <<<"$out"))"; else fail "live state: $(tail -n 25 <<<"$out")"; fi
 if have node; then
   if o=$(node "$ROOT/tests/web-live.mjs" 2>&1); then pass "poll timing ($(grep -E '^  -> ' <<<"$o"))"; else fail "poll timing: $(tail -n 12 <<<"$o")"; fi
+  if o=$(node "$ROOT/tests/web-delaysample.mjs" 2>&1); then pass "delay sample ($(grep -E '^  -> ' <<<"$o"))"; else fail "delay sample: $(tail -n 12 <<<"$o")"; fi
 else skip "node missing"; fi
 finish

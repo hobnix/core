@@ -704,7 +704,7 @@ class Cli(unittest.TestCase):
         self.assertEqual(len(lines), 73)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
-        self.assertEqual(len(status), 10)
+        self.assertEqual(len(status), 14)
         self.assertEqual(status[9], "-")    # fake has no heartbeat
         self.assertEqual(status[7], "-")
         self.assertEqual(status[8], "fresh")
@@ -718,7 +718,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         ls.cli_status(out, docs=FakeResp().docs())
         raw = out.getvalue().rstrip("\n").split("\n")
-        self.assertTrue(all(len(l.split("\t")) == 10 for l in raw))
+        self.assertTrue(all(len(l.split("\t")) == 14 for l in raw))
         by = {l.split("\t")[0]: l.split("\t")[7] for l in raw}
         self.assertEqual((by["services-routes"], by["status"]), ("services-list", "-"))
         self.assertTrue(all(l.split("\t")[8] == "-" for l in raw))
