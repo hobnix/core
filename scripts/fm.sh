@@ -175,7 +175,19 @@ cmd_ls() {
       local dd; for dd in "$(disks_root)"/data-[0-9]*; do [ -d "$dd" ] && dlist+=("$dd") || true; done
     fi
   fi
+  # Which disk holds which entry: ONE listing of the folder on each disk that is awake, not a test of every entry on every disk (that woke every
+  # sleeping disk in turn and took up to a minute). A disk in standby is left alone and named in the `asleep` line.
+  local -A onDisk=(); local -a asleep=() live=()
+  if [ "${#dlist[@]}" -gt 0 ]; then
+    local e0 par n0; fm_arel "$rel"; par=$AREL
+    for e0 in "${dlist[@]}"; do
+      if fm_disk_asleep "$e0"; then asleep+=("${e0##*/}"); continue; fi
+      live+=("$e0")
+      while IFS= read -r -d '' n0; do onDisk["${e0##*/}/$n0"]=1; done < <(find -P "$e0${par:+/$par}" -mindepth 1 -maxdepth 1 -printf '%f\0' 2>/dev/null)
+    done
+  fi
   echo "status	ok"
+  [ "${#asleep[@]}" -eq 0 ] || printf 'asleep\t%s\n' "$(IFS=,; echo "${asleep[*]}")"
   local fmt='%y\001%s\001%T@\001%f\0' y s t name n=0 more=no
   local -a hide=(); while IFS= read -r name; do hide+=(! -name "$name"); done < <(fm_trash_names)   # the trash is not listed
   while IFS=$'\001' read -r -d '' y s t name; do
@@ -190,9 +202,9 @@ cmd_ls() {
     if [ "$typ" = d ]; then [ -r "$full" ] && [ -x "$full" ] || flags+=(noaccess)
     elif [ "$typ" = f ]; then [ -r "$full" ] || flags+=(noaccess); fi
     fm_arel "${rel:+$rel/}$name"; a=$AREL
-    if [ "${#dlist[@]}" -gt 0 ]; then
-      for e in "${dlist[@]}"; do
-        if [ -e "$e/$a" ] || [ -L "$e/$a" ]; then disks=${disks:+$disks,}${e##*/}; fi
+    if [ "${#live[@]}" -gt 0 ]; then
+      for e in "${live[@]}"; do
+        if [ -n "${onDisk[${e##*/}/$name]:-}" ]; then disks=${disks:+$disks,}${e##*/}; fi
       done
     fi
     local b="-"; [ -z "${busy_of[$a]:-}" ] || b=${busy_of[$a]}

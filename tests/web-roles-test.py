@@ -170,9 +170,9 @@ class SignIn(Base):
         self.assertIsNone(a.domain_role("x"))
 
     def test_a_session_without_a_role_is_an_admin_and_a_strange_one_a_viewer(self):
-        old = self.app.sessions.create("HOME\\old", "domain", "127.0.0.1")
+        old = self.app.sessions.create("old", "local", "127.0.0.1")
         self.app.sessions.items[old].pop("role")        # written before roles existed: only admins could sign in then
-        odd = self.app.sessions.create("HOME\\odd", "domain", "127.0.0.1", role="root")
+        odd = self.app.sessions.create("odd", "local", "127.0.0.1", role="root")
         self.assertEqual(self.req("GET", "/api/session", headers={"Cookie": "hs_session=" + old})[1]["role"], "admin")
         self.assertEqual(self.req("GET", "/api/session", headers={"Cookie": "hs_session=" + odd})[1]["role"], "viewer")
 
@@ -233,6 +233,16 @@ class Matrix(Base):
         self.assertEqual(self.get("vic", "/api/sys/ct/list")[0], 200)
         self.assertEqual(self.get("vic", "/api/sys/users/list")[0], 403)
         self.assertEqual(self.get("mia", "/api/sys/users/list")[0], 403)
+
+    def test_a_viewer_cannot_list_files_or_search_backups(self):
+        """#946: file names of every share (sensitive ones too) and a search over all backups are admin reads, not viewer reads"""
+        for path in ("/api/sys/fm/locations", "/api/sys/fm/ls/share:sensitive", "/api/sys/fm/du/share:sensitive", "/api/sys/fm/stat/share:sensitive?path=/a",
+                     "/api/sys/backup/find/secret"):
+            for user in ("vic", "mia"):
+                s, d, _ = self.get(user, path)
+                self.assertEqual(s, 403, (path, user))
+                self.assertEqual(d["required"], "admin", path)
+            self.assertNotEqual(self.get("anna", path)[0], 403, path)
 
     def test_the_403_body(self):
         s, d, _ = self.post("vic", "/api/start", {"area": "ct", "args": ["docker", "update"]})

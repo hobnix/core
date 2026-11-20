@@ -194,7 +194,9 @@
                 {#if showDisks && r.disks.length}<span class="dkb">{#each r.disks as d}<Chip>{d.replace('data-', 'd')}</Chip>{/each}</span>{/if}
               </div>
             {:else if col.key === 'size'}
-              <span class="mono" class:dim={l.locked}>{r.type === 'd' && !Number.isFinite(r.bytes) ? '—' : S.bytesTxt(r.bytes)}</span>
+              {#if r.type === 'd' && !Number.isFinite(r.bytes)}
+                <button class="btn btn-ghost sm szb" aria-label={`Calculate the size of ${r.name}`} use:tip={'Calculate the size of this folder (reads everything below it, can wake disks)'} onclick={(e) => { e.stopPropagation(); fm.sizeOf(side, r.name); }}><i class="ph ph-ruler"></i>Size</button>
+              {:else}<span class="mono" class:dim={l.locked}>{S.bytesTxt(r.bytes)}</span>{/if}
             {:else if col.key === 'mod'}
               <span class:dim={l.locked}>{S.dateTxt(r.mtime)}</span>
             {:else if col.key === 'disks'}
@@ -224,6 +226,7 @@
   .fmlocbtn[aria-expanded='true'] { border-color: var(--accent); }
   .cv { flex: none; width: 6px; height: 6px; border: solid var(--fg-3); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg) translate(-2px, -2px); }
   .fmlocbtn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .szb { height: 24px; padding: 0 6px; font-size: 12px; color: var(--fg-3); }
   .fsx { font-size: 12px; color: var(--fg-3); }
   .fmfilter { width: 118px; }
   .fmfilter :global(.input) { min-height: 28px; height: 28px; padding: 2px 8px; font-size: 12.5px; }

@@ -177,7 +177,7 @@
       </Table>
     </Card>
 
-    <Card title="Find a file">
+    {#if ui.role === 'admin'}<Card title="Find a file">
       <Muted as="p">in every restore point</Muted>
       <form class="findrow" onsubmit={(e) => { e.preventDefault(); find(); }}>
         <TextInput bind:value={q} placeholder="Part of a file name, e.g. Rechnung" maxlength={80} autocomplete="off" spellcheck={false} ariaLabel="Part of a file name" />
@@ -196,7 +196,7 @@
         {#if found.length >= 200}<Muted as="p">Only the first 200 hits are shown: use a longer word.</Muted>{/if}
         <Muted as="p">To bring a file back: Restore files… above, with the path and the restore point.</Muted>
       {/if}
-    </Card>
+    </Card>{/if}
   {/if}
 </PageState>
 

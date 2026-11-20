@@ -49,7 +49,7 @@
         {#if fm.canPause()}
           <Button size="sm" icon="pause" busy={j.pausing} busyLabel="Pausing…" tooltip="Stops the job and keeps its list: Continue starts a new job that skips what is copied" onclick={() => fm.pauseJob()}>Pause</Button>
         {/if}
-        <Button size="sm" busy={j.cancelling} busyLabel="Cancelling…" disabled={j.pausing} tooltip="Stops cleanly: what is copied stays, nothing unverified is removed" onclick={() => fm.cancelJob()}>Cancel</Button>
+        <Button size="sm" icon="x" busy={j.cancelling} busyLabel="Cancelling…" disabled={j.pausing} tooltip="Stops cleanly: what is copied stays, nothing unverified is removed" onclick={() => fm.cancelJob()}>Cancel job</Button>
       {:else if j.state === 'paused'}
         <Button size="sm" variant="primary" icon="play" busy={j.continuing} busyLabel="Starting…" tooltip="A new job over the same selection: --conflict skip, size check" onclick={() => fm.continueJob()}>Continue</Button>
         <Button size="sm" variant="ghost" icon="x" label="Dismiss" onclick={() => fm.dismissJob()} />

@@ -36,6 +36,11 @@ check_out() {   # check_out "what" regex command...: output of the command match
   if grep -Eq "$re" <<<"$out"; then pass "$what"; else fail "$what (no '$re' in: $(head -c 300 <<<"$out" | tr '\n' ' '))"; fi
 }
 
+check_match() {   # check_match "what" regex text: the text matches the extended regex
+  if grep -Eq "$2" <<<"$3"; then pass "$1"; else fail "$1 (no '$2' in: $(head -c 300 <<<"$3" | tr '
+' ' '))"; fi
+}
+
 # Mounts the tests make (the pool, the data disks, /bulk). A leftover one of an earlier test or of the machine itself is in the way.
 # mountpoint(1) cannot be used for this: on a dead FUSE mount (mergerfs gone) it says "not a mountpoint" and mkdir says "File exists".
 test_mounts() { awk '$5 ~ /^(\/bulk|\/mnt\/bulk|\/var\/lib\/hs\/disks)(\/|$)/ { print $5 }' /proc/self/mountinfo | sort -ru; }

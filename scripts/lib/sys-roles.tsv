@@ -61,11 +61,11 @@ disk start <disk> <action>	admin	start
 disk results <disk>	viewer	read
 disk ls <member>	viewer	read
 disk marks	viewer	read
-fm locations	viewer	read
+fm locations	admin	read
 fm pair <left> <right>	admin	read
-fm ls <location>	viewer	read
-fm du <location>	viewer	read
-fm stat <location>	viewer	read
+fm ls <location>	admin	read
+fm du <location>	admin	read
+fm stat <location>	admin	read
 fm trash <location>	admin	read
 fm progress <unit>	viewer	read
 fm plan <op>	admin	plan
@@ -228,7 +228,7 @@ recipes asks <recipe>	viewer	read
 recipes steps <recipe>	viewer	read
 admin plan <action>	admin	plan
 admin start <action>	admin	start
-backup find <word>	viewer	read
+backup find <word>	admin	read
 dc state	admin	read
 dc plan <action>	admin	plan
 dc start <action>	admin	start
