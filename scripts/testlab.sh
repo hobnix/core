@@ -483,6 +483,10 @@ for s in json.load(open(sys.argv[1])).get("steps", []):
   mkdir -p "$rundir/harness-browser"
   HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" run --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}" \
     --nav "$src/web/src/nav.js" --out "$rundir/harness-browser/result-browser.json" || rc=$?
+  # #485: the live scenarios (an open page follows a change made over ssh); only with HS_TESTLAB_LIVE_SSH=<user@host> (a key the VM accepts), limit 0 must fail
+  if [ "$rc" = 0 ] && [ -n "${HS_TESTLAB_LIVE_SSH:-}" ]; then
+    HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" live --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}"       --scenarios "$src/scripts/dev/testlab-live.tsv" --limits "$src/scripts/lib/live-limits.tsv" --ssh "$HS_TESTLAB_LIVE_SSH"       ${HS_TESTLAB_LIVE_LIMIT:+--limit "$HS_TESTLAB_LIVE_LIMIT"} --out "$rundir/harness-browser/result-live.json" || rc=$?
+  fi
   case "$rc" in 0) res[6]=ok ;; 1) res[6]=failed ;; 3) res[6]=skipped ;; *) res[6]=error ;; esac
 }
 
