@@ -32,7 +32,15 @@ row_command() {   # row_command <script> <flags>: sets run_cmd (the program and 
   local sub bin fb
   case "$1" in
     rust:*) ;;
-    *) run_cmd=(bash "$(script_file "$1")"); return 0 ;;
+    *)
+      # a row of a package that speaks the command protocol (flag proto, registry-load.sh): ext_proto.py runs the program and renders its answer
+      case ",${2:-}," in
+        *,proto,*)
+          local pk=${row_path#sys }; pk=${pk#ext }; pk=${pk%% *}
+          run_cmd=(python3 -I "$here/ext_proto.py" dispatch --kind "$row_kind" --package "$pk" --path "$row_path" --flags "${2:-}" -- "$(script_file "$1")")
+          return 0 ;;
+      esac
+      run_cmd=(bash "$(script_file "$1")"); return 0 ;;
   esac
   sub=${1#rust:}
   bin=${HOBNIX_BIN:-}

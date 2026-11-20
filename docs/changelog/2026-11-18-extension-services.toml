@@ -1,0 +1,4 @@
+date  = "2026-11-18"
+type  = "feature"
+title = "Service extensions run under a supervised unit"
+body  = """An extension with a `[service]` table now runs as one supervised process: `hs ext status` shows its state, `hs ext start` and `hs ext stop` control it, and a service that fails five times in ten minutes is given up with an `ext.service-failed` event. Not tested on hardware yet."""

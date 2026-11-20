@@ -1,6 +1,6 @@
 # 0010: Command extensions speak versioned JSON over stdin/stdout
 
-Status: Accepted (2026-11-10)
+Status: Accepted (2026-11-10); implemented in 0.8 (dispatcher `scripts/lib/ext_proto.py`, manifest checks `pkg_protocol.py`, SDK helpers); not tested on hardware yet. Guide: docs/extensions.md
 Issue: hobnix/server#237 (epic #197). Service extensions are #238, permissions #239; neither is decided here.
 
 ## Context
@@ -61,7 +61,7 @@ Issue: hobnix/server#237 (epic #197). Service extensions are #238, permissions #
 - Follow-ups, not built here (the reference runner is the proof that the format works, it is not called by `hs` yet):
   1. `protocol = [1]` and a per-row `timeout` in package.toml / commands.tsv flags, validated by `pkg.py validate`; the dispatcher
      (`hs ext`, `hs sys ext`) calls the runner for such rows and renders `data` to TSV/text.
-  2. `hs_job` cancel sends SIGTERM to the process group (ADR 0004) so rule 7 holds for jobs started by the web interface.
+  2. `hs_job` cancel sends SIGTERM to the process group (ADR 0004) so rule 7 holds for jobs started by the web interface. Checked: the job is a systemd unit with the default `KillMode=control-group`, so `systemctl stop` sends SIGTERM to every process of the unit (a superset of the process group), then SIGKILL after the stop timeout; no code change was needed. tests/job-cancel.sh covers it (a job that traps SIGTERM writes `cancelled`, its children are gone).
   3. An SDK (#197) with the same message types for shell, Python and Go. The Rust one exists: rust/hobnix-ext-sdk (#240, covers ADR 0011 too).
 
 ## Open points

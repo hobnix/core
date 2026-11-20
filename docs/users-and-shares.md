@@ -146,6 +146,27 @@ Other account tasks:
 `Administrator`. Use it for administration and a normal account for daily use. `Administrator` cannot be locked, deleted or removed from
 "Domain Admins" with `hs`, so you cannot lock yourself out.
 
+### Who may use the web interface, and what they may do
+
+The web interface knows three roles, and a person's role comes from their domain groups. The highest group wins.
+
+| Role | Group | May |
+| --- | --- | --- |
+| viewer | `hn-viewers` | look at everything that shows no secret; no changes |
+| app manager | `hn-app-managers` | also start, stop and update instances and apps |
+| admin | Domain Admins | everything |
+
+Create the two groups once. The command shows what is missing and changes nothing until you type the name of your domain:
+
+```bash
+sudo hs group roles
+```
+
+Then put people in them, for example `sudo hs user alice join hn-viewers`. The role is read when somebody signs in and kept for that session;
+a changed membership applies at the next sign-in. A person in none of the three groups cannot sign in. The local admin account stays an admin,
+also while the domain controller is down. Other names for the two groups: the settings `webViewerGroup` and `webAppManagerGroup`. The audit
+log (`hs sys audit`) names the signed-in person for every change made in the web interface. Not tested on hardware yet.
+
 Deleting an account is final: its files stay in the shares, but its rights become dead entries, and a new user with the same name does not
 get them back.
 

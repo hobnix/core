@@ -169,7 +169,7 @@ jobs:
           HS_TEST_CI=1 bash tests/run-all.sh --jobs 2 --shard ${{ matrix.shard }}/${{ strategy.job-total }} "${only[@]}"
 
   # The default package repositories checked against this core: manifests, indexes and their own tests. A core change that breaks a package is
-  # seen here, before a release (docs/PLAN-packages.md, "Compatibility and CI across repositories"). recipes and extensions: latest main.
+  # seen here, before a release (docs/PLAN-packages.md, "Compatibility and CI across repositories"). recipes and extensions: the branch of the same name, else latest main.
   # hobnix/capabilities (docs/PLAN-capabilities-repo.md Q5): the branch of the same name if it exists, else `develop`; a release pull request
   # (into main) and a v* tag use its newest tag (scripts/dev/caps-ref.sh). The job logs the commit it used.
   packages:
@@ -178,13 +178,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # recipes and extensions: the branch of the same name if it exists there (a core change that needs a package change ships both), else the default branch
+      - name: Choose the refs of hobnix/recipes and hobnix/extensions
+        id: pkgref
+        env:
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          for r in recipes extensions; do
+            ref=
+            if git ls-remote --exit-code --heads "https://github.com/hobnix/$r.git" "$HEAD_REF" >/dev/null 2>&1; then ref=$HEAD_REF; fi
+            echo "$r=$ref" >> "$GITHUB_OUTPUT"
+          done
       - uses: actions/checkout@v5
         with:
           repository: hobnix/recipes
+          ref: ${{ steps.pkgref.outputs.recipes }}
           path: pkgs/recipes
       - uses: actions/checkout@v5
         with:
           repository: hobnix/extensions
+          ref: ${{ steps.pkgref.outputs.extensions }}
           path: pkgs/extensions
       - name: Choose the ref of hobnix/capabilities
         id: capref

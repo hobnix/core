@@ -9,6 +9,7 @@
   import { route, go } from '../route.svelte.js';
   import { pageFor } from '../routes.js';
   import { itemOf } from '../nav.js';
+  import { pageRole, roleOk, refusal } from '../roles.js';
   import { ui } from '../ui.svelte.js';
   import Banner from '../ui/Banner.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -26,10 +27,18 @@
   const caps = $derived(ui.features.capabilities);
   const off = $derived(node.local && !!item?.capability && Array.isArray(caps) && !caps.includes(item.capability));
   const gate = $derived(node.local && locked && !!item?.storage);
+  // a page of a higher role than this session has: said in words (the server answers 403 to its reads too); a remote node's pages only read, never refused here
+  const need = $derived(node.local ? pageRole(inner) : 'viewer');
+  const refused = $derived(!roleOk(ui.role, need));
   const down = $derived(!node.local && node.state === 'down');
 </script>
 
-{#if off}
+{#if refused}
+  <div class="card"><EmptyState tone="info" icon="prohibit" title="Not for your role"
+    text={refusal(ui.role, need) + ` Only the ${need} role may open this page. Ask an administrator if you need it.`}>
+    {#snippet action()}<Button tooltip={'Back to the summary'} onclick={() => go('/')}><i class="ph ph-house"></i>Summary</Button>{/snippet}
+  </EmptyState></div>
+{:else if off}
   <div class="card"><EmptyState tone="info" icon="power" title="This part is switched off"
     text="It is not part of this server's configuration, so there is nothing to show. Switch it on in Settings (the line is capabilities in machine.toml).">
     {#snippet action()}<Button tooltip={'Open the settings page'} onclick={() => go('/settings/capabilities')}><i class="ph ph-sliders"></i>Open Settings</Button>{/snippet}

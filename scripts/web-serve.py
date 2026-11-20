@@ -23,7 +23,8 @@ This file is the whole HTTP side of the entry page:
   GET  anything else  the built frontend (web/dist), index.html for unknown paths
 Nothing else. Changes (plan/start) will go through the same session check and their own allowlist.
 
-Who may sign in: members of Domain Admins (checked with winbind after ntlm_auth accepted the password), and the one local
+Who may sign in: members of Domain Admins, hn-app-managers or hn-viewers (checked with winbind after ntlm_auth accepted the password;
+the highest role wins, ADR 0012), and the one local
 account (default adminuser, checked with unix_chkpwd) which is the only way in while the storage is locked and dc1 is down.
 Passwords travel on stdin of the helper, never in an argument list.
 
@@ -65,6 +66,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_terminal as wt      # the in-browser terminal (WebSocket, tickets, pty shell)
 import web_vmconsole as vc    # the graphical VM console (Incus VGA console relayed over a WebSocket, ADR 0021)
 import live_state as ls        # live state: the RESP client for Redis (mode redis)
+import token_store as tk      # API tokens: the store, the per token rate limit, the hourly owner re-check (ADR 0012, step 17)
 import first_run as fr         # first-run flag and the one-time console token (docs/adr/0022-first-run-console-token.md)
 from hs_ext import (env, runtime_setting, capabilities, applied_recipes, ext_roots, ext_sys_rows, ext_packages, ext_manifest,  # noqa: F401,E402
                     ext_read, ext_load_web, EXT_NAME, EXT_KINDS, EXT_BLOCKS)
@@ -264,6 +266,14 @@ def _runtime(fn):
 
 class Config:
     @_runtime
+    def manager_group(self):                # ADR 0012 / D2: the group of the role app-manager; visible in the domain, so it carries the final prefix
+        return runtime_setting("webAppManagerGroup") or env("HS_WEB_APP_GROUP", "hn-app-managers")
+
+    @_runtime
+    def viewer_group(self):                 # the group of the role viewer
+        return runtime_setting("webViewerGroup") or env("HS_WEB_VIEWER_GROUP", "hn-viewers")
+
+    @_runtime
     def accent(self):                       # main colour (webAccent)
         return runtime_setting("webAccent") or env("HS_WEB_ACCENT", DEFAULT_ACCENT)
 
@@ -297,6 +307,7 @@ class Config:
         self.workgroup = env("HS_WEB_WORKGROUP", "")                 # "HOME"; empty = no domain, local account only
         self.realm = env("HS_WEB_REALM", "")                         # "ad.home.lan", only shown
         self.admin_group = env("HS_WEB_ADMIN_GROUP", "Domain Admins")
+        self.roles_file = env("HS_WEB_ROLES_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "sys-roles.tsv"))
         self.local_user = env("HS_WEB_LOCAL_USER", "adminuser")
         self.locked_marker = env("HS_LOCKED_MARKER", "/run/hs/storage-locked")
         self.ntlm_auth = env("HS_WEB_NTLM_AUTH", "ntlm_auth")
@@ -434,16 +445,107 @@ def favicon_svg(accent):
             '<path d="M36.5 33.5 L63.5 66.5 M50 50 L36.5 66.5" fill="none" stroke="%s" stroke-width="7"/></svg>' % accent)
 
 
+# ─────────────────────────── roles (ADR 0012) ───────────────────────────
+ROLES = ("viewer", "app-manager", "admin")      # ordered, each includes the one before
+
+
+def role_ok(have, need):
+    """True when the role `have` may do what `need` asks. An unknown role on either side is refused."""
+    return have in ROLES and need in ROLES and ROLES.index(have) >= ROLES.index(need)
+
+
+class RoleTable:
+    """The least role of every `hs sys` row: scripts/lib/sys-roles.tsv, generated from docs/api/sys.toml (scripts/openapi-gen.py). A row is the
+    words of the registry with `<name>` for an argument. match(words) takes the words after `hs sys` (more words than the row are fine, a query
+    flag at the end too) and answers the role of the best matching row: most fixed words, then the longest. No row = admin (ADR 0012 decision 2),
+    and an unreadable table = admin for everything, so a missing file locks a viewer out and never lets one in."""
+
+    def __init__(self, path):
+        self.path, self.rows, self.loaded = path, [], False
+
+    def _load(self):
+        self.loaded, rows = True, []
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                for line in f:
+                    cols = line.rstrip("\n").split("\t")
+                    if line.startswith("#") or len(cols) < 2 or cols[1] not in ROLES:
+                        continue
+                    rows.append((tuple(cols[0].split()), cols[1]))
+        except OSError:
+            pass
+        self.rows = rows
+
+    def match(self, words):
+        """-> (role, row words) of the best row, or ("admin", None) when no row fits"""
+        if not self.loaded:
+            self._load()
+        words, best, key = list(words), None, (-1, -1)
+        for row, role in self.rows:
+            if len(row) > len(words):
+                continue
+            fixed = 0
+            for r, w in zip(row, words):
+                if r.startswith("<") and r.endswith(">"):
+                    continue
+                if r != w:
+                    break
+                fixed += 1
+            else:
+                if (fixed, len(row)) > key:
+                    best, key = (role, row), (fixed, len(row))
+        return best or ("admin", None)
+
+    def need(self, words):
+        return self.match(words)[0]
+
+
+TOKEN_DENIED = frozenset(("token", "users", "secrets", "unlock", "vault", "terminal", "vmconsole"))      # words a bearer token never gets, whatever its role
+# A change (plan/start) a token may start: only areas that give no access outliving the token (#944). Every area of CHANGES is in exactly one of the two
+# sets (tests/token-test.py fails for a new one); the denied areas can add keys, packages, routes, people or settings that survive a revoked token.
+TOKEN_CHANGE_ALLOWED = frozenset(("ct", "backup", "shares", "docker", "docker-app", "docker-registry", "apps", "recipes", "jobs", "notify", "health", "expiry", "iso"))
+TOKEN_CHANGE_DENIED = frozenset(("token", "users", "secrets", "ssh-key", "pkg", "config", "system", "routes", "net", "dc", "node", "migrate", "incident",
+                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "vps", "parts", "release", "gateway", "fm", "ext"))
+
+_actor = threading.local()      # who a command runs for: _run hands it to the command as HS_ACTOR (the audit line, scripts/lib/audit.sh)
+
+
+def current_actor():
+    return getattr(_actor, "name", "")
+
+
+def actor_name(user):
+    """The name the audit log gets for a signed-in person: the same characters audit_actor keeps (a domain user is WORKGROUP\\anna -> WORKGROUP_anna)."""
+    return re.sub(r"[^A-Za-z0-9._@-]", "_", str(user))[:64]
+
+
 # ─────────────────────────── sign-in checks ───────────────────────────
 USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
+def _command_env():
+    """The environment of a command: ours, plus HS_ACTOR when a person asked for it. A name only, never a secret."""
+    who = current_actor()
+    if not who:
+        return None
+    e = dict(os.environ)
+    e["HS_ACTOR"] = who
+    return e
+
+
+RC_TIMEOUT = 124      # the web server stopped waiting (the time limit passed); the shell's `timeout` uses the same number
+RC_NOT_RUN = 127      # the command could not be started
+
+
 def _run(cmd, stdin=None, timeout=10):
+    """-> (rc, stdout). A timeout is RC_TIMEOUT, a command that could not be started RC_NOT_RUN, both with empty output."""
     try:
-        p = subprocess.run(cmd, input=stdin, capture_output=True, timeout=timeout)
+        p = subprocess.run(cmd, input=stdin, capture_output=True, timeout=timeout, env=_command_env())
         return p.returncode, p.stdout.decode("utf-8", "replace")
+    except subprocess.TimeoutExpired:
+        return RC_TIMEOUT, ""
     except (OSError, subprocess.SubprocessError):
-        return 127, ""
+        return RC_NOT_RUN, ""
 
 
 _run_plain = _run      # tests replace _run with a fake; while they do, plans go through that fake and the plan cache is off (see _change)
@@ -501,9 +603,9 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
     went away (gone() is True) or the timeout passed. Only for plans: a plan changes nothing, so stopping it is safe. Never for start."""
     try:
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, start_new_session=hasattr(os, "killpg"))
+                             stderr=subprocess.DEVNULL, start_new_session=hasattr(os, "killpg"), env=_command_env())
     except (OSError, ValueError):
-        return 127, "", "run"
+        return RC_NOT_RUN, "", "run"
     end, data = time.monotonic() + timeout, stdin
     while True:
         try:
@@ -514,7 +616,7 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
             how = "gone" if gone is not None and gone() else "timeout" if time.monotonic() > end else None
             if how:
                 _kill_tree(p)
-                return 127, "", how
+                return RC_TIMEOUT, "", how
 
 
 class Auth:
@@ -549,14 +651,32 @@ class Auth:
         print("web login: ntlm_auth did not decide: rc=%s out=%r err=%r" % (rc, out[:120], err[:200]), flush=True)
         return None
 
-    def domain_is_admin(self, user):
+    def domain_in_group(self, user, group):
         wg = self.cfg.workgroup
-        rc, out = _run([self.cfg.wbinfo, "--group-info", "%s\\%s" % (wg, self.cfg.admin_group)])
+        rc, out = _run([self.cfg.wbinfo, "--group-info", "%s\\%s" % (wg, group)])
         parts = out.strip().split(":")
         if rc != 0 or len(parts) < 3 or not parts[2].isdigit():
             return False
         rc, out = _run([self.cfg.wbinfo, "-r", "%s\\%s" % (wg, user)])
         return rc == 0 and parts[2] in out.split()
+
+    def domain_reachable(self):
+        """True when winbind can reach a domain controller (`wbinfo -t`). A token owner who is in no group while this is False is not gone, the answer is only missing."""
+        return not self.storage_locked() and _run([self.cfg.wbinfo, "-t"])[0] == 0
+
+    def domain_is_admin(self, user):
+        return self.domain_in_group(user, self.cfg.admin_group)
+
+    def domain_role(self, user):
+        """The highest role the person's domain groups give (ADR 0012), or None when they are in none of the three groups.
+        A group that does not exist (a domain that never ran `hs users groups`) gives nothing: the sign-in is refused, never widened."""
+        if self.domain_is_admin(user):
+            return "admin"
+        if self.domain_in_group(user, self.cfg.manager_group):
+            return "app-manager"
+        if self.domain_in_group(user, self.cfg.viewer_group):
+            return "viewer"
+        return None
 
     def local_password_ok(self, user, password):
         # unix_chkpwd reads the password (NUL terminated) from stdin; as root it may check any account. Empty passwords never pass.
@@ -609,10 +729,11 @@ class Sessions:
     """Sessions live in memory; with cfg.session_file they are also written (only sha256 of the cookie token, user, realm, times) so that a
     restart of hs-web does not sign everybody out. The CSRF token is derived from the cookie token (csrf_for), so nothing secret is stored."""
 
-    KEYS = ("user", "realm", "created", "seen", "ip", "ua", "fp")      # what is written; fp = fingerprint of the local password at sign-in (local sessions only)
+    KEYS = ("user", "realm", "role", "created", "seen", "ip", "ua", "fp")      # what is written; fp = fingerprint of the local password at sign-in (local sessions only)
 
     def __init__(self, cfg):
         self.cfg, self.lock, self.items, self.restored, self.saved_at = cfg, threading.Lock(), {}, {}, 0.0
+        self.owner_role = None  # App sets this to a function (user, realm) -> the role of a domain person now, or None = gone (#945); None here = no re-check
         self.fp_of = None       # App sets this to Auth.local_fingerprint; tests may leave it None (no password check)
         self._load()
 
@@ -648,9 +769,9 @@ class Sessions:
         except OSError:
             pass
 
-    def create(self, user, realm, ip, ua=""):
+    def create(self, user, realm, ip, ua="", role="admin"):
         token, now = secrets.token_urlsafe(32), time.time()
-        s = {"user": user, "realm": realm, "csrf": csrf_for(token), "created": now, "seen": now, "ip": ip, "ua": ua[:24]}
+        s = {"user": user, "realm": realm, "role": role, "csrf": csrf_for(token), "created": now, "seen": now, "ip": ip, "ua": ua[:24]}
         fp = self.fp_of(user, fresh=True) if realm == "local" and self.fp_of else ""      # never the cached one: a password just changed
         if fp:
             s["fp"] = fp
@@ -690,13 +811,14 @@ class Sessions:
                 self._save()
         return n
 
-    def end_others(self, current_token):
+    def end_others(self, current_token, user=None):
+        """End every session but this one; with `user` only that person's (a viewer or an app manager never ends somebody else's)."""
         cur, n = self.sid(current_token), 0
         with self.lock:
-            for t in [t for t in self.items if self.sid(t) != cur]:
+            for t in [t for t in self.items if self.sid(t) != cur and (user is None or self.items[t]["user"] == user)]:
                 del self.items[t]
                 n += 1
-            for h in [h for h in self.restored if h[:16] != cur]:
+            for h in [h for h in self.restored if h[:16] != cur and (user is None or self.restored[h]["user"] == user)]:
                 del self.restored[h]
                 n += 1
             if n:
@@ -721,6 +843,23 @@ class Sessions:
         return False
 
     def get(self, token, locked, fp_of=None):
+        """The live session of this cookie token, or None. A domain session has the role its person has NOW, read at most once an hour like a
+        token's (ADR 0012 decision 6): gone (disabled, out of all three groups) ends it, a lower role lowers it. Asked outside the lock (the domain may be slow)."""
+        s = self._get(token, locked, fp_of)
+        if s is None or s["realm"] != "domain" or not self.owner_role:
+            return s
+        role = self.owner_role(s["user"], s["realm"])
+        with self.lock:
+            if role is None:
+                self.items.pop(token, None)
+                self._save()
+                return None
+            if s.get("role") != role:
+                s["role"] = role
+                self._save()
+        return s
+
+    def _get(self, token, locked, fp_of=None):
         if not token:
             return None
         fp_of = fp_of or self.fp_of
@@ -967,6 +1106,7 @@ READS = {
     ("jobs", "tail"): {"kind": "tsv", "ttl": 0, "args": [UNIT], "query": {"from": (r"^[0-9]{1,7}$", "")}},
     ("system", "updates"): {"kind": "tsv", "ttl": 30, "topic": "system-updates"},
     ("release", "show"): {"kind": "tsv", "ttl": 30},        # the update channel and what the next update does (release-channel.sh)
+    ("token", "list"): {"kind": "tsv", "ttl": 5, "query": {"owner": (r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$", "--owner")}},      # a non-admin gets their own (server side, _sys)
     ("ssh-key", "list"): {"kind": "tsv", "ttl": 30, "topic": "ssh-keys"},
     ("node", "list"): {"kind": "tsv", "ttl": 15, "topic": "node-list"},
     ("node", "show"): {"kind": "tsv", "ttl": 15, "args": [NAME]},
@@ -1112,14 +1252,14 @@ FULL_NAME = r"^\w[\w .'-]{0,63}$"                                     # a full n
 CHANGE = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9._ -]{0,63}=(add|remove)$"     # <user>:<group>=add|remove
 # settings the web UI may change (machine.toml keys); everything else (keys, host name, addresses, secrets) stays a terminal job
 # schema:begin CONFIG_KEYS (generated by scripts/schema-gen.py; edit config/schema.toml)
-CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webAccent|webTerminal|"
-               "recipeQuestionHours|webTerminalIdleMinutes|webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|"
-               "incusUi|isoDir|syncEveryHours|shareSnapshots|diskSpindownMinutes|fileManagerWrite|setupDone|"
-               "backupNewShares|backupNewInstances|offsiteDiskDays|notifySecondMinPriority|notifications|quietHours|"
-               "autoMitigate|autoMitigateFreeze|autoMitigateBackup|metrics|metricsDays|metricsMaxGB|deckApi|"
-               "dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|gatewayPublicHttp|gatewayUnknownHostLocal|"
-               "gatewayUnknownHostPublic|gatewayTunnelPort|gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|"
-               "gatewayAcmeDnsProvider")
+CONFIG_KEYS = ("timeZone|language|keyMap|icons|loginMessage|updateChannel|webAllowedHosts|webViewerGroup|"
+               "webAppManagerGroup|webAccent|webTerminal|recipeQuestionHours|webTerminalIdleMinutes|"
+               "webTerminalMaxHours|nic|smbAllow|dhcpRange|siteName|incusUi|isoDir|syncEveryHours|shareSnapshots|"
+               "diskSpindownMinutes|fileManagerWrite|setupDone|backupNewShares|backupNewInstances|offsiteDiskDays|"
+               "notifySecondMinPriority|notifications|quietHours|autoMitigate|autoMitigateFreeze|autoMitigateBackup|"
+               "metrics|metricsDays|metricsMaxGB|deckApi|dockerSize|dockerMemory|dockerCpus|gatewayPublicHttps|"
+               "gatewayPublicHttp|gatewayUnknownHostLocal|gatewayUnknownHostPublic|gatewayTunnelPort|"
+               "gatewayAcmeEmail|gatewayAcmeStaging|gatewayAcmeChallenge|gatewayAcmeDnsProvider")
 # schema:end CONFIG_KEYS
 CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one --set key=value of `config apply` (hand-written, outside the generated block)
 # share forms: a folder name inside the instance (absolute) and inside a share (relative or absolute, both without ..), a SID with its level, a kept folder
@@ -1220,6 +1360,9 @@ CHANGES = {
                      "--newname": (r"^[^\x00-\x1f/]{1,255}$", False), "--conflicts": (None, False)},
             "selection": True}],
     # one public key line (type, base64 body, optional comment; no newline: fullmatch + the character classes) / the id column of `ssh-key list`
+    # API tokens (token-change.sh): --by (who asks) and --cap (their role) are added by the server, never by the client; the token comes back once as `secret token`
+    "token": [{"fixed": [r"^create$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"], "opts": {"--role": (r"^(viewer|app-manager|admin)$", False), "--days": (r"^[0-9]{1,3}$", False)}},
+              [r"^revoke$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"]],
     "ssh-key": [[r"^add$", r"(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) "
                            r"[A-Za-z0-9+/]{16,700}={0,3}( [A-Za-z0-9@._:+=, -]{1,100})?"],
                 [r"^remove$", r"[A-Za-z0-9][A-Za-z0-9@._:+/= -]{0,100}"]],
@@ -1474,6 +1617,22 @@ def ext_refresh(force=False):
         CHANGES["config"] = _config_entries("|".join(overlay_settable()))
 
 
+def ext_need(words, table_need):
+    """The role an extension call needs (docs/PLAN-extensions-access.md step 18): the higher of the `role` of the package's [[web.reads]] /
+    [[web.changes]] entry and `table_need`, the role of the core row it calls. `words` are the words after `hs sys`; anything that is not an
+    extension call, or an entry that is gone, keeps `table_need` (an extension call that matches no entry is refused before this)."""
+    if len(words) < 3 or words[0] != "ext":
+        return table_need
+    if words[2] in ("plan", "start"):
+        entries = CHANGES.get("ext/" + words[1], [])
+        roles = [e.get("role", "admin") for e in entries if isinstance(e, dict) and _entry_match(e, list(words[3:]))[0]]
+    else:
+        spec = next((READS.get(tuple(words[:n])) for n in range(len(words), 0, -1) if tuple(words[:n]) in READS), None)
+        roles = [spec.get("role", "admin")] if spec else []
+    have = min(roles, key=ROLES.index) if roles else "admin"      # no entry found: admin
+    return max(have, table_need, key=ROLES.index)
+
+
 def _entry_match(entry, args):
     """-> (ok, takes_stdin). An entry is a list of patterns (an exact shape) or a dict {fixed: [patterns], opts: {--flag: (pattern|None, repeats)}, stdin: bool}
     whose options may follow the fixed arguments in any order (a flag without a pattern is a switch, a flag with `repeats` may appear more than once)."""
@@ -1603,6 +1762,19 @@ def validate_change(body):
     return area, args, confirm, stdin
 
 
+CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
+
+
+def no_status_reason(rc):
+    """The reason for a plan or start that ended without its own status line."""
+    if rc == RC_TIMEOUT:
+        return ("The server stopped waiting after %d s. A start may still be running or be partly done: check Jobs and the page "
+                "before you try again." % CHANGE_LIMIT)
+    if rc == RC_NOT_RUN:
+        return "The server could not run the command (exit %d)." % rc
+    return "The server could not do this (exit %d)." % rc
+
+
 def parse_change(out, rc):
     """The key<TAB>value lines of a plan or start (scripts/*-change.sh) as one object. step, note, warn, danger, section and text (the update preview lists commits) keep their order."""
     d = {"exit": rc, "status": "", "reason": "", "heading": "", "command": "", "confirm_name": "", "long": False, "unit": "",
@@ -1645,14 +1817,14 @@ def parse_change(out, rc):
             d["job"] = v           # the job record of an interactive recipe run (ADR 0018): the page follows it
         elif k == "secret":
             name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer): login, domain, host, password
-            if name in ("login", "domain", "host", "password"):
+            if name in ("login", "domain", "host", "password", "token"):
                 d.setdefault("secret", {})[name] = val
         elif k in ("file", "color", "seed", "size"):
             d[k] = v           # what a poster drawing reports
     if not d["status"]:
         d["status"] = "ok" if rc == 0 else "refused"
     if d["status"] == "refused" and not d["reason"]:
-        d["reason"] = "The server could not do this (exit %d)." % rc
+        d["reason"] = no_status_reason(rc)
     return d
 
 
@@ -1705,7 +1877,7 @@ def plan_cacheable(area, args, stdin):
 def plan_stable(out, rc, d):
     """Worth keeping: the script printed its own status line, it is ok/needs/refused, ok only with exit 0, no secret in it, not a failed run."""
     explicit = any(line.startswith("status\t") for line in out.splitlines())
-    return (explicit and rc != 127 and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
+    return (explicit and rc not in (RC_TIMEOUT, RC_NOT_RUN) and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
             and "secret" not in d)
 
 
@@ -1989,6 +2161,8 @@ class Reads:
 
     @staticmethod
     def _shape(spec, rc, out):
+        if rc == RC_TIMEOUT and not out.strip():
+            return 502, {"error": "The server stopped waiting for this answer (time limit).", "rc": rc}
         if rc != 0 and not out.strip():
             return 502, {"error": "The server could not answer this (exit %d)." % rc, "rc": rc}
         if spec["kind"] == "json":
@@ -2081,7 +2255,7 @@ def parse_unlock(rc, out, passphrase):
         return "ok", "Unlocked. The services are starting."
     text = out.replace(passphrase, "***") if passphrase else out
     low = text.lower()
-    if rc == 127:
+    if rc == RC_NOT_RUN:
         return "failed", UNLOCK_NOT_RUN
     if "opens nothing" in low or "not the passphrase" in low or "did not accept" in low or "vault did not open" in low:
         return "failed", "Wrong passphrase."
@@ -2536,6 +2710,26 @@ class ChangesSeen:
 
 
 class App:
+    def _token_owner(self, owner, realm):
+        """The role of the owner of a token now (tk.TokenAuth reads it at most once an hour): ("role", r), ("gone", None) or ("down", None).
+        A domain owner is a name WORKGROUP_user (the audit form); the groups are asked as the plain user."""
+        if realm == "local":
+            return ("role", "admin") if owner == self.cfg.local_user else ("gone", None)
+        wg = self.cfg.workgroup
+        user = owner[len(wg) + 1:] if wg and owner.startswith(wg + "_") else owner
+        if not wg or not USER_RE.fullmatch(user):
+            return ("gone", None)
+        role = self.auth.domain_role(user)
+        if role:
+            return ("role", role)
+        return ("gone", None) if self.auth.domain_reachable() else ("down", None)
+
+    def _session_role(self, user, realm):
+        """The role of a domain session's person now: the same hourly answer as for their tokens (tk.TokenAuth.owner_role: a day of grace while the
+        domain controller is down, then viewer). The session name is the workgroup, a backslash and the user; None = gone."""
+        wg = self.cfg.workgroup
+        return self.tokens.owner_role("%s_%s" % (wg, user.split("\\")[-1]), realm) if wg else None
+
     def __init__(self, cfg=None, auth=None):
         self.cfg = cfg or Config()
         self.auth = auth or Auth(self.cfg)
@@ -2543,6 +2737,9 @@ class App:
         # looked up at call time: tests swap self.auth methods; a stand-in auth without the method means "no password check" (fail open, as an unreadable shadow)
         self.sessions.fp_of = lambda user, fresh=False: getattr(self.auth, "local_fingerprint", lambda u, fresh=False: "")(user, fresh=fresh)
         self.plans = Plans(self.cfg.plan_ttl)
+        self.roles = RoleTable(self.cfg.roles_file)
+        self.tokens = tk.TokenAuth(tk.Store(), self._token_owner)
+        self.sessions.owner_role = self._session_role
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
@@ -2601,7 +2798,68 @@ def make_handler(app):
             return ""
 
         def _session(self):
+            """The signed-in person: a bearer token (verified once per request by _bearer_refused, never a cookie) or the session of the cookie."""
+            if self.headers.get("Authorization", "")[:7].lower() == "bearer ":
+                bc = getattr(self, "_bc", None)
+                return bc[1] if bc and bc[0] is self.headers else None
             return app.sessions.get(self._token(), app.auth.storage_locked())
+
+        def _csrf_ok(self, s):
+            """A cookie session needs its CSRF token; a bearer token has no cookie, so there is nothing to forge (ADR 0012 decision 4)."""
+            return bool(s.get("via")) or secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"])
+
+        def _bearer_refused(self):
+            """`Authorization: Bearer <token>` (ADR 0012 decisions 4 to 6, D4): answers the request itself and returns True when the token is refused
+            (401, or 429 while the address or the token id is locked). Sets self._bc = (headers, session) for _session when it is good. The address is
+            counted like a wrong password (the same Throttle, key tok:<address>); the token id by the limiter of the token store."""
+            h = self.headers.get("Authorization", "")
+            if h[:7].lower() != "bearer ":
+                return False
+            ip = self._client()
+            wait = app.throttle.wait("tok:" + ip)
+            if wait:
+                self._json(429, {"error": "Too many tries. Wait %d seconds." % wait, "retry_after": wait}, (("Retry-After", str(wait)),))
+                return True
+            res = app.tokens.check(h)
+            if res[0] == "ok":
+                i = res[1]
+                self._bc = (self.headers, {"user": i["owner"], "realm": i["realm"], "role": i["role"], "csrf": "", "via": i["id"], "created": 0, "seen": 0})
+                return False
+            _, code, text, tid, count = res
+            if count:
+                app.throttle.failed("tok:" + ip)
+            print("web token refused: %s from %s" % (tid or "-", ip), flush=True)      # the id, never the token
+            extra = (("Retry-After", "300"),) if code == 429 else ()
+            self._json(code, {"error": text}, extra + (("WWW-Authenticate", "Bearer"),))
+            return True
+
+        @staticmethod
+        def _role(s):
+            """The role of a session. A session written before roles existed has none: only Domain Admins and the local admin could sign in
+            then, so it is an admin. Any other value that is not a role is a viewer."""
+            r = s.get("role")
+            return "admin" if r is None else r if r in ROLES else "viewer"
+
+        def _allowed(self, s, words, change=False):
+            """The one role check (ADR 0012 decision 3): after the session is known, before the command runs. `words` are the words after `hs sys`.
+            A refused call is a 403 that names both roles, runs nothing and writes no audit line (the web log has it)."""
+            need, have = app.roles.need(words), self._role(s)
+            if words[:1] == ["ext"] and len(words) > 2:      # a package's entry names its own role; the core row still counts when it has one
+                ext_refresh()
+                need = ext_need(words, need if app.roles.match(words)[1] else "viewer")
+            if s.get("via") and words[:1] and words[0] in TOKEN_DENIED:      # a token never manages tokens, people, secrets or the unlock, whatever its role
+                print("web refused: token %s may not %s" % (s["via"], " ".join(words[:2])), flush=True)
+                self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
+                return False
+            if change and s.get("via") and words[0] not in TOKEN_CHANGE_ALLOWED:      # a token starts changes of an explicit list of areas only (#944)
+                print("web refused: token %s may not change %s" % (s["via"], words[0]), flush=True)
+                self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
+                return False
+            if role_ok(have, need):
+                return True
+            print("web refused: %s (%s) may not %s, needs %s" % (s["user"], have, " ".join(words[:3]), need), flush=True)
+            self._json(403, {"error": "Your role (%s) may not do this. It needs %s." % (have, need), "required": need, "role": have})
+            return False
 
         def _same_origin(self):
             origin = self.headers.get("Origin", "")
@@ -2673,7 +2931,7 @@ def make_handler(app):
             self.do_GET()
 
         def do_GET(self):
-            if self._host_refused():
+            if self._host_refused() or self._bearer_refused():
                 return
             path = urllib.parse.urlsplit(self.path).path
             if path == "/api/hello":
@@ -2686,15 +2944,19 @@ def make_handler(app):
                 s = self._session()
                 if not s:
                     return self._json(401, {"error": "not signed in"})
-                return self._json(200, {"user": s["user"], "realm": s["realm"], "csrf": s["csrf"], "features": features(cfg, app.first_run)})
+                return self._json(200, {"user": s["user"], "realm": s["realm"], "role": self._role(s), "csrf": s["csrf"], "features": features(cfg, app.first_run)})
             if path == "/api/settings-layout":
                 if not self._session():
                     return self._json(401, {"error": "not signed in"})
                 return self._json(200, overlay_layout())
             if path == "/api/sessions":
-                if not self._session():
+                s = self._session()
+                if not s:
                     return self._json(401, {"error": "not signed in"})
-                return self._json(200, {"sessions": app.sessions.listing(self._token())})
+                rows = app.sessions.listing(self._token())
+                if self._role(s) != "admin":
+                    rows = [r for r in rows if r["user"] == s["user"]]      # whose sessions exist is for admins; everybody sees their own
+                return self._json(200, {"sessions": rows})
             if path == "/theme.css":
                 data = theme_css(cfg.accent).encode()
                 self._headers(200, "text/css; charset=utf-8", len(data), (("Cache-Control", "no-cache"),))
@@ -2780,12 +3042,18 @@ def make_handler(app):
             return self._json(404, {"error": "unknown"})
 
         def _sys(self, path, query):
-            if not self._session():
+            s = self._session()
+            if not s:
                 return self._json(401, {"error": "not signed in"})
             fresh = bool(query.pop("fresh", None))      # ?fresh=1: the refresh button of a page (not part of the allowlisted query)
-            hit = app.reads.resolve([urllib.parse.unquote(x) for x in path[len("/api/sys/"):].split("/") if x], query)
+            words = [urllib.parse.unquote(x) for x in path[len("/api/sys/"):].split("/") if x]
+            if words[:2] == ["token", "list"] and self._role(s) != "admin":
+                query["owner"] = [actor_name(s["user"])]      # whose tokens exist is for admins; everybody else sees their own (the cache key holds the owner)
+            hit = app.reads.resolve(words, query)
             if hit is None:
                 return self._json(404, {"error": "unknown"})
+            if not self._allowed(s, hit[1]):
+                return
             code, obj, age, more = app.store.get(*hit, fresh=fresh)
             self._json(code, obj, extra=((("X-HS-Age", str(int(age))),) if age is not None else ()) + tuple(more))
 
@@ -2840,6 +3108,8 @@ def make_handler(app):
             frm = (query.get("from") or ["0"])[0]
             if not re.fullmatch(UNIT, unit) or not re.fullmatch(r"[0-9]{1,7}", frm):
                 return self._json(404, {"error": "unknown"})
+            if not self._allowed(s, ["jobs", "tail", unit]):      # the stream is the read `jobs tail`
+                return
             with app.stream_lock:
                 if app.streams >= cfg.stream_max:
                     return self._json(503, {"error": "too many open streams"})
@@ -2986,11 +3256,18 @@ def make_handler(app):
                 self._read(4096)
                 self.close_connection = True
                 return
+            if self._bearer_refused():
+                self._read(4096)
+                self.close_connection = True
+                return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
             if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
-            if not self._same_origin():
+            bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
+            if bearer and path not in ("/api/plan", "/api/start"):
+                return self._json(403, {"error": "A token can only plan and start changes."})      # no sign-in, sessions, unlock, terminal or live calls
+            if not bearer and not self._same_origin():      # a bearer token is no cookie: there is no browser to trick (ADR 0012 decision 4)
                 return self._json(403, {"error": "origin"})
             # One gate for every changing request: a session and its CSRF token, checked before any handler runs, so a handler added later cannot
             # forget it. Only the requests that start a session (login, setup) and logout (which is harmless without a session) are exempt.
@@ -2998,7 +3275,7 @@ def make_handler(app):
                 gate = self._session()
                 if not gate:
                     return self._json(401, {"error": "not signed in"})
-                if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), gate["csrf"]):
+                if not self._csrf_ok(gate):
                     return self._json(403, {"error": "csrf"})
             body = self._json_body(raw)
             if body is None:
@@ -3021,7 +3298,7 @@ def make_handler(app):
                 return self._change(path[len("/api/"):], body)
             if path == "/api/logout":
                 s = self._session()
-                if s and not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+                if s and not self._csrf_ok(s):
                     return self._json(403, {"error": "csrf"})
                 app.sessions.drop(self._token())
                 return self._json(200, {"ok": True}, (self._cookie("", 0),))
@@ -3030,14 +3307,17 @@ def make_handler(app):
         def _sessions_end(self, path, body, s):
             """End one session by its id, or all but this one. The gate in do_POST has checked the session and the CSRF token already."""
             ip, actor, token = self._client(), s["user"], self._token()
+            mine = None if self._role(s) == "admin" else s["user"]      # only an admin ends other people's sessions
             if path == "/api/sessions/end-others":
-                n = app.sessions.end_others(token)
+                n = app.sessions.end_others(token, mine)
                 print("web session ended: %s ended %d other sessions from %s" % (actor, n, ip), flush=True)
                 return self._json(200, {"ok": True, "ended": n})
             sid = body.get("id")
             if not isinstance(sid, str) or not re.fullmatch(r"[0-9a-f]{16}", sid):
                 return self._json(404, {"error": "no such session"})
             who = next((r["user"] for r in app.sessions.listing(token) if r["id"] == sid), "")
+            if mine is not None and who != mine:
+                return self._json(404, {"error": "no such session"})
             if not app.sessions.end(sid):
                 return self._json(404, {"error": "no such session"})
             print("web session ended: %s ended %s (%s) from %s" % (actor, sid, who, ip), flush=True)
@@ -3049,7 +3329,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             rev = body.get("rev")
             if not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
@@ -3062,7 +3342,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             if cfg.live != "redis":
                 return self._json(409, {"error": "live state is off"})
@@ -3077,7 +3357,7 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
             ch = validate_change(body)
             if ch is None:
@@ -3085,12 +3365,23 @@ def make_handler(app):
             area, args, confirm, stdin = ch
             if area == "pool" and not pool_change_ok(cfg.hs, args):
                 return self._json(400, {"error": "That change is not allowed."})
-            cmd = [cfg.hs, "sys"] + area.split("/") + [verb] + args      # "ext/games" = the words `ext games` (an extension package)
+            if not self._allowed(s, area.split("/") + [verb] + args, change=True):      # "ext/games" = the words `ext games` (an extension package)
+                return
+            _actor.name = actor_name("%s via token %s" % (s["user"], s["via"]) if s.get("via") else s["user"])      # every command below runs for this person (HS_ACTOR, the audit line)
+            try:
+                return self._change_run(verb, s, area, args, confirm, stdin)
+            finally:
+                _actor.name = ""
+
+        def _change_run(self, verb, s, area, args, confirm, stdin):
+            cmd = [cfg.hs, "sys"] + area.split("/") + [verb] + args
             if verb == "start" and confirm:
                 cmd += ["--confirm", confirm]
             if (area == "jobs" and args[:1] == ["answer"]) or (area == "recipes" and "--interactive" in args) or (area == "apps" and verb == "start"):
-                # ADR 0018 rule 11: who answers / who started the run. Roles (ADR 0012) are not built: every signed-in person is an administrator today
-                cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), "--role", "admin"]
+                # ADR 0018 rule 11: who answers / who started the run, and with which role (ADR 0012)
+                cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), "--role", self._role(s)]
+            if area == "token":
+                cmd += ["--by", actor_name(s["user"]), "--cap", self._role(s)]      # the owner of a new token and the most it may have; never from the client
             if area == "fm" and verb == "start":
                 cmd += ["--by", re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"]))]       # who, for the audit log of the file manager
             if verb == "start":
@@ -3104,7 +3395,7 @@ def make_handler(app):
                     _timing("plan", shape, t0, "cached", None, hit["status"])
                     return self._json(200, hit)
                 gen = app.plans.gen
-                rc, out, how = _run_watched(cmd, stdin=data, timeout=60, gone=lambda: _client_gone(self.connection))
+                rc, out, how = _run_watched(cmd, stdin=data, timeout=CHANGE_LIMIT, gone=lambda: _client_gone(self.connection))
                 if how == "gone":           # the browser asked something newer: no answer, the connection is closed
                     _timing("plan", shape, t0, how, None, None)
                     self.close_connection = True
@@ -3114,7 +3405,7 @@ def make_handler(app):
                     app.plans.put(key, gen, d)
                 _timing("plan", shape, t0, how, rc, d["status"])
                 return self._json(200, d)
-            rc, out = _run(cmd, stdin=data, timeout=60)
+            rc, out = _run(cmd, stdin=data, timeout=CHANGE_LIMIT)
             d = parse_change(out, rc)
             if verb == "start":
                 app.reads.clear()      # what the pages show next is read again, not served from before the change (clears the plan cache too)
@@ -3127,8 +3418,10 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
+            if not self._allowed(s, ["terminal"]):      # a shell on the host: no row, so admin only
+                return
             if not cfg.terminal:
                 return self._json(403, {"error": "Switch on the browser terminal under Settings > Users and access."})
             target = body.get("target")
@@ -3146,8 +3439,10 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
+            if not self._allowed(s, ["vmconsole"]):      # the console of an instance: admin only (ADR 0012, decided 2026-11-10)
+                return
             if not cfg.terminal:
                 return self._json(403, {"error": "Switch on the browser terminal under Settings > Users and access."})
             target = body.get("target")
@@ -3261,8 +3556,10 @@ def make_handler(app):
             s = self._session()
             if not s:
                 return self._json(401, {"error": "not signed in"})
-            if not secrets.compare_digest(self.headers.get("X-CSRF-Token", ""), s["csrf"]):
+            if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
+            if not self._allowed(s, ["unlock", "stdin"]):
+                return
             pw = body.get("passphrase")
             if not isinstance(pw, str) or not pw or len(pw) > 256 or any(ord(c) < 32 or ord(c) == 127 for c in pw):
                 return self._json(400, {"status": "failed", "reason": "Enter the passphrase (one line, up to 256 characters)."})
@@ -3370,10 +3667,12 @@ def make_handler(app):
                     return self._json(503, {"error": "The domain could not check the password right now. Try again, or sign in as the local admin (see the server log)."})
                 if not ok:
                     return deny("Wrong user name or password.")
-                if not app.auth.domain_is_admin(user):
-                    return deny("Only members of %s can sign in." % cfg.admin_group, 403)
+                role = app.auth.domain_role(user)      # the highest of the three groups; read now, kept for the life of the session (ADR 0012 decision 6)
+                if role is None:
+                    return deny("Only members of %s, %s or %s can sign in." % (cfg.admin_group, cfg.manager_group, cfg.viewer_group), 403)
                 name = "%s\\%s" % (cfg.workgroup, user.lower())
             else:
+                role = "admin"      # the local account is the way in while the domain controller is down
                 if user != cfg.local_user:
                     return deny("Wrong user name or password.")
                 if not app.auth.local_password_ok(user, password):
@@ -3381,11 +3680,11 @@ def make_handler(app):
                 name = user
             app.throttle.ok(*keys)
             app.sessions.drop(self._token())      # a cookie that came with the login is not kept alive (no session fixation)
-            token = app.sessions.create(name, realm, ip, self._ua())
+            token = app.sessions.create(name, realm, ip, self._ua(), role)
             app.warmer.wake.set()
             s = app.sessions.get(token, locked)
-            print("web login: %s from %s" % (name, ip), flush=True)
-            self._json(200, {"user": name, "realm": realm, "csrf": s["csrf"], "features": features(cfg, app.first_run)}, (self._cookie(token, cfg.max_age),))
+            print("web login: %s (%s) from %s" % (name, role, ip), flush=True)
+            self._json(200, {"user": name, "realm": realm, "role": role, "csrf": s["csrf"], "features": features(cfg, app.first_run)}, (self._cookie(token, cfg.max_age),))
 
     return Handler
 

@@ -83,6 +83,16 @@ def _load_pkg_perms():
 pkg_perms = _load_pkg_perms()
 
 
+def _load_pkg_roles():
+    spec = importlib.util.spec_from_file_location("pkg_roles", os.path.join(HERE, "lib", "pkg_roles.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_roles = _load_pkg_roles()
+
+
 def _load_pkg_app():
     spec = importlib.util.spec_from_file_location("pkg_app", os.path.join(HERE, "lib", "pkg_app.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -91,6 +101,16 @@ def _load_pkg_app():
 
 
 pkg_app = _load_pkg_app()
+
+
+def _load_pkg_protocol():
+    spec = importlib.util.spec_from_file_location("pkg_protocol", os.path.join(HERE, "lib", "pkg_protocol.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_protocol = _load_pkg_protocol()
 
 
 def capability_toml(folder):
@@ -417,6 +437,9 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad(t)
     for t in pkg_perms.manifest_problems(n, m, capability_toml(os.path.dirname(path)) if path else None):
         bad("permissions: " + t)
+    for t in pkg_roles.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
+        bad(t)
+    out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
     if warnings is not None:
@@ -570,7 +593,10 @@ def repo_check(folder, warnings=None):
         if not SEMVER.match(str(e.get("version", ""))):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
+        if pkg_perms.undeclared(m):
+            out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
+        out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
         warnings += [f"{name}: {t}" for t in warns]
@@ -712,7 +738,8 @@ def main(argv):
         if not found:
             print("unknown package", file=sys.stderr)
             return 1
-        for x in pkg_perms.of(found[0]) or ["-"]:
+        got = pkg_perms.of(found[0])
+        for x in ["-"] if got is None else got:
             print(x)
     elif cmd == "backup-paths":     # backup-paths <name>: the paths of [app.backup] mode = "paths", one per line (nothing for another mode); exit 1 for an unknown package
         found = [m for _, m in manifests() if m.get("name") == (rest[0] if rest else "")]

@@ -15,6 +15,7 @@ listed there and below, or `tests/docs.sh` complains. Guides follow [GUIDE-TEMPL
 | [Encryption and vault](encryption-and-vault.md) | One passphrase, the vault, encrypted disks, unlocking |
 | [Backup and recovery](backup-and-recovery.md) | Backups, restoring, snapshots, rebuilding a server |
 | [Web interface](web-interface.md) | Turning it on, signing in, pages, terminal, appearance |
+| [Extensions](extensions.md) | Extension commands and services, permissions and what is enforced, package events |
 | [Operations](operations.md) | Health alerts, updates, UPS, remote access, the gateway |
 
 The command reference is generated from the command list (`hs help`, or the page *All commands*).
@@ -31,6 +32,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [dev-environment](dev-environment.md) | Running tests, the WSL and VM tiers, the agent workflow |
 | [GUIDE-TEMPLATE](GUIDE-TEMPLATE.md) | How a guide is written: shape, rules, the glossary |
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
+| [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
@@ -52,6 +54,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
 | [PLAN-app-lifecycle](PLAN-app-lifecycle.md) | Design for milestone 0.6: one lifecycle for apps and packages, one Install job, app contract, store fields, update policy |
 | [PLAN-storage-nas](PLAN-storage-nas.md) | Design for milestone 0.7: file manager write and trash, spin-down, Unraid takeover, partial container backup, off-site copy, further capacity levels |
+| [PLAN-extensions-access](PLAN-extensions-access.md) | Design for milestone 0.8: extension protocol and SDK, enforced permissions, package events, roles and API tokens, two-factor login and single sign-on |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
@@ -62,6 +65,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.5](RELEASE-NOTES-0.5.md) | Draft release notes of 0.5.0, with what is not verified |
 | [RELEASE-NOTES-0.6](RELEASE-NOTES-0.6.md) | Draft release notes of 0.6.0, with what is not verified |
 | [RELEASE-NOTES-0.7](RELEASE-NOTES-0.7.md) | Draft release notes of 0.7.0, with what is not verified |
+| [RELEASE-NOTES-0.8](RELEASE-NOTES-0.8.md) | Draft release notes of 0.8.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |
