@@ -31,6 +31,16 @@ KEYS = {
 }
 
 
+def _secret(key, arg):
+    """The deny list of scripts/lib/ext_confine.py (secret paths, #947): the problem or None."""
+    import importlib.util
+    import os
+    spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.check_secret(key, arg)
+
+
 def split(p):
     key, _, arg = str(p).partition(":")
     return key, arg
@@ -50,6 +60,10 @@ def check_one(name, p):
         return "%s needs an argument (%s:...)" % (key, key)
     if not rx.match(arg) or ".." in arg.split("/"):
         return "%s: argument %r is not allowed" % (key, arg)
+    if key in ("fs.read", "fs.write"):
+        bad = _secret(key, arg)
+        if bad:
+            return "%s: %s" % (key, bad)
     if key == "events.emit" and not arg.startswith("pkg.%s." % name):
         return "events.emit must lie below pkg.%s. (got %s)" % (name, arg)
     return None

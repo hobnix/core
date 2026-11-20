@@ -17,7 +17,9 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 PrivateDevices=yes
-ReadWritePaths=-/var/lib/hs/ext-svc"
+TemporaryFileSystem=/var/lib/hs:ro
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+BindPaths=-/var/lib/hs/ext-svc"
 check_eq "a package without permissions gets the strict defaults" "$nodecl" "$($EC -)"
 check_eq "declared but empty is the same text" "$nodecl" "$($EC)"
 check_eq "permissions that are not systemd's business change nothing" "$nodecl" "$($EC web.read events.emit:pkg.fixsvc.x host:incus secrets:key)"
@@ -31,7 +33,10 @@ CapabilityBoundingSet=
 PrivateDevices=no
 DevicePolicy=closed
 DeviceAllow=char-drm rw
-ReadWritePaths=-/var/lib/hs/ext-svc -/var/lib/hs/ext/fixsvc -/srv/media
+TemporaryFileSystem=/var/lib/hs:ro
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+ReadWritePaths=-/srv/media
+BindPaths=-/var/lib/hs/ext-svc -/var/lib/hs/ext/fixsvc
 ReadOnlyPaths=-/etc/hs -/srv/in
 # net=lan is declared only: nothing here limits the network"
 check_eq "fs.write, fs.read, devices and net map to the lines" "$full" "$($EC fs.write:/var/lib/hs/ext/fixsvc fs.read:/etc/hs fs.write:/srv/media/ fs.read:/srv/in devices:gpu net:lan)"
@@ -51,6 +56,25 @@ rc=0; $EC devices:tape >/dev/null 2>&1 || rc=$?
 check_eq "an unknown device is refused" 1 "$rc"
 rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name 'Bad Name' -- - >/dev/null 2>&1 || rc=$?
 check_eq "a bad package name is refused" 2 "$rc"
+
+echo "-- secrets are hidden and a grant that overlaps them is refused (#947)"
+check_eq "/var/lib/hs is an empty read-only tmpfs, the bridge state is bound back" "2" "$($EC - | grep -c 'TemporaryFileSystem=/var/lib/hs:ro$\|BindPaths=-/var/lib/hs/ext-svc$')"
+check_eq "root, shadow, ssh and nixos are inaccessible" "1" "$($EC - | grep -c '^InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos$')"
+for g in /var/lib/hs /var/lib/hs/restic-password /var/lib/hs/api-tokens/x /var/lib /root /root/.ssh /etc/shadow /etc/ssh/ssh_host_ed25519_key /etc/nixos/machine.toml /etc; do
+  rc=0; $EC "fs.read:$g" >/dev/null 2>&1 || rc=$?
+  check_eq "fs.read:$g is refused" "1" "$rc"
+  rc=0; $EC "fs.write:$g" >/dev/null 2>&1 || rc=$?
+  check_eq "fs.write:$g is refused" "1" "$rc"
+done
+for g in /etc/hs /etc/systemd /boot /nix/store; do
+  rc=0; $EC "fs.write:$g" >/dev/null 2>&1 || rc=$?
+  check_eq "fs.write:$g is refused (system files)" "1" "$rc"
+done
+rc=0; $EC fs.read:/etc/hs >/dev/null 2>&1 || rc=$?
+check_eq "fs.read:/etc/hs stays grantable" "0" "$rc"
+rc=0; $EC fs.write:/var/lib/hs/ext/x fs.read:/var/lib/hs/ext-svc/y >/dev/null 2>&1 || rc=$?
+check_eq "state below /var/lib/hs/ext and ext-svc stays grantable" "0" "$rc"
+check_eq "the refusal names the secret it overlaps" "1" "$($EC fs.read:/var/lib/hs/restic-password 2>&1 | grep -c 'overlaps /var/lib/hs')"
 
 echo "-- the template unit is the floor"
 for l in 'ProtectSystem = "strict"' 'ProtectHome = true' 'PrivateTmp = true' 'PrivateDevices = true' 'NoNewPrivileges = true' 'CapabilityBoundingSet = ""'; do
@@ -74,7 +98,7 @@ xe() { HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$EXT/state HS_PACKAGES_
 xe start okpkg >/dev/null 2>&1 || true
 f=$EXT/dropin/hs-ext-svc@okpkg.service.d/10-confine.conf
 check "start writes the drop-in under the unit's .d folder" test -f "$f"
-check "the drop-in of a package with permissions" grep -qx 'ReadWritePaths=-/var/lib/hs/ext-svc -/srv/ok' "$f"
+check "the drop-in of a package with permissions" grep -qx 'ReadWritePaths=-/srv/ok' "$f"
 check "it lists fs.read" grep -qx 'ReadOnlyPaths=-/etc/hs' "$f"
 check "systemd is told to reload before the unit starts" grep -q '^daemon-reload' "$EXT/ctl.log"
 check_eq "daemon-reload comes before start" "daemon-reload start" "$(grep -o '^daemon-reload\|^start' "$EXT/ctl.log" | tr '\n' ' ' | sed 's/ $//')"
@@ -127,7 +151,10 @@ expect="--pipe
 --property=NoNewPrivileges=yes
 --property=CapabilityBoundingSet=
 --property=PrivateDevices=yes
---property=ReadWritePaths=-/var/lib/hs/ext-svc -/srv/ok
+--property=TemporaryFileSystem=/var/lib/hs:ro
+--property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+--property=ReadWritePaths=-/srv/ok
+--property=BindPaths=-/var/lib/hs/ext-svc
 --property=ReadOnlyPaths=-/etc/hs
 --
 python3
