@@ -172,7 +172,6 @@
    ]
   ],
   "state/disks": [],
-  "reads/status": [],
   "live/status": [],
   "live/inspect": {},
   "live/raw": {},

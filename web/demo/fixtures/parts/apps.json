@@ -56,7 +56,6 @@
    ["hs-backup.service","Nightly backup","2026-11-19 02:00","2026-11-18 02:00","ok"],
    ["hs-backup-offsite.service","Off-site backup","2026-11-20 02:10","2026-11-19 02:10","ok"],
    ["hs-bulk-scrub.service","Scrub of the bulk pool","2026-12-01 04:00","2026-11-01 04:00","ok"],
-   ["hs-reads-collect.service","Collect the slow reads","2026-11-19 06:30","2026-11-19 06:29","ok"],
    ["hs-snapshots-ct.service","Instance snapshots","2026-11-20 03:00","2026-11-19 03:00","ok"]
   ],
   "recipes/list": [

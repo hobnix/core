@@ -30,7 +30,6 @@
   "webTailscale": "cap:tailscale",
   "webLan": "access",
   "webDocs": "general",
-  "liveState": "cap:live-state",
   "testlabNightly": "cap:testlab",
   "webTerminal": "access",
   "recipeQuestionHours": "access",
@@ -359,9 +358,9 @@
    "entry": true
   },
   "live-state": {
-   "title": "Live state (Redis cache for the web interface)",
+   "title": "Live state (collector for the web interface)",
    "icon": "puzzle-piece",
-   "entry": true
+   "entry": false
   },
   "metrics": {
    "title": "Metrics (Prometheus on this server)",

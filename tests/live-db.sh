@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live state on the state database (ADR 0026 step 1): DbStore, the live functions of state-db.py, the collector in db mode.
+# Live state on the state database (ADR 0026): DbStore, the live functions of state-db.py, the collector.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 if ! have python3; then skip "python3 missing"; finish; exit 0; fi

@@ -138,7 +138,7 @@ while IFS=$'\t' read -r key text; do
   [ -n "$key" ] || continue
   problem "$key" "$text"
 done < <(bash "$here/state.sh" problems 2>/dev/null || true)
-# the live state of the web interface: Redis down, or a topic older than three intervals (texts are English)
+# the live state of the web interface: the collector not running, or a topic older than three intervals (texts are English)
 if capability_on live-state; then
   while IFS=$'\t' read -r key text; do
     [ -n "$key" ] || continue

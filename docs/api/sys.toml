@@ -904,9 +904,6 @@ role = "admin"
 ["state read-get <key>"]
 role = "viewer"
 
-["reads status"]
-role = "viewer"
-
 ["live refresh"]
 role = "admin"
 
@@ -915,9 +912,6 @@ role = "viewer"
 
 ["live check"]
 role = "viewer"
-
-["reads collect"]
-role = "admin"
 
 ["ext list"]
 role = "admin"

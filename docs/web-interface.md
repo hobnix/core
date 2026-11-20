@@ -307,30 +307,28 @@ password once), the sign-in to the reverse proxy, anything that asks questions, 
 
 ## Live state
 
-`liveState = "db"` is a third value, only for measuring the state database as the store of the live state: see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
+Live state has no setting: on a server with the web interface the collector `hs-live` keeps the status of every page in the state database and tells
+the browser through `/api/events` when something changes. The Summary page updates within about a second or two after a change, without polling. If the
+collector stops, the pages keep their last data and mark it as old; `sudo hs sys live status` and `hs sys live check` show the state. A `liveState` line in
+`machine.toml` from an older version is ignored (`hs config check` says so). To measure the cost on your server see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
 
-With `liveState = "redis"` in `machine.toml` (default `off`) the Summary page updates within about a second after a change, without polling.
-The server keeps the status in a Redis service on a local socket (no network port) and tells the browser through `/api/events` when it changes.
-If the service is down, the status read answers "state service down" and the page retries every 15 seconds; "Live updates paused" shows when an already open live stream is lost. `sudo hs sys live status` shows the state.
-
-When live state is on, the Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
-follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. With
-live state off, Diagnostics keeps its old collected-reads view. Not tested on hardware yet.
+The Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
+follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. Not tested on hardware yet.
 
 The fixed reads of the Storage pages (Pools, Disks, Shares, Encryption, Vault, file locations, Other disk) use live state too: they come
-from Redis, have no polling timer while the stream is open, and the refresh button in the top bar refreshes them. Selected disk, share and
+from the state database, have no polling timer while the stream is open, and the refresh button in the top bar refreshes them. Selected disk, share and
 file details (SMART history, access lists, snapshots, directory contents) stay direct. The pools `bulk` and `fast` have their own topics;
 other pool names are read directly. While storage is locked the pool and share panels keep their last value (or show "refreshing") until
-unlock refreshes them. With live state off everything works as before. Not tested on hardware yet.
+unlock refreshes them. Not tested on hardware yet.
 
 The Summary and top bar, Health, Settings, the Instances and Services pages, the Marketplace and Apps, and the Network pages (gateway status, routes
-and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from Redis and update
+and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from the state database and update
 over the stream. A change from the terminal, from the web interface or from a job refreshes only the pages it can affect; a finished job refreshes
 everything. Reads that need an argument (one instance's logs, one service, one user) and on-demand reports stay direct. Pages whose feature is off
-(gateway, Active Directory, router connection) show nothing for it. With live state off everything works as before. Not tested on hardware yet.
+(gateway, Active Directory, router connection) show nothing for it. Not tested on hardware yet.
 
 The Users and Backup pages follow the same rule: the user and group lists, the domain controller certificate state, the backup state and the list of
-shares and instances with their backup switch come from Redis and update after a user, share, instance or backup change. One user's or group's details,
+shares and instances with their backup switch come from the state database and update after a user, share, instance or backup change. One user's or group's details,
 the snapshots and the file search of the backup stay direct (they open the backup disk). Not tested on hardware yet.
 
 ### How fast a change shows

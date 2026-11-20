@@ -99,4 +99,17 @@ cp -r "$WORK/pkgx.keep" "$HS_PACKAGES_DIR/pkgx"
 check "overlay write" $GEN overlay write --packages "$HS_PACKAGES_DIR" --out "$HS_GENERATED_DIR" --example "$HS_MACHINE_EXAMPLE"
 check "the retired list is gone" test ! -e "$HS_GENERATED_DIR/retired-keys.tsv"
 
+echo "-- a machine.toml from before 0.10 (liveState, ADR 0026): ignored with a note, never an error"
+for v in redis off db bogus; do
+  cp "$HS_MACHINE_EXAMPLE" "$M"; sed -i 's/CHANGEME/deadbeef/' "$M"
+  printf 'liveState = "%s"\n' "$v" >> "$M"
+  out=$(bash "$SCRIPTS/config-read.sh" check 2>&1); rc=$?
+  check_eq "liveState = $v: the check passes" "0" "$rc"
+  check "liveState = $v: it says note, no warning" bash -c 'grep -q "^note: liveState: no longer used, live state is always on" <<<"$1" && ! grep -q "warning: liveState" <<<"$1"' _ "$out"
+done
+cp "$HS_MACHINE_EXAMPLE" "$M"; sed -i 's/CHANGEME/deadbeef/' "$M"
+out=$(bash "$SCRIPTS/config-read.sh" check 2>&1)
+check "without the key there is no note" bash -c '! grep -q liveState <<<"$1"' _ "$out"
+check "the generated example no longer has the option" bash -c '! grep -q liveState "$1"' _ "$HS_MACHINE_EXAMPLE"
+
 finish

@@ -11495,80 +11495,6 @@
     }
    }
   },
-  "/reads/collect": {
-   "post": {
-    "operationId": "reads.collect",
-    "summary": "read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)",
-    "x-hs-exit": true,
-    "x-hs-role": "admin",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "collect"
-     ],
-     "script": "reads-collect.sh",
-     "args": "{rest}",
-     "class": "change",
-     "rest": true
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/plain": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
-  "/reads/status": {
-   "get": {
-    "operationId": "reads.status",
-    "summary": "every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes",
-    "x-hs-exit": true,
-    "x-hs-role": "viewer",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "status"
-     ],
-     "script": "reads-collect.sh",
-     "args": "--status",
-     "class": "read",
-     "rest": false
-    },
-    "x-hs-web": {
-     "path": "/api/sys/reads/status",
-     "kind": "tsv",
-     "ttl": 5,
-     "query": []
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/tab-separated-values": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
   "/rebuild/pending": {
    "get": {
     "operationId": "rebuild.pending",
@@ -14532,7 +14458,7 @@
   "/state/read-put/{key}": {
    "get": {
     "operationId": "state.read-put.by_key",
-    "summary": "keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it",
+    "summary": "keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026)",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {

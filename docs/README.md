@@ -49,7 +49,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [events](events.md) | The event catalogue: kind names, levels, payload rules |
 | [notify-rules](notify-rules.md) | Which events become push messages: the rules table, mute a kind, Matrix cards |
 | [PLAN-jobs](PLAN-jobs.md) | Job system audit: which commands run as jobs, what a job record holds |
-| [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (Redis, collector, live updates) |
+| [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (collector, live updates; the Redis parts are superseded by ADR 0026) |
 | [PLAN-channels](PLAN-channels.md) | Update channels Stable, Beta, Edge on top of develop and main |
 | [PLAN-portable-install](PLAN-portable-install.md) | Audit of fixed names and assumptions that break on another machine, options for pools, users and single-disk installs |
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |

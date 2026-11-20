@@ -1,30 +1,37 @@
 # live-state
 
-Redis on a unix socket plus the collector `hs-live`. The collector runs `hs sys <topic>` on an interval and stores the raw text in Redis; the
-web interface serves topic reads from there and pushes changes to the browser (`/api/events`). Not tested on hardware yet.
-Design: docs/PLAN-web-cache.md. Option `liveState` ("redis" | "off", default "off"); on when `webUi` and a homeserver and `liveState = "redis"`,
-or when `live-state` is named in `capabilities`.
+The collector `hs-live` (scripts/live-collect.py). It runs `hs sys <topic>` on an interval and keeps the raw text in the state database
+(`/var/lib/hs/state.db`, table `live`); the web interface serves topic reads from there and pushes changes to the browser (`/api/events`).
+No Redis, no socket, no group, no setting, no mode (ADR 0026, docs/adr/0026-live-state-one-mode-one-store.md; since #563 in 0.10). The capability is
+on whenever `webUi` is on for a homeserver (configuration.nix); it has no option. An old `liveState` key in machine.toml is ignored: `hs config check`
+says `note: liveState: no longer used ...` for one release. Not tested on hardware yet.
+Design: docs/PLAN-web-cache.md (its Redis parts are superseded by the ADR).
 
 Rules:
-- **One writer:** only `hs-live` (scripts/live-collect.py) writes the topic keys. The web only reads and asks for a refresh.
-- **Never TCP:** `port = 0`, the socket /run/redis-hobnix/redis.sock (mode 660). No firewall rule.
-- **Never persistent:** no `save`, no append file; Redis is a cache in RAM (32 MB, allkeys-lru). A reboot starts empty and the collector refills it.
-- **503, not a fallback:** with Redis down a topic read answers 503 "state service down"; the web never runs the read itself in this mode.
-- **Names:** key `hs:v1:<topic>` (JSON: ts, gen, rc, out, err, ts_err; `out` is the raw text), channel `hs:v1:changed` (`<topic> <gen>`),
-  channel `hs:v1:refresh` (`<topic>` or `*`). Topics: scripts/lib/live-topics.tsv.
-- **The `live` topic:** `hs sys live status` is collected every 5 seconds as topic `live`. The command runs before the collector takes its
-  own Redis lock or issues its own GET/SET, so the `live` row in the Diagnostics table reports the previous collection; this is expected,
-  not staleness. The old database collector (`scripts/reads-collect.sh`) remains for the reads that still use it.
-- The `group` option of `services.redis.servers.<n>` is unverified in the pinned nixpkgs; module.nix does not use it. The socket group is
-  `redis-hobnix`; hs-web and hs-live get it through SupplementaryGroups.
+- **One writer:** only `hs-live` writes the tables `live` and `heartbeat`. The web only reads; a refresh is a counter (below).
+- **A document only on change:** a run whose output differs from the stored one writes the row (`gen` + 1, `updated` = now) and counts `live:<topic>` up in the
+  table `topics`, in one transaction; an identical run writes nothing. Freshness is one `heartbeat` row (name `hs-live`) written every `HS_LIVE_BEAT` seconds (5):
+  the web says `down` when it is older than max(15, 3 x every) and `up` when it is fresh again, and a document counts as checked at the last beat.
+- **Refresh:** `live_refresh <topic>|@<group>|--all` (scripts/lib/live.sh, `hs sys live refresh`, a web start) counts the topics up in `topics`
+  (`state-db.py topic-bump`). The collector looks at the counters every `HS_LIVE_WATCH` seconds (1) and reads a topic of its own again when its counter moved;
+  `live:` and `reads:` counters are never a request. The first look is the baseline.
+- **No 503 "state service down":** a read without a topic, a topic whose capability is off, `?fresh=1` (runs the command), a state database that cannot be read
+  and a topic with no row while no collector runs are the direct read (stale-while-revalidate cache); a collector that runs and has no row yet: 503
+  "refreshing" (retry after 2 s).
+- **Names:** topics in scripts/lib/live-topics.tsv; the row of a topic is `live(topic, payload, updated, ms, rc, gen, err, ts_err, ttl, src)`, in the
+  code a document is `{out, rc, gen, ts, err, ts_err, ttl, src}` (scripts/live_state.py `db_read`).
+- **The `live` topic:** `hs sys live status` is collected every 5 seconds as topic `live`, so its own row describes the previous collection by design.
+- **The 27 slow reads** of scripts/lib/collected-reads.tsv are topics (`reads_intervals`: a topic is read at least as often as that file says). The old table
+  `reads` and `hs sys state reads` stay for now; nothing writes the table (`reads-collect.sh` and its timer are gone).
+- **SQLite:** the connection of the collector has `busy_timeout`; all topic threads share one connection under one lock. The write load of 73 topics is
+  measured with `hs live measure` (docs/operations.md); the first real measurement is on the 0.10 beta (#566).
 
 Topics (65, including `status` and `live`): see `scripts/lib/live-topics.tsv`. Storage fixed reads now have their own topics, including
 six fixed-pool topics (`pool-info-bulk`, `pool-info-fast`, `pool-members-bulk`, `pool-members-fast`, `pool-state-bulk`,
 `pool-state-fast`) whose words contain the literal pool name. The web resolves those per request from the validated
 `pool=bulk|fast` query; any other pool argument stays a direct read. Lock mode is `skip` for mounted-pool/Samba reads
 (`pool-info-*`, `pool-members-*`, `shares-overview`, `shares-deleted`, `shares-principals`) and `run` for the rest, so
-lock-aware pages keep their defined locked state. The old database collector and `reads` table remain for off mode and
-unmapped reads.
+lock-aware pages keep their defined locked state. 
 
 Refresh base (built, not run on hardware):
 - **Columns 5 and 6 of live-topics.tsv:** `cap` (the capability that must be on, `-` = always; a topic whose cap is off is not run, has no document and
@@ -36,9 +43,8 @@ Refresh base (built, not run on hardware):
 - **Parallel limit:** the collector runs at most `HS_LIVE_PARALLEL` (default 4) `hs sys` reads at once.
 - **CLI hook:** scripts/lib/hs.sh runs a registry row with flag `changes` as a child and, after exit 0, calls `live_refresh @<topic flag>`
   (default `@system`); other rows still `exec`. `hs_job` refreshes `@jobs` at start and everything at the end. Test knob `HS_LIVE_LOG`
-  (lib/live.sh): append the arguments to that file instead of using the socket.
-- **Old collector:** in Redis mode (the live socket exists) `reads-collect.sh` skips a read whose words equal the words of a topic.
-- **Topic map:** the session answer carries `features.topics` (read URL -> topic, empty in off mode); `poll(path, ms)` uses it when it has no
+  (lib/live.sh): append the arguments to that file instead of counting.
+- **Topic map:** the session answer carries `features.topics` (read URL -> topic); `poll(path, ms)` uses it when it has no
   topic argument.
 
 System slice (built, not run on hardware): 17 more topics for the Summary, top bar, Health, Settings and Jobs: `deck`, `jobs-running`, `jobs-list`,
@@ -50,7 +56,7 @@ outside the dispatcher: `health-check.sh` (real run: `health-next health-list st
 Instances slice (built, not run on hardware): 10 more topics, all `skip` while locked: `ct-list` (10 s), `iso-list` (10 s), `ct-pools` (15 s),
 `ct-profiles` (120 s) (all need the `incus` capability; `tests/live-state-test.py` fails when web-serve.py maps a topic without a row), `services-list`, `services-app`, `services-routes` (30 s), `services-local-routes` (needs `gateway`), `services-tiles` (60 s)
 and `services-stats` (30 s; both need `dashboard`; stats calls the service APIs, keys go on curl's stdin). A topic whose capability is off is read
-directly by the web (no Redis document). Groups: `@instances` (any `ct`/recipes/mac change) and `@network` (services, routes, net, gateway) wake the lists, `services-app` and the routes; `ct-profiles` and `services-local-routes` also listen to `@system` (`hs rebuild`/`update` change the Incus preseed and the proxy); `services-stats` only to `@network`. No new explicit hooks: every
+directly by the web (no document). Groups: `@instances` (any `ct`/recipes/mac change) and `@network` (services, routes, net, gateway) wake the lists, `services-app` and the routes; `ct-profiles` and `services-local-routes` also listen to `@system` (`hs rebuild`/`update` change the Incus preseed and the proxy); `services-stats` only to `@network`. No new explicit hooks: every
 change of these areas goes through the dispatcher or a web `start`. `ct <ct> ...` and `services show` stay direct.
 
 Apps slice (built, not run on hardware): 3 more topics, all local reads (from the last `hs pkg fetch`, no network): `pkg-market` (120 s, `skip`;
@@ -108,7 +114,7 @@ deleted. The web interface takes the capability from the read itself (the topic 
 
 `DockerWatch` in `scripts/live-collect.py` is one thread of hs-live. It runs
 `incus exec docker -- docker events --format '{{json .}}' --filter type=container --filter type=network --filter type=volume`
-(`HS_INCUS` is honoured) and asks for the group `@docker` (the topics `docker-list` and `docker-apps`) with a direct `refresh`, no Redis round trip.
+(`HS_INCUS` is honoured) and asks for the group `@docker` (the topics `docker-list` and `docker-apps`) with a direct `refresh`.
 
 - Coalescing: a refresh when 1 s passed without a new event, at the latest 5 s after the first event of a burst. Pending events are flushed when the stream ends.
 - The poll of the two topics is 300 s now; it is the safety net when the watcher is down.
@@ -135,13 +141,9 @@ capability gate (`incus` off = no process) are the Docker ones; the 10 s poll st
 
 Not tested on hardware yet.
 
-## State-database path (ADR 0026 step 1)
+## History
 
-`liveState = "db"` (only for the measurement, `hs live measure`) starts the unit `hs-live-db` (configuration.nix, not this capability: the capability, its `sys live *` rows,
-its Health check and its pages stay redis-only) running scripts/live-collect.py with `HS_LIVE_STORE=db`. It writes the table `live` (a document only when the output changed;
-`updated` is the time of the last change) and bumps the counter `live:<topic>` in the same transaction; the web feeds `live:` counters as `changed` and does not clear its read
-cache for them. One row of the table `heartbeat` every `HS_LIVE_BEAT` seconds (default 5); the web says `down` when it is older than max(15, 3 x every) and `up` when fresh again.
-There is no refresh channel in this mode: `live_refresh` and the web refresh do not wake topics. The SQL is in scripts/state-db.py (`live_*`), called in-process by the collector.
-Step 4 (#562): in this mode the web reads a topic from the table `live` (`DbStore` in scripts/web-serve.py), starts no process and has no 503 "state service down": a read without a topic, a topic whose capability is off, `?fresh=1` (runs the command, the stored document stays) and an unreadable database are the direct read, and so is a topic with no row while the heartbeat is old (no collector); a collector and no row yet answers 503 "refreshing" (retry 2 s). `features.live` is true and carries the topic map, so a page follows `/api/events` and keeps its timer only while the stream is down. `changed` comes from the counters only: `live:<topic>` is sent as `changed <topic>` (a plain `<topic>` counter from a hook is not sent while `live:<topic>` exists: the collector's answer is the one event). Freshness is the heartbeat, not the document: a document changes only with its output, so `X-HS-Age` is the time since the collector's last round, `X-HS-Updated` (additive) is the document's own change time, and `X-HS-Status` is `expired` as soon as the heartbeat is older than max(15, 3 x every) (also what `down` uses). `pool disks` has no topic in READS (it takes `?role=`) and still comes from the table `reads`. Not tested on hardware yet.
-Step 2 and 3 (#561): the 27 keys of scripts/lib/collected-reads.tsv are all topics (`pool disks` got the topic `pool-disks`); in this mode a topic is read at least as often as that file says (`reads_intervals` in live-collect.py), never less often than its row in live-topics.tsv. `hs-reads-collect` keeps running unchanged (the table `reads` goes in #563). Writers share state.db with `busy_timeout` 30 s and WAL (`open_rw`).
-Not tested on hardware yet.
+`liveState = "redis"` (Redis on a unix socket, the unit `hs-live`, the group `redis-hobnix`) and `liveState = "db"` (the unit `hs-live-db`, the measurement
+build) were two modes of the same collector until #563 removed the option, the Redis service, the RESP client, the `StateStore` modes, `HS_WEB_LIVE`,
+`reads-collect.sh` and the timer `hs-reads-collect`. The unit `hs-live` now is the former `hs-live-db`. Upgrade: nothing to do; the next rebuild drops Redis and the
+old timer, and a `liveState` line in machine.toml is ignored with a note. Not tested on hardware yet.

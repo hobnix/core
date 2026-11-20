@@ -238,13 +238,11 @@ net start <action>	admin	start
 state reads	viewer	read
 state read-put <key>	admin	read
 state read-get <key>	viewer	read
-reads status	viewer	read
 live refresh	admin	read
 live status	viewer	read
 live inspect	viewer	read
 live raw <topic>	viewer	read
 live check	viewer	read
-reads collect	admin	change
 ext list	admin	read
 ext status	admin	read
 pkg list	admin	read

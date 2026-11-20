@@ -40,6 +40,11 @@ case "${1:-}" in
       if [ "$kind" = warn ] && grep -qx "$key" <<<"$moved"; then
         text="runtime setting now (no rebuild): run hs config migrate-settings to move it out of machine.toml"
       fi
+      # liveState was removed in 0.10 (ADR 0026: live state has no setting, it always runs in the state database): a note for one release, never an error
+      if [ "$kind" = warn ] && [ "$key" = liveState ]; then
+        printf 'note: %s: no longer used, live state is always on and kept in the state database (delete the line when you like)\n' "$key"
+        continue
+      fi
       # an option of a capability package that was removed: a note, never an error (the key stays harmless in machine.toml)
       if [ "$kind" = warn ] && [ -r "$retired" ] && row=$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$retired") && [ -n "$row" ]; then
         printf 'note: %s: unused, capability %s removed (delete the line when you like)\n' "$key" "$row"

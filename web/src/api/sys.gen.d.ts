@@ -2284,30 +2284,6 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
-  "reads.collect": {
-    /** read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals) */
-    words: ["reads", "collect"];
-    path: "/reads/collect";
-    method: "post";
-    class: "change";
-    role: "admin";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string;
-  };
-  "reads.status": {
-    /** every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes */
-    words: ["reads", "status"];
-    path: "/reads/status";
-    method: "get";
-    class: "read";
-    role: "viewer";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string[][];
-  };
   "rebuild.pending": {
     /** the machine.toml changes that wait for one hs rebuild, one per line: key, the value the running system was built with, the value now (- = not set); empty: nothing waits or no copy was kept yet */
     words: ["rebuild", "pending"];
@@ -3046,7 +3022,7 @@ export interface SysOperations {
     lines: string;
   };
   "state.read-put.by_key": {
-    /** keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it */
+    /** keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026) */
     words: ["state", "read-put", "<key>"];
     path: "/state/read-put/{key}";
     method: "get";

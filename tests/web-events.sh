@@ -10,5 +10,5 @@ check "event list is a read with source and after" grep -q '("event", "list"):.*
 check "event list takes before" grep -qF '"before": (r"^[0-9]{1,9}$", "--before")' "$SCRIPTS/web-serve.py"
 check "the page has the stream topic" grep -q "poll(() => path, 30000, 'event-log')" "$SCRIPTS/../web/src/pages/Events.svelte"
 check "the page pages by --before, not a growing limit" grep -q "&before=" "$SCRIPTS/../web/src/pages/Events.svelte"
-check "the stream topic is followed in every liveState mode" grep -q "STREAM_TOPICS.has(t)" "$SCRIPTS/../web/src/data.svelte.js"
+check "the stream topic is followed" grep -q "STREAM_TOPICS.has(t)" "$SCRIPTS/../web/src/data.svelte.js"
 finish

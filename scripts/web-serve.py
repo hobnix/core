@@ -9,11 +9,11 @@ This file is the whole HTTP side of the entry page:
   POST /api/logout
   GET  /api/changes/seen   the revision this user has seen in What's new ({rev}, "" = never); session needed
   POST /api/changes/seen   {rev: 40 hex}: remember it for the signed-in user (web-changes-seen.json in the state folder); session + CSRF
-  POST /api/live/refresh   {topic}: ask the live collector to read that topic again (mode redis; 409 otherwise); session + CSRF
+  POST /api/live/refresh   {topic}: ask the live collector to read that topic again (the collector counts it up and reads it again); session + CSRF
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
-  GET  /api/events    server-sent events `changed` ({topic, gen}) in every mode (a watcher reads the table `topics` of state.db once a second; Redis, when on, is the fast path), `down`/`up` when Redis goes (mode db: when the heartbeat of hs-live-db stops or returns; there a `live:<topic>` counter is sent as `changed` <topic>); session, same Origin
+  GET  /api/events    server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
   GET  /api/board     the dashboard tiles and their stats, only while the dashboard variant is web; a session, or (setting dashboardOpen) a private address
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
@@ -65,7 +65,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_terminal as wt      # the in-browser terminal (WebSocket, tickets, pty shell)
 import web_vmconsole as vc    # the graphical VM console (Incus VGA console relayed over a WebSocket, ADR 0021)
-import live_state as ls        # live state: the RESP client for Redis (mode redis)
+import live_state as ls        # live state: the topic list, the read side of the state database tables live and heartbeat
 import token_store as tk      # API tokens: the store, the per token rate limit, the hourly owner re-check (ADR 0012, step 17)
 import first_run as fr         # first-run flag and the one-time console token (docs/adr/0022-first-run-console-token.md)
 from hs_ext import (env, runtime_setting, capabilities, applied_recipes, ext_roots, ext_sys_rows, ext_packages, ext_manifest,  # noqa: F401,E402
@@ -216,11 +216,11 @@ def docs_search(query, lang=""):
 
 def features(cfg, first_run=None):
     """what the server switched on, for the session answer; setup_wizard = the first-run wizard is still to be shown (never token or expiry)"""
-    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": cfg.live in ("redis", "db"), "topics": live_topic_map() if cfg.live in ("redis", "db") else {}}   # host: the local node's name = the first part of every address (/node/<host>/...)
+    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": True, "topics": live_topic_map()}   # host: the local node's name = the first part of every address (/node/<host>/...)
 
 
 def live_topic_map():
-    """Read URL -> live-state topic, from READS (mode redis): a string topic is /api/sys/<words>, a pool topic (kind, word) is /api/sys/pool/<word>?pool=<x> for each pool with a live topic.
+    """Read URL -> live-state topic, from READS: a string topic is /api/sys/<words>, a pool topic (kind, word) is /api/sys/pool/<word>?pool=<x> for each pool with a live topic.
     The session answer carries it so poll(path) follows the live stream without a topic argument on each page."""
     out = {}
     for words, spec in READS.items():
@@ -329,7 +329,6 @@ class Config:
         self.cache_file = env("HS_WEB_CACHE_FILE", "/run/hs-web/cache.json")   # the answers survive a restart of this service (tmpfs: not a reboot); "" = memory only
         self.warm_all = env("HS_WEB_WARM_ALL", "1") == "1"            # keep every read without arguments warm (see Warmer), not only the common ones
         self.warm_idle_ttl = float(env("HS_WEB_WARM_IDLE_TTL", "120")) # such a read that nobody has asked for is read again at most this often
-        self.collected_max_age = float(env("HS_WEB_COLLECTED_MAX_AGE", "180"))   # a read the collector keeps (state database) is served from there while its output is at most this old
         self.seen_for = float(env("HS_WEB_SEEN_FOR", "1800"))         # a read somebody asked for stays in the warm-up for this many seconds
         self.warm_active = float(env("HS_WEB_WARM_ACTIVE", "300"))    # the warm-up runs while a session was seen within this many seconds
         self.warm_pause = float(env("HS_WEB_WARM_PAUSE", "0.2"))
@@ -346,11 +345,7 @@ class Config:
         self.stream_every = float(env("HS_WEB_STREAM_EVERY", "1"))        # seconds between two looks at the journal
         self.stream_max = int(env("HS_WEB_STREAM_MAX", "6"))              # streams open at once (one thread each)
         self.stream_hours = float(env("HS_WEB_STREAM_HOURS", "6"))        # a stream ends after this long; the page reconnects or falls back
-        # live state (capability live-state): "redis" serves topic reads from Redis and pushes changes on /api/events; anything else = off;
-        # "db" (ADR 0026): topic reads come from the table `live` of state.db (DbStore), `changed` from the counters live:<topic>, `down`/`up` from the heartbeat row of the collector hs-live-db
-        self.live = env("HS_WEB_LIVE", "")
         self.probe_file = env("HS_WEB_PROBE_FILE", "/run/hs-web/probe.tsv")      # hs live measure: when a live:probe counter reached the streams ("" = off)
-        self.live_socket = env("HS_LIVE_SOCKET", "/run/redis-hobnix/redis.sock")
         self.events_watch = 1.0                                           # seconds between two reads of the change counters (table topics of state.db)
         self.events_ping = 15.0                                           # seconds of silence before a `: ping` on /api/events (tests shorten it)
         self.events_max = int(env("HS_WEB_EVENTS_MAX", "32"))             # /api/events streams open at once
@@ -965,28 +960,15 @@ class Facts:
             return self.value
 
     def _stored(self):
-        """-> (rc, out) of the `status` topic in mode redis or db; None when the key, Redis or the document is not there (then the command runs)."""
-        if self.cfg.live == "db":
-            try:
-                doc, _ = live_db_read("status")
-            except OSError:
-                return None
-            return (int(doc["rc"] or 0), str(doc["out"])) if doc and doc["out"] else None
+        """-> (rc, out) of the `status` topic from the state database; None when the document is not there (then the command runs)."""
         try:
-            r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-            try:
-                raw = r.cmd("GET", ls.KEY % "status")
-            finally:
-                r.close()
-            doc = json.loads(raw) if raw else None
-            if isinstance(doc, dict) and doc.get("out"):
-                return int(doc.get("rc") or 0), str(doc["out"])
-        except (OSError, ValueError, TypeError):
-            pass
-        return None
+            doc, _ = live_db_read("status")
+        except OSError:
+            return None
+        return (int(doc["rc"] or 0), str(doc["out"])) if doc and doc["out"] else None
 
     def _read(self, locked):
-        got = self._stored() if self.cfg.live in ("redis", "db") else None
+        got = self._stored()
         rc, out = got if got else _run([self.cfg.hs, "sys", "status"], timeout=15)
         rows = {}
         for line in out.splitlines():
@@ -1077,7 +1059,7 @@ def pool_change_ok(hs, args):
 
 
 READS = {
-    ("status",):{"kind": "tsv", "ttl": 10, "topic": "status"},      # topic: the live-state key (read only in mode redis)
+    ("status",):{"kind": "tsv", "ttl": 10, "topic": "status"},      # topic: the live-state topic (served from the state database)
     ("deck",): {"kind": "json", "ttl": 8, "topic": "deck"},
     ("ups", "status"): {"kind": "tsv", "ttl": 15, "topic": "ups"},
     ("monitor", "disks"): {"kind": "tsv", "ttl": 15, "topic": "monitor-disks"},
@@ -1093,10 +1075,9 @@ READS = {
     ("pool", "disks"): {"kind": "tsv", "ttl": 15, "query": {"role": (r"^adopt$", "--role")}},
     ("disk-health", "list"): {"kind": "tsv", "ttl": 30, "topic": "disk-health"},
     ("state", "disks"): {"kind": "tsv", "ttl": 15, "topic": "disk-inventory"},
-    ("reads", "status"): {"kind": "tsv", "ttl": 5},      # the Data page: what the collector keeps, how old, how long each read takes
     ("live", "status"): {"kind": "tsv", "ttl": 5, "topic": "live"},      # the Data page in live mode: the live topics themselves
-    ("live", "inspect"): {"kind": "json", "ttl": 0, "redis": True},      # the Live state page; ttl 0: never cached nor warmed, re-read on each change of topic live
-    ("live", "raw"): {"kind": "json", "ttl": 0, "redis": True, "args": [NAME]},      # one topic's stored output for the Live state page (capped in live_state.py)
+    ("live", "inspect"): {"kind": "json", "ttl": 0},      # the Live state page; ttl 0: never cached nor warmed, re-read on each change of topic live
+    ("live", "raw"): {"kind": "json", "ttl": 0, "args": [NAME]},      # one topic's stored output for the Live state page (capped in live_state.py)
     ("state", "events"): {"kind": "tsv", "ttl": 10, "query": {"n": (r"^[0-9]{1,4}$", "")}},
     ("testlab", "results"): {"kind": "tsv", "ttl": 10},      # the Test-lab page (capability testlab)
     ("event", "list"): {"kind": "tsv", "ttl": 10, "query": {"n": (r"^[0-9]{1,4}$", ""), "source": (r"^[a-z][a-z0-9-]{0,30}$", "--source"), "after": (r"^[0-9]{1,9}$", "--after"), "before": (r"^[0-9]{1,9}$", "--before")}},      # the event log (docs/adr/0005-events.md)
@@ -1934,7 +1915,7 @@ class Reads:
 
     def resolve(self, segments, query):
         """-> (spec, argv words, cache key) or None when this is not an allowlisted read.
-        A fixed-pool topic mapping is resolved per request: only a pool with a live topic gets the Redis topic, other pool values stay direct."""
+        A fixed-pool topic mapping is resolved per request: only a pool with a live topic gets the topic, other pool values stay direct."""
         ext_refresh()
         for n in range(len(segments), 0, -1):
             words = tuple(segments[:n])
@@ -2013,15 +1994,7 @@ class Reads:
                 return hit[1]
             gen = self.gen
             stamp = time.time()
-            kept = None if force else self.collected(argv)
-            # a kept output older than the one in the cache (a refresh button read a newer one) is not put back
-            if kept is not None and kept[0] <= self.cleared_at:
-                kept = None   # read before the last change: run the script, the collector has not seen the change yet
-            if kept is not None and (not hit or kept[0] > hit[0]) and stamp - kept[0] < self.cfg.collected_max_age and (kept[1] == 0 or kept[2].strip()):
-                # the collector has it: no script is started; the answer is as old as the collector's reading
-                stamp, rc, out = kept[0], kept[1], kept[2]
-            else:
-                rc, out = _run([self.cfg.hs, "sys"] + argv, timeout=30)
+            rc, out = _run([self.cfg.hs, "sys"] + argv, timeout=30)
             result = self._shape(spec, rc, out)
             if result[0] == 200 and not spec.get("nocache"):
                 with self.lock:
@@ -2050,26 +2023,6 @@ class Reads:
         with self.lock:
             hit = self.cache.get(key)
         return None if hit is None else time.time() - hit[0]
-
-    def collected(self, argv):
-        """(updated, rc, output) kept by the collector (scripts/reads-collect.sh, table `reads` of the state database) for this read, or None.
-        Read-only; any trouble (no database, no table, no row) is just None, and the read is run as it always was."""
-        key = " ".join(argv)
-        if key not in collected_keys():
-            return None
-        db = env("HS_STATE_DB", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "state.db"))
-        if not os.path.exists(db):
-            return None
-        try:
-            c = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=2)
-            try:
-                c.execute("PRAGMA query_only=1")
-                row = c.execute("SELECT updated, rc, payload FROM reads WHERE key = ?", (key,)).fetchone()
-            finally:
-                c.close()
-        except sqlite3.Error:
-            return None
-        return None if row is None else (float(row[0]), int(row[1]), row[2])
 
     def spec_for(self, argv):
         """the allowlist entry of a read that was kept (words first, then what the query added)"""
@@ -2138,15 +2091,14 @@ class Reads:
 
     def warm_targets(self):
         """(spec, argv, key, how often) of every read the warm-up should keep fresh: the common ones, those somebody asked for lately (with their
-        arguments), and, unless switched off, every other read without arguments (at most every warm_idle_ttl seconds). Topic reads are skipped
-        in Redis mode; a fixed-pool mapping is resolved first so only its concrete fixed-pool form is skipped, while the no-pool/all-pool form
+        arguments), and, unless switched off, every other read without arguments (at most every warm_idle_ttl seconds). Topic reads are skipped; a fixed-pool mapping is resolved first so only its concrete fixed-pool form is skipped, while the no-pool/all-pool form
         stays warmable."""
         out, done = [], set()
 
         def add(spec, argv, every):
             key = tuple(argv)
             # a resolved string topic belongs to the live collector, not the warm-up; a mapping without a match has no topic and can be warmed
-            is_topic = self.cfg.live in ("redis", "db") and isinstance(spec.get("topic"), str)
+            is_topic = isinstance(spec.get("topic"), str)
             if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache"):
                 done.add(key)
                 out.append((spec, argv, key, every))
@@ -2183,26 +2135,6 @@ class Reads:
         if spec["kind"] == "text":
             return 200, {"text": out, "rc": rc}
         return 200, {"rows": [line.split("\t") for line in out.splitlines() if line != ""], "rc": rc}
-
-
-_COLLECTED = None
-
-
-def collected_keys():
-    """the reads the collector keeps (scripts/lib/collected-reads.tsv: the words, TAB, seconds), read once"""
-    global _COLLECTED
-    if _COLLECTED is None:
-        path = env("HS_COLLECTED_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "collected-reads.tsv"))
-        keys = set()
-        try:
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    if line.strip() and not line.startswith("#"):
-                        keys.add(line.split("\t")[0].strip())
-        except OSError:
-            pass
-        _COLLECTED = keys
-    return _COLLECTED
 
 
 # What the pages need first after sign-in; read again about every ttl while somebody is using the interface (see Warmer).
@@ -2314,167 +2246,34 @@ class Proxy:
             return 502, {"error": "not reachable" if isinstance(e, (urllib.error.URLError, OSError)) else "not a status document"}
 
 
-class StateStore:
-    """Where the web gets a read from. The interface (the web asks only these three):
-    get(spec, argv, key, fresh) -> (code, object, age in seconds or None, extra headers as a tuple of (name, value))
-    subscribe(callback)         -> callback(topic, gen) is called when a topic changed (modes without push do nothing)
-    request(topic)              -> ask for a new reading of the topic ("*": all); fire and forget"""
-
-    def get(self, spec, argv, key, fresh=False):
-        raise NotImplementedError
-
-    def subscribe(self, callback):
-        pass
-
-    def request(self, topic):
-        pass
-
-
-class OffStore(StateStore):
-    """Mode off: the direct read with the short cache (Reads.get_aged), as before live-state existed."""
-
-    def __init__(self, reads):
-        self.reads = reads
-
-    def get(self, spec, argv, key, fresh=False):
-        code, obj, age = self.reads.get_aged(spec, argv, key, fresh=fresh)
-        return code, obj, age, ()
-
-
-class RedisStore(StateStore):
-    """Mode redis: a read with a topic is the key hs:v1:<topic> (raw text, parsed here by Reads._shape); no process is started. A read without a
-    topic is the old path (OffStore). Redis not answering is a 503, never a silent fallback."""
-    FRESH_WAIT = 10.0      # ?fresh=1: seconds to wait for the collector's new reading
-
-    def __init__(self, cfg, reads):
-        self.cfg, self.off = cfg, OffStore(reads)
-        try:
-            self.caps = {t: i["cap"] for t, i in ls.topic_info().items()}      # topic -> the capability it needs (None = always)
-        except OSError:
-            self.caps = {}
-        try:
-            self.ivals = {t[0]: t[2] for t in ls.topics()}      # topic -> interval, for status_of of an old document without ttl
-        except OSError:
-            self.ivals = {}
-
-    def _doc(self, topic):
-        """-> the stored document or None (key missing); OSError when Redis does not answer"""
-        r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-        try:
-            raw = r.cmd("GET", ls.KEY % topic)
-        finally:
-            r.close()
-        try:
-            doc = json.loads(raw) if raw is not None else None
-        except ValueError:
-            doc = None
-        return doc if isinstance(doc, dict) else None
-
-    def get(self, spec, argv, key, fresh=False):
-        topic = spec.get("topic")
-        if spec.get("redis") and not topic:      # a direct read that needs Redis (the Live state page): Redis down is 503 like for a topic read
-            try:
-                r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-                try:
-                    r.cmd("PING")
-                finally:
-                    r.close()
-            except OSError:
-                return 503, {"error": "state service down", "hint": "systemctl status redis-hobnix hs-live"}, None, ()
-        cap = spec["cap"] if "cap" in spec else self.caps.get(topic)      # an extension read names its own capability (None = a recipe package)
-        if not topic or not ls.cap_on(cap):      # no topic, or its capability is off (the collector never writes it): the direct read
-            return self.off.get(spec, argv, key, fresh=fresh)
-        try:
-            doc = self._doc(topic)
-            if fresh:
-                old = int((doc or {}).get("gen") or 0)
-                self.request(topic)
-                end = time.time() + self.FRESH_WAIT
-                while time.time() < end:
-                    time.sleep(0.2)
-                    new = self._doc(topic)
-                    if new is not None and int(new.get("gen") or 0) > old:
-                        doc = new
-                        break
-        except OSError:
-            return 503, {"error": "state service down", "hint": "systemctl status redis-hobnix hs-live"}, None, ()
-        if doc is None:
-            self.request(topic)
-            return 503, {"error": "refreshing", "retry_after": 2}, None, (("Retry-After", "2"),)
-        try:
-            ts = float(doc.get("ts") or 0)
-            code, obj = Reads._shape(spec, int(doc.get("rc") or 0), str(doc.get("out") or ""))
-        except (TypeError, ValueError):
-            return 502, {"error": "The stored answer is not readable."}, None, ()
-        more = (("X-HS-Status", ls.status_of(doc, self.ivals.get(topic, 60), time.time())),)      # fresh|stale|error|expired (#322); expired is still served
-        try:
-            if doc.get("err") and float(doc.get("ts_err") or 0) > ts:
-                more += (("X-HS-Stale", str(int(float(doc["ts_err"])))),
-                         ("X-HS-State", "stale" if ts else "error"),      # additive: stale = last good data served, error = never read
-                         ("X-HS-Last-Ok", str(int(ts)) if ts else "-"),
-                         ("X-HS-Topic", topic),      # for the tooltip of the top bar (#323): which read, and its last error line (printable ASCII)
-                         ("X-HS-Error", ls.clean(doc["err"], 160).encode("ascii", "replace").decode()))
-        except (TypeError, ValueError):
-            pass
-        return code, obj, max(0.0, time.time() - ts), more
-
-    def request(self, topic):
-        try:
-            r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-            try:
-                r.cmd("PUBLISH", ls.REFRESH, topic)
-            finally:
-                r.close()
-        except OSError:
-            pass
-
-
 def state_db_path():
-    return env("HS_STATE_DB", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "state.db"))
+    return ls.state_db_path()
 
 
 def collector_alive(hb, now=None):
-    """The heartbeat row (time, every) of the db collector is fresh: not older than max(15, 3 x every) seconds (one rule for `down` and for the status of a document)."""
-    t = time.time() if now is None else now
-    return bool(hb) and t - hb[0] <= max(15, 3 * hb[1])
+    """The heartbeat row (time, every) of the collector is fresh: not older than max(15, 3 x every) seconds (one rule for `down` and for the status of a document)."""
+    return ls.collector_alive(hb, now)
 
 
 def live_db_read(topic):
-    """Mode db: -> (document, heartbeat) from the state database, read-only, no subprocess. The document is None when the topic has no row (or
-    there is no database yet), else a dict {out, rc, gen, ts (= updated), err, ts_err, ttl} in the shape of a stored Redis document; the heartbeat is
-    (time, every) or None. OSError when the database cannot be read now."""
-    db = state_db_path()
-    if not os.path.exists(db):
-        return None, None
-    try:
-        c = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=2)
-        try:
-            c.execute("PRAGMA query_only=1")
-            try:
-                row = c.execute("SELECT payload, rc, gen, updated, err, ts_err, ttl FROM live WHERE topic = ?", (topic,)).fetchone()
-                hb = c.execute("SELECT time, every FROM heartbeat WHERE name = 'hs-live'").fetchone()
-            except sqlite3.OperationalError as e:
-                if "no such table" in str(e):
-                    return None, None
-                raise
-        finally:
-            c.close()
-    except sqlite3.Error as e:
-        raise OSError("state.db: %s" % e)
-    doc = {"out": row[0], "rc": row[1], "gen": row[2], "ts": row[3], "err": row[4], "ts_err": row[5], "ttl": row[6]} if row else None
-    return doc, ((int(hb[0]), int(hb[1])) if hb else None)
+    """-> (document, heartbeat) from the state database, read-only, no subprocess. The document is None when the topic has no row (or
+    there is no database yet), else a dict {out, rc, gen, ts (= updated), err, ts_err, ttl, src}; the heartbeat is (time, every) or None.
+    OSError when the database cannot be read now."""
+    docs, hb = ls.db_read(topic)
+    return docs.get(topic), hb
 
 
-class DbStore(StateStore):
-    """Mode db (ADR 0026 step 4): a read with a topic is the row of the table `live` in state.db (written by the collector); no process is started
-    and there is no Redis. A read without a topic, one whose capability is off, ?fresh=1 and a state database that cannot be read are the direct
-    read (OffStore): this mode never answers 503 "state service down". No fresh heartbeat (the collector does not run) and no row for the
-    topic: also the direct read, so a server without its collector still shows data; a collector and no row yet: 503 "refreshing".
+class LiveStore:
+    """Where the web gets a read from (ADR 0026): a read with a topic is the row of the table `live` in state.db (written by the collector hs-live);
+    no process is started. A read without a topic, one whose capability is off, ?fresh=1 and a state database that cannot be read are the direct
+    read (Reads.get_aged): there is no 503 "state service down". No fresh heartbeat (the collector does not run) and no row for the topic: also the
+    direct read, so a server without its collector still shows data; a collector and no row yet: 503 "refreshing".
     Freshness is the heartbeat, not the age of the document (a document changes only with its output): X-HS-Age is the time since the collector
-    last finished a round, the document's own change time is X-HS-Updated, and the status is `expired` as soon as the collector is not running."""
+    last finished a round, the document's own change time is X-HS-Updated, and the status is `expired` as soon as the collector is not running.
+    get(spec, argv, key, fresh) -> (code, object, age in seconds or None, extra headers as a tuple of (name, value)); request(topic) asks for a new reading."""
 
     def __init__(self, cfg, reads):
-        self.cfg, self.off = cfg, OffStore(reads)
+        self.cfg, self.reads = cfg, reads
         try:
             self.caps = {t: i["cap"] for t, i in ls.topic_info().items()}
         except OSError:
@@ -2484,20 +2283,24 @@ class DbStore(StateStore):
         except OSError:
             self.ivals = {}
 
+    def off(self, spec, argv, key, fresh=False):
+        code, obj, age = self.reads.get_aged(spec, argv, key, fresh=fresh)
+        return code, obj, age, ()
+
     def get(self, spec, argv, key, fresh=False):
         topic = spec.get("topic")
         cap = spec["cap"] if "cap" in spec else self.caps.get(topic)
         if fresh or not isinstance(topic, str) or not ls.cap_on(cap):
-            return self.off.get(spec, argv, key, fresh=fresh)
+            return self.off(spec, argv, key, fresh=fresh)
         try:
             doc, hb = live_db_read(topic)
         except OSError:
-            return self.off.get(spec, argv, key, fresh=fresh)
+            return self.off(spec, argv, key, fresh=fresh)
         now = time.time()
         alive = collector_alive(hb, now)
         if doc is None:
             if not alive:
-                return self.off.get(spec, argv, key, fresh=fresh)
+                return self.off(spec, argv, key, fresh=fresh)
             return 503, {"error": "refreshing", "retry_after": 2}, None, (("Retry-After", "2"),)
         try:
             ts = float(doc.get("ts") or 0)
@@ -2521,17 +2324,20 @@ class DbStore(StateStore):
                      ("X-HS-Error", ls.clean(doc["err"], 160).encode("ascii", "replace").decode()))
         return code, obj, max(0.0, now - checked), more
 
+    def request(self, topic):
+        """count the topic up (the collector wakes on it); fire and forget, "*" = every topic"""
+        threading.Thread(target=ls.cli_refresh, args=(["--all"] if topic == "*" else [topic],), daemon=True).start()
+
 
 class Events:
-    """The hub behind /api/events: one thread follows hs:v1:changed (mode redis) and hands every message to each open stream. A stream is a
+    """The hub behind /api/events: a watcher follows the change counters and the heartbeat of the collector and hands every change to each open stream. A stream is a
     queue of ("changed", topic, gen) | ("domain", row) | ("resync",) | ("down",) | ("up",). feed() is also how tests push a message."""
 
     def __init__(self, cfg):
         self.cfg, self.lock, self.queues = cfg, threading.Lock(), set()
-        self.redis_up = False        # the Redis subscription holds: it delivers the live topics, the counters are then only the fallback
         self.counters = None         # topic -> gen as the watcher saw it last; None = not read yet (the first read is the baseline, no event)
         self.last_event = None       # id of the newest event-log row the watcher saw; None = not read yet (the first read is the baseline)
-        self.collector_up = None     # mode db: the heartbeat of hs-live-db is fresh; None = not looked at yet
+        self.collector_up = None     # the heartbeat of hs-live is fresh; None = not looked at yet
         self.on_change = None        # App sets it: called once per round that saw a change made outside the web (clears the read cache)
 
     def add(self):
@@ -2561,9 +2367,6 @@ class Events:
                     q.put_nowait(("resync",))
                 except queue.Full:
                     pass
-
-    def start(self):
-        threading.Thread(target=self._run, daemon=True).start()
 
     def start_watch(self):
         threading.Thread(target=self._watch, daemon=True).start()
@@ -2605,7 +2408,7 @@ class Events:
             return None
 
     def poll_heartbeat(self, now=None):
-        """One round (mode db): the collector is down when its heartbeat is older than max(15, 3 x every) s. The first look is the baseline (`down`
+        """One round: the collector is down when its heartbeat is older than max(15, 3 x every) s. The first look is the baseline (`down`
         only when it is already down); after that `down` or `up` once per change. `up` comes alone: the pages read again on their own timers."""
         hb = self.read_heartbeat()
         if hb is None:
@@ -2693,7 +2496,7 @@ class Events:
             self.feed("domain", row)
 
     def poll_counters(self):
-        """One round: every topic whose gen moved gets a `changed` (not while Redis delivers it); a change made outside the web (hs in a terminal, a
+        """One round: every topic whose gen moved gets a `changed`; a change made outside the web (hs in a terminal, a
         timer) also clears the read cache. A `reads:<key>` counter is the collector keeping newer output: the event only, the cache stays."""
         now = self.read_counters()
         if now is None:
@@ -2704,13 +2507,12 @@ class Events:
         moved = sorted((t, g) for t, g in now.items() if g != before.get(t))
         if any(not t.startswith(("reads:", "live:")) for t, _ in moved) and self.on_change:
             self.on_change()
-        db = self.cfg.live == "db"
         for t, g in moved:
-            if db and t.startswith("live:"):
-                self.feed("changed", t[5:], g)      # mode db: the document of that topic has a new gen; a page knows the topic by its own name
-            elif db and "live:" + t in now:
-                pass                                # mode db: a hook asked for a new reading; the collector answers with live:<topic> (other gen, same event)
-            elif t.startswith(("reads:", "live:")) or not self.redis_up:
+            if t.startswith("live:"):
+                self.feed("changed", t[5:], g)      # the document of that topic has a new gen; a page knows the topic by its own name
+            elif "live:" + t in now:
+                pass                                # a hook asked for a new reading; the collector answers with live:<topic> (other gen, same event)
+            else:
                 self.feed("changed", t, g)
             if t == "live:probe":
                 self.record_probe(t, g)
@@ -2725,65 +2527,11 @@ class Events:
                 self.poll_events()
             except Exception:
                 pass
-            if self.cfg.live == "db":
-                try:
-                    self.poll_heartbeat()
-                except Exception:
-                    pass
-            time.sleep(self.cfg.events_watch)
-
-    def _run(self):
-        up, wait = False, 1
-        while True:
-            began = time.time()
             try:
-                r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-                try:
-                    for _, msg in r.subscribe(ls.CHANGED):
-                        wait = 1
-                        if not up:
-                            up = True
-                            self.redis_up = True
-                            self.announce()
-                        topic, _, gen = msg.partition(" ")
-                        if topic:
-                            self.feed("changed", topic, int(gen) if gen.isdigit() else 0)
-                finally:
-                    r.close()
-            except (OSError, ValueError):
+                self.poll_heartbeat()
+            except Exception:
                 pass
-            if up:
-                self.feed("down")
-            up = False
-            self.redis_up = False
-            if time.time() - began > 10:      # the subscription held for a while: start the backoff again
-                wait = 1
-            self.sleep(wait)
-            wait = min(wait * 2, 30)
-
-    def sleep(self, seconds):
-        time.sleep(seconds)
-
-    def announce(self):
-        """After a (re)connect: `up`, then a `changed` for every known topic (its stored gen, 0 when unknown) so the pages read again."""
-        self.feed("up")
-        try:
-            rows = ls.topics()
-        except OSError:
-            rows = []
-        for row in rows:
-            self.feed("changed", row[0], self.gen_of(row[0]))
-
-    def gen_of(self, topic):
-        try:
-            r = ls.Resp(self.cfg.live_socket, timeout=1.0)
-            try:
-                doc = json.loads(r.cmd("GET", ls.KEY % topic) or "{}")
-            finally:
-                r.close()
-            return int(doc.get("gen") or 0)
-        except (OSError, ValueError, TypeError, AttributeError):
-            return 0
+            time.sleep(self.cfg.events_watch)
 
 
 class ChangesSeen:
@@ -2851,8 +2599,8 @@ class App:
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
-        self.store = RedisStore(self.cfg, self.reads) if self.cfg.live == "redis" else DbStore(self.cfg, self.reads) if self.cfg.live == "db" else OffStore(self.reads)
-        self.events = Events(self.cfg)       # main() starts the counter watcher always and the Redis subscription in mode redis
+        self.store = LiveStore(self.cfg, self.reads)
+        self.events = Events(self.cfg)       # main() starts the watcher of the counters and the heartbeat
         self.events.on_change = self.reads.clear
         self.proxy = Proxy(self.cfg)
         self.warmer = Warmer(self)       # started by main(), not here
@@ -3262,9 +3010,8 @@ def make_handler(app):
                     app.streams -= 1
 
         def _events(self):
-            """Server-sent events, in every liveState mode: `changed` {topic, gen} when a change counter moved (Events.poll_counters) or, in mode
-            redis, the collector read a topic again; `domain` (id = event log id) per new log row, replayed after Last-Event-ID (up to 500, else `resync`,
-            also sent when a stream queue overflowed); `down` / `up` when Redis goes or comes back (mode db: when the heartbeat of the collector stops or returns); `beat` after events_ping seconds of silence. One thread per stream (at most cfg.events_max). The page reads the topic again when `changed` arrives."""
+            """Server-sent events: `changed` {topic, gen} when a change counter moved or the collector read a topic again (Events.poll_counters); `domain` (id = event log id) per new log row, replayed after Last-Event-ID (up to 500, else `resync`,
+            also sent when a stream queue overflowed); `down` / `up` when the heartbeat of the collector stops or returns; `beat` after events_ping seconds of silence. One thread per stream (at most cfg.events_max). The page reads the topic again when `changed` arrives."""
             if not self._session():
                 return self._json(401, {"error": "not signed in"})
             if self.headers.get("Origin") and not self._same_origin():
@@ -3278,7 +3025,7 @@ def make_handler(app):
                 self.close_connection = True
                 self._headers(200, "text/event-stream", None, (("Cache-Control", "no-cache"), ("Connection", "close"), ("X-Accel-Buffering", "no")))
                 self.wfile.write(b"retry: 3000\n\n")
-                if cfg.live == "db" and app.events.collector_up is False:
+                if app.events.collector_up is False:
                     self.wfile.write(b"event: down\ndata: {}\n\n")
                 sent = 0                                                     # the newest log id this stream has sent (a live row up to it is a repeat)
                 last = (self.headers.get("Last-Event-ID") or "").strip()
@@ -3452,8 +3199,6 @@ def make_handler(app):
                 return self._json(401, {"error": "not signed in"})
             if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
-            if cfg.live != "redis":
-                return self._json(409, {"error": "live state is off"})
             topic = body.get("topic")
             if not isinstance(topic, str) or not re.fullmatch(NAME, topic) or topic not in {t[0] for t in ls.topics()}:
                 return self._json(400, {"error": "That topic is not known."})
@@ -3517,7 +3262,7 @@ def make_handler(app):
             d = parse_change(out, rc)
             if verb == "start":
                 app.reads.clear()      # what the pages show next is read again, not served from before the change (clears the plan cache too)
-                app.store.request(area_refresh(area))      # mode redis: the collector reads the topics of the area again (a no-op in mode off)
+                app.store.request(area_refresh(area))      # the collector reads the topics of the area again
             _timing(verb, shape, t0, "run", rc, d["status"])
             self._json(200, d)
 
@@ -3810,8 +3555,6 @@ def main():
     app.reads.load(cfg.cache_file)
     app.warmer.start()
     app.events.start_watch()
-    if cfg.live == "redis":
-        app.events.start()
     server = Server((cfg.bind, cfg.port), make_handler(app))
     server.serve_forever()
 
