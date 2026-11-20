@@ -78,7 +78,7 @@ rc=0; out=$($P media parity 2>&1) || rc=$?
 [ "$rc" -ne 0 ] && grep -q "only on the snapraid layout" <<<"$out" && pass "ZFS: refused with the reason" || fail "zfs: $out"
 echo snapraid > "$WORK/bulk-type"
 
-echo "-- sys bulk sync-refused"
+echo "-- sys share parity refused"
 [ -z "$($P --refused)" ] && pass "empty when nothing was refused" || fail "refused not empty"
 printf 'shares/media\tdownloads\t12\t10\t15\n' > "$HS_SYNC_REFUSED"
 check_eq "prints the file" "shares/media${T}downloads${T}12${T}10${T}15" "$($P --refused)"
@@ -111,7 +111,7 @@ rc=0; HS_BULK_TYPE_FILE=$WORK/bulk-type bash "$SCRIPTS/system-change.sh" plan up
 
 echo "-- schema keys, registry, web allowlist"
 grep -q '^  syncMaxRemoved = 100;' "$ROOT/config/defaults.nix" && grep -q '^  syncMaxRemovedPercent = 1;' "$ROOT/config/defaults.nix" && pass "defaults.nix has both keys (generated)" || fail "defaults.nix"
-grep -q "^sys${T}sys share parity state <share>${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && grep -q "^sys${T}sys bulk sync-refused${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && grep -q "^user${T}share <share> parity${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && pass "registry rows" || fail "registry rows"
-grep -q '("share", "parity", "state")' "$SCRIPTS/web-serve.py" && grep -q '("bulk", "sync-refused")' "$SCRIPTS/web-serve.py" && grep -q 'parity-(skip|keep)' "$SCRIPTS/web-serve.py" && grep -q 'parity-limit' "$SCRIPTS/web-serve.py" && pass "web-serve.py allows the reads and the changes" || fail "web-serve.py"
+grep -q "^sys${T}sys share parity state <share>${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && grep -q "^sys${T}sys share parity refused${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && grep -q "^user${T}share <share> parity${T}share-parity.sh" "$SCRIPTS/lib/registry.tsv" && pass "registry rows" || fail "registry rows"
+grep -q '("share", "parity", "state")' "$SCRIPTS/web-serve.py" && grep -q '("share", "parity", "refused")' "$SCRIPTS/web-serve.py" && grep -q 'parity-(skip|keep)' "$SCRIPTS/web-serve.py" && grep -q 'parity-limit' "$SCRIPTS/web-serve.py" && pass "web-serve.py allows the reads and the changes" || fail "web-serve.py"
 
 finish

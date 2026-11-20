@@ -319,7 +319,7 @@ sys	sys event list	event.sh	list {rest}	the event log: id, time (epoch seconds),
 sys	sys temp-disk raw	temp-disk.sh	raw	disks that can be mounted as temp disk	-
 sys	sys cache state	share-cache.sh	--state	upload cache state per share	-
 sys	sys share parity state <share>	share-parity.sh	--state {1}	the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder	-
-sys	sys bulk sync-refused	share-parity.sh	--refused	the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)	-
+sys	sys share parity refused	share-parity.sh	--refused	the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)	-
 sys	sys unifi used	unifi.sh	used	addresses in use at the router	-
 sys	sys unifi reserved	unifi.sh	reserved	reserved addresses at the router	-
 sys	sys unifi networks	unifi.sh	networks	the router's networks, no header: name, subnet, dhcp true|false, first, last address of the DHCP range	-

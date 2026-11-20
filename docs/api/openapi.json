@@ -1488,73 +1488,6 @@
     }
    }
   },
-  "/bulk/sync-refused": {
-   "get": {
-    "operationId": "bulk.sync-refused",
-    "summary": "the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)",
-    "x-hs-exit": true,
-    "x-hs-role": "viewer",
-    "x-hs-sys": {
-     "words": [
-      "bulk",
-      "sync-refused"
-     ],
-     "script": "share-parity.sh",
-     "args": "--refused",
-     "class": "read",
-     "rest": false
-    },
-    "x-hs-web": {
-     "path": "/api/sys/bulk/sync-refused",
-     "kind": "tsv",
-     "ttl": 10,
-     "query": []
-    },
-    "description": "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since.",
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/tab-separated-values": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "array",
-          "prefixItems": [
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "share"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "folder"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "removed"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "limit"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "share_total"
-           }
-          ],
-          "minItems": 5,
-          "maxItems": 5
-         }
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
   "/cache/state": {
    "get": {
     "operationId": "cache.state",
@@ -13082,6 +13015,74 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/share/parity/refused": {
+   "get": {
+    "operationId": "share.parity.refused",
+    "summary": "the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "refused"
+     ],
+     "script": "share-parity.sh",
+     "args": "--refused",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/refused",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "folder"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "removed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "limit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share_total"
+           }
+          ],
+          "minItems": 5,
+          "maxItems": 5
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }

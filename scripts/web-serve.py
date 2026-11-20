@@ -1131,7 +1131,7 @@ READS = {
     ("dns", "list"): {"kind": "tsv", "ttl": 60, "topic": "dns-list"},
     ("cache", "state"): {"kind": "tsv", "ttl": 15},
     ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},     # per share: limit, default, skip (share-parity.sh --state)
-    ("bulk", "sync-refused"): {"kind": "tsv", "ttl": 10},     # the shares the last parity sync stopped for (share-parity.sh --refused)
+    ("share", "parity", "refused"): {"kind": "tsv", "ttl": 10},     # the shares the last parity sync stopped for (share-parity.sh --refused)
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
     ("disk", "marks"): {"kind": "tsv", "ttl": 10, "topic": "disk-marks"},
@@ -1552,7 +1552,7 @@ CHANGES = {
     "release": [[r"^channel$", r"^(stable|beta|edge)$"]],
     "system": [[r"^(sync|scrub|update|rebuild|gc|rollback|reboot|shutdown)$"],
                [r"^(sync|scrub)$", r"^--pool$", POOL],
-               [r"^sync$", r"^--force$"]],     # "These deletions are expected, sync now" (the table of `sys bulk sync-refused`)
+               [r"^sync$", r"^--force$"]],     # "These deletions are expected, sync now" (the table of `sys share parity refused`)
     # the gateway setup (gateway-setup.sh): all changed keys as --set key=value (may repeat); the typed port comes as --confirm
     "gateway": [{"fixed": [r"^setup$"], "opts": {"--set": (GW_SET, True)}}],
     # turning Docker on (docker-setup.sh, which calls hs docker enable): the manager and the size as --set key=value; the plan changes nothing

@@ -53,7 +53,6 @@ state events	free query: the number of rows asked for, polled every 15 s while t
 token list	free query: an admin sees all tokens, anybody else their own (the owner is part of the key); fetched when the page opens and after a change
 
 # No arguments and no topic yet: the page asks again on a timer or on demand
-bulk sync-refused	no producer for a topic yet; a few lines, polled every 15 s on the Pools page
 cache state	no producer for a topic yet
 config check	no producer for a topic yet; fetched on demand by the settings page
 disk power	no topic of its own; the Disks page re-reads it with monitor-disks (sleep state and measured watts)
@@ -67,6 +66,7 @@ net check	no producer for a topic yet
 net nics	no producer for a topic yet
 parts pending	no producer for a topic yet
 preset list	no producer for a topic yet
+share parity refused	no producer for a topic yet; a few lines, polled every 15 s on the Pools page
 storage discover	no producer for a topic yet
 rebuild pending	no producer for a topic yet
 release show	no producer for a topic yet; polled every 10 s or 60 s by the settings pages

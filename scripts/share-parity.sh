@@ -12,7 +12,7 @@ set -euo pipefail
 #   --state <share>   limit<TAB>default|custom|off<TAB><N or ->, then default<TAB><floor><TAB><percent>, then skip<TAB><folder> per skipped folder
 #   --refused         share<TAB>folder<TAB>removed<TAB>limit<TAB>share_total per row of the last refused sync (nothing = none)
 #   --files <share> <folder>   number of files in the folder (for the plan)
-# Test knobs: HS_BULK (the /bulk folder), HS_BULK_TYPE_FILE, HS_PARITY_SKIP, HS_PARITY_LIMITS, HS_SYNC_REFUSED, HS_SETTINGS_DIR, HS_BULK_MOUNT (stand-in for bulk-mount.sh), HS_LOCK.
+# Test knobs: HS_BULK (the pool folder), HS_BULK_TYPE_FILE, HS_PARITY_SKIP, HS_PARITY_LIMITS, HS_SYNC_REFUSED, HS_SETTINGS_DIR, HS_BULK_MOUNT (stand-in for bulk-mount.sh), HS_LOCK.
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/pools.sh"
@@ -91,9 +91,9 @@ esac
 share=$1; shift
 [ "${1:-}" != parity ] || shift
 action=${1:-status}
-supported || fail "Parity settings exist only on the snapraid layout. With /bulk on ZFS every file is protected the moment it is written."
-rel=$(rel_of "$share") || fail "$(t "No share called '%s' under /bulk/shares or /bulk/sensitive." "$share")"
-# the SnapRAID config is written again with the bulk lock held: never while a sync reads it
+supported || fail "Parity settings exist only on the snapraid layout. With the pool on ZFS every file is protected the moment it is written."
+rel=$(rel_of "$share") || fail "$(t "No share called '%s' under the shares or sensitive folders of the pool." "$share")"
+# the SnapRAID config is written again with the pool lock held: never while a sync reads it
 write_conf() {
   (
     exec 9>"${HS_LOCK:-/run/hs-bulk.lock}"

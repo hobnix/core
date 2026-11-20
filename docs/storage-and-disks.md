@@ -325,7 +325,7 @@ sudo hs share media parity limit default
   `limit default` goes back to the higher of `syncMaxRemoved` (100) and `syncMaxRemovedPercent` (1 %) of the share's files; change those two with
   `hs config set`.
 
-A sync that is stopped keeps the table in `/var/lib/hs/sync-refused` (`hs sys bulk sync-refused`); the pool page shows it. A sync that fails prints
+A sync that is stopped keeps the table in `/var/lib/hs/sync-refused` (`hs sys share parity refused`); the pool page shows it. A sync that fails prints
 SnapRAID's `Unexpected ...` and `WARNING` lines (each once, at most 30), so the log names the files. In the web interface the same settings are in
 the drawer of a share (Parity). Not tested on hardware yet.
 

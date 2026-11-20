@@ -38,6 +38,6 @@
     <Muted as="p">No folder is left out of the parity.</Muted>
   {/each}
   <div style="margin-top:8px">
-    <Button size="sm" icon="eye-slash" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Leave a folder out of the parity (shows the plan and asks for the folder name)'} onclick={() => openCreate(ParitySkip, { share })}>Leave a folder out…</Button>
+    <Button size="sm" icon="prohibit" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Leave a folder out of the parity (shows the plan and asks for the folder name)'} onclick={() => openCreate(ParitySkip, { share })}>Leave a folder out…</Button>
   </div>
 </div>

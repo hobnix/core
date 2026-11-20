@@ -1,5 +1,5 @@
 <script>
-  // The table of the last refused parity sync (`hs sys bulk sync-refused`): which shares are over their limit and where the removed files are, with
+  // The table of the last refused parity sync (`hs sys share parity refused`): which shares are over their limit and where the removed files are, with
   // the button that syncs anyway (`hs sys system plan|start sync --force`; the plan names what becomes permanent). Shown only while there are rows.
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan } from '../../ui.svelte.js';
@@ -10,7 +10,7 @@
 
   let { locked = false } = $props();
 
-  const refused = poll('/api/sys/bulk/sync-refused', 15000, 'pool-state');
+  const refused = poll('/api/sys/share/parity/refused', 15000, 'pool-state');
   // share<TAB>folder<TAB>removed<TAB>limit<TAB>share_total
   const list = $derived(rows(refused).map((r) => ({ share: r[0], folder: r[1] === '-' ? '(whole share)' : r[1], removed: r[2], limit: r[3], total: r[4], key: `${r[0]}/${r[1]}` })));
   const columns = [{ key: 'share', label: 'Share' }, { key: 'folder', label: 'Folder' }, { key: 'removed', label: 'Removed' }, { key: 'limit', label: 'Limit' }];

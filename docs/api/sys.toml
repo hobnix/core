@@ -1022,7 +1022,7 @@ records = { limit = ["mode", "value"], default = ["floor", "percent"], skip = ["
 enums = { "limit.mode" = ["default", "custom", "off"] }
 note = "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out."
 
-["bulk sync-refused"]
+["share parity refused"]
 role = "viewer"
 kind = "tsv"
 columns = ["share", "folder", "removed", "limit", "share_total"]
