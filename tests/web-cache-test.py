@@ -136,8 +136,10 @@ class Cache(unittest.TestCase):
     def test_warm_targets_hold_every_read_without_arguments(self):
         r = self.reads()
         names = {"/".join(k[0].words) if hasattr(k[0], "words") else "/".join(k[1]) for k in r.warm_targets()}
-        for must in ("ct/list", "shares/overview", "recipes/list", "services/list", "dc/state", "state/disks"):
+        for must in ("net/nics", "system/doctor", "logs/units", "docker/health", "pool/list"):
             self.assertIn(must, names)
+        for topic in ("ct/list", "shares/overview", "recipes/list", "services/list", "dc/state", "state/disks"):
+            self.assertNotIn(topic, names)              # a live topic: the collector keeps it, the warm-up leaves it alone
         self.assertNotIn("config/check", names)         # ttl 0: always read fresh, never warmed
         self.assertFalse(any(k[1][:2] == ["ct", "bindings"] for k in r.warm_targets()))   # needs an argument nobody gave yet
 
@@ -150,7 +152,7 @@ class Cache(unittest.TestCase):
     def test_a_read_nobody_asked_for_is_not_read_more_often_than_the_idle_ttl(self):
         r = self.reads()
         every = {tuple(argv): e for spec_, argv, key, e in r.warm_targets()}
-        self.assertGreaterEqual(every[("recipes", "list")], self.cfg.warm_idle_ttl)
+        self.assertGreaterEqual(every[("net", "nics")], self.cfg.warm_idle_ttl)
 
     def test_the_warm_up_reads_what_is_missing_and_stops_when_nobody_is_there(self):
         class App:
@@ -163,7 +165,7 @@ class Cache(unittest.TestCase):
         self.cfg.warm_pause = 0
         w = ws.Warmer(app)
         n = w.once()
-        self.assertGreater(n, 40)                        # every read without arguments
+        self.assertGreater(n, 25)                        # every read without arguments and without a live topic
         self.assertEqual(w.once(), 0)                    # all warm now
         app.sessions = type("S", (), {"last_seen": staticmethod(lambda: time.time() - 99999)})()
         self.assertEqual(w.once(), 0)
@@ -176,157 +178,6 @@ class Cache(unittest.TestCase):
         cfg = ws.Config()
         self.assertGreaterEqual(cfg.stale_max, 900)
         self.assertGreaterEqual(cfg.stale_factor, 20)
-
-
-class Collected(unittest.TestCase):
-    """reads the collector keeps in the state database are served from there, without starting the script"""
-
-    def setUp(self):
-        self.fake = Fake()
-        self.real_run = ws._run
-        ws._run = self.fake
-        self.tmp = tempfile.mkdtemp()
-        self.db = os.path.join(self.tmp, "state.db")
-        lst = os.path.join(self.tmp, "collected.tsv")
-        with open(lst, "w") as f:
-            f.write("# a comment\nct list\t10\nshares overview\t30\n")
-        os.environ["HS_STATE_DB"] = self.db
-        os.environ["HS_COLLECTED_FILE"] = lst
-        ws._COLLECTED = None
-        c = sqlite3.connect(self.db)
-        c.execute("CREATE TABLE reads (key TEXT PRIMARY KEY, payload TEXT NOT NULL, updated INTEGER NOT NULL, ms INTEGER, rc INTEGER NOT NULL DEFAULT 0)")
-        c.commit()
-        c.close()
-        self.cfg = ws.Config()
-        self.cfg.cache_file = ""
-
-    def tearDown(self):
-        ws._run = self.real_run
-        for k in ("HS_STATE_DB", "HS_COLLECTED_FILE"):
-            os.environ.pop(k, None)
-        ws._COLLECTED = None
-
-    def put(self, key, payload, age=1, rc=0):
-        c = sqlite3.connect(self.db)
-        c.execute("INSERT OR REPLACE INTO reads VALUES (?, ?, ?, 5, ?)", (key, payload, int(time.time()) - age, rc))
-        c.commit()
-        c.close()
-
-    def ask(self, r, path):
-        return r.get_aged(*r.resolve(path.split("/"), {}))
-
-    def test_a_kept_output_is_served_and_no_script_runs(self):
-        self.put("ct list", "jellyfin\tRUNNING\n")
-        r = ws.Reads(self.cfg)
-        code, obj, _ = self.ask(r, "ct/list")
-        self.assertEqual((code, obj["rows"]), (200, [["jellyfin", "RUNNING"]]))
-        self.assertEqual(self.fake.calls, [])
-
-    def test_the_answer_is_as_old_as_the_collectors_reading(self):
-        self.put("ct list", "a\n", age=40)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        t, _ = r.cache[("ct", "list")]
-        self.assertAlmostEqual(time.time() - t, 40, delta=3)
-
-    def test_too_old_means_the_script_runs(self):
-        self.put("ct list", "old\n", age=100000)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [("ct", "list")])
-
-    def test_a_read_that_is_not_collected_runs_as_before(self):
-        self.put("users list", "x\n")          # in the table, but not in the list
-        r = ws.Reads(self.cfg)
-        self.ask(r, "users/list")
-        self.assertEqual(self.fake.calls, [("users", "list")])
-
-    def test_a_failed_empty_reading_is_ignored(self):
-        self.put("ct list", "", rc=1)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [("ct", "list")])
-
-    def test_a_failed_reading_with_output_is_still_shaped(self):
-        self.put("ct list", "partial\n", rc=1)
-        r = ws.Reads(self.cfg)
-        code, obj, _ = self.ask(r, "ct/list")
-        self.assertEqual((code, obj["rows"]), (200, [["partial"]]))
-
-    def test_no_database_no_table_no_row_all_mean_run_the_script(self):
-        os.remove(self.db)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [("ct", "list")])
-        c = sqlite3.connect(self.db)               # a database without the table
-        c.execute("CREATE TABLE other (x)")
-        c.commit()
-        c.close()
-        r2 = ws.Reads(self.cfg)
-        self.ask(r2, "shares/overview")
-        self.assertEqual(self.fake.calls[-1], ("shares", "overview"))
-
-    def test_the_database_is_only_read(self):
-        r = ws.Reads(self.cfg)
-        self.put("ct list", "a\n")
-        self.ask(r, "ct/list")
-        c = sqlite3.connect(self.db)
-        n = c.execute("SELECT COUNT(*) FROM reads").fetchone()[0]
-        c.close()
-        self.assertEqual(n, 1)
-
-    def test_a_kept_answer_reports_its_real_age(self):
-        self.put("ct list", "a\n", age=40)
-        r = ws.Reads(self.cfg)
-        _, _, age = self.ask(r, "ct/list")
-        self.assertAlmostEqual(age, 40, delta=3)          # not "just read": the page shows how old the data is
-
-    def test_fresh_runs_the_script_and_ignores_what_was_kept(self):
-        self.put("ct list", "kept\n", age=5)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [])
-        code, obj, age = r.get_aged(*r.resolve(["ct", "list"], {}), fresh=True)
-        self.assertEqual((code, age), (200, 0))
-        self.assertEqual(self.fake.calls, [("ct", "list")])
-        self.assertEqual(obj["rows"], [['{"x": 1}']])
-
-    def test_an_older_kept_output_does_not_replace_a_newer_answer(self):
-        self.put("ct list", "kept\n", age=30)
-        r = ws.Reads(self.cfg)
-        r.get_aged(*r.resolve(["ct", "list"], {}), fresh=True)
-        t0, _ = r.cache[("ct", "list")]
-        r.cache[("ct", "list")] = (t0 - 20, r.cache[("ct", "list")][1])        # the ttl has passed, the collector's reading (30 s) is still older
-        r.fetch(*r.resolve(["ct", "list"], {}))
-        self.assertLess(time.time() - r.cache[("ct", "list")][0], 3)           # the cache is not set back to the collector's older reading
-        self.assertEqual(len(self.fake.calls), 2)                              # the script ran again instead
-
-    def test_after_a_change_what_the_collector_read_before_it_is_not_used(self):
-        self.put("ct list", "before\n", age=5)
-        r = ws.Reads(self.cfg)
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [])
-        r.clear()                                    # a change was started
-        self.ask(r, "ct/list")
-        self.assertEqual(self.fake.calls, [("ct", "list")])          # the script runs instead of serving the pre-change reading
-        self.put("ct list", "after\n", age=0)        # a collector run after the change is used again
-        r.clear()
-        time.sleep(1.1)
-        self.put("ct list", "later\n", age=0)
-        code, obj, _ = self.ask(r, "ct/list")
-        self.assertEqual(obj["rows"], [["later"]])
-        self.assertEqual(len(self.fake.calls), 1)
-
-    def test_the_status_read_is_allowlisted(self):
-        self.assertEqual(ws.READS[("reads", "status")]["kind"], "tsv")
-
-    def test_the_list_of_the_repo_names_only_real_reads(self):
-        ws._COLLECTED = None
-        os.environ.pop("HS_COLLECTED_FILE", None)
-        self.assertGreater(len(ws.collected_keys()), 10)
-        for key in ws.collected_keys():
-            words = key.split(" ")
-            self.assertTrue(any(ws.READS.get(tuple(words[:n])) is not None for n in range(len(words), 0, -1)), key)
 
 
 class Nocache(unittest.TestCase):

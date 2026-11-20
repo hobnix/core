@@ -1,0 +1,4 @@
+date  = "2026-11-20"
+type  = "change"
+title = "Live state is always on and kept in the state database"
+body  = """Live state has no setting any more: on a server with the web interface the collector `hs-live` keeps every page's data in the state database and the open page follows changes within a few seconds, also a change made in a terminal. Redis is gone (no service, no socket), and so are the timer `hs-reads-collect`, `hs sys reads status` and `hs sys reads collect`. Upgrade: nothing to do. A `liveState` line left in `machine.toml` (`"redis"`, `"off"` or `"db"`) is ignored; `hs config check` shows a note for this release and you can delete the line. Not tested on hardware yet."""

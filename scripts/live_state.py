@@ -1,119 +1,75 @@
 #!/usr/bin/env python3
-"""Live state: a small RESP2 client over a unix socket (no redis-py), the topic list and the CLI behind `hs sys live`.
-Shared by scripts/live-collect.py (the one writer) and scripts/web-serve.py (the reader). Only the raw text of a `hs sys` read is stored:
-the value of hs:v1:<topic> is JSON {"ts", "gen", "rc", "out", "err", "ts_err"}. Channels: hs:v1:changed ("<topic> <gen>"),
-hs:v1:refresh ("<topic>" or "*").
-  python3 live_state.py refresh <topic>|@<group>...|--all   ask the collector to read again (exit 0 always); @<group> = every topic of
-                                                     that change area (and of `any`), see live-topics.tsv columns 5 and 6
+"""Live state (ADR 0026): the topic list, the read side of the live tables in the state database and the CLI behind `hs sys live`.
+Shared by scripts/live-collect.py (the one writer, through state-db.py) and scripts/web-serve.py (the reader). The documents are the raw text of one
+`hs sys` read: table `live` of state.db (topic, payload, updated, ms, rc, gen, err, ts_err, ttl, src), one heartbeat row `hs-live` in table `heartbeat`
+says the collector runs. Here a document is a dict {out, rc, gen, ts (= updated), err, ts_err, ttl, src}.
+  python3 live_state.py refresh <topic>|@<group>...|--all   ask the collector to read again (exit 0 always): counts the topics up in the table
+                                                     `topics` (state-db.py topic-bump); @<group> = every topic of that change area (and of `any`),
+                                                     see live-topics.tsv columns 5 and 6
   python3 live_state.py status                       topic, interval, age (-1 none), gen, rc, err or -, ts_err or -, needs (comma list or -;
                                                      the 8th field, since #153, see live-topics.tsv column 7), status (fresh|stale|error|expired
                                                      or -; the 9th field, since #322, status_of)
   python3 live_state.py inspect   JSON: every topic with words, interval, lock, cap, groups and its stored state (the inspector page)
   python3 live_state.py raw <topic>   JSON: the stored document of one topic, out capped at RAW_MAX bytes (exit 2: unknown topic)
-  python3 live_state.py check                        problems: live:down / live:stale:<topic> TAB text (exit 1 when there are some)
+  python3 live_state.py check                        problems: live:down / live:never:<topic> / live:stale:<topic> TAB text (exit 1 when there are some)
 """
 import heapq
 import json
 import os
-import socket
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
 
-KEY = "hs:v1:%s"
 RAW_MAX = 65536
-CHANGED = "hs:v1:changed"
-REFRESH = "hs:v1:refresh"
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SOCKET = "/run/redis-hobnix/redis.sock"
+BEAT_NAME = "hs-live"
 
 
-def socket_path():
-    return os.environ.get("HS_LIVE_SOCKET", DEFAULT_SOCKET)
+def state_db_path():
+    return os.environ.get("HS_STATE_DB") or os.path.join(os.environ.get("HS_STATE_DIR") or "/var/lib/hs", "state.db")
 
 
-def encode(*args):
-    out = [b"*%d\r\n" % len(args)]
-    for a in args:
-        b = a if isinstance(a, bytes) else str(a).encode()
-        out.append(b"$%d\r\n%s\r\n" % (len(b), b))
-    return b"".join(out)
+def collector_alive(hb, now=None):
+    """The heartbeat row (time, every) of the collector is fresh: not older than max(15, 3 x every) seconds (one rule for `down`, for the status of a
+    document and for `hs sys live check`)."""
+    t = time.time() if now is None else now
+    return bool(hb) and t - hb[0] <= max(15, 3 * hb[1])
 
 
-class Resp:
-    """One connection. Every failure is an OSError."""
+def _db_open():
+    db = state_db_path()
+    if not os.path.exists(db):
+        return None
+    c = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=2)
+    c.execute("PRAGMA query_only=1")
+    return c
 
-    def __init__(self, path=None, timeout=1.0):
-        self.path = path or socket_path()
-        self.timeout = timeout
-        self.buf = b""
+
+def db_read(topic=None):
+    """-> (documents, heartbeat) from the state database, read-only, no subprocess. documents: {topic: doc} (just the one topic when given; {} when it
+    has no row, there is no database yet or no table); doc = {out, rc, gen, ts, err, ts_err, ttl, src}; heartbeat = (time, every) or None.
+    OSError when the database cannot be read now."""
+    try:
+        c = _db_open()
+        if c is None:
+            return {}, None
         try:
-            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self.sock.settimeout(timeout)
-            self.sock.connect(self.path)
-        except (OSError, AttributeError) as e:
-            raise OSError("cannot connect to %s: %s" % (self.path, e))
-
-    def close(self):
-        try:
-            self.sock.close()
-        except OSError:
-            pass
-
-    def _fill(self):
-        try:
-            data = self.sock.recv(65536)
-        except socket.timeout:
-            raise OSError("timeout")
-        if not data:
-            raise OSError("connection closed")
-        self.buf += data
-
-    def _line(self):
-        while b"\r\n" not in self.buf:
-            self._fill()
-        line, self.buf = self.buf.split(b"\r\n", 1)
-        return line
-
-    def _exact(self, n):
-        while len(self.buf) < n + 2:
-            self._fill()
-        data, self.buf = self.buf[:n], self.buf[n + 2:]
-        return data
-
-    def read(self):
-        line = self._line()
-        kind, rest = line[:1], line[1:]
-        if kind == b"+":
-            return rest.decode()
-        if kind == b"-":
-            raise OSError("redis: " + rest.decode())
-        if kind == b":":
-            return int(rest)
-        if kind == b"$":
-            n = int(rest)
-            return None if n < 0 else self._exact(n).decode("utf-8", "replace")
-        if kind == b"*":
-            n = int(rest)
-            return None if n < 0 else [self.read() for _ in range(n)]
-        raise OSError("bad reply " + repr(line[:20]))
-
-    def cmd(self, *args):
-        try:
-            self.sock.sendall(encode(*args))
-        except socket.timeout:
-            raise OSError("timeout")
-        return self.read()
-
-    def subscribe(self, channel):
-        """Yields (channel, message) until the connection fails (OSError). Waits without a timeout between messages."""
-        self.cmd("SUBSCRIBE", channel)
-        self.sock.settimeout(None)
-        while True:
-            m = self.read()
-            if isinstance(m, list) and len(m) == 3 and m[0] == "message":
-                yield m[1], m[2]
+            try:
+                sql = "SELECT topic, payload, rc, gen, updated, err, ts_err, ttl, src FROM live" + (" WHERE topic = ?" if topic else "")
+                rows = c.execute(sql, (topic,) if topic else ()).fetchall()
+                hb = c.execute("SELECT time, every FROM heartbeat WHERE name = ?", (BEAT_NAME,)).fetchone()
+            except sqlite3.OperationalError as e:
+                if "no such table" in str(e):
+                    return {}, None
+                raise
+        finally:
+            c.close()
+    except sqlite3.Error as e:
+        raise OSError("state.db: %s" % e)
+    docs = {r[0]: {"out": r[1], "rc": r[2], "gen": r[3], "ts": r[4], "err": r[5], "ts_err": r[6], "ttl": r[7], "src": r[8]} for r in rows}
+    return docs, ((int(hb[0]), int(hb[1])) if hb else None)
 
 
 def ext_live(log=None):
@@ -264,16 +220,6 @@ def clean(text, limit=200):
     return "".join(c if c.isprintable() else " " for c in str(text))[:limit]
 
 
-def _doc(r, topic):
-    raw = r.cmd("GET", KEY % topic)
-    if raw is None:
-        return None
-    try:
-        return json.loads(raw)
-    except ValueError:
-        return None
-
-
 def status_of(doc, interval, now=None):
     """The one status of a live entry: fresh, stale, error or expired. ttl = doc["ttl"], else 3 x interval.
     error = the last try failed and there is no good data inside the ttl (never read, or older than the ttl); stale = the last try failed but the
@@ -299,6 +245,15 @@ def status_of(doc, interval, now=None):
     return "fresh" if inside else "expired"
 
 
+def checked_doc(doc, hb, now=None):
+    """The document as the status rules see it: the collector looks at every topic at its interval, so while it runs an unchanged answer was
+    confirmed at its last beat (ts = the later of the change time and the beat). Without a fresh heartbeat nothing was confirmed: ts stays, and
+    the status turns `expired` (data older than its ttl). A failed document keeps its own times."""
+    if not doc or not doc.get("ts") or not collector_alive(hb, now) or (doc.get("err") and (doc.get("ts_err") or 0) > doc["ts"]):
+        return doc
+    return dict(doc, ts=max(doc["ts"], hb[0]))
+
+
 def _ttl(doc, interval, info=None):
     """seconds an entry counts as fresh: the document's own ttl, else the topic's override (live-topics.tsv column 8), else 3 x interval"""
     try:
@@ -308,123 +263,123 @@ def _ttl(doc, interval, info=None):
     return t or float((info or {}).get("ttl") or 0) or 3 * interval
 
 
-def cli_refresh(args, conn=None):
+def cli_refresh(args):
+    """count the topics up in the table `topics` (the collector wakes on it); best effort, always 0"""
     try:
-        names = [t[0] for t in topics()] if "--all" in args else [a for a in args]
-        r = conn or Resp(timeout=1.0)
-        for t in names:
-            r.cmd("PUBLISH", REFRESH, t)
-        r.close()
-    except (OSError, ValueError):
+        subprocess.run([sys.executable, os.path.join(HERE, "state-db.py"), "topic-bump"] + [a for a in args], capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
         pass
     return 0
 
 
-def cli_status(conn=None, out=None):
+def cli_status(out=None, docs=None):
     out = out or sys.stdout
     try:
-        r = conn or Resp(timeout=2.0)
-        now = time.time()
-        needs = topic_needs()
-        info = topic_info()
-        for topic, _, interval, _ in topics():
-            d = _doc(r, topic) or {}
-            age = int(now - d["ts"]) if d.get("ts") else -1
-            err = clean(d.get("err") or "-")
-            ts_err = str(int(d["ts_err"])) if d.get("ts_err") else "-"
-            out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
-                topic, interval, age, d.get("gen", 0), d.get("rc", "-"), err, ts_err, ",".join(needs.get(topic, ())) or "-",
-                status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-"))
+        docs, hb = docs if docs is not None else db_read()
     except OSError as e:
         sys.stderr.write("live state failed: %s\n" % e)
         return 1
+    now = time.time()
+    needs = topic_needs()
+    info = topic_info()
+    for topic, _, interval, _ in topics():
+        d = checked_doc(docs.get(topic), hb, now) or {}
+        age = int(now - d["ts"]) if d.get("ts") else -1
+        err = clean(d.get("err") or "-")
+        ts_err = str(int(d["ts_err"])) if d.get("ts_err") else "-"
+        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+            topic, interval, age, d.get("gen", 0), d.get("rc", "-") if d.get("rc") is not None else "-", err, ts_err, ",".join(needs.get(topic, ())) or "-",
+            status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-"))
     return 0
 
 
-def cli_inspect(conn=None, out=None):
+def cli_inspect(out=None, docs=None):
     out = out or sys.stdout
-    r = None
     try:
-        core = {t[0] for t in topics(os.path.join(HERE, "lib", "live-topics.tsv"))}
-        info = topic_info()
-        rows = topics()
-        caps = {}
-        for t in rows:
-            c = info.get(t[0], {}).get("cap")
-            if c is not None and c not in caps:
-                caps[c] = cap_on(c)
-        r = conn or Resp(timeout=2.0)
-        now = time.time()
-        entries = []
-        for topic, words, interval, lock in rows:
-            d = _doc(r, topic) or {}
-            i = info.get(topic, {})
-            e = {"topic": topic, "words": words, "interval": interval, "lock": lock,
-                 "origin": "core" if topic in core else "extension",
-                 "cap": i.get("cap"), "cap_on": caps.get(i.get("cap"), True), "groups": sorted(i.get("groups") or ()),
-                 "age": int(now - d["ts"]) if d.get("ts") else None, "gen": int(d.get("gen") or 0),
-                 "rc": d.get("rc") if isinstance(d.get("rc"), int) else None,
-                 "err": clean(d["err"]) if d.get("err") else None,
-                 "ts_err": int(d["ts_err"]) if d.get("ts_err") else None,
-                 "bytes": len(str(d.get("out") or "").encode()) if d else None}
-            # #339 needs, #322 status/ttl/source: present only when those are in
-            if i.get("needs") is not None:
-                e["needs"] = sorted(i["needs"])
-            if d:
-                e["status"] = status_of(dict(d, ttl=_ttl(d, interval, i)), interval, now)
-                e["ttl"] = int(_ttl(d, interval, i))
-                if isinstance(d.get("src"), str):
-                    e["source"] = d["src"]
-            entries.append(e)
-        out.write(json.dumps({"now": int(now), "topics": entries}, sort_keys=True) + "\n")
+        docs, hb = docs if docs is not None else db_read()
     except OSError as e:
         sys.stderr.write("live state failed: %s\n" % e)
         return 1
-    finally:
-        if r is not None and conn is None:
-            r.close()
+    core = {t[0] for t in topics(os.path.join(HERE, "lib", "live-topics.tsv"))}
+    info = topic_info()
+    rows = topics()
+    caps = {}
+    for t in rows:
+        c = info.get(t[0], {}).get("cap")
+        if c is not None and c not in caps:
+            caps[c] = cap_on(c)
+    now = time.time()
+    entries = []
+    for topic, words, interval, lock in rows:
+        raw = docs.get(topic)
+        d = checked_doc(raw, hb, now) or {}
+        i = info.get(topic, {})
+        e = {"topic": topic, "words": words, "interval": interval, "lock": lock,
+             "origin": "core" if topic in core else "extension",
+             "cap": i.get("cap"), "cap_on": caps.get(i.get("cap"), True), "groups": sorted(i.get("groups") or ()),
+             "age": int(now - d["ts"]) if d.get("ts") else None, "gen": int(d.get("gen") or 0),
+             "rc": d.get("rc") if isinstance(d.get("rc"), int) else None,
+             "err": clean(d["err"]) if d.get("err") else None,
+             "ts_err": int(d["ts_err"]) if d.get("ts_err") else None,
+             "bytes": len(str(d.get("out") or "").encode()) if d else None}
+        # #339 needs, #322 status/ttl/source: present only when those are in
+        if i.get("needs") is not None:
+            e["needs"] = sorted(i["needs"])
+        if d:
+            e["status"] = status_of(dict(d, ttl=_ttl(d, interval, i)), interval, now)
+            e["ttl"] = int(_ttl(d, interval, i))
+            if isinstance(d.get("src"), str):
+                e["source"] = d["src"]
+        entries.append(e)
+    out.write(json.dumps({"now": int(now), "topics": entries}, sort_keys=True) + "\n")
     return 0
 
 
-def cli_raw(args, conn=None, out=None):
+def cli_raw(args, out=None, docs=None):
     out = out or sys.stdout
-    r = None
+    if len(args) != 1 or args[0] not in {t[0] for t in topics()}:
+        sys.stderr.write("unknown live topic\n")
+        return 2
+    topic = args[0]
     try:
-        if len(args) != 1 or args[0] not in {t[0] for t in topics()}:
-            sys.stderr.write("unknown live topic\n")
-            return 2
-        topic = args[0]
-        r = conn or Resp(timeout=2.0)
-        d = _doc(r, topic)
-        if d is None:
-            res = {"topic": topic, "stored": False}
-        else:
-            b = str(d.get("out") or "").encode()
-            res = {"topic": topic, "stored": True, "ts": d.get("ts"), "gen": d.get("gen"), "rc": d.get("rc"),
-                   "err": clean(d["err"], 2000) if d.get("err") else None, "ts_err": d.get("ts_err"),
-                   "bytes": len(b), "truncated": len(b) > RAW_MAX,
-                   "out": b[:RAW_MAX].decode("utf-8", "ignore")}
-        out.write(json.dumps(res, sort_keys=True) + "\n")
+        docs, _ = docs if docs is not None else db_read(topic)
     except OSError as e:
         sys.stderr.write("live state failed: %s\n" % e)
         return 1
-    finally:
-        if r is not None and conn is None:
-            r.close()
+    d = docs.get(topic)
+    if d is None:
+        res = {"topic": topic, "stored": False}
+    else:
+        b = str(d.get("out") or "").encode()
+        res = {"topic": topic, "stored": True, "ts": d.get("ts"), "gen": d.get("gen"), "rc": d.get("rc"),
+               "err": clean(d["err"], 2000) if d.get("err") else None, "ts_err": d.get("ts_err"),
+               "bytes": len(b), "truncated": len(b) > RAW_MAX,
+               "out": b[:RAW_MAX].decode("utf-8", "ignore")}
+    out.write(json.dumps(res, sort_keys=True) + "\n")
     return 0
 
 
-def cli_check(conn=None, out=None):
+def cli_check(out=None, docs=None):
     out = out or sys.stdout
+    problems = []
     try:
-        r = conn or Resp(timeout=2.0)
-        now = time.time()
-        problems = []
+        docs, hb = docs if docs is not None else db_read()
+    except OSError as e:
+        docs, hb = None, None
+        problems = [("live:down", "the live state database cannot be read (%s). Details: systemctl status hs-live" % e)]
+    now = time.time()
+    if docs is not None and not collector_alive(hb, now):
+        if hb:
+            problems = [("live:down", "the live state collector is not running (its last beat was %d s ago). Details: systemctl status hs-live" % (now - hb[0]))]
+        elif docs:
+            problems = [("live:down", "the live state collector is not running (it has no beat). Details: systemctl status hs-live")]
+        # no beat and no document at all: the collector has not started yet (a fresh install), nothing to say
+    elif docs is not None:
         info = topic_info()
         for topic, _, interval, _ in topics():
             if not cap_on((info.get(topic) or {}).get("cap")):
                 continue   # the capability is off: the topic is not read
-            d = _doc(r, topic)
+            d = docs.get(topic)
             if d is None:
                 continue   # nothing read yet: the collector is still starting
             if not d.get("ts"):
@@ -432,12 +387,10 @@ def cli_check(conn=None, out=None):
                     problems.append(("live:never:" + topic, "live state '%s' has never been read: %s. Details: systemctl status hs-live" % (
                         topic, clean(d["err"]))))
                 continue
-            st = status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now)
+            st = status_of(dict(checked_doc(d, hb, now), ttl=_ttl(d, interval, info.get(topic))), interval, now)
             if st in ("expired", "error"):
                 problems.append(("live:stale:" + topic, "live state '%s' is %s (%d s old, read every %d s). Details: systemctl status hs-live" % (
                     topic, st, now - d["ts"], interval)))
-    except OSError as e:
-        problems = [("live:down", "the live state service is down (%s). Details: systemctl status redis-hobnix hs-live" % e)]
     for k, t in problems:
         out.write("%s\t%s\n" % (k, t))
     return 1 if problems else 0

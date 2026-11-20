@@ -19,15 +19,15 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   deck-disks                 the 5 fields per disk the status document uses (name bytes kind role temp), from the last reading
   inventory-json             {"known":N,"missing":[...],"worse":[...]} for the status document
   forget <serial|dev> [--yes]  remove a MISSING disk from the list for good
-  read-put <key> [--ms N] [--rc N]  keep the output of a read (stdin) for the web interface: scripts/reads-collect.sh, the one writer of the table `reads`
+  read-put <key> [--ms N] [--rc N]  keep the output of a read (stdin): the table `reads`; nothing writes it since ADR 0026 (the live topics replaced it), kept for old callers
   usage-record <key> <used> <size>  one reading of a pool / filesystem fill level (bytes; backup: percent and 100), at most one per hour and key
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
   read-get <key>             the kept output (nothing and exit 1 when there is none)
   topic-bump <topic|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
   read-fail <key> --err TEXT [--ms N] [--rc N]  a run with no output: keeps the old output, records err and ts_err (#324)
   reads                      key TAB age in seconds (-1 = never read well) TAB milliseconds TAB exit code TAB bytes TAB status TAB gen TAB err TAB err age, oldest first
-  live_open, live_load, live_put, live_fail, live_delete, live_beat: in-process only, used by live-collect.py in liveState "db"
-                             (ADR 0026 step 1): the tables `live` and `heartbeat`; no command line
+  live_open, live_load, live_put, live_fail, live_delete, live_beat: in-process only, used by live-collect.py
+                             (ADR 0026): the tables `live` and `heartbeat`; no command line
   baseline-run               the daily SMART check: read every disk through disk-health.sh --readings, compare with the stored reading,
                              update the table baseline (docs/PLAN-disk-health.md)
   baseline                   machine line per disk: serial dev kind level since last_read first_read wwn realloc pending uncorr crc
@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS smart_serial ON smart (serial, time);
 CREATE TABLE IF NOT EXISTS baseline (serial TEXT PRIMARY KEY, wwn TEXT, dev TEXT, kind TEXT, first_read INTEGER, last_read INTEGER, last_try INTEGER, hours INTEGER, realloc INTEGER, pending INTEGER, uncorr INTEGER, crc INTEGER, nv_crit INTEGER, nv_media INTEGER, nv_used INTEGER, nv_spare INTEGER, nv_spare_thr INTEGER, level TEXT NOT NULL DEFAULT 'healthy', level_time INTEGER, note TEXT);
 CREATE TABLE IF NOT EXISTS samples (
   time INTEGER NOT NULL, cpu INTEGER, mem INTEGER, gpu INTEGER, rx INTEGER, tx INTEGER, boot INTEGER NOT NULL DEFAULT 0);
--- the output of the slow `hs sys ...` reads, written by the collector (scripts/reads-collect.sh) and served by the web interface instead of running the script
+-- the output of the slow `hs sys ...` reads, written by nobody since ADR 0026 (the live topics took the reads over); `hs sys state reads` still shows it
 CREATE TABLE IF NOT EXISTS topics (topic TEXT PRIMARY KEY, gen INTEGER NOT NULL DEFAULT 0, time INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS reads (
   key TEXT PRIMARY KEY, payload TEXT NOT NULL, updated INTEGER NOT NULL, ms INTEGER, rc INTEGER NOT NULL DEFAULT 0,
@@ -1139,7 +1139,7 @@ def bump(c, names):
                   "ON CONFLICT(topic) DO UPDATE SET gen = gen + 1, time = excluded.time", (n, t))
 
 
-# ADR 0026 step 1 (liveState = "db"): the documents of the live-state collector and its heartbeat. Created only by live_open(), so a server
+# ADR 0026: the documents of the live-state collector and its heartbeat. Created only by live_open(), so a server
 # with the switch off never gets the tables. In-process only: scripts/live-collect.py loads this file and calls these functions on one connection.
 LIVE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS live (topic TEXT PRIMARY KEY, payload TEXT NOT NULL, updated INTEGER NOT NULL, ms INTEGER, rc INTEGER NOT NULL DEFAULT 0,

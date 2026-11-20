@@ -1869,7 +1869,7 @@ cmd_state_kv() {
     printf 'disk\tabsent\n'
   fi
   if mountpoint -q "$BROWSE" 2>/dev/null; then printf 'browse\ton\n'; else printf 'browse\toff\n'; fi
-  # the address may carry user:password (rest:https://u:pw@host/); this output lands in Redis, so the password is masked
+  # the address may carry user:password (rest:https://u:pw@host/); this output lands in the live state, so the password is masked
   offsite_adopt_old
   printf 'offsite\t%s\n' "$({ cat "$OFFSITE" 2>/dev/null || true; } | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')"
   printf 'offsite_ok\t%s\n' "$(get offsite_ok)"

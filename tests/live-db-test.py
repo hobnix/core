@@ -71,7 +71,7 @@ class Base(unittest.TestCase):
             return results.pop(0)
         db = lc.DbStore(sdb, clock=lambda: self.now)
         OPEN.append(db)
-        c = lc.Collector(None, run=run, topic_rows=list(self.rows), db=db, emit=lambda *a: events.append(a), topic_info=dict(INFO))
+        c = lc.Collector(db, run=run, topic_rows=list(self.rows), emit=lambda *a: events.append(a), topic_info=dict(INFO))
         return c, db, events
 
     def read(self, c, t=None):
@@ -161,12 +161,6 @@ class Db(Base):
         c.rescan()
         self.assertEqual(q("SELECT COUNT(*) FROM live WHERE topic='ext-x'"), [(0,)])
 
-    def test_backend_names(self):
-        c, db, _ = self.make([])
-        self.assertEqual(c.backend, "state.db")
-        c2 = lc.Collector(object(), topic_rows=list(self.rows), topic_info=dict(INFO))
-        self.assertEqual(c2.backend, "redis")
-
 
 class TakeOver(Base):
     """#561: the 27 slow reads of collected-reads.tsv are topics of the collector (db mode), two writers share the database."""
@@ -233,33 +227,34 @@ class TakeOver(Base):
         self.assertEqual(q("SELECT SUM(gen) FROM topics WHERE topic LIKE 'live:%'"), [(80,)])
 
 
-class FakeResp:
-    def __init__(self):
-        self.data, self.published = {}, []
+class Listen(Base):
+    """the refresh path without Redis: a hook counts a topic up in the table `topics`, the collector reads it again"""
 
-    def cmd(self, *a):
-        if a[0] == "GET":
-            return self.data.get(a[1])
-        if a[0] == "SET":
-            self.data[a[1]] = a[2]
-            return "OK"
-        if a[0] == "PUBLISH":
-            self.published.append((a[1], a[2]))
-            return 1
-        raise AssertionError(a)
+    def test_a_counted_topic_is_asked_for_again_and_our_own_counters_are_not(self):
+        c, db, _ = self.make([])
+        asked = []
+        c.refresh = asked.append
+
+        class Stop:      # four rounds, then the collector stops
+            n = 4
+
+            def wait(self, every):
+                self.n -= 1
+                return self.n < 0
+        c.stop = Stop()
+        counters = iter([{"status": 1}, {"status": 1}, {"status": 2, "live:status": 5, "reads:x": 1}, {"status": 2, "live:status": 6, "other": 1}])
+        db.counters = lambda: next(counters)
+        c.listen()
+        self.assertEqual(asked, ["status"])      # the first look is the baseline; live:/reads: and an unknown topic ask for nothing
+
+    def test_counters_reads_the_table(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        self.read(c)
+        self.assertEqual(db.counters().get("live:status"), 1)
 
 
-class Redis(unittest.TestCase):
-    def test_redis_path_unchanged(self):
-        st = FakeResp()
-        c = lc.Collector(st, run=lambda w: (0, "ok\n", ""), topic_rows=[("status", ["status"], 15, "run")], topic_info=dict(INFO))
-        self.assertTrue(c.collect("status", ["status"]))
-        self.assertEqual(json.loads(st.data["hs:v1:status"])["gen"], 1)
-        self.assertEqual(st.published, [("hs:v1:changed", "status 1")])
-
-
-class Off(unittest.TestCase):
-    def test_off_mode_creates_no_live_table(self):
+class Bump(unittest.TestCase):
+    def test_a_hook_bump_creates_no_live_table(self):
         reset()
         r = subprocess.run([sys.executable, os.path.join(scripts, "state-db.py"), "topic-bump", "x"], capture_output=True, text=True,
                            env=dict(os.environ))

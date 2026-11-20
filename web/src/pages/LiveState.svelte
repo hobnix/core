@@ -71,7 +71,7 @@
   {:else}
     {#if down}
       <div class="note bad"><i class="ph ph-warning-circle"></i>
-        <span>{tr('The live state service is down. The table shows the last data; polling every 5 s until it comes back. Check')} <code>systemctl status redis-hobnix hs-live</code>.</span>
+        <span>{tr('The live state data cannot be read. The table shows the last data; polling every 5 s until it comes back. Check')} <code>systemctl status hs-live</code>.</span>
       </div>
     {:else if starting}
       <div class="note"><i class="ph ph-circle-notch spin"></i>
