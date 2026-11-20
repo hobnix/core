@@ -1,0 +1,5 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "hs docker gpu on gives the apps in Docker the graphics chip for hardware transcoding"
+docs  = "containers-and-apps#give-the-apps-in-docker-the-graphics-chip"
+body  = """The container docker is locked, so its devices could not be changed by hand. hs docker gpu on passes an Intel or AMD chip in as /dev/dri for the group render, after a plan; hs docker gpu shows the compose lines an app needs, hs docker gpu off removes it again. NVIDIA is not covered yet."""

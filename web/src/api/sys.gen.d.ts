@@ -181,7 +181,7 @@ export interface SysOperations {
     path: "/backup/find/{word}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { word: string; };
     stdin: "none";
     exit: number;
@@ -998,7 +998,7 @@ export interface SysOperations {
     path: "/fm/du/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1020,7 +1020,7 @@ export interface SysOperations {
     path: "/fm/locations";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1032,7 +1032,7 @@ export interface SysOperations {
     path: "/fm/ls/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1092,7 +1092,7 @@ export interface SysOperations {
     path: "/fm/stat/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;

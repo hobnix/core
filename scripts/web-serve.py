@@ -501,6 +501,11 @@ class RoleTable:
 
 
 TOKEN_DENIED = frozenset(("token", "users", "secrets", "unlock", "vault", "terminal", "vmconsole"))      # words a bearer token never gets, whatever its role
+# A change (plan/start) a token may start: only areas that give no access outliving the token (#944). Every area of CHANGES is in exactly one of the two
+# sets (tests/token-test.py fails for a new one); the denied areas can add keys, packages, routes, people or settings that survive a revoked token.
+TOKEN_CHANGE_ALLOWED = frozenset(("ct", "backup", "shares", "docker", "docker-app", "docker-registry", "apps", "recipes", "jobs", "notify", "health", "expiry", "iso"))
+TOKEN_CHANGE_DENIED = frozenset(("token", "users", "secrets", "ssh-key", "pkg", "config", "system", "routes", "net", "dc", "node", "migrate", "incident",
+                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "vps", "parts", "release", "gateway", "fm", "ext"))
 
 _actor = threading.local()      # who a command runs for: _run hands it to the command as HS_ACTOR (the audit line, scripts/lib/audit.sh)
 
@@ -528,12 +533,19 @@ def _command_env():
     return e
 
 
+RC_TIMEOUT = 124      # the web server stopped waiting (the time limit passed); the shell's `timeout` uses the same number
+RC_NOT_RUN = 127      # the command could not be started
+
+
 def _run(cmd, stdin=None, timeout=10):
+    """-> (rc, stdout). A timeout is RC_TIMEOUT, a command that could not be started RC_NOT_RUN, both with empty output."""
     try:
         p = subprocess.run(cmd, input=stdin, capture_output=True, timeout=timeout, env=_command_env())
         return p.returncode, p.stdout.decode("utf-8", "replace")
+    except subprocess.TimeoutExpired:
+        return RC_TIMEOUT, ""
     except (OSError, subprocess.SubprocessError):
-        return 127, ""
+        return RC_NOT_RUN, ""
 
 
 _run_plain = _run      # tests replace _run with a fake; while they do, plans go through that fake and the plan cache is off (see _change)
@@ -593,7 +605,7 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, start_new_session=hasattr(os, "killpg"), env=_command_env())
     except (OSError, ValueError):
-        return 127, "", "run"
+        return RC_NOT_RUN, "", "run"
     end, data = time.monotonic() + timeout, stdin
     while True:
         try:
@@ -604,7 +616,7 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
             how = "gone" if gone is not None and gone() else "timeout" if time.monotonic() > end else None
             if how:
                 _kill_tree(p)
-                return 127, "", how
+                return RC_TIMEOUT, "", how
 
 
 class Auth:
@@ -721,6 +733,7 @@ class Sessions:
 
     def __init__(self, cfg):
         self.cfg, self.lock, self.items, self.restored, self.saved_at = cfg, threading.Lock(), {}, {}, 0.0
+        self.owner_role = None  # App sets this to a function (user, realm) -> the role of a domain person now, or None = gone (#945); None here = no re-check
         self.fp_of = None       # App sets this to Auth.local_fingerprint; tests may leave it None (no password check)
         self._load()
 
@@ -830,6 +843,23 @@ class Sessions:
         return False
 
     def get(self, token, locked, fp_of=None):
+        """The live session of this cookie token, or None. A domain session has the role its person has NOW, read at most once an hour like a
+        token's (ADR 0012 decision 6): gone (disabled, out of all three groups) ends it, a lower role lowers it. Asked outside the lock (the domain may be slow)."""
+        s = self._get(token, locked, fp_of)
+        if s is None or s["realm"] != "domain" or not self.owner_role:
+            return s
+        role = self.owner_role(s["user"], s["realm"])
+        with self.lock:
+            if role is None:
+                self.items.pop(token, None)
+                self._save()
+                return None
+            if s.get("role") != role:
+                s["role"] = role
+                self._save()
+        return s
+
+    def _get(self, token, locked, fp_of=None):
         if not token:
             return None
         fp_of = fp_of or self.fp_of
@@ -1734,6 +1764,19 @@ def validate_change(body):
     return area, args, confirm, stdin
 
 
+CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
+
+
+def no_status_reason(rc):
+    """The reason for a plan or start that ended without its own status line."""
+    if rc == RC_TIMEOUT:
+        return ("The server stopped waiting after %d s. A start may still be running or be partly done: check Jobs and the page "
+                "before you try again." % CHANGE_LIMIT)
+    if rc == RC_NOT_RUN:
+        return "The server could not run the command (exit %d)." % rc
+    return "The server could not do this (exit %d)." % rc
+
+
 def parse_change(out, rc):
     """The key<TAB>value lines of a plan or start (scripts/*-change.sh) as one object. step, note, warn, danger, section and text (the update preview lists commits) keep their order."""
     d = {"exit": rc, "status": "", "reason": "", "heading": "", "command": "", "confirm_name": "", "long": False, "unit": "",
@@ -1783,7 +1826,7 @@ def parse_change(out, rc):
     if not d["status"]:
         d["status"] = "ok" if rc == 0 else "refused"
     if d["status"] == "refused" and not d["reason"]:
-        d["reason"] = "The server could not do this (exit %d)." % rc
+        d["reason"] = no_status_reason(rc)
     return d
 
 
@@ -1836,7 +1879,7 @@ def plan_cacheable(area, args, stdin):
 def plan_stable(out, rc, d):
     """Worth keeping: the script printed its own status line, it is ok/needs/refused, ok only with exit 0, no secret in it, not a failed run."""
     explicit = any(line.startswith("status\t") for line in out.splitlines())
-    return (explicit and rc != 127 and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
+    return (explicit and rc not in (RC_TIMEOUT, RC_NOT_RUN) and d["status"] in ("ok", "needs", "refused") and (d["status"] != "ok" or rc == 0)
             and "secret" not in d)
 
 
@@ -2120,6 +2163,8 @@ class Reads:
 
     @staticmethod
     def _shape(spec, rc, out):
+        if rc == RC_TIMEOUT and not out.strip():
+            return 502, {"error": "The server stopped waiting for this answer (time limit).", "rc": rc}
         if rc != 0 and not out.strip():
             return 502, {"error": "The server could not answer this (exit %d)." % rc, "rc": rc}
         if spec["kind"] == "json":
@@ -2212,7 +2257,7 @@ def parse_unlock(rc, out, passphrase):
         return "ok", "Unlocked. The services are starting."
     text = out.replace(passphrase, "***") if passphrase else out
     low = text.lower()
-    if rc == 127:
+    if rc == RC_NOT_RUN:
         return "failed", UNLOCK_NOT_RUN
     if "opens nothing" in low or "not the passphrase" in low or "did not accept" in low or "vault did not open" in low:
         return "failed", "Wrong passphrase."
@@ -2681,6 +2726,12 @@ class App:
             return ("role", role)
         return ("gone", None) if self.auth.domain_reachable() else ("down", None)
 
+    def _session_role(self, user, realm):
+        """The role of a domain session's person now: the same hourly answer as for their tokens (tk.TokenAuth.owner_role: a day of grace while the
+        domain controller is down, then viewer). The session name is the workgroup, a backslash and the user; None = gone."""
+        wg = self.cfg.workgroup
+        return self.tokens.owner_role("%s_%s" % (wg, user.split("\\")[-1]), realm) if wg else None
+
     def __init__(self, cfg=None, auth=None):
         self.cfg = cfg or Config()
         self.auth = auth or Auth(self.cfg)
@@ -2690,6 +2741,7 @@ class App:
         self.plans = Plans(self.cfg.plan_ttl)
         self.roles = RoleTable(self.cfg.roles_file)
         self.tokens = tk.TokenAuth(tk.Store(), self._token_owner)
+        self.sessions.owner_role = self._session_role
         self.changes_seen = ChangesSeen(self.cfg)
         self.first_run = fr.FirstRun(self.cfg.first_run_file)
         self.reads.on_clear = self.plans.clear
@@ -2790,7 +2842,7 @@ def make_handler(app):
             r = s.get("role")
             return "admin" if r is None else r if r in ROLES else "viewer"
 
-        def _allowed(self, s, words):
+        def _allowed(self, s, words, change=False):
             """The one role check (ADR 0012 decision 3): after the session is known, before the command runs. `words` are the words after `hs sys`.
             A refused call is a 403 that names both roles, runs nothing and writes no audit line (the web log has it)."""
             need, have = app.roles.need(words), self._role(s)
@@ -2799,6 +2851,10 @@ def make_handler(app):
                 need = ext_need(words, need if app.roles.match(words)[1] else "viewer")
             if s.get("via") and words[:1] and words[0] in TOKEN_DENIED:      # a token never manages tokens, people, secrets or the unlock, whatever its role
                 print("web refused: token %s may not %s" % (s["via"], " ".join(words[:2])), flush=True)
+                self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
+                return False
+            if change and s.get("via") and words[0] not in TOKEN_CHANGE_ALLOWED:      # a token starts changes of an explicit list of areas only (#944)
+                print("web refused: token %s may not change %s" % (s["via"], words[0]), flush=True)
                 self._json(403, {"error": "A token cannot use this.", "required": "admin", "role": have})
                 return False
             if role_ok(have, need):
@@ -3311,7 +3367,7 @@ def make_handler(app):
             area, args, confirm, stdin = ch
             if area == "pool" and not pool_change_ok(cfg.hs, args):
                 return self._json(400, {"error": "That change is not allowed."})
-            if not self._allowed(s, area.split("/") + [verb] + args):      # "ext/games" = the words `ext games` (an extension package)
+            if not self._allowed(s, area.split("/") + [verb] + args, change=True):      # "ext/games" = the words `ext games` (an extension package)
                 return
             _actor.name = actor_name("%s via token %s" % (s["user"], s["via"]) if s.get("via") else s["user"])      # every command below runs for this person (HS_ACTOR, the audit line)
             try:
@@ -3341,7 +3397,7 @@ def make_handler(app):
                     _timing("plan", shape, t0, "cached", None, hit["status"])
                     return self._json(200, hit)
                 gen = app.plans.gen
-                rc, out, how = _run_watched(cmd, stdin=data, timeout=60, gone=lambda: _client_gone(self.connection))
+                rc, out, how = _run_watched(cmd, stdin=data, timeout=CHANGE_LIMIT, gone=lambda: _client_gone(self.connection))
                 if how == "gone":           # the browser asked something newer: no answer, the connection is closed
                     _timing("plan", shape, t0, how, None, None)
                     self.close_connection = True
@@ -3351,7 +3407,7 @@ def make_handler(app):
                     app.plans.put(key, gen, d)
                 _timing("plan", shape, t0, how, rc, d["status"])
                 return self._json(200, d)
-            rc, out = _run(cmd, stdin=data, timeout=60)
+            rc, out = _run(cmd, stdin=data, timeout=CHANGE_LIMIT)
             d = parse_change(out, rc)
             if verb == "start":
                 app.reads.clear()      # what the pages show next is read again, not served from before the change (clears the plan cache too)

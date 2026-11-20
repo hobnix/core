@@ -614,7 +614,9 @@ The open editor reads `hs sys docker rev <app>` every 30 seconds to notice a cha
 disk"; it never reloads by itself.
 
 In the web interface the list shows the chips "Changed, not applied" and "New, not started" next to the name, with an Apply button that
-opens the plan of `recreate` (`docker compose up -d` from the folder: it never pulls, builds or removes a volume). For `invalid` files Apply is disabled and says why. "Unmanaged" rows
+opens the plan of `recreate` (`docker compose up -d` from the folder: it never removes a volume, and it pulls or builds only images that are
+not in Docker yet). When images are missing, for example after the app moved to a new Docker container, the plan names them and the recreate
+runs as a background job under Jobs. Not tested on hardware yet. For `invalid` files Apply is disabled and says why. "Unmanaged" rows
 have no Start, Stop or Edit. The editor also warns when a `user:` of a service differs from the user Docker maps for all shares.
 
 Giving a person access to a share that holds a `.env` file (the share `apps` always) shows a warning in the plan: those files can
@@ -746,6 +748,34 @@ hs docker move-apps --finish
 `hs update` never moves apps by itself.
 
 Not tested on hardware yet.
+
+### Give the apps in Docker the graphics chip
+
+Hardware transcoding (Jellyfin, Plex, Tdarr in Docker) needs `/dev/dri`. The container `docker` is locked, so you cannot add the
+device by hand; `hs docker gpu` does it:
+
+```bash
+hs docker gpu on --dry-run
+hs docker gpu on
+```
+
+The plan names the chip (the first Intel or AMD chip the server has; pick another with `--pci <address>`, the plan lists the
+addresses when there are several) and the group `render` of the container `docker` that owns `/dev/dri` inside it. Nothing
+restarts. All apps in Docker share the chip. Afterwards `hs docker gpu` prints the two lines an app needs in its compose file, for
+example:
+
+```yaml
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "993"   # the gid hs docker gpu prints
+```
+
+An app sees the chip once it is created again (`docker compose up -d`). `hs docker gpu off` removes the device after a plan; apps
+that use it fall back to the CPU. An NVIDIA card is not covered by this command yet; an app that needs it runs in its own
+container. Not tested on hardware yet.
 
 ## Check that it worked
 
