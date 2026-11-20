@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "change"
+title = "Jobs: the record opens beside the list"
+body  = """
+On the Jobs tab, clicking a job record now shows it to the right of the list instead of below it, so you no longer scroll and lose the list. On a phone the record opens full screen with a close button.
+"""
