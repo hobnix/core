@@ -126,7 +126,7 @@
   </div>
   {#if open && !phone}
     <aside class="pane xh" aria-label={tr('Job record')} tabindex="-1" onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), close())}>
-      <div class="ph-h">
+      <div class="rec-h">
         <b class="nm">{current?.description ?? detail?.description ?? open}</b>
         <Button variant="ghost" class="btn-icon" aria-label={tr('Close')} onclick={close}><i class="ph ph-x"></i></Button>
       </div>
@@ -161,7 +161,7 @@
   .jr.two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; align-items: stretch; }
   .jr.two .tablescroll { min-height: 0; overflow-y: auto; }
   .pane { min-height: 0; overflow: auto; margin: 4px 14px 4px 0; border: 1px solid var(--line); background: var(--panel); outline: none; }
-  .ph-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  .rec-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
   .nm { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
   .detail { padding: 8px 12px; font-size: 12px; display: grid; gap: 6px; }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
