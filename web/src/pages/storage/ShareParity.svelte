@@ -26,18 +26,18 @@
   <Row gap="3" wrap style="padding: 7px 0; border-bottom: 1px solid var(--line)">
     <span>Sync stops after</span>
     <span style="flex: 1"><Chip>{limitText}</Chip></span>
-    <Button size="sm" disabled={locked || !state.loaded} tooltip={locked ? 'Storage is locked' : 'Change how many removed files stop the sync for this share'} onclick={() => openCreate(ParityLimit, { share, current: mode === 'custom' ? limit[2] : mode })}>Change limit</Button>
+    <Button need="admin" size="sm" disabled={locked || !state.loaded} tooltip={locked ? 'Storage is locked' : 'Change how many removed files stop the sync for this share'} onclick={() => openCreate(ParityLimit, { share, current: mode === 'custom' ? limit[2] : mode })}>Change limit</Button>
   </Row>
   {#each skipped as f}
     <Row gap="3" wrap style="padding: 7px 0; border-bottom: 1px solid var(--line)">
       <code>{f}</code>
       <span style="flex: 1"><Muted>left out of the parity, not protected</Muted></span>
-      <Button size="sm" busy={rowstate.pending('shares', [share, 'parity-keep', '--folder', f])} disabled={locked} tooltip={'Protect this folder again from the next sync'} onclick={() => openPlan('shares', [share, 'parity-keep', '--folder', f], `Protect ${f} of ${share} again`)}>Protect again</Button>
+      <Button need="admin" size="sm" busy={rowstate.pending('shares', [share, 'parity-keep', '--folder', f])} disabled={locked} tooltip={'Protect this folder again from the next sync'} onclick={() => openPlan('shares', [share, 'parity-keep', '--folder', f], `Protect ${f} of ${share} again`)}>Protect again</Button>
     </Row>
   {:else}
     <Muted as="p">No folder is left out of the parity.</Muted>
   {/each}
   <div style="margin-top:8px">
-    <Button size="sm" icon="prohibit" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Leave a folder out of the parity (shows the plan and asks for the folder name)'} onclick={() => openCreate(ParitySkip, { share })}>Leave a folder out…</Button>
+    <Button need="admin" size="sm" icon="prohibit" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Leave a folder out of the parity (shows the plan and asks for the folder name)'} onclick={() => openCreate(ParitySkip, { share })}>Leave a folder out…</Button>
   </div>
 </div>

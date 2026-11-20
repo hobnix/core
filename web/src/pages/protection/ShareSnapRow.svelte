@@ -24,8 +24,8 @@
   <td class="n300" style="padding:4px 8px">{hist.loaded && !hist.error ? newest : ''}</td>
   <td style="padding:2px 8px">
     <span class="acts">
-      <Button variant="ghost" class="btn-icon" icon="camera" busy={rowstate.pending('shares', [name, 'snapshot'])} aria-label="Snapshot now" tooltip={'Snapshot now'} onclick={() => openPlan('shares', [name, 'snapshot'], `Snapshot ${name}`)} />
-      <Button variant="ghost" class="btn-icon" icon="arrow-u-up-left" disabled={!newestName} busy={rowstate.pending('shares', [name, 'rollback', '--snapshot', newestName])} aria-label="Roll back to newest" tooltip={newestName ? `Roll back to ${newestName}` : 'No snapshot to roll back to'} onclick={() => openPlan('shares', [name, 'rollback', '--snapshot', newestName], `Roll back ${name}`)} />
+      <Button need="admin" variant="ghost" class="btn-icon" icon="camera" busy={rowstate.pending('shares', [name, 'snapshot'])} aria-label="Snapshot now" tooltip={'Snapshot now'} onclick={() => openPlan('shares', [name, 'snapshot'], `Snapshot ${name}`)} />
+      <Button need="admin" variant="ghost" class="btn-icon" icon="arrow-u-up-left" disabled={!newestName} busy={rowstate.pending('shares', [name, 'rollback', '--snapshot', newestName])} aria-label="Roll back to newest" tooltip={newestName ? `Roll back to ${newestName}` : 'No snapshot to roll back to'} onclick={() => openPlan('shares', [name, 'rollback', '--snapshot', newestName], `Roll back ${name}`)} />
     </span>
   </td>
 </tr>

@@ -76,8 +76,10 @@
 <style>
   .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; align-items: center; }
   .day { margin: 16px 0 4px; font-size: 12px; font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.04em; }
-  .list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  /* every day sits on the panel surface (like a Card), so the words keep their contrast on the page in light and dark (#971) */
+  .list { list-style: none; margin: 0; padding: 0 12px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
   .e { display: grid; grid-template-columns: 84px 110px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .e:last-child { border-bottom: 0; }
   .e.acked { opacity: 0.7; }
   .when { font-size: 12px; color: var(--fg-3); white-space: nowrap; padding-top: 1px; }
   .body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

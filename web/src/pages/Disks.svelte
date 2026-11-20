@@ -159,8 +159,8 @@
 
 <PageHeader title="Disks" crumb="Storage" sub="Every disk of this server: where it belongs, how healthy it is, what it has been through.">
   {#snippet actions()}
-    <Button disabled={locked} tooltip={lockTip('Look at a USB or hot-plug disk: mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Other disk</Button>
-    <Button variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
+    <Button need="admin" disabled={locked} tooltip={lockTip('Look at a USB or hot-plug disk: mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Other disk</Button>
+    <Button need="admin" variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
   {/snippet}
 </PageHeader>
 {#if pw.power.length}<Muted as="p">{#each pw.power as x, i}{i ? ' · ' : ''}{powerText(x)}{/each}</Muted>{/if}
@@ -193,7 +193,7 @@
             <Kv items={[{ k: 'Serial', v: selMissing.serial }, { k: 'Was', v: selMissing.dev }, { k: 'Size', v: sizeTxt(selMissing.size) }, { k: 'First seen', v: dateOf(selMissing.first) }, { k: 'Last seen', v: dateOf(selMissing.lastSeen) }, { k: 'Role', v: selMissing.role }]} />
             <Muted as="p" style="padding:12px 16px;margin:0">A missing disk can only be forgotten. If it is a pool member, replace it from its pool first.</Muted>
             {#snippet actions()}
-              <Button variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
+              <Button need="admin" variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
             {/snippet}
           </Drawer>
         {/if}
@@ -275,18 +275,18 @@
               {/if}
             {/snippet}
             {#snippet actions()}
-              <Button size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
-              <Button size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
+              <Button need="admin" size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
+              <Button need="admin" size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
               {#if isLoose(sel)}
-                <Button variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
-                <Button size="sm" disabled={locked} tooltip={lockTip('Mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Mount read-only…</Button>
-                <Button variant="danger" size="sm" disabled={locked} tooltip={lockTip('Erase this disk so it can be added to a pool')} onclick={() => openCreate(WipeDisk, { disk: sel.name, model: modelOf(sel), size: sel.size })}><i class="ph ph-eraser"></i>Format…</Button>
+                <Button need="admin" variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={lockTip('Mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Mount read-only…</Button>
+                <Button need="admin" variant="danger" size="sm" disabled={locked} tooltip={lockTip('Erase this disk so it can be added to a pool')} onclick={() => openCreate(WipeDisk, { disk: sel.name, model: modelOf(sel), size: sel.size })}><i class="ph ph-eraser"></i>Format…</Button>
               {/if}
               {#if snapRole(sel) && /data/.test(sel.role) && member}
-                <Button size="sm" disabled={locked} tooltip={'Take this disk out of the pool to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: snapName, member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={'Take this disk out of the pool to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: snapName, member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
                 <Button size="sm" disabled={locked} tooltip={'Look at the files of this disk, next to another disk'} onclick={() => go(filesLink({ left: `disk:${member}`, right: otherDisk(member) }))}><i class="ph ph-folder-open"></i>Browse files</Button>
                 <Button size="sm" disabled={locked} tooltip={'Move files to another data disk in the file manager; their path stays'} onclick={() => go(filesLink({ left: `disk:${member}`, path: '/shares', right: otherDisk(member), rpath: '/shares' }))}><i class="ph ph-arrows-left-right"></i>Move files…</Button>
-                <Button size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: snapName, member, members: dataMembers(snapName) })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: snapName, member, members: dataMembers(snapName) })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
               {/if}
             {/snippet}
           </Drawer>
