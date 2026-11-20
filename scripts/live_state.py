@@ -288,7 +288,7 @@ def cli_status(out=None, docs=None):
         age = int(now - d["ts"]) if d.get("ts") else -1
         err = clean(d.get("err") or "-")
         ts_err = str(int(d["ts_err"])) if d.get("ts_err") else "-"
-        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+        out.write("%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
             topic, interval, age, d.get("gen", 0), d.get("rc", "-") if d.get("rc") is not None else "-", err, ts_err, ",".join(needs.get(topic, ())) or "-",
             status_of(dict(d, ttl=_ttl(d, interval, info.get(topic))), interval, now) if d else "-", beat))
     return 0

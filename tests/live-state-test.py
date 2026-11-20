@@ -718,7 +718,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         ls.cli_status(out, docs=FakeResp().docs())
         raw = out.getvalue().rstrip("\n").split("\n")
-        self.assertTrue(all(len(l.split("\t")) == 9 for l in raw))
+        self.assertTrue(all(len(l.split("\t")) == 10 for l in raw))
         by = {l.split("\t")[0]: l.split("\t")[7] for l in raw}
         self.assertEqual((by["services-routes"], by["status"]), ("services-list", "-"))
         self.assertTrue(all(l.split("\t")[8] == "-" for l in raw))
