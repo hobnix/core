@@ -1,12 +1,12 @@
-# Hobnix 0.9.0 release notes (draft)
+# Hobnix 0.9.0 release notes
 
-Draft for the release "0.9 Web Components", built from the changelog entries of `docs/changelog/` that are on `0.9` but not on `develop` after 0.8 (9) and
+Final text of the release "0.9 Web Components", built from the changelog entries of `docs/changelog/` that are on `0.9` but not on `develop` after 0.8 (9) and
 the commits of the milestone. Written 2026-11-20. The same text is the body of the release pull request and of the GitHub release.
 
 **Read this first.** 0.9.0 is a web interface release: one shared set of parts (cards, dialogs, progress bars, timelines, steppers) now draws the pages, so
-they look and behave the same. Almost nothing here changes what the server does. Nothing was run on real hardware and no owner has looked at the pages in a
-browser yet; the checks are the automated web tests and builds. Items marked **Not tested on hardware yet** have not been tried on a real server. Pages were
-moved group by group, so a page can have changed in small ways (spacing, wording of a button, where a tooltip sits): see "Not verified".
+they look and behave the same. Almost nothing here changes what the server does. The owner ran v0.9.0-beta.1 on a real server and it looks good (see
+"Checked on a real server"). Items marked **Not tested on hardware yet** have not been tried on a real server. Pages were moved group by group, so a page
+can have changed in small ways (spacing, wording of a button, where a tooltip sits).
 
 ## What 0.9.0 is
 A web interface built from one component library instead of page-by-page markup, a gallery page that shows every part, and a demo mode that runs the
@@ -45,7 +45,23 @@ manager moved to the shared parts group by group, and the last raw inputs became
 - Live state on by default and booting the ISO on real hardware (#175), as before.
 - Storybook (decided against for now, see above).
 
-## Not verified
-- No page was checked in a browser by the owner on a real server. The automated web tests, the gallery coverage test and the build passed in development.
-- Every item marked "Not tested on hardware yet": the disk sleep and power columns on real disks, and all pages against a real server rather than the demo data.
-- The merge of `develop` (0.8 work, file manager changes) with the component moves was resolved by hand in the file manager and backup pages; look at both.
+## Checked on a real server
+The owner ran v0.9.0-beta.1 on a real server. Looks good:
+- Update from 0.8.0.
+- The file manager and the backup, vault and expiry pages (the areas where `develop` and the component moves were merged by hand).
+- The moved pages in light mode, dark mode and phone width.
+- Dialogs, menus and QuickLook.
+- The bell, Settings > Updates and the component gallery.
+
+## Not tested
+- Demo mode (`npm run demo`). Not tested on hardware yet.
+- The steps of the wizards. Not tested on hardware yet.
+- Jobs and progress bars. Not tested on hardware yet.
+- The disk sleep and power columns on real disks. Not tested on hardware yet.
+
+## Known issues
+All of these are fixed in 0.10 or later.
+- **#965**: viewers still see enabled change buttons; the server refuses the change with 403.
+- **#971**: the Events timeline has no background.
+- **#972**: the install wizard stays on step 1, and a question from a job raises no toast (found installing bazarr).
+- **#973**: the jobs page layout.
