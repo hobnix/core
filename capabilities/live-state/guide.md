@@ -1,54 +1,79 @@
 # Live state for the web interface
 
-The web interface shows its pages from a store that a collector fills (the state database on the server) and updates the page when something changes,
-without polling. There is nothing to switch on: it runs on every server that runs the web interface.
+The web interface shows its pages from the state database, which a collector keeps filled, and the open page follows changes without polling. This
+guide is for the owner of a server with the web interface: what runs, what you see, how to check it and what to do when it stops.
 
 ## Before you start
-- The web interface is on: `webUi = true` in `machine.toml` (see [Web interface](../../docs/web-interface.md)).
-- This guide is not tested on hardware yet.
+- The web interface is on: `webUi = true` in `machine.toml` (see [Web interface](../../docs/web-interface.md)). There is nothing else to switch on.
+- Not tested on hardware yet.
 
-## What runs
-The collector `hs-live` reads each topic on its own interval and keeps the result in `/var/lib/hs/state.db`. It writes a topic only when its output changed,
-and one heartbeat row every few seconds. The web interface reads from there and tells the browser over `/api/events` which topic changed. A change made
-in a terminal (`hs share`, `hs ct`, `hs disk`, `hs pool`, `hs vault`, `hs unlock`) asks the collector to read the affected topics again; the open page
-shows it within a few seconds. Not tested on hardware yet.
+## What live state is
+- **The collector** `hs-live` (a systemd service) runs the read commands (`hs sys ...`) of every page on its own interval and keeps the answer in
+  `/var/lib/hs/state.db`. It writes a topic only when its answer changed.
+- **Three tables** hold it: `live` (one document per topic), `heartbeat` (one row the collector refreshes every few seconds) and `topics` (a change
+  counter per topic).
+- **The refresh hook** `live_refresh` is called by commands that change something (`hs share`, `hs ct`, `hs disk`, `hs pool`, `hs vault`, `hs unlock`).
+  It counts the affected topics up; the collector sees the counter move within about a second and reads the topic again. This also covers a change made
+  in a terminal or by a timer.
+- **The stream** `/api/events` tells the open page what happened: `changed` (a topic has new data), `domain` (a new row in the event log),
+  `down` and `up` (the collector stopped or came back), `resync` (the page missed events and reads everything again).
+- Nothing is configured: there is no setting, no extra service and no Redis. Not tested on hardware yet.
 
-There is no setting and no extra service (Redis is not used any more). A `liveState` line left in `machine.toml` from an older version is ignored;
-`hs config check` says so in a note, and you can delete the line.
+## What you see
+- **The page updates by itself** within a few seconds after a change, also when the change was made with `hs` in a terminal.
+- **The top bar** shows how old the data of the page is and has a refresh button. The refresh button reads from the system now instead of from the
+  state database.
+- **When the collector stops**, the pages keep their last data and mark it as old. They never wait for it, and the stream says `down`.
+- **The Diagnostics page** (Monitoring) lists every live topic with its status, interval, age, generation, exit code and error. Above the table it says
+  when the collector made its last round ("Collector heartbeat: last round 4 s ago") and warns when there is no heartbeat. While the stream is lost the
+  page polls every 5 seconds.
 
-## Check that it worked
 Not tested on hardware yet.
 
+## Check the live state
 ```bash
-hs sys live status
+sudo hs sys live status
 ```
 
-Every topic shows an age of a few seconds (the age is `-1` when nothing has been collected yet) and an empty error (`-`). The age counts from the last
-time the collector looked, not from the last change of the data.
+One line per topic: topic, interval, age in seconds (`-1` = nothing collected yet), generation, exit code, error, error time, needs, status
+(`fresh`, `stale`, `error` or `expired`) and, as the last field, the age in seconds of the collector's heartbeat (the same on every line, `-` = no heartbeat).
 
 ```bash
-hs sys live check
+sudo hs sys live check
 ```
 
-prints nothing when all is well, and a line per problem otherwise (the collector is not running, or a topic could not be read).
+Prints nothing when all is well and one line per problem otherwise (the key `live:down`, `live:never:<topic>` or `live:stale:<topic>`, then a text).
+A fresh install whose collector has not started yet prints nothing.
 
-The Diagnostics page shows the live topics. It follows the live stream (`/api/events`) and falls back to polling every 5 seconds when the stream is
-lost. If the collector stops, the pages keep showing the last data and mark it as old; they never wait for it.
+```bash
+sudo hs sys live raw <topic>
+```
+
+Shows the stored document of one topic as JSON (the output is cut at 64 KiB). `hs sys live inspect` lists all topics as JSON, the form the web
+interface uses. Not tested on hardware yet.
 
 ## Measure the write load
 ```bash
 sudo hs live measure --minutes 30
 ```
 
-writes a result file with the writes per minute, the growth of the database and the time a change needs to reach the page (see the
-[operations guide](../../docs/operations.md)). Not tested on hardware yet.
+Writes a result file with the writes per minute, the growth of the database and the time a change needs to reach the stream; see the
+[operations guide](../../docs/operations.md#measure-the-live-state-on-the-state-database). Not tested on hardware yet.
+
+## After an upgrade
+Nothing to do. The next rebuild removes Redis and the old timer `hs-reads-collect` if the server had them. A `liveState` line in `machine.toml` is ignored:
+`hs config check` shows a note for this release, and you can delete the line. The commands `hs sys reads status` and `hs sys reads collect` are gone.
+Not tested on hardware yet.
 
 ## If something goes wrong
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| The Health page says the live state collector is not running | `hs-live` stopped | `systemctl status hs-live`, then `sudo systemctl restart hs-live` |
-| The page says "refreshing" for a few seconds | The first value is not collected yet | Wait; the page retries by itself |
-| `hs sys live status` shows a growing age | The collector is stuck or the read fails | `journalctl -u hs-live` |
+| `hs sys live check` says `live:down`, the Diagnostics page says there is no heartbeat | The collector `hs-live` is not running | `systemctl status hs-live`, then `sudo systemctl restart hs-live` |
+| Pages show old data and say so | The collector stopped, or the topic fails | `hs sys live status` (status and error per topic), then `journalctl -u hs-live` |
+| A page says "refreshing" for a few seconds | The collector runs but has not read this topic yet | Wait; the page retries by itself |
+| A topic stays `stale` or shows an error | The command behind it fails or is slow | `sudo hs sys live raw <topic>` shows the last answer and the error |
+| The page does not update by itself | The stream is lost (proxy, network) | The page polls every 5 seconds meanwhile; reload the page |
 
 ## Next
 - [Web interface](../../docs/web-interface.md)
+- [Operations](../../docs/operations.md)

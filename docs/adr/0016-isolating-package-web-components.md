@@ -77,5 +77,5 @@ SES: [tc39/proposal-ses](https://github.com/tc39/proposal-ses), [ses on npm](htt
    origin complicates the "admin pages never public" rule and reverse-proxy routes (CLAUDE.md).
 4. Phone layout and keyboard focus: a frame needs its own scroll and focus handling; accessibility of a frame's contents is the author's job
    and cannot be checked by the core.
-5. Do secrets ever appear in a read's output? Live reads store output in Redis in clear text today (PLAN-extensions "Live reads"); a frame
+5. Do secrets ever appear in a read's output? Live reads store output in the state database in clear text today (in Redis before 0.10) (PLAN-extensions "Live reads"); a frame
    would see the same data as the table block would.
