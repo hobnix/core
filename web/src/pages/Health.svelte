@@ -1,7 +1,8 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
-  import { openPlan, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import AckProblem from '../forms/ops/AckProblem.svelte';
   import { go } from '../route.svelte.js';
   import { pools, poolOfRole } from '../pools.svelte.js';
   import { agoShort } from '../format.js';
@@ -141,7 +142,7 @@
             </div>
             <div class="acts">
               {#if p.id && p.acked}<Button need="admin" variant="ghost" size="sm" busy={jobRunning('health', ['unack', p.id])} tooltip={'Report it again and count it'} onclick={() => openPlan('health', ['unack', p.id], 'Undo acknowledge')}>Undo</Button>
-              {:else if p.id}<Button need="admin" variant="ghost" size="sm" busy={jobRunning('health', ['ack', p.id])} tooltip={'Silent until the problem is gone'} onclick={() => openPlan('health', ['ack', p.id], 'Acknowledge')}>Acknowledge</Button>{/if}
+              {:else if p.id}<Button need="admin" variant="ghost" size="sm" busy={jobRunning('health', ['ack', p.id])} tooltip={'Silent until the problem is gone'} onclick={() => openCreate(AckProblem, { id: p.id, text: p.title })}>Acknowledge</Button>{/if}
               {#if p.act && !p.acked}<Button variant="primary" size="sm" busy={jobRunning(p.act.area, p.act.args)} tooltip={`Shows the plan first: ${p.act.title}`} onclick={() => openPlan(p.act.area, p.act.args, p.act.title)}>{p.act.label}</Button>{/if}
             </div>
           </div>
