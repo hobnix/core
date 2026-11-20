@@ -138,7 +138,7 @@
       </div>
       <span class="grow"></span>
       <div class="fmgrp">
-        <Button size="sm" variant="ghost" icon="columns" aria-pressed={fm.dual} tooltip={fm.dual ? 'Close the second pane: delete, new folder and rename work on one pane' : 'Open a second pane: copy and move need it as the target'} onclick={() => fm.setDual(!fm.dual)}>{fm.dual ? 'Close second pane' : 'Second pane'}</Button>
+        <Button size="sm" variant="ghost" icon="folders" aria-pressed={fm.dual} tooltip={fm.dual ? 'Close the second pane: delete, new folder and rename work on one pane' : 'Open a second pane: copy and move need it as the target'} onclick={() => fm.setDual(!fm.dual)}>{fm.dual ? 'Close second pane' : 'Second pane'}</Button>
         {#if fm.dual}
         <Button size="sm" variant="ghost" class="pho" tooltip="Show the same place in the active pane" onclick={() => fm.same(fm.active)}>Same as other pane</Button>
         <Button size="sm" variant="ghost" icon="arrows-left-right" tooltip="Exchange the two panes" onclick={() => fm.swap()}>Swap panes</Button>
