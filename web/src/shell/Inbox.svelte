@@ -11,7 +11,8 @@
   import { agoShort } from '../format.js';
   import StatusDot from '../ui/StatusDot.svelte';
   import Button from '../ui/Button.svelte';
-  import { openPlan } from '../ui.svelte.js';
+  import { openCreate } from '../ui.svelte.js';
+  import AckProblem from '../forms/ops/AckProblem.svelte';
   import { problemItems, notificationItems, bellCount, newestId } from './inbox.js';
 
   const KEY = 'hs.inbox.read';
@@ -72,7 +73,7 @@
             <StatusDot bare state={p.acked ? 'off' : 'warn'} label={p.acked ? 'acknowledged' : 'problem'} />
             <span class="tx">{p.text}<span class="sub">{#if p.acked} · acknowledged{/if}{#if p.since} · {agoShort(p.since)}{/if}</span></span>
           </a>
-          {#if !p.acked}<Button need="admin" size="sm" variant="ghost" tooltip="Silent until the problem is gone" onclick={() => { open = false; openPlan('health', ['ack', p.id], 'Acknowledge'); }}>Acknowledge</Button>{/if}
+          {#if !p.acked}<Button need="admin" size="sm" variant="ghost" tooltip="Silent until the problem is gone" onclick={() => { open = false; openCreate(AckProblem, { id: p.id, text: p.text }); }}>Acknowledge</Button>{/if}
         {:else}
           <div class="inbox-empty">{failed ? 'The problem list could not be read.' : 'No open problems.'}</div>
         {/each}
