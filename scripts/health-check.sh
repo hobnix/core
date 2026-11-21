@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
 done
 # a real run changes what the web interface shows (Health, top bar, Summary): the live state reads again afterwards, never fails the run
 if ! $dry && ! $test_msg; then
-  trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh health-next health-list status deck' EXIT
+  trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:health.checked' EXIT
 fi
 
 # Every problem has a key and a text. The text is what people read; the key
