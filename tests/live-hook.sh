@@ -18,6 +18,8 @@ printf 'user%szfail%s%s/fail.sh%s-%s-%s-%stopic:disks,changes\n' "$T" "$T" "$WOR
 printf 'user%szplain%s%s/ok.sh%s-%s-%s-%schanges\n' "$T" "$T" "$WORK" "$T" "$T" "$T" "$T" >> "$WORK/reg.tsv"
 printf 'user%sext zz go%s%s/ok.sh%s-%s-%s-%stopic:system,changes
 ' "$T" "$T" "$WORK" "$T" "$T" "$T" "$T" >> "$WORK/reg.tsv"
+printf 'user%szmulti%s%s/ok.sh%s-%s-%s-%stopic:system,topic:instances,changes
+' "$T" "$T" "$WORK" "$T" "$T" "$T" "$T" >> "$WORK/reg.tsv"
 printf 'user%szread%s%s/ok.sh%s-%s-%s-%stopic:disks,reads\n' "$T" "$T" "$WORK" "$T" "$T" "$T" "$T" >> "$WORK/reg.tsv"
 export HS_REGISTRY=$(wp "$WORK/reg.tsv") HS_LIVE_LOG=$(wp "$WORK/live.log") HS_PLAIN=1 HS_LANG=en HS_CALLER=test
 HS="bash $SCRIPTS/lib/hs.sh"
@@ -28,6 +30,7 @@ check_eq "a change that succeeds asks for its group" "@disks" "$(cat "$WORK/live
 check_eq "a failed change keeps its exit code" "3" "$rc"
 check_eq "...and still asks for its group (rule 8)" "@disks" "$(cat "$WORK/live.log")"
 : > "$WORK/live.log"; $HS zplain >/dev/null; check_eq "a change without topic: asks for @system" "@system" "$(cat "$WORK/live.log")"
+: > "$WORK/live.log"; $HS zmulti >/dev/null; check_eq "a row with two topic: words asks for both groups" "@system @instances" "$(cat "$WORK/live.log")"
 : > "$WORK/live.log"; $HS zread >/dev/null
 check_eq "a read asks for nothing" "0" "$(grep -c . "$WORK/live.log")"
 
