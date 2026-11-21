@@ -338,7 +338,7 @@ in
     path = [ "/run/current-system/sw" config.services.samba.package ];
     environment = {
       HS_CALLER = "web";
-      HS_MACHINE_CACHE = "/run/hs-machine-cache";    # machine.toml answers kept 30 s at most (scripts/lib/machine.sh)
+      HS_MACHINE_CACHE = "/run/hs-machine-cache";    # machine.toml answers kept 30 s at most (scripts/lib/machine-toml helpers)
       HS_WEB_PORT = toString webPort;
       HS_WEB_ROOT = "${hsWeb}";
       HS_WEB_BIND = if webTailscale && !webLan then "127.0.0.1" else "";

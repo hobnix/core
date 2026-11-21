@@ -542,10 +542,10 @@ class Collector:
                     soft = True
             if not (hard or soft):
                 continue
+            self.trig.setdefault(t, t_trig)      # the earliest trigger of the next read starts its delay measure
             if ev.is_set():
                 queued += 1                    # a wake already waits for this topic: the burst becomes one read
             else:
-                self.trig.setdefault(t, t_trig)
                 woken.append(t)
             if hard:
                 self.soft.discard(t)
