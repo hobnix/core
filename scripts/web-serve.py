@@ -14,7 +14,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
-  GET  /api/events    server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
+  GET  /api/events    (?topics=a,b&sid=<id>: only those topics; POST /api/events/subscribe {sid, topics} changes the set of an open stream, D13) server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
   GET  /api/board     the dashboard tiles and their stats, only while the dashboard variant is web; a session, or (setting dashboardOpen) a private address
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
@@ -2368,12 +2368,46 @@ class SampleGate:
             return True
 
 
+SID = re.compile(r"[A-Za-z0-9_-]{8,64}$")
+MAX_STREAM_TOPICS = 256
+
+
+def parse_topics(raw):
+    """D13: the topic list of a subscription: a comma separated string or a list of names -> frozenset; None when it is not one (a topic is a
+    name, `<topic>` or `<topic>:<arg>`, at most MAX_STREAM_TOPICS of them). `*` alone or in the list means every topic."""
+    if isinstance(raw, str):
+        raw = [x for x in raw.split(",") if x]
+    if not isinstance(raw, list) or len(raw) > MAX_STREAM_TOPICS:
+        return None
+    out = set()
+    for t in raw:
+        if not isinstance(t, str) or not (t == "*" or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:@=-]{0,127}", t)):
+            return None
+        out.add(t)
+    return frozenset(out)
+
+
+class StreamQueue(queue.Queue):
+    """The queue of one open stream plus what it wants: `topics` None = every `changed` (no `topics=` at connect: old clients, tests), else the
+    set it subscribed to (`*` in it = all); `sid` and `owner` (the session token) let POST /api/events/subscribe find it."""
+    topics = None
+    sid = ""
+    owner = ""
+
+    def wants(self, topic):
+        t = self.topics
+        return t is None or topic in t or "*" in t
+
+
 class Events:
     """The hub behind /api/events: a watcher follows the change counters and the heartbeat of the collector and hands every change to each open stream. A stream is a
     queue of ("changed", topic, gen) | ("domain", row) | ("resync",) | ("down",) | ("up",). feed() is also how tests push a message."""
 
     def __init__(self, cfg):
         self.cfg, self.lock, self.queues = cfg, threading.Lock(), set()
+        self.by_sid = {}             # stream id (chosen by the page) -> its queue, for the subscribe call
+        self.sent_changed = 0        # `changed` items put on a stream queue (after the topic filter) / offered to one: for `hs live measure` (D13)
+        self.offered_changed = 0
         self.counters = None         # topic -> gen as the watcher saw it last; None = not read yet (the first read is the baseline, no event)
         self.last_event = None       # id of the newest event-log row the watcher saw; None = not read yet (the first read is the baseline)
         self.collector_up = None     # the heartbeat of hs-live is fresh; None = not looked at yet
@@ -2383,20 +2417,49 @@ class Events:
         self.woke_fallback = 0       # rounds it started because the fallback period ran out
         self.push_up = False         # the socket is bound and the listener runs
 
-    def add(self):
-        q = queue.Queue(maxsize=256)
+    def add(self, topics=None, sid="", owner=""):
+        q = StreamQueue(maxsize=256)
+        q.topics, q.sid, q.owner = topics, sid, owner
         with self.lock:
             self.queues.add(q)
+            if sid:
+                self.by_sid[sid] = q
         return q
 
     def remove(self, q):
         with self.lock:
             self.queues.discard(q)
+            if q.sid and self.by_sid.get(q.sid) is q:
+                del self.by_sid[q.sid]
+
+    def subscribe(self, sid, owner, topics):
+        """D13: replace the topic set of the open stream `sid` of this session. -> (added topics, {topic: gen}) or None when there is no such stream
+        (of this owner). The gens let the page see a change that came between its read and this call."""
+        with self.lock:
+            q = self.by_sid.get(sid)
+            if q is None or q.owner != owner:
+                return None
+            old = q.topics
+            q.topics = topics
+            counters = dict(self.counters or {})
+        added = sorted(t for t in topics if t != "*" and (old is not None and t not in old and "*" not in old))
+        gens = {}
+        for t in added:
+            g = counters.get("live:" + t, counters.get(t))
+            if g is not None:
+                gens[t] = g
+        return added, gens
 
     def feed(self, *item):
         with self.lock:
             targets = list(self.queues)
+        changed = item[0] == "changed"
         for q in targets:
+            if changed:
+                self.offered_changed += 1
+                if not q.wants(item[1]):
+                    continue                # D13: this stream did not subscribe to the topic; domain events and the rest always go out
+                self.sent_changed += 1
             try:
                 q.put_nowait(item)
             except queue.Full:
@@ -2454,7 +2517,8 @@ class Events:
                 pass
 
     def push_stats(self):
-        return {"push": self.woke_push, "fallback": self.woke_fallback, "socket": self.push_up, "time": int(time.time())}
+        return {"push": self.woke_push, "fallback": self.woke_fallback, "socket": self.push_up, "time": int(time.time()),
+                "changed_sent": self.sent_changed, "changed_offered": self.offered_changed}
 
     def write_push_stats(self):
         """The counters for `hs live load` (and the Live state page, step 19): a small file in the run folder, best effort."""
@@ -2616,7 +2680,7 @@ class Events:
                 self.record_probe(t, g)
 
     def _watch(self):
-        saved = (0, 0)
+        saved = (0, 0, 0, 0)
         while True:
             try:
                 self.poll_counters()
@@ -2636,8 +2700,9 @@ class Events:
                 self.woke_push += 1
             else:
                 self.woke_fallback += 1
-            if (self.woke_push, self.woke_fallback) != saved and (self.woke_push + self.woke_fallback) % 5 == 0:
-                saved = (self.woke_push, self.woke_fallback)
+            now = (self.woke_push, self.woke_fallback, self.sent_changed, self.offered_changed)
+            if now != saved and (self.woke_push + self.woke_fallback) % 5 == 0:
+                saved = now
                 self.write_push_stats()
 
 
@@ -3131,7 +3196,18 @@ def make_handler(app):
                 if app.event_streams >= cfg.events_max:
                     return self._json(503, {"error": "too many open streams"})
                 app.event_streams += 1
-            q = app.events.add()
+            qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query, keep_blank_values=True)
+            topics = None
+            if "topics" in qs:                                              # D13: no `topics` = every topic (old clients); `topics=` empty = none
+                topics = parse_topics(qs["topics"][0])
+                if topics is None:
+                    with app.stream_lock:
+                        app.event_streams -= 1
+                    return self._json(400, {"error": "topics must be a comma separated list of topic names."})
+            sid = (qs.get("sid") or [""])[0]
+            if sid and not SID.match(sid):
+                sid = ""
+            q = app.events.add(topics, sid, self._token())
             try:
                 self.close_connection = True
                 self._headers(200, "text/event-stream", None, (("Cache-Control", "no-cache"), ("Connection", "close"), ("X-Accel-Buffering", "no")))
@@ -3228,7 +3304,7 @@ def make_handler(app):
                 return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
-            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
+            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/events/subscribe", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
             if bearer and path not in ("/api/plan", "/api/start"):
@@ -3262,6 +3338,8 @@ def make_handler(app):
                 return self._live_refresh(body)
             if path == "/api/live/sample":
                 return self._live_sample(body)
+            if path == "/api/events/subscribe":
+                return self._events_subscribe(body)
             if path in ("/api/plan", "/api/start"):
                 return self._change(path[len("/api/"):], body)
             if path == "/api/logout":
@@ -3318,6 +3396,18 @@ def make_handler(app):
             app.store.request(topic)      # the same message ?fresh=1 sends
             print("web live refresh: %s %s" % (re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), topic), flush=True)
             return self._json(200, {"ok": True})
+
+        def _events_subscribe(self, body):
+            """D13: change the topic set of this session's open stream `sid`. Short on purpose (no subprocess, no disk): the browser keeps only a
+            few connections per server and a long request would starve the Start clicks. Any signed-in role; the answer lists the gens of the added
+            topics so the page can catch a change that came before the call."""
+            sid, topics = body.get("sid"), parse_topics(body.get("topics"))
+            if not isinstance(sid, str) or not SID.match(sid) or topics is None:
+                return self._json(400, {"error": "Need sid (the stream id) and topics (a list of topic names)."})
+            r = app.events.subscribe(sid, self._token(), topics)
+            if r is None:
+                return self._json(404, {"error": "No such open stream."})
+            return self._json(200, {"ok": True, "count": len(topics), "gens": r[1]})
 
         def _live_sample(self, body):
             """#486 (D8): the Live state page says how long after `changed` it showed the new data. Any signed-in role (a viewer too); only numbers

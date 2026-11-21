@@ -36,7 +36,7 @@ done <<<"$out"
 # D11: how the web server woke up: by a datagram (push) or by the fallback period (scripts/web-serve.py Events.write_push_stats); nothing when it has not written
 pushf=${HS_LIVE_PUSH_FILE:-${HS_RUN_DIR:-/run/hs}/live-push.json}
 if [ -r "$pushf" ]; then
-  pushline=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print("%s by push, %s by the fallback period, socket %s" % (d.get("push", 0), d.get("fallback", 0), "up" if d.get("socket") else "down"))' "$pushf" 2>/dev/null || true)
+  pushline=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); line = "%s by push, %s by the fallback period, socket %s" % (d.get("push", 0), d.get("fallback", 0), "up" if d.get("socket") else "down"); line += (", %s of %s changed frames sent to the streams" % (d["changed_sent"], d["changed_offered"])) if "changed_offered" in d else ""; print(line)' "$pushf" 2>/dev/null || true)
   [ -z "$pushline" ] || KV_WIDTH=8 kv "web" "$pushline"
 fi
 printf '%s\n' "$out" | sed -n '/^--$/,$p' | tail -n +2 | table

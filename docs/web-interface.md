@@ -333,6 +333,10 @@ the browser through `/api/events` when something changes. The Summary page updat
 collector stops, the pages keep their last data and mark it as old; `sudo hs sys live status` and `hs sys live check` show the state. A `liveState` line in
 `machine.toml` from an older version is ignored (`hs config check` says so). To measure the cost on your server see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
 
+A page is told only about the topics it reads. The browser opens one stream per tab (`/api/events?topics=...&sid=...`) and, when you go to another page, sends the
+new list in a short `POST /api/events/subscribe` (`{sid, topics}`; only for the stream of the same session). Job and health events are never filtered. A stream
+opened without `topics` (an older page, a script) gets every topic, as before. Not tested on hardware or in a real browser yet.
+
 The Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
 follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. Not tested on hardware yet.
 
