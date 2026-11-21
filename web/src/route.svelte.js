@@ -49,7 +49,7 @@ export function setQuery(patch, { replace = false, state } = {}) {
   set(parse(route.full, toSearch(query)));
 }
 
-// An address without a node (redirects.js) is replaced by the one with the local node; Back keeps working because it is replaceState.
+// An address without a node, or an old inner path that moved (redirects.js: the node is added, MOVED rows are followed), is replaced by the new one; Back keeps working because it is replaceState (never pushState).
 function fix() {
   if (!state.local || new URLSearchParams(location.search).has('terminal')) return;   // a popped-out terminal keeps its address
   const cur = route.full + (location.search || '');
