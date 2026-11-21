@@ -44,19 +44,19 @@ exit 0
 ' > "$WORK/fb/systemctl"; cp "$WORK/fb/systemctl" "$WORK/fb/ok"; chmod +x "$WORK/fb/systemctl" "$WORK/fb/ok"
 : > "$WORK/live.log"
 HS_UPS_CONF=$(wp "$WORK/ups.conf") HS_NOTIFY="$WORK/fb/ok" HS_SYSTEMCTL="$WORK/fb/systemctl" NOTIFYTYPE=ONLINE bash "$SCRIPTS/ups.sh" event "UPS online" >/dev/null 2>&1
-check_eq "ups.sh event asks for ups, deck, status" "ups deck status" "$(cat "$WORK/live.log")"
+check_eq "ups.sh event asks for the named event ups.changed" "event:ups.changed" "$(cat "$WORK/live.log")"
 : > "$WORK/live.log"
 PATH="$WORK/fb:$PATH" bash "$SCRIPTS/jobs.sh" stop hs-job-x.service >/dev/null 2>&1
-check_eq "jobs.sh stop asks for @jobs" "@jobs" "$(cat "$WORK/live.log")"
+check_eq "jobs.sh stop asks for job.stopped" "event:job.stopped" "$(cat "$WORK/live.log")"
 : > "$WORK/live.log"
 PATH="$WORK/fb:$PATH" bash "$SCRIPTS/jobs.sh" stop >/dev/null 2>&1
 check_eq "jobs.sh stop without a unit asks for nothing" "0" "$(grep -c . "$WORK/live.log")"
 # these need git, root or a whole health run: the call is checked in the text
 hook() { grep -E "^ *(trap .*|[^#]*)live_refresh $2" "$SCRIPTS/$1" >/dev/null 2>&1 && echo yes || echo no; }
-check_eq "health-check.sh refreshes the health topics" "yes" "$(hook health-check.sh 'health-next health-list status deck')"
+check_eq "health-check.sh refreshes the health topics" "yes" "$(hook health-check.sh 'event:health.checked')"
 check_eq "update.sh refreshes system-updates after the pull" "yes" "$(hook update.sh 'system-updates')"
 check_eq "update-preview.sh refreshes system-updates after the fetch" "yes" "$(hook update-preview.sh 'system-updates')"
-check_eq "pkg.sh refreshes the package topics after a fetch" "yes" "$(hook pkg.sh 'pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list')"
+check_eq "pkg.sh refreshes the package topics after a fetch" "yes" "$(hook pkg.sh 'event:pkg.changed')"
 check_eq "...and after install, remove, update and repo add|remove (pkg_changed; six: rollback changes the installed copy too)" "6" "$(grep -cE 'pkg_changed(;|$)' "$SCRIPTS/pkg.sh")"
 mkdir -p "$WORK/pkgstate"
 : > "$WORK/live.log"
@@ -65,7 +65,7 @@ check_eq "pkg.sh repo remove that fails asks for nothing" "0" "$(grep -c . "$WOR
 : > "$WORK/live.log"
 HS_STATE_DIR=$(wp "$WORK/pkgstate") bash "$SCRIPTS/pkg.sh" fetch nope >/dev/null 2>&1; rc=$?
 check_eq "pkg.sh fetch nope exits 0" "0" "$rc"
-check_eq "...and asks for the package topics" "pkg-market pkg-states apps-list apps-health pkg-repos recipes-list recipes-versions parts-list" "$(cat "$WORK/live.log")"
+check_eq "...and asks for the named event pkg.changed" "event:pkg.changed" "$(cat "$WORK/live.log")"
 : > "$WORK/live.log"
 HS_STATE_DIR=$(wp "$WORK/pkgstate") bash "$SCRIPTS/pkg.sh" --repos >/dev/null 2>&1; HS_STATE_DIR=$(wp "$WORK/pkgstate") bash "$SCRIPTS/pkg.sh" --market >/dev/null 2>&1
 check_eq "the pkg reads ask for nothing" "0" "$(grep -c . "$WORK/live.log")"

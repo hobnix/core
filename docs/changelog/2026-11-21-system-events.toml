@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Health, package, vault, job and UPS changes name their event"
+body  = """The health check, package changes, vaults, stopping a job by hand and UPS events now ask for one named change each, so the live data behind those pages is read again from a single list. What the pages show stays the same."""
