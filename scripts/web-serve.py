@@ -347,6 +347,8 @@ class Config:
         self.stream_max = int(env("HS_WEB_STREAM_MAX", "6"))              # streams open at once (one thread each)
         self.stream_hours = float(env("HS_WEB_STREAM_HOURS", "6"))        # a stream ends after this long; the page reconnects or falls back
         self.probe_file = env("HS_WEB_PROBE_FILE", "/run/hs-web/probe.tsv")      # hs live measure: when a live:probe counter reached the streams ("" = off)
+        self.live_sock = env("HS_LIVE_SOCK", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live.sock"))   # push socket (D11): "" = off, the watcher polls alone
+        self.live_push_file = env("HS_LIVE_PUSH_FILE", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live-push.json"))   # the wake counters for hs live load ("" = off)
         self.events_watch = 1.0                                           # seconds between two reads of the change counters (table topics of state.db)
         self.events_ping = 15.0                                           # seconds of silence before a `: ping` on /api/events (tests shorten it)
         self.events_max = int(env("HS_WEB_EVENTS_MAX", "32"))             # /api/events streams open at once
@@ -2376,6 +2378,10 @@ class Events:
         self.last_event = None       # id of the newest event-log row the watcher saw; None = not read yet (the first read is the baseline)
         self.collector_up = None     # the heartbeat of hs-live is fresh; None = not looked at yet
         self.on_change = None        # App sets it: called once per round that saw a change made outside the web (clears the read cache)
+        self.wake = threading.Event()  # set by the push socket: a writer said "look at the counters now" (D11)
+        self.woke_push = 0           # rounds the watcher started because of a datagram
+        self.woke_fallback = 0       # rounds it started because the fallback period ran out
+        self.push_up = False         # the socket is bound and the listener runs
 
     def add(self):
         q = queue.Queue(maxsize=256)
@@ -2406,7 +2412,62 @@ class Events:
                     pass
 
     def start_watch(self):
+        self.start_push()
         threading.Thread(target=self._watch, daemon=True).start()
+
+    def start_push(self):
+        """D11: listen on the unix datagram socket cfg.live_sock; every datagram wakes the watcher at once. Best effort: no folder, no rights, a dead
+        listener: nothing else changes, the watcher keeps polling at cfg.events_watch (the fallback). Returns True when the socket is bound."""
+        path = self.cfg.live_sock
+        if not path or not hasattr(socket, "AF_UNIX"):
+            return False
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            sock.bind(path)
+            try:
+                os.chmod(path, 0o600)       # only root pokes (the collector, hs); the datagram carries no data anyway
+            except OSError:
+                pass
+        except OSError:
+            return False
+        self.push_up = True
+        threading.Thread(target=self._listen, args=(sock,), daemon=True).start()
+        return True
+
+    def _listen(self, sock):
+        try:
+            while True:
+                sock.recv(64)
+                self.wake.set()
+        except Exception:
+            pass
+        finally:
+            self.push_up = False
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def push_stats(self):
+        return {"push": self.woke_push, "fallback": self.woke_fallback, "socket": self.push_up, "time": int(time.time())}
+
+    def write_push_stats(self):
+        """The counters for `hs live load` (and the Live state page, step 19): a small file in the run folder, best effort."""
+        path = self.cfg.live_push_file
+        if not path:
+            return
+        try:
+            tmp = path + ".new"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.push_stats(), f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
 
     def read_counters(self):
         """-> {topic: gen} from the table `topics` of the state database (read-only, no subprocess); {} while there is no database or table;
@@ -2555,6 +2616,7 @@ class Events:
                 self.record_probe(t, g)
 
     def _watch(self):
+        saved = (0, 0)
         while True:
             try:
                 self.poll_counters()
@@ -2568,7 +2630,15 @@ class Events:
                 self.poll_heartbeat()
             except Exception:
                 pass
-            time.sleep(self.cfg.events_watch)
+            # sleep until a datagram comes or the fallback period is over; a missing socket just means the full period every time
+            if self.wake.wait(self.cfg.events_watch):
+                self.wake.clear()
+                self.woke_push += 1
+            else:
+                self.woke_fallback += 1
+            if (self.woke_push, self.woke_fallback) != saved and (self.woke_push + self.woke_fallback) % 5 == 0:
+                saved = (self.woke_push, self.woke_fallback)
+                self.write_push_stats()
 
 
 class ChangesSeen:

@@ -14,3 +14,9 @@ check_eq "gateway-routes before status" "gateway-routes" "$($L | grep -E '^ *(ga
 check_out "--top 1 cuts the list" "gateway-routes" $L --top 1
 check "--top 1 leaves out the second" bash -c "! $L --top 1 | grep -q '^ *status '"
 finish
+echo "-- the push counters of the web server (D11)"
+export HS_LIVE_PUSH_FILE=$WORK/push.json
+printf '{"push": 7, "fallback": 3, "socket": true}' >"$WORK/push.json"
+check_out "wake counters shown" "7 by push, 3 by the fallback period, socket up" $L
+rm -f "$WORK/push.json"
+check_out "no counters file: the rest still shows" "30 started in the last 60 s" $L
