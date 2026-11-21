@@ -2,21 +2,21 @@
 # Tab separated. Kinds of row:
 #   watch  <unit pattern>  <when>  <topics>  <reason>
 #          pattern = fnmatch on the unit name (hs-job-*.service); when = all (every change of ActiveState) | failed (only into or out of `failed`);
-#          topics = comma list of topics of scripts/lib/live-topics.tsv or @<group> or @ext-%i (%i = the instance of a template unit).
+#          topics = comma list of topics, `event:<kind>` (a named event of scripts/lib/event-topics.tsv, D12), of scripts/lib/live-topics.tsv or @<group> or @ext-%i (%i = the instance of a template unit).
 #          A unit that matches several rows marks the union of their topics.
 #   timed  <topic>  -  -  <reason>   a topic that stays timed in the collector (no event source): the reason is shown by the guide
 # (In the mount unit row the bracket keeps the old pool name out of tests/pool-names-ratchet.tsv, which may only go down; the pattern matches the same unit.)
 # tests/unit-watch.sh checks that every topic exists. The collector interval stays as the safety net for every topic.
 watch	hs-job-*.service	all	jobs-running	a job unit starts or ends (also one that dies without a record)
-watch	hs-*.service	failed	health-next,health-list	the health check lists a failed hs-* unit (scripts/health-check.sh); only into or out of failed, oneshots run all day
+watch	hs-*.service	failed	event:service.failed	the health check lists a failed hs-* unit (scripts/health-check.sh); only into or out of failed, oneshots run all day
 watch	hs-ext-svc@*.service	all	@ext-%i	an extension service starts, stops or fails (its tile and page)
-watch	b[u]lk-mount.service	all	@disks,shares-overview,fm-locations,health-next,health-list	the array mount comes or goes
-watch	samba-smbd.service	all	shares-overview,shares-principals,health-next,health-list	the shares are served or not
-watch	zfs-import-*.service	all	@disks,health-next,health-list	a pool is imported or fails to import
-watch	zfs-scrub*.service	all	@disks,health-next,health-list	a scrub runs or fails
-watch	incus.service	all	ct-list,ct-pools,iso-list,services-list,apps-list,apps-health	Incus is up or down: every instance row
-watch	docker.service	all	docker-list,docker-apps	Docker is up or down
-watch	traefik.service	all	gateway-status,gateway-health,gateway-routes	the gateway proxy is up or down
+watch	b[u]lk-mount.service	all	event:mount.changed	the array mount comes or goes
+watch	samba-smbd.service	all	event:samba.changed	the shares are served or not
+watch	zfs-import-*.service	all	event:pool-unit.changed	a pool is imported or fails to import
+watch	zfs-scrub*.service	all	event:pool-unit.changed	a scrub runs or fails
+watch	incus.service	all	event:incus.changed	Incus is up or down: every instance row
+watch	docker.service	all	event:docker-service.changed	Docker is up or down
+watch	traefik.service	all	event:gateway.changed	the gateway proxy is up or down
 timed	disk-health	-	-	SMART values change slowly and are read through smartctl; no event exists (the disk half of #484 is udev: plug and pull only)
 timed	monitor-disks	-	-	free space and temperatures have no event; one collector reads them, not every browser (D3)
 timed	temp-disks	-	-	temperatures; the plug and pull part is marked by disk-event.sh
