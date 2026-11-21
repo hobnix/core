@@ -14,7 +14,7 @@
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
-    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted,
+    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted, NodePopover,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
   } from '../ui/index.js';
@@ -243,6 +243,11 @@
     <Entry name="Menu" text="The More menu and row actions; a disabled item says why.">
       <div class="cell"><small>default</small><Menu items={menu} /></div>
       <div class="cell"><small>align start</small><Menu items={menu} align="start" label="Actions" /></div>
+    </Entry>
+
+    <Entry name="NodePopover" text="Spike for the Network Map (issue 871): the detail popover of a node, behaviour from @ui-sdk/svelte, look from our tokens. Press Enter on the trigger, Tab inside, Escape closes and focus returns.">
+      <div class="cell"><small>default</small><NodePopover label="gateway" title="Gateway 192.168.1.1"><Kv items={[{ k: 'Seen from here', v: '12 Mbit/s' }, { k: 'State', v: 'up' }]} /></NodePopover></div>
+      <div class="cell"><small>near the edge (flips)</small><div style="text-align:right"><NodePopover label="br0" title="Bridge br0"><Kv items={[{ k: 'Ports', v: '4' }]} /></NodePopover></div></div>
     </Entry>
 
     <Entry name="Tooltip" text="The one tooltip element; a control asks for it with the tooltip prop of a Button. Hover or focus these.">
