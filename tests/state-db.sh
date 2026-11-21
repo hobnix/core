@@ -44,6 +44,10 @@ check_eq "S2 is missing, S1 ok" "S1 ok
 S2 missing
 S3 ok" "$($S disks | awk -F'\t' '{print $1, $5}' | sort)"
 check_out "event missing" "	missing	S2	" $S events
+# the web log stream: the rows once, then only new ones, until the reader goes
+HS_FOLLOW_EVERY=0.2 timeout 1.5 bash "$SCRIPTS/state.sh" events-follow 60 > "$WORK/follow.out" 2>/dev/null || true
+check_eq "events-follow prints each event once" "1" "$(grep -c '	missing	S2	' "$WORK/follow.out")"
+check_eq "events-follow wants a number" "1" "$(bash "$SCRIPTS/state.sh" events-follow many >/dev/null 2>&1; echo $?)"
 check_out "health problem names the forget command" "^disk:S2:missing	.*hs disk S2 forget" $S problems
 step 3100
 check_eq "a second run adds no second event" "1" "$($S events | grep -c '	missing	S2	')"

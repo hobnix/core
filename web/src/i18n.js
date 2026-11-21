@@ -23,9 +23,12 @@ const de = {
   Capabilities: 'Funktionen', Advanced: 'Erweitert', Backups: 'Datensicherungen',
   Next: 'Weiter', Back: 'Zurück', Review: 'Überprüfen', 'Back to the questions': 'Zurück zu den Fragen', Change: 'Ändern', 'Apply…': 'Anwenden…', recommended: 'empfohlen',   // the wizard's buttons
   'Sort by': 'Sortieren nach', 'Update all': 'Alle aktualisieren',
+  // The toasts of a started change (shell/PlanDialog.svelte, ui.svelte.js)
+  'Running in the background.': 'Läuft im Hintergrund.', 'Open Tasks': 'Aufgaben öffnen', 'Show plan': 'Plan anzeigen', done: 'erledigt', 'was refused': 'wurde abgelehnt',
+  'failed to start': 'konnte nicht gestartet werden', 'The server did not start it.': 'Der Server hat es nicht gestartet.', finished: 'beendet', 'Show log': 'Protokoll anzeigen',
   // Job records (shell/JobRecords.svelte, ADR 0004)
-  'Job records': 'Auftragsprotokolle', Scheduled: 'Geplant', Started: 'Gestartet', Job: 'Auftrag', Step: 'Schritt', Progress: 'Fortschritt', Took: 'Dauer',
-  queued: 'wartet', running: 'läuft', ok: 'erledigt', failed: 'fehlgeschlagen', cancelled: 'abgebrochen', interrupted: 'unterbrochen',
+  'Job record': 'Auftragsprotokoll', 'Job records': 'Auftragsprotokolle', Scheduled: 'Geplant', Started: 'Gestartet', Job: 'Auftrag', Step: 'Schritt', Progress: 'Fortschritt', Took: 'Dauer',
+  queued: 'wartet', running: 'läuft', ok: 'erledigt', failed: 'fehlgeschlagen', cancelled: 'abgebrochen', interrupted: 'unterbrochen', skipped: 'übersprungen',
   'No job records yet.': 'Noch keine Auftragsprotokolle.', 'The job records could not be read.': 'Die Auftragsprotokolle konnten nicht gelesen werden.',
   'The record could not be read.': 'Das Protokoll konnte nicht gelesen werden.', 'Cancel requested': 'Abbruch angefordert',
   Id: 'Kennung', Initiator: 'Ausgelöst von', Unit: 'Einheit', Queued: 'Eingereiht', Ended: 'Beendet',
@@ -130,7 +133,7 @@ const de = {
   'Preferences the recipe does not ask here (memory, port, share ...) use the answers stored last time, or the defaults; to choose them yourself run': 'Einstellungen, die das Rezept hier nicht fragt (Speicher, Port, Freigabe ...), nehmen die zuletzt gespeicherten Antworten oder die Vorgaben; um sie selbst zu wählen, führe aus:',
   'in the terminal.': 'im Terminal.',
   // Interactive recipe runs (InstallDialog.svelte, shell/JobRecords.svelte, ADR 0018 stage 3)
-  'Waiting for your answer': 'Warte auf deine Antwort', 'waiting for input': 'wartet auf Eingabe', waiting: 'wartet auf Eingabe', 'Answer the question': 'Frage beantworten',
+  'needs an answer': 'braucht eine Antwort', 'Open the job': 'Auftrag öffnen', 'Waiting for your answer': 'Warte auf deine Antwort', 'waiting for input': 'wartet auf Eingabe', waiting: 'wartet auf Eingabe', 'Answer the question': 'Frage beantworten',
   Send: 'Senden', Done: 'Fertig', 'Running…': 'Läuft…', 'The job could not be read.': 'Der Auftrag konnte nicht gelesen werden.',
   'Leave it empty to use': 'Leer lassen, um zu verwenden:',
   'Closing this window does not stop the run: it waits for your answer on the Jobs page.': 'Das Schließen dieses Fensters hält den Lauf nicht an: Er wartet auf der Seite Aufträge auf deine Antwort.',

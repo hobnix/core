@@ -9,7 +9,7 @@
   //   </CreateDialog>
   //
   // `args` is a function of the form state that returns the argument list of `hs sys <area> plan|start` (or null while the form cannot name a command yet).
-  // The dialog asks the server for a plan at once when it opens, then 300 ms after the last change (the older request is aborted), and shows what
+  // The dialog asks the server for a plan at once when it opens, then 400 ms after the last change (the older request is aborted), and shows what
   // comes back: allowed / needs input / refused. Start is enabled only for the plan of the current form. A password or a
   // passphrase is returned by `stdin` (one line): it is sent in the request body for the server to put on the command's standard input, never in `args`.
   import { plan as askPlan, start as doStart } from '../api.js';
@@ -19,6 +19,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import Dialog from '../ui/Dialog.svelte';
 
+  const PLAN_DEBOUNCE_MS = 400;       // quiet time after the last edit before the plan is asked again
   let { title, kicker = 'New', area, args, stdin = () => undefined, form, onclose = () => { ui.create = null; }, ondone = () => {} } = $props();
 
   let p = $state(null);
@@ -37,7 +38,7 @@
   const allowed = $derived(p?.status === 'ok');
   const canStart = $derived(allowed && !busy && !asking && planKey !== '' && planKey === wantKey && (!p.confirm_name || confirm === p.confirm_name));
 
-  // a new plan at once when the dialog opens, then 300 ms after the last change; the older request is aborted, its answer dropped
+  // a new plan at once when the dialog opens, then 400 ms after the last change; the older request is aborted, its answer dropped
   let first = true;
   $effect(() => {
     const a = args();
@@ -57,7 +58,7 @@
       } finally {
         if (my === seq) asking = false;
       }
-    }, first ? 0 : 300);
+    }, first ? 0 : PLAN_DEBOUNCE_MS);
     first = false;
     return () => { clearTimeout(timer); ctl.abort(); };   // a newer edit or closing the dialog: the old question is dropped and its request aborted
   });

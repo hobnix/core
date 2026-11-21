@@ -391,6 +391,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "ct.follow.by_ct": {
+    /** the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines]) */
+    words: ["ct", "follow", "<ct>"];
+    path: "/ct/follow/{ct}";
+    method: "get";
+    class: "read";
+    role: "app-manager";
+    params: { ct: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "ct.list": {
     /** instances with state and address */
     words: ["ct", "list"];
@@ -788,6 +800,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "docker.follow.by_app": {
+    /** the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default) */
+    words: ["docker", "follow", "<app>"];
+    path: "/docker/follow/{app}";
+    method: "get";
+    class: "read";
+    role: "app-manager";
+    params: { app: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "docker.health": {
     /** the checks of the Docker capability page as id, state (ok|warn|fail|off), fix, detail, reason (- when empty): container, share (apps on the SSD pool), mount (apps mounted in Docker) */
     words: ["docker", "health"];
@@ -921,7 +945,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "event.list": {
-    /** the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] */
+    /** the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID] */
     words: ["event", "list"];
     path: "/event/list";
     method: "get";
@@ -1204,6 +1228,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "health.acks": {
+    /** the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed */
+    words: ["health", "acks"];
+    path: "/health/acks";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "health.dry-run": {
     /** current problems, nothing is sent */
     words: ["health", "dry-run"];
@@ -1217,7 +1253,7 @@ export interface SysOperations {
     lines: string;
   };
   "health.list": {
-    /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -) */
+    /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -) */
     words: ["health", "list"];
     path: "/health/list";
     method: "get";
@@ -1382,7 +1418,7 @@ export interface SysOperations {
     params: { id: string; };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted" | "skipped", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.list": {
     /** timers and services with next and last run */
@@ -1442,7 +1478,7 @@ export interface SysOperations {
     params: { };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted" | "skipped", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.running": {
     /** background jobs that are running now */
@@ -1508,7 +1544,7 @@ export interface SysOperations {
       | [tag: "next", count: Field])[];
   };
   "live.check": {
-    /** problems of the live state (Redis down, a topic older than three intervals): key and text */
+    /** problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text */
     words: ["live", "check"];
     path: "/live/check";
     method: "get";
@@ -1556,7 +1592,7 @@ export interface SysOperations {
     lines: string;
   };
   "live.status": {
-    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document) */
+    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet) */
     words: ["live", "status"];
     path: "/live/status";
     method: "get";
@@ -1566,6 +1602,18 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "logs.follow": {
+    /** the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>] */
+    words: ["logs", "follow"];
+    path: "/logs/follow";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
   };
   "logs.show": {
     /** the journal as plain lines: hs sys logs show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>] */
@@ -2272,30 +2320,6 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
-  "reads.collect": {
-    /** read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals) */
-    words: ["reads", "collect"];
-    path: "/reads/collect";
-    method: "post";
-    class: "change";
-    role: "admin";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string;
-  };
-  "reads.status": {
-    /** every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes */
-    words: ["reads", "status"];
-    path: "/reads/status";
-    method: "get";
-    class: "read";
-    role: "viewer";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string[][];
-  };
   "rebuild.pending": {
     /** the machine.toml changes that wait for one hs rebuild, one per line: key, the value the running system was built with, the value now (- = not set); empty: nothing waits or no copy was kept yet */
     words: ["rebuild", "pending"];
@@ -2637,6 +2661,32 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "share.parity.refused": {
+    /** the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused) */
+    words: ["share", "parity", "refused"];
+    path: "/share/parity/refused";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [share: Field, folder: Field, removed: Field, limit: Field, share_total: Field][];
+  };
+  "share.parity.state.by_share": {
+    /** the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder */
+    words: ["share", "parity", "state", "<share>"];
+    path: "/share/parity/state/{share}";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { share: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "limit", mode: "default" | "custom" | "off", value: Field]
+      | [tag: "default", floor: Field, percent: Field]
+      | [tag: "skip", folder: Field])[];
+  };
   "shares.acl": {
     /** who may use a share */
     words: ["shares", "acl"];
@@ -2949,6 +2999,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "state.events-follow": {
+    /** the last disk events, then every new row until the reader goes (the web log stream; plain rows) */
+    words: ["state", "events-follow"];
+    path: "/state/events-follow";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "state.events-json": {
     /** the latest disk events as JSON with masked serials (what the status endpoint serves at /events) */
     words: ["state", "events-json"];
@@ -3034,7 +3096,7 @@ export interface SysOperations {
     lines: string;
   };
   "state.read-put.by_key": {
-    /** keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it */
+    /** keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026) */
     words: ["state", "read-put", "<key>"];
     path: "/state/read-put/{key}";
     method: "get";

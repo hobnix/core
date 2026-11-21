@@ -428,11 +428,13 @@ case ",$row_flags," in
   *,changes,*)
     # a change: after the command, any exit code, the live state of its area is read again (topic: flag, default system); the exit code stays the script's
     . "$here/live.sh"
-    grp=system
-    case ",$row_flags," in *,topic:*) grp=${row_flags#*topic:}; grp=${grp%%,*} ;; esac
+    # every topic: word of the row is a change area that is read again (a package install also changes the instances: topic:system,topic:instances)
+    local_grps=()
+    for w in ${row_flags//,/ }; do case "$w" in topic:*) local_grps+=("event:area.${w#topic:}") ;; esac; done
+    [ "${#local_grps[@]}" -gt 0 ] || local_grps=(event:area.system)
     if "${run_cmd[@]}" ${cmd_args[@]+"${cmd_args[@]}"}; then rc=0; else rc=$?; fi
     # also after a failure: a half-done change leaves a changed state (docs/adr/0005-events.md, rule 8)
-    live_refresh "@$grp"
+    live_refresh "${local_grps[@]}"
     # who did what: the words typed and the exit code, never the arguments after them (scripts/lib/audit.sh)
     . "$here/audit.sh"; audit_record "$typed" "$rc" "$row_flags"
     case "$row_path" in "ext "*) w=${row_path#ext }; live_refresh "@ext-${w%% *}" ;; esac   # a package's own topics

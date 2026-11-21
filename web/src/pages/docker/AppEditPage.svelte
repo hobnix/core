@@ -9,7 +9,8 @@
   import { get, plan } from '../../api.js';
   import { poll, rows, refresh } from '../../data.svelte.js';
   import { route, go } from '../../route.svelte.js';
-  import { openPlan, jobRunning, tasks } from '../../ui.svelte.js';
+  import { openPlan, tasks } from '../../ui.svelte.js';
+  import { rowstate } from '../../rowstate.svelte.js';
   import { jobMatches } from '../../jobkey.js';
   import PageHeader from '../../shell/PageHeader.svelte';
   import Banner from '../../ui/Banner.svelte';
@@ -38,8 +39,8 @@
   const apps = $derived(rows(appsPoll).map(appOf).filter(Boolean));
   // for the live checks and the Bind share dialog: every container, what docker mounts, the shares, the user docker maps already
   const contPoll = poll('/api/sys/docker/containers', 30000);
-  const storPoll = poll('/api/sys/ct/storage/docker', 15000);
-  const sharesPoll = poll('/api/sys/shares/list', 30000);
+  const storPoll = poll('/api/sys/ct/storage/docker', 15000, 'ct-list');
+  const sharesPoll = poll('/api/sys/shares/list', 30000, 'shares-overview');
   const remotePoll = poll('/api/sys/remote/list', 30000);
   const statusPoll = poll('/api/sys/docker/status', 15000);
   const containers = $derived(rows(contPoll).filter((r) => r.length >= 3).map((r) => ({ name: r[0], project: r[1], state: r[2] })));
@@ -77,8 +78,8 @@
   const canApply = $derived(!loading && !loadError && !readOnly && !!target && /^[a-z0-9][a-z0-9_-]{0,40}$/.test(target));
   const applyArgs = $derived([target, 'app-save', '--rev', isNew ? 'new' : rev]);
   const saveArgs = $derived([target, 'app-write', '--rev', isNew ? 'new' : rev]);
-  const applying = $derived(canApply && jobRunning('docker-app', applyArgs));
-  const saving = $derived(canApply && jobRunning('docker-app', saveArgs));
+  const applying = $derived(canApply && rowstate.pending('docker-app', applyArgs));
+  const saving = $derived(canApply && rowstate.pending('docker-app', saveArgs));
   let testing = $state(false);          // the Test is being asked
   let banner = $state([]);              // findings without a place: [{ level, text }]
   let result = $state(null);            // { errors, warns } of the last Test, until the text changes
@@ -202,7 +203,7 @@
   // Bind share: a mounted share adds its line at once; otherwise the plan of the mount runs first and the line is added when its job ends
   let binding = $state(false);
   let pending = $state(null);      // { args, line }
-  const mountRunning = $derived(!!pending && jobRunning('docker', pending.args));
+  const mountRunning = $derived(!!pending && rowstate.pending('docker', pending.args));
   let sawMount = false;
   $effect(() => {
     if (mountRunning) { sawMount = true; return; }

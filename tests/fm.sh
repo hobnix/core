@@ -221,6 +221,36 @@ for k in files_done files_total bytes_done bytes_total speed eta current phase r
 check_eq "progress: skipped 0" 0 "$(kv skipped)"; check_eq "progress: failed 0" 0 "$(kv failed)"
 [ "$(kv bytes_done)" = "$(kv bytes_total)" ] && pass "progress: all bytes done" || fail "bytes: $out"
 fm progress hs-job-nonexistent; check_eq "progress: unknown job" 1 "$rc"
+
+echo "-- progress: the job record is the shared truth, also next to a state file"
+export HS_JOBS_DIR=$WORK/records
+jid=$(python3 "$SCRIPTS/job-record.py" new --slug fm-copy --desc "fm copy" --unit hs-job-fm-rec --source cli --initiator t)
+python3 "$SCRIPTS/job-record.py" run "$jid"; python3 "$SCRIPTS/job-record.py" step "$jid" 2 5 "Copying the second folder"
+sleep 120 &
+spid=$!
+printf 'files_done\t1\nfiles_total\t4\nbytes_done\t10\nbytes_total\t40\nspeed\t0\neta\t0\ncurrent\tx\nphase\tcopying\nresult\trunning\nskipped\t0\nfailed\t0\npid\t%s\n' "$spid" > "$HS_FM_DIR/jobs/rectest.state"
+printf '%s\n' "$jid" > "$HS_FM_DIR/jobs/rectest.rec"
+fm progress rectest
+check_eq "record + state: files come from the state file" 1 "$(kv files_done)"
+check_eq "record + state: the phase is the step of the record" "Copying the second folder" "$(kv phase)"
+python3 "$SCRIPTS/job-record.py" finish "$jid" 0
+fm progress rectest
+check_eq "record + state: a finished record gives the result" done "$(kv result)"
+# a record with fields this reader does not know (a newer writer, additive change): read as before, nothing breaks
+python3 - "$HS_JOBS_DIR/$jid.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+r = json.load(open(p))
+r["field_from_the_future"] = {"a": [1, 2], "b": "x"}
+r["step"]["extra"] = True
+json.dump(r, open(p, "w"))
+PY
+fm progress rectest
+check_eq "record with an unknown field: still read" done "$(kv result)"; check_eq "record with an unknown field: exit 0" 0 "$rc"
+printf 'not json' > "$HS_JOBS_DIR/$jid.json"
+fm progress rectest
+check_eq "an unreadable record: the state file stands alone" running "$(kv result)"
+kill "$spid" 2>/dev/null; rm -f "$HS_FM_DIR/jobs/rectest.state" "$HS_FM_DIR/jobs/rectest.rec"
 mkdir -p "$HS_FM_DIR/jobs"; echo ghost1 > "$HS_FM_DIR/jobs/hs-job-ghost.alias"; fm progress hs-job-ghost; check_eq "progress: a job stopped before its first state is cancelled, not running" cancelled "$(kv result)"
 # conflicts: the same copy again
 fmsel Avatar Heat -- plan copy --from disk:data-04 --path shares/media/movies --to disk:data-05 --to-path shares/media

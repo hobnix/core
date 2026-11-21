@@ -15,7 +15,10 @@
   import { route, go } from '../route.svelte.js';
   import { healthDot } from '../format.js';
   import { sleepOf, sleepText, sleepDot, parsePower, powerText } from '../disk-sleep.js';
-  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { diskPending, failedOf } from './storage/pending.js';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
   import WipeDisk from '../forms/storage/WipeDisk.svelte';
@@ -29,6 +32,10 @@
   let { deck } = $props();
 
   onMount(() => { loadPools(); });
+  // a pool job that ends may have added or removed a pool: read the pool list again then (from the job, not from a timer)
+  const anyPoolJob = $derived(rowstate.active('pool', []).length > 0 || rowstate.active('migrate', []).length > 0);
+  let wasBusy = false;
+  $effect(() => { const b = anyPoolJob; if (wasBusy && !b) loadPools(true); wasBusy = b; });
   // the one SnapRAID pool (its disks are labelled "bulk data-01" by monitor disks, an internal prefix) and the filter chips of every pool
   const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? '');
   const TABS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name })), { id: 'none', label: 'Free' }, { id: 'missing', label: 'Missing' }]);
@@ -99,6 +106,10 @@
     const g = membRows(poolOf(d)).find((r) => r[0] === memberOf(d))?.[3];
     return g && g !== '-' ? g : roleLabel(d.role);
   };
+  // what a disk is doing (format, test, detach, recover, move, forget): any job that names the device, its pool member or its serial; also one started in a terminal
+  const namesOf = (d) => [d.name, memberOf(d), serialOf(d)];
+  const doingOf = (d) => diskPending(namesOf(d), rowstate.active);
+  const failureOfDisk = (d) => failedOf('disk', namesOf(d), rowstate.failedLead);
   const poolText = (d) => poolOf(d) || (isLoose(d) ? 'free' : d.role);
   // the pane next to a disk in the file manager: another data disk (a pool disk and its own pool never meet there)
   const otherDisk = (member) => { const o = dataMembers(snapName).find((n) => n !== member); return o ? `disk:${o}` : ''; };
@@ -107,7 +118,7 @@
   // ── the drawer: SMART history and self-tests
   const rec = $derived(known.find((k) => k.dev === sel?.name && k.state !== 'missing'));
   const serial = $derived(rec?.serial ?? '');
-  const hist = poll(() => (serial ? `/api/sys/state/smart/${encodeURIComponent(serial)}` : ''), 60000);
+  const hist = poll(() => (serial ? `/api/sys/state/smart/${encodeURIComponent(serial)}` : ''), 60000, 'disk-health');
   const results = poll(() => (sel ? `/api/sys/disk/results/${encodeURIComponent(sel.name)}` : ''), 60000);
   // state smart: time, realloc, pending, crc, temp, hours (newest first)
   const readings = $derived(rows(hist).map((r) => ({ t: Number(r[0]), pending: Number(r[2]), temp: Number(r[4]) })).filter((x) => !isNaN(x.t)).reverse());
@@ -148,8 +159,8 @@
 
 <PageHeader title="Disks" crumb="Storage" sub="Every disk of this server: where it belongs, how healthy it is, what it has been through.">
   {#snippet actions()}
-    <Button disabled={locked} tooltip={lockTip('Look at a USB or hot-plug disk: mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Other disk</Button>
-    <Button variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
+    <Button need="admin" disabled={locked} tooltip={lockTip('Look at a USB or hot-plug disk: mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Other disk</Button>
+    <Button need="admin" variant="primary" disabled={locked || !counts.none} tooltip={lockTip(counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>
   {/snippet}
 </PageHeader>
 {#if pw.power.length}<Muted as="p">{#each pw.power as x, i}{i ? ' · ' : ''}{powerText(x)}{/each}</Muted>{/if}
@@ -182,7 +193,7 @@
             <Kv items={[{ k: 'Serial', v: selMissing.serial }, { k: 'Was', v: selMissing.dev }, { k: 'Size', v: sizeTxt(selMissing.size) }, { k: 'First seen', v: dateOf(selMissing.first) }, { k: 'Last seen', v: dateOf(selMissing.lastSeen) }, { k: 'Role', v: selMissing.role }]} />
             <Muted as="p" style="padding:12px 16px;margin:0">A missing disk can only be forgotten. If it is a pool member, replace it from its pool first.</Muted>
             {#snippet actions()}
-              <Button variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
+              <Button need="admin" variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
             {/snippet}
           </Drawer>
         {/if}
@@ -201,7 +212,7 @@
           <div style="overflow-x:auto"><Table id="disks" {columns} rows={visible} key="name" compact selected={sel?.name} onrow={(d) => { selName = d.name; tab = 'info'; }}
                  empty={filter === 'none' ? 'Every disk belongs to a pool, the system or the backup.' : 'No disks here.'}>
             {#snippet cell(d, col)}
-              {#if col.key === 'name'}<code>{d.name}</code>
+              {#if col.key === 'name'}<code>{d.name}</code>{#if doingOf(d)} <Chip>{doingOf(d).toLowerCase()}…</Chip>{/if}
               {:else if col.key === 'pool'}<Chip>{poolText(d)}</Chip>
               {:else if col.key === 'role'}<Muted>{diskPool(d.role) ? roleText(d) : ''}</Muted>
               {:else if col.key === 'model'}<Muted>{modelOf(d)}</Muted>
@@ -229,6 +240,8 @@
                   { k: 'Sleep', v: sleepText(sel.sleep) ? `${sleepText(sel.sleep)}${pw.disks[sel.name]?.wakes ? `, woke ${pw.disks[sel.name].wakes}x today` : ''}` : '' },
                   { k: 'Free space', v: sel.free && sel.free !== '-' ? sizeTxt(Number(sel.free)) : '' }, { k: 'First seen', v: rec?.first ? dateOf(rec.first) : '' },
                 ]} />
+                {#if doingOf(sel)}<div style="padding:12px 16px;margin:0"><Banner tone="info">{doingOf(sel)}… a job is running on this disk; this page follows it.</Banner></div>
+                {:else if failureOfDisk(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={failureOfDisk(sel).error} ondismiss={() => rowstate.dismiss(failureOfDisk(sel).id)} /></div>{/if}
                 {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p style="padding:12px 16px;margin:0">{verdicts[sel.name].reason}</p>{/if}
                 {#if markOf[member]}<div style="padding:12px 16px;margin:0"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
                 <Row gap="2" wrap style="padding:12px 16px;margin:0">
@@ -262,18 +275,18 @@
               {/if}
             {/snippet}
             {#snippet actions()}
-              <Button size="sm" icon="pulse" busy={jobRunning('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
-              <Button size="sm" icon="pulse" busy={jobRunning('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
+              <Button need="admin" size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'short'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'About two minutes; shows the plan first'} onclick={() => runTest('short')}>Short test</Button>
+              <Button need="admin" size="sm" icon="pulse" busy={rowstate.pending('disk', [sel.name, 'test', 'long'])} disabled={!!running} tooltip={running ? 'A test is running in this disk' : 'Reads the whole surface (hours); shows the plan first'} onclick={() => runTest('long')}>Long test</Button>
               {#if isLoose(sel)}
-                <Button variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
-                <Button size="sm" disabled={locked} tooltip={lockTip('Mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Mount read-only…</Button>
-                <Button variant="danger" size="sm" disabled={locked} tooltip={lockTip('Erase this disk so it can be added to a pool')} onclick={() => openCreate(WipeDisk, { disk: sel.name, model: modelOf(sel), size: sel.size })}><i class="ph ph-eraser"></i>Format…</Button>
+                <Button need="admin" variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={lockTip('Mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Mount read-only…</Button>
+                <Button need="admin" variant="danger" size="sm" disabled={locked} tooltip={lockTip('Erase this disk so it can be added to a pool')} onclick={() => openCreate(WipeDisk, { disk: sel.name, model: modelOf(sel), size: sel.size })}><i class="ph ph-eraser"></i>Format…</Button>
               {/if}
               {#if snapRole(sel) && /data/.test(sel.role) && member}
-                <Button size="sm" disabled={locked} tooltip={'Take this disk out of the pool to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: snapName, member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={'Take this disk out of the pool to work on it (or put it back)'} onclick={() => openCreate(DetachDisk, { pool: snapName, member })}><i class="ph ph-plugs"></i>{markOf[member] === 'detached' ? 'Attach…' : 'Detach…'}</Button>
                 <Button size="sm" disabled={locked} tooltip={'Look at the files of this disk, next to another disk'} onclick={() => go(filesLink({ left: `disk:${member}`, right: otherDisk(member) }))}><i class="ph ph-folder-open"></i>Browse files</Button>
                 <Button size="sm" disabled={locked} tooltip={'Move files to another data disk in the file manager; their path stays'} onclick={() => go(filesLink({ left: `disk:${member}`, path: '/shares', right: otherDisk(member), rpath: '/shares' }))}><i class="ph ph-arrows-left-right"></i>Move files…</Button>
-                <Button size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: snapName, member, members: dataMembers(snapName) })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
+                <Button need="admin" size="sm" disabled={locked} tooltip={'Get deleted files back from this disk'} onclick={() => openCreate(RecoverDisk, { pool: snapName, member, members: dataMembers(snapName) })}><i class="ph ph-first-aid-kit"></i>Recover…</Button>
               {/if}
             {/snippet}
           </Drawer>

@@ -3,7 +3,7 @@
 
   let { name } = $props();
   // share, level, via (the entries made for the group itself)
-  const acc = poll(() => `/api/sys/users/group-access/${encodeURIComponent(name)}`, 30000);
+  const acc = poll(() => `/api/sys/users/group-access/${encodeURIComponent(name)}`, 30000, 'shares-overview');
   const text = $derived(rows(acc).map((r) => `${r[0]} (${r[1]})`).join(', '));
 </script>
 

@@ -4,7 +4,10 @@
   // Snapshots of an instance live HERE (the Snapshots page is gone); the "in the backup" switch lives on Backup, this page only shows the badge.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { ctPending, ctFailed } from './instances/pending.js';
   import { route } from '../route.svelte.js';
   import Terminal from '../shell/Terminal.svelte';
   import VmConsole from '../shell/VmConsole.svelte';
@@ -54,13 +57,16 @@
   // recipes list: name, description, containers (comma separated, - for none), state
   const recipes = $derived(rows(rec).map((r) => ({ name: r[0], cts: r[2] === '-' ? [] : r[2].split(',') })));
 
-  const bind = poll(() => (sel ? `/api/sys/ct/bindings/${encodeURIComponent(sel.name)}` : ''), 15000);
+  const bind = poll(() => (sel ? `/api/sys/ct/bindings/${encodeURIComponent(sel.name)}` : ''), 15000, 'ct-list');
   // binding, kind, pool, source, inside, mode, cache, backup, share, used_bytes, disks, also_used_by
   const bindings = $derived(rows(bind).map((r) => ({ device: r[0], kind: r[1], pool: r[2], source: r[3], inside: r[4], mode: r[5], backup: r[7], share: r[8], also: r[11] })));
-  const snap = poll(() => (sel ? `/api/sys/ct/snapshots/${encodeURIComponent(sel.name)}` : ''), 15000);
+  const snap = poll(() => (sel ? `/api/sys/ct/snapshots/${encodeURIComponent(sel.name)}` : ''), 15000, 'ct-list');
   // name, created; newest first ("YYYY-MM-DD HH:MM" sorts as text)
   const snaps = $derived([...rows(snap)].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).map((r) => ({ name: r[0], created: r[1] })));
 
+  const doing = (c) => ctPending(c.name, rowstate.pending);
+  const failure = (c) => (doing(c) ? null : ctFailed(c.name, rowstate.failed));
+  const busyOf = (c, ...a) => a.some((x) => rowstate.pending('ct', [c.name, ...x]));
   const kind = (c) => (isVm(c) ? 'VM' : 'CT');
   const word = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
   const dot = (s) => (/running/i.test(s) ? 'ok' : /partial/i.test(s) ? 'warn' : 'off');
@@ -95,7 +101,7 @@
 
 <PageHeader title="Instances" crumb={ui.host} sub={cts.length ? `${running} of ${cts.length} running` : 'Containers and virtual machines.'}>
   {#snippet actions()}
-    <Button need="app-manager" icon="arrows-clockwise" disabled={!running} busy={jobRunning('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
+    <Button need="app-manager" icon="arrows-clockwise" disabled={!running} busy={rowstate.pending('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
     <Button need="app-manager" variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>
   {/snippet}
 </PageHeader>
@@ -116,7 +122,7 @@
             {#if eligible(c)}<Button variant="ghost" class="btn-icon instances-chev" icon={open.has(c.name) ? 'caret-down' : 'caret-right'} aria-label="{open.has(c.name) ? 'Collapse' : 'Expand'} apps" onclick={(e) => toggleApps(e, c.name)} />{/if}
           {:else if col.key === 'owner'}{#if c.owner}<span class="kd" role="img" aria-label="Locked by {c.owner}" use:tip={`Locked by ${c.owner}: only hs ${c.owner} disable removes it`}><i class="ph ph-lock"></i></span>{/if}
           {:else if col.key === 'type'}<span class="kd">{kind(c)}</span>
-          {:else if col.key === 'state'}<StatusDot state={dot(c.state)} label={word(c.state)} />
+          {:else if col.key === 'state'}{#if doing(c)}<span class="kd"><i class="ph ph-circle-notch spin"></i> {doing(c)}…</span>{:else}<StatusDot state={dot(c.state)} label={word(c.state)} />{/if}{#if failure(c)}<span use:tip={failure(c).error.what}><Chip tone="bad">failed</Chip></span>{/if}
           {:else if col.key === 'address'}<span class="mono addr">{c.address}</span>
           {:else if col.key === 'boot'}<span class="kd">{boots(c) ? 'yes' : 'no'}</span>
           {:else if col.key === 'ram'}{spaced(c.ram)}
@@ -127,9 +133,9 @@
             {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<span class="kd">–</span>{/if}
           {:else}
             <span class="acts">
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={(jobRunning('ct', [c.name, 'stop']) || jobRunning('ct', [c.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [c.name, 'start']))} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={jobRunning('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={jobRunning('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={busyOf(c, ['stop'], ['stop', '--autostart', 'off'], ['start'])} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={rowstate.pending('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={rowstate.pending('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
             </span>
           {/if}
         {/snippet}
@@ -152,6 +158,7 @@
       {#if sel}
         <Drawer title={sel.name} chip={kind(sel)} state={dot(sel.state)} stateLabel={word(sel.state)} {tabs} bind:tab onclose={() => { selName = ''; }}>
           {#snippet children(t)}
+            {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
             <Chip>{boots(sel) ? 'starts at boot' : 'not set to start at boot'}</Chip>
             {#if sel.owner}<span use:tip={`Managed by ${sel.owner}: turn it off under Settings, Capabilities to change or delete it`}><Chip kind="strong"><i class="ph ph-lock"></i> locked: {sel.owner}</Chip></span>{/if}
             <Kv items={[
@@ -174,7 +181,7 @@
                         <Chip>{b.kind}</Chip>
                         {#if b.share && b.share !== '-'}<a {...link(sharePath(b), 'shares', b.share)} use:tip={'Open the share'}>{b.share}</a>{:else}<span class="mono">{b.source}</span>{/if}
                         <span class="kd">{b.mode}</span>
-                        {#if !sel.owner}<Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="x" style="margin-left:auto" busy={jobRunning('ct', [sel.name, 'remove-storage', '--device', b.device])} tooltip={'Remove this binding'} aria-label="Remove {b.device}" onclick={() => openPlan('ct', [sel.name, 'remove-storage', '--device', b.device], `Remove ${b.device} from ${sel.name}`)} />{/if}
+                        {#if !sel.owner}<Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="x" style="margin-left:auto" busy={rowstate.pending('ct', [sel.name, 'remove-storage', '--device', b.device])} tooltip={'Remove this binding'} aria-label="Remove {b.device}" onclick={() => openPlan('ct', [sel.name, 'remove-storage', '--device', b.device], `Remove ${b.device} from ${sel.name}`)} />{/if}
                       </div>
                       <div class="rs mono">{b.source} → {b.inside}</div>
                       {#if b.also && b.also !== '-'}<div class="rs">Also mounted by {b.also}</div>{/if}
@@ -193,15 +200,15 @@
                     <div class="r"><div class="rt">
                       <span class="mono">{sn.name}</span><span class="kd">{sn.created}</span>
                       <span class="acts" style="margin-left:auto">
-                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-u-up-left" busy={jobRunning('ct', [sel.name, 'restore', '--snapshot', sn.name])} aria-label="Restore {sn.name}" tooltip={i === 0 ? 'Go back to this snapshot' : 'Go back to this snapshot (the newer ones are deleted)'} onclick={() => openPlan('ct', [sel.name, 'restore', '--snapshot', sn.name], `Restore ${sel.name}`)} />
-                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib bad" icon="trash" busy={jobRunning('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name])} aria-label="Delete {sn.name}" tooltip={'Delete this snapshot (the plan asks for the instance name)'} onclick={() => openPlan('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name], `Delete snapshot ${sn.name}`)} />
+                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-u-up-left" busy={rowstate.pending('ct', [sel.name, 'restore', '--snapshot', sn.name])} aria-label="Restore {sn.name}" tooltip={i === 0 ? 'Go back to this snapshot' : 'Go back to this snapshot (the newer ones are deleted)'} onclick={() => openPlan('ct', [sel.name, 'restore', '--snapshot', sn.name], `Restore ${sel.name}`)} />
+                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib bad" icon="trash" busy={rowstate.pending('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name])} aria-label="Delete {sn.name}" tooltip={'Delete this snapshot (the plan asks for the instance name)'} onclick={() => openPlan('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name], `Delete snapshot ${sn.name}`)} />
                       </span>
                     </div></div>
                   {:else}
                     <div class="kd pad">{snap.loaded ? (snap.error ? 'The snapshots could not be read.' : 'No snapshots yet.') : 'Loading…'}</div>
                   {/each}
                 </div>
-                <Button need="app-manager" size="sm" icon="camera" busy={jobRunning('ct', [sel.name, 'snapshot'])} busyLabel="Snapshotting…" tooltip={'Take a snapshot of this instance now'} onclick={() => openPlan('ct', [sel.name, 'snapshot'], `Snapshot ${sel.name}`)}>Snapshot now</Button>
+                <Button need="app-manager" size="sm" icon="camera" busy={rowstate.pending('ct', [sel.name, 'snapshot'])} busyLabel="Snapshotting…" tooltip={'Take a snapshot of this instance now'} onclick={() => openPlan('ct', [sel.name, 'snapshot'], `Snapshot ${sel.name}`)}>Snapshot now</Button>
               </div>
             {:else if t === 'logs'}
               {#key sel.name}<LogsTab ct={sel.name} />{/key}
@@ -223,13 +230,13 @@
             {/if}
           {/snippet}
           {#snippet actions()}
-            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={(jobRunning('ct', [sel.name, 'stop']) || jobRunning('ct', [sel.name, 'stop', '--autostart', 'off']) || jobRunning('ct', [sel.name, 'start']))} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
-            <Button need="app-manager" size="sm" icon="arrow-clockwise" busy={jobRunning('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
-            <Button need="app-manager" size="sm" icon="arrows-clockwise" busy={jobRunning('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
+            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={busyOf(sel, ['stop'], ['stop', '--autostart', 'off'], ['start'])} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
+            <Button need="app-manager" size="sm" icon="arrow-clockwise" busy={rowstate.pending('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
+            <Button need="app-manager" size="sm" icon="arrows-clockwise" busy={rowstate.pending('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
             <Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'A shell inside the instance' : 'The instance is not running'} onclick={() => openCreate(Terminal, { target: sel.name, title: sel.name })}><i class="ph ph-terminal-window"></i>Terminal</Button>
             {#if isVm(sel)}<Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'The screen of the virtual machine' : 'The instance is not running'} onclick={() => openCreate(VmConsole, { target: sel.name, title: sel.name })}><i class="ph ph-monitor"></i>Console</Button>{/if}
             <Button need="app-manager" size="sm" tooltip={'Change memory, CPU, storage and other settings'} onclick={() => openCreate(InstanceSettings, { ct: sel })}><i class="ph ph-sliders"></i>Settings</Button>
-            {#if !sel.owner}<Button need="app-manager" variant="danger" size="sm" icon="trash" busy={jobRunning('ct', [sel.name, 'delete'])} busyLabel="Deleting…" tooltip={'Delete the instance (the plan asks for its name)'} onclick={() => openPlan('ct', [sel.name, 'delete'], `Delete ${sel.name}`)}>Delete</Button>{/if}
+            {#if !sel.owner}<Button need="app-manager" variant="danger" size="sm" icon="trash" busy={rowstate.pending('ct', [sel.name, 'delete'])} busyLabel="Deleting…" tooltip={'Delete the instance (the plan asks for its name)'} onclick={() => openPlan('ct', [sel.name, 'delete'], `Delete ${sel.name}`)}>Delete</Button>{/if}
           {/snippet}
         </Drawer>
       {/if}

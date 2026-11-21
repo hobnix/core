@@ -5,7 +5,7 @@
   import { Field, TextInput, Muted } from '../../ui';
 
   let { name, ondone = () => {} } = $props();
-  const det = poll(`/api/sys/users/group-details/${encodeURIComponent(name)}`, 30000);
+  const det = poll(`/api/sys/users/group-details/${encodeURIComponent(name)}`, 30000, 'users-groups');
   const have = $derived(Object.fromEntries(rows(det).map((r) => [r[0], r[1] === '-' ? '' : (r[1] ?? '')])).description ?? '');
   let edited = $state(null);
   const desc = $derived(edited ?? have);

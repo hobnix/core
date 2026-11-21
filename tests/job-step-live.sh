@@ -42,7 +42,8 @@ chmod +x "$T/hobnix"
 before=$(gen)
 out=$(HOBNIX_BIN="$T/hobnix" HS_JOB_RECORD= bash -c ". '$here/scripts/lib/job.sh'; hs_job_record step x 1 3 A; hs_job_record progress x 1 10 MB; hs_job_record step x 3 3 C; echo \$_HS_JOB_RECORD_USE")
 check "the wrapper took the Rust writer" "rust" "$out"
-check "the wrapper counts the counter up once per second with the Rust writer" "$((before + 1))" "$(gen)"
+after=$(gen)   # once per second: the three calls may straddle a second boundary, so one or two bumps, never none and never three
+check "the wrapper counts the counter up at most once per second with the Rust writer" "yes" "$([ "$after" -ge $((before + 1)) ] && [ "$after" -le $((before + 2)) ] && echo yes || echo "no ($before -> $after)")"
 out=$(HOBNIX_BIN="$T/hobnix" HS_JOB_NOBUMP=1 bash -c ". '$here/scripts/lib/job.sh'; hs_job_record step x 1 3 A")
-check "HS_JOB_NOBUMP holds for the wrapper too" "$((before + 1))" "$(gen)"
+check "HS_JOB_NOBUMP holds for the wrapper too" "$after" "$(gen)"
 exit $fail

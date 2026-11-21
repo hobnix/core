@@ -4,6 +4,7 @@
   import { initLang } from './lang.svelte.js';
   import { clearPollCache } from './data.svelte.js';
   import { live, startLive, stopLive, setTopics } from './live.svelte.js';
+  import { startRowState } from './rowstate.svelte.js';
   import { ui } from './ui.svelte.js';
   import Shell from './shell/Shell.svelte';
   import Login from './Login.svelte';
@@ -23,8 +24,8 @@
 
   setAuthLostHandler(() => { stopLive(); clearPollCache(); user = null; ui.role = 'viewer'; });
 
-  // the event stream runs while somebody is signed in (served in every liveState mode, ADR 0005 rule 5; `live.open` says it is up)
-  $effect(() => { setTopics(ui.features.topics ?? {}); live.follow = !!ui.features.live; if (user) startLive(); else stopLive(); });
+  // the event stream runs while somebody is signed in (served always, ADR 0005 rule 5; `live.open` says it is up)
+  $effect(() => { setTopics(ui.features.topics ?? {}); live.follow = !!ui.features.live; if (user) { startLive(); startRowState(); } else stopLive(); });
 
   onMount(async () => {
     if (kiosk) return;

@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "Shares, Users, Groups and Backup rows follow their jobs"
+body  = """A share, user or group row shows Snapshotting, Locking, Deleting and so on as soon as its job runs, also when the job was started in a terminal. Backup and Vault show a failed job's error until you dismiss it. A failed job puts the row back."""

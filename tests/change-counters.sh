@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Change counters (docs/adr/0005-events.md rule 5): the table `topics` of state.db, `state-db.py topic-bump` (names, @group, --all), the
-# collector's bump in `read-put`, and scripts/lib/live.sh live_refresh counting up without Redis. python3 stdlib only, no root.
+# collector's bump in `read-put`, and scripts/lib/live.sh live_refresh counting up. python3 stdlib only, no root.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
@@ -35,11 +35,44 @@ check_eq "other output" "2" "$(q "SELECT gen FROM topics WHERE topic='reads:moni
 echo "-- live: counters (ADR 0026 step 1) are counted like any topic"
 sdb topic-bump live:probe >/dev/null
 check_eq "live:probe gen 1" "1" "$(q "SELECT gen FROM topics WHERE topic='live:probe'")"
-echo "-- live_refresh counts up without Redis"
+echo "-- live_refresh counts up"
 unset HS_LIVE_LOG
-export HS_LIVE_SOCKET=$WORK/none.sock
 ( . "$SCRIPTS/lib/live.sh"; live_refresh ct )
 check_eq "live_refresh" "2" "$(q "SELECT gen FROM topics WHERE topic='ct'")"
 HS_LIVE_LOG=$WORK/log bash -c ". '$SCRIPTS/lib/live.sh'; live_refresh ct"
 check_eq "test knob does not count" "2" "$(q "SELECT gen FROM topics WHERE topic='ct'")"
+echo "-- push socket (D11): a datagram after every bump, never a failure without a listener"
+export HS_LIVE_SOCK=$WORK/nobody.sock
+sdb topic-bump ct >/dev/null; check_eq "no socket: the bump works" "3" "$(q "SELECT gen FROM topics WHERE topic='ct'")"
+check_eq "no socket: exit 0" "0" "$(sdb topic-bump ct >/dev/null; echo $?)"
+if python3 -c 'import socket; socket.AF_UNIX' 2>/dev/null; then
+  export HS_LIVE_SOCK=$WORK/live.sock
+  hear() {   # hear <command...>: run it with a listener and print how many datagrams came
+    python3 - "$HS_LIVE_SOCK" "$@" <<'PY'
+import os, socket, subprocess, sys
+path = sys.argv[1]
+if os.path.exists(path):
+    os.unlink(path)
+s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+s.bind(path)
+s.settimeout(0.3)
+subprocess.run(sys.argv[2:], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+n = 0
+try:
+    while True:
+        s.recv(16)
+        n += 1
+except socket.timeout:
+    pass
+print(n)
+PY
+  }
+  check_eq "topic-bump pokes once" "1" "$(hear python3 "$SD" topic-bump ct)"
+  check_eq "a read pokes nobody" "0" "$(hear python3 "$SD" reads)"
+  check_eq "live_refresh pokes (hooks, unit-watch)" "1" "$(hear bash -c ". '$SCRIPTS/lib/live.sh'; live_refresh ct")"
+  check_eq "bump with a bad name pokes nothing" "0" "$(hear python3 "$SD" topic-bump 'bad;name')"
+else
+  echo "no unix sockets here: the push checks are skipped"
+fi
+unset HS_LIVE_SOCK
 finish

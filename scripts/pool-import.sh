@@ -19,6 +19,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/lib/admin.sh"
 # shellcheck source=scripts/lib/pools.sh
 . "$here/lib/pools.sh"
+# shellcheck source=scripts/lib/admin.sh
+. "$here/lib/admin.sh"
 # shellcheck source=scripts/lib/pools-write.sh
 . "$here/lib/pools-write.sh"
 # shellcheck source=scripts/lib/effect.sh
@@ -151,7 +153,7 @@ plan_lines() {   # plan_lines <pool>: the plan as data (the contract of hs sys p
 }
 
 refresh_topics() {
-  live_refresh status monitor-disks disk-inventory disk-marks shares-overview fm-locations encryption
+  live_refresh event:pool.imported
 }
 
 do_import() {   # do_import <pool>: the job body

@@ -51,7 +51,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case '/operations/notifications': return [`${A}notify/channels`, `${A}notify/providers`];
     case '/monitoring/live-state': return liveOn ? [`${A}live/inspect`] : [];
     case '/monitoring/test-lab': return [`${A}testlab/results`];
-    case '/monitoring/diagnostics': return [liveOn ? `${A}live/status` : `${A}reads/status`];
+    case '/monitoring/diagnostics': return [`${A}live/status`];
     case '/storage/encryption': return [`${A}encryption/list`, `${A}status`];
     case '/storage/vault': return [`${A}status`, `${A}vault/list`, `${A}vault/usage`, `${A}vault/uses`];
     case '/storage/pools': return [`${A}pool/list`, `${A}monitor/disks`, ...poolList.filter((p) => p.kind !== 'zfs').map((p) => `${A}pool/info?pool=${p.name}`)];

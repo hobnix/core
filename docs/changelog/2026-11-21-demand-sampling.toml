@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Less work while nobody looks"
+body  = """SMART findings, free space and sizes are now read often only while a page that shows them is open; otherwise the server reads them every few minutes. Opening the page reads them at once. The Live state page shows which topics are on demand. Health checks are not affected."""

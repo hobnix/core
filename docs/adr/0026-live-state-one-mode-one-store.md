@@ -1,6 +1,6 @@
 # 0026: Live state is always on, one mode, one store (the state database, not Redis)
 
-Status: Accepted (2026-11-13), option A. The measurement in migration step 1 is still to do; all code for #481 stays behind a switch that is off until it is measured.
+Status: Accepted (2026-11-13), option A. Migration steps 2 to 6 are built (#561, #562, #563): the switch `liveState` and Redis are gone, live state always runs on the state database. The measurement of step 1 and the check of step 7 are still to do on a real server (#566); the first real write load is seen on the 0.10 beta.
 Issue: hobnix/server#481 (part of #480)
 
 The owner decided: live state is on by default, with one mode and one store, and accepted the state database as that store (2026-11-13).
@@ -92,6 +92,7 @@ anticipated.
 9. Instant push is optional and later: if 1 s feels slow on real hardware, the collector pokes the web server over a unix socket after a
    write. The one-second watcher stays as the fallback, so the socket is an accelerator, never a requirement. It is not built unless the
    check on a real server asks for it.
+   *Superseded by D11 of docs/PLAN-live-interface.md (2026-11-21, step 12): the push socket `/run/hs/live.sock` is built now, not only on request; the watcher stays the fallback.*
 
 ## Consequences
 

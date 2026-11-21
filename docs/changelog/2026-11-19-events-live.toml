@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "The Events page follows the server live"
+body  = """The Events page now shows a new entry the moment it is written, without asking the server every 30 seconds while the live connection is open. \"Show more\" loads the next older entries, and `hs event list` takes `--before <id>` for the same."""

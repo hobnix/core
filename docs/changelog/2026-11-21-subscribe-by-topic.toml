@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "An open page is told only about what it shows"
+body  = """The web interface now sends an open page only the changes of the data that page reads, and changes the list when you go to another page. This means less traffic and less work in the browser. hs live load shows how many change messages were sent out of those offered."""

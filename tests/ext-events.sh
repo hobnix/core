@@ -139,26 +139,29 @@ sys.path.insert(0, sys.argv[1])
 spec = importlib.util.spec_from_file_location("lc", sys.argv[1] + "/live-collect.py")
 lc = importlib.util.module_from_spec(spec); spec.loader.exec_module(lc)
 
-class Store:
-    def __init__(self): self.d = {}
-    def cmd(self, *a):
-        if a[0] == "GET": return self.d.get(a[1])
-        if a[0] == "SET": self.d[a[1]] = a[2]
-        if a[0] == "DEL": self.d.pop(a[1], None)
-        return None
-st = Store()
+class Db:      # the DbStore of the collector in memory: documents as {payload, err}
+    def __init__(self): self.docs, self.gens = {}, {}
+    def get(self, t): return self.docs.get(t)
+    def put(self, t, out, rc, ms, src, ttl, now):
+        self.gens[t] = self.gens.get(t, 0) + 1
+        self.docs[t] = {"payload": out, "err": None, "gen": self.gens[t]}
+        return self.gens[t]
+    def fail(self, *a): pass
+    def delete(self, t): self.docs.pop(t, None)
+    def beat(self, *a): pass
+    def counters(self): return {}
+st = Db()
 c = lc.Collector(st, topic_rows=[], topic_info={}, ext_rows=lambda log=None: ([], {}), watchers=[], topic_needs={}, snapshots=False)
 docs = [[("ext-x-state", '{"n":1}')]]
 w = lc.SnapshotWatch(c, threading.Event(), read=lambda: docs[0])
 w.once(); w.once()
-import json
-d = json.loads(st.d["hs:v1:ext-x-state"])
-assert d["out"] == '{"n":1}' and d["gen"] == 1, d
+d = st.docs["ext-x-state"]
+assert d["payload"] == '{"n":1}' and d["gen"] == 1, d
 docs[0] = [("ext-x-state", '{"n":2}')]
 w.once()
-assert json.loads(st.d["hs:v1:ext-x-state"])["gen"] == 2
+assert st.docs["ext-x-state"]["gen"] == 2
 docs[0] = []
 w.once()
-assert "hs:v1:ext-x-state" not in st.d
+assert "ext-x-state" not in st.docs
 PY
 finish

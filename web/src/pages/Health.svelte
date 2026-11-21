@@ -1,7 +1,9 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
-  import { openPlan, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { areaRole } from '../roles.js';
+  import AckProblem from '../forms/ops/AckProblem.svelte';
   import { go } from '../route.svelte.js';
   import { pools, poolOfRole } from '../pools.svelte.js';
   import { agoShort } from '../format.js';
@@ -74,7 +76,7 @@
   const nextOf = $derived(Object.fromEntries(rows(health).map((r) => [r[0], r[1]])));
   const withAck = $derived(hlist.loaded && !hlist.error && rows(hlist).length > 0);
   const problems = $derived(withAck
-    ? rows(hlist).map((r) => ({ ...describe(r[1], nextOf[r[1]] ?? '', r[3], r[4]), id: r[0], acked: r[2] === 'acked' }))
+    ? rows(hlist).map((r) => ({ ...describe(r[1], nextOf[r[1]] ?? '', r[3], r[4]), id: r[0], acked: r[2] === 'acked', until: /^\d+$/.test(r[5] ?? '') ? Number(r[5]) : 0, who: r[6] && r[6] !== '-' ? r[6] : '' }))
     : rows(health).map((r) => ({ ...describe(r[0], r[1]), id: '', acked: false })));
   const answered = $derived(health.loaded && !health.error);
   const paused = $derived(rows(hlist).some((r) => r[0] === 'mitigation:paused'));
@@ -109,14 +111,14 @@
 <div class="page">
   <PageHeader title="Health" crumb="{ui.host} / Health" {sub}>
     {#snippet actions()}
-      <Button icon="bell-ringing" busy={jobRunning('admin', ['test-push'])} busyLabel="Sending…" tooltip={'Send a test message to the push address'} onclick={() => openPlan('admin', ['test-push'], 'Test push message')}>Send test push</Button>
-      <Button variant="primary" icon="shield-check" busy={jobRunning('jobs', ['run', 'hs-health-check.service'])} busyLabel="Checking…" tooltip={'Check everything now and list the problems'} onclick={() => openPlan('jobs', ['run', 'hs-health-check.service'], 'Health check')}>Run health check</Button>
+      <Button need="admin" icon="bell-ringing" busy={jobRunning('admin', ['test-push'])} busyLabel="Sending…" tooltip={'Send a test message to the push address'} onclick={() => openPlan('admin', ['test-push'], 'Test push message')}>Send test push</Button>
+      <Button need="admin" variant="primary" icon="shield-check" busy={jobRunning('jobs', ['run', 'hs-health-check.service'])} busyLabel="Checking…" tooltip={'Check everything now and list the problems'} onclick={() => openPlan('jobs', ['run', 'hs-health-check.service'], 'Health check')}>Run health check</Button>
     {/snippet}
   </PageHeader>
 
   {#if paused}
     <Banner tone="warn" icon="pause-circle">Sync, scrub and the cache mover are paused. Fix the cause first, then lift the pause.
-      {#snippet action()}<Button variant="primary" size="sm" icon="play" busy={jobRunning('health', ['resume'])} busyLabel="Resuming…" tooltip={'Shows the plan first'} onclick={() => openPlan('health', ['resume'], 'Resume the bulk jobs')}>Resume</Button>{/snippet}
+      {#snippet action()}<Button need="admin" variant="primary" size="sm" icon="play" busy={jobRunning('health', ['resume'])} busyLabel="Resuming…" tooltip={'Shows the plan first'} onclick={() => openPlan('health', ['resume'], 'Resume the bulk jobs')}>Resume</Button>{/snippet}
     </Banner>
   {/if}
 
@@ -132,7 +134,7 @@
               <div class="ti">{p.title}</div>
               {#if p.how}<div class="how">{p.how}</div>{/if}
               <div class="meta">
-                {#if p.acked}<Chip>acknowledged</Chip>{/if}
+                {#if p.acked}<Chip>acknowledged</Chip>{#if p.who}<span class="when">by {p.who}</span>{/if}<span class="when">{p.until ? `until ${new Date(p.until * 1000).toLocaleString()}` : 'until it clears'}</span>{/if}
                 {#if p.since}<span class="when" use:tip={'First seen by the health check'}>first seen {p.since}</span>{/if}
                 {#if p.id && !p.acked}<span class="when" use:tip={'The channels that took the last message about this problem'}>{p.told.length ? `told: ${p.told.join(', ')}` : 'no message sent yet'}</span>{/if}
                 {#if OBJECT[p.icon]}<button use:tip={'Open the page of the thing this problem is about'} class="lnk" onclick={() => go(OBJECT[p.icon][1])}>{OBJECT[p.icon][0]}<i class="ph ph-arrow-right"></i></button>{/if}
@@ -140,9 +142,9 @@
               </div>
             </div>
             <div class="acts">
-              {#if p.id && p.acked}<Button variant="ghost" size="sm" busy={jobRunning('health', ['unack', p.id])} tooltip={'Report it again and count it'} onclick={() => openPlan('health', ['unack', p.id], 'Undo acknowledge')}>Undo</Button>
-              {:else if p.id}<Button variant="ghost" size="sm" busy={jobRunning('health', ['ack', p.id])} tooltip={'Silent until the problem is gone'} onclick={() => openPlan('health', ['ack', p.id], 'Acknowledge')}>Acknowledge</Button>{/if}
-              {#if p.act && !p.acked}<Button variant="primary" size="sm" busy={jobRunning(p.act.area, p.act.args)} tooltip={`Shows the plan first: ${p.act.title}`} onclick={() => openPlan(p.act.area, p.act.args, p.act.title)}>{p.act.label}</Button>{/if}
+              {#if p.id && p.acked}<Button need="admin" variant="ghost" size="sm" busy={jobRunning('health', ['unack', p.id])} tooltip={'Report it again and count it'} onclick={() => openPlan('health', ['unack', p.id], 'Undo acknowledge')}>Undo</Button>
+              {:else if p.id}<Button need="admin" variant="ghost" size="sm" busy={jobRunning('health', ['ack', p.id])} tooltip={'Silent until the problem is gone'} onclick={() => openCreate(AckProblem, { id: p.id, text: p.title })}>Acknowledge</Button>{/if}
+              {#if p.act && !p.acked}<Button need={areaRole(p.act.area)} variant="primary" size="sm" busy={jobRunning(p.act.area, p.act.args)} tooltip={`Shows the plan first: ${p.act.title}`} onclick={() => openPlan(p.act.area, p.act.args, p.act.title)}>{p.act.label}</Button>{/if}
             </div>
           </div>
         {/each}

@@ -68,6 +68,8 @@ default_probes() {
     $'help\thelp\t0' \
     $'hs status\tstatus\t0 1' \
     $'hs health\thealth\t0 1\t120' \
+    $'hs health list-acks\thealth list-acks\t0 1\t30' \
+    $'hs live load\tlive load\t0 1' \
     $'hs ct list\tct list\t0' \
     $'hs ct hardware\tct hardware\t0 1' \
     $'hs disk list\tdisk list\t0 1' \
@@ -84,6 +86,8 @@ default_probes() {
     $'hs pool bulk\tpool bulk\t0 1' \
     $'hs sys pool list\tsys pool list\t0' \
     $'hs sys pool state\tsys pool state\t0' \
+    $'hs sys share parity refused\tsys share parity refused\t0' \
+    $'hs sys share parity state\tsys share parity state nothing\t0' \
     $'hs sys storage discover\tsys storage discover\t0' \
     $'hs sys disk power\tsys disk power\t0 1' \
     $'hs storage incident\tstorage incident\t0 1' \

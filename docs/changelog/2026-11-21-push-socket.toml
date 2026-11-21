@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Changes reach an open page at once"
+body  = """The collector and hs now tell the web interface the moment something changed, so an open page shows it in a fraction of a second instead of up to a second later. The old once-a-second look stays as a safety net. hs live load shows how often each way woke the web interface."""

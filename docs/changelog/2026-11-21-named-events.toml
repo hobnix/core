@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "A container or disk change wakes only the pages it touches"
+body  = """Starting, stopping, creating or deleting an instance and plugging or pulling a disk now name the event, and only the live data that event changes is read again, not the whole area. Pages show the same, with less work behind them."""

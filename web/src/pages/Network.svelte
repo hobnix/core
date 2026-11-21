@@ -155,7 +155,7 @@
       <div class="note">Outside these ranges: {#each others as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c.name)}>{c.name}</a> ({c.address.split(' ')[0]}){/each}</div>
     {/if}
     <div class="note">{list.loaded ? (list.error && !cts.length ? 'The instances could not be read (is the storage locked?).' : routerOff ? 'Shows instances with an address. The router could not be asked: UniFi is not set up on this server, or the key is wrong (Router tab).' : clients.loaded ? `Filled cells are instances; outlined cells are other devices the router has reserved or sees online.${elsewhere ? ` ${elsewhere} more address(es) at the router lie outside these ranges.` : ''}` : 'Loading…') : 'Loading…'}</div>
-    <div><Button size="sm" icon="push-pin" busy={jobRunning('admin', ['pin-macs'])} busyLabel="Pinning…" tooltip={'Pin the MAC address of every instance'} onclick={() => openPlan('admin', ['pin-macs'], 'Pin the MAC addresses')}>Pin MACs</Button></div>
+    <div><Button need="admin" size="sm" icon="push-pin" busy={jobRunning('admin', ['pin-macs'])} busyLabel="Pinning…" tooltip={'Pin the MAC address of every instance'} onclick={() => openPlan('admin', ['pin-macs'], 'Pin the MAC addresses')}>Pin MACs</Button></div>
   </div>
 
   <div class="card" style="padding:12px 14px;gap:8px">
@@ -207,7 +207,7 @@
 {:else if tab === 'router'}
   <div class="card" style="padding:12px 14px;gap:8px">
     <div class="ch"><b>Router</b><span class="sub">UniFi · networks and DHCP ranges</span>
-      <Button variant="primary" size="sm" style="margin-left:auto" tooltip={'Store the address and the API key of the UniFi router'} onclick={() => openCreate(RouterSetup)}><i class="ph ph-plugs-connected"></i>{routerOk ? 'Change router…' : 'Connect router…'}</Button></div>
+      <Button need="admin" variant="primary" size="sm" style="margin-left:auto" tooltip={'Store the address and the API key of the UniFi router'} onclick={() => openCreate(RouterSetup)}><i class="ph ph-plugs-connected"></i>{routerOk ? 'Change router…' : 'Connect router…'}</Button></div>
     {#if routerOff && !routerOk}
       <Banner tone="info">The router could not be asked: UniFi is not set up on this server, or the key is wrong. Connect it to see the networks and to keep the instance addresses in step.</Banner>
     {/if}
@@ -224,8 +224,8 @@
 {:else}
   <div class="card" style="padding:12px 14px;gap:8px">
     <div class="ch"><b>Remote shares</b><span class="sub">between homeservers: a peer connection, not a share of this server</span>
-      <Button variant="ghost" size="sm" style="margin-left:auto" tooltip={'Mount a share of another homeserver, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Mount a share…</Button>
-      <Button variant="ghost" size="sm" tooltip={'Let another homeserver read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access…</Button></div>
+      <Button need="admin" variant="ghost" size="sm" style="margin-left:auto" tooltip={'Mount a share of another homeserver, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Mount a share…</Button>
+      <Button need="admin" variant="ghost" size="sm" tooltip={'Let another homeserver read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access…</Button></div>
     <Table id="remote-shares" columns={remoteCols} rows={rem} compact loading={!remote.loaded} empty={remote.error ? 'Remote shares could not be read.' : 'No shares with other servers.'}>
       {#snippet cell(r, col)}
         {#if col.key === 'kind'}<Chip>{kindWord(r.kind)}</Chip>
@@ -233,11 +233,11 @@
         {:else if col.key === 'share'}<span class="kd">{r.share}</span>
         {:else if col.key === 'state'}<StatusDot state={remDot(r.state)} label={r.state} />
         {:else}<span style="white-space:nowrap">{#if r.kind === 'mount'}
-                <Button variant="ghost" size="sm" tooltip={`Give an instance the shares of ${r.peer}, or take them away`} onclick={() => openCreate(PeerAttach, { peer: r.peer, instances: cts.map((c) => c.name) })}>Instance…</Button>
-                <Button variant="ghost" size="sm" busy={jobRunning('peers', ['remove', r.peer, r.share])} tooltip={`Stop using ${r.share} of ${r.peer}`} onclick={() => openPlan('peers', ['remove', r.peer, r.share], 'Stop using ' + r.peer + ' / ' + r.share)}>Remove…</Button>
+                <Button need="admin" variant="ghost" size="sm" tooltip={`Give an instance the shares of ${r.peer}, or take them away`} onclick={() => openCreate(PeerAttach, { peer: r.peer, instances: cts.map((c) => c.name) })}>Instance…</Button>
+                <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['remove', r.peer, r.share])} tooltip={`Stop using ${r.share} of ${r.peer}`} onclick={() => openPlan('peers', ['remove', r.peer, r.share], 'Stop using ' + r.peer + ' / ' + r.share)}>Remove…</Button>
               {:else}
-                <Button variant="ghost" size="sm" tooltip={`Make a new password for ${r.peer}`} onclick={() => openCreate(PeerOffer, { peer: r.peer, share: r.share, newpw: true, ondone: (o) => (offered = o) })}>New password…</Button>
-                <Button variant="ghost" size="sm" busy={jobRunning('peers', ['revoke', r.peer, r.share])} tooltip={`Take the access to ${r.share} away from ${r.peer}`} onclick={() => openPlan('peers', ['revoke', r.peer, r.share], 'Take back the access of ' + r.peer)}>Revoke…</Button>
+                <Button need="admin" variant="ghost" size="sm" tooltip={`Make a new password for ${r.peer}`} onclick={() => openCreate(PeerOffer, { peer: r.peer, share: r.share, newpw: true, ondone: (o) => (offered = o) })}>New password…</Button>
+                <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['revoke', r.peer, r.share])} tooltip={`Take the access to ${r.share} away from ${r.peer}`} onclick={() => openPlan('peers', ['revoke', r.peer, r.share], 'Take back the access of ' + r.peer)}>Revoke…</Button>
               {/if}</span>{/if}
       {/snippet}
     </Table>

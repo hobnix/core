@@ -81,10 +81,10 @@ class Changes(unittest.TestCase):
             self.assertFalse(ok("expiry", bad), bad)
 
     def test_health(self):
-        for good in (["ack", "backup:stale"], ["ack", "zfs:tank:scrub-old"], ["unack", "expiry:DC certificate (old):soon"], ["resume"]):
+        for good in (["ack", "backup:stale"], ["ack", "zfs:tank:scrub-old"], ["ack", "backup:stale", "--for", "7d", "--note", "disk swap on Friday"], ["unack", "expiry:DC certificate (old):soon"], ["resume"]):
             self.assertTrue(ok("health", good), good)
         for bad in (["ack"], ["ack", "x;y"], ["ack", "$(x)"], ["ack", ":x"], ["ack", "a\tb"], ["ack", "a", "b"], ["resume", "x"],
-                    ["unack"], ["frob", "x"], ["ack", "x" * 102]):
+                    ["unack"], ["frob", "x"], ["ack", "x" * 102], ["ack", "a", "--for", "7"], ["ack", "a", "--for", "0x"], ["ack", "a", "--note", "x	y"], ["ack", "a", "--note", "x" * 201]):
             self.assertFalse(ok("health", bad), bad)
 
     def test_service_add(self):

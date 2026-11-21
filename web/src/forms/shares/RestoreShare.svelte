@@ -7,7 +7,7 @@
 
   let { share, onclose, ondone = () => {} } = $props();
 
-  const snaps = poll('/api/sys/backup/snapshots?tag=shares', 60000);
+  const snaps = poll('/api/sys/backup/snapshots?tag=shares', 60000, 'backup-state');
   // id, time, tags; newest first
   const list = $derived(rows(snaps).map((r) => ({ id: r[0], time: r[1] })).reverse());
 

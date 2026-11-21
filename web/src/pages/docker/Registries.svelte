@@ -2,7 +2,8 @@
   // Registries: the logins for private registries (ghcr.io) of the apps in Docker. hs sys docker registries reads, hs sys docker-registry plan|start
   // add|remove change. The token sits in the vault and reaches a pull for one command only; this page never shows it.
   import { poll, rows, refresh } from '../../data.svelte.js';
-  import { openCreate, openPlan, jobRunning } from '../../ui.svelte.js';
+  import { openCreate, openPlan } from '../../ui.svelte.js';
+  import { rowstate } from '../../rowstate.svelte.js';
   import Table from '../../shell/Table.svelte';
   import PageHeader from '../../shell/PageHeader.svelte';
   import PageState from '../../shell/PageState.svelte';
@@ -47,7 +48,7 @@
         {:else if col.key === 'state'}<StatusDot state={dot(i.state)} label={label(i.state)} />
         {:else if col.key === 'usedBy'}{i.usedBy || '–'}
         {:else}
-          <Button size="sm" variant="danger" busy={jobRunning('docker-registry', ['remove', i.host])} busyLabel="Removing…" tooltip="Remove this login" onclick={() => openPlan('docker-registry', ['remove', i.host], `remove ${i.host}`)}>Remove</Button>
+          <Button need="app-manager" size="sm" variant="danger" busy={rowstate.pending('docker-registry', ['remove', i.host])} busyLabel="Removing…" tooltip="Remove this login" onclick={() => openPlan('docker-registry', ['remove', i.host], `remove ${i.host}`)}>Remove</Button>
         {/if}
       {/snippet}
     </Table>

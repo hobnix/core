@@ -1,7 +1,7 @@
 // Parse the rows of `hs sys live status` for the Diagnostics page.
 // Pure JavaScript: no fetch, no Redis, no Svelte, no CLI contract changes.
 
-// topic, interval, age (-1 = none), generation, exit code, error, error timestamp; seven fields, eight since #153 (needs), nine with the status (#322)
+// topic, interval, age (-1 = none), generation, exit code, error, error timestamp; seven fields, eight since #153 (needs), nine with the status (#322), ten with the collector heartbeat age (#564), fourteen with the delay in ms (#486: last and worst from trigger to new gen, last and worst seen in a page; - = none)
 /**
  * @param {import('./api/sys.gen').SysLines<'live.status'>} rows
  * @param {number} [nowSec]
@@ -10,7 +10,7 @@ export function parseLiveRows(rows, nowSec) {
   const now = nowSec ?? Date.now() / 1000;
   return (rows || [])
     .filter((r) => Array.isArray(r) && r.length >= 7)
-    .map(([topic, everyStr, ageStr, genStr, rcStr, errStr, tsErrStr, needsStr, statusStr]) => {
+    .map(([topic, everyStr, ageStr, genStr, rcStr, errStr, tsErrStr, needsStr, statusStr, beatStr, dLast, dWorst, wLast, wWorst]) => {
       const every = Number(everyStr);
       const age = ageStr === '-1' ? null : Number(ageStr);
       const gen = Number(genStr) || 0;
@@ -28,7 +28,9 @@ export function parseLiveRows(rows, nowSec) {
       } else if ((err && tsErr !== null && tsErr > storedTs)) {
         state = 'failing';
       }
-      return { topic, every, age, gen, rc, err, tsErr, state, needs };
+      const beat = !beatStr || beatStr === '-' ? null : Number(beatStr);
+      const ms = (v) => (!v || v === '-' ? null : Number(v));
+      return { topic, every, age, gen, rc, err, tsErr, state, needs, beat, delayLast: ms(dLast), delayWorst: ms(dWorst), webLast: ms(wLast), webWorst: ms(wWorst) };
     });
 }
 
@@ -56,6 +58,9 @@ export function parseInspect(doc, nowSec) {
       else if (age === null) state = err ? 'never' : 'pending';
       else if (age > 3 * every) state = 'stale';
       else if (err && tsErr !== null && storedTs !== null && tsErr > storedTs) state = 'failing';
+      // D14: a demand topic nobody watches is read once per idle period; an old value inside that period is resting, not stale (opening the page reads it)
+      const idle = Number(t.idle) || 0;
+      if (idle && !t.lease && (state === 'stale' || state === 'expired') && age !== null && age <= 3 * idle) state = 'idle';
       return { ...t, every, age, rc, err, tsErr, gen: Number(t.gen) || 0, words: Array.isArray(t.words) ? t.words : [],
                groups: Array.isArray(t.groups) ? t.groups : [], state };
     });
@@ -65,6 +70,8 @@ export function parseInspect(doc, nowSec) {
       needs: rows.some((r) => Array.isArray(r.needs)),
       status: rows.some((r) => typeof r.status === 'string'),
       ttl: rows.some((r) => r.ttl !== undefined && r.ttl !== null),
+      demand: rows.some((r) => typeof r.demand === 'string'),
+      delay: rows.some((r) => Object.keys(r).some((k) => k.startsWith('delay_'))),
     },
   };
 }

@@ -11,7 +11,7 @@ set -euo pipefail
 adm="$(admin_user)"
 
 live_refresh_temp() {
-  live_refresh status monitor-disks temp-disks shares-overview fm-locations
+  live_refresh event:temp-disk.changed
 }
 
 usage() {

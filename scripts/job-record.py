@@ -12,6 +12,7 @@ Never stores argv or environment, only the description the caller gives.
   find-unit UNIT | cancel ID --by NAME --safe yes|no | cancelled ID (exit 0 when cancelled)
   error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected; Python writer only)
   result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers; Python writer only)
+  key ID KEY   (the row key of a job, "apps remove nextcloud": the area and arguments the buttons of the web interface use; Python writer only)
   reconcile   mark queued/running/waiting records whose unit is gone as interrupted (boot); never re-runs anything
 """
 import argparse
@@ -38,7 +39,7 @@ RATE_SECONDS = float(os.environ.get("HS_JOB_RATE", "1"))   # the test sets a lon
 SOURCES = ("cli", "web", "timer", "extension")
 FIELDS = ("id", "slug", "description", "source", "initiator", "unit", "queued", "started", "ended",
           "state", "exit", "step", "progress", "error", "result", "cancel", "version",
-          "parent", "kind", "waiting")   # parent, kind, waiting: ADR 0018, optional and additive
+          "parent", "kind", "waiting", "key")   # parent, kind, waiting: ADR 0018; key: the row key (web/src/jobkey.js), optional and additive
 ACTIVE = ("queued", "running", "waiting")
 KINDS = ("orchestration", "step")
 ASK_KINDS = ("text", "secret", "choice")
@@ -269,6 +270,8 @@ def cmd_finish(a):
         rec["waiting"] = None
         if rec.get("state") == "cancelled":   # a cancel stays cancelled; the earlier end time and cancel block stay
             rec["ended"] = rec.get("ended") or now_iso()
+        elif rec.get("state") == "skipped":   # a skip stays skipped (exit 0, no error)
+            rec["ended"] = rec.get("ended") or now_iso()
         elif a.exit == 0:
             rec["ended"] = now_iso()
             rec["state"] = "ok"
@@ -287,6 +290,31 @@ def cmd_finish(a):
         os.unlink(os.path.join(jobs_dir(), "%s.lock" % a.id))
     except OSError:
         pass
+
+
+def cmd_skip(a):
+    """End a job that found the same work already running: state skipped, exit 0, the message in `result.message`. Not an error, no failure notice."""
+    with locked(a.id):
+        rec = load(a.id)
+        if rec.get("state") not in ACTIVE:
+            raise Fail("job has ended already")
+        rec["state"] = "skipped"
+        rec["exit"] = 0
+        rec["ended"] = now_iso()
+        rec["waiting"] = None
+        rec["error"] = None
+        rec["result"] = {"message": a.message}
+        save(rec)
+    bump_records()
+
+
+def cmd_key(a):
+    """Set the row key (web/src/jobkey.js) so a page can show which row a job works on, also when it was started in a terminal. One line, 200 characters at most."""
+    key = re.sub(r"[^A-Za-z0-9 ._:/=@,+-]+", "", a.key).strip()[:200]
+    with locked(a.id):
+        rec = load(a.id)
+        rec["key"] = key or None
+        save(rec)
 
 
 def cmd_error(a):
@@ -464,6 +492,8 @@ def main():
     s.add_argument("--parent", default="")
     s.add_argument("--kind", default="")
     s.set_defaults(fn=cmd_new)
+    s = sub.add_parser("skip"); s.add_argument("id"); s.add_argument("message"); s.set_defaults(fn=cmd_skip)
+    s = sub.add_parser("key"); s.add_argument("id"); s.add_argument("key"); s.set_defaults(fn=cmd_key)
     s = sub.add_parser("run"); s.add_argument("id"); s.set_defaults(fn=cmd_run)
     s = sub.add_parser("wait"); s.add_argument("id"); s.add_argument("--seq", type=int, required=True)
     s.add_argument("--key", required=True); s.add_argument("--label", required=True); s.add_argument("--kind", required=True)

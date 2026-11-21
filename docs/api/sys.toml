@@ -24,19 +24,19 @@ enums = { state = ["running", "ok", "failed", "unknown"] }
 ["jobs record <id>"]
 role = "viewer"
 kind = "json"
-note = "One job record (docs/adr/0004-job-record.md): id, slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null."
+note = "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null."
 
 ["jobs records"]
 role = "viewer"
 kind = "tsv"
-columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 
 ["jobs children <id>"]
 role = "viewer"
 kind = "tsv"
-columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 note = "The sub-jobs of one orchestration job (ADR 0018), oldest first; same columns as jobs records."
 
 ["jobs answer <id>"]
@@ -105,7 +105,7 @@ enums = { "offer.state" = ["none", "unknown", "current", "kept", "update"], "sta
 ["live inspect"]
 role = "viewer"
 kind = "json"
-note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322)."
+note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
 
 ["live raw <topic>"]
 role = "viewer"
@@ -373,6 +373,9 @@ role = "admin"
 ["logs show"]
 role = "admin"
 
+["logs follow"]
+role = "admin"
+
 ["jobs stop <unit>"]
 role = "admin"
 
@@ -431,6 +434,9 @@ role = "admin"
 role = "viewer"
 
 ["state events"]
+role = "viewer"
+
+["state events-follow"]
 role = "viewer"
 
 ["state smart <serial>"]
@@ -718,6 +724,9 @@ role = "app-manager"
 ["ct logs <ct>"]
 role = "app-manager"
 
+["ct follow <ct>"]
+role = "app-manager"
+
 ["monitor disks"]
 role = "viewer"
 
@@ -729,6 +738,9 @@ role = "viewer"
 
 ["health list"]
 role = "viewer"
+
+["health acks"]
+role = "admin"
 
 ["health plan <action>"]
 role = "admin"
@@ -901,20 +913,15 @@ role = "admin"
 ["state read-get <key>"]
 role = "viewer"
 
-["reads status"]
-role = "viewer"
-
 ["live refresh"]
 role = "admin"
 
 ["live status"]
 role = "viewer"
+note = "Columns 11 to 14 since #486: delay_last_ms, delay_worst_ms (trigger to new generation, written by the collector), web_last_ms, web_worst_ms (the browser sample); - = no sample yet."
 
 ["live check"]
 role = "viewer"
-
-["reads collect"]
-role = "admin"
 
 ["ext list"]
 role = "admin"
@@ -970,6 +977,9 @@ role = "viewer"
 ["docker logs <app>"]
 role = "app-manager"
 
+["docker follow <app>"]
+role = "app-manager"
+
 ["docker app <app>"]
 role = "viewer"
 
@@ -1017,3 +1027,16 @@ note = "action create <name> [--role R] [--days N] or revoke <name>. The web ser
 ["token start <action>"]
 role = "app-manager"
 note = "create answers once with the line secret<TAB>token<TAB><token>; revoke needs --confirm <name>. A request that came with a token is refused (a token cannot create tokens)."
+
+["share parity state <share>"]
+role = "viewer"
+kind = "tsv"
+records = { limit = ["mode", "value"], default = ["floor", "percent"], skip = ["folder"] }
+enums = { "limit.mode" = ["default", "custom", "off"] }
+note = "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out."
+
+["share parity refused"]
+role = "viewer"
+kind = "tsv"
+columns = ["share", "folder", "removed", "limit", "share_total"]
+note = "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since."

@@ -19,7 +19,7 @@
 <div class="page">
   <PageHeader title="Setup" crumb={ui.host} sub={answered ? `${doneCount} of ${steps.length} steps done. Everything here can be done later.` : 'The first-run checklist.'}>
     {#snippet actions()}
-      <Button variant="primary" class="b13" icon="check-circle" busy={jobRunning('config', ['set', 'setupDone', 'true'])} tooltip={finished ? 'Setup is already marked as finished' : !answered ? 'Waiting for the list of steps' : 'Hide the setup reminder on the summary'} disabled={!answered || finished} onclick={() => openPlan('config', ['set', 'setupDone', 'true'], 'Setup finished')}>
+      <Button need="admin" variant="primary" class="b13" icon="check-circle" busy={jobRunning('config', ['set', 'setupDone', 'true'])} tooltip={finished ? 'Setup is already marked as finished' : !answered ? 'Waiting for the list of steps' : 'Hide the setup reminder on the summary'} disabled={!answered || finished} onclick={() => openPlan('config', ['set', 'setupDone', 'true'], 'Setup finished')}>
         {finished ? 'Setup is finished' : 'Mark setup as finished'}
       </Button>
     {/snippet}

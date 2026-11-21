@@ -16,9 +16,10 @@
   //   reason: why a disabled button is disabled, in a sentence; shown as its tooltip and read by screen readers (a disabled button has no focus, so the
   //     reason is also in the accessible description). A role refusal (`need`) sets its own sentence; `reason` is for every other "not now".
   //   keys: the shortcut shown in the tooltip next to its text (`F5`, `Ctrl R`); the button does not bind it
+  //   onbusyclick: called for a click while the button is busy (the click is otherwise ignored); a button of a running job uses it to show that job
   //   class: extra classes of the page (`btn-icon`, a layout class); aria-label, href-less attributes and event handlers go through to the <button>
   let { variant = 'secondary', size = '', icon = '', busy = false, busyLabel = '', disabled = false, tooltip = '', type = 'button', block = false,
-        need = '', label = '', reason = '', keys = '', class: extra = '', onclick = null, children, ...rest } = $props();
+        need = '', label = '', reason = '', keys = '', class: extra = '', onclick = null, onbusyclick = null, children, ...rest } = $props();
 
   const refused = $derived(!!need && !can(need));
   const off = $derived(disabled || refused);
@@ -29,7 +30,7 @@
   const working = $derived(busy || pending);
 
   async function click(e) {
-    if (working) { e.preventDefault(); return; }       // a submit button must not submit the form again while it works
+    if (working) { e.preventDefault(); onbusyclick?.(e); return; }       // a submit button must not submit the form again while it works
     if (off || !onclick) return;
     const r = onclick(e);
     if (r && typeof r.then === 'function') {

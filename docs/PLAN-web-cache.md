@@ -2,6 +2,8 @@
 
 Status: design only, nothing built. Open questions at the end are for the owner.
 
+> **Superseded in part (2026-11-20, #563):** everything here that names Redis (the store `services.redis.servers.hobnix`, the socket and its group, the modes `redis` and `off`, `StateStore`/`RedisStore`/`OffStore`, `503 state service down`, `hs:v1:*` keys and channels, "Redis mode" of the old collector) and the `reads` table with `reads-collect.sh` and the timer `hs-reads-collect` is replaced by ADR 0026 (docs/adr/0026-live-state-one-mode-one-store.md): one mode, one store (the state database), no setting. What still holds: the topics, the collector, the groups and the refresh hooks, the status vocabulary, the events as signals.
+
 ## Problem
 
 1. The web backend (`scripts/web-serve.py`) answers every page read by starting an `hs sys ...` process, with a short in-memory cache. Cold

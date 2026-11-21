@@ -87,7 +87,7 @@
     <Table id="api-tokens" {columns} rows={tokens} key="id" loading={!list.loaded} empty="No tokens yet.">
       {#snippet cell(r, col)}
         {#if col.key === 'expires'}{day(r.expires)}{#if r.state === 'expired'} <Chip>expired</Chip>{/if}
-        {:else if col.key === 'act'}<Button size="sm" variant="ghost" busy={jobRunning('token', ['revoke', r.name])} tooltip={'Revoke this token'} onclick={() => revoke(r)}>Revoke</Button>
+        {:else if col.key === 'act'}<Button need="app-manager" size="sm" variant="ghost" busy={jobRunning('token', ['revoke', r.name])} tooltip={'Revoke this token'} onclick={() => revoke(r)}>Revoke</Button>
         {:else}{r[col.key] || '–'}{/if}
       {/snippet}
     </Table>

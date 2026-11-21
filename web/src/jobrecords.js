@@ -2,7 +2,7 @@
 // Columns of `hs sys jobs records` (docs/api/sys.toml): id slug description state queued started ended exit step_n step_of step_text
 // progress_done progress_total progress_unit. An empty field is "-".
 
-const KNOWN = { queued: 'off', running: 'info', waiting: 'warn', ok: 'ok', failed: 'bad', cancelled: 'off', interrupted: 'warn' };
+const KNOWN = { queued: 'off', running: 'info', waiting: 'warn', ok: 'ok', failed: 'bad', cancelled: 'off', interrupted: 'warn', skipped: 'off' };
 
 const val = (s) => (s === undefined || s === null || s === '-' || s === '' ? null : s);
 const num = (s) => { const v = val(s); if (v === null) return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -13,6 +13,7 @@ export function parseRecord(r) {
     queued: val(r[4]), started: val(r[5]), ended: val(r[6]), exit: num(r[7]),
     step: num(r[9]) === null && !val(r[10]) ? null : { n: num(r[8]), of: num(r[9]), text: val(r[10]) },
     progress: num(r[11]) === null && num(r[12]) === null ? null : { done: num(r[11]), total: num(r[12]), unit: val(r[13]) },
+    key: val(r[14]),   // the row key of jobkey.js; "-" or no column (an older server) = null
   };
 }
 
@@ -76,4 +77,20 @@ export function latestOnly(read, apply) {
     apply(v);
     return true;
   };
+}
+
+// Did a job change since `seen` ({ ev, gen })? A job.* event (state changes) or a bump of `reads:jobs-records` (a step or progress update,
+// which writes no log row) means yes. A dialog that listened only to events kept showing step 1 while the job moved on (hobnix/server#972).
+export function jobChanged(events, gen, seen) {
+  const ev = lastJobEvent(events)?.id ?? 0;
+  const g = gen ?? 0;
+  return { changed: ev !== seen.ev || g !== seen.gen, seen: { ev, gen: g } };
+}
+
+// Jobs that wait for an answer -> what to do with the toasts. `shown` is the set of job ids that have a toast now.
+// raise: the records to announce, dismiss: the ids whose question is gone (answered, cancelled, finished).
+export function askDiff(list, shown) {
+  const waiting = (list ?? []).filter((r) => r.state === 'waiting');
+  const ids = new Set(waiting.map((r) => r.id));
+  return { raise: waiting.filter((r) => !shown.has(r.id)), dismiss: [...shown].filter((id) => !ids.has(id)) };
 }

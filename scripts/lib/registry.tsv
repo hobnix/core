@@ -14,6 +14,7 @@ user	smoke	smoke.sh	{rest}	quick check that the commands work here: needed progr
 user	cheatsheet	cheatsheet.sh	{rest}	one-page German cheat sheet of the most useful commands (Markdown, to print)	Spickzettel auf einer Seite mit den wichtigsten Befehlen (Markdown, zum Ausdrucken)	topic:docs,reads
 user	jobs reconcile	job-reconcile.sh	-	-	-	nohelp,topic:system,changes
 user	timing	read-timing.sh	{rest}	how long the reads of the interface take (every tab loads through them), slowest first; needs root	wie lange die Lesezugriffe der Oberfläche dauern (jeder Reiter lädt damit), die langsamsten zuerst	nohelp,topic:system,reads
+user	live load	live-load.sh	{rest}	what the live-state collector costs now: CPU seconds and reads per topic in the last minute	was der Live-Zustand-Sammler gerade kostet: CPU-Sekunden und Lesevorgänge je Thema in der letzten Minute	reads,topic:system
 user	live measure	live-measure.sh	{rest}	measure the live state on the state database for a while (writes per minute, database growth, change latency) and write a result file; needs root	-	nohelp,long,topic:system,changes
 user	motd	motd.sh	{rest}	three status lines: problems, last backup, system (also shown at SSH login)	drei Statuszeilen: Probleme, letztes Backup, System (erscheint auch beim SSH-Login)	topic:system,reads
 user	docs build	docs-build.sh	{rest}	build the documentation pages again (guides and command reference)	Dokumentationsseiten neu bauen (Anleitungen und Befehlsübersicht)	topic:docs,changes
@@ -83,6 +84,7 @@ user	share cleanup	share-cleanup.sh	-	remove the Samba shares whose folder is go
 user	share <share> perm	share-perm.sh	{1} {rest}	who may use a share (guided, or: hs share <share> perm <name>=<level>)	wer eine Freigabe nutzen darf (geführt, oder: hs share <Freigabe> perm <Name>=<Stufe>)	guided,topic:shares,changes,cheat:shares,capability:samba
 user	share <share> show	share-perm.sh	{1} --show	who may use a share	wer eine Freigabe nutzen darf	guided,topic:shares,reads,cheat:shares,capability:samba
 user	share <share> cache	share-cache.sh	{1} {rest}	upload cache of a share: hs share <share> cache on|off	Upload-Cache einer Freigabe: hs share <Freigabe> cache on|off	topic:shares,changes,capability:storage
+user	share <share> parity	share-parity.sh	{1} parity {rest}	SnapRAID layout: folders the parity leaves out and how many removed files stop the sync, per share: hs share <share> parity [skip|keep <folder>] [limit <N>|off|default]	Bauart snapraid: Ordner, die die Parität auslässt, und wie viele gelöschte Dateien die Synchronisation anhalten, je Freigabe: hs share <Freigabe> parity [skip|keep <Ordner>] [limit <N>|off|default]	topic:shares,changes,capability:storage
 user	share <share> rename	manage-shares.sh	{1} --rename {rest}	rename a share: hs share <share> rename <new>	Freigabe umbenennen: hs share <Freigabe> rename <neu>	topic:shares,changes,capability:storage
 user	share restore-kept <kept>	share-undelete.sh	{1} {rest}	bring the kept folder of a deleted share back under its old name: hs share restore-kept <share>.deleted-<date> [--dry-run] (nothing is overwritten or removed)	den aufbewahrten Ordner einer gelöschten Freigabe unter dem alten Namen zurückholen: hs share restore-kept <Freigabe>.deleted-<Datum> [--dry-run] (nichts wird überschrieben oder entfernt)	topic:shares,changes,capability:storage
 user	share <share> restore	share-restore.sh	{1} {rest}	bring files of a share back from the backup (guided)	Dateien einer Freigabe aus dem Backup zurückholen (geführt)	guided,topic:shares,changes,cheat:backup,capability:storage
@@ -91,6 +93,9 @@ user	share <share> snapshots	share-snap.sh	{1} snapshots	list the snapshots of a
 user	share <share> rollback	share-snap-guided.sh	{1} rollback {rest}	go back to a snapshot of a share: hs share <share> rollback [name]	zu einem Schnappschuss zurückkehren: hs share <Freigabe> rollback [Name]	guided,topic:shares,changes,capability:storage
 user	share <share> auto	share-snap-guided.sh	{1} auto {rest}	include a share in the automatic snapshots or leave it out: hs share <share> auto on|off	Freigabe in die automatischen Schnappschüsse aufnehmen oder ausnehmen: hs share <Freigabe> auto on|off	guided,topic:shares,changes,capability:storage
 user	snapshots	snapshots-auto.sh	{rest}	automatic ZFS snapshots now (hs snapshots) or the list of shares (hs snapshots list)	automatische ZFS-Schnappschüsse jetzt anlegen (hs snapshots) oder die Liste der Freigaben (hs snapshots list)	topic:backup,reads,capability:backup
+user	snapshots run	snapshots-auto.sh	run {rest}	take the automatic snapshots now	die automatischen Schnappschüsse jetzt anlegen	nohelp,topic:backup,changes,capability:backup
+user	snapshots <share> on	snapshots-auto.sh	{1} on	switch the automatic snapshots of a share on	die automatischen Schnappschüsse einer Freigabe einschalten	nohelp,topic:backup,changes,capability:backup
+user	snapshots <share> off	snapshots-auto.sh	{1} off	switch the automatic snapshots of a share off	die automatischen Schnappschüsse einer Freigabe ausschalten	nohelp,topic:backup,changes,capability:backup
 user	ct list	status.sh	-	containers and VMs with state, address and pinned MAC	Container und VMs mit Zustand, Adresse und festgelegter MAC	topic:instances,reads,cheat:server,capability:incus
 user	ct add	ct-guided.sh	add {rest}	create an instance (guided): hs ct add [name] [--kind empty|docker|vm] [--ram MB] ...	Instanz anlegen (geführt): hs ct add [Name] [--kind empty|docker|vm] [--ram MB] ...	guided,topic:instances,changes,capability:incus
 user	ct <ct> start	manage-ct.sh	{1} --start	start an instance	Instanz starten	topic:instances,changes,capability:incus
@@ -202,8 +207,9 @@ user	job follow	jobs.sh	{rest} --follow	follow the journal of a running job	das 
 user	job stop	jobs.sh	stop {rest}	stop a running job	einen laufenden Auftrag stoppen	nohelp,topic:jobs,changes
 user	health	health.sh	-	the problems, each with the command that helps	die Probleme, jedes mit dem passenden Befehl	topic:system,reads,cheat:server
 user	health test	health.sh	test	send a test message	eine Testnachricht schicken	nohelp,topic:system,changes
-user	health ack	health-ack.sh	ack {rest}	list the problem ids, or silence one until it clears: hs health ack <id>	Problem-IDs anzeigen oder eines stummschalten, bis es verschwindet: hs health ack <ID>	topic:system,changes
+user	health ack	health-ack.sh	ack {rest}	list the problem ids, or silence one until it clears (or --for 7d), with --note <text>: hs health ack <id> [--for 7d] [--note <text>]	Problem-IDs anzeigen oder eines stummschalten, bis es verschwindet (oder --for 7d), mit --note <Text>: hs health ack <ID> [--for 7d] [--note <Text>]	topic:system,changes
 user	health unack	health-ack.sh	unack {rest}	take an acknowledgement back: hs health unack <id>	ein Quittieren zurücknehmen: hs health unack <ID>	nohelp,topic:system,changes
+user	health list-acks	health-ack.sh	list-acks	what is acknowledged: id, since, until, who, note	was quittiert ist: ID, seit, bis, wer, Notiz	topic:system,reads
 user	health resume	health-ack.sh	resume	lift the pause of the sync, scrub and cache mover that the health check set	die Pause von Sync, Scrub und Cache-Mover aufheben, die der Health-Check gesetzt hat	topic:system,changes
 user	report	report.sh	-	collect what a helper needs into one text file	sammelt, was ein Helfer braucht, in einer Textdatei	topic:system,changes,cheat:trouble
 user	migrate	migrate.sh	-	move from an old server step by step (resumable)	Umzug von einem alten Server Schritt für Schritt (wiederaufnehmbar)	topic:system,changes,capability:storage
@@ -270,6 +276,7 @@ sys	sys config plan <action>	config-change.sh	plan {1} {rest}	what changing a se
 sys	sys config start <action>	config-change.sh	start {1} {rest}	do it (hs sys config start set <key> <value>); the file is checked and put back when the check fails	-
 sys	sys logs units	logs.sh	units	what the journal can be filtered by (key and label)	-
 sys	sys logs show	logs.sh	show {rest}	the journal as plain lines: hs sys logs show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>]	-
+sys	sys logs follow	logs.sh	follow {rest}	the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]	-
 sys	sys jobs tail <unit>	jobs.sh	tail {1} {rest}	state and new journal lines of a job since line N (state, exit, line, next)	-
 sys	sys jobs stop <unit>	jobs.sh	stop {1}	stop a running background job	-
 sys	sys jobs record <id>	jobs.sh	--record {1}	one job record as JSON (ADR 0004): state, step, progress, times, exit, error, result	-	reads,topic:jobs
@@ -298,6 +305,7 @@ sys	sys state forget <serial>	state.sh	forget {1} --yes	remove a MISSING disk fr
 sys	sys state collect	state.sh	collect {rest}	read the disks and update the state database (the one writer; root)	-
 sys	sys state disks	state.sh	disks	the disk inventory: serial, model, size, name, state ok|missing|unknown, role, pool, first and last seen, worse, note	-
 sys	sys state events	state.sh	events {rest}	disk events from the state database: time, kind, serial, text	-
+sys	sys state events-follow	state.sh	events-follow {rest}	the last disk events, then every new row until the reader goes (the web log stream; plain rows)	-
 sys	sys state smart <serial>	state.sh	smart {1}	the stored SMART readings of one disk over time	-
 sys	sys state problems	state.sh	problems	problems the state database knows (missing or worsening disks, a stopped collector): key and text	-
 sys	sys state baseline	state.sh	baseline	the daily SMART check per disk: serial, name, kind, level healthy|watch|failing, since, last read, first read, wwn, realloc, pending, uncorr, crc, nv_crit, nv_media, nv_used, nv_spare, present, note	-
@@ -309,13 +317,15 @@ sys	sys state events-json	state.sh	events-json {rest}	the latest disk events as 
 sys	sys state history	state.sh	history {rest}	the last 24 hours (one median per hour) as the status document shows them (JSON)	-
 sys	sys state history-record	state.sh	history-record {rest}	add one reading (time rx tx cpu_total cpu_idle mem_total mem_available gpu uptime) to the last 24 hours; the status service does	-
 user	audit	audit.sh	{rest}	-	-	topic:system,reads
-user	event list	event.sh	list {rest}	what happened on the server, newest last (hs event list [N] [--source S] [--after ID])	was auf dem Server passiert ist, das Neueste zuletzt (hs event list [N] [--source S] [--after ID])	topic:system,reads
+user	event list	event.sh	list {rest}	what happened on the server, newest last (hs event list [N] [--source S] [--after ID] [--before ID])	was auf dem Server passiert ist, das Neueste zuletzt (hs event list [N] [--source S] [--after ID] [--before ID])	topic:system,reads
 user	event kinds	event.sh	kinds {rest}	the event kinds: core and those of installed packages (hs event kinds [--package NAME])	die Ereignisarten: Kern und die der installierten Pakete (hs event kinds [--package NAME])	topic:system,reads
 user	event emit	event.sh	emit {rest}	write one entry to the event log (root): hs event emit <source.kind> <subject> [text] [--level info|warn|error] [--payload JSON]	einen Eintrag ins Ereignisprotokoll schreiben (root): hs event emit <Quelle.Art> <Betreff> [Text] [--level info|warn|error] [--payload JSON]	topic:system,changes
 sys	sys audit	audit.sh	{rest}	who did what: the commands that changed the server; id, time (epoch seconds), actor, result ok|failed, exit, command (hs sys audit [N])	-
-sys	sys event list	event.sh	list {rest}	the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID]	-
+sys	sys event list	event.sh	list {rest}	the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID]	-
 sys	sys temp-disk raw	temp-disk.sh	raw	disks that can be mounted as temp disk	-
 sys	sys cache state	share-cache.sh	--state	upload cache state per share	-
+sys	sys share parity state <share>	share-parity.sh	--state {1}	the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder	-
+sys	sys share parity refused	share-parity.sh	--refused	the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)	-
 sys	sys unifi used	unifi.sh	used	addresses in use at the router	-
 sys	sys unifi reserved	unifi.sh	reserved	reserved addresses at the router	-
 sys	sys unifi networks	unifi.sh	networks	the router's networks, no header: name, subnet, dhcp true|false, first, last address of the DHCP range	-
@@ -402,11 +412,13 @@ sys	sys ct bindings <ct>	ct-bindings.sh	{1}	the storage of an instance with pool
 sys	sys ct plan <ct> <action>	ct-change.sh	plan {1} {2} {rest}	what a change of an instance would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
 sys	sys ct start <ct> <action>	ct-change.sh	start {1} {2} {rest}	do a change of an instance as a background job; needs --confirm <name> when the plan has a danger line	-
 sys	sys ct logs <ct>	ct-access.sh	{1} logs {rest}	the last lines of the journal inside an instance (hs sys ct logs <ct> [lines])	-
+sys	sys ct follow <ct>	ct-access.sh	{1} follow {rest}	the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])	-
 sys	sys monitor disks	monitor.sh	--disks	disk table of the overview	-
 sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)	Schlafzustand der drehenden Platten (Platte, Zustand, seit, Aufwachen heute) und die gemessenen Leistungswerte mit Quelle (USV, CPU-Paket)	-
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
 sys	sys health next	health.sh	next	problems with their fix command (problem, next)	-
-sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -)	-
+sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)	-
+sys	sys health acks	health-ack.sh	list-acks	the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed	-
 sys	sys health plan <action>	health-change.sh	plan {1} {rest}	what acknowledging a problem, taking it back or lifting the pause of the bulk jobs would do, as data: status, plan lines (never asks)	-
 sys	sys health start <action>	health-change.sh	start {1} {rest}	do it (hs sys health start ack <id> | unack <id> | resume), answers status done	-
 sys	sys deck	deck-status.sh	-	one JSON document with the numbers for a status display (network and cpu counters, pools, disks, backup, problems, instances)	-
@@ -514,15 +526,13 @@ sys	sys dc start <action>	dc-change.sh	start {1} {rest}	do it (hs sys dc start c
 sys	sys net plan <action>	net-change.sh	plan {1} {rest}	what connecting the router would do, as data: status, plan lines (never asks; the API key is the first line on standard input; exit 0 ok, 1 refused, 2 = address or key missing)	-
 sys	sys net start <action>	net-change.sh	start {1} {rest}	do it (hs sys net start setup --address <url>, the API key on standard input), answers status done	-
 sys	sys state reads	state.sh	reads	what the collector keeps for the web interface, oldest first: read, age in seconds, milliseconds it took, exit code, bytes (which reads are slow, which are stale)	-
-sys	sys state read-put <key>	state.sh	read-put {1} {rest}	keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it	-
+sys	sys state read-put <key>	state.sh	read-put {1} {rest}	keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026)	-
 sys	sys state read-get <key>	state.sh	read-get {1}	the output the collector kept for a read (exit 1: none)	-
-sys	sys reads status	reads-collect.sh	--status	every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes	-
 sys	sys live refresh	live.sh	refresh {rest}	ask the live-state collector to read these topics again now (--all: every topic); returns at once	-	capability:live-state
-sys	sys live status	live.sh	status	every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document)	-	capability:live-state
+sys	sys live status	live.sh	status	every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet)	-	capability:live-state
 sys	sys live inspect	live.sh	inspect	every live-state topic as JSON for the inspector page: words, interval, lock, origin, capability, groups, age, gen, exit code, error, error time, bytes (needs, status, ttl only when known)	-	capability:live-state
 sys	sys live raw <topic>	live.sh	raw {1}	the stored document of one live-state topic as JSON, the output capped at 64 KiB	-	capability:live-state
-sys	sys live check	live.sh	check	problems of the live state (Redis down, a topic older than three intervals): key and text	-	capability:live-state
-sys	sys reads collect	reads-collect.sh	{rest}	read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)	-
+sys	sys live check	live.sh	check	problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text	-	capability:live-state
 sys	sys ext list	ext.sh	--list	extension packages as name, on|off, commands, nix (yes = a rebuild switches it), title	-
 sys	sys ext status	ext.sh	--status	the services of the extensions that are on, one per line: name, state (starting|running|degraded|stopping|stopped|failed), reason (or -), since (epoch seconds or -)	-
 user	pkg list	pkg.sh	list {rest}	list the packages (recipes and extensions) with their version: hs pkg list [--all] [--kind recipe|extension|capability]	die Pakete (Rezepte und Erweiterungen) mit Version auflisten: hs pkg list [--all] [--kind recipe|extension|capability]	topic:system,reads
@@ -531,10 +541,10 @@ user	pkg validate	pkg.sh	validate	check every package manifest	alle Paket-Manife
 sys	sys pkg list	pkg.sh	--list	every package as data: name, kind, version, applied version (- = never), audience, title	-
 user	pkg fetch	pkg.sh	fetch {rest}	update the package repositories and find the newest verified release	die Paket-Repositories aktualisieren und das neueste geprüfte Release finden	topic:system,changes
 user	pkg available	pkg.sh	available	what the package repositories offer (after hs pkg fetch)	was die Paket-Repositories anbieten (nach hs pkg fetch)	topic:system,reads
-user	pkg install <name>	pkg.sh	install {1} {rest}	install a package from a repository (signed release, read-only copy): hs pkg install <name> [--repo <repo>]	ein Paket aus einem Repository installieren (signiertes Release, schreibgeschützte Kopie): hs pkg install <Name> [--repo <Repo>]	topic:system,changes
-user	pkg update <name>	pkg.sh	update {1} {rest}	show what changed in a package, then install its new release: hs pkg update <name> [--yes]	zeigen, was sich in einem Paket geändert hat, dann das neue Release installieren: hs pkg update <Name> [--yes]	topic:system,changes
-user	pkg remove <name>	pkg.sh	remove {1} {rest}	uninstall a package installed from a repository, refused while something needs it (a container or data stays): hs pkg remove <name> [--dry-run]	ein aus einem Repository installiertes Paket deinstallieren, abgelehnt solange etwas es braucht (Container und Daten bleiben): hs pkg remove <Name> [--dry-run]	topic:system,changes
-user	pkg rollback <name>	pkg.sh	rollback {1} {rest}	put the copy from before the last package update back (then hs rebuild): hs pkg rollback <name>	die Kopie von vor dem letzten Paket-Update zurückholen (danach hs rebuild): hs pkg rollback <Name>	topic:system,changes
+user	pkg install <name>	pkg.sh	install {1} {rest}	install a package from a repository (signed release, read-only copy): hs pkg install <name> [--repo <repo>]	ein Paket aus einem Repository installieren (signiertes Release, schreibgeschützte Kopie): hs pkg install <Name> [--repo <Repo>]	topic:system,topic:instances,changes
+user	pkg update <name>	pkg.sh	update {1} {rest}	show what changed in a package, then install its new release: hs pkg update <name> [--yes]	zeigen, was sich in einem Paket geändert hat, dann das neue Release installieren: hs pkg update <Name> [--yes]	topic:system,topic:instances,changes
+user	pkg remove <name>	pkg.sh	remove {1} {rest}	uninstall a package installed from a repository, refused while something needs it (a container or data stays): hs pkg remove <name> [--dry-run]	ein aus einem Repository installiertes Paket deinstallieren, abgelehnt solange etwas es braucht (Container und Daten bleiben): hs pkg remove <Name> [--dry-run]	topic:system,topic:instances,changes
+user	pkg rollback <name>	pkg.sh	rollback {1} {rest}	put the copy from before the last package update back (then hs rebuild): hs pkg rollback <name>	die Kopie von vor dem letzten Paket-Update zurückholen (danach hs rebuild): hs pkg rollback <Name>	topic:system,topic:instances,changes
 user	pkg new <name>	pkg.sh	new {1} {rest}	start a package that passes the checks in a checkout of a package repository: hs pkg new <name> --template recipe|extension|capability [--protocol shell|python] [--dir <path>] [--title <text>]	ein Paket, das die Prüfungen besteht, in einem Checkout eines Paket-Repositorys anlegen: hs pkg new <Name> --template recipe|extension [--protocol shell|python] [--dir <Pfad>] [--title <Text>]	topic:system,changes
 user	pkg repo list	pkg.sh	repo list	the package repositories: the two defaults and the ones that were added	die Paket-Repositories: die beiden Standard-Repositories und die hinzugefügten	topic:system,reads
 user	pkg repo add <name> <url>	pkg.sh	repo add {1} {2} {rest}	add a package repository (releases must be signed): hs pkg repo add <name> <url> --key <allowed_signers file>	ein Paket-Repository hinzufügen (Releases müssen signiert sein): hs pkg repo add <Name> <URL> --key <allowed_signers-Datei>	topic:system,changes
@@ -563,6 +573,7 @@ sys	sys docker start <action>	docker-setup.sh	start {1} {rest}	do it (hs sys doc
 sys	sys docker apps	docker.sh	--apps	the apps in Docker as name, parent, project, state, running/total, ports, address, images, managed, update, files (same|changed|new|invalid|-; - when empty; kind unmanaged = a container without a compose project; no row when Docker is off or does not answer)	-
 sys	sys docker containers	docker.sh	--containers	every container in Docker as name, project, state (- when empty; no row when Docker is off or does not answer): the editor checks container_name against it	-
 sys	sys docker logs <app>	docker.sh	--logs {1} {rest}	the Compose log of one app: name parent project state ports, then log lines (--tail 200 by default, up to 2000)	-	changes
+sys	sys docker follow <app>	docker.sh	--follow-logs {1} {rest}	the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)	-
 sys	sys docker app <app>	docker.sh	--app {1}	the app as JSON: rev, managed (web|recipe|other), env NAMES only, compose text (no env values; compose may hold secrets)	-
 sys	sys docker rev <app>	docker.sh	--rev {1}	the revision of the compose file and .env of one app, one line (what hs sys docker app prints as rev): the open editor polls it for "changed on disk"	-
 sys	sys docker-app plan <app> <action>	docker-app-change.sh	plan {1} {2} {rest}	what starting, stopping, restarting, pulling, saving, rebuilding, recreating or deleting an app in Docker would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused with a reason); app-save and app-write (the files only) take --rev new|<rev> with document stdin and print `finding<TAB>level<TAB>where<TAB>text` lines (the editor's Test); delete confirms by name	-	changes

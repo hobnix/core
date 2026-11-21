@@ -7,6 +7,9 @@ UNVERIFIED: written without Incus, a browser or the playwright package. Not test
 
   testlab-browser.py run --url http://<vm>:8480 --nav <nav.js> --out <result-browser.json> [--user adminuser] [--timeout 120]
   testlab-browser.py pages <nav.js>          the paths it would open (no browser needed)
+  testlab-browser.py live --url ... --scenarios <testlab-live.tsv> --out <result-live.json> [--limit SECONDS] [--ssh adminuser@vm]
+                                             #485: open a page, start a change from a second channel (ssh), the OPEN page must show the new state
+                                             without a reload within the limit (default: scripts/lib/live-limits.tsv, class `hook`); --limit 0 must fail
 
 The password comes from HS_NESTED_PASSWORD (never argv). Exit codes: 0 all pages fine, 1 a page failed, 3 no browser here (playwright missing),
 4 the web interface did not answer.
@@ -100,6 +103,89 @@ def run(a):
     return 0 if ok else 1
 
 
+def load_limits(path):
+    out = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                k, v = line.split("\t")[:2]
+                out[k] = float(v)
+    return out
+
+
+def load_scenarios(path):
+    """name, path, before, after, limit class, command (columns of scripts/dev/testlab-live.tsv)"""
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                c = line.rstrip("\n").split("\t")
+                if len(c) >= 6:
+                    rows.append(dict(zip(("name", "path", "before", "after", "klass", "cmd"), c[:6])))
+    return rows
+
+
+def measure(sc, limit, page_text, trigger, clock=time.monotonic, sleep=time.sleep, poll=0.1):
+    """One scenario with an OPEN page and no reload: page_text() is what the page shows now, trigger() starts the change from a second channel.
+    -> (ok, seconds, message). Fails when `before` is not shown first, when `after` is not shown within `limit` seconds, or at limit 0."""
+    if sc["before"] not in page_text():
+        return False, 0.0, "the page did not show %r before the change" % sc["before"]
+    t0 = clock()
+    trigger()
+    while True:
+        took = clock() - t0
+        if took > limit:
+            return False, took, "%r not shown within %.1f s (limit %.1f)" % (sc["after"], took, limit)
+        if sc["after"] in page_text():
+            if limit <= 0:
+                return False, took, "limit is %.1f s" % limit
+            return True, took, ""
+        sleep(poll)
+
+
+def run_live(a):
+    limits = load_limits(a.limits)
+    scenarios = load_scenarios(a.scenarios)
+    pw = os.environ.get("HS_NESTED_PASSWORD", "")
+    if not pw:
+        print("HS_NESTED_PASSWORD is not set", file=sys.stderr)
+        return 2
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("playwright is not installed here: the live stage cannot run", file=sys.stderr)
+        return 3
+    import subprocess
+    if not wait_up(a.url, a.timeout):
+        return 4
+    results = []
+    with sync_playwright() as pwr:
+        try:
+            browser = pwr.chromium.launch(headless=True)
+        except Exception as e:
+            print("no headless browser could start: %s" % e, file=sys.stderr)
+            return 3
+        ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        if not ctx.request.post(a.url + "/api/login", data={"realm": "local", "user": a.user, "password": pw}).ok:
+            print("sign in failed", file=sys.stderr)
+            return 1
+        for sc in scenarios:
+            limit = a.limit if a.limit is not None else limits[sc["klass"]]
+            page = ctx.new_page()
+            page.goto(a.url + sc["path"], wait_until="networkidle", timeout=30000)
+            page.wait_for_function("t => document.body.innerText.includes(t)", arg=sc["before"], timeout=15000)
+            ok, took, msg = measure(sc, limit, lambda: page.inner_text("body"),
+                                    lambda: subprocess.run(["ssh", "-o", "BatchMode=yes", a.ssh, sc["cmd"]], check=False, timeout=120))
+            page.close()
+            results.append({"step": "%s (%s)" % (sc["name"], sc["path"]), "ok": ok, "seconds": round(took, 2), "limit": limit, **({"error": msg} if msg else {})})
+            print("  %s  %s  %.2f s (limit %.1f)" % ("ok  " if ok else "FAIL", sc["name"], took, limit), flush=True)
+        browser.close()
+    ok = all(r["ok"] for r in results)
+    with open(a.out, "w") as f:
+        json.dump({"stage": "browser-live", "ok": ok, "steps": results}, f, indent=1)
+    return 0 if ok else 1
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="testlab-browser")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -111,7 +197,18 @@ def main(argv):
     p.add_argument("--out", required=True)
     p.add_argument("--user", default="adminuser")
     p.add_argument("--timeout", type=int, default=120)
+    p = sub.add_parser("live")
+    p.add_argument("--url", required=True)
+    p.add_argument("--scenarios", required=True)
+    p.add_argument("--limits", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "live-limits.tsv"))
+    p.add_argument("--out", required=True)
+    p.add_argument("--ssh", required=True)
+    p.add_argument("--limit", type=float, default=None)
+    p.add_argument("--user", default="adminuser")
+    p.add_argument("--timeout", type=int, default=120)
     a = ap.parse_args(argv)
+    if a.cmd == "live":
+        return run_live(a)
     if a.cmd == "pages":
         print("\n".join(pages(a.nav)))
         return 0

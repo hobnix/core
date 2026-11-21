@@ -1859,6 +1859,51 @@
     }
    }
   },
+  "/ct/follow/{ct}": {
+   "get": {
+    "operationId": "ct.follow.by_ct",
+    "summary": "the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "ct",
+      "follow",
+      "<ct>"
+     ],
+     "script": "ct-access.sh",
+     "args": "{1} follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "ct",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/ct/list": {
    "get": {
     "operationId": "ct.list",
@@ -3691,6 +3736,51 @@
     }
    }
   },
+  "/docker/follow/{app}": {
+   "get": {
+    "operationId": "docker.follow.by_app",
+    "summary": "the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "docker",
+      "follow",
+      "<app>"
+     ],
+     "script": "docker.sh",
+     "args": "--follow-logs {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "app",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/docker/health": {
    "get": {
     "operationId": "docker.health",
@@ -4190,7 +4280,7 @@
   "/event/list": {
    "get": {
     "operationId": "event.list",
-    "summary": "the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID]",
+    "summary": "the event log: id, time (epoch seconds), source, kind, subject, level info|warn|error, text, payload (JSON or -); hs sys event list [N] [--source S] [--after ID] [--before ID]",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -4210,7 +4300,8 @@
      "query": [
       "n",
       "source",
-      "after"
+      "after",
+      "before"
      ]
     },
     "responses": {
@@ -5680,6 +5771,40 @@
     }
    }
   },
+  "/health/acks": {
+   "get": {
+    "operationId": "health.acks",
+    "summary": "the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "health",
+      "acks"
+     ],
+     "script": "health-ack.sh",
+     "args": "list-acks",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/health/dry-run": {
    "get": {
     "operationId": "health.dry-run",
@@ -5717,7 +5842,7 @@
   "/health/list": {
    "get": {
     "operationId": "health.list",
-    "summary": "every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -)",
+    "summary": "every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -6760,7 +6885,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {
@@ -6802,10 +6928,14 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "progress_unit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key"
            }
           ],
-          "minItems": 14,
-          "maxItems": 14
+          "minItems": 15,
+          "maxItems": 15
          }
         }
        }
@@ -7039,7 +7169,7 @@
      }
     ],
     "x-hs-described": false,
-    "description": "One job record (docs/adr/0004-job-record.md): id, slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
+    "description": "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
     "responses": {
      "0": {
       "description": "ok",
@@ -7114,7 +7244,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {
@@ -7156,10 +7287,14 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "progress_unit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key"
            }
           ],
-          "minItems": 14,
-          "maxItems": 14
+          "minItems": 15,
+          "maxItems": 15
          }
         }
        }
@@ -7514,7 +7649,7 @@
   "/live/check": {
    "get": {
     "operationId": "live.check",
-    "summary": "problems of the live state (Redis down, a topic older than three intervals): key and text",
+    "summary": "problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7568,7 +7703,7 @@
      "query": []
     },
     "x-hs-described": false,
-    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322).",
+    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
     "responses": {
      "0": {
       "description": "ok",
@@ -7675,7 +7810,7 @@
   "/live/status": {
    "get": {
     "operationId": "live.status",
-    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document)",
+    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet)",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7695,11 +7830,46 @@
      "query": []
     },
     "x-hs-described": false,
+    "description": "Columns 11 to 14 since #486: delay_last_ms, delay_worst_ms (trigger to new generation, written by the collector), web_last_ms, web_worst_ms (the browser sample); - = no sample yet.",
     "responses": {
      "0": {
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/logs/follow": {
+   "get": {
+    "operationId": "logs.follow",
+    "summary": "the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "logs",
+      "follow"
+     ],
+     "script": "logs.sh",
+     "args": "follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }
@@ -11452,80 +11622,6 @@
     }
    }
   },
-  "/reads/collect": {
-   "post": {
-    "operationId": "reads.collect",
-    "summary": "read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)",
-    "x-hs-exit": true,
-    "x-hs-role": "admin",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "collect"
-     ],
-     "script": "reads-collect.sh",
-     "args": "{rest}",
-     "class": "change",
-     "rest": true
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/plain": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
-  "/reads/status": {
-   "get": {
-    "operationId": "reads.status",
-    "summary": "every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes",
-    "x-hs-exit": true,
-    "x-hs-role": "viewer",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "status"
-     ],
-     "script": "reads-collect.sh",
-     "args": "--status",
-     "class": "read",
-     "rest": false
-    },
-    "x-hs-web": {
-     "path": "/api/sys/reads/status",
-     "kind": "tsv",
-     "ttl": 5,
-     "query": []
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/tab-separated-values": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
   "/rebuild/pending": {
    "get": {
     "operationId": "rebuild.pending",
@@ -13050,6 +13146,185 @@
     }
    }
   },
+  "/share/parity/refused": {
+   "get": {
+    "operationId": "share.parity.refused",
+    "summary": "the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "refused"
+     ],
+     "script": "share-parity.sh",
+     "args": "--refused",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/refused",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "folder"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "removed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "limit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share_total"
+           }
+          ],
+          "minItems": 5,
+          "maxItems": 5
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/share/parity/state/{share}": {
+   "get": {
+    "operationId": "share.parity.state.by_share",
+    "summary": "the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "state",
+      "<share>"
+     ],
+     "script": "share-parity.sh",
+     "args": "--state {1}",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/state/<share>",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "parameters": [
+     {
+      "name": "share",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "limit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "mode",
+              "enum": [
+               "default",
+               "custom",
+               "off"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "value"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "default"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "floor"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "percent"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "skip"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "folder"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/shares/acl": {
    "get": {
     "operationId": "shares.acl",
@@ -14220,6 +14495,40 @@
     }
    }
   },
+  "/state/events-follow": {
+   "get": {
+    "operationId": "state.events-follow",
+    "summary": "the last disk events, then every new row until the reader goes (the web log stream; plain rows)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "state",
+      "events-follow"
+     ],
+     "script": "state.sh",
+     "args": "events-follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/state/events-json": {
    "get": {
     "operationId": "state.events-json",
@@ -14489,7 +14798,7 @@
   "/state/read-put/{key}": {
    "get": {
     "operationId": "state.read-put.by_key",
-    "summary": "keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it",
+    "summary": "keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026)",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {

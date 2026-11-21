@@ -34,6 +34,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
 | [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
+| [PLAN-live-interface](PLAN-live-interface.md) | Milestone 0.10: the interface follows events, pending rows, delay measured, acknowledge |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |
@@ -48,7 +49,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [events](events.md) | The event catalogue: kind names, levels, payload rules |
 | [notify-rules](notify-rules.md) | Which events become push messages: the rules table, mute a kind, Matrix cards |
 | [PLAN-jobs](PLAN-jobs.md) | Job system audit: which commands run as jobs, what a job record holds |
-| [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (Redis, collector, live updates) |
+| [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (collector, live updates; the Redis parts are superseded by ADR 0026) |
 | [PLAN-channels](PLAN-channels.md) | Update channels Stable, Beta, Edge on top of develop and main |
 | [PLAN-portable-install](PLAN-portable-install.md) | Audit of fixed names and assumptions that break on another machine, options for pools, users and single-disk installs |
 | [PLAN-capabilities-repo](PLAN-capabilities-repo.md) | Design for hobnix/capabilities: optional capabilities as packages, pure evaluation, channels, pilot and steps |
@@ -67,6 +68,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.7](RELEASE-NOTES-0.7.md) | Draft release notes of 0.7.0, with what is not verified |
 | [RELEASE-NOTES-0.8](RELEASE-NOTES-0.8.md) | Draft release notes of 0.8.0, with what is not verified |
 | [RELEASE-NOTES-0.9](RELEASE-NOTES-0.9.md) | Draft release notes of 0.9.0, with what is not verified |
+| [RELEASE-NOTES-0.10](RELEASE-NOTES-0.10.md) | Draft release notes of 0.10.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

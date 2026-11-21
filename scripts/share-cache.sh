@@ -17,7 +17,7 @@ here=$(dirname "$0")
 . "$here/lib/pools.sh"
 . "$here/lib/bulkpath.sh"
 root=$(snap_root)
-live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
+live_refresh_shares() { live_refresh event:share.changed; }
 cache=/mnt/bulk/cache      # ZFS dataset fast/hs-cache; its quota is the size of the cache
 dataset=fast/hs-cache
 default_size=200G
