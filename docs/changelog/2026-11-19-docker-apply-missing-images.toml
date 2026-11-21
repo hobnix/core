@@ -1,0 +1,7 @@
+date  = "2026-11-19"
+type  = "fix"
+title = "Apply of a Docker app with images not downloaded yet runs as a job instead of failing with exit 127"
+docs  = "containers-and-apps"
+body  = """After an app moves to a new Docker container, its images are not there yet and `docker compose up -d` downloads or builds them first. The plan of Apply now names those images and runs the recreate as a background job under Jobs. Before, the web interface stopped waiting after 60 seconds and showed "The server could not do this (exit 127)".
+
+A plan or start that takes longer than 60 seconds now says that the server stopped waiting and that the work may still be running, instead of "exit 127"."""

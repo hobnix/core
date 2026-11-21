@@ -180,9 +180,9 @@
             <Switch box checked={selected.has(p.name)} onchange={(c) => toggle(p.name, c)} label="Select {p.name}" />
           {:else if col.key === 'go'}
             {#if p.state === 'new'}
-              <Button variant="primary" size="sm" busy={rowstate.pending('apps', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
+              <Button need="app-manager" variant="primary" size="sm" busy={rowstate.pending('apps', ['install', p.name])} busyLabel="Installing…" tooltip={`Install ${p.name} from ${p.repo}`} onclick={() => install(p)}>Install</Button>
             {:else if p.state === 'update'}
-              <Button variant="primary" size="sm" busy={rowstate.pending('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
+              <Button need="admin" variant="primary" size="sm" busy={rowstate.pending('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
             {/if}
           {:else if col.key === 'name'}
             <span class="nm"><i class="ph ph-{kindIcon(p.kind)}" style="color:{p.state === 'new' ? 'var(--fg-3)' : 'var(--accent-ink)'}"></i>{p.name}</span>
@@ -202,9 +202,9 @@
           {:else if p.state !== 'new'}
             {@const turnTo = stageActions(stageOf.get(p.name)).turn}
             {#if turnTo}
-              <Button size="sm" busy={rowstate.pending('parts', ['enable', p.name]) || rowstate.pending('parts', ['disable', p.name])} tooltip={turnTo === 'enable' ? 'Switch it on (shows the plan)' : 'Switch it off (shows the plan)'} onclick={() => turn(p, turnTo)}>{turnTo === 'enable' ? 'Turn on' : 'Turn off'}</Button>
+              <Button need="admin" size="sm" busy={rowstate.pending('parts', ['enable', p.name]) || rowstate.pending('parts', ['disable', p.name])} tooltip={turnTo === 'enable' ? 'Switch it on (shows the plan)' : 'Switch it off (shows the plan)'} onclick={() => turn(p, turnTo)}>{turnTo === 'enable' ? 'Turn on' : 'Turn off'}</Button>
             {/if}
-            <Button variant="ghost" class="btn-icon" icon="trash" disabled={p.core} busy={rowstate.pending('pkg', ['remove', p.name])} tooltip={p.core ? 'The server refers to this package by name: it stays' : 'Remove the installed copy (data and containers stay)'} aria-label="Remove {p.name}" onclick={() => remove(p)} />
+            <Button need="admin" variant="ghost" class="btn-icon" icon="trash" disabled={p.core} busy={rowstate.pending('pkg', ['remove', p.name])} tooltip={p.core ? 'The server refers to this package by name: it stays' : 'Remove the installed copy (data and containers stay)'} aria-label="Remove {p.name}" onclick={() => remove(p)} />
           {/if}
         {/snippet}
       </Table>
@@ -225,7 +225,7 @@
           {:else if col.key === 'from'}
             {r.from === 'default' ? 'this project' : 'added by you'}
           {:else if r.from === 'added'}
-            <Button variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
+            <Button need="admin" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
           {/if}
         {/snippet}
       </Table>

@@ -82,6 +82,9 @@ Stages 3 to 6 were written without Incus, KVM or nix. Not tested on hardware yet
 console scenarios (`scripts/dev/nested_stages.py`).
 
 ## What stays manual
+- Stage 6, live part (#485, optional): with `HS_TESTLAB_LIVE_SSH=<user@vm>` (a key the VM accepts) the stage also opens a page, starts a change over ssh
+  (install an app, stop a container, lock the storage: `scripts/dev/testlab-live.tsv`) and fails when the open page does not show the new state without a
+  reload within the limit of `scripts/lib/live-limits.tsv` (5 s). `HS_TESTLAB_LIVE_LIMIT=0` must fail the stage. Not tested on hardware yet.
 - Nothing that stages 1 to 6 cover. Once they are green on the real server, the manual list shrinks to what a virtual machine cannot do (next point).
 - A virtual machine cannot check SMART or a really failing disk, GPU passthrough, the UPS, real DNS and certificates, or a VPS.
 

@@ -97,6 +97,9 @@ has "^row${T}d${T}0${T}[0-9]*${T}Heat${T}data-04${T}-${T}-$" && pass "the pool v
 cp -a "$D4/shares/media/movies/Heat" "$D5/shares/media/movies_heat_tmp" 2>/dev/null; mkdir -p "$D5/shares/media/movies"; mv "$D5/shares/media/movies_heat_tmp" "$D5/shares/media/movies/Heat"
 fm ls pool:bulk --path shares/media/movies
 has "Heat${T}data-04,data-05${T}" && pass "an entry on two disks lists both" || fail "two disks: $out"
+touch "$B/disks/data-05.asleep"; fm ls pool:bulk --path shares/media/movies
+has "Heat${T}data-04${T}" && has "^asleep${T}data-05$" && pass "a disk in standby is not read: left out of the disks column and named in the asleep line" || fail "asleep: $out"
+rm -f "$B/disks/data-05.asleep"
 rm -rf "$D5/shares/media/movies"
 fm ls pool:bulk
 ! grep -q "^row${T}d.*${T}-${T}-${T}-$" <<<"$out" && grep "^row" <<<"$out" | cut -f7 | grep -vq '^array$' && fail "pool root entries are all array: $out" || pass "pool top level entries are array"
@@ -248,6 +251,7 @@ printf 'not json' > "$HS_JOBS_DIR/$jid.json"
 fm progress rectest
 check_eq "an unreadable record: the state file stands alone" running "$(kv result)"
 kill "$spid" 2>/dev/null; rm -f "$HS_FM_DIR/jobs/rectest.state" "$HS_FM_DIR/jobs/rectest.rec"
+mkdir -p "$HS_FM_DIR/jobs"; echo ghost1 > "$HS_FM_DIR/jobs/hs-job-ghost.alias"; fm progress hs-job-ghost; check_eq "progress: a job stopped before its first state is cancelled, not running" cancelled "$(kv result)"
 # conflicts: the same copy again
 fmsel Avatar Heat -- plan copy --from disk:data-04 --path shares/media/movies --to disk:data-05 --to-path shares/media
 check_eq "plan: conflicts counted" 3 "$(kv conflicts)"

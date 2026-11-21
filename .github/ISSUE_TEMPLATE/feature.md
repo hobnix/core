@@ -10,8 +10,8 @@ labels: enhancement
 
 **What done looks like** (one or two checks someone can run, for example a command and its output):
 
-**Hardware test** (what to run on a real server and what to expect, one box per step; the issue stays open in the board column Testing
-until they are ticked. Write "none" for a change with nothing to run on a server):
+**Hardware test** (what to run on a real server and what to expect, one box per step; at merge the steps move into the milestone's
+"Hardware test" tracker and this issue closes. Write "none" for a change with nothing to run on a server):
 
 - [ ] 
 

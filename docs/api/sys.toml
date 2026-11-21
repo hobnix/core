@@ -30,13 +30,13 @@ note = "One job record (docs/adr/0004-job-record.md): id, key (the row key of we
 role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 
 ["jobs children <id>"]
 role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 note = "The sub-jobs of one orchestration job (ADR 0018), oldest first; same columns as jobs records."
 
 ["jobs answer <id>"]
@@ -105,7 +105,7 @@ enums = { "offer.state" = ["none", "unknown", "current", "kept", "update"], "sta
 ["live inspect"]
 role = "viewer"
 kind = "json"
-note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322)."
+note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
 
 ["live raw <topic>"]
 role = "viewer"
@@ -262,14 +262,14 @@ enums = { status = ["ok", "refused", "started"] }
 note = "The lines of hs sys apps plan|start retry|cleanup <job> (the same script, apps-recover.sh); use those. Not called by the web interface directly."
 
 ["fm du <location>"]
-role = "viewer"
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], cached = ["answer"], pending = ["answer"], unit = ["unit"], files = ["count"], folders = ["count"], bytes = ["bytes"], partial = ["answer"], mtime = ["epoch"], time = ["epoch"] }
 enums = { "status.status" = ["ok", "refused"], "cached.answer" = ["yes", "no"], "pending.answer" = ["yes"], "partial.answer" = ["yes", "no"] }
 note = "The size of one folder (--path). A fresh cached answer (cached, files, folders, bytes, partial, mtime of the folder, time measured) or, when there is none, pending + unit of the background job that measures it (ask again). It can wake disks."
 
 ["fm stat <location>"]
-role = "viewer"
+role = "admin"
 kind = "tsv"
 records = { status = ["status"], reason = ["text"], type = ["type"], owner = ["name"], group = ["name"], uid = ["id"], gid = ["id"], mode = ["octal"], perms = ["rwx"], bytes = ["bytes"], mtime = ["epoch"] }
 enums = { "status.status" = ["ok", "refused"], "type.type" = ["d", "f", "l"] }
@@ -395,13 +395,13 @@ role = "viewer"
 role = "viewer"
 
 ["fm locations"]
-role = "viewer"
+role = "admin"
 
 ["fm pair <left> <right>"]
 role = "admin"
 
 ["fm ls <location>"]
-role = "viewer"
+role = "admin"
 
 ["fm trash <location>"]
 role = "admin"
@@ -878,7 +878,7 @@ role = "admin"
 role = "admin"
 
 ["backup find <word>"]
-role = "viewer"
+role = "admin"
 
 ["dc state"]
 role = "admin"
@@ -904,20 +904,15 @@ role = "admin"
 ["state read-get <key>"]
 role = "viewer"
 
-["reads status"]
-role = "viewer"
-
 ["live refresh"]
 role = "admin"
 
 ["live status"]
 role = "viewer"
+note = "Columns 11 to 14 since #486: delay_last_ms, delay_worst_ms (trigger to new generation, written by the collector), web_last_ms, web_worst_ms (the browser sample); - = no sample yet."
 
 ["live check"]
 role = "viewer"
-
-["reads collect"]
-role = "admin"
 
 ["ext list"]
 role = "admin"
@@ -1020,3 +1015,16 @@ note = "action create <name> [--role R] [--days N] or revoke <name>. The web ser
 ["token start <action>"]
 role = "app-manager"
 note = "create answers once with the line secret<TAB>token<TAB><token>; revoke needs --confirm <name>. A request that came with a token is refused (a token cannot create tokens)."
+
+["share parity state <share>"]
+role = "viewer"
+kind = "tsv"
+records = { limit = ["mode", "value"], default = ["floor", "percent"], skip = ["folder"] }
+enums = { "limit.mode" = ["default", "custom", "off"] }
+note = "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out."
+
+["share parity refused"]
+role = "viewer"
+kind = "tsv"
+columns = ["share", "folder", "removed", "limit", "share_total"]
+note = "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since."

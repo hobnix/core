@@ -26,6 +26,7 @@
   // The look of the interface (settings/Appearance.svelte): mounted when the file exists. A glob import may find nothing, so a build without the file works.
   const appearance = import.meta.glob('./Appearance.svelte', { eager: true });
   const Appearance = Object.values(appearance)[0]?.default ?? null;
+  import BrowserNotifications from './BrowserNotifications.svelte';
 
   const TITLES = {
     general: ['General', 'The name, language and look of this server and its web interface.'],
@@ -116,7 +117,7 @@
         {/if}
         <p class="hp2">{updates.loaded ? (behind > 0 ? `${behind} new change${behind === 1 ? '' : 's'} upstream.` : 'Up to date as of the last look.') : 'Loading…'}</p>
         <div class="acts">
-          <Button variant="primary" class="settingspage-b13" icon="arrow-circle-up" busy={jobRunning('system', ['update'])} busyLabel="Updating…" tooltip={'Update the server (snapshots first; shows the plan)'} disabled={!!deck?.data?.locked} onpointerenter={() => prefetchPlan('system', ['update'])} onfocus={() => prefetchPlan('system', ['update'])} onclick={() => openPlan('system', ['update'], 'Update')}>Update…</Button>
+          <Button need="admin" variant="primary" class="settingspage-b13" icon="arrow-circle-up" busy={jobRunning('system', ['update'])} busyLabel="Updating…" tooltip={'Update the server (snapshots first; shows the plan)'} disabled={!!deck?.data?.locked} onpointerenter={() => prefetchPlan('system', ['update'])} onfocus={() => prefetchPlan('system', ['update'])} onclick={() => openPlan('system', ['update'], 'Update')}>Update…</Button>
           <Button class="settingspage-b13" tooltip={tr('Choose which version this server follows')} onclick={() => go('/settings/releases')}><i class="ph ph-git-branch"></i>{tr('Update channel')}…</Button>
           <Button class="settingspage-b13" tooltip={'Read what is new, change by change'} onclick={() => go('/operations/whats-new')}><i class="ph ph-sparkle"></i>What's new</Button>
         </div>
@@ -124,7 +125,7 @@
       <div class="card sec">
         <div class="st">New options</div>
         <p class="hp2">After an update machine.toml may lack options that were added. Syncing puts them in their place with their defaults; your values stay. It shows the plan first.</p>
-        <Button size="sm" icon="arrows-clockwise" style="align-self:flex-start" busy={jobRunning('config', ['sync'])} busyLabel="Syncing…" tooltip={'Put machine.toml in the layout of the example (shows the plan)'} onclick={() => openPlan('config', ['sync'], 'Sync machine.toml')}>Sync new options…</Button>
+        <Button need="admin" size="sm" icon="arrows-clockwise" style="align-self:flex-start" busy={jobRunning('config', ['sync'])} busyLabel="Syncing…" tooltip={'Put machine.toml in the layout of the example (shows the plan)'} onclick={() => openPlan('config', ['sync'], 'Sync machine.toml')}>Sync new options…</Button>
       </div>
     </div>
   {:else if core && !(list.loaded && list.error)}
@@ -140,6 +141,7 @@
 
   {#if page === 'general'}
     {#if Appearance}<Appearance />{/if}
+    <BrowserNotifications />
     <div class="cols">
       <div class="card sec" id="nodes">
         <div class="st">Nodes</div>

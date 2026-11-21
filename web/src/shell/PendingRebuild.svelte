@@ -20,7 +20,7 @@
       <ul class="pend">{#each items as it}<li><code>{describe(it)}</code></li>{/each}</ul>
     {/if}
     {#snippet action()}
-      <Button size="sm" variant="primary" icon="hammer" busy={jobRunning('system', ['rebuild'])} busyLabel="Rebuilding…" tooltip={'Apply all of them with one rebuild (shows the plan)'} onclick={() => openPlan('system', ['rebuild'], 'Rebuild now')}>Rebuild now…</Button>
+      <Button need="admin" size="sm" variant="primary" icon="hammer" busy={jobRunning('system', ['rebuild'])} busyLabel="Rebuilding…" tooltip={'Apply all of them with one rebuild (shows the plan)'} onclick={() => openPlan('system', ['rebuild'], 'Rebuild now')}>Rebuild now…</Button>
     {/snippet}
   </Banner>
 {/if}

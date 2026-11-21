@@ -71,7 +71,7 @@ class Base(unittest.TestCase):
             return results.pop(0)
         db = lc.DbStore(sdb, clock=lambda: self.now)
         OPEN.append(db)
-        c = lc.Collector(None, run=run, topic_rows=list(self.rows), db=db, emit=lambda *a: events.append(a), topic_info=dict(INFO))
+        c = lc.Collector(db, run=run, topic_rows=list(self.rows), emit=lambda *a: events.append(a), topic_info=dict(INFO))
         return c, db, events
 
     def read(self, c, t=None):
@@ -161,40 +161,228 @@ class Db(Base):
         c.rescan()
         self.assertEqual(q("SELECT COUNT(*) FROM live WHERE topic='ext-x'"), [(0,)])
 
-    def test_backend_names(self):
+
+class TakeOver(Base):
+    """#561: the 27 slow reads of collected-reads.tsv are topics of the collector (db mode), two writers share the database."""
+
+    def keys(self):
+        out = []
+        with open(os.path.join(scripts, "lib", "collected-reads.tsv"), encoding="utf-8") as f:
+            for line in f:
+                c = line.rstrip("\r\n").split("\t")
+                if c[0].strip() and not c[0].startswith("#"):
+                    out.append((tuple(c[0].split()), int(c[1])))
+        return out
+
+    def test_every_collected_read_is_a_topic_and_never_slower(self):
+        keys = self.keys()
+        self.assertEqual(len(keys), 27)
+        topics = {tuple(w): i for _, w, i, _ in ls.topics(os.path.join(scripts, "lib", "live-topics.tsv"))}
+        rows = lc.reads_intervals(ls.topics(os.path.join(scripts, "lib", "live-topics.tsv")))
+        got = {tuple(w): i for _, w, i, _ in rows}
+        for words, every in keys:
+            self.assertIn(words, topics, "no topic for: " + " ".join(words))
+            self.assertLessEqual(got[words], every)
+            self.assertLessEqual(got[words], topics[words])
+        self.assertEqual(len(rows), len(topics))
+
+    def test_intervals_take_the_shorter_one(self):
+        d = tempfile.mkdtemp(prefix="reads-")
+        f = os.path.join(d, "c.tsv")
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write("# c\nstatus\t7\ndocker list\t30\nbad\tx\n")
+        rows = [("status", ["status"], 15, "run"), ("docker-list", ["docker", "list"], 300, "run"), ("other", ["other"], 20, "run")]
+        self.assertEqual([r[2] for r in lc.reads_intervals(rows, f)], [7, 30, 20])
+        self.assertEqual(lc.reads_intervals(rows, os.path.join(d, "none.tsv")), rows)
+
+    def test_busy_timeout_is_set(self):
+        c = sdb.open_rw()
+        try:
+            self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 30000)
+            self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+        finally:
+            c.close()
+
+    def test_two_writers_lose_nothing(self):
+        reset()
+        a, b = lc.DbStore(sdb, clock=lambda: 1000), lc.DbStore(sdb, clock=lambda: 1000)
+        OPEN.extend([a, b])
+        errs = []
+
+        def work(db, name):
+            try:
+                for i in range(40):
+                    db.put("%s-%d" % (name, i % 5), "v%d" % i, 0, 1, name, 45, 1000 + i)
+                    db.beat(5, None)
+            except Exception as e:      # noqa: BLE001
+                errs.append(e)
+        ts = [threading.Thread(target=work, args=(db, n)) for db, n in ((a, "a"), (b, "b"))]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(60)
+        self.assertEqual(errs, [])
+        self.assertEqual(q("SELECT COUNT(*) FROM live"), [(10,)])
+        self.assertEqual(q("SELECT SUM(gen) FROM live"), [(80,)])
+        self.assertEqual(q("SELECT SUM(gen) FROM topics WHERE topic LIKE 'live:%'"), [(80,)])
+
+
+class Listen(Base):
+    """the refresh path without Redis: a hook counts a topic up in the table `topics`, the collector reads it again"""
+
+    def test_a_counted_topic_is_asked_for_again_and_our_own_counters_are_not(self):
         c, db, _ = self.make([])
-        self.assertEqual(c.backend, "state.db")
-        c2 = lc.Collector(object(), topic_rows=list(self.rows), topic_info=dict(INFO))
-        self.assertEqual(c2.backend, "redis")
+        asked = []
+        c.refresh = lambda t, since=None: asked.append(t)
+
+        class Stop:      # four rounds, then the collector stops
+            n = 4
+
+            def wait(self, every):
+                self.n -= 1
+                return self.n < 0
+        c.stop = Stop()
+        counters = iter([{"status": 1}, {"status": 1}, {"status": 2, "live:status": 5, "reads:x": 1}, {"status": 2, "live:status": 6, "other": 1}])
+        db.counters = lambda: next(counters)
+        c.listen()
+        self.assertEqual(asked, ["status"])      # the first look is the baseline; live:/reads: and an unknown topic ask for nothing
+
+    def test_counters_reads_the_table(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        self.read(c)
+        self.assertEqual(db.counters().get("live:status"), 1)
 
 
-class FakeResp:
-    def __init__(self):
-        self.data, self.published = {}, []
+class Delay(Base):
+    """#486: the delay from the trigger to the new generation, the health note, the status columns, the additive table."""
 
-    def cmd(self, *a):
-        if a[0] == "GET":
-            return self.data.get(a[1])
-        if a[0] == "SET":
-            self.data[a[1]] = a[2]
-            return "OK"
-        if a[0] == "PUBLISH":
-            self.published.append((a[1], a[2]))
-            return 1
-        raise AssertionError(a)
+    def trigger_read(self, c, at, read_at):
+        real = time.time
+        time.time = lambda: float(at)
+        try:
+            c.refresh("status")
+        finally:
+            time.time = real
+        return self.read(c, read_at)
+
+    def test_a_triggered_read_with_a_new_gen_records_last_and_worst(self):
+        c, db, _ = self.make([(0, "a\n", ""), (0, "b\n", ""), (0, "c\n", "")])
+        self.read(c, 1000)      # no trigger: no sample
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+        self.assertTrue(self.trigger_read(c, 1010, 1012))
+        self.assertTrue(self.trigger_read(c, 1020, 1021))
+        self.assertEqual(q("SELECT ms_last, ms_worst, ms_n, ms_recent FROM live_delay WHERE topic='status'"), [(1000, 2000, 2, "2000,1000")])
+
+    def test_an_unchanged_read_leaves_no_sample_and_clears_the_trigger(self):
+        c, db, _ = self.make([(0, "a\n", ""), (0, "a\n", ""), (0, "b\n", "")])
+        self.read(c, 1000)
+        self.assertFalse(self.trigger_read(c, 1010, 1011))
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+        self.assertEqual(c.trig, {})
+        self.read(c, 5000)      # a later change without a trigger does not inherit the old one
+        self.assertEqual(q("SELECT COUNT(*) FROM live_delay"), [(0,)])
+
+    def test_a_hook_counts_from_the_time_the_counter_moved(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        c.refresh("status", 990)
+        self.assertEqual(c.trig["status"], 990)
+        c.refresh("status", 995)      # the first trigger of a read that has not run yet keeps its time
+        self.assertEqual(c.trig["status"], 990)
+
+    def test_only_the_last_20_samples_are_kept(self):
+        c, db, _ = self.make([])
+        for i in range(25):
+            db.delay("status", i, 1000 + i)
+        rec = q("SELECT ms_recent, ms_worst, ms_n FROM live_delay")[0]
+        self.assertEqual((rec[0].split(",")[0], len(rec[0].split(",")), rec[1], rec[2]), ("5", 20, 24, 25))
+
+    def test_a_slow_topic_raises_the_health_note_and_a_fast_one_does_not(self):
+        c, db, _ = self.make([(0, "a\n", "")])
+        db.delay("status", 11000, 1000)
+        notes = ls.slow_notes(ls.delays_read(), {"status"}, 10.0)
+        self.assertEqual([k for k, _ in notes], ["live:slow:status"])
+        self.assertIn("11.0 s", notes[0][1])
+        self.assertEqual(ls.slow_notes(ls.delays_read(), {"status"}, 12.0), [])
+        self.assertEqual(ls.slow_notes(ls.delays_read(), {"other"}, 10.0), [])      # a topic that is gone says nothing
+        sdb_c = sdb.open_rw()
+        sdb.live_delay_put(sdb_c, "status", 30000, 1001, web=True)
+        sdb_c.close()
+        self.assertEqual([k for k, _ in ls.slow_notes(ls.delays_read(), {"status"}, 12.0)], ["live:slowweb:status"])
+
+    def test_check_prints_the_slow_note_with_a_running_collector(self):
+        import io
+        now = time.time()
+        doc = {"status": {"out": "x", "rc": 0, "gen": 1, "ts": now, "err": None, "ts_err": None, "ttl": 100, "src": "t"}}
+        real = ls.topics
+        ls.topics = lambda *a: [("status", ["status"], 15, "run")]
+        try:
+            buf = io.StringIO()
+            rc = ls.cli_check(buf, (doc, (int(now), 5)), {"status": {"ms_recent": [200, 15000], "web_recent": []}})
+            quiet = io.StringIO()
+            rc2 = ls.cli_check(quiet, (doc, (int(now), 5)), {"status": {"ms_recent": [200, 900], "web_recent": []}})
+        finally:
+            ls.topics = real
+        self.assertEqual(rc, 1)
+        self.assertTrue(buf.getvalue().startswith("live:slow:status	live state 'status' is slow"), buf.getvalue())
+        self.assertEqual((rc2, quiet.getvalue()), (0, ""))
+
+    def test_the_limit_is_read_from_the_limits_file(self):
+        path = os.path.join(TMP, "limits.tsv")
+        with open(path, "w") as f:
+            f.write("# c\nnote\t3\tx\nhook\t1\tx\n")
+        self.assertEqual((ls.limits(path)["note"], ls.limits(path)["timed"]), (3.0, 20.0))
+        self.assertEqual(ls.limits(os.path.join(TMP, "none.tsv"))["note"], 10.0)
+        self.assertEqual(ls.limits()["note"], 10.0)      # the shipped file
+
+    def test_status_has_the_delay_columns_at_the_end_with_a_dash_for_none(self):
+        import io
+        doc = {"status": {"out": "x", "rc": 0, "gen": 1, "ts": 1000, "err": None, "ts_err": None, "ttl": 100, "src": "t"}}
+        real = ls.topics
+        ls.topics = lambda *a: [("status", ["status"], 15, "run"), ("other", ["o"], 15, "run")]
+        try:
+            buf = io.StringIO()
+            ls.cli_status(buf, (doc, (1000, 5)), {"status": {"ms_last": 40, "ms_worst": 900, "web_last": None, "web_worst": None}})
+        finally:
+            ls.topics = real
+        rows = [l.split("\t") for l in buf.getvalue().splitlines()]
+        self.assertEqual([len(r) for r in rows], [14, 14])
+        self.assertEqual(rows[0][10:], ["40", "900", "-", "-"])
+        self.assertEqual(rows[1][10:], ["-", "-", "-", "-"])
+        self.assertEqual(len(rows[0][:10]), 10)      # the first ten keep their place
+
+    def test_an_old_database_without_the_table_gets_it_and_reads_empty(self):
+        reset()
+        c = sqlite3.connect(DB)
+        c.executescript(sdb.SCHEMA + sdb.LIVE_SCHEMA.split("-- #486")[0])      # a state.db of the release before: live and heartbeat, no live_delay
+        c.execute("INSERT INTO live (topic, payload, updated, gen) VALUES ('status', 'old', 5, 3)")
+        c.commit()
+        c.close()
+        self.assertEqual(ls.delays_read(), {})      # a reader does not fail on the missing table
+        r = subprocess.run([sys.executable, os.path.join(scripts, "live_state.py"), "status"], capture_output=True, text=True, env=dict(os.environ))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(all(len(l.split("\t")) == 14 and l.split("\t")[10:] == ["-"] * 4 for l in r.stdout.splitlines() if l))
+        db = lc.DbStore(sdb)      # the collector opens it: the table is added, the old document stays
+        OPEN.append(db)
+        self.assertEqual(q("SELECT payload, gen FROM live WHERE topic='status'"), [("old", 3)])
+        db.delay("status", 7, 100)
+        self.assertEqual(q("SELECT ms_last, ms_n FROM live_delay"), [(7, 1)])
+        db2 = lc.DbStore(sdb)      # and a second open does not fail or clear it
+        OPEN.append(db2)
+        self.assertEqual(q("SELECT ms_n FROM live_delay"), [(1,)])
+
+    def test_the_sample_command_stores_a_browser_number(self):
+        reset()
+        env = dict(os.environ)
+        run = lambda *a: subprocess.run([sys.executable, os.path.join(scripts, "state-db.py"), "live-sample"] + list(a), capture_output=True, text=True, env=env).returncode
+        self.assertEqual(run("status", "250"), 0)
+        self.assertEqual(run("status", "1500"), 0)
+        self.assertEqual(run("status", "x"), 1)
+        self.assertEqual(run("bad topic!", "5"), 1)
+        self.assertEqual(q("SELECT web_last, web_worst, web_n, ms_n FROM live_delay"), [(1500, 1500, 2, 0)])
 
 
-class Redis(unittest.TestCase):
-    def test_redis_path_unchanged(self):
-        st = FakeResp()
-        c = lc.Collector(st, run=lambda w: (0, "ok\n", ""), topic_rows=[("status", ["status"], 15, "run")], topic_info=dict(INFO))
-        self.assertTrue(c.collect("status", ["status"]))
-        self.assertEqual(json.loads(st.data["hs:v1:status"])["gen"], 1)
-        self.assertEqual(st.published, [("hs:v1:changed", "status 1")])
-
-
-class Off(unittest.TestCase):
-    def test_off_mode_creates_no_live_table(self):
+class Bump(unittest.TestCase):
+    def test_a_hook_bump_creates_no_live_table(self):
         reset()
         r = subprocess.run([sys.executable, os.path.join(scripts, "state-db.py"), "topic-bump", "x"], capture_output=True, text=True,
                            env=dict(os.environ))

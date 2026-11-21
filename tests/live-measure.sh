@@ -13,7 +13,7 @@ export HS_WEB_PROBE_FILE=$(wp "$WORK/probe.tsv")
 export HS_MEASURE_LOST_S=2
 
 echo "-- live measure"
-# a state.db with the live tables, as hs-live-db leaves it
+# a state.db with the live tables, as hs-live leaves it
 python3 - "$HS_STATE_DB" <<'PYEOF'
 import sqlite3, sys, time
 c = sqlite3.connect(sys.argv[1])

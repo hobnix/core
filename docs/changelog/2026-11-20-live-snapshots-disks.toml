@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "change"
+title = "Snapshot lists, free-disk pickers, SMART history and service forms follow the live state"
+body  = """
+The backup and share snapshot lists, the instance snapshot lists, the disk pickers of the storage dialogs, the SMART history of a disk and the service form no longer ask the server on a timer while the live stream is open. They read again when the matching topic changes (`backup-state`, `ct-list`, `pool-disks`, `disk-health`, `services-list`).
+"""

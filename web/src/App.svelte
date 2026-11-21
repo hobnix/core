@@ -24,7 +24,7 @@
 
   setAuthLostHandler(() => { stopLive(); clearPollCache(); user = null; ui.role = 'viewer'; });
 
-  // the event stream runs while somebody is signed in (served in every liveState mode, ADR 0005 rule 5; `live.open` says it is up)
+  // the event stream runs while somebody is signed in (served always, ADR 0005 rule 5; `live.open` says it is up)
   $effect(() => { setTopics(ui.features.topics ?? {}); live.follow = !!ui.features.live; if (user) { startLive(); startRowState(); } else stopLive(); });
 
   onMount(async () => {

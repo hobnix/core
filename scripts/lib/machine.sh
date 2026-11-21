@@ -45,8 +45,46 @@ machine_tool() {   # machine_tool <args>: the python tool
   command -v "$py" >/dev/null 2>&1 || py=python
   PYTHONUTF8=1 "$py" "${BASH_SOURCE[0]%/*}/../machine-toml.py" "$@"
 }
-machine_get() { [ -f "$(machine_file)" ] || return 1; machine_tool get "$(machine_file)" "$1"; }
-machine_get_json() { [ -f "$(machine_file)" ] || return 1; machine_tool get "$(machine_file)" "$1" --json; }
+# The read path of the long-running services (hs-live, hs-web) asks for the same keys again and again (pools, bulkType ...): with
+# HS_MACHINE_CACHE=<folder> (set in their units; OFF everywhere else, so the CLI and the tests always read the file) each answer is kept in a file
+# there for at most HS_MACHINE_CACHE_TTL seconds (default 30) and only while the file has the same modification time (ns), size and inode.
+# A file system stamps a file with a coarse clock, so a rewrite within the same few milliseconds can look unchanged: that is why the answer also
+# expires, and machine_set / machine_unset drop every answer.
+_machine_cache_dir() {
+  local d=${HS_MACHINE_CACHE:-}
+  [ -n "$d" ] && [ "$d" != off ] || return 1
+  [ -d "$d" ] || (umask 077; mkdir -p "$d") 2>/dev/null || return 1
+  [ -w "$d" ] || return 1
+  printf '%s' "$d"
+}
+_machine_cached() {   # _machine_cached <mode> <key> [--json]: print the answer, return its exit code
+  local f; f=$(machine_file)
+  [ -f "$f" ] || return 1
+  local d c rc out sig have
+  if d=$(_machine_cache_dir) && [[ $2 =~ ^[A-Za-z0-9_.-]{1,80}$ ]] && sig=$(stat -c '%.9Y %s %i' -- "$f" 2>/dev/null) && [ -n "$sig" ]; then
+    local now=${EPOCHSECONDS:-0} ttl=${HS_MACHINE_CACHE_TTL:-30} at
+    # exact: the answer is used only while the file has the same modification time (ns), size and inode as when it was read; any writer
+    # (machine_set, the python tool, an editor, a copy over it) changes at least one of them
+    c=$d/$(printf '%s' "$f" | cksum | tr -c '0-9' _).$2.${3:+json}
+    if [ -f "$c" ]; then
+      { IFS= read -r have; IFS= read -r at; IFS= read -r rc; out=$(cat); } <"$c" 2>/dev/null || rc=
+      if [ "$have" = "$sig" ] && [[ $at =~ ^[0-9]+$ ]] && [ "$now" -gt 0 ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -lt "$ttl" ] && [[ $rc =~ ^[0-9]+$ ]]; then [ -z "$out" ] || printf '%s
+' "$out"; return "$rc"; fi
+    fi
+    out=$(machine_tool get "$f" "$2" ${3-}); rc=$?
+    ( umask 077; { printf '%s
+%s
+%s
+' "$sig" "$now" "$rc"; printf '%s' "$out"; } >"$c.$$" && mv -f "$c.$$" "$c" ) 2>/dev/null || true
+    [ -z "$out" ] || printf '%s
+' "$out"
+    return "$rc"
+  fi
+  machine_tool get "$f" "$2" ${3-}
+}
+_machine_cache_clear() { local d; d=$(_machine_cache_dir) && rm -f "$d"/* 2>/dev/null; return 0; }
+machine_get() { _machine_cached get "$1"; }
+machine_get_json() { _machine_cached get "$1" --json; }
 machine_has() { machine_get_json "$1" >/dev/null 2>&1; }
 _machine_backup() {   # _machine_backup <tag>: the --backup option for a change, when there is a state folder
   local state=${HS_STATE_DIR:-/var/lib/hs}
@@ -54,11 +92,13 @@ _machine_backup() {   # _machine_backup <tag>: the --backup option for a change,
 }
 machine_set() {
   local -a bk=(); mapfile -t bk < <(_machine_backup "${3:-config}")
-  machine_tool set "$(machine_file)" "$1" "$2" "${bk[@]}"
+  machine_tool set "$(machine_file)" "$1" "$2" "${bk[@]}"; local rc=$?
+  _machine_cache_clear; return "$rc"
 }
 machine_unset() {
   local -a bk=(); mapfile -t bk < <(_machine_backup "${2:-config}")
-  machine_tool unset "$(machine_file)" "$1" "${bk[@]}"
+  machine_tool unset "$(machine_file)" "$1" "${bk[@]}"; local rc=$?
+  _machine_cache_clear; return "$rc"
 }
 config_overlay_key() {
   local f; f=$(machine_generated_dir)/config-keys.overlay

@@ -38,6 +38,7 @@
   import GenBlock from './GenBlock.svelte';
   import { tr } from '../i18n.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
+  import { areaRole } from '../roles.js';
   import { tpl, planArgs } from './generic.js';
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import InputForm from '../forms/ops/InputForm.svelte';
@@ -67,7 +68,7 @@
   <PageHeader title={spec.title} crumb={spec.crumb} sub={spec.sub}>
     {#snippet actions()}
       {#each spec.actions ?? [] as a, i}
-        <Button variant={a.primary ? 'primary' : a.danger ? 'danger' : 'secondary'} tooltip={a.form && !forms[a.form] ? 'This change has no form in the web interface yet' : ''} disabled={a.form && !forms[a.form]} onclick={() => run(a, i)}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{a.label}</Button>
+        <Button need={areaRole(a.plan?.[0])} variant={a.primary ? 'primary' : a.danger ? 'danger' : 'secondary'} tooltip={a.form && !forms[a.form] ? 'This change has no form in the web interface yet' : ''} disabled={a.form && !forms[a.form]} onclick={() => run(a, i)}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{a.label}</Button>
       {/each}
     {/snippet}
   </PageHeader>

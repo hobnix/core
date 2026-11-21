@@ -26,8 +26,8 @@
     </div>
     <div style="flex:1"></div>
     <!-- vps update / vps watch: hs sys vps plan|start runs them over SSH with a key that can do only that (machine.toml: vpsHost, `hs vps key`) -->
-    {#if canAct}<Button icon="arrow-circle-up" disabled={!ui.features.vps} busy={jobRunning('vps', ['update'])} tooltip={ui.features.vps ? 'Pull the configuration on the proxyserver and rebuild it' : 'Set vpsHost in machine.toml (steps: docs/web-interface.md)'} onclick={() => openPlan('vps', ['update'], 'Update the proxyserver')}>vps update</Button>
-    <Button icon="binoculars" disabled={!ui.features.vps} busy={jobRunning('vps', ['watch'])} tooltip={ui.features.vps ? 'Check the home server from the proxyserver now' : 'Set vpsHost in machine.toml (steps: docs/web-interface.md)'} onclick={() => openPlan('vps', ['watch'], 'Watch the home server from outside')}>vps watch</Button>{/if}
+    {#if canAct}<Button need="admin" icon="arrow-circle-up" disabled={!ui.features.vps} busy={jobRunning('vps', ['update'])} tooltip={ui.features.vps ? 'Pull the configuration on the proxyserver and rebuild it' : 'Set vpsHost in machine.toml (steps: docs/web-interface.md)'} onclick={() => openPlan('vps', ['update'], 'Update the proxyserver')}>vps update</Button>
+    <Button need="admin" icon="binoculars" disabled={!ui.features.vps} busy={jobRunning('vps', ['watch'])} tooltip={ui.features.vps ? 'Check the home server from the proxyserver now' : 'Set vpsHost in machine.toml (steps: docs/web-interface.md)'} onclick={() => openPlan('vps', ['watch'], 'Watch the home server from outside')}>vps watch</Button>{/if}
     {#if d}
       <span class="chip"><span class="dot {d.problems > 0 ? 'warn' : d.problems === 0 ? 'ok' : 'off'}"></span>Health · {d.problems == null ? 'not available' : d.problems > 0 ? `${d.problems} problem${d.problems === 1 ? '' : 's'}` : 'no problems'}</span>
     {/if}

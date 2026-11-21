@@ -1,0 +1,6 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "A change that cannot start now ends with a message, not a spinner"
+body  = """
+On a busy server a plan or a start could stay unanswered and the toast spun for ever. The browser now waits 75 seconds, then says the server did not answer and to check Jobs. A job whose record cannot be read for about 30 seconds ends its toast too. Forms ask for the plan 400 ms after the last edit, and the Live state page sends its delay samples in batches.
+"""

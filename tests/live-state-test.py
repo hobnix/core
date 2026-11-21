@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""scripts/live_state.py and scripts/live-collect.py with a fake store and a stub run (no Redis, no processes)."""
+"""scripts/live_state.py and scripts/live-collect.py with an in-memory stand-in of the state database store and a stub run (no database, no processes)."""
 import importlib.util
 import io
 import json
 import os
 import re
 import shlex
-import socket
 import tempfile
 import threading
 import time
@@ -26,23 +25,47 @@ spec.loader.exec_module(lc)
 
 
 class FakeResp:
-    def __init__(self):
-        self.data = {}
-        self.published = []
+    """The DbStore of the collector (get/put/fail/delete/beat/counters) in memory. `data` holds the documents as hs:v1:<topic> -> JSON {ts, gen, rc,
+    out, err, ts_err, ttl, src}: the shape the tests below read and seed; docs() is what live_state.db_read returns for it."""
 
-    def cmd(self, *a):
-        if a[0] == "GET":
-            return self.data.get(a[1])
-        if a[0] == "SET":
-            self.data[a[1]] = a[2]
-            return "OK"
-        if a[0] == "PUBLISH":
-            self.published.append((a[1], a[2]))
-            return 1
-        if a[0] == "DEL":
-            self.data.pop(a[1], None)
-            return 1
-        raise AssertionError(a)
+    def __init__(self, hb=None):
+        self.data, self.published, self.hb, self.seen = {}, [], hb, None
+
+    def get(self, topic):
+        raw = self.data.get("hs:v1:" + topic)
+        if raw is None:
+            return None
+        d = json.loads(raw)
+        return {"payload": d.get("out"), "rc": d.get("rc"), "err": d.get("err"), "gen": d.get("gen", 0), "updated": d.get("ts"), "ts_err": d.get("ts_err")}
+
+    def put(self, topic, out, rc, ms, src, ttl, now):
+        old = json.loads(self.data.get("hs:v1:" + topic) or "{}")
+        gen = int(old.get("gen", 0)) + 1
+        self.data["hs:v1:" + topic] = json.dumps({"ts": now, "gen": gen, "rc": rc, "out": out, "err": None, "ts_err": None, "src": src, "ttl": ttl})
+        self.published.append(("changed", "%s %d" % (topic, gen)))
+        return gen
+
+    def fail(self, topic, rc, ms, err, src, ttl, now):
+        old = json.loads(self.data.get("hs:v1:" + topic) or "{}")
+        self.data["hs:v1:" + topic] = json.dumps({"ts": old.get("ts"), "gen": old.get("gen", 0), "rc": rc, "out": old.get("out", ""), "err": err,
+                                                  "ts_err": now, "src": src, "ttl": ttl})
+
+    def delete(self, topic):
+        self.data.pop("hs:v1:" + topic, None)
+
+    def beat(self, every, read):
+        pass
+
+    def counters(self):
+        return {}
+
+    def docs(self):
+        docs = {}
+        for k, v in self.data.items():
+            d = json.loads(v)
+            docs[k[len("hs:v1:"):]] = {"out": d.get("out"), "rc": d.get("rc"), "gen": d.get("gen"), "ts": d.get("ts"), "err": d.get("err"),
+                                       "ts_err": d.get("ts_err"), "ttl": d.get("ttl"), "src": d.get("src")}
+        return docs, self.hb
 
     def close(self):
         pass
@@ -60,14 +83,14 @@ class Collect(unittest.TestCase):
         st = FakeResp()
         return lc.Collector(st, run=run, topic_rows=self.rows), st, calls
 
-    def test_success_sets_key_and_publishes(self):
+    def test_success_sets_the_document_and_counts_it(self):
         c, st, _ = self.make([(0, "ok\n", ""), (0, "ok2\n", "")])
         self.assertTrue(c.collect("status", ["status"]))
         d = json.loads(st.data["hs:v1:status"])
         self.assertEqual((d["gen"], d["rc"], d["out"], d["err"]), (1, 0, "ok\n", None))
         c.collect("status", ["status"])
         self.assertEqual(json.loads(st.data["hs:v1:status"])["gen"], 2)
-        self.assertEqual(st.published, [("hs:v1:changed", "status 1"), ("hs:v1:changed", "status 2")])
+        self.assertEqual(st.published, [("changed", "status 1"), ("changed", "status 2")])
 
     def test_identical_output_keeps_gen_and_does_not_publish(self):
         S = "same\n"
@@ -78,7 +101,7 @@ class Collect(unittest.TestCase):
         self.assertFalse(c.collect("status", ["status"]))
         d = json.loads(st.data["hs:v1:status"])
         self.assertEqual(d["gen"], 1)
-        self.assertGreaterEqual(d["ts"], ts1)     # freshness still moves
+        self.assertEqual(d["ts"], ts1)     # an unchanged answer writes nothing: its time is the time of the change (the heartbeat says it was checked)
         self.assertEqual(len(st.published), 1)
         # a changed rc with the same text counts as different
         self.assertTrue(c.collect("status", ["status"]))
@@ -105,20 +128,19 @@ class Collect(unittest.TestCase):
         d = json.loads(st.data["hs:v1:status"])
         self.assertEqual((d["src"], d["ttl"]), ("status", 45))      # 3 x interval 15
         c.info = {"status": {"ttl": 600}}
-        c.collect("status", ["status"])       # identical read: only ts moves (and a ttl change shows)
+        c.collect("status", ["status"])       # identical read: nothing is written, not even a new ttl
         d2 = json.loads(st.data["hs:v1:status"])
-        self.assertEqual((d2["gen"], d2["out"], d2["ttl"]), (1, "a", 600))
+        self.assertEqual((d2["gen"], d2["out"], d2["ttl"]), (1, "a", 45))
         c.collect("status", ["status"])
         d3 = json.loads(st.data["hs:v1:status"])
-        self.assertEqual((d3["src"], d3["ttl"], d3["out"]), ("status", 600, "a"))      # a failed read keeps them
+        self.assertEqual((d3["src"], d3["ttl"], d3["out"]), ("status", 600, "a"))      # a failed read writes the current ones, the data stays
 
-    def test_identical_read_of_old_document_only_moves_ts(self):
+    def test_identical_read_of_an_old_document_writes_nothing(self):
         c, st, _ = self.make([(0, "a", "")])
-        st.data["hs:v1:status"] = json.dumps({"ts": 1.0, "gen": 3, "rc": 0, "out": "a", "err": None, "ts_err": None, "state": "ok"})
+        st.data["hs:v1:status"] = json.dumps({"ts": 1.0, "gen": 3, "rc": 0, "out": "a", "err": None, "ts_err": None})
         self.assertFalse(c.collect("status", ["status"]))
         d = json.loads(st.data["hs:v1:status"])
-        self.assertEqual((d["gen"], d["out"], st.published), (3, "a", []))
-        self.assertGreater(d["ts"], 1.0)
+        self.assertEqual((d["gen"], d["out"], d["ts"], st.published), (3, "a", 1.0, []))
 
     def test_failure_keeps_data_and_sets_err(self):
         c, st, _ = self.make([(0, "good", ""), (2, "", "x" * 300)])
@@ -139,17 +161,17 @@ class Collect(unittest.TestCase):
         key = "hs:v1:status"
         c.collect("status", ["status"])
         good = json.loads(st.data[key])
-        self.assertEqual(good["state"], "ok")
+        self.assertIsNone(good["err"])
         c.collect("status", ["status"])
         d = json.loads(st.data[key])
-        self.assertEqual((d["state"], d["out"], d["ts"], d["gen"]), ("stale", "good", good["ts"], 1))
+        self.assertEqual((bool(d["err"]), d["out"], d["ts"], d["gen"]), (True, "good", good["ts"], 1))      # stale: the last good data and the failure
         c.collect("status", ["status"])
         c.collect("status", ["status"])
         self.assertEqual([e[0] for e in events], ["live.collector-failed"])      # one event for three failed runs
         self.assertEqual(events[0][1], "status")
         self.assertTrue(c.collect("status", ["status"]))
         d = json.loads(st.data[key])
-        self.assertEqual((d["state"], d["out"], d["err"], d["ts_err"]), ("ok", "better", None, None))
+        self.assertEqual((d["out"], d["err"], d["ts_err"]), ("better", None, None))
         self.assertEqual([e[0] for e in events], ["live.collector-failed", "live.collector-recovered"])
 
     def test_never_read_topic_is_error_not_stale(self):
@@ -158,7 +180,7 @@ class Collect(unittest.TestCase):
         c.emit = lambda *a: events.append(a)
         c.collect("status", ["status"])
         d = json.loads(st.data["hs:v1:status"])
-        self.assertEqual((d["state"], d["ts"], d["out"]), ("error", None, ""))
+        self.assertEqual((bool(d["err"]), d["ts"], d["out"]), (True, None, ""))      # error: never read
         self.assertEqual(len(events), 1)
 
     def test_locked_skip_runs_nothing(self):
@@ -179,6 +201,67 @@ class Collect(unittest.TestCase):
         self.assertTrue(c.events["slow"].is_set())
         c.refresh("*")
         self.assertTrue(c.events["status"].is_set())
+
+
+class Coalesce(unittest.TestCase):
+    """a burst of refreshes of one topic is one read (beta.1 read state-history again and again); a group `any` wake waits longer"""
+
+    def make(self, groups):
+        rows = [(n, [n], 300, "run") for n in groups]
+        calls = []
+
+        def run(words):
+            calls.append(words[0])
+            return 0, "%s %d\n" % (words[0], len(calls)), ""
+        c = lc.Collector(FakeResp(), run=run, topic_rows=rows, topic_info={n: {"cap": None, "groups": g} for n, g in groups.items()}, topic_needs={})
+        return c, calls
+
+    def run_loop(self, c, topic, secs):
+        t = threading.Thread(target=c.loop, args=(topic, [topic], 300, "run"), daemon=True)
+        t.start()
+        time.sleep(secs)
+        c.stop.set()
+        c.events[topic].set()
+        t.join(3)
+
+    def test_burst_is_one_read(self):
+        c, calls = self.make({"hist": {"disks"}})
+        c.min_gap = 0.4
+
+        def burst():
+            time.sleep(0.15)                      # the first read is done, the topic sleeps
+            for _ in range(20):
+                c.refresh("hist")
+                c.refresh("@disks")
+                time.sleep(0.01)
+        b = threading.Thread(target=burst)
+        b.start()
+        self.run_loop(c, "hist", 1.0)
+        b.join()
+        self.assertEqual(calls, ["hist", "hist"])          # the first read, then ONE for the 40 refreshes
+
+    def test_any_wake_waits_for_any_gap_but_own_group_does_not(self):
+        c, calls = self.make({"st": {"any"}})
+        c.min_gap, c.any_gap = 0, 30
+        t = threading.Thread(target=c.loop, args=("st", ["st"], 300, "run"), daemon=True)
+        t.start()
+        time.sleep(0.2)
+        c.refresh("@docker")                               # `any` only: held back by any_gap
+        time.sleep(0.3)
+        self.assertEqual(calls, ["st"])
+        c.refresh("st")                                    # asked for by name: not held back by any_gap
+        time.sleep(0.3)
+        c.stop.set()
+        c.events["st"].set()
+        t.join(3)
+        self.assertEqual(calls, ["st", "st"])
+
+    def test_refresh_log_counts_the_queued(self):
+        c, _ = self.make({"a": {"x"}})
+        with unittest.mock.patch.object(lc, "log") as lg:
+            c.refresh("a")
+            c.refresh("a")
+        self.assertEqual(lg.call_count, 1)                 # the second one woke nothing new: no line
 
 
 class Needs(unittest.TestCase):
@@ -265,11 +348,11 @@ class Needs(unittest.TestCase):
         outs = [(0, "ok\n", ""), (1, "", "boom")]
         c, calls = self.make({"b": ("a",)}, run=lambda w: outs.pop(0) if w[0] == "a" else (0, "b\n", ""))
         c.collect("b", ["b"])
-        before = c.store.data["hs:v1:b"]
+        before = c.db.data["hs:v1:b"]
         self.assertTrue(c.collect("a", ["a"]))
         self.assertFalse(c.collect("a", ["a"]))        # failed: not a new gen, no wave
-        self.assertEqual(c.store.data["hs:v1:b"], before)
-        self.assertEqual(json.loads(c.store.data["hs:v1:b"])["state"], "ok")
+        self.assertEqual(c.db.data["hs:v1:b"], before)
+        self.assertIsNone(json.loads(c.db.data["hs:v1:b"])["err"])
 
     def test_error_in_b_inside_a_wave(self):
         state = {"n": 0}
@@ -283,8 +366,8 @@ class Needs(unittest.TestCase):
         self.assertEqual(c.wave({"a"}), ["b", "c"])
         calls.clear()
         self.assertEqual(c.wave({"a"}), ["b"])
-        doc = json.loads(c.store.data["hs:v1:b"])
-        self.assertEqual((doc["state"], doc["out"]), ("stale", "good\n"))
+        doc = json.loads(c.db.data["hs:v1:b"])
+        self.assertEqual((bool(doc["err"]), doc["out"]), (True, "good\n"))
 
     def test_min_gap_waits_and_a_burst_is_one_wave(self):
         import time
@@ -311,35 +394,6 @@ class Needs(unittest.TestCase):
         c.refresh("@disks")
         self.assertTrue(c.events["a"].is_set())
         self.assertFalse(c.events["b"].is_set())
-
-
-class Reconnect(unittest.TestCase):
-    def test_old_store_is_closed_before_the_new_one(self):
-        closed, fresh = [], FakeResp()
-
-        class Dead:
-            def cmd(self, *a):
-                raise OSError("gone")
-
-            def close(self):
-                closed.append(1)
-
-        class Stop:
-            def __init__(self, c):
-                self.c = c
-
-            def is_set(self):
-                return bool(closed and self.c.store is fresh)
-
-            def wait(self, t=None):
-                return False
-
-        c = lc.Collector(Dead(), run=lambda w: (0, "x\n", ""), topic_rows=[("status", ["status"], 15, "run")],
-                         connect=lambda: fresh)
-        c.stop = Stop(c)
-        c.loop("status", ["status"], 15, "run")
-        self.assertEqual(closed, [1])
-        self.assertIs(c.store, fresh)
 
 
 class Groups(unittest.TestCase):
@@ -391,7 +445,7 @@ class Groups(unittest.TestCase):
         ls._CAP_CACHE["nosuchcap"] = (__import__("time").time(), False)
         try:
             self.assertFalse(c.collect("d", ["d"]))
-            self.assertEqual((calls, c.store.data), ([], {}))
+            self.assertEqual((calls, c.db.data), ([], {}))
             self.assertTrue(c.collect("a", ["a"]))
         finally:
             ls._CAP_CACHE.clear()
@@ -470,6 +524,17 @@ ID_TOPICS = {
     'backup-shares': (['backup', 'shares'], 60, 'skip', 'backup', {'backup', 'shares', 'instances', 'disks', 'system'}),
     'docker-list': (['docker', 'list'], 300, 'skip', 'docker', {'instances', 'system', 'docker'}),
     'docker-apps': (['docker', 'apps'], 300, 'skip', 'docker', {'instances', 'system', 'docker'}),
+    'docker-status': (['docker', 'status'], 60, 'skip', None, {'instances', 'system', 'docker'}),
+    'docker-health': (['docker', 'health'], 60, 'skip', None, {'instances', 'system', 'docker'}),
+    'docker-containers': (['docker', 'containers'], 120, 'skip', 'docker', {'instances', 'system', 'docker'}),
+    'docker-registries': (['docker', 'registries'], 120, 'skip', 'docker', {'instances', 'system', 'docker'}),
+}
+
+# #886: reads that had no producer. Not in ID_TOPICS: they are not woken by every instance or system row.
+PENDING_TOPICS = {
+    'parts-pending': (['parts', 'pending'], 60, 'run', None, {'system', 'network'}),
+    'rebuild-pending': (['rebuild', 'pending'], 60, 'run', None, {'system', 'network', 'security', 'backup'}),
+    'preset-list': (['preset', 'list'], 3600, 'run', None, set()),
 }
 
 
@@ -506,6 +571,13 @@ class Cli(unittest.TestCase):
                 if f[1].split()[0] == "remote":
                     self.assertIn("remote-list", woken_by(g), f[1])
         self.assertTrue({"system", "network", "instances", "shares"} <= seen)
+
+    def test_pending_topics(self):
+        info = ls.topic_info()
+        rows = {t[0]: t for t in ls.topics()}
+        for name, (words, iv, lock, cap, groups) in PENDING_TOPICS.items():
+            self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
+            self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
 
     def test_identity_and_backup_topics(self):
         info = ls.topic_info()
@@ -645,17 +717,17 @@ class Cli(unittest.TestCase):
         ls.topics, ls.topic_info = (lambda: real_t(p)), (lambda: real_i(p))
         ls._CAP_CACHE["nosuchcap"] = (time.time(), False)
         out = io.StringIO()
-        st = FakeResp()
+        st = FakeResp((time.time(), 5))
         st.data["hs:v1:old"] = json.dumps({"ts": time.time() - 999, "gen": 1, "rc": 0, "out": "x", "err": None, "ts_err": None})
         try:
-            self.assertEqual(ls.cli_check(conn=st, out=out), 0)
+            self.assertEqual(ls.cli_check(out, docs=st.docs()), 0)
             self.assertEqual(out.getvalue(), "")
         finally:
             ls.topics, ls.topic_info = real_t, real_i
             ls._CAP_CACHE.clear()
 
-    def fake(self, ts, err=None, ts_err=None):
-        st = FakeResp()
+    def fake(self, ts, err=None, ts_err=None, hb=None):
+        st = FakeResp(hb)
         st.data["hs:v1:status"] = json.dumps({"ts": ts, "gen": 4, "rc": 0, "out": "x", "err": err, "ts_err": ts_err})
         return st
 
@@ -669,6 +741,7 @@ class Cli(unittest.TestCase):
             ('disk-marks', ['disk', 'marks'], 15, 'run'),
             ('pool-info-bulk', ['pool', 'info', 'bulk'], 15, 'skip'),
             ('pool-info-fast', ['pool', 'info', 'fast'], 15, 'skip'),
+            ('pool-disks', ['pool', 'disks'], 30, 'skip'),
             ('pool-members-bulk', ['pool', 'members', 'bulk'], 15, 'skip'),
             ('pool-members-fast', ['pool', 'members', 'fast'], 15, 'skip'),
             ('pool-state-bulk', ['pool', 'state', 'bulk'], 10, 'run'),
@@ -700,17 +773,18 @@ class Cli(unittest.TestCase):
             ('expiry', ['expiry', 'list'], 300, 'run'),
             ('notify-channels', ['notify', 'channels'], 60, 'run'),
             ('notify-providers', ['notify', 'providers'], 3600, 'run'),
-        ] + [(n, v[0], v[1], v[2]) for n, v in INSTANCE_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in APP_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in NET_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in ID_TOPICS.items()])
+        ] + [(n, v[0], v[1], v[2]) for n, v in INSTANCE_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in APP_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in NET_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in ID_TOPICS.items()] + [(n, v[0], v[1], v[2]) for n, v in PENDING_TOPICS.items()])
 
     def test_status_shape(self):
         import time
         out = io.StringIO()
-        self.assertEqual(ls.cli_status(self.fake(time.time() - 7), out), 0)
+        self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 72)
+        self.assertEqual(len(lines), 80)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
-        self.assertEqual(len(status), 9)
+        self.assertEqual(len(status), 14)
+        self.assertEqual(status[9], "-")    # fake has no heartbeat
         self.assertEqual(status[7], "-")
         self.assertEqual(status[8], "fresh")
         self.assertEqual(live[8], "-")      # no document: no status
@@ -721,15 +795,15 @@ class Cli(unittest.TestCase):
 
     def test_status_without_data(self):
         out = io.StringIO()
-        ls.cli_status(FakeResp(), out)
+        ls.cli_status(out, docs=FakeResp().docs())
         raw = out.getvalue().rstrip("\n").split("\n")
-        self.assertTrue(all(len(l.split("\t")) == 9 for l in raw))
+        self.assertTrue(all(len(l.split("\t")) == 14 for l in raw))
         by = {l.split("\t")[0]: l.split("\t")[7] for l in raw}
         self.assertEqual((by["services-routes"], by["status"]), ("services-list", "-"))
         self.assertTrue(all(l.split("\t")[8] == "-" for l in raw))
         lines = sorted("\t".join(l.split("\t")[:7]) for l in raw)
-        old = ['disk-health	30	-1	0	-	-	-', 'disk-inventory	30	-1	0	-	-	-', 'disk-marks	15	-1	0	-	-	-', 'encryption	30	-1	0	-	-	-', 'fm-locations	15	-1	0	-	-	-', 'live	5	-1	0	-	-	-', 'monitor-disks	15	-1	0	-	-	-', 'pool-info-bulk	15	-1	0	-	-	-', 'pool-info-fast	15	-1	0	-	-	-', 'pool-members-bulk	15	-1	0	-	-	-', 'pool-members-fast	15	-1	0	-	-	-', 'pool-state-bulk	10	-1	0	-	-	-', 'pool-state-fast	10	-1	0	-	-	-', 'shares-deleted	60	-1	0	-	-	-', 'shares-overview	30	-1	0	-	-	-', 'shares-principals	60	-1	0	-	-	-', 'state-history	30	-1	0	-	-	-', 'status	15	-1	0	-	-	-', 'temp-disks	30	-1	0	-	-	-', 'vault-list	60	-1	0	-	-	-', 'vault-usage	30	-1	0	-	-	-', 'vault-uses	60	-1	0	-	-	-']
-        self.assertEqual(lines, sorted(old + ["%s	%s	-1	0	-	-	-" % (t, iv) for t, iv in SYSTEM_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in INSTANCE_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in APP_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in NET_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in ID_TOPICS.items()]))
+        old = ['disk-health	30	-1	0	-	-	-', 'disk-inventory	30	-1	0	-	-	-', 'disk-marks	15	-1	0	-	-	-', 'encryption	30	-1	0	-	-	-', 'fm-locations	15	-1	0	-	-	-', 'live	5	-1	0	-	-	-', 'monitor-disks	15	-1	0	-	-	-', 'pool-disks	30	-1	0	-	-	-', 'pool-info-bulk	15	-1	0	-	-	-', 'pool-info-fast	15	-1	0	-	-	-', 'pool-members-bulk	15	-1	0	-	-	-', 'pool-members-fast	15	-1	0	-	-	-', 'pool-state-bulk	10	-1	0	-	-	-', 'pool-state-fast	10	-1	0	-	-	-', 'shares-deleted	60	-1	0	-	-	-', 'shares-overview	30	-1	0	-	-	-', 'shares-principals	60	-1	0	-	-	-', 'state-history	30	-1	0	-	-	-', 'status	15	-1	0	-	-	-', 'temp-disks	30	-1	0	-	-	-', 'vault-list	60	-1	0	-	-	-', 'vault-usage	30	-1	0	-	-	-', 'vault-uses	60	-1	0	-	-	-']
+        self.assertEqual(lines, sorted(old + ["%s	%s	-1	0	-	-	-" % (t, iv) for t, iv in SYSTEM_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in INSTANCE_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in APP_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in NET_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in ID_TOPICS.items()] + ["%s	%s	-1	0	-	-	-" % (t, v[1]) for t, v in PENDING_TOPICS.items()]))
 
     def test_status_of(self):
         n = 1000.0
@@ -749,7 +823,7 @@ class Cli(unittest.TestCase):
         import time
         out = io.StringIO()
         st = self.fake(time.time() - 100)
-        ls.cli_status(st, out)
+        ls.cli_status(out, docs=st.docs())
         self.assertEqual([l for l in out.getvalue().split("\n") if l.startswith("status\t")][0].split("\t")[8], "expired")
         self.assertEqual(ls._ttl({}, 15, {"ttl": 600}), 600)
         self.assertEqual(ls._ttl({"ttl": 20}, 15, {"ttl": 600}), 20)
@@ -758,49 +832,63 @@ class Cli(unittest.TestCase):
     def test_check_fresh_stale_down(self):
         import time
         out = io.StringIO()
-        self.assertEqual(ls.cli_check(self.fake(time.time() - 5), out), 0)
+        alive = (time.time(), 5)
+        self.assertEqual(ls.cli_check(out, docs=self.fake(time.time() - 5, hb=alive).docs()), 0)      # the collector runs: an unchanged answer is fresh
         self.assertEqual(out.getvalue(), "")
-        self.assertEqual(ls.cli_check(self.fake(time.time() - 100), out), 1)
+        self.assertEqual(ls.cli_check(out, docs=self.fake(time.time() - 100, hb=alive).docs()), 0)
+        self.assertEqual(out.getvalue(), "")
+        # the last try failed and the good data is past its ttl: stale
+        self.assertEqual(ls.cli_check(out, docs=self.fake(time.time() - 100, err="boom", ts_err=time.time() - 1, hb=alive).docs()), 1)
         self.assertTrue(out.getvalue().startswith("live:stale:status\t"))
+        # no fresh heartbeat but documents: the collector is not running (one line, not one per topic)
         out = io.StringIO()
-        os.environ["HS_LIVE_SOCKET"] = "/nonexistent/none.sock"
-        try:
-            self.assertEqual(ls.cli_check(None, out), 1)
-        finally:
-            del os.environ["HS_LIVE_SOCKET"]
+        self.assertEqual(ls.cli_check(out, docs=self.fake(time.time() - 5, hb=(time.time() - 600, 5)).docs()), 1)
+        self.assertEqual(len(out.getvalue().splitlines()), 1)
+        self.assertTrue(out.getvalue().startswith("live:down\t"))
+        # nothing at all yet (a fresh install, the collector has not started): no problem
+        out = io.StringIO()
+        self.assertEqual(ls.cli_check(out, docs=FakeResp().docs()), 0)
+        self.assertEqual(out.getvalue(), "")
+        # the database cannot be read
+        out = io.StringIO()
+        with unittest.mock.patch.object(ls, "db_read", side_effect=OSError("state.db: locked")):
+            self.assertEqual(ls.cli_check(out), 1)
         self.assertTrue(out.getvalue().startswith("live:down\t"))
 
-    def test_check_includes_stale_live_topic(self):
+    def test_status_age_counts_from_the_heartbeat_while_the_collector_runs(self):
         import time
-        st = FakeResp()
-        st.data["hs:v1:status"] = json.dumps({"ts": time.time() - 5, "gen": 1, "rc": 0, "out": "x", "err": None, "ts_err": None})
-        st.data["hs:v1:live"] = json.dumps({"ts": time.time() - 20, "gen": 1, "rc": 0, "out": "x", "err": None, "ts_err": None})
         out = io.StringIO()
-        self.assertEqual(ls.cli_check(st, out), 1)
+        ls.cli_status(out, docs=self.fake(time.time() - 500, hb=(time.time() - 2, 5)).docs())
+        status = [l for l in out.getvalue().split("\n") if l.startswith("status\t")][0].split("\t")
+        self.assertEqual(status[8], "fresh")      # unchanged for 500 s, but the collector looked 2 s ago
+        self.assertIn(int(status[2]), (2, 3))
+        self.assertIn(int(status[9]), (2, 3))      # the heartbeat age, last column
+
+    def test_check_includes_a_failing_live_topic(self):
+        import time
+        st = FakeResp((time.time(), 5))
+        st.data["hs:v1:status"] = json.dumps({"ts": time.time() - 5, "gen": 1, "rc": 0, "out": "x", "err": None, "ts_err": None})
+        st.data["hs:v1:live"] = json.dumps({"ts": time.time() - 20, "gen": 1, "rc": 1, "out": "x", "err": "boom", "ts_err": time.time() - 1})
+        out = io.StringIO()
+        self.assertEqual(ls.cli_check(out, docs=st.docs()), 1)
         self.assertIn("live:stale:live\t", out.getvalue())
 
-    def test_refresh_publishes_and_never_fails(self):
-        st = FakeResp()
-        self.assertEqual(ls.cli_refresh(["a", "b"], st), 0)
-        self.assertEqual(st.published, [("hs:v1:refresh", "a"), ("hs:v1:refresh", "b")])
-        st = FakeResp()
-        ls.cli_refresh(["--all"], st)
-        self.assertEqual(sorted(p[1] for p in st.published), sorted([t[0] for t in ls.topics()]))
-        self.assertEqual(len(st.published), 72)
-        os.environ["HS_LIVE_SOCKET"] = "/nonexistent/none.sock"
-        try:
-            self.assertEqual(ls.cli_refresh(["--all"]), 0)
-        finally:
-            del os.environ["HS_LIVE_SOCKET"]
+    def test_refresh_counts_the_topics_up(self):
+        calls = []
+        with unittest.mock.patch.object(ls.subprocess, "run", lambda cmd, **kw: calls.append(cmd)):
+            self.assertEqual(ls.cli_refresh(["a", "@b"]), 0)
+        self.assertEqual(calls[0][1:], [os.path.join(ls.HERE, "state-db.py"), "topic-bump", "a", "@b"])
+        with unittest.mock.patch.object(ls.subprocess, "run", side_effect=OSError("no python")):
+            self.assertEqual(ls.cli_refresh(["--all"]), 0)      # best effort
 
     def test_self_read_sees_previous_generation(self):
-        """The collector runs the command before its own Redis lock, so cli_status sees the previous live document."""
+        """The collector runs the command before it stores, so cli_status sees the previous live document."""
         import time
         st = FakeResp()
         st.data["hs:v1:status"] = json.dumps({"ts": time.time() - 5, "gen": 1, "rc": 0, "out": "x", "err": None, "ts_err": None})
         st.data["hs:v1:live"] = json.dumps({"ts": time.time() - 2, "gen": 3, "rc": 0, "out": "x", "err": None, "ts_err": None})
         out = io.StringIO()
-        ls.cli_status(st, out)
+        ls.cli_status(out, docs=st.docs())
         live = [l for l in out.getvalue().rstrip("\n").split("\n") if l.startswith("live\t")][0].split("\t")
         self.assertEqual(live[3], "3")      # the generation that existed before this collection
         self.assertEqual(st.published, [])  # status does not publish refreshes
@@ -809,7 +897,7 @@ class Cli(unittest.TestCase):
     def inspect(self, st, caps=None):
         out = io.StringIO()
         with unittest.mock.patch.object(ls, "cap_on", lambda n: True if caps is None else caps.get(n, True)):
-            rc = ls.cli_inspect(st, out)
+            rc = ls.cli_inspect(out, docs=st.docs())
         return rc, (json.loads(out.getvalue()) if out.getvalue() else None)
 
     def test_inspect_shape(self):
@@ -858,15 +946,14 @@ class Cli(unittest.TestCase):
         self.assertNotIn("ext-demo-list", {e["topic"] for e in doc["topics"]})
 
     def test_inspect_down(self):
-        class Dead:
-            def cmd(self, *a):
-                raise OSError("gone")
-        rc, doc = self.inspect(Dead())
-        self.assertEqual(rc, 1)
+        out = io.StringIO()
+        with unittest.mock.patch.object(ls, "db_read", side_effect=OSError("state.db: locked")):
+            self.assertEqual(ls.cli_inspect(out), 1)
+        self.assertEqual(out.getvalue(), "")
 
     def raw(self, args, st):
         out = io.StringIO()
-        rc = ls.cli_raw(args, st, out)
+        rc = ls.cli_raw(args, out, docs=st.docs())
         return rc, (json.loads(out.getvalue()) if out.getvalue() else None)
 
     def test_raw_caps_size(self):
@@ -884,43 +971,6 @@ class Cli(unittest.TestCase):
     def test_raw_not_stored(self):
         rc, d = self.raw(["status"], FakeResp())
         self.assertEqual((rc, d), (0, {"topic": "status", "stored": False}))
-
-
-@unittest.skipUnless(hasattr(socket, "AF_UNIX"), "no AF_UNIX")
-class Wire(unittest.TestCase):
-    def test_encode_decode(self):
-        self.assertEqual(ls.encode("SET", "k", "v"), b"*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n")
-        d = tempfile.mkdtemp()
-        path = os.path.join(d, "s.sock")
-        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        srv.bind(path)
-        srv.listen(1)
-        got = []
-
-        def serve():
-            c, _ = srv.accept()
-            got.append(c.recv(4096))
-            c.sendall(b"+OK\r\n:42\r\n$6\r\nh\xc3\xa4llo\r\n$-1\r\n*2\r\n$1\r\na\r\n:7\r\n-ERR no\r\n")
-            c.close()
-        t = threading.Thread(target=serve, daemon=True)
-        t.start()
-        r = ls.Resp(path, 2)
-        self.assertEqual(r.cmd("PING"), "OK")
-        self.assertEqual(got[0], b"*1\r\n$4\r\nPING\r\n")
-        self.assertEqual(r.read(), 42)
-        self.assertEqual(r.read(), "hällo"[:5] if False else "hällo")
-        self.assertIsNone(r.read())
-        self.assertEqual(r.read(), ["a", 7])
-        with self.assertRaises(OSError):
-            r.read()
-        with self.assertRaises(OSError):
-            r.read()   # closed
-        r.close()
-        srv.close()
-
-    def test_connect_error_is_oserror(self):
-        with self.assertRaises(OSError):
-            ls.Resp("/nonexistent/none.sock", 1)
 
 
 class ExtLive(unittest.TestCase):
@@ -1015,7 +1065,7 @@ class ExtLive(unittest.TestCase):
         out = io.StringIO()
         with unittest.mock.patch.object(ls, "topics", lambda path=None: [("t", ["t"], 15, "run")]), \
                 unittest.mock.patch.object(ls, "topic_info", lambda path=None: {}):
-            ls.cli_check(conn=st, out=out)
+            ls.cli_check(out, docs=st.docs())
         self.assertEqual(len(out.getvalue().splitlines()), 1)
         self.assertNotIn("\t", out.getvalue().split("\t", 1)[1])
 
@@ -1035,12 +1085,12 @@ class ExtLive(unittest.TestCase):
         self.assertTrue(c.events["ext-demo-list"].is_set())
         self.assertTrue(c.events["status"].is_set())        # status lists the group "any": every group wakes it
         stop = c.stops["ext-demo-list"]
-        c.store.data["hs:v1:ext-demo-list"] = "{}"
+        c.db.data["hs:v1:ext-demo-list"] = "{}"
         self.write("caps", "")
         c.rescan()
         self.assertTrue(stop.is_set())
         self.assertNotIn("ext-demo-list", c.events)
-        self.assertNotIn("hs:v1:ext-demo-list", c.store.data)
+        self.assertNotIn("hs:v1:ext-demo-list", c.db.data)
         self.assertIn("status", c.events)
 
     def test_refresh_of_an_unknown_ext_topic_rescans(self):
@@ -1213,7 +1263,7 @@ class DockerEvents(unittest.TestCase):
 
     def test_docker_group_wakes_the_docker_topics(self):
         got = {t for t, i in ls.topic_info().items() if "docker" in i["groups"]}
-        self.assertEqual(got, {"docker-list", "docker-apps"})
+        self.assertEqual(got, {"docker-list", "docker-apps", "docker-status", "docker-health", "docker-containers", "docker-registries"})
 
 
 FAKE_INCUS = r"""

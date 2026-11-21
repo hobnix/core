@@ -1,0 +1,7 @@
+date = "2026-11-20"
+type = "feature"
+title = "SnapRAID: skipped folders and removal limits per share"
+docs = "storage-and-disks"
+body = """The parity sync no longer stops the whole pool for 100 removed files. The limit is per share (default: the higher of 100 files and 1 % of the share) and the sync stops only for shares over it, with a table of share, folder, removed files and limit. hs share <share> parity skip <folder> leaves a folder such as downloads out of the parity (you type the folder name; its files lose their protection), limit sets the number by hand.
+
+The web interface has a Parity section in the share drawer, and the pool page shows the table of a stopped sync with a button to sync anyway. After a failed sync the log lists SnapRAID's Unexpected and WARNING lines. Not tested on hardware yet."""

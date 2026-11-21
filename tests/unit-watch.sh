@@ -37,7 +37,7 @@ run() {   # run <feed lines...>: the topics of the one refresh call (sorted), "-
 }
 
 check_eq "a job unit marks jobs-running" "jobs-running" "$(run "$(sig hs-job-pool-bulk-1.service active)")"
-check_eq "a plain hs unit that runs marks nothing (only failed counts)" "-" "$(run "$(sig hs-reads-collect.service active)" "$(sig hs-reads-collect.service inactive)")"
+check_eq "a plain hs unit that runs marks nothing (only failed counts)" "-" "$(run "$(sig hs-event-notify.service active)" "$(sig hs-event-notify.service inactive)")"
 check_eq "an hs unit that fails marks the health topics" "health-list,health-next" "$(run "$(sig hs-backup.service active)" "$(sig hs-backup.service failed)")"
 check_eq "...and so does the one that leaves failed" "health-list,health-next" "$(run "$(sig hs-backup.service failed)" "$(sig hs-backup.service inactive)" | head -n 1)"
 check_eq "a template unit marks the group of its instance" "@ext-confinefx" "$(run "$(sig 'hs-ext-svc@confinefx.service' active)")"

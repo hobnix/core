@@ -27,7 +27,7 @@ usage: hs backup [status]                    what is in the backup, last run, sp
        hs backup find <name>                 which snapshots contain a file name
        hs backup restore <snapshot|latest> <path> [--tag T] [--to DIR] [--keep-owner]
                                              restore one file or folder, by default
-                                             into /bulk/shares/restored (never over the live copy), owned by adminuser;
+                                             into /bulk/shares/restored (never over the live copy), owned by the admin account;
                                              --keep-owner keeps the owners of the snapshot, --to / (in place) always does
        hs backup config                      the host snapshots and which settings files each holds
        hs backup config restore [<snapshot|latest>] [--with-state] [--dry-run]
@@ -529,7 +529,12 @@ cmd_now() {
   local lock=/run/hs-backup.lock
   [ -w /run ] || lock=$STATE/.backup.lock
   exec 9>"$lock"
-  flock -n 9 || die "Another backup is running."
+  if ! flock -n 9; then
+    # a second start is not a failure: as a job it ends skipped (exit 0), at a terminal it says so
+    if [ -n "${HS_JOB_ID:-}" ]; then . "$(dirname "$0")/lib/job.sh"; hs_job_skip "Already running" || true; fi
+    note "$(t 'Already running')"
+    return 0
+  fi
   note_state "last_try=$(date +%s)"
   # restic shows its own progress line on a terminal; in a job or a log (no terminal) one line a minute
   [ -t 1 ] || export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-0.0167}
@@ -1869,7 +1874,7 @@ cmd_state_kv() {
     printf 'disk\tabsent\n'
   fi
   if mountpoint -q "$BROWSE" 2>/dev/null; then printf 'browse\ton\n'; else printf 'browse\toff\n'; fi
-  # the address may carry user:password (rest:https://u:pw@host/); this output lands in Redis, so the password is masked
+  # the address may carry user:password (rest:https://u:pw@host/); this output lands in the live state, so the password is masked
   offsite_adopt_old
   printf 'offsite\t%s\n' "$({ cat "$OFFSITE" 2>/dev/null || true; } | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')"
   printf 'offsite_ok\t%s\n' "$(get offsite_ok)"

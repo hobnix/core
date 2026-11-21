@@ -1002,7 +1002,7 @@
     "operationId": "backup.find.by_word",
     "summary": "files whose name contains a word, in every snapshot, as data: snapshot, time, path, type, bytes (at most 200; mounts the backup disk, can take a while)",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "backup",
@@ -2979,6 +2979,12 @@
      "class": "read",
      "rest": false
     },
+    "x-hs-web": {
+     "path": "/api/sys/disk/power",
+     "kind": "tsv",
+     "ttl": 30,
+     "query": []
+    },
     "description": "disk: one line per spinning pool member disk; since is epoch seconds of the last state change seen, wakes the asleep-to-spinning changes seen today (counted at each reading). power: only measured numbers, each with its source (ups = UPS output, rapl = CPU package from /sys/class/powercap); no estimate and no number per disk. Empty when nothing is measured.",
     "responses": {
      "0": {
@@ -4536,7 +4542,7 @@
     "operationId": "fm.du.by_location",
     "summary": "file manager: the size of one folder (--path); it reads everything below it and can wake disks, so it runs as a background job: a fresh cached answer (files, folders, bytes, partial, mtime, time) or pending + unit; ask again later",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -4762,7 +4768,7 @@
     "operationId": "fm.locations",
     "summary": "file manager: the places a pane can show (disks of the array, pools, upload cache, shares, temporary disks) as loc rows: id, kind, label, filesystem, size, free, writable, reason, pool, disk",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -4802,7 +4808,7 @@
     "operationId": "fm.ls.by_location",
     "summary": "file manager: one page of a folder: row lines (type d|f|l, bytes, mtime, name, disks, flags, busy), then cursor or end; --path, --cursor, --limit",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -5092,7 +5098,7 @@
     "operationId": "fm.stat.by_location",
     "summary": "file manager: owner, group and mode of one item (--path), read from stat: type, owner, group, uid, gid, mode, perms, bytes, mtime; changes nothing",
     "x-hs-exit": true,
-    "x-hs-role": "viewer",
+    "x-hs-role": "admin",
     "x-hs-sys": {
      "words": [
       "fm",
@@ -6789,7 +6795,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {
@@ -7147,7 +7154,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {
@@ -7551,7 +7559,7 @@
   "/live/check": {
    "get": {
     "operationId": "live.check",
-    "summary": "problems of the live state (Redis down, a topic older than three intervals): key and text",
+    "summary": "problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7605,7 +7613,7 @@
      "query": []
     },
     "x-hs-described": false,
-    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322).",
+    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
     "responses": {
      "0": {
       "description": "ok",
@@ -7712,7 +7720,7 @@
   "/live/status": {
    "get": {
     "operationId": "live.status",
-    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document)",
+    "summary": "every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet)",
     "x-hs-exit": true,
     "x-hs-role": "viewer",
     "x-hs-sys": {
@@ -7732,6 +7740,7 @@
      "query": []
     },
     "x-hs-described": false,
+    "description": "Columns 11 to 14 since #486: delay_last_ms, delay_worst_ms (trigger to new generation, written by the collector), web_last_ms, web_worst_ms (the browser sample); - = no sample yet.",
     "responses": {
      "0": {
       "description": "ok",
@@ -11489,80 +11498,6 @@
     }
    }
   },
-  "/reads/collect": {
-   "post": {
-    "operationId": "reads.collect",
-    "summary": "read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals)",
-    "x-hs-exit": true,
-    "x-hs-role": "admin",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "collect"
-     ],
-     "script": "reads-collect.sh",
-     "args": "{rest}",
-     "class": "change",
-     "rest": true
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/plain": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
-  "/reads/status": {
-   "get": {
-    "operationId": "reads.status",
-    "summary": "every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes",
-    "x-hs-exit": true,
-    "x-hs-role": "viewer",
-    "x-hs-sys": {
-     "words": [
-      "reads",
-      "status"
-     ],
-     "script": "reads-collect.sh",
-     "args": "--status",
-     "class": "read",
-     "rest": false
-    },
-    "x-hs-web": {
-     "path": "/api/sys/reads/status",
-     "kind": "tsv",
-     "ttl": 5,
-     "query": []
-    },
-    "x-hs-described": false,
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/tab-separated-values": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
   "/rebuild/pending": {
    "get": {
     "operationId": "rebuild.pending",
@@ -13087,6 +13022,185 @@
     }
    }
   },
+  "/share/parity/refused": {
+   "get": {
+    "operationId": "share.parity.refused",
+    "summary": "the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "refused"
+     ],
+     "script": "share-parity.sh",
+     "args": "--refused",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/refused",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The shares the last parity sync stopped for, one row per folder (the eight with most removed files): share (shares/<name>), folder (- = the share itself), removed in that folder, the limit of the share and the removed files of the whole share. Empty when the last sync was not refused or has finished since.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "folder"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "removed"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "limit"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share_total"
+           }
+          ],
+          "minItems": 5,
+          "maxItems": 5
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/share/parity/state/{share}": {
+   "get": {
+    "operationId": "share.parity.state.by_share",
+    "summary": "the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "share",
+      "parity",
+      "state",
+      "<share>"
+     ],
+     "script": "share-parity.sh",
+     "args": "--state {1}",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/share/parity/state/<share>",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "parameters": [
+     {
+      "name": "share",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The parity settings of one share (SnapRAID layout). limit: mode default|custom|off and the number (- unless custom); default: the floor (syncMaxRemoved) and the percent (syncMaxRemovedPercent) the default limit is made of; skip: one line per folder the parity leaves out.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "limit"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "mode",
+              "enum": [
+               "default",
+               "custom",
+               "off"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "value"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "default"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "floor"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "percent"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "skip"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "folder"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/shares/acl": {
    "get": {
     "operationId": "shares.acl",
@@ -14526,7 +14640,7 @@
   "/state/read-put/{key}": {
    "get": {
     "operationId": "state.read-put.by_key",
-    "summary": "keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it",
+    "summary": "keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026)",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {

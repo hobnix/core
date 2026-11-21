@@ -77,7 +77,7 @@ scripts/state-db.py	2
 scripts/system-change.sh	7
 scripts/temp-disk.sh	3
 scripts/testlab.sh	2
-scripts/web-serve.py	19
+scripts/web-serve.py	18
 scripts/web_terminal.py	1
 web/src/editor/volumes.js	4
 web/src/files/FmPlan.svelte	1

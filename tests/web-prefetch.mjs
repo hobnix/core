@@ -49,9 +49,8 @@ check('the new pool address names its pool', readsFor('/node/hs/storage/pools/fa
 const storagePages = ['/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files', '/storage/encryption', '/storage/vault'];
 check('storage prefetch lists are identical with live mode off and on', storagePages.every((r) => JSON.stringify(readsFor(r)) === JSON.stringify(readsFor(r, [], true))));
 check('storage pages still prefetch URLs, none named like a topic', storagePages.every((r) => readsFor(r).length > 0 && readsFor(r).every((p) => p.startsWith('/api/sys/') && !/\/(pool-(info|members|state)-|shares-overview|monitor-disks)/.test(p))));
-check('storage prefetch is unchanged by live mode', JSON.stringify(readsFor('/storage/pools/bulk')) === JSON.stringify(readsFor('/storage/pools/bulk', [], true)) && JSON.stringify(readsFor('/monitoring/diagnostics')) !== JSON.stringify(readsFor('/monitoring/diagnostics', [], true)));
-check('Diagnostics defaults to the collected reads', JSON.stringify(readsFor('/monitoring/diagnostics')) === JSON.stringify(['/api/sys/reads/status']));
-check('Diagnostics with live on uses the live read', JSON.stringify(readsFor('/monitoring/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']));
+check('storage prefetch is unchanged by live mode', JSON.stringify(readsFor('/storage/pools/bulk')) === JSON.stringify(readsFor('/storage/pools/bulk', [], true)));
+check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/monitoring/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/monitoring/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

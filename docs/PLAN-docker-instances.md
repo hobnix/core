@@ -156,7 +156,7 @@ with Docker inside. The gateway itself stays on the host (see the last section).
 | `ct-list` live topic (instances, shares, network) misses child changes | The docker read must publish to the `ct-list` topic group; a test asserts it. |
 | Disabling destroys data | Typed name, plan with counts, snapshot offer, `hs rebuild` refuses to do it silently. |
 | Docker's own iptables rules fight the host firewall | Docker runs inside the parent's network namespace, but published ports are reachable on the parent's address: the host nftables rules and the route guard stay the only public path; test that a child port is not reachable from the internet side without a route. |
-| Child state read is slow | Read-only, timeout, goes through the collector (`reads-collect.sh`) as a slow read; the web shows the age like every other page. |
+| Child state read is slow | Read-only, timeout, goes through the collector (`hs-live`) as a slow read; the web shows the age like every other page. |
 | Admin manager on a public route | `never-public` descriptor, covered by the existing guard test. |
 
 ## Phases

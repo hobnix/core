@@ -48,7 +48,7 @@
         {:else if col.key === 'state'}<StatusDot state={dot(i.state)} label={label(i.state)} />
         {:else if col.key === 'usedBy'}{i.usedBy || '–'}
         {:else}
-          <Button size="sm" variant="danger" busy={rowstate.pending('docker-registry', ['remove', i.host])} busyLabel="Removing…" tooltip="Remove this login" onclick={() => openPlan('docker-registry', ['remove', i.host], `remove ${i.host}`)}>Remove</Button>
+          <Button need="app-manager" size="sm" variant="danger" busy={rowstate.pending('docker-registry', ['remove', i.host])} busyLabel="Removing…" tooltip="Remove this login" onclick={() => openPlan('docker-registry', ['remove', i.host], `remove ${i.host}`)}>Remove</Button>
         {/if}
       {/snippet}
     </Table>
