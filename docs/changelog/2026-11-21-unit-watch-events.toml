@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Service up and down changes name their event"
+body  = """The service watcher now asks for named changes (a failed unit, the array mount, Samba, Incus, Docker, the gateway proxy) from one list instead of topic lists in its own file. What the pages show stays the same."""
