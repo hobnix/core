@@ -1,0 +1,6 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "Update and other buttons start again on a busy server"
+body  = """
+Pointing at a button asked the server for its plan in advance. On a busy server those plans ran for a minute, piled up, and filled the browser's six connections, so the click on Start never reached the server and its toast spun for ever. At most two plans are now asked in advance, none twice while one still runs, and each is dropped after 20 seconds.
+"""

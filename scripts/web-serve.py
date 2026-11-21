@@ -3323,6 +3323,7 @@ def make_handler(app):
                 rc, out, how = _run_watched(cmd, stdin=data, timeout=CHANGE_LIMIT, gone=lambda: _client_gone(self.connection))
                 if how == "gone":           # the browser asked something newer: no answer, the connection is closed
                     _timing("plan", shape, t0, how, None, None)
+                    print("web plan dropped: %s after %d ms, the browser closed the connection (no answer was sent)" % (shape, (time.monotonic() - t0) * 1000), flush=True)
                     self.close_connection = True
                     return
                 d = parse_change(out, rc)
