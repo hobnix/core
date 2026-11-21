@@ -55,6 +55,9 @@ check('inspect: capability off wins', pi({ cap_on: false, age: null }).rows[0].s
 check('inspect: doc status wins', pi({ status: 'error', cap_on: true }).rows[0].state === 'error');
 check('inspect: has.needs only with the key', !pi({}).has.needs && pi({ needs: ['a', 'b'] }).has.needs && pi({ needs: ['a', 'b'] }).rows[0].needs.join(', ') === 'a, b');
 check('inspect: has.status and has.ttl', pi({ status: 'ok', ttl: 45 }).has.status && pi({ ttl: 45 }).has.ttl && !pi({}).has.ttl && !pi({ ttl: null }).has.ttl);
+check('inspect: a resting demand topic is idle, a watched or old one is stale', pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 200 }).rows[0].state === 'idle'
+  && pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 200, lease: 1100 }).rows[0].state === 'expired'
+  && pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 2000 }).rows[0].state === 'expired' && pi({ demand: 'always' }).has.demand && !pi({}).has.demand);
 check('inspect: garbage gives no rows', parseInspect(null).rows.length === 0 && parseInspect({ topics: 5 }).rows.length === 0 && parseInspect({ topics: [null, {}, { topic: 3 }] }).rows.length === 0);
 check('inspect: unknown keys are kept', pi({ extra: 1 }).rows[0].extra === 1);
 const TOPICS = { '/api/sys/pool/info?pool=bulk': 'pool-info-bulk', '/api/sys/pool/members?pool=fast': 'pool-members-fast', '/api/sys/pool/state?pool=bulk': 'pool-state-bulk', '/api/sys/pool/info?pool=fast': 'pool-info-fast' };
