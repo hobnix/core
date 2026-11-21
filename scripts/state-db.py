@@ -1311,7 +1311,7 @@ def expand_topics(args):
         if a.startswith("event:"):
             if kinds is None:
                 kinds = event_topic_rows()
-            out += kinds.get(a[6:]) or [t for t, groups in rows if "system" in groups or "any" in groups]   # unknown kind: @system
+            out += expand_topics(kinds.get(a[6:]) or ["@system"])      # a kind may list topics and @groups; an unknown kind: @system
         elif a in ("--all", "*"):
             out += [r[0] for r in rows]
         elif a.startswith("@"):

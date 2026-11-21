@@ -32,3 +32,13 @@ pool-unit.changed	monitor-disks,disk-health,disk-inventory,disk-marks,pool-info-
 incus.changed	ct-list,ct-pools,iso-list,services-list,apps-list,apps-health	refresh	Incus is up or down (hs-unit-watch)
 docker-service.changed	docker-list,docker-apps	refresh	Docker is up or down (hs-unit-watch)
 gateway.changed	gateway-status,gateway-health,gateway-routes	refresh	the gateway proxy is up or down (hs-unit-watch)
+area.backup	@backup	refresh	the change area backup: what the registry topic:backup flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.disks	@disks	refresh	the change area disks: what the registry topic:disks flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.docs	@docs	refresh	the change area docs: what the registry topic:docs flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.instances	@instances	refresh	the change area instances: what the registry topic:instances flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.jobs	@jobs	refresh	the change area jobs: what the registry topic:jobs flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.network	@network	refresh	the change area network: what the registry topic:network flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.security	@security	refresh	the change area security: what the registry topic:security flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.shares	@shares	refresh	the change area shares: what the registry topic:shares flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.system	@system	refresh	the change area system: what the registry topic:system flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.users	@users	refresh	the change area users: what the registry topic:users flag and the timers ask for; an alias of the group, edit the topics here to narrow it

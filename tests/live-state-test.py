@@ -513,6 +513,16 @@ class Groups(unittest.TestCase):
         g.refresh("@instances")
         self.assertLess(len(self.set_of(c)), len(self.set_of(g)))
 
+    def test_area_event_asks_like_its_group(self):
+        """area.<name> lists the group @<name>: the same hard and soft (`any`) wake as the group, so the registry flags can resolve through the table."""
+        rows, info = ls.topics(), ls.topic_info()
+        a = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        a.refresh("event:area.disks")
+        g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.refresh("@disks")
+        self.assertEqual(self.set_of(a), self.set_of(g))
+        self.assertEqual(a.soft, g.soft)
+
     def test_unknown_named_event_falls_back_to_system(self):
         rows, info = ls.topics(), ls.topic_info()
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
