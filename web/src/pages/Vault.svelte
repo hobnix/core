@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { poll, rows } from '../data.svelte.js';
   import { bytes } from '../format.js';
   import { openPlan } from '../ui.svelte.js';
@@ -69,7 +70,7 @@
     </Stack>
   </div>
 </Card>
-{#if closed || locked}<Banner tone="warn">The vault is closed because the storage is locked. Unlock it on the <button class="link-btn" onclick={() => go('/storage/encryption')}>Encryption</button> page; locked is a normal state after a boot.</Banner>{/if}
+{#if closed || locked}<Banner tone="warn">The vault is closed because the storage is locked. Unlock it on the <button class="link-btn" onclick={() => go(P.encryption)}>Encryption</button> page; locked is a normal state after a boot.</Banner>{/if}
 
 <Card title="Vault items">
   <Muted as="p">values are never shown</Muted>

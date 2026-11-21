@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { onMount } from 'svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import Wizard from '../ui/Wizard.svelte';
@@ -26,7 +27,7 @@
   const advance = () => { at = clampIndex(at + 1, steps.length); };
 
   onMount(async () => {
-    if (!ui.features.setup_wizard) { go('/setup'); return; }
+    if (!ui.features.setup_wizard) { go(P.setup); return; }
     try { user = (await session())?.user ?? ''; } catch { /* the name stays empty */ }
   });
   // a step's save() returns true to advance now, false when it opened a plan (the page then waits for it to close)
@@ -40,7 +41,7 @@
     waiting = false;
     (async () => {
       try { const s = await session(); if (s) ui.features = s.features; } catch { /* keep the old answer */ }
-      if (!ui.features.setup_wizard) go('/setup');
+      if (!ui.features.setup_wizard) go(P.setup);
       else if (step.id !== 'done') advance();
     })();
   });

@@ -1,4 +1,5 @@
 <script>
+  import { P, poolPath } from '../paths.js';
   // Storage > Disks: every disk of this server in one list (/storage/disks, filter ?pool=<pool name>|none|missing), a drawer for the selected one
   // (SMART history, self-test results, the actions that belong to a single disk). Changing pool membership (replace, remove, close, convert)
   // stays on Pools; a free disk is added from here (the Pools plan).
@@ -245,9 +246,9 @@
                 {#if verdicts[sel.name]?.reason && verdicts[sel.name].reason !== '-'}<p style="padding:12px 16px;margin:0">{verdicts[sel.name].reason}</p>{/if}
                 {#if markOf[member]}<div style="padding:12px 16px;margin:0"><Banner tone="info">{markOf[member] === 'detached' ? `This disk is out of /${snapName} on purpose (detached). Attach it again when you are done.` : `Recovery is running or waiting for its finish; the disk is out of /${snapName} until then.`}</Banner></div>{/if}
                 <Row gap="2" wrap style="padding:12px 16px;margin:0">
-                  {#if diskPool(sel.role)}<Button size="sm" tooltip={`Open the pool ${diskPool(sel.role)}`} onclick={() => go(`/storage/pools/${diskPool(sel.role)}`)}><i class="ph ph-cylinder"></i>Pool {diskPool(sel.role)}</Button>{/if}
-                  <Button size="sm" tooltip={'Open the health page'} onclick={() => go('/operations/health')}><i class="ph ph-heartbeat"></i>Health</Button>
-                  <Button size="sm" tooltip={'Open the encryption page'} onclick={() => go('/storage/encryption')}><i class="ph ph-lock-key"></i>Encryption</Button>
+                  {#if diskPool(sel.role)}<Button size="sm" tooltip={`Open the pool ${diskPool(sel.role)}`} onclick={() => go(poolPath(diskPool(sel.role)))}><i class="ph ph-cylinder"></i>Pool {diskPool(sel.role)}</Button>{/if}
+                  <Button size="sm" tooltip={'Open the health page'} onclick={() => go(P.health)}><i class="ph ph-heartbeat"></i>Health</Button>
+                  <Button size="sm" tooltip={'Open the encryption page'} onclick={() => go(P.encryption)}><i class="ph ph-lock-key"></i>Encryption</Button>
                 </Row>
               {:else if t === 'smart'}
                 <Kv items={[{ k: 'Pending sectors', v: num(sel.pending) }, { k: 'Reallocated', v: num(sel.realloc) }, { k: 'CRC errors', v: num(sel.crc) }, { k: 'Verdict', v: verdictOf(sel) }]} />

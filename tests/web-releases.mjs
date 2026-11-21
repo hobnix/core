@@ -34,7 +34,7 @@ assert.match(src('settings/SettingsPage.svelte'), /\/api\/sys\/release\/show/);
 // the page is in the tree under Settings and has a route
 const settings = mainTree.find((i) => i.path === '/settings');
 assert.ok(settings.children.some((c) => c.path === '/settings/releases' && c.label === 'Releases'));
-assert.match(src('routes.js'), /'\/settings\/releases': Releases,/);
+assert.match(src('routes.js'), /\[P\.releases\]: Releases,/);
 
 // German: every sentence of the page is in the dictionary of i18n.js
 const i18n = src('i18n.js');

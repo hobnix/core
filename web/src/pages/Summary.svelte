@@ -1,4 +1,5 @@
 <script>
+  import { P, poolPath } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   // The node's home: "is it fine, and what needs me?". A node card with the Halftone, the meters, one line per fact that
   // opens the page that OWNS it, one UsageBar per pool, and two shortcuts that open plans (Back up now, Update). No tables of disks, shares or problems.
@@ -138,12 +139,12 @@
 
   {#if !locked && setupOpen}
     <Banner tone="warn" icon="list-checks">Finish the setup: {setupOpen} item{setupOpen === 1 ? '' : 's'} still open{setupLabels ? ` (${setupLabels})` : ''}.
-      {#snippet action()}<Button size="sm" tooltip={'Open the first-run checklist'} onclick={() => go('/setup')}>Open Setup<i class="ph ph-arrow-right"></i></Button>{/snippet}
+      {#snippet action()}<Button size="sm" tooltip={'Open the first-run checklist'} onclick={() => go(P.setup)}>Open Setup<i class="ph ph-arrow-right"></i></Button>{/snippet}
     </Banner>
   {/if}
   {#if changes.count}
     <Banner tone="info" icon="sparkle">{changes.count} change{changes.count === 1 ? '' : 's'} since your last visit.
-      {#snippet action()}<Button size="sm" tooltip={'See what the last update brought'} onclick={() => go('/operations/whats-new')}>Show<i class="ph ph-arrow-right"></i></Button>{/snippet}
+      {#snippet action()}<Button size="sm" tooltip={'See what the last update brought'} onclick={() => go(P.whatsNew)}>Show<i class="ph ph-arrow-right"></i></Button>{/snippet}
     </Banner>
   {/if}
   {#if ui.features.live && !live.open}
@@ -187,7 +188,7 @@
       <div class="card">
         <div class="ctitle">Pools</div>
         {#each pools as p}
-          <button class="prow" onclick={() => go(`/storage/pools/${p.name}`)}>
+          <button class="prow" onclick={() => go(poolPath(p.name))}>
             <span class="pn"><i class="ph ph-{poolIcon(p.role)}"></i>{p.name}</span>
             <StatusDot state={p.health && p.health !== 'ONLINE' ? 'warn' : 'ok'} label={p.health && p.health !== 'ONLINE' ? p.health.toLowerCase() : 'online'} />
             <UsageBar used={p.used} size={p.size} width={180} />

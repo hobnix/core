@@ -1,4 +1,5 @@
 <script>
+  import { poolPath } from '../paths.js';
   // The overview of a group in the tree (Storage, Identity, Protection, Operations): one card per child page with the note the tree shows,
   // and for Storage the capacity of the pools on top. Nothing is read here that the tree does not read already.
   import { route, go } from '../route.svelte.js';
@@ -40,7 +41,7 @@
   {#if isStorage && pools.length && !locked}
     <div class="two">
       {#each pools as p}
-        <button class="card elev-sm pool" onclick={() => go(`/storage/pools/${p.name}`)}>
+        <button class="card elev-sm pool" onclick={() => go(poolPath(p.name))}>
           <div class="row"><i class="ph ph-{poolIcon(p.role)}" style="color:var(--color-accent)"></i><span class="nm">{p.name}</span><span class="sub" style="margin-left:auto">{pct(p)} % used</span></div>
           <div class="bar"><div style="width:{pct(p)}%"></div></div>
           <div class="sub">{bytes(p.used)} of {bytes(p.size)}</div>
