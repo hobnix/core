@@ -1,5 +1,6 @@
 // The browser half of the delay measure (web/src/delaysample.js, #486).
 import { createSampler } from '../web/src/delaysample.js';
+import { createBatcher } from '../web/src/samplebatch.js';
 import { parseLiveRows, parseInspect } from '../web/src/livestatus.js';
 
 let ok = 0, bad = 0;
@@ -29,6 +30,20 @@ const rows = parseLiveRows([['a', '5', '1', '1', '0', '-', '-', '-', 'fresh', '2
 check('status rows: the delay columns, - is none', rows[0].delayLast === 40 && rows[0].delayWorst === 900 && rows[0].webLast === null && rows[1].delayLast === null);
 const ins = parseInspect({ now: 10, topics: [{ topic: 'a', interval: 5, age: 1, gen: 1, delay_ms_last: 40 }, { topic: 'b', interval: 5, age: 1, gen: 1 }] });
 check('inspect: has.delay only with a sample', ins.has.delay === true && parseInspect({ topics: [{ topic: 'b', interval: 5 }] }).has.delay === false);
+
+// batches: one POST for many samples, at most `max` each, flushed by the timer or by flush()
+{
+  const posts = []; let fire = null;
+  const b = createBatcher((x) => posts.push(x), { wait: 10000, max: 3, setTimer: (f) => { fire = f; return 1; }, clearTimer: () => { fire = null; } });
+  b.add('a', 1); b.add('b', 2);
+  check('batch: nothing is sent before the wait', posts.length === 0 && fire !== null);
+  fire();
+  check('batch: the timer sends both in one post', posts.length === 1 && posts[0].length === 2 && posts[0][1].topic === 'b');
+  b.add('a', 1); b.add('a', 2); b.add('a', 3); b.add('a', 4);
+  check('batch: a full batch goes at once, the rest waits', posts.length === 2 && posts[1].length === 3);
+  b.flush();
+  check('batch: flush sends the rest', posts.length === 3 && posts[2].length === 1);
+}
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
