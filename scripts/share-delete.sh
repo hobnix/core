@@ -11,7 +11,7 @@ set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/instance.sh"
 . "$here/lib/live.sh"
-live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
+live_refresh_shares() { live_refresh event:share.changed; }
 manage=${HS_MANAGE_SHARES:-$here/manage-shares.sh}
 incus=${HS_INCUS:-incus}
 net=${HS_NET:-net}

@@ -10,7 +10,7 @@
 set -euo pipefail
 . "$(dirname "$0")/lib/ui.sh"
 . "$(dirname "$0")/lib/live.sh"
-live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
+live_refresh_shares() { live_refresh event:share.changed; }
 
 net=${HS_NET:-net}
 BULK=${HS_BULK:-/bulk}

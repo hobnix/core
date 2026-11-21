@@ -12,8 +12,17 @@ ET=$SCRIPTS/lib/event-topics.tsv
 kinds=$(grep -v '^#' "$ET" | cut -f1)
 check "the table lists kinds" test -n "$kinds"
 bad=""
-for k in $kinds; do grep -q "^$k$T" "$SCRIPTS/lib/event-kinds.tsv" || bad="$bad $k"; done
-check_eq "every kind of event-topics.tsv is in event-kinds.tsv" "" "$bad"
+for k in $(grep -v '^#' "$ET" | awk -F'	' '$3=="log" {print $1}'); do grep -q "^$k$T" "$SCRIPTS/lib/event-kinds.tsv" || bad="$bad $k"; done
+check_eq "every kind with how=log is in event-kinds.tsv" "" "$bad"
+bad=""
+for k in $(grep -v '^#' "$ET" | awk -F'	' '$3=="refresh" {print $1}'); do ! grep -q "^$k$T" "$SCRIPTS/lib/event-kinds.tsv" || bad="$bad $k"; done
+check_eq "a how=refresh name is not an event kind of the log" "" "$bad"
+check_eq "the how column is log or refresh" "" "$(grep -v '^#' "$ET" | awk -F'	' '$3!="log" && $3!="refresh" {print $1}')"
+# every named event a script asks for is in the table
+used=$(grep -rhoE 'live_refresh event:[a-z.-]+|refresh "?event:[a-z.-]+' "$SCRIPTS"/*.sh "$SCRIPTS"/lib/*.sh | sed -E 's/.*event://' | sort -u)
+bad=""; for k in $used; do case "$k" in disk.) continue;; esac; grep -q "^$k$T" "$ET" || bad="$bad $k"; done
+check_eq "every event:<kind> a script asks for is in event-topics.tsv" "" "$bad"
+check_eq "the ten share scripts ask for share.changed" "10" "$(grep -l 'live_refresh event:share.changed' "$SCRIPTS"/*.sh | wc -l | tr -d ' ')"
 bad=""
 for t in $(grep -v '^#' "$ET" | cut -f2 | tr ',' '\n' | sort -u); do grep -q "^$t$T" "$SCRIPTS/lib/live-topics.tsv" || bad="$bad $t"; done
 check_eq "every topic of event-topics.tsv is a live-state topic" "" "$bad"

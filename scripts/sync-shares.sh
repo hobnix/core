@@ -8,7 +8,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib/sharepath.sh"
 . "$(dirname "$0")/lib/admin.sh"
 adm="$(admin_user)"
-live_refresh_shares() { live_refresh status shares-overview shares-deleted fm-locations pool-info-bulk; }
+live_refresh_shares() { live_refresh event:share.changed; }
 
 check=false
 fix_all=false
