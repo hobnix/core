@@ -373,6 +373,9 @@ role = "admin"
 ["logs show"]
 role = "admin"
 
+["logs follow"]
+role = "admin"
+
 ["jobs stop <unit>"]
 role = "admin"
 
@@ -431,6 +434,9 @@ role = "admin"
 role = "viewer"
 
 ["state events"]
+role = "viewer"
+
+["state events-follow"]
 role = "viewer"
 
 ["state smart <serial>"]
@@ -718,6 +724,9 @@ role = "app-manager"
 ["ct logs <ct>"]
 role = "app-manager"
 
+["ct follow <ct>"]
+role = "app-manager"
+
 ["monitor disks"]
 role = "viewer"
 
@@ -966,6 +975,9 @@ role = "viewer"
 role = "viewer"
 
 ["docker logs <app>"]
+role = "app-manager"
+
+["docker follow <app>"]
 role = "app-manager"
 
 ["docker app <app>"]

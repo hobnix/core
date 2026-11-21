@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: Docker as part of hobnix: turn it on (a locked container with Docker inside), turn it off, list the apps that run in it
 # help.de: Docker als Teil von hobnix: einschalten (ein gesperrter Container mit Docker darin), ausschalten, die Apps darin auflisten
-# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | gpu [on|off] [--pci <address>] [--yes] [--dry-run] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines]
+# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | gpu [on|off] [--pci <address>] [--yes] [--dry-run] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines] | --follow-logs <app> [lines]
 # The capability docker (docs/PLAN-docker-instances.md, Decisions 12 to 14): the container `docker` is owned by it (user.hs.managed_by=docker),
 # so only this script deletes it (HS_OWNER=docker on the manage-ct.sh call, scripts/lib/instance.sh).
 #   hs docker status       key/value lines: on or off, the container, the manager, the size, the number of apps, the address
@@ -30,6 +30,7 @@
 #   --app <app>            JSON document for the web editor: rev, managed (web|recipe|other), env names, envText (the whole .env, base64 in the script output; envTooBig over 64 KiB), compose; for the admin editor, read nocache
 #   --rev <app>            the revision of the compose file + .env of one app, one line (what --app prints as rev)
 #   --logs <app> [lines]   the Compose log of one app (default 200, max 2000); the app must be a child of docker, never the manager
+#   --follow-logs <app> [lines]   the same, then every new line until the reader goes (the web log stream; plain lines)
 #                          --job runs it as a background job (the web interface: hs sys docker start mount)
 # Test knobs: HS_DOCKER_MANAGE_CT (a script that stands in for manage-ct.sh), HS_DOCKER_BACKUP (stands in for backup.sh), HS_DOCKER_NO_JOB=1
 # (no systemd-run: the long work runs at once), HS_REMOTE_ROOT (default /mnt/remote), HS_SETTINGS_DIR, HS_STATE_DIR, HS_CAPABILITIES_FILE, HS_CAPABILITIES_TSV, HS_INCUS.
@@ -267,6 +268,16 @@ logs() {   # logs <app> [lines]
   raw=$(children) || return 1
   if ! printf '%s\n' "$raw" | awk -F'\t' -v app="$app" '$1 == app {found=1} END{exit !found}'; then return 1; fi
   timeout 10 "${HS_INCUS:-incus}" exec "$CT" -- docker compose -p "$app" logs --no-color --tail "$lines" --timestamps </dev/null
+}
+
+follow_logs() {   # follow_logs <app> [lines]: the Compose log, the last lines then every new one, until the reader goes (the web log stream)
+  local app=${1:-} lines=${2:-200} raw
+  [[ "$app" =~ ^[a-z0-9][a-z0-9_-]{0,40}$ ]] || return 1
+  [[ "$lines" =~ ^[0-9]+$ ]] && [ "$lines" -ge 1 ] && [ "$lines" -le 2000 ] || return 1
+  owned && running || return 1
+  raw=$(children) || return 1
+  if ! printf '%s\n' "$raw" | awk -F'\t' -v app="$app" '$1 == app {found=1} END{exit !found}'; then return 1; fi
+  exec "${HS_INCUS:-incus}" exec "$CT" -- docker compose -p "$app" logs --no-color --tail "$lines" --timestamps -f </dev/null
 }
 
 app_is_child() {   # app_is_child <app>
@@ -974,5 +985,6 @@ case "$verb" in
   --app) [ $# -ge 1 ] || usage; app "$1"; shift ;;
   --rev) [ $# -ge 1 ] || usage; rev "$1" ;;
   --logs) logs "$@" ;;
+  --follow-logs) follow_logs "$@" ;;
   *) usage ;;
 esac
