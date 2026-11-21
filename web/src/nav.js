@@ -11,7 +11,7 @@ export const tree = [
         children: [
           // the pools of this server are added under it at render time (nodeItems poolRows)
           { label: 'Pools', icon: 'cylinder', path: P.pools, storage: true },
-          { label: 'Disks', icon: 'hard-drive', path: P.disks, storage: true },
+          { label: 'Disks', icon: 'hard-drive', path: P.disks, prefix: true, storage: true },
           { label: 'Incident', icon: 'first-aid-kit', path: P.incident, storage: true },
           { label: 'Shares', icon: 'folders', path: P.shares, storage: true },
           { label: 'Files', icon: 'folder-open', path: P.files, storage: true },
