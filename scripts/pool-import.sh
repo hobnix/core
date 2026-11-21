@@ -153,7 +153,7 @@ plan_lines() {   # plan_lines <pool>: the plan as data (the contract of hs sys p
 }
 
 refresh_topics() {
-  live_refresh status monitor-disks disk-inventory disk-marks shares-overview fm-locations encryption
+  live_refresh event:pool.imported
 }
 
 do_import() {   # do_import <pool>: the job body

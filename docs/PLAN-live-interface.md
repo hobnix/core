@@ -122,6 +122,8 @@ First PR (the table and the first two sources): `scripts/lib/event-topics.tsv` (
 
 Second PR (hook scripts, area shares): the table has a `how` column (`log` = also an event of the log, in `event-kinds.tsv`; `refresh` = a name for a refresh only, not in the log). `share.changed` (refresh) replaces the same five topics the ten share scripts listed by hand, so the set is unchanged and the names live in one place. The same pattern follows for the other areas.
 
+Third PR (hook scripts, area storage): `disk.changed` (disk-detach, disk-recover), `pool.changed` (manage-pool), `pool.imported`, `temp-disk.changed`, `disk.health-checked` and `state.disk-seen`, `state.smart-checked`, `state.collected` (state.sh), all `refresh` names with the topic sets the scripts listed by hand (renamed, not narrowed).
+
 ### Step 6, status (#886)
 
 The count at the start of the step was 47 call sites (the 66 of the plan text was counted earlier). First PR: the reads without a producer get a collector topic (`docker-status`, `docker-health`, `docker-containers`, `docker-registries`, `parts-pending`, `rebuild-pending`, `preset-list`); `timed-reads.max` 47 to 37. Still timed, with the reason in `scripts/lib/read-reasons.tsv`: free query/argument reads (backup snapshots, pool disks, logs, per-app/per-container/per-disk/per-node answers, services show), dynamic reads named by a page or capability declaration, node reads over ssh, the VPS probe, `release show`, `incident state`, `testlab results`. Next PRs take these by D5 (a) first.
