@@ -13,7 +13,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import { poll } from '../data.svelte.js';
   import { ui } from '../ui.svelte.js';
-  import { live } from '../live.svelte.js';
+  import { live, wantAllTopics } from '../live.svelte.js';
   import { tr } from '../i18n.js';
   import { get, liveRefresh, liveSamples } from '../api.js';
   import { parseInspect } from '../livestatus.js';
@@ -30,6 +30,7 @@
   const batch = createBatcher((samples) => { liveSamples(samples).catch(() => {}); });
   const sampler = createSampler((topic, ms) => batch.add(topic, ms));
   onDestroy(() => batch.flush());
+  $effect(() => wantAllTopics());   // D13: this page measures every topic, so it subscribes to all of them
   $effect(() => { for (const [topic, gen] of Object.entries(live.gen)) sampler.changed(topic, gen); });
   $effect(() => {
     const rows = parsed.rows;

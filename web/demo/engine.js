@@ -93,7 +93,7 @@ export function answer(method, path, query, body, fx) {
   }
   if (path === '/api/plan') return plan(body || {});
   if (path === '/api/start') return start();
-  if (path === '/api/logout' || path === '/api/changes/seen' || path === '/api/live/refresh') return json(200, {});
+  if (path === '/api/logout' || path === '/api/changes/seen' || path === '/api/live/refresh' || path === '/api/events/subscribe') return json(200, {});
   if (path === '/api/login') return json(200, { user: 'demo', realm: 'local', role: 'admin', csrf: 'demo' });
   return json(403, { error: DEMO_NOTE });
 }

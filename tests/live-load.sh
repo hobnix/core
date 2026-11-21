@@ -18,5 +18,7 @@ echo "-- the push counters of the web server (D11)"
 export HS_LIVE_PUSH_FILE=$WORK/push.json
 printf '{"push": 7, "fallback": 3, "socket": true}' >"$WORK/push.json"
 check_out "wake counters shown" "7 by push, 3 by the fallback period, socket up" $L
+printf '{"push": 7, "fallback": 3, "socket": true, "changed_sent": 12, "changed_offered": 90}' >"$WORK/push.json"
+check_out "changed frames sent of offered (D13)" "12 of 90 changed frames sent to the streams" $L
 rm -f "$WORK/push.json"
 check_out "no counters file: the rest still shows" "30 started in the last 60 s" $L

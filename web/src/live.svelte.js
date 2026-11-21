@@ -6,6 +6,8 @@
 // The domain events (`events`) are served always (ADR 0005), so a page that reads them (the job records) uses `open` alone.
 // EventSource reconnects by itself. `beat` (the server sends it when the stream is idle) feeds a watchdog (livewatch.js): a stream that went silent is reopened.
 import { LiveWatch } from './livewatch.js';
+import { TopicSet, streamQuery, newSid, createSubscriber } from './topicset.js';
+import { subscribeTopics } from './api.js';
 
 export const live = $state({ open: false, follow: false, gen: {}, topics: {}, events: [], lastId: 0, resyncs: 0 });
 // Topics that only the browser knows: the domain events of the stream are their signal (served in every mode), so a poll with one of these
@@ -16,18 +18,33 @@ const KEEP = 100;   // domain events kept in live.events
 // URL -> topic map from the session answer (features.topics): a poll without its own topic argument follows the stream through it.
 export function setTopics(map) { live.topics = map && typeof map === 'object' ? map : {}; }
 
-let es = null, watch = null, timer = null, needResync = false;
+// D13: the stream carries only the topics the open page reads (`topics`), one stream per tab; a route change sends the new set (POST, short).
+// `wantTopic(topic)` is the one place a read registers; it returns the release function. Domain events are never filtered.
+export const topicSet = new TopicSet();
+export const wantTopic = (topic) => { const off = topicSet.want(topic); subscriber.schedule(); return () => { off(); subscriber.schedule(); }; };
+// a read that follows every topic (the Live state page)
+export const wantAllTopics = () => wantTopic('*');
+// a change that came between a read and the subscribe call: the server says the gen of each added topic; a gen the page already saw differently re-reads
+const catchUp = (gens) => { for (const [t, g] of Object.entries(gens)) if (t in live.gen && live.gen[t] !== g) live.gen[t] = g; };
+const subscriber = createSubscriber({ set: topicSet, send: (list) => subscribeTopics(sid, list), onGens: catchUp });
+
+let es = null, watch = null, timer = null, needResync = false, sid = '', urlKey = '', broken = false;
 
 // Reads every followed topic again: the polls read live.resyncs next to live.gen[topic], so a new value runs each of them once.
 export function resyncAll() { live.resyncs += 1; }
 
 function connect() {
-  es = new EventSource('/api/events');
+  if (!sid) sid = newSid();
+  const list = topicSet.list();
+  urlKey = list.join(',');
+  es = new EventSource('/api/events?' + streamQuery(list, sid));
+  // EventSource reconnects with the URL it was made with, so after an error the server may hold an old set: send the current one again
+  const opened = () => { subscriber.opened(urlKey, !broken); broken = false; };
   const seen = (name, fn) => es.addEventListener(name, (ev) => { watch?.frame(); fn(ev); });
-  seen('open', () => { live.open = true; if (needResync) { needResync = false; resyncAll(); } });
+  seen('open', () => { opened(); live.open = true; if (needResync) { needResync = false; resyncAll(); } });
   seen('up', () => { live.open = true; });
   seen('down', () => { live.open = false; });
-  es.addEventListener('error', () => { live.open = false; });
+  es.addEventListener('error', () => { live.open = false; broken = true; subscriber.closed(); });
   seen('beat', () => {});
   seen('changed', (ev) => {
     try {
@@ -57,6 +74,7 @@ export function startLive() {
       if (es) es.close();
       live.open = false;
       needResync = true;
+      subscriber.closed();
       connect();
     },
   });
@@ -68,6 +86,9 @@ export function startLive() {
 export function stopLive() {
   if (es) es.close();
   es = null;
+  subscriber.closed();
+  sid = '';
+  broken = false;
   if (timer) clearInterval(timer);
   timer = null;
   watch = null;

@@ -640,6 +640,131 @@ class Events(Base):
         finally:
             c.close()
 
+    def wait_stream(self, n=1):
+        for _ in range(150):
+            if len(self.app.events.queues) >= n:
+                return
+            threading.Event().wait(0.02)
+        self.fail("the stream did not open")
+
+    def frames(self, r, n):
+        """The next n (event, data) pairs of the stream, comments and blank lines skipped."""
+        out = []
+        while len(out) < n or out[-1][1] is None:
+            line = r.fp.readline()
+            if line.startswith(b"event: "):
+                out.append([line[7:].strip().decode(), None])
+            elif line.startswith(b"data: ") and out and out[-1][1] is None:
+                out[-1][1] = json.loads(line[6:])
+        return out
+
+    def subscribe(self, sid, topics, ck=None):
+        csrf = self.csrf()
+        return self.req("POST", "/api/events/subscribe", {"sid": sid, "topics": topics}, headers=dict(ck or self.ck, **{"X-CSRF-Token": csrf}))
+
+    def csrf(self):
+        return json.loads(self.req("GET", "/api/session", headers=self.ck)[1])["csrf"]
+
+    def test_a_stream_gets_no_changed_for_a_topic_it_did_not_ask_for(self):
+        """D13: `topics=` limits `changed`; a domain event and the rest always arrive."""
+        c, r = self.open("/api/events?topics=status,pool-info-bulk&sid=abcdefgh1")
+        try:
+            self.wait_stream()
+            self.app.events.feed("changed", "apps-list", 1)
+            self.app.events.feed("domain", {"id": 7, "time": 1, "source": "t", "kind": "job.started", "subject": "", "level": "info", "text": "x", "payload": None})
+            self.app.events.feed("changed", "status", 2)
+            self.app.events.feed("resync")
+            got = [f for f in self.frames(r, 3) if f[0] != "beat"]
+            self.assertEqual([f[0] for f in got], ["domain", "changed", "resync"])
+            self.assertEqual(got[1][1], {"topic": "status", "gen": 2})
+        finally:
+            c.close()
+
+    def test_a_stream_without_topics_gets_every_changed(self):
+        c, r = self.open()
+        try:
+            self.wait_stream()
+            self.app.events.feed("changed", "apps-list", 1)
+            self.assertEqual(self.frames(r, 1)[0], ["changed", {"topic": "apps-list", "gen": 1}])
+        finally:
+            c.close()
+
+    def test_an_empty_topics_list_means_no_changed_frames(self):
+        c, r = self.open("/api/events?topics=&sid=abcdefgh2")
+        try:
+            self.wait_stream()
+            self.app.events.feed("changed", "status", 1)
+            self.app.events.feed("down")
+            self.assertEqual(self.frames(r, 1)[0][0], "down")
+        finally:
+            c.close()
+
+    def test_bad_topics_are_refused_and_the_slot_is_given_back(self):
+        self.assertEqual(self.req("GET", "/api/events?topics=a%20b", headers=self.ck)[0], 400)
+        self.assertEqual(self.req("GET", "/api/events?topics=" + ",".join("t%d" % i for i in range(300)), headers=self.ck)[0], 400)
+        self.assertEqual(self.app.event_streams, 0)
+
+    def test_subscribe_changes_the_set_of_an_open_stream(self):
+        c, r = self.open("/api/events?topics=status&sid=abcdefgh3")
+        try:
+            self.wait_stream()
+            s, body, _ = self.subscribe("abcdefgh3", ["apps-list", "status"])
+            self.assertEqual(s, 200)
+            self.assertEqual(json.loads(body)["count"], 2)
+            self.app.events.feed("changed", "pool-info-bulk", 1)
+            self.app.events.feed("changed", "apps-list", 4)
+            self.assertEqual(self.frames(r, 1)[0], ["changed", {"topic": "apps-list", "gen": 4}])
+            self.assertEqual(self.subscribe("abcdefgh3", ["*"])[0], 200)       # `*` = every topic
+            self.app.events.feed("changed", "pool-info-bulk", 2)
+            self.assertEqual(self.frames(r, 1)[0], ["changed", {"topic": "pool-info-bulk", "gen": 2}])
+        finally:
+            c.close()
+
+    def test_subscribe_answers_with_the_gens_of_the_added_topics(self):
+        c, r = self.open("/api/events?topics=status&sid=abcdefgh4")
+        try:
+            self.wait_stream()
+            self.app.events.counters = {"live:apps-list": 9, "status": 3}
+            body = json.loads(self.subscribe("abcdefgh4", ["status", "apps-list"])[1])
+            self.assertEqual(body["gens"], {"apps-list": 9})
+        finally:
+            c.close()
+
+    def test_subscribe_needs_an_open_stream_of_the_same_session(self):
+        c, r = self.open("/api/events?topics=status&sid=abcdefgh5")
+        try:
+            self.wait_stream()
+            self.assertEqual(self.subscribe("nosuchstream1", ["status"])[0], 404)
+            other = self.req("POST", "/api/login", {"realm": "domain", "user": "anna", "password": "pw"})[2]
+            ck2 = {"Cookie": (other.getheader("Set-Cookie") or "").split(";")[0]}
+            csrf2 = json.loads(self.req("GET", "/api/session", headers=ck2)[1])["csrf"]
+            s = self.req("POST", "/api/events/subscribe", {"sid": "abcdefgh5", "topics": ["x"]}, headers=dict(ck2, **{"X-CSRF-Token": csrf2}))[0]
+            self.assertEqual(s, 404)                                              # another session cannot change this stream
+            self.assertEqual(self.subscribe("abcdefgh5", "not a list")[0], 400)
+            self.assertEqual(self.subscribe("short", ["status"])[0], 400)
+        finally:
+            c.close()
+
+    def test_a_closed_stream_is_forgotten(self):
+        c, r = self.open("/api/events?topics=status&sid=abcdefgh6")
+        self.wait_stream()
+        r.close()
+        c.close()
+        for _ in range(100):
+            self.app.events.feed("down")
+            if "abcdefgh6" not in self.app.events.by_sid:
+                break
+            threading.Event().wait(0.05)
+        self.assertNotIn("abcdefgh6", self.app.events.by_sid)
+
+    def test_the_hub_counts_the_frames_the_filter_kept(self):
+        hub = ws.Events(self.cfg)
+        a, b = hub.add(frozenset({"x"})), hub.add(None)
+        hub.feed("changed", "x", 1)
+        hub.feed("changed", "y", 1)
+        self.assertEqual((hub.offered_changed, hub.sent_changed), (4, 3))
+        self.assertEqual((a.qsize(), b.qsize()), (1, 2))
+
     def test_an_idle_stream_sends_the_named_beat(self):
         self.cfg.events_ping = 0.2
         c, r = self.open()
