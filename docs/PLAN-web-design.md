@@ -175,6 +175,35 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 
 Four pages are exempt from a template: **Files** (two-pane file manager, web/design/HANDOFF.md "Files") and the **browser terminal** use only the frame; the **Login** page and the one-time **console-code sign-in** of the first run (ADR 0022) are outside the shell. The first-run wizard (#183) is a Flow at `/setup` after sign-in. Summary is a Group page of its own kind: status lines that each open their owner page, a usage bar per pool, shortcuts that open plans.
 
+### 3.2.1 The Object frame as built (0.11 step 1, the disk page)
+
+`shell/ObjectPage.svelte` is the Object template. Its props are fixed here because the package and app pages of 0.12 (#474, #478) reuse the frame; a change after 0.11 is a change to the 0.12 plan. Pure rules (tab limit, tab from the address, menu greying, the read-only note, the vertical order) are in `shell/objectpage.js` and tested in node (tests/web-object.mjs).
+
+| Prop | Meaning |
+|---|---|
+| `crumb`, `title`, `sub` | the `PageHeader` text (crumb is `Group > List`) |
+| `chip`, `state`, `stateLabel` | the status next to the name (a `Chip` and a `StatusDot` with its word) |
+| `tabs` `[{ id, label }]`, `tab`, `onpick(id)` | at most four (`MAX_TABS`), the first is Overview with id `overview`; `tab` is the id from the address, an unknown one is Overview, not an error; one tab or none draws no tab row |
+| `primary` (snippet) | the visible actions: ONE primary and at most ONE secondary (D4). The page owns them; the frame only places them before the More menu |
+| `menu` | items of `ui/Menu` plus `need`: an item above the session's role stays in the list, greyed, with the refusal sentence |
+| `danger` | items of `ui/DangerZone` (`area`+`args` open a plan, or `onclick` opens a form that asks for the name). Always the last thing on the page |
+| `links` | items of `LinkedObjects`; shown under the Overview tab (all other tabs show only their body) |
+| `jobs`, `jobHref` | `match(record)` of `JobStrip`; leave it out for no strip |
+| `need` | the role that may change the object (default `admin`). Below it the page is read-only with a note, never refused (a viewer opening an object by address sees the page) |
+| `loading`, `error`, `notFound`, `notFoundTitle`, `notFoundText`, `backTo`, `backLabel` | the data states through `PageState`; an address of an object that does not exist is a sentence and a button back to the list, not a blank page |
+| `banners`, `children(tab)` (snippets) | state banners (a running job, a failure, a held state) above the tabs; the body of the active tab |
+
+Order, top to bottom, fixed: header (with status, actions, menu), read-only note, banners, job strip, tabs, body, linked objects (Overview only), danger section.
+
+Findings that changed the design or the inventory:
+- **The quick look has no tabs.** It is Overview facts, state, the one main action and "Open page". The disk's SMART history and self-test results are read by the page only (`detail: true` in `pages/disks/model.svelte.js`), so opening a quick look reads nothing the list does not already read. The list and the page share one data model (`diskModel`): the same reads, the same words. Other objects follow the same split: a `model.svelte.js` next to the page folder.
+- **The tab is a path segment** (`/storage/disks/<name>/<tab>`, D6); Overview has no segment (`diskPath`). A list keeps `?tab=` only where a list has views.
+- **`ui/DangerZone` takes `onclick`** for an action whose form asks for the name itself (Format). `ui/Menu` items get `need` through the frame (`menuFor`); `ui/Drawer` gets a `role` prop (the quick look is `role="dialog"`, not modal).
+- **QuickLook rules** (`ui/quicklook.js`): Escape closes it from anywhere in the page while no modal dialog or menu is open; a press outside closes it, but not on another row (that replaces it) and not inside a dialog it opened; closing returns the focus to the row (`data-k`, the Table key), else to where the focus was. The panel sticks to the top of the scrolling area and is 400 px wide, full screen up to 860 px; the list never moves (measured 1920, 1280 and 390 px: same table width, height and columns with and without it).
+- **A list item with pages needs `prefix: true`** in `nav.js`, or the tree loses its highlight on an object page (done for Disks; the other four objects do the same in their own lane).
+- **A missing disk has no page.** It has no device name; it stays a quick look under the Missing filter (`?sel=<serial>`), as the plan says for objects without a page.
+- Component inventory (5.2): `ObjectPage` (shell) is new; `LinkedObjects`, `JobStrip`, `DangerZone` are now used by it.
+
 ### 3.3 Quick look
 
 The quick look replaces the drawer. It is an overlay above the list (component from #447, `ui/Drawer` is the starting point), so selecting a row never narrows or moves the list. It shows the object's Overview, the linked objects and the main actions, plus "Open page". The row stays in the address (`?sel=`), so a reload or a shared link opens the same quick look. On a phone it is full screen.

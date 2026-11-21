@@ -9,13 +9,13 @@
   import { tr } from "../i18n.js";
   import StatusDot from './StatusDot.svelte';
   import Chip from './Chip.svelte';
-  let { title = '', chip = '', state = '', stateLabel = '', tabs = [], tab = $bindable(''), onclose = null, children, actions, header } = $props();
+  let { title = '', chip = '', state = '', stateLabel = '', tabs = [], tab = $bindable(''), onclose = null, role = undefined, children, actions, header } = $props();
   const active = $derived(tab || tabs[0]?.id || '');
   let root;
   $effect(() => { root?.focus({ preventScroll: true }); });
 </script>
 
-<aside class="sdr xh" bind:this={root} tabindex="-1" aria-label={title} onkeydown={(e) => e.key === 'Escape' && onclose && (e.stopPropagation(), onclose())}>
+<aside class="sdr xh" bind:this={root} tabindex="-1" {role} aria-label={title} onkeydown={(e) => e.key === 'Escape' && onclose && (e.stopPropagation(), onclose())}>
   <div class="sdh">
     <div class="ttl">
       <b class="nm">{title}</b>

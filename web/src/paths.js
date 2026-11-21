@@ -30,6 +30,8 @@ export const P = Object.freeze({
 
 // pages with a name or a topic in the address
 export const poolPath = (name) => `${P.pools}/${name}`;
+// the page of one disk: /storage/disks/<name>[/<tab>] (D6); Overview has no tab segment
+export const diskPath = (name, tab = '') => `${P.disks}/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
 export const dockerAppPath = (name) => `${P.docker}/app/${encodeURIComponent(name)}`;
 export const capabilityPath = (name) => `${P.capabilities}/${name}`;
 export const extensionPath = (name) => `/extensions/${name}`;

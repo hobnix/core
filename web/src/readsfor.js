@@ -31,6 +31,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
   let m;
   if ((m = path.match(/^\/extensions\/([a-z][a-z0-9-]*)$/))) return extReads(m[1], extPages);
   if ((m = path.match(/^\/storage\/pools\/([a-z0-9-]+)$/))) return pool(m[1]);
+  if (/^\/storage\/disks\/[^/]+/.test(path)) return DISKS;   // the page of one disk reads what the list reads (its SMART history and tests are read by the page itself)
   if (path.startsWith('/settings/capabilities')) return [`${A}config/list`, `${A}parts/list`, `${A}parts/pending`];
   if (path.startsWith('/settings/')) return [`${A}config/list`];
   switch (path) {

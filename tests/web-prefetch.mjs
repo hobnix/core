@@ -41,6 +41,7 @@ const tank = readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data'
 check('the pools page reads the list, not the fixed pools', tank.includes('/api/sys/pool/list') && !tank.some((p) => p.includes('pool=bulk')) && !tank.some((p) => p.includes('pool=tank')));
 check('a SnapRAID pool is read for its facts', readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/info?pool=tank'));
 check('the disks page reads the members of the SnapRAID pool by name', readsFor('/storage/disks', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/members?pool=tank') && !readsFor('/storage/disks', [], false, []).some((p) => p.includes('pool=bulk')));
+check('the page of one disk prefetches what the list reads (a tab and an encoded name too)', JSON.stringify(readsFor('/storage/disks/sda')) === JSON.stringify(readsFor('/storage/disks', [], false, [])) && readsFor('/node/x/storage/disks/a%20b/smart').length === 4);
 const parsed = parsePoolRows([['tank', 'data', 'zfs', 'online'], ['Bad', 'data', 'zfs', 'x'], ['a1234567890123', 'data', 'zfs', 'x'], ['x', 'other', 'zfs', 'x'], ['y', 'apps', 'ext4', 'x'], ['ssd', 'apps', 'snapraid']]);
 check('parsePoolRows drops bad rows', parsed.length === 2 && parsed[0].name === 'tank' && parsed[1].state === '-');
 check('ofRole lists the names of a role', JSON.stringify(ofRole(parsed, 'apps')) === JSON.stringify(['ssd']));

@@ -6,6 +6,7 @@ import { P } from './paths.js';
 
 export const objects = {
   pool: { label: 'Pool', list: P.pools, base: `${P.pools}/`, tabs: [] },
+  disk: { label: 'Disk', list: P.disks, base: `${P.disks}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'smart', label: 'SMART' }, { id: 'tests', label: 'Tests' }, { id: 'files', label: 'Files' }] },
 };
 
 // the object an INNER path names: { kind, id, tab } (id decoded, tab '' when there is none), or null
