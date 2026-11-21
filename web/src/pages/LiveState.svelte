@@ -1,6 +1,7 @@
 <script>
   // Monitoring > Live state: every live-state topic with its static facts and its stored state, one read (`hs sys live inspect`).
   // Updates come from /api/events (topic live); 5 s polling only while the stream is down. Refresh asks the collector to read a topic now.
+  import { onDestroy } from 'svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import Table from '../shell/Table.svelte';
   import Button from '../ui/Button.svelte';
@@ -14,9 +15,10 @@
   import { ui } from '../ui.svelte.js';
   import { live } from '../live.svelte.js';
   import { tr } from '../i18n.js';
-  import { get, liveRefresh, liveSample } from '../api.js';
+  import { get, liveRefresh, liveSamples } from '../api.js';
   import { parseInspect } from '../livestatus.js';
   import { createSampler } from '../delaysample.js';
+  import { createBatcher } from '../samplebatch.js';
 
   const on = $derived(ui.features.live && (!Array.isArray(ui.features.capabilities) || ui.features.capabilities.includes('live-state')));
   const st = poll(() => (on ? '/api/sys/live/inspect' : ''), 5000, 'live');
@@ -25,7 +27,9 @@
   const starting = $derived(st.error?.status === 503 && st.error?.retryAfter > 0);
 
   // The delay of the page (#486): from a `changed` event of the stream to the rows that show it; the numbers go to the server, per topic.
-  const sampler = createSampler((topic, ms) => { liveSample(topic, ms).catch(() => {}); });
+  const batch = createBatcher((samples) => { liveSamples(samples).catch(() => {}); });
+  const sampler = createSampler((topic, ms) => batch.add(topic, ms));
+  onDestroy(() => batch.flush());
   $effect(() => { for (const [topic, gen] of Object.entries(live.gen)) sampler.changed(topic, gen); });
   $effect(() => {
     const rows = parsed.rows;

@@ -10,7 +10,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/changes/seen   the revision this user has seen in What's new ({rev}, "" = never); session needed
   POST /api/changes/seen   {rev: 40 hex}: remember it for the signed-in user (web-changes-seen.json in the state folder); session + CSRF
   POST /api/live/refresh   {topic}: ask the live collector to read that topic again (the collector counts it up and reads it again); session + CSRF
-  POST /api/live/sample    {topic, ms}: the Live state page says how long after `changed` it showed the new data (#486); any signed-in role, session + CSRF, rate limited, only the numbers are kept (state-db.py live-sample)
+  POST /api/live/sample    {topic, ms} or {samples: [{topic, ms}, ... up to 20]}: the Live state page says how long after `changed` it showed the new data (#486); any signed-in role, session + CSRF, rate limited, only the numbers are kept (state-db.py live-sample)
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
@@ -2339,6 +2339,9 @@ class LiveStore:
         threading.Thread(target=ls.cli_refresh, args=(["--all"] if topic == "*" else [topic],), daemon=True).start()
 
 
+SAMPLE_BATCH = 20      # samples in one POST /api/live/sample
+
+
 class SampleGate:
     """Rate limit of the delay samples of the Live state page (#486): per session and in total, a sliding minute. In memory only."""
     SAMPLE_PER_SESSION = 20
@@ -2677,9 +2680,12 @@ def make_handler(app):
 
         def _json(self, code, obj, extra=()):
             data = json.dumps(obj).encode()
-            self._headers(code, "application/json", len(data), extra)
-            if self.command != "HEAD":
-                self.wfile.write(data)
+            try:
+                self._headers(code, "application/json", len(data), extra)
+                if self.command != "HEAD":
+                    self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True      # the browser gave up waiting (a slow plan): nothing to tell it, no traceback in the log
 
         def _token(self):
             for part in self.headers.get("Cookie", "").split(";"):
@@ -3251,18 +3257,25 @@ def make_handler(app):
                 return self._json(401, {"error": "not signed in"})
             if not self._csrf_ok(s):
                 return self._json(403, {"error": "csrf"})
-            topic, ms = body.get("topic"), body.get("ms")
-            if not isinstance(topic, str) or not re.fullmatch(NAME, topic) or topic not in {t[0] for t in ls.topics()}:
-                return self._json(400, {"error": "That topic is not known."})
-            if isinstance(ms, bool) or not isinstance(ms, int) or not 0 <= ms <= 600000:
-                return self._json(400, {"error": "ms must be a whole number of milliseconds from 0 to 600000."})
+            # one sample {topic, ms} or a batch {samples: [{topic, ms}, ...]} (at most SAMPLE_BATCH); a request counts once against the limit
+            raw = body.get("samples") if "samples" in body else [body]
+            if not isinstance(raw, list) or not 1 <= len(raw) <= SAMPLE_BATCH or not all(isinstance(x, dict) for x in raw):
+                return self._json(400, {"error": "samples must be a list of 1 to %d {topic, ms}." % SAMPLE_BATCH})
+            known = {t[0] for t in ls.topics()}
+            for x in raw:
+                topic, ms = x.get("topic"), x.get("ms")
+                if not isinstance(topic, str) or not re.fullmatch(NAME, topic) or topic not in known:
+                    return self._json(400, {"error": "That topic is not known."})
+                if isinstance(ms, bool) or not isinstance(ms, int) or not 0 <= ms <= 600000:
+                    return self._json(400, {"error": "ms must be a whole number of milliseconds from 0 to 600000."})
             if not app.samples.allow(self._token()):
                 return self._json(429, {"error": "Too many samples; try again in a minute."})
-            try:
-                subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state-db.py"), "live-sample", topic, str(ms)],
-                               capture_output=True, timeout=10)
-            except (OSError, subprocess.TimeoutExpired):
-                pass      # a sample is best effort
+            for x in raw:
+                try:
+                    subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state-db.py"), "live-sample", x["topic"], str(x["ms"])],
+                                   capture_output=True, timeout=10)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass      # a sample is best effort
             return self._json(200, {"ok": True})
 
         def _change(self, verb, body):

@@ -13,7 +13,31 @@ export const ageOf = (path) => {
 const states = new Map();
 export const stateOf = (path) => states.get(path) ?? null;
 
-async function call(method, path, body, ageKey, signal) {
+// How long the browser waits for a plan or a start: the server gives a script CHANGE_LIMIT (60 s, scripts/web-serve.py), so a little more. A busy
+// server (load average above the cores) may answer late or never; without this a toast or dialog would wait for ever (tests/web-plan-timeout.mjs).
+export const CHANGE_WAIT_MS = 75000;
+
+async function call(method, path, body, ageKey, signal, timeoutMs = 0) {
+  let timedOut = false;
+  if (timeoutMs > 0) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
+    if (signal) { if (signal.aborted) ctl.abort(); else signal.addEventListener('abort', () => ctl.abort(), { once: true }); }
+    signal = ctl.signal;
+    try { return await call1(method, path, body, ageKey, signal); }
+    catch (e) {
+      if (timedOut && e.name === 'AbortError') {
+        const t = new Error(`The server did not answer within ${Math.round(timeoutMs / 1000)} seconds. It may be busy: check Jobs for the change, then try again.`);
+        t.status = 0; t.timeout = true;
+        throw t;
+      }
+      throw e;
+    } finally { clearTimeout(timer); }
+  }
+  return call1(method, path, body, ageKey, signal);
+}
+
+async function call1(method, path, body, ageKey, signal) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET' && csrf) headers['X-CSRF-Token'] = csrf;
@@ -51,6 +75,8 @@ export const settingsLayout = () => call('GET', '/api/settings-layout');
 export const changesSeen = () => call('GET', '/api/changes/seen');
 export const liveRefresh = (topic) => call('POST', '/api/live/refresh', { topic });
 // the delay sample of the Live state page (#486): topic and milliseconds, nothing else
+// one POST carries up to 20 samples ({samples: [{topic, ms}, ...]}); the single form {topic, ms} still works
+export const liveSamples = (samples) => call('POST', '/api/live/sample', { samples });
 export const liveSample = (topic, ms) => call('POST', '/api/live/sample', { topic, ms });
 export const markChangesSeen = (rev) => call('POST', '/api/changes/seen', { rev });
 
@@ -120,7 +146,7 @@ export async function get(path, fresh = false) {
 // A change is always a plan first, then a start (with the typed word when the plan has a confirm_name).
 // selection: the file manager's list of item names (the server hands it to the script on stdin, NUL separated)
 // document: the docker app-save body (the server serializes it as bytes on stdin)
-const planCall = (area, args, stdin, selection, signal, document) => call('POST', '/api/plan', { area, args, ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, signal);   // an aborted call rejects with e.name === 'AbortError'
+const planCall = (area, args, stdin, selection, signal, document) => call('POST', '/api/plan', { area, args, ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, signal, CHANGE_WAIT_MS);   // an aborted call rejects with e.name === 'AbortError'
 
 // A plan only reads, so a button can ask for it when the pointer arrives (prefetchPlan) and the dialog that opens a moment later takes the
 // answer that is already running or done. Never with stdin, a selection or a document (secrets, file lists); a start forgets everything.
@@ -143,5 +169,5 @@ export function prefetchPlan(area, args) {
 export const plan = (area, args, stdin, selection, signal, document) => (stdin || selection || signal || document !== undefined) ? planCall(area, args, stdin, selection, signal, document) : prefetchPlan(area, args);
 export const start = (area, args, confirm, stdin, selection, document) => {
   planned.clear();
-  return call('POST', '/api/start', { area, args, ...(confirm ? { confirm } : {}), ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) });
+  return call('POST', '/api/start', { area, args, ...(confirm ? { confirm } : {}), ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, undefined, CHANGE_WAIT_MS);
 };

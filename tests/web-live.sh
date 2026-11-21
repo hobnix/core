@@ -8,5 +8,6 @@ if out=$(python3 -I "$ROOT/tests/web-live-test.py" 2>&1); then pass "live state 
 if have node; then
   if o=$(node "$ROOT/tests/web-live.mjs" 2>&1); then pass "poll timing ($(grep -E '^  -> ' <<<"$o"))"; else fail "poll timing: $(tail -n 12 <<<"$o")"; fi
   if o=$(node "$ROOT/tests/web-delaysample.mjs" 2>&1); then pass "delay sample ($(grep -E '^  -> ' <<<"$o"))"; else fail "delay sample: $(tail -n 12 <<<"$o")"; fi
+  if o=$(node "$ROOT/tests/web-plan-timeout.mjs" 2>&1); then pass "plan/start timeout ($(grep -E '^  -> ' <<<"$o"))"; else fail "plan/start timeout: $(tail -n 12 <<<"$o")"; fi
 else skip "node missing"; fi
 finish

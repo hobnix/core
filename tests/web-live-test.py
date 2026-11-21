@@ -329,6 +329,16 @@ class Topics(DbBase):
         finally:
             c.close()
 
+    def test_delay_sample_batch(self):
+        ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
+        self.app.samples.SAMPLE_PER_SESSION = 2
+        batch = {"samples": [{"topic": "status", "ms": 5}, {"topic": "status", "ms": 6}, {"topic": "status", "ms": 7}]}
+        self.assertEqual(self.req("POST", "/api/live/sample", batch, ch)[0], 200)      # one request, three samples, one slot of the limit
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": []}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": [{"topic": "status", "ms": 1}] * (ws.SAMPLE_BATCH + 1)}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": [{"topic": "status", "ms": 1}, {"topic": "nope", "ms": 1}]}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": "x"}, ch)[0], 400)
+
     def test_delay_sample_is_rate_limited(self):
         ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
         self.app.samples.SAMPLE_PER_SESSION = 3

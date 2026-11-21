@@ -82,7 +82,9 @@ function apply(t, rows) {
 // The second toast of a job: how it ended, with a link to its log in Tasks (a job.* event of the stream ends the follow, nothing polls for it).
 export function endToast(t) {
   const ok = t.state === 'ok' || t.state === 'done';
-  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${tr(ok ? 'finished' : 'failed')}`, action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: tr('Show log') });
+  const lost = t.state === 'unknown' || t.state === 'lost';      // no record of the unit (or the page lost the server): not the same as a failure
+  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${tr(ok ? 'finished' : lost ? 'ended, result unknown' : 'failed')}`,
+    text: lost ? tr('No record of this job was found. Check Jobs to see whether it ran.') : '', action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: tr('Show log') });
 }
 
 // Follow a job: a server-sent-events stream (GET /api/sys/jobs/stream/<unit>) while it works, polling the same journal every 2 s when
@@ -121,18 +123,22 @@ function stream(unit) {
   });
 }
 
+export const POLL_MAX_ERRORS = 15;      // 15 failed reads in a row (about 30 s): say so instead of waiting for ever
 async function poll(unit) {
+  let errors = 0;
   for (;;) {
     const t = tasks.list.find((x) => x.unit === unit);
     if (!t) return;
     try {
       const r = await get(`/api/sys/jobs/tail/${encodeURIComponent(unit)}?from=${t.next}`);
+      errors = 0;
       apply(t, r.rows);
       // a unit that was just started may not exist for a moment: give it a few tries before calling it gone
       if (t.state === 'unknown' && ++t.gone < 4) t.state = 'running';
       if (t.state !== 'running') { t.ended = new Date(); endToast(t); return; }
     } catch (e) {
       if (e.status === 401) return;
+      if (++errors >= POLL_MAX_ERRORS) { t.state = 'lost'; t.ended = new Date(); endToast(t); return; }
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
