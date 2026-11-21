@@ -569,9 +569,12 @@ class Collector:
             self.rescan(self.RESCAN_MIN)      # a package was switched on a moment ago: the web interface asks for its topic
         kind_topics = None
         if topic.startswith("event:"):        # a named event (D12): the topics event-topics.tsv lists; an unknown kind falls back to @system
-            kind_topics = set(ls.event_topics().get(topic[6:]) or ())
-            if not kind_topics:
-                return self.refresh("@system", since)
+            words = ls.event_topics().get(topic[6:]) or ["@system"]
+            if any(w.startswith("@") for w in words):      # a kind that lists groups (area.<name>): each word asks as it always did
+                for w in words:
+                    self.refresh(w, since)
+                return
+            kind_topics = set(words)
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
