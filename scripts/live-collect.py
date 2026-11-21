@@ -21,6 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import collections
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -453,6 +454,24 @@ def beat_every():
     return max(1, n)
 
 
+def _envf(name, default, low):
+    try:
+        n = float(os.environ.get(name, default))
+    except ValueError:
+        n = default
+    return n if math.isfinite(n) and n >= low else default
+
+
+def _cpu_seconds():
+    """CPU seconds of this process and of the children it has waited for (the topic scripts)"""
+    try:
+        import resource
+        a, b = resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
+        return a.ru_utime + a.ru_stime + b.ru_utime + b.ru_stime
+    except (ImportError, OSError):
+        return time.process_time()
+
+
 class Collector:
     RESCAN = 60.0         # seconds between looks at the extension packages that are on (their live reads)
     RESCAN_MIN = 3.0      # a refresh of an unknown ext- topic looks sooner, but not more often than this
@@ -492,6 +511,12 @@ class Collector:
         except ValueError:
             ag = 15.0
         self.any_gap = ag if math.isfinite(ag) and ag >= 0 else 15.0       # a topic woken only by the group `any` waits this long since its last read
+        self.duty = _envf("HS_LIVE_DUTY", 10.0, 0.0)        # a read that took N seconds is not repeated for N x duty seconds (at most ~1/duty of a core per topic)
+        self.budget = _envf("HS_LIVE_BUDGET", 0.5, 0.01)    # reads may keep this many cores busy (seconds of read time per second, last minute); above it the timed intervals stretch
+        self.window = _envf("HS_LIVE_WINDOW", 60.0, 1.0)    # the look-back of the load numbers (a test shortens it)
+        self.reads_at = {}                       # topic -> deque of the times its reads started (last window)
+        self.busy_log = collections.deque()      # (time of the end, seconds) of every read (last window)
+        self.rusage0 = _cpu_seconds()
         self.soft = set()                        # topics whose pending wake came only from the group `any` (no change of their own area)
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
@@ -574,6 +599,7 @@ class Collector:
                 self.took[topic] = int((time.monotonic() - t0) * 1000)
             now = time.time()
             self.last_read[topic] = now
+            self._account(topic, now, self.took[topic] / 1000.0)
             ev = []
             try:
                 new = self._store(topic, rc, out, err, now, ev)
@@ -583,6 +609,56 @@ class Collector:
             finally:
                 for kind, text in ev:      # outside the lock: writing an event must not hold the other topics back
                     self.emit(kind, topic, text)
+
+    def _account(self, topic, now, secs):
+        """count a read: per topic (last window) and the busy seconds of all reads; a topic read far more often than its interval is said once"""
+        with self.tlock:
+            q = self.reads_at.setdefault(topic, collections.deque())
+            q.append(now)
+            while q and q[0] < now - self.window:
+                q.popleft()
+            self.busy_log.append((now, secs))
+            while self.busy_log and self.busy_log[0][0] < now - self.window:
+                self.busy_log.popleft()
+            n = len(q)
+            iv = next((r[2] for r in self.rows if r[0] == topic), 0)
+        if iv and self.window >= 60 and n > 4 * (self.window / iv) + 4:
+            self.say("topic %s is read much more often than its interval (a loop?)" % topic)
+
+    def load(self):
+        """-> busy cores over the look-back (seconds of read time per second)"""
+        now = time.time()
+        with self.tlock:
+            while self.busy_log and self.busy_log[0][0] < now - self.window:
+                self.busy_log.popleft()
+            return sum(s for _, s in self.busy_log) / self.window
+
+    def stretch(self):
+        """factor on the timed intervals: 1 while the reads stay inside the budget, more when they do not (at most 10)"""
+        return min(10.0, max(1.0, self.load() / self.budget))
+
+    def gap(self, topic, base):
+        """seconds a topic is left alone after a read: `base`, or duty x the time its last read took when that is longer"""
+        return max(base, self.duty * self.took.get(topic, 0) / 1000.0)
+
+    def stats(self):
+        """the numbers `hs live load` shows"""
+        now = time.time()
+        with self.tlock:
+            per = {t: sum(1 for x in q if x >= now - self.window) for t, q in self.reads_at.items()}
+        return {"time": int(now), "window": self.window, "cpu_s": round(_cpu_seconds() - self.rusage0, 1), "since": int(self.db.started if hasattr(self.db, "started") else now),
+                "busy": round(self.load(), 3), "stretch": round(self.stretch(), 2), "reads": sum(per.values()),
+                "topics": {t: {"reads": n, "ms": self.took.get(t, 0)} for t, n in per.items() if n}}
+
+    def write_stats(self):
+        path = os.environ.get("HS_LIVE_LOAD_FILE") or os.path.join(os.environ.get("HS_RUN_DIR", "/run/hs"), "live-load.json")
+        try:
+            tmp = path + ".new"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.stats(), f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
 
     def _delay(self, topic, trig):
         """record the time from the trigger to the new gen (#486); a database that cannot be written now loses the sample, never the read"""
@@ -647,7 +723,7 @@ class Collector:
             with self.tlock:
                 if t not in self.events:          # an extension topic went away
                     continue
-            wait = self.last_read.get(t, 0) + self.min_gap - time.time()
+            wait = self.last_read.get(t, 0) + self.gap(t, self.min_gap) - time.time()
             if wait > 0:
                 self.stop.wait(wait)
             ran.append(t)
@@ -679,11 +755,11 @@ class Collector:
                 log("state.db down (%s), retry in 5 s" % e)
                 self.stop.wait(5)
                 continue
-            if ev.wait(timeout=interval):
+            if ev.wait(timeout=max(interval * self.stretch(), self.gap(topic, 0))):
                 # woken by a refresh, not by the interval: a topic is not read again sooner than min_gap after its last read (any_gap when only the
                 # group `any` woke it); refreshes that arrive meanwhile are the same read
                 while not self.stop.is_set() and not mine.is_set():
-                    gap = self.any_gap if topic in self.soft else self.min_gap      # a refresh by name meanwhile ends the longer wait
+                    gap = self.gap(topic, self.any_gap if topic in self.soft else self.min_gap)      # a refresh by name meanwhile ends the longer wait
                     wait = self.last_read.get(topic, 0) + gap - time.time()
                     if wait <= 0:
                         break
@@ -775,6 +851,7 @@ class Collector:
         while not self.stop.is_set():
             try:
                 self.db.beat(self.beat_every, int(max(self.last_read.values())) if self.last_read else None)
+                self.write_stats()
                 said = False
             except OSError as e:
                 if not said:
