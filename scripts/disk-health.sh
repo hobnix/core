@@ -9,7 +9,7 @@ here=$(dirname "$0")
 . "$here/lib/live.sh"
 
 live_refresh_health() {
-  live_refresh monitor-disks disk-health
+  live_refresh event:disk.health-checked
 }
 
 usage() {
