@@ -487,6 +487,12 @@ class Collector:
         except ValueError:
             gap = 5.0
         self.min_gap = gap if math.isfinite(gap) and gap >= 0 else 5.0      # inf and NaN fall back
+        try:
+            ag = float(os.environ.get("HS_LIVE_ANY_GAP", "15"))
+        except ValueError:
+            ag = 15.0
+        self.any_gap = ag if math.isfinite(ag) and ag >= 0 else 15.0       # a topic woken only by the group `any` waits this long since its last read
+        self.soft = set()                        # topics whose pending wake came only from the group `any` (no change of their own area)
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
         self.trig = {}                           # topic -> time (epoch seconds) of the trigger that waits for its read (#486 delay measure)
@@ -522,21 +528,35 @@ class Collector:
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
-        woken = []
+        woken, queued = [], 0
         t_trig = since if since else time.time()
         for t, ev in items:
+            hard = soft = False
             if topic == "*" or topic == t:
-                self.trig.setdefault(t, t_trig)
-                ev.set()
-                woken.append(t)
+                hard = True
             elif topic.startswith("@"):
                 groups = (info.get(t) or {}).get("groups", set())
-                if topic[1:] in groups or "any" in groups:
-                    self.trig.setdefault(t, t_trig)
-                    ev.set()
-                    woken.append(t)
+                if topic[1:] in groups:
+                    hard = True
+                elif "any" in groups:
+                    soft = True
+            if not (hard or soft):
+                continue
+            self.trig.setdefault(t, t_trig)      # the earliest trigger of the next read starts its delay measure
+            if ev.is_set():
+                queued += 1                    # a wake already waits for this topic: the burst becomes one read
+            else:
+                woken.append(t)
+            if hard:
+                self.soft.discard(t)
+            elif not ev.is_set():
+                self.soft.add(t)
+            ev.set()
         # one journal line per request (journalctl -u hs-live): which topics it woke, so a stale page can be traced to a missing or late refresh
-        log("refresh %s -> %s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic")))
+        if queued and not woken:
+            return                              # all of it was queued already: nothing new to say (a burst filled the journal)
+        log("refresh %s -> %s%s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic"),
+                                    " (+%d already queued)" % queued if queued else ""))
 
     def collect(self, topic, words, mode="run"):
         """One read of one topic. Returns True when the output differs from the last read (new gen, published); an identical read writes nothing."""
@@ -659,7 +679,16 @@ class Collector:
                 log("state.db down (%s), retry in 5 s" % e)
                 self.stop.wait(5)
                 continue
-            ev.wait(timeout=interval)
+            if ev.wait(timeout=interval):
+                # woken by a refresh, not by the interval: a topic is not read again sooner than min_gap after its last read (any_gap when only the
+                # group `any` woke it); refreshes that arrive meanwhile are the same read
+                while not self.stop.is_set() and not mine.is_set():
+                    gap = self.any_gap if topic in self.soft else self.min_gap      # a refresh by name meanwhile ends the longer wait
+                    wait = self.last_read.get(topic, 0) + gap - time.time()
+                    if wait <= 0:
+                        break
+                    self.stop.wait(min(wait, 0.25))
+                self.soft.discard(topic)
             ev.clear()
 
     def _spawn(self, topic, words, interval, mode):

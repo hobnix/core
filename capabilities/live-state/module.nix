@@ -10,7 +10,7 @@
     description = "Live state collector (hs sys ... into the state database)";
     wantedBy = [ "multi-user.target" ];
     path = [ "/run/current-system/sw" pkgs.python3 ];
-    environment.HS_CALLER = "ui";
+    environment = { HS_CALLER = "ui"; HS_MACHINE_CACHE = "/run/hs-machine-cache"; };    # answers of machine.toml reads, 30 s at most (scripts/lib helpers)
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${hs.scripts}/live-collect.py";
       Restart = "always";
