@@ -25,6 +25,10 @@ case "$verb" in
   logs)    n=${1:-100}
            [[ "$n" =~ ^[0-9]+$ ]] || usage
            "$incus" exec "$ct" -- journalctl -n "$n" --no-pager 2>/dev/null || "$incus" info "$ct" --show-log ;;
+  follow)  # the web interface's log stream: the last N lines, then every new one, plain; the reader ends it by closing the pipe or killing it
+           n=${1:-200}
+           [[ "$n" =~ ^[0-9]+$ ]] || usage
+           exec "$incus" exec "$ct" -- journalctl -n "$n" -f --no-pager </dev/null ;;
   console) exec "$incus" console "$ct" ;;
   *)       usage ;;
 esac

@@ -70,6 +70,9 @@ check_out "exec runs the command inside" "ran: web -- ls /etc" $A web exec ls /e
 check_out "shell is a login shell" "ran: web -- su -l" $A web shell
 check_out "logs asks the journal for 20 lines" "journalctl -n 20 --no-pager" $A web logs 20
 check_out "logs without a number reads 100" "journalctl -n 100 --no-pager" $A web logs
+check_out "follow asks the journal for 200 lines and follows" "journalctl -n 200 -f --no-pager" $A web follow
+check_out "follow takes a number" "journalctl -n 30 -f --no-pager" $A web follow 30
+check_out "follow wants a number" "usage" $A web follow many
 check_out "console" "console web" $A web console
 check_out "an unknown instance is named" "No instance called 'nope'" $A nope shell
 check_out "logs wants a number" "usage" $A web logs many

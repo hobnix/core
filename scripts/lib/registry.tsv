@@ -276,6 +276,7 @@ sys	sys config plan <action>	config-change.sh	plan {1} {rest}	what changing a se
 sys	sys config start <action>	config-change.sh	start {1} {rest}	do it (hs sys config start set <key> <value>); the file is checked and put back when the check fails	-
 sys	sys logs units	logs.sh	units	what the journal can be filtered by (key and label)	-
 sys	sys logs show	logs.sh	show {rest}	the journal as plain lines: hs sys logs show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>]	-
+sys	sys logs follow	logs.sh	follow {rest}	the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]	-
 sys	sys jobs tail <unit>	jobs.sh	tail {1} {rest}	state and new journal lines of a job since line N (state, exit, line, next)	-
 sys	sys jobs stop <unit>	jobs.sh	stop {1}	stop a running background job	-
 sys	sys jobs record <id>	jobs.sh	--record {1}	one job record as JSON (ADR 0004): state, step, progress, times, exit, error, result	-	reads,topic:jobs
@@ -304,6 +305,7 @@ sys	sys state forget <serial>	state.sh	forget {1} --yes	remove a MISSING disk fr
 sys	sys state collect	state.sh	collect {rest}	read the disks and update the state database (the one writer; root)	-
 sys	sys state disks	state.sh	disks	the disk inventory: serial, model, size, name, state ok|missing|unknown, role, pool, first and last seen, worse, note	-
 sys	sys state events	state.sh	events {rest}	disk events from the state database: time, kind, serial, text	-
+sys	sys state events-follow	state.sh	events-follow {rest}	the last disk events, then every new row until the reader goes (the web log stream; plain rows)	-
 sys	sys state smart <serial>	state.sh	smart {1}	the stored SMART readings of one disk over time	-
 sys	sys state problems	state.sh	problems	problems the state database knows (missing or worsening disks, a stopped collector): key and text	-
 sys	sys state baseline	state.sh	baseline	the daily SMART check per disk: serial, name, kind, level healthy|watch|failing, since, last read, first read, wwn, realloc, pending, uncorr, crc, nv_crit, nv_media, nv_used, nv_spare, present, note	-
@@ -410,6 +412,7 @@ sys	sys ct bindings <ct>	ct-bindings.sh	{1}	the storage of an instance with pool
 sys	sys ct plan <ct> <action>	ct-change.sh	plan {1} {2} {rest}	what a change of an instance would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
 sys	sys ct start <ct> <action>	ct-change.sh	start {1} {2} {rest}	do a change of an instance as a background job; needs --confirm <name> when the plan has a danger line	-
 sys	sys ct logs <ct>	ct-access.sh	{1} logs {rest}	the last lines of the journal inside an instance (hs sys ct logs <ct> [lines])	-
+sys	sys ct follow <ct>	ct-access.sh	{1} follow {rest}	the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])	-
 sys	sys monitor disks	monitor.sh	--disks	disk table of the overview	-
 sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)	Schlafzustand der drehenden Platten (Platte, Zustand, seit, Aufwachen heute) und die gemessenen Leistungswerte mit Quelle (USV, CPU-Paket)	-
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
@@ -570,6 +573,7 @@ sys	sys docker start <action>	docker-setup.sh	start {1} {rest}	do it (hs sys doc
 sys	sys docker apps	docker.sh	--apps	the apps in Docker as name, parent, project, state, running/total, ports, address, images, managed, update, files (same|changed|new|invalid|-; - when empty; kind unmanaged = a container without a compose project; no row when Docker is off or does not answer)	-
 sys	sys docker containers	docker.sh	--containers	every container in Docker as name, project, state (- when empty; no row when Docker is off or does not answer): the editor checks container_name against it	-
 sys	sys docker logs <app>	docker.sh	--logs {1} {rest}	the Compose log of one app: name parent project state ports, then log lines (--tail 200 by default, up to 2000)	-	changes
+sys	sys docker follow <app>	docker.sh	--follow-logs {1} {rest}	the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)	-
 sys	sys docker app <app>	docker.sh	--app {1}	the app as JSON: rev, managed (web|recipe|other), env NAMES only, compose text (no env values; compose may hold secrets)	-
 sys	sys docker rev <app>	docker.sh	--rev {1}	the revision of the compose file and .env of one app, one line (what hs sys docker app prints as rev): the open editor polls it for "changed on disk"	-
 sys	sys docker-app plan <app> <action>	docker-app-change.sh	plan {1} {2} {rest}	what starting, stopping, restarting, pulling, saving, rebuilding, recreating or deleting an app in Docker would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused with a reason); app-save and app-write (the files only) take --rev new|<rev> with document stdin and print `finding<TAB>level<TAB>where<TAB>text` lines (the editor's Test); delete confirms by name	-	changes

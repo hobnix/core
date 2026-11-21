@@ -391,6 +391,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "ct.follow.by_ct": {
+    /** the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines]) */
+    words: ["ct", "follow", "<ct>"];
+    path: "/ct/follow/{ct}";
+    method: "get";
+    class: "read";
+    role: "app-manager";
+    params: { ct: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "ct.list": {
     /** instances with state and address */
     words: ["ct", "list"];
@@ -787,6 +799,18 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "docker.follow.by_app": {
+    /** the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default) */
+    words: ["docker", "follow", "<app>"];
+    path: "/docker/follow/{app}";
+    method: "get";
+    class: "read";
+    role: "app-manager";
+    params: { app: string; };
+    stdin: "none";
+    exit: number;
+    lines: string;
   };
   "docker.health": {
     /** the checks of the Docker capability page as id, state (ok|warn|fail|off), fix, detail, reason (- when empty): container, share (apps on the SSD pool), mount (apps mounted in Docker) */
@@ -1578,6 +1602,18 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "logs.follow": {
+    /** the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>] */
+    words: ["logs", "follow"];
+    path: "/logs/follow";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
   };
   "logs.show": {
     /** the journal as plain lines: hs sys logs show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>] */
@@ -2962,6 +2998,18 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string[][];
+  };
+  "state.events-follow": {
+    /** the last disk events, then every new row until the reader goes (the web log stream; plain rows) */
+    words: ["state", "events-follow"];
+    path: "/state/events-follow";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
   };
   "state.events-json": {
     /** the latest disk events as JSON with masked serials (what the status endpoint serves at /events) */
