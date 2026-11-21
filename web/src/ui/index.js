@@ -45,3 +45,4 @@ export { default as Menu } from './Menu.svelte';           // the More menu and 
 export { default as Toast } from './Toast.svelte';         // mounted once in the shell; fed by toast() from toast.svelte.js
 export { toast, dismissToast } from './toast.svelte.js';
 export { default as QuickLook } from './QuickLook.svelte'; // the Drawer as an overlay above a list
+export { default as NodePopover } from './NodePopover.svelte';     // spike, issue 871: map-node detail popover on @ui-sdk/svelte (not used by a page yet)
