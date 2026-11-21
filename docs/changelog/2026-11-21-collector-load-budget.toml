@@ -1,0 +1,6 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "Live state: the collector limits its own load; new hs live load"
+body  = """
+The topics add up to about 170 reads a minute, and each read starts several processes. The collector now leaves a topic alone for ten times as long as its last read took, stretches all timed reads when the reads together keep more than half a core busy, and says in the journal when a topic is read much more often than its interval. `hs live load` shows the CPU seconds of the collector and the reads per topic in the last minute, without ps.
+"""

@@ -264,6 +264,89 @@ class Coalesce(unittest.TestCase):
         self.assertEqual(lg.call_count, 1)                 # the second one woke nothing new: no line
 
 
+class Load(unittest.TestCase):
+    """the collector cannot burn a core by itself: no self-triggering loop, a duty cycle per topic, a budget for all reads (#1008)"""
+
+    def make(self, run, interval=0.05, names=("a",)):
+        rows = [(n, [n], interval, "run") for n in names]
+        c = lc.Collector(FakeResp(), run=run, topic_rows=rows, topic_info={n: {"cap": None, "groups": {"g"}} for n in names}, topic_needs={})
+        return c
+
+    def spin(self, c, secs, topic="a"):
+        t = threading.Thread(target=c.loop, args=(topic, [topic], c.rows[0][2], "run"), daemon=True)
+        t.start()
+        time.sleep(secs)
+        c.stop.set()
+        c.events[topic].set()
+        t.join(3)
+
+    def test_a_read_that_asks_for_itself_again_is_no_loop(self):
+        """a topic whose read emits a change that refreshes the same topic (an event feedback) is read once per min_gap, not as fast as it can"""
+        calls = []
+        box = {}
+
+        def run(words):
+            calls.append(time.time())
+            box["c"].refresh("a")                     # the read counts a change that wakes the topic again
+            return 0, "x %d\n" % len(calls), ""
+        c = box["c"] = self.make(run, interval=60)
+        c.min_gap, c.duty = 0.3, 0
+        self.spin(c, 1.6)
+        self.assertGreaterEqual(len(calls), 3)
+        self.assertLessEqual(len(calls), 7)         # 1.6 s / 0.3 s gap + the first read; unbounded it would be thousands
+        gaps = [b - a for a, b in zip(calls, calls[1:])]
+        self.assertGreaterEqual(min(gaps), 0.25)
+
+    def test_duty_cycle_spaces_a_slow_read(self):
+        """a read that takes 50 ms with a 50 ms interval is repeated at most every 10 x 50 ms"""
+        calls = []
+
+        def run(words):
+            calls.append(1)
+            time.sleep(0.05)
+            return 0, "y\n", ""
+        c = self.make(run, interval=0.05)
+        c.duty = 10
+        self.spin(c, 2.0)
+        self.assertLessEqual(len(calls), 6)         # without the duty cycle: ~20
+        c2 = self.make(run, interval=0.05)
+        calls.clear()
+        c2.duty, c2.budget = 0, 1000
+        self.spin(c2, 1.0)
+        self.assertGreaterEqual(len(calls), 8)      # the stand-in without both: the old behaviour
+
+    def test_budget_stretches_the_timed_intervals(self):
+        c = self.make(lambda w: (0, "z\n", ""))
+        c.budget = 0.5
+        self.assertEqual(c.stretch(), 1.0)
+        now = time.time()
+        c.busy_log.extend([(now, 60.0)])            # a core busy for the whole look-back
+        self.assertAlmostEqual(c.stretch(), 2.0, places=1)
+        c.busy_log.extend([(now, 6000.0)])
+        self.assertEqual(c.stretch(), 10.0)
+
+    def test_stats_file_counts_reads_per_topic(self):
+        c = self.make(lambda w: (0, "z\n", ""), names=("a", "b"))
+        for _ in range(3):
+            c.collect("a", ["a"])
+        c.collect("b", ["b"])
+        with tempfile.TemporaryDirectory() as d:
+            with unittest.mock.patch.dict(os.environ, {"HS_LIVE_LOAD_FILE": os.path.join(d, "load.json")}):
+                c.write_stats()
+            doc = json.load(open(os.path.join(d, "load.json"), encoding="utf-8"))
+        self.assertEqual((doc["reads"], doc["topics"]["a"]["reads"], doc["topics"]["b"]["reads"]), (4, 3, 1))
+        self.assertIn("cpu_s", doc)
+
+    def test_a_loop_is_said_once(self):
+        c = self.make(lambda w: (0, "z\n", ""), interval=30)
+        c.window = 60.0
+        with unittest.mock.patch.object(lc, "log") as lg:
+            for _ in range(200):
+                c.collect("a", ["a"])
+        said = [x for x in lg.call_args_list if "a loop?" in x[0][0]]
+        self.assertEqual(len(said), 1)
+
+
 class Needs(unittest.TestCase):
     """dependency graph and waves (#153)"""
 
