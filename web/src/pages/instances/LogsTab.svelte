@@ -1,6 +1,6 @@
 <script>
-  // The Logs tab of an instance drawer: the last lines of its journal (`hs sys ct logs <ct>`, read only), following while the tab is open.
-  import { poll } from '../../data.svelte.js';
+  // The Logs tab of an instance drawer: the last lines of its journal (`hs sys ct logs <ct>`, read only), following while the tab is open (a log stream, D15; the timed read only while the stream is down).
+  import { logfeed } from '../../logfeed.svelte.js';
   import { Select, Checkbox, Muted } from '../../ui/index.js';
 
   let { ct } = $props();
@@ -8,8 +8,8 @@
   let follow = $state(true);
   let box = $state(null);
 
-  const logs = poll(() => (follow || !logs?.loaded ? `/api/sys/ct/logs/${encodeURIComponent(ct)}?lines=${lines}` : ''), 4000);
-  const list = $derived(((logs.data?.text ?? '').trimEnd() || '').split('\n').filter((l, i, a) => a.length > 1 || l));
+  const logs = logfeed({ stream: () => `/api/logs/stream/ct?target=${encodeURIComponent(ct)}&lines=${lines}`, read: () => `/api/sys/ct/logs/${encodeURIComponent(ct)}?lines=${lines}`, follow: () => follow, every: 4000 });
+  const list = $derived(logs.lines);
   const cls = (l) => (/\b(error|err|fail|failed|crit|alert|emerg)\b/i.test(l) ? 'bad' : /\bwarn(ing)?\b/i.test(l) ? 'warn' : '');
   $effect(() => { if (follow && box && list.length) box.scrollTop = box.scrollHeight; });
 </script>
@@ -21,7 +21,7 @@
   </div>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div class="log" bind:this={box} tabindex="0" role="log" aria-label="Journal of {ct}">
-    {#if logs.error && !logs.data}
+    {#if logs.error}
       <div class="bad">The log could not be read (is the instance running?).</div>
     {:else if !logs.loaded}
       <Muted as="div">Loading…</Muted>

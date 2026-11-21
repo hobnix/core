@@ -369,6 +369,10 @@ class DbStore:
             return {t: int(g) for t, g, _ in rows}
         return self._tx(read)
 
+    def demand(self, now):
+        """-> {topic: until} of the leases of the web server that have not run out (D14; `*` = every topic)"""
+        return self._tx(lambda c: self.sdb.demand_active(c, int(now)))
+
     def delay(self, topic, ms, now):
         """one delay sample of a topic (#486): last, worst and the recent list in table live_delay"""
         self._tx(self.sdb.live_delay_put, topic, ms, int(now), False)
@@ -530,6 +534,7 @@ class Collector:
         self.busy_log = collections.deque()      # (time of the end, seconds) of every read (last window)
         self.rusage0 = _cpu_seconds()
         self.soft = set()                        # topics whose pending wake came only from the group `any` (no change of their own area)
+        self.leases = {}                         # D14: topic -> time the lease runs out, as listen() saw the table `demand` last (`*` = every topic)
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
         self.trig = {}                           # topic -> time (epoch seconds) of the trigger that waits for its read (#486 delay measure)
@@ -564,9 +569,12 @@ class Collector:
             self.rescan(self.RESCAN_MIN)      # a package was switched on a moment ago: the web interface asks for its topic
         kind_topics = None
         if topic.startswith("event:"):        # a named event (D12): the topics event-topics.tsv lists; an unknown kind falls back to @system
-            kind_topics = set(ls.event_topics().get(topic[6:]) or ())
-            if not kind_topics:
-                return self.refresh("@system", since)
+            words = ls.event_topics().get(topic[6:]) or ["@system"]
+            if any(w.startswith("@") for w in words):      # a kind that lists groups (area.<name>): each word asks as it always did
+                for w in words:
+                    self.refresh(w, since)
+                return
+            kind_topics = set(words)
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
@@ -687,6 +695,19 @@ class Collector:
         except OSError as e:
             log("delay of %s not written (%s)" % (topic, e))
 
+    def leased(self, topic, now=None):
+        """True while an open stream of the web server wants the topic (a lease that has not run out)"""
+        now = now if now is not None else time.time()
+        ls_ = self.leases
+        return max(ls_.get(topic, 0), ls_.get("*", 0)) > now
+
+    def pace(self, topic, interval):
+        """seconds between two reads of a topic: its interval, or its idle interval (live-topics.tsv column 9, D14) while nobody wants it"""
+        idle = (self.info.get(topic) or {}).get("idle")
+        if idle and not self.leased(topic):
+            return max(idle, interval)
+        return interval
+
     def _meta(self, topic):
         """(src, ttl) of a topic for its document: the words of the read and the seconds it counts as fresh (live-topics.tsv column 8, else 3 x interval)"""
         for r in self.rows:
@@ -772,7 +793,7 @@ class Collector:
                 log("state.db down (%s), retry in 5 s" % e)
                 self.stop.wait(5)
                 continue
-            if ev.wait(timeout=max(interval * self.stretch(), self.gap(topic, 0))):
+            if ev.wait(timeout=max(self.pace(topic, interval) * self.stretch(), self.gap(topic, 0))):
                 # woken by a refresh, not by the interval: a topic is not read again sooner than min_gap after its last read (any_gap when only the
                 # group `any` woke it); refreshes that arrive meanwhile are the same read
                 while not self.stop.is_set() and not mine.is_set():
@@ -853,6 +874,7 @@ class Collector:
                 now = self.db.counters()
             except OSError:
                 continue
+            self.lease_round()
             before, self.db.seen = self.db.seen, now
             if before is None:
                 continue
@@ -861,6 +883,23 @@ class Collector:
                     known = t in self.events
                 if known or t.startswith("ext-"):
                     self.refresh(t, (getattr(self.db, "times", None) or {}).get(t))
+
+    def lease_round(self):
+        """D14: read the leases of the web server; a demand topic that has one now and had none a moment ago is read at once (a page was opened). A table
+        that cannot be read leaves the leases as they were (they run out by their own time). Never raises."""
+        if not hasattr(self.db, "demand"):
+            return
+        try:
+            now = time.time()
+            new = self.db.demand(now)
+        except Exception:
+            return
+        with self.tlock:
+            was = {t for t in self.events if self.leased(t, now)}
+            self.leases = new
+            wake = [t for t in self.events if (self.info.get(t) or {}).get("idle") and t not in was and self.leased(t, now)]
+        for t in sorted(wake):
+            self.refresh(t)
 
     def beat(self):
         """The heartbeat thread: one row every beat_every seconds; the web says `down` when it gets old."""

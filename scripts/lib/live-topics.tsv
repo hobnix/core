@@ -10,12 +10,16 @@
 # Column 7: needs = comma list of topics (column 1 of this file) whose new gen re-reads this topic in a wave
 # (scripts/live-collect.py), `-` = none. Checked by tests/live-state-test.py (unknown topic, self reference, cycle fail).
 # Column 8 (optional): ttl = seconds the entry counts as fresh (live_state.status_of); `-` or empty = 3 x interval. An entry past its ttl is still served, only marked.
+# Column 9 (optional): demand (D14) = `always` (or empty, `-`: the topic runs at its interval) or `idle:<seconds>`: the topic runs at its interval only
+# while an open page of the web interface wants it (a lease in the table `demand`, written by hs-web), else once per idle period, and at once when a
+# lease appears. Only topics for a page: SMART, free space, sizes. Never a topic that a health check, a notification or a push rule reads
+# (tests/live-demand-test.py lists them). A named event or a refresh by hook still wakes it.
 # Lock mode: mounted-pool/Samba reads skip while locked (they need services that are down); lock-aware reads run so the UI can show
 # the defined locked state. Unlock refreshes all topics immediately.
 status	status	15	run	-	any	-
 live	live status	5	run	-	any	-
-monitor-disks	monitor disks	15	run	-	disks	-
-disk-health	disk-health list	30	run	-	disks	-
+monitor-disks	monitor disks	15	run	-	disks	-	-	idle:120
+disk-health	disk-health list	30	run	-	disks	-	-	idle:300
 disk-inventory	state disks	30	run	-	disks	-
 disk-marks	disk marks	15	run	-	disks	-
 pool-info-bulk	pool info bulk	15	skip	-	disks	-
@@ -25,15 +29,15 @@ pool-members-bulk	pool members bulk	15	skip	-	disks	-
 pool-members-fast	pool members fast	15	skip	-	disks	-
 pool-state-bulk	pool state bulk	10	run	-	disks	-
 pool-state-fast	pool state fast	10	run	-	disks	-
-shares-overview	shares overview	30	skip	-	shares	-
-shares-deleted	shares deleted	60	skip	-	shares	-
+shares-overview	shares overview	30	skip	-	shares	-	-	idle:300
+shares-deleted	shares deleted	60	skip	-	shares	-	-	idle:600
 shares-principals	shares principals	60	skip	-	shares	-
 encryption	encryption list	30	run	-	security	-
 vault-list	vault list	60	run	-	security	-
-vault-usage	vault usage	30	run	-	security	-
+vault-usage	vault usage	30	run	-	security	-	-	idle:300
 vault-uses	vault uses	60	run	-	security	-
 state-history	state history	30	run	-	disks	-
-fm-locations	fm locations	15	run	-	shares	-
+fm-locations	fm locations	15	run	-	shares	-	-	idle:300
 temp-disks	temp-disk raw	30	run	-	disks,shares	-
 deck	deck	5	run	-	any	-
 jobs-running	jobs running	10	run	-	any,jobs	-
@@ -81,8 +85,8 @@ users-list	users list	60	skip	ad	users,shares,instances,system	-
 users-groups	users groups	60	skip	ad	users,shares,instances,system	-
 dc-state	dc state	600	skip	ad	users,security,instances,system	-
 backup-state	backup state	30	run	backup	backup,any	-
-backup-overview	backup overview	60	skip	backup	backup,shares,instances,disks,system	-
-backup-shares	backup shares	60	skip	backup	backup,shares,instances,disks,system	-
+backup-overview	backup overview	60	skip	backup	backup,shares,instances,disks,system	-	-	idle:600
+backup-shares	backup shares	60	skip	backup	backup,shares,instances,disks,system	-	-	idle:600
 docker-list	docker list	300	skip	docker	instances,system,docker	-
 docker-apps	docker apps	300	skip	docker	instances,system,docker	-
 docker-status	docker status	60	skip	-	instances,system,docker	-

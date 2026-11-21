@@ -144,6 +144,29 @@ def topics(path=None):
     return rows
 
 
+def parse_demand(v):
+    """column 9 of live-topics.tsv: `always` (or empty, `-`) -> None, `idle:<seconds>` -> the seconds (D14); anything else counts as always"""
+    v = (v or "").strip()
+    if v.startswith("idle:") and v[5:].isdigit() and int(v[5:]) > 0:
+        return int(v[5:])
+    return None
+
+
+def demand_read(now=None):
+    """-> {topic: until} of the leases that have not run out (table demand, read-only); {} when there is no database or table"""
+    now = int(now if now is not None else time.time())
+    try:
+        c = _db_open()
+        if c is None:
+            return {}
+        try:
+            return {t: int(u) for t, u in c.execute("SELECT topic, until FROM demand WHERE until > ?", (now,))}
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return {}
+
+
 def topic_info(path=None):
     """{topic: {"cap": capability name or None, "groups": set of change areas}} from columns 5 and 6 of live-topics.tsv."""
     own = path is not None
@@ -168,6 +191,9 @@ def topic_info(path=None):
             info[c[0]] = {"cap": cap, "groups": groups}
             if ttl:
                 info[c[0]]["ttl"] = ttl
+            idle = parse_demand(c[8]) if len(c) > 8 else None
+            if idle:
+                info[c[0]]["idle"] = idle
     if not own:
         for t, i in ext_live()[1].items():
             info.setdefault(t, i)
@@ -376,6 +402,7 @@ def cli_inspect(out=None, docs=None, delays=None):
         if c is not None and c not in caps:
             caps[c] = cap_on(c)
     now = time.time()
+    leases = demand_read(now)
     entries = []
     for topic, words, interval, lock in rows:
         raw = docs.get(topic)
@@ -389,6 +416,14 @@ def cli_inspect(out=None, docs=None, delays=None):
              "err": clean(d["err"]) if d.get("err") else None,
              "ts_err": int(d["ts_err"]) if d.get("ts_err") else None,
              "bytes": len(str(d.get("out") or "").encode()) if d else None}
+        # D14: demand = always | idle:<seconds>; lease = the time (seconds) the lease runs out, only while a stream wants the topic
+        idle = i.get("idle")
+        e["demand"] = "idle:%d" % idle if idle else "always"
+        if idle:
+            e["idle"] = idle
+            u = leases.get(topic) or leases.get("*")
+            if u:
+                e["lease"] = u
         # #339 needs, #322 status/ttl/source: present only when those are in
         if i.get("needs") is not None:
             e["needs"] = sorted(i["needs"])
@@ -474,7 +509,11 @@ def cli_check(out=None, docs=None, delays=None):
                     problems.append(("live:never:" + topic, "live state '%s' has never been read: %s. Details: systemctl status hs-live" % (
                         topic, clean(d["err"]))))
                 continue
-            st = status_of(dict(checked_doc(d, hb, now), ttl=_ttl(d, interval, info.get(topic))), interval, now)
+            idle = (info.get(topic) or {}).get("idle")
+            ttl = _ttl(d, interval, info.get(topic))
+            if idle:
+                ttl = max(ttl, 3 * idle)      # D14: a topic nobody watches runs at its idle interval, that is not a stale topic
+            st = status_of(dict(checked_doc(d, hb, now), ttl=ttl), interval, now)
             if st in ("expired", "error"):
                 problems.append(("live:stale:" + topic, "live state '%s' is %s (%d s old, read every %d s). Details: systemctl status hs-live" % (
                     topic, st, now - d["ts"], interval)))

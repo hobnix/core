@@ -349,7 +349,7 @@ unlock refreshes them. Not tested on hardware yet.
 The Summary and top bar, Health, Settings, the Instances and Services pages, the Marketplace and Apps, and the Network pages (gateway status, routes
 and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from the state database and update
 over the stream. A change from the terminal, from the web interface or from a job refreshes only the pages it can affect; a finished job refreshes
-everything. Reads that need an argument (one instance's logs, one service, one user) and on-demand reports stay direct. Pages whose feature is off
+everything. Reads that need an argument (one service, one user) and on-demand reports stay direct. Pages whose feature is off
 (gateway, Active Directory, router connection) show nothing for it. Not tested on hardware yet.
 
 The Users and Backup pages follow the same rule: the user and group lists, the domain controller certificate state, the backup state and the list of
@@ -375,6 +375,24 @@ SMART values (`disk-health`), free space and temperatures (`monitor-disks`, `tem
 traffic counters and the UniFi clients.
 
 Check that it works: `systemctl status hs-unit-watch`, open the Services page and run `sudo systemctl stop docker` (then `start`): the Docker row changes without a reload.
+Not tested on hardware yet.
+
+### Logs follow a stream
+
+The log views (the Logs tab of an instance and of a Docker app, the instance log window, the Logs and Disk events tabs of the task panel) show new lines as
+they are written, without asking again and again. Each open view holds one stream of its own (`GET /api/logs/stream/<ct|docker|system|events>`,
+server-sent events): the server starts `hs sys ... follow` for it, sends the last 200 lines first and then every new line, and ends the command when the
+view closes, the tab goes away, you sign out or the stream ends.
+
+- **Who sees what:** the same role as the read the view replaces (instance and Docker logs: app manager, system journal: admin, disk events: viewer).
+  A log may hold secrets, so a stream is never cached and never part of a live topic.
+- **Limits:** 4 open log streams per person and 8 in all (`HS_WEB_LOGS_USER_MAX`, `HS_WEB_LOGS_MAX`), apart from the 32 event streams. A browser keeps
+  only 6 connections to one server and the page holds one for its events, so a view opens its stream only while it is shown, never when the pointer
+  passes over a link, and a switched-off *Follow* closes it.
+- **A tab nobody sees:** a stream with no visible tab closes after 15 minutes and opens again, with a fresh fill, when the tab is shown.
+- **When the stream is not there** (limit reached, the server restarting, the command ended): the view falls back to the old timed read until the stream is
+  back.
+
 Not tested on hardware yet.
 
 ## Inspect the live state

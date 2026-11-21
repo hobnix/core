@@ -48,6 +48,7 @@ import mimetypes
 import os
 import queue
 import re
+import importlib.util
 import sqlite3
 import secrets
 import select
@@ -352,6 +353,10 @@ class Config:
         self.events_watch = 1.0                                           # seconds between two reads of the change counters (table topics of state.db)
         self.events_ping = 15.0                                           # seconds of silence before a `: ping` on /api/events (tests shorten it)
         self.events_max = int(env("HS_WEB_EVENTS_MAX", "32"))             # /api/events streams open at once
+        self.logs_user_max = int(env("HS_WEB_LOGS_USER_MAX", "4"))        # /api/logs/stream: open log streams per user (D15; one child process each)
+        self.logs_max = int(env("HS_WEB_LOGS_MAX", "8"))                  # ... and in total, apart from events_max
+        self.logs_tick = float(env("HS_WEB_LOGS_TICK", "1"))              # seconds a log stream waits for a line before it looks at the client again
+        self.logs_ping = int(env("HS_WEB_LOGS_PING", "15"))               # quiet ticks before a `: ping`
 
 
 # ─────────────────────────── colours ───────────────────────────
@@ -615,6 +620,34 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
             if how:
                 _kill_tree(p)
                 return RC_TIMEOUT, "", how
+
+
+LOG_KINDS = ("system", "ct", "docker", "events")      # what /api/logs/stream/<kind> can follow
+
+
+def log_follow_words(kind, query):
+    """-> the words after `hs sys` for a log stream, or None when the kind or an argument is not valid (D15). Every value is checked
+    against the pattern of the read it replaces, nothing else reaches a command line. `target` is the instance or the app."""
+    def one(key, rx, default=""):
+        v = (query.get(key) or [default])[0]
+        return v if re.fullmatch(rx, v) else None
+    lines = one("lines", r"[0-9]{1,4}", "200")
+    if lines is None or not 1 <= int(lines) <= 2000:
+        return None
+    if kind == "ct":
+        t = one("target", NAME[1:-1], "")
+        return ["ct", "follow", t, lines] if t else None
+    if kind == "docker":
+        t = one("target", APP[1:-1], "")
+        return ["docker", "follow", t, lines] if t else None
+    if kind == "events":
+        return ["state", "events-follow", lines]
+    if kind == "system":
+        unit, level = one("unit", r"[a-z0-9-]{1,32}", "all"), one("level", r"err|warning|info", "info")
+        if unit is None or level is None:
+            return None
+        return ["logs", "follow", "--unit", unit, "--level", level, "--lines", lines]
+    return None
 
 
 class Auth:
@@ -2416,6 +2449,10 @@ class Events:
         self.woke_push = 0           # rounds the watcher started because of a datagram
         self.woke_fallback = 0       # rounds it started because the fallback period ran out
         self.push_up = False         # the socket is bound and the listener runs
+        self.lease_now = threading.Event()   # set when a stream came or changed its topics: the lease thread writes at once (D14)
+        self.lease_every = 10.0      # seconds between two renewals of the leases while a stream is open
+        self.lease_written = 0       # rounds that wrote leases (a test and `hs live measure` look at it)
+        self._sdb = None
 
     def add(self, topics=None, sid="", owner=""):
         q = StreamQueue(maxsize=256)
@@ -2424,6 +2461,7 @@ class Events:
             self.queues.add(q)
             if sid:
                 self.by_sid[sid] = q
+        self.lease_now.set()
         return q
 
     def remove(self, q):
@@ -2442,6 +2480,7 @@ class Events:
             old = q.topics
             q.topics = topics
             counters = dict(self.counters or {})
+        self.lease_now.set()
         added = sorted(t for t in topics if t != "*" and (old is not None and t not in old and "*" not in old))
         gens = {}
         for t in added:
@@ -2477,6 +2516,50 @@ class Events:
     def start_watch(self):
         self.start_push()
         threading.Thread(target=self._watch, daemon=True).start()
+        threading.Thread(target=self._lease, daemon=True).start()
+
+    def demanded(self):
+        """D14: the topics the open streams want: the union of their sets; a stream without a set (old client) or with `*` wants every topic (`*`)."""
+        with self.lock:
+            sets = [q.topics for q in self.queues]
+        out = set()
+        for t in sets:
+            if t is None or "*" in t:
+                return {"*"}
+            out |= set(t)
+        return out
+
+    def write_leases(self):
+        """Lease the wanted topics in the table `demand` (state-db.py, 30 s). Best effort: no database, a busy one, no table: nothing happens and the
+        collector runs the topics at their idle interval. Only this thread writes, so a slow database never holds up a request or the watcher."""
+        topics = self.demanded()
+        db = env("HS_STATE_DB", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "state.db"))
+        if not topics or not os.path.exists(db):
+            return False
+        try:
+            if self._sdb is None:
+                spec = importlib.util.spec_from_file_location("state_db", os.path.join(os.path.dirname(os.path.abspath(__file__)), "state-db.py"))
+                self._sdb = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(self._sdb)
+            c = self._sdb.demand_open()
+            try:
+                self._sdb.demand_put(c, sorted(topics), time.time())
+            finally:
+                c.close()
+        except Exception:
+            return False
+        self.lease_written += 1
+        return True
+
+    def _lease(self):
+        while True:
+            try:
+                self.write_leases()
+            except Exception:
+                pass
+            if self.lease_now.wait(self.lease_every):
+                self.lease_now.clear()
+                time.sleep(0.05)        # a page that registers several topics in a row is one write
 
     def start_push(self):
         """D11: listen on the unix datagram socket cfg.live_sock; every datagram wakes the watcher at once. Best effort: no folder, no rights, a dead
@@ -2781,6 +2864,7 @@ class App:
         self.vmconsoles = vc.consoles()
         self.incus = vc.IncusApi()                      # tests replace this with a fake
         self.stream_lock, self.streams, self.event_streams = threading.Lock(), 0, 0
+        self.log_streams = {}                           # user -> open log streams (D15)
         self.term_spawn = lambda target, name=None: wt.pty_spawn(target, self.cfg.local_user, name=name)      # tests replace this with a fake
 
 
@@ -3019,6 +3103,8 @@ def make_handler(app):
                 return self._board()
             if path == "/api/events":
                 return self._events()
+            if path.startswith("/api/logs/stream/"):
+                return self._logs_stream(path[len("/api/logs/stream/"):], urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path.startswith("/api/sys/jobs/stream/"):
                 return self._jobs_stream(urllib.parse.unquote(path[len("/api/sys/jobs/stream/"):]), urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path.startswith("/api/sys/"):
@@ -3184,6 +3270,88 @@ def make_handler(app):
             finally:
                 with app.stream_lock:
                     app.streams -= 1
+
+        def _logs_stream(self, kind, query):
+            """D15: follow a log as server-sent events. `data: {"lines": [...]}` batches (the first ones are the fill, then what is appended), `event: end` when
+            the command ends, `: ping` after silence. One child process per stream (`hs sys ... follow`, plain lines), killed when the browser goes, the session
+            ends, the time passed or the cap is hit: cfg.logs_user_max per user and cfg.logs_max in all (apart from events_max). The role is the one of the
+            read it replaces (`ct logs`, `docker logs`, `logs show`, `state events`). Never cached, never in a topic: a log may hold secrets. The page
+            falls back to the timed read when this answers anything but 200."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            if self.headers.get("Origin") and not self._same_origin():
+                return self._json(403, {"error": "origin"})
+            words = log_follow_words(kind, query) if kind in LOG_KINDS else None
+            if words is None:
+                return self._json(404, {"error": "unknown"})
+            if not self._allowed(s, words[:3] if kind in ("ct", "docker") else words[:2]):
+                return
+            user = s["user"]
+            with app.stream_lock:
+                if sum(app.log_streams.values()) >= cfg.logs_max or app.log_streams.get(user, 0) >= cfg.logs_user_max:
+                    return self._json(503, {"error": "too many open log streams"})
+                app.log_streams[user] = app.log_streams.get(user, 0) + 1
+            p = None
+            try:
+                try:
+                    p = subprocess.Popen([cfg.hs, "sys"] + words, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         start_new_session=hasattr(os, "killpg"), env=_command_env())
+                except (OSError, ValueError):
+                    return self._json(503, {"error": "could not start"})
+                q = queue.Queue()
+
+                def pump(f=p.stdout):
+                    try:
+                        for raw in iter(f.readline, b""):
+                            q.put(raw.decode("utf-8", "replace").rstrip("\r\n"))
+                    except (OSError, ValueError):
+                        pass
+                    q.put(None)
+                threading.Thread(target=pump, daemon=True).start()
+                self.close_connection = True
+                self._headers(200, "text/event-stream", None, (("Connection", "close"), ("X-Accel-Buffering", "no")))
+                self.wfile.write(b"retry: 3000\n\n")
+                self.wfile.flush()
+                t0, quiet, done = time.time(), 0, False
+                while not done and time.time() - t0 < cfg.stream_hours * 3600:
+                    batch = []
+                    try:
+                        item = q.get(timeout=cfg.logs_tick)
+                        while True:
+                            if item is None:
+                                done = True
+                                break
+                            batch.append(item)
+                            if len(batch) >= 500:
+                                break
+                            item = q.get_nowait()
+                    except queue.Empty:
+                        pass
+                    if not app.sessions.get(self._token(), app.auth.storage_locked()):
+                        break                                                # signed out, expired or locked
+                    if batch:
+                        self.wfile.write(b"data: " + json.dumps({"lines": batch}).encode() + b"\n\n")
+                        quiet = 0
+                    else:
+                        quiet += 1
+                        if quiet % cfg.logs_ping == 0 and not done:
+                            self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    if _client_gone(self.connection):
+                        break
+                if done:
+                    self.wfile.write(b"event: end\ndata: {}\n\n")
+                    self.wfile.flush()
+            except (OSError, ValueError):
+                pass                                                         # the browser went away
+            finally:
+                if p is not None:
+                    _kill_tree(p)
+                with app.stream_lock:
+                    app.log_streams[user] = app.log_streams.get(user, 1) - 1
+                    if app.log_streams[user] <= 0:
+                        app.log_streams.pop(user, None)
 
         def _events(self):
             """Server-sent events: `changed` {topic, gen} when a change counter moved or the collector read a topic again (Events.poll_counters); `domain` (id = event log id) per new log row, replayed after Last-Event-ID (up to 500, else `resync`,

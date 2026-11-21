@@ -135,7 +135,7 @@ in
       rc=0
       bash ${scripts}/sync-shares.sh || rc=$?
       bash ${scripts}/manage-shares.sh --measure >/dev/null || [ "$rc" -ne 0 ] || rc=$?
-      bash ${scripts}/live.sh refresh @shares   # also when a step failed
+      bash ${scripts}/live.sh refresh event:area.shares   # also when a step failed
       exit $rc
     '';
     startAt = "03:35";
