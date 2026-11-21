@@ -1321,20 +1321,20 @@ class DockerEvents(unittest.TestCase):
         self.make("start")
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.5)
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
         self.assertEqual(self.logs, [])
 
     def test_burst_is_coalesced(self):
         self.make("burst")
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
 
     def test_daemon_restart_reconnects_once_and_refreshes(self):
         self.make("restart")
         self.assertTrue(self.wait_for(lambda: self.runs() >= 4 and len(self.calls) >= 2))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@docker", "@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed", "event:docker.changed"])
         down = [l for l in self.logs if "docker events down" in l]
         self.assertEqual(len(down), 1)
         self.assertIn("down", down[0])
@@ -1343,7 +1343,7 @@ class DockerEvents(unittest.TestCase):
     def test_first_connect_after_failures_refreshes(self):
         self.make("late")
         self.assertTrue(self.wait_for(lambda: self.calls))
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
         self.assertEqual(len([l for l in self.logs if "docker events down" in l]), 1)
         self.assertEqual(len([l for l in self.logs if "docker events back" in l]), 1)
 

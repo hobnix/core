@@ -126,6 +126,8 @@ Third PR (hook scripts, area storage): `disk.changed` (disk-detach, disk-recover
 
 Fourth PR (hook scripts, area system): `health.checked`, `job.stopped`, `pkg.changed`, `ups.changed`, `vault.changed` (refresh names, topic sets unchanged). Single-topic calls (`system-updates`, `apps-list`, `--all` after an unlock) stay as plain topic names: a name would add nothing.
 
+Fifth PR (Docker watcher): `docker.changed` (refresh) = the six `docker-*` topics plus `status` and `deck`; the old group `@docker` also soft-woke the `any` topics. The Docker watcher needs no log kinds: it asks for the refresh only, as before, so the plan's "emitter first" is not needed for the refresh path (event rows for Docker would be a separate feature).
+
 ### Step 6, status (#886)
 
 The count at the start of the step was 47 call sites (the 66 of the plan text was counted earlier). First PR: the reads without a producer get a collector topic (`docker-status`, `docker-health`, `docker-containers`, `docker-registries`, `parts-pending`, `rebuild-pending`, `preset-list`); `timed-reads.max` 47 to 37. Still timed, with the reason in `scripts/lib/read-reasons.tsv`: free query/argument reads (backup snapshots, pool disks, logs, per-app/per-container/per-disk/per-node answers, services show), dynamic reads named by a page or capability declaration, node reads over ssh, the VPS probe, `release show`, `incident state`, `testlab results`. Next PRs take these by D5 (a) first.

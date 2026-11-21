@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Docker changes wake only the Docker pages"
+body  = """A change seen by the Docker watcher now names one event, docker.changed, and only the Docker data and the status counts are read again, not every page that lists Docker as a source."""
