@@ -1,4 +1,5 @@
 <script>
+  import { nodePath } from '../paths.js';
   import { route, setLocalNode, go } from '../route.svelte.js';
   import { poll, rows, prefetch, refresh } from '../data.svelte.js';
   import TopBar from './TopBar.svelte';
@@ -163,7 +164,7 @@
         <Skeleton lines={5} height={16} gap={16} />
       {:else if !known && nodeList.loaded}
         <div class="card"><b>There is no server called {route.node}.</b>
-          <span class="text-muted">The addresses of a server are /node/&lt;name&gt;/... Go to <button class="link-btn" onclick={() => go(`/node/${encodeURIComponent(host)}`)}>{host}</button>.</span></div>
+          <span class="text-muted">The addresses of a server are /node/&lt;name&gt;/... Go to <button class="link-btn" onclick={() => go(nodePath(host))}>{host}</button>.</span></div>
       {:else}
         <PageFrame {deck} {meta} node={current} {locked} />
       {/if}

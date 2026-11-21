@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   // Storage > Shares: every share (the Samba shares of bulk, the instance volumes of fast) in one list, with its permissions, snapshots and
   // history in a drawer; the folders of deleted shares are kept in the second view. /storage/shares?pool=<pool name> filters, ?view=snapshots opens
@@ -85,7 +86,7 @@
   const size = (n) => (!n ? '' : n >= 1e12 ? `${(n / 1e12).toFixed(2)} TB` : n >= 1e9 ? `${Math.round(n / 1e9)} GB` : bytes(n));
   const host = $derived(deck?.data?.host ?? 'homeserver');
   const mountedBy = (s) => (dash(s.mounted) ? s.mounted.split(',').map((x) => x.trim()).filter(Boolean).map((x) => ({ text: x, name: x.replace(/\s*\(.*$/, '') })) : []);
-  const openInstance = (name) => { setSelection('instances', name); go('/instances'); };
+  const openInstance = (name) => { setSelection('instances', name); go(P.instances); };
 
   // drawer data (ACL and snapshots are per share; read only for the selected one)
   const acl = poll(() => (editable(sel) ? `/api/sys/shares/acl/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
@@ -190,7 +191,7 @@
                   {:else}<Muted as="p">No instance mounts this {sel.volume ? 'volume' : 'share'}.</Muted>{/if}
                   {#if !sel.volume && sel.kind !== 'other' && /^data-/.test(sel.disks)}<ShareParity share={sel.name} {locked} />{/if}
                   {#if sel.volume}<Muted as="p">An instance volume belongs to its instance: change it there.</Muted>{:else if sel.kind !== 'other'}
-                    <Muted as="p">Whether it is in the backup is set on <button class="link-btn" onclick={() => go('/protection/backup')}>Backup</button>.</Muted>
+                    <Muted as="p">Whether it is in the backup is set on <button class="link-btn" onclick={() => go(P.backup)}>Backup</button>.</Muted>
                   {/if}
                 </div>
               {:else if t === 'perm'}

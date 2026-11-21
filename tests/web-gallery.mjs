@@ -33,8 +33,8 @@ eq('every entry shows at least one state', entries.filter((e) => !e.cells).map((
 eq('the shell list names real files', SHELL.filter((n) => !comps('shell').includes(n)), []);
 
 // the page is reachable: a route and a tree entry
-eq('the route exists', /'\/developer\/components': Gallery/.test(readFileSync(join(src, 'routes.js'), 'utf8')), true);
-eq('the tree links it', /path: '\/developer\/components'/.test(readFileSync(join(src, 'nav.js'), 'utf8')), true);
+eq('the route exists', /\[P\.components\]: Gallery/.test(readFileSync(join(src, 'routes.js'), 'utf8')), true);
+eq('the tree links it', /path: P\.components/.test(readFileSync(join(src, 'nav.js'), 'utf8')), true);
 
 console.log(`  ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

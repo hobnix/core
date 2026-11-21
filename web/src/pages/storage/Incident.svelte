@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../../paths.js';
   // Storage > Incident: a degraded pool, a missing pool disk or a failing disk, step by step (hobnix/server#255). Everything comes from
   // `hs sys incident state` (scripts/storage-incident.sh --state); the page changes nothing by itself. Pausing the writing apps is a plan
   // (area `incident`); the replace is the existing Replace form of the pools (plan, typed disk name, job), so the destructive step is the same one.
@@ -42,7 +43,7 @@
 
 <PageHeader title="Incident" crumb="Storage" sub="A degraded pool or a failing disk: what happened, what it touches, the next safe step.">
   {#snippet actions()}
-    <Button tooltip={'Back to the pools'} onclick={() => go('/storage/pools')}><i class="ph ph-cylinder"></i>Pools</Button>
+    <Button tooltip={'Back to the pools'} onclick={() => go(P.pools)}><i class="ph ph-cylinder"></i>Pools</Button>
   {/snippet}
 </PageHeader>
 

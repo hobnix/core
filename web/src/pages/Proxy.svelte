@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import Button from '../ui/Button.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   // proxyserver summary (design screen 19): what the VPS's status document holds today; the rest of the design's cards say "not available yet".
@@ -122,7 +123,7 @@
               {/each}
             </div>
           {/if}
-          <Button variant="ghost" size="sm" tooltip={'Show every forwarded port'} style="align-self:flex-start" onclick={() => go('/ports')}>All ports<i class="ph ph-caret-right"></i></Button>
+          <Button variant="ghost" size="sm" tooltip={'Show every forwarded port'} style="align-self:flex-start" onclick={() => go(P.ports)}>All ports<i class="ph ph-caret-right"></i></Button>
         </div>
 
         <div class="card elev-sm c" style="gap:0" class:focus={focus === 'certificate'} id="px-certificate">

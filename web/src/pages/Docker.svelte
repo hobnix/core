@@ -1,4 +1,5 @@
 <script>
+  import { P, capabilityPath, dockerAppPath } from '../paths.js';
   // The Docker page: the apps (compose projects) that run in the locked docker container.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
@@ -67,7 +68,7 @@
 {#if broken.length}
   <Banner tone="bad">
     Docker is on, but not complete: {broken.map((b) => b.reason).join(' ')}
-    {#snippet action()}<a class="btn" href={url('/settings/capabilities/docker')}>Open Docker settings</a>{/snippet}
+    {#snippet action()}<a class="btn" href={url(capabilityPath('docker'))}>Open Docker settings</a>{/snippet}
   </Banner>
 {/if}
 
@@ -76,10 +77,10 @@
            retry={() => refresh(['/api/sys/docker/apps'])}>
   {#if status.state !== 'on'}
     <EmptyState icon="shipping-container" title="Docker is off" tone="info" text="Turn Docker on under Settings, Capabilities, Docker.">
-      {#snippet action()}<a class="btn" href={url('/settings/capabilities/docker')}>Open Docker settings</a>{/snippet}
+      {#snippet action()}<a class="btn" href={url(capabilityPath('docker'))}>Open Docker settings</a>{/snippet}
     </EmptyState>
   {:else}
-    <div class="toolbar"><Button need="app-manager" size="sm" icon="plus" onclick={() => go('/instances/docker/new')}>New app</Button> <Button size="sm" icon="magic-wand" onclick={() => go('/instances/docker/wizard')}>Guided</Button></div>
+    <div class="toolbar"><Button need="app-manager" size="sm" icon="plus" onclick={() => go(P.dockerNew)}>New app</Button> <Button size="sm" icon="magic-wand" onclick={() => go(P.dockerWizard)}>Guided</Button></div>
     <Split open={!!sel}>
       {#snippet list()}
         <div class="card" style="padding:0">
@@ -124,7 +125,7 @@
               {#if t === 'overview'}
                 <Kv items={[{ k: 'State', v: sel.state }, { k: 'Running', v: sel.running }, { k: 'Project', v: sel.project }, { k: 'Address', v: sel.address }, { k: 'Ports', v: sel.ports }, { k: 'Images', v: sel.images }, { k: 'Managed', v: sel.managed }, { k: 'Update', v: sel.update }, ...(sel.files !== '-' ? [{ k: 'Files', v: sel.files }] : [])]} />
               {:else if t === 'compose'}
-                <Button need="app-manager" icon="pencil-simple" onclick={() => go(`/instances/docker/app/${encodeURIComponent(sel.name)}`)}>Open editor</Button>
+                <Button need="app-manager" icon="pencil-simple" onclick={() => go(dockerAppPath(sel.name))}>Open editor</Button>
               {:else}
                 {#key sel.name}<AppLogs app={sel.name} />{/key}
               {/if}

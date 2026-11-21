@@ -27,7 +27,7 @@ eq('time filter', filterRows([a, b, c], { since: 250 }).map((e) => e.id), [3]);
 eq('sinceFrom', [sinceFrom('1h', 10_000_000), sinceFrom('')], [10000 - 3600, 0]);
 
 const routes = readFileSync(new URL('../web/src/routes.js', import.meta.url), 'utf8');
-eq('route', routes.includes("'/operations/events': Events"), true);
-eq('nav entry', readFileSync(new URL('../web/src/nav.js', import.meta.url), 'utf8').includes("path: '/operations/events'"), true);
+eq('route', routes.includes('[P.events]: Events'), true);
+eq('nav entry', readFileSync(new URL('../web/src/nav.js', import.meta.url), 'utf8').includes('path: P.events'), true);
 eq('page has no raw HTML', /\{@html/.test(readFileSync(new URL('../web/src/pages/Events.svelte', import.meta.url), 'utf8')), false);
 process.exit(bad ? 1 : 0);

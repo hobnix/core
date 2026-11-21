@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   // Raises a Toast for every job that waits for an answer (state `waiting`), on any page and also when the dialog that started the job is closed
   // (hobnix/server#972, #447). Reads the job records once, then again on a job.* event or a records generation bump (no polling while the event
   // stream is up; a slow timer only while it is down). The toast links to the record and goes away when the question is answered. Draws nothing.
@@ -16,7 +17,7 @@
     const { raise, dismiss } = askDiff((d.rows ?? []).map(parseRecord), shown);
     for (const r of raise) {
       shown.add(r.id);
-      toast({ key: key(r.id), kind: 'ask', title: `${r.description} ${tr('needs an answer')}`, href: url(`/health/jobs?job=${encodeURIComponent(r.id)}`), linkLabel: tr('Open the job') });
+      toast({ key: key(r.id), kind: 'ask', title: `${r.description} ${tr('needs an answer')}`, href: url(`${P.nodeHealth}/jobs?job=${encodeURIComponent(r.id)}`), linkLabel: tr('Open the job') });
     }
     for (const id of dismiss) { shown.delete(id); dismissToast(key(id)); }
   });

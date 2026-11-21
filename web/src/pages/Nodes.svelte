@@ -1,4 +1,5 @@
 <script>
+  import { nodePath } from '../paths.js';
   // All servers at a glance: this server and every node of `hs node list`, one row each. Each remote node is asked for
   // its status document over SSH (the word status only); a node that does not answer keeps its last document and says since when.
   // A row opens the drawer: facts, the key line its owner has to allow, remove. Adding a node changes nothing on the other server.
@@ -105,7 +106,7 @@
             </div>
           {/if}
           {#snippet actions()}
-            <Button variant="primary" tooltip={'Switch the interface to this server'} onclick={() => go(`/node/${encodeURIComponent(sel.name)}`)}><i class="ph ph-arrow-right"></i>Open</Button>
+            <Button variant="primary" tooltip={'Switch the interface to this server'} onclick={() => go(nodePath(sel.name))}><i class="ph ph-arrow-right"></i>Open</Button>
             {#if sel.kind !== 'main' && sel.source === 'file'}
               <Button need="admin" variant="ghost" class="nodes-danger" icon="trash" busy={jobRunning('node', ['remove', sel.name])} tooltip={'Take this server off the list (the server itself is not touched)'} onclick={() => { const n = sel.name; selName = ''; openPlan('node', ['remove', n], `Remove ${n}`); }}>Remove…</Button>
             {/if}
