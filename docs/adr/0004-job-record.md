@@ -27,7 +27,7 @@ From the audit of #129 (docs/PLAN-jobs.md has the older one):
    `id`, `slug`, `description`, `source` (`cli` | `web` | `timer` | `extension`), `initiator` (login name or null), `unit`, `queued`,
    `started`, `ended`, `state`, `exit`, `step` (`{n, of, text}`), `progress` (`{done, total, unit}`), `error` (`{category, message}`),
    `result` (object, per job kind), `cancel` (`{requested_by, at, safe}`), `version` (1); additive since 0.10: `key` (the row key of web/src/jobkey.js, for example `apps remove nextcloud`; Python writer, kept by the Rust one).
-4. **States:** `queued`, `running`, `ok`, `failed`, `cancelled`, `interrupted`. Only these; the old `never` and `unknown` stay in the old
+4. **States:** `queued`, `running`, `ok`, `failed`, `cancelled`, `interrupted`, and since 0.10 `skipped` (the job found the same work already running and did nothing: exit 0, no error, no failure notice, `result.message` says why; written by `hs_job_skip`, Python writer only). Only these; the old `never` and `unknown` stay in the old
    `jobs.sh` output and map to no record.
 5. **One writer.** The `hs_job` wrapper writes the record: `running` before the command, the final state after. The job reports progress through
    helpers (`hs_job_step`, `hs_job_progress`) that go through the same writer. A cancel request is a separate file `<id>.cancel` that the

@@ -28,7 +28,7 @@ const de = {
   'failed to start': 'konnte nicht gestartet werden', 'The server did not start it.': 'Der Server hat es nicht gestartet.', finished: 'beendet', 'Show log': 'Protokoll anzeigen',
   // Job records (shell/JobRecords.svelte, ADR 0004)
   'Job record': 'Auftragsprotokoll', 'Job records': 'Auftragsprotokolle', Scheduled: 'Geplant', Started: 'Gestartet', Job: 'Auftrag', Step: 'Schritt', Progress: 'Fortschritt', Took: 'Dauer',
-  queued: 'wartet', running: 'läuft', ok: 'erledigt', failed: 'fehlgeschlagen', cancelled: 'abgebrochen', interrupted: 'unterbrochen',
+  queued: 'wartet', running: 'läuft', ok: 'erledigt', failed: 'fehlgeschlagen', cancelled: 'abgebrochen', interrupted: 'unterbrochen', skipped: 'übersprungen',
   'No job records yet.': 'Noch keine Auftragsprotokolle.', 'The job records could not be read.': 'Die Auftragsprotokolle konnten nicht gelesen werden.',
   'The record could not be read.': 'Das Protokoll konnte nicht gelesen werden.', 'Cancel requested': 'Abbruch angefordert',
   Id: 'Kennung', Initiator: 'Ausgelöst von', Unit: 'Einheit', Queued: 'Eingereiht', Ended: 'Beendet',

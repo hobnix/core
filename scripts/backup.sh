@@ -529,7 +529,12 @@ cmd_now() {
   local lock=/run/hs-backup.lock
   [ -w /run ] || lock=$STATE/.backup.lock
   exec 9>"$lock"
-  flock -n 9 || die "Another backup is running."
+  if ! flock -n 9; then
+    # a second start is not a failure: as a job it ends skipped (exit 0), at a terminal it says so
+    if [ -n "${HS_JOB_ID:-}" ]; then . "$(dirname "$0")/lib/job.sh"; hs_job_skip "Already running" || true; fi
+    note "$(t 'Already running')"
+    return 0
+  fi
   note_state "last_try=$(date +%s)"
   # restic shows its own progress line on a terminal; in a job or a log (no terminal) one line a minute
   [ -t 1 ] || export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-0.0167}

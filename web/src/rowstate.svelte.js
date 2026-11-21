@@ -9,7 +9,7 @@ import { get } from './api.js';
 import { live } from './live.svelte.js';
 import { tasks } from './ui.svelte.js';
 import { parseRecord, lastJobEvent, latestOnly } from './jobrecords.js';
-import { fromRecords, applyEvents, isPending, failureOf, activeKeys, failureOfLead } from './rowstate.js';
+import { fromRecords, applyEvents, isPending, failureOf, activeKeys, failureOfLead, activeJobOf, activeJobs } from './rowstate.js';
 
 const state = $state({ base: new Map(), dismissed: new Set(), baseline: 0, started: false });
 
@@ -42,6 +42,9 @@ export const rowstate = {
   // by the leading arguments (a pool or disk: any job that starts with its name): the keys of the running jobs, and the newest failure
   active: (area, lead) => activeKeys(jobs, tasks.list, area, lead),
   failedLead: (area, lead) => failureOfLead(jobs, state.dismissed, area, lead),
+  // the newest active job of a row ({ id, state, started, description } or null), and every active job (the Tasks tab)
+  activeJob: (area, args) => activeJobOf(jobs, area, args),
+  activeJobs: () => activeJobs(jobs),
   dismiss: (id) => { state.dismissed = new Set([...state.dismissed, id]); },
   clear: () => { state.dismissed = new Set([...state.dismissed, ...[...jobs].filter(([, j]) => j.state === 'failed' || j.state === 'interrupted').map(([id]) => id)]); },
 };

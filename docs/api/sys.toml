@@ -30,13 +30,13 @@ note = "One job record (docs/adr/0004-job-record.md): id, key (the row key of we
 role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 
 ["jobs children <id>"]
 role = "viewer"
 kind = "tsv"
 columns = ["id", "slug", "description", "state", "queued", "started", "ended", "exit", "step_n", "step_of", "step_text", "progress_done", "progress_total", "progress_unit", "key"]
-enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted"] }
+enums = { state = ["queued", "running", "waiting", "ok", "failed", "cancelled", "interrupted", "skipped"] }
 note = "The sub-jobs of one orchestration job (ADR 0018), oldest first; same columns as jobs records."
 
 ["jobs answer <id>"]

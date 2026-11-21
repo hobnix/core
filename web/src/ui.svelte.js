@@ -12,6 +12,7 @@ export const ui = $state({
   role: 'viewer',                     // the role of this session (GET /api/session): viewer | app-manager | admin; roles.js decides what it may see
   host: 'homeserver',                 // this node's name (the dialogs name the node they act on)
   panel: { open: true, tab: 'tasks', height: 214 },   // height in px while open; the grip drags it
+  jobSel: '',                         // the id of a job record the Jobs tab should select (set by openJob, read and cleared by shell/JobRecords.svelte)
   offsitePass: '',                    // the own password of a NEW off-site repository: shown once on the Backup page, then dropped (never stored)
 });
 
@@ -37,6 +38,12 @@ export function openCreate(component, props = {}) {
 export function showTab(tab) {
   ui.panel.tab = tab;
   ui.panel.open = true;
+}
+
+// Show a job record: open the Jobs tab (job records) and select the job there.
+export function openJob(id) {
+  ui.jobSel = id;
+  showTab('jobs');
 }
 
 // Tasks: jobs started here, newest first. A job runs on the server whether or not this page is open; the page only follows its journal.
