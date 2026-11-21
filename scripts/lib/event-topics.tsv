@@ -24,3 +24,4 @@ job.stopped	status,live,deck,jobs-running,jobs-list,health-next,setup-list,backu
 pkg.changed	pkg-market,pkg-states,apps-list,apps-health,pkg-repos,recipes-list,recipes-versions,parts-list	refresh	a package was fetched, installed, removed, updated or a repository changed (pkg.sh)
 ups.changed	ups,deck,status	refresh	upsmon reported a UPS event (ups.sh event)
 vault.changed	status,encryption,vault-list,vault-usage,vault-uses	refresh	a vault was created, opened, closed, moved or removed (vault.sh)
+docker.changed	status,deck,docker-list,docker-apps,docker-status,docker-health,docker-containers,docker-registries	refresh	a Docker container or image changed (the Docker watcher of the collector)

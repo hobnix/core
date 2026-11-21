@@ -7,7 +7,7 @@ recovery each write one event (live.collector-failed, live.collector-recovered),
 5 s, never exit. Log goes to the journal.
 A topic can name topics it needs (lib/live-topics.tsv column 7): when one of them gets a new gen, one wave thread reads the dependents once, in
 dependency order (a burst of changes is one wave); a wave never reads a topic sooner than HS_LIVE_MIN_GAP seconds (default 5) after its last read.
-DockerWatch follows the Docker event stream of the container docker and asks for @docker (#155); IncusWatch follows `incus monitor --type=lifecycle`,
+DockerWatch follows the Docker event stream of the container docker and asks for the named event docker.changed (#155); IncusWatch follows `incus monitor --type=lifecycle`,
 asks for @instances and writes ct.created/started/stopped/deleted events (#392). The 27 slow reads of lib/collected-reads.tsv are topics with their
 (shorter) intervals (reads_intervals)."""
 import importlib.util
@@ -86,7 +86,7 @@ class DockerWatch:
     docker off = no process. Not tested on hardware yet."""
     NAME = "docker"
     CAP = "docker"
-    GROUP = "@docker"
+    GROUP = "event:docker.changed"
     COALESCE = 1.0
     MAX_WAIT = 5.0
     STABLE = 3.0
