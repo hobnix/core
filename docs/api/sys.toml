@@ -105,7 +105,7 @@ enums = { "offer.state" = ["none", "unknown", "current", "kept", "update"], "sta
 ["live inspect"]
 role = "viewer"
 kind = "json"
-note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
+note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
 
 ["live raw <topic>"]
 role = "viewer"

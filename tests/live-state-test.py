@@ -687,7 +687,7 @@ class Cli(unittest.TestCase):
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in ID_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
-            self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
+            self.assertEqual({k: v for k, v in info[name].items() if k != "idle"}, {"cap": cap, "groups": groups}, name)      # idle: D14, tests/live-demand-test.py
 
     def test_every_change_row_wakes_the_identity_and_backup_topics_it_can_alter(self):
         # system rows (config set, rebuild, update ...) can switch ad/backup on or move the dc/timer; instance rows start/stop the dc and change
