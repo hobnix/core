@@ -1,5 +1,5 @@
 // The pending state of a row from job events and job records (web/src/rowstate.js), run with node.
-import { fromRecords, applyEvents, isPending, failureOf, jobEventState } from '../web/src/rowstate.js';
+import { fromRecords, applyEvents, isPending, failureOf, jobEventState, activeJobs, activeJobOf, FAILED } from '../web/src/rowstate.js';
 import { parseRecord } from '../web/src/jobrecords.js';
 import { sharePending, shareFailed, userPending, userFailed, groupPending, backupPending, backupFailed, vaultFailed } from '../web/src/pages/rows.js';
 let bad = 0;
@@ -112,5 +112,16 @@ check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', s
   check('a later ok job of the same lead replaces the failure', failedOf('disk', ['sdb'], fl) === null);
   check('dismissed failure is gone', failureOfLead(bad2, new Set([P1]), 'pool', ['bulk']) === null);
   check('own task counts by lead', activeKeys(new Map(), [{ key: 'pool bulk add --disks a,b', state: 'running' }], 'pool', ['bulk']).length === 1);
+}
+// a reload: the Tasks tab lists the active jobs from the records; the newest active job of a row names the running backup
+{
+  const mk = (id, state, key, started) => parseRecord([id, 's', 'hs ' + key, state, '-', started, '-', '-', '-', '-', '-', '-', '-', '-', key]);
+  const jobs = fromRecords([mk('20261120-010000-backup-aaaa', 'running', 'backup now', '2026-11-20T01:00:00Z'), mk('20261120-000000-backup-bbbb', 'ok', 'backup now', '2026-11-20T00:00:00Z'),
+    mk('20261120-020000-pool-cccc', 'waiting', 'pool tank sync', '-'), mk('20261120-030000-backup-dddd', 'skipped', 'backup now', '2026-11-20T03:00:00Z')]);
+  const act = activeJobs(jobs);
+  check('active jobs: running and waiting only, newest first', act.length === 2 && act[0].id.includes('pool-cccc') && act[1].id.includes('backup-aaaa'));
+  check('active job of a row: the running backup with its start', activeJobOf(jobs, 'backup', ['now'])?.started === '2026-11-20T01:00:00Z');
+  check('a skipped or finished job is not active', activeJobOf(fromRecords([mk('20261120-030000-backup-dddd', 'skipped', 'backup now', '-')]), 'backup', ['now']) === null);
+  check('skipped event is a state, not a failure', jobEventState({ source: 'job', kind: 'skipped', subject: 'x' })?.state === 'skipped' && !FAILED.includes('skipped'));
 }
 if (bad) process.exit(1);

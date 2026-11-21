@@ -7,7 +7,8 @@
   import { onDestroy } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
   import { get } from '../api.js';
-  import { ui, tasks, track, openPlan, jobRunning } from '../ui.svelte.js';
+  import { ui, tasks, track, openPlan, jobRunning, openJob } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
 
   let { user = '' } = $props();
 
@@ -41,7 +42,12 @@
   // the server names a unit with .service, a tracked task may not: compare without the suffix
   const bare = (u) => String(u).replace(/\.service$/, '');
   const others = $derived(rows(running).filter((r) => !tasks.list.some((t) => bare(t.unit) === bare(r[0]))).map((r) => ({ unit: r[0], title: r[1] || r[0], started: r[2], state: 'running', remote: true })));
-  const all = $derived([...tasks.list, ...others]);
+  // after a reload this browser knows no task: the jobs that still run or wait come from the job records (the same list as the Jobs tab, kept by the job
+  // events), unless a task of this browser or a row of the unit read above already shows them. Selecting one opens its record in the Jobs tab.
+  const fromRecords = $derived(rowstate.activeJobs()
+    .filter((j) => !tasks.list.some((t) => t.state === 'running' && j.key && t.key === j.key) && !others.some((o) => o.title === j.description))
+    .map((j) => ({ unit: j.id, title: j.description, started: j.started ? new Date(j.started) : '', state: j.state === 'running' ? 'running' : j.state, remote: true, record: true })));
+  const all = $derived([...tasks.list, ...others, ...fromRecords]);
   const sel = $derived(tasks.list.find((t) => t.unit === tasks.selected));
 
   const jobRows = $derived(rows(jobs));
@@ -63,14 +69,14 @@
   onDestroy(() => clearInterval(tick));
 
   const dot = (r) => (r === 'ok' ? 'ok' : r === 'failed' ? 'bad' : r === 'running' ? 'run' : 'off');
-  const label = (t) => (t.state === 'ok' ? 'ok' : t.state === 'failed' ? `failed (exit ${t.exit ?? '?'})` : t.state === 'unknown' ? 'gone' : 'running');
+  const label = (t) => (t.state === 'ok' ? 'ok' : t.state === 'failed' ? `failed (exit ${t.exit ?? '?'})` : t.state === 'unknown' ? 'gone' : t.state === 'queued' ? 'queued' : t.state === 'waiting' ? 'waiting for input' : 'running');
   const clock = (d) => (d instanceof Date ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d);
   const span = (t) => {
     if (!(t.started instanceof Date)) return '–';
     const s = Math.max(0, Math.round(((t.ended ?? new Date(now)) - t.started) / 1000));
     return s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
   };
-  const select = (t) => { tasks.selected = t.unit; stuck = true; if (t.remote) track(t.unit, t.title); };
+  const select = (t) => { if (t.record) { openJob(t.unit); return; } tasks.selected = t.unit; stuck = true; if (t.remote) track(t.unit, t.title); };
 
   // the task log follows new output while it is scrolled to the bottom; scrolled up it stays where it is
   let tailEl = $state(null);
@@ -178,7 +184,7 @@
               <tr>
                 <td class="mono unit">{r[0]}</td><td class="soft">{ui.host}</td><td class="muted">{r[1]}</td><td class="muted">{r[3]}</td><td>{r[2]}</td>
                 <td><span class="res"><span class="dot {dot(r[4])}"></span>{r[4]}</span></td>
-                <td class="act"><Button variant="ghost" style="font-size:11.5px;padding:2px 6px" busy={jobRunning('jobs', ['run', r[0]])} busyLabel="Running…" tooltip={'Run this job now (shows the plan first)'} onclick={() => openPlan('jobs', ['run', r[0]], r[1] || r[0])}>Run now</Button></td>
+                <td class="act"><Button need="admin" variant="ghost" style="font-size:11.5px;padding:2px 6px" busy={jobRunning('jobs', ['run', r[0]])} busyLabel="Running…" tooltip={'Run this job now (shows the plan first)'} onclick={() => openPlan('jobs', ['run', r[0]], r[1] || r[0])}>Run now</Button></td>
               </tr>
             {:else}
               <tr><td colspan="7" class="empty">{jobs.loaded ? 'No scheduled jobs.' : 'Loading…'}</td></tr>

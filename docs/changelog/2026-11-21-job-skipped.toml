@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "A second backup start is skipped, not failed"
+body  = """Starting hs backup now while a backup runs no longer fails: the job ends as skipped (a new job record state, exit 0, message "Already running"), the Jobs list shows it with a neutral dot, and no failure notice is sent. On the Backup page the Back up now button shows a spinner while a backup job runs, its tooltip says since when, and a click selects that job in Jobs. Esc closes the job record on the Jobs page, and the Tasks tab lists jobs that still run after a page reload. Not tested on hardware yet."""

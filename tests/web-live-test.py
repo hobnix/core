@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""scripts/web-serve.py: the StateStore interface. Mode off answers exactly as before (same calls, same X-HS-Age); a store set on app.store is
-what `_sys` uses. Real HTTP server on a free port, fake helpers, `_run` replaced (no processes)."""
+"""scripts/web-serve.py: the live state (ADR 0026): LiveStore reads a topic from the state database (tables live and heartbeat), /api/events follows the
+change counters and the heartbeat, no Redis and no mode. A store set on app.store is what `_sys` uses. Real HTTP server on a free port, fake helpers,
+`_run` replaced (no processes)."""
 import http.client
 import importlib.util
 import json
@@ -17,6 +18,11 @@ spec.loader.exec_module(ws)
 os.environ["HS_WEB_QUIET"] = "1"
 os.environ["HS_STATE_DIR"] = tempfile.mkdtemp()
 
+_sdb_spec = importlib.util.spec_from_file_location("state_db_for_web", os.path.join(here, "..", "scripts", "state-db.py"))
+sdb = importlib.util.module_from_spec(_sdb_spec)
+os.environ.setdefault("HS_STATE_DB", os.path.join(tempfile.mkdtemp(), "x.db"))
+_sdb_spec.loader.exec_module(sdb)
+
 
 class FakeAuth:
     def __init__(self, cfg):
@@ -26,13 +32,13 @@ class FakeAuth:
         return False
 
     def domain_password_ok(self, user, password):
-        return user == "anna" and password == "pw"
+        return user in ("anna", "vera") and password == "pw"
 
     def domain_is_admin(self, user):
         return user == "anna"
 
     def domain_role(self, user):
-        return "admin" if self.domain_is_admin(user) else None
+        return "admin" if self.domain_is_admin(user) else ("viewer" if user == "vera" else None)
 
     def local_fingerprint(self, user, fresh=False):
         return ""
@@ -52,7 +58,7 @@ class Fake:
         return 0, "a\tb\n"
 
 
-class FakeStore(ws.StateStore):
+class FakeStore:
     def __init__(self):
         self.asked = []
 
@@ -69,6 +75,8 @@ class Base(unittest.TestCase):
         cfg.root, cfg.workgroup, cfg.realm, cfg.fail_delay = self.tmp, "HOME", "ad.home.lan", 0
         cfg.hs = "/nonexistent/hs"
         self.cfg = cfg
+        self.db = os.path.join(self.tmp, "state.db")
+        os.environ["HS_STATE_DB"] = self.db      # the state database of the test: not there until a test makes it
         self.fake, self.real_run = Fake(), ws._run
         ws._run = self.fake
         self.app = ws.App(cfg, FakeAuth(cfg))
@@ -81,6 +89,7 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         ws._run = self.real_run
+        os.environ.pop("HS_STATE_DB", None)
         self.srv.shutdown()
         self.srv.server_close()
 
@@ -98,18 +107,18 @@ class Base(unittest.TestCase):
         return out
 
 
-class OffMode(Base):
-    def test_config_defaults(self):
-        self.assertEqual(ws.Config().live, "")
-        self.assertFalse(ws.features(ws.Config())["live"])
-        self.assertEqual(ws.Config().events_max, 32)
-        self.assertEqual(ws.Config().live_socket, "/run/redis-hobnix/redis.sock")
+class NoCollector(Base):
+    """No state database (a server whose collector never ran): every read is the direct read with the short cache, as before live state existed."""
 
-    def test_the_default_store_is_off(self):
-        self.assertIsInstance(self.app.store, ws.OffStore)
+    def test_config_defaults(self):
+        self.assertTrue(ws.features(ws.Config())["live"])
+        self.assertEqual(ws.features(ws.Config())["topics"], ws.live_topic_map())
+        self.assertEqual(ws.Config().events_max, 32)
+        self.assertFalse(hasattr(ws.Config(), "live_socket"))
+
+    def test_the_store_is_the_live_store(self):
+        self.assertIsInstance(self.app.store, ws.LiveStore)
         self.assertIs(self.app.store.reads, self.app.reads)
-        self.assertIsNone(self.app.store.subscribe(lambda t, g: None))
-        self.assertIsNone(self.app.store.request("status"))
 
     def test_status_is_read_directly_with_the_cache_age(self):
         s, d, r = self.req("GET", "/api/sys/status", headers=self.ck)
@@ -129,15 +138,10 @@ class OffMode(Base):
     def test_the_status_read_has_a_topic(self):
         self.assertEqual(ws.READS[("status",)]["topic"], "status")
 
-    def test_live_refresh_is_409_in_mode_off(self):
-        csrf = json.loads(self.req("GET", "/api/session", headers=self.ck)[1])["csrf"]
-        r = self.req("POST", "/api/live/refresh", {"topic": "status"}, dict(self.ck, **{"X-CSRF-Token": csrf}))
-        self.assertEqual(r[0], 409)
-
     def test_the_live_status_read_has_a_topic(self):
         self.assertEqual(ws.READS[("live", "status")]["topic"], "live")
 
-    def test_mapped_storage_reads_run_directly_in_off_mode(self):
+    def test_mapped_storage_reads_run_directly_without_a_collector(self):
         for path, argv in (("monitor/disks", ("monitor", "disks")), ("shares/overview", ("shares", "overview")),
                            ("pool/info?pool=bulk", ("pool", "info", "--pool", "bulk"))):
             self.fake.calls.clear()
@@ -146,7 +150,7 @@ class OffMode(Base):
             self.assertEqual(len(self.fake.calls), 1, path)
             self.assertEqual(self.fake.calls[0][:len(argv[:2])], argv[:2])
 
-    def test_live_status_runs_directly_in_off_mode(self):
+    def test_live_status_runs_directly_without_a_collector(self):
         s, d, r = self.req("GET", "/api/sys/live/status", headers=self.ck)
         self.assertEqual(s, 200)
         self.assertEqual(self.fake.calls, [("live", "status")])
@@ -171,154 +175,54 @@ class FakeStoreUsed(Base):
         self.assertEqual(self.app.store.asked, [])
 
 
-class FakeRedis:
-    """what the Redis socket holds: keys and the PUBLISH log; down = every connection is refused"""
+class DbBase(Base):
+    """The state database of the test with the live tables; ws.ls.cli_refresh (what LiveStore.request calls) records what was asked for."""
 
-    def __init__(self):
-        self.keys, self.published, self.down, self.on_publish = {}, [], False, None
-
-
-class FakeResp:
-    redis = None
-
-    def __init__(self, path=None, timeout=1.0):
-        if FakeResp.redis.down:
-            raise OSError("cannot connect")
-
-    def cmd(self, *a):
-        if a[0] == "GET":
-            return FakeResp.redis.keys.get(a[1])
-        if a[0] == "PUBLISH":
-            FakeResp.redis.published.append((a[1], a[2]))
-            if FakeResp.redis.on_publish:
-                FakeResp.redis.on_publish(a[2])
-            return 1
-
-    def close(self):
-        pass
-
-
-def doc(out="a\tb\n", gen=1, age=3, **kw):
-    import time
-    d = {"ts": time.time() - age, "gen": gen, "rc": 0, "out": out, "err": None, "ts_err": None}
-    d.update(kw)
-    return json.dumps(d)
-
-
-class RedisBase(Base):
     def setUp(self):
-        self.redis = FakeRedis()
-        FakeResp.redis = self.redis
-        self.real_resp, ws.ls.Resp = ws.ls.Resp, FakeResp
-        self.real_wait = ws.RedisStore.FRESH_WAIT
-        os.environ["HS_WEB_LIVE"] = "redis"
         super().setUp()
+        import sqlite3
+        self.asked = []
+        self.real_refresh, ws.ls.cli_refresh = ws.ls.cli_refresh, lambda args: self.asked.append(list(args)) or 0
+        self.c = sqlite3.connect(self.db)
+        self.c.executescript(sdb.SCHEMA + sdb.LIVE_SCHEMA)
+        self.c.commit()
+        self.hub = self.app.events
+        self.hub.cfg.probe_file = ""
+        self.q = self.hub.add()
 
     def tearDown(self):
+        ws.ls.cli_refresh = self.real_refresh
+        self.c.close()
         super().tearDown()
-        ws.ls.Resp = self.real_resp
-        ws.RedisStore.FRESH_WAIT = self.real_wait
-        os.environ.pop("HS_WEB_LIVE", None)
+
+    def put(self, out="x\ty\n", t=None, topic="status", gen_only=False):
+        return sdb.live_put(self.c, topic, out, 0, 5, "test", 60, int(t or time.time()))
+
+    def beat(self, t=None, every=5):
+        sdb.live_beat(self.c, "hs-live", every, 0, int(t or time.time()), {}, 0)
+
+    def get(self, path="/api/sys/status"):
+        return self.req("GET", path, headers=self.ck)
+
+    def counters(self):
+        self.hub.poll_counters()
+        out = []
+        while not self.q.empty():
+            out.append(self.q.get())
+        return out
+
+    def csrf(self):
+        return json.loads(self.req("GET", "/api/session", headers=self.ck)[1])["csrf"]
+
+    def with_caps(self, on):
+        real = ws.ls.cap_on
+        ws.ls.cap_on = lambda name: True if name is None else on
+        self.addCleanup(setattr, ws.ls, "cap_on", real)
 
 
-class RedisMode(RedisBase):
-    def test_store_and_feature(self):
-        self.assertIsInstance(self.app.store, ws.RedisStore)
+class Topics(DbBase):
+    def test_features_and_the_topic_map(self):
         self.assertTrue(ws.features(self.cfg)["live"])
-        os.environ.pop("HS_WEB_LIVE")
-        self.assertFalse(ws.features(ws.Config())["live"])
-
-    def test_status_comes_from_the_key(self):
-        self.redis.keys["hs:v1:status"] = doc("x\ty\n", age=4)
-        s, d, r = self.req("GET", "/api/sys/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["x", "y"]]))
-        self.assertIn(r.getheader("X-HS-Age"), ("4", "5"))
-        self.assertIsNone(r.getheader("X-HS-Stale"))
-        self.assertEqual(self.fake.calls, [])
-
-    def test_redis_down_is_503(self):
-        self.redis.down = True
-        s, d, r = self.req("GET", "/api/sys/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["error"]), (503, "state service down"))
-        self.assertEqual(self.fake.calls, [])
-
-    def test_missing_key_asks_for_a_refresh(self):
-        s, d, r = self.req("GET", "/api/sys/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)), (503, {"error": "refreshing", "retry_after": 2}))
-        self.assertEqual(r.getheader("Retry-After"), "2")
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "status")])
-
-    def test_newer_error_marks_it_stale(self):
-        import time
-        self.redis.keys["hs:v1:status"] = doc(age=60, err="boom", ts_err=time.time() - 5)
-        s, d, r = self.req("GET", "/api/sys/status", headers=self.ck)
-        self.assertEqual(s, 200)
-        self.assertTrue(r.getheader("X-HS-Stale"))
-        self.assertEqual((r.getheader("X-HS-State"), bool(int(r.getheader("X-HS-Last-Ok")))), ("stale", True))
-        self.assertEqual((r.getheader("X-HS-Topic"), r.getheader("X-HS-Error")), ("status", "boom"))
-        self.redis.keys["hs:v1:status"] = doc(age=5, err="old", ts_err=time.time() - 60)
-        self.assertIsNone(self.req("GET", "/api/sys/status", headers=self.ck)[2].getheader("X-HS-Stale"))
-
-    def test_status_header(self):
-        import time
-        k = "hs:v1:status"
-        want = [(doc(age=3), "fresh"), (doc(age=60, err="boom", ts_err=time.time() - 5, ttl=100), "stale"),
-                (doc(age=500, err="boom", ts_err=time.time() - 5), "error"), (doc(age=500), "expired")]
-        for d, st in want:
-            self.redis.keys[k] = d
-            s, _, r = self.req("GET", "/api/sys/status", headers=self.ck)
-            self.assertEqual((s, r.getheader("X-HS-Status")), (200, st))      # an expired entry is still served
-
-    def test_fresh_waits_for_a_new_gen(self):
-        self.redis.keys["hs:v1:status"] = doc("old\n", gen=1)
-        self.redis.on_publish = lambda t: self.redis.keys.__setitem__("hs:v1:status", doc("new\n", gen=2, age=0))
-        s, d, r = self.req("GET", "/api/sys/status?fresh=1", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["new"]]))
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "status")])
-
-    def test_fresh_gives_up_and_serves_what_it_has(self):
-        ws.RedisStore.FRESH_WAIT = 0.3
-        self.redis.keys["hs:v1:status"] = doc("old\n", gen=1)
-        s, d, r = self.req("GET", "/api/sys/status?fresh=1", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["old"]]))
-
-    def test_reads_without_a_topic_still_run(self):
-        s, d, r = self.req("GET", "/api/sys/gateway/status", headers=self.ck)
-        self.assertEqual(s, 200)
-        self.assertEqual(self.fake.calls, [("gateway", "status")])
-
-    def test_warm_up_skips_topics(self):
-        targets = [tuple(a[2]) for a in self.app.reads.warm_targets()]
-        self.assertNotIn(("status",), targets)
-        self.assertNotIn(("live", "status"), targets)
-
-    def test_live_status_comes_from_the_key(self):
-        self.redis.keys["hs:v1:live"] = doc("live\t5\t2\t1\t0\t-\t-\n", age=4)
-        s, d, r = self.req("GET", "/api/sys/live/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["live", "5", "2", "1", "0", "-", "-"]]))
-        self.assertIn(r.getheader("X-HS-Age"), ("4", "5"))
-        self.assertEqual(self.fake.calls, [])
-
-    def test_live_status_redis_down_is_503(self):
-        self.redis.down = True
-        s, d, r = self.req("GET", "/api/sys/live/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["error"]), (503, "state service down"))
-        self.assertEqual(self.fake.calls, [])
-
-    def test_live_status_missing_key_asks_for_a_refresh(self):
-        s, d, r = self.req("GET", "/api/sys/live/status", headers=self.ck)
-        self.assertEqual((s, json.loads(d)), (503, {"error": "refreshing", "retry_after": 2}))
-        self.assertEqual(r.getheader("Retry-After"), "2")
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "live")])
-
-    def test_live_status_fresh_waits_for_a_new_gen(self):
-        self.redis.keys["hs:v1:live"] = doc("old\n", gen=1)
-        self.redis.on_publish = lambda t: self.redis.keys.__setitem__("hs:v1:live", doc("new\n", gen=2, age=0))
-        s, d, r = self.req("GET", "/api/sys/live/status?fresh=1", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["new"]]))
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "live")])
-
-    def test_the_topic_map(self):
         m = ws.live_topic_map()
         self.assertEqual(m["/api/sys/status"], "status")
         self.assertEqual(m["/api/sys/monitor/disks"], "monitor-disks")
@@ -330,21 +234,41 @@ class RedisMode(RedisBase):
         self.assertEqual(len([k for k in m if "?pool=" in k]), 6)
         self.assertEqual(ws.features(self.cfg)["topics"], m)
 
-    def test_the_topic_map_is_empty_in_off_mode(self):
-        os.environ.pop("HS_WEB_LIVE")
-        self.assertEqual(ws.features(ws.Config())["topics"], {})
+    def test_reads_without_a_topic_still_run(self):
+        s, d, r = self.req("GET", "/api/sys/gateway/status", headers=self.ck)
+        self.assertEqual(s, 200)
+        self.assertEqual(self.fake.calls, [("gateway", "status")])
+
+    def test_warm_up_skips_topics(self):
+        targets = [tuple(a[2]) for a in self.app.reads.warm_targets()]
+        self.assertNotIn(("status",), targets)
+        self.assertNotIn(("live", "status"), targets)
+
+    def test_live_status_comes_from_the_row(self):
+        self.put("live\t5\t2\t1\t0\t-\t-\n", topic="live")
+        self.beat()
+        s, d, r = self.get("/api/sys/live/status")
+        self.assertEqual((s, json.loads(d)["rows"]), (200, [["live", "5", "2", "1", "0", "-", "-"]]))
+        self.assertEqual(self.fake.calls, [])
+
+    def test_status_header(self):
+        self.beat()
+        sdb.live_put(self.c, "status", "x\n", 0, 5, "test", 100, int(time.time()) - 60)
+        sdb.live_fail(self.c, "status", 1, 3, "boom", "test", 100, int(time.time()) - 5)
+        s, _, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-Status")), (200, "stale"))
+        sdb.live_delete(self.c, "status")
+        sdb.live_fail(self.c, "status", 1, 3, "boom", "test", 100, int(time.time()) - 5)
+        s, _, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-Status"), r.getheader("X-HS-State")), (502, "error", "error"))      # never read: nothing to show, marked error
 
     def test_cap_off_topic_reads_directly(self):
-        calls = []
+        self.with_caps(False)
         self.app.store.caps["status"] = "nosuchcap"
-        self.app.store.off = type("O", (), {"get": lambda s, spec, argv, key, fresh=False: calls.append(key) or (200, {"d": 1}, 1, ())})()
-        ws.ls._CAP_CACHE["nosuchcap"] = (time.time(), False)
-        try:
-            self.assertEqual(self.app.store.get(ws.READS[("status",)], ["status"], ("status",))[0], 200)
-            self.assertEqual(calls, [("status",)])
-            self.assertEqual(self.redis.published, [])
-        finally:
-            ws.ls._CAP_CACHE.clear()
+        self.put()
+        self.beat()
+        s, d, r = self.get()
+        self.assertEqual((s, self.fake.calls), (200, [("status",)]))
 
     def test_area_refresh_messages(self):
         self.assertEqual(ws.area_refresh("ct"), "@instances")
@@ -355,22 +279,19 @@ class RedisMode(RedisBase):
     def test_a_started_change_asks_for_its_group(self):
         ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
         self.assertEqual(self.req("POST", "/api/plan", {"area": "ct", "args": ["web1", "restart"]}, ch)[0], 200)
-        self.assertEqual(self.redis.published, [])
+        self.assertEqual(self.asked, [])
         self.assertEqual(self.req("POST", "/api/start", {"area": "ct", "args": ["web1", "restart"]}, ch)[0], 200)
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "@instances")])
+        for _ in range(50):
+            if self.asked:
+                break
+            time.sleep(0.02)
+        self.assertEqual(self.asked, [["@instances"]])
 
     def test_inspect_and_raw_reads_are_never_cached(self):
         self.assertEqual(ws.READS[("live", "inspect")]["ttl"], 0)
         self.assertNotIn("topic", ws.READS[("live", "inspect")])
         self.assertEqual(ws.READS[("live", "raw")]["ttl"], 0)
         self.assertTrue(ws.READS[("live", "raw")]["args"])
-
-    def test_inspect_with_redis_down_is_503(self):
-        self.redis.down = True
-        for path in ("/api/sys/live/inspect", "/api/sys/live/raw/status"):
-            s, d, r = self.req("GET", path, headers=self.ck)
-            self.assertEqual((s, json.loads(d)["error"]), (503, "state service down"))
-        self.assertEqual(self.fake.calls, [])
 
     def test_live_refresh_checks(self):
         body = {"topic": "status"}
@@ -380,12 +301,59 @@ class RedisMode(RedisBase):
         self.assertEqual(self.req("POST", "/api/live/refresh", body, dict(ch, Origin="http://evil.example"))[0], 403)
         self.assertEqual(self.req("POST", "/api/live/refresh", {"topic": "no-such-topic"}, ch)[0], 400)
         self.assertEqual(self.req("POST", "/api/live/refresh", {"topic": 5}, ch)[0], 400)
-        self.assertEqual(self.redis.published, [])
-        self.assertEqual(self.req("POST", "/api/live/refresh", body, ch)[0], 200)
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "status")])
+        self.assertEqual(self.asked, [])
+        self.assertEqual(self.req("POST", "/api/live/refresh", body, ch)[0], 200)      # no mode switch any more: never 409
+        for _ in range(50):
+            if self.asked:
+                break
+            time.sleep(0.02)
+        self.assertEqual(self.asked, [["status"]])
+
+    def test_delay_sample_is_open_to_a_viewer_and_stores_only_numbers(self):
+        import sqlite3
+        r = self.req("POST", "/api/login", {"realm": "domain", "user": "vera", "password": "pw"})[2]
+        ck = {"Cookie": (r.getheader("Set-Cookie") or "").split(";")[0]}
+        csrf = json.loads(self.req("GET", "/api/session", headers=ck)[1])["csrf"]
+        ch = dict(ck, **{"X-CSRF-Token": csrf})
+        body = {"topic": "status", "ms": 1234}
+        self.assertEqual(self.req("POST", "/api/live/sample", body)[0], 401)
+        self.assertEqual(self.req("POST", "/api/live/sample", body, dict(ck, **{"X-CSRF-Token": "bad"}))[0], 403)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"topic": "nope", "ms": 5}, ch)[0], 400)
+        for bad in (-1, 600001, "5", 1.5, True, None):
+            self.assertEqual(self.req("POST", "/api/live/sample", {"topic": "status", "ms": bad}, ch)[0], 400, bad)
+        self.assertEqual(self.req("POST", "/api/live/sample", body, ch)[0], 200)
+        c = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(c.execute("SELECT web_last, web_worst, web_n, web_recent, ms_n FROM live_delay WHERE topic='status'").fetchall(),
+                             [(1234, 1234, 1, "1234", 0)])
+        finally:
+            c.close()
+
+    def test_delay_sample_batch(self):
+        ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
+        self.app.samples.SAMPLE_PER_SESSION = 2
+        batch = {"samples": [{"topic": "status", "ms": 5}, {"topic": "status", "ms": 6}, {"topic": "status", "ms": 7}]}
+        self.assertEqual(self.req("POST", "/api/live/sample", batch, ch)[0], 200)      # one request, three samples, one slot of the limit
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": []}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": [{"topic": "status", "ms": 1}] * (ws.SAMPLE_BATCH + 1)}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": [{"topic": "status", "ms": 1}, {"topic": "nope", "ms": 1}]}, ch)[0], 400)
+        self.assertEqual(self.req("POST", "/api/live/sample", {"samples": "x"}, ch)[0], 400)
+
+    def test_delay_sample_is_rate_limited(self):
+        ch = dict(self.ck, **{"X-CSRF-Token": self.csrf()})
+        self.app.samples.SAMPLE_PER_SESSION = 3
+        codes = [self.req("POST", "/api/live/sample", {"topic": "status", "ms": 10 + i}, ch)[0] for i in range(5)]
+        self.assertEqual(codes, [200, 200, 200, 429, 429])
+        g = ws.SampleGate(clock=lambda: 100.0)
+        g.SAMPLE_TOTAL = 2
+        self.assertEqual([g.allow("a"), g.allow("b"), g.allow("c")], [True, True, False])      # the total is shared by all sessions
+        later = ws.SampleGate(clock=iter([0.0, 0.0, 61.0]).__next__)
+        later.SAMPLE_PER_SESSION = 2
+        self.assertEqual([later.allow("a"), later.allow("a"), later.allow("a")], [True, True, True])      # a minute later the window is free
 
     def test_login_facts_read_the_stored_status(self):
-        self.redis.keys["hs:v1:status"] = doc("instances\t3\t4\n")
+        self.put("instances\t3\t4\n")
+        self.beat()
         facts = ws.Facts(self.cfg)._read(False)
         self.assertEqual(facts[0]["text"], "3 of 4 instances running")
         self.assertEqual(self.fake.calls, [])
@@ -393,9 +361,6 @@ class RedisMode(RedisBase):
     def test_login_facts_fall_back_to_the_command(self):
         ws.Facts(self.cfg)._read(False)
         self.assertEqual(self.fake.calls[0], ("status",))
-
-    def csrf(self):
-        return json.loads(self.req("GET", "/api/session", headers=self.ck)[1])["csrf"]
 
 
 NO_ARG = {
@@ -436,7 +401,7 @@ DIRECT_IDENTITY = [("cache", "state"), ("users", "access"), ("users", "group-acc
                    ("backup", "find"), ("backup", "snapshots")]
 
 
-class StorageTopics(RedisBase):
+class StorageTopics(DbBase):
     def test_web_areas_that_change_apps_ask_for_groups_that_wake_the_app_topics(self):
         info = ws.ls.topic_info()
         # pkg (install, update, remove, fetch, repo), parts and system (update, rebuild) change the package tree; recipes change instances
@@ -520,16 +485,18 @@ class StorageTopics(RedisBase):
         ws.ls.cap_on = lambda name: True if name is None else on
         self.addCleanup(setattr, ws.ls, "cap_on", real)
 
-    def test_ct_list_comes_from_its_key(self):
+    def test_ct_list_comes_from_its_row(self):
         self.with_caps(True)
-        self.redis.keys["hs:v1:ct-list"] = doc("web\trunning\n")
+        self.put("web\trunning\n", topic="ct-list")
+        self.beat()
         s, d, r = self.req("GET", "/api/sys/ct/list", headers=self.ck)
         self.assertEqual((s, json.loads(d)["rows"]), (200, [["web", "running"]]))
         self.assertEqual(self.fake.calls, [])
 
     def test_ct_list_without_the_incus_capability_is_read_directly(self):
         self.with_caps(False)
-        self.redis.keys["hs:v1:ct-list"] = doc("web\trunning\n")
+        self.put("web\trunning\n", topic="ct-list")
+        self.beat()
         s, d, r = self.req("GET", "/api/sys/ct/list", headers=self.ck)
         self.assertEqual(s, 200)
         self.assertEqual(self.fake.calls, [("ct", "list")])
@@ -553,6 +520,33 @@ class StorageTopics(RedisBase):
                 self.assertEqual(ws.live_topic_map()["/api/sys/pool/%s?pool=%s" % (kind, pool)], "pool-%s-%s" % (kind, pool))
         self.assertNotIn("topic", ws.READS[("pool", "disks")])
 
+    # D5 (a), #886 part 2: a free-argument read follows the topic of its list (refetch when it changes), no timer while the stream is open
+    FOLLOW = {
+        "forms/backup/SetupDisk.svelte": ["pool-disks"], "forms/storage/AddDisks.svelte": ["pool-disks"],
+        "forms/storage/ReplaceMember.svelte": ["pool-disks"],
+        "forms/shares/RestoreShare.svelte": ["backup-state"], "pages/Backup.svelte": ["backup-state", "backup-state"],
+        "pages/Shares.svelte": ["backup-state"],
+        "pages/Instances.svelte": ["ct-list"], "pages/protection/CtSnapRow.svelte": ["ct-list"],
+        "pages/Disks.svelte": ["disk-health"], "forms/ops/ServiceForm.svelte": ["services-list"],
+    }
+
+    def test_free_argument_reads_follow_the_topic_of_their_list(self):
+        import re
+        known = {r[0] for r in ws.ls.topics()}
+        root = os.path.join(here, "..", "web", "src")
+        needles = ("pool/disks", "backup/snapshots", "ct/snapshots", "state/smart", "services/show")
+        for rel, topics in self.FOLLOW.items():
+            src = open(os.path.join(root, rel), encoding="utf-8").read()
+            found = []
+            for line in src.splitlines():
+                if "poll(" in line and any(n in line for n in needles):
+                    m = re.search(r",\s*\d+,\s*'([a-z-]+)'\)", line)
+                    self.assertIsNotNone(m, rel + ": " + line.strip())
+                    found.append(m.group(1))
+            self.assertEqual(found, topics, rel)
+            for t in found:
+                self.assertIn(t, known)
+
     def test_resolution_picks_the_topic_per_pool(self):
         for kind in ("info", "members", "state"):
             for pool in ("bulk", "fast"):
@@ -562,31 +556,27 @@ class StorageTopics(RedisBase):
             self.assertNotIn("topic", self.app.reads.resolve(["pool", kind], {"pool": ["archive"]})[0])
             self.assertIsInstance(ws.READS[("pool", kind)]["topic"], tuple)      # the global entry is never changed
 
-    def test_fixed_pool_read_uses_its_own_key_and_no_process(self):
-        self.redis.keys["hs:v1:pool-info-fast"] = doc("fast\t1\n")
-        self.redis.keys["hs:v1:pool-info-bulk"] = doc("bulk\t2\n")
+    def test_fixed_pool_read_uses_its_own_row_and_no_process(self):
+        self.put("fast\t1\n", topic="pool-info-fast")
+        self.put("bulk\t2\n", topic="pool-info-bulk")
+        self.beat()
         s, d, r = self.req("GET", "/api/sys/pool/info?pool=fast", headers=self.ck)
         self.assertEqual((s, json.loads(d)["rows"]), (200, [["fast", "1"]]))
         self.assertEqual(self.fake.calls, [])
 
-    def test_no_argument_storage_read_comes_from_its_key(self):
-        self.redis.keys["hs:v1:shares-overview"] = doc("s\tx\n")
+    def test_no_argument_storage_read_comes_from_its_row(self):
+        self.put("s\tx\n", topic="shares-overview")
+        self.beat()
         s, d, r = self.req("GET", "/api/sys/shares/overview", headers=self.ck)
         self.assertEqual((s, json.loads(d)["rows"]), (200, [["s", "x"]]))
         self.assertEqual(self.fake.calls, [])
 
-    def test_fresh_publishes_the_fixed_pool_topic(self):
-        self.redis.keys["hs:v1:pool-state-bulk"] = doc("old\n", gen=1)
-        self.redis.on_publish = lambda t: self.redis.keys.__setitem__("hs:v1:pool-state-bulk", doc("new\n", gen=2, age=0))
+    def test_fresh_runs_the_fixed_pool_read_now(self):
+        self.put("old\n", topic="pool-state-bulk")
+        self.beat()
         s, d, r = self.req("GET", "/api/sys/pool/state?pool=bulk&fresh=1", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["rows"]), (200, [["new"]]))
-        self.assertEqual(self.redis.published, [("hs:v1:refresh", "pool-state-bulk")])
-
-    def test_redis_down_is_503_for_a_fixed_pool(self):
-        self.redis.down = True
-        s, d, r = self.req("GET", "/api/sys/pool/members?pool=bulk", headers=self.ck)
-        self.assertEqual((s, json.loads(d)["error"]), (503, "state service down"))
-        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(s, 200)
+        self.assertEqual(len(self.fake.calls), 1)
 
     def test_arbitrary_and_no_pool_reads_still_run_directly(self):
         for q in ("", "?pool=archive"):
@@ -597,7 +587,7 @@ class StorageTopics(RedisBase):
             self.assertEqual(self.fake.calls[0][:2], ("pool", "info"))
             if q:
                 self.assertIn("archive", self.fake.calls[0])
-        self.assertEqual(self.redis.published, [])
+        self.assertEqual(self.asked, [])
 
     def test_warm_targets_keep_direct_pool_reads_only(self):
         for kind in ("info", "members", "state"):
@@ -610,67 +600,13 @@ class StorageTopics(RedisBase):
         for t in targets:
             self.assertFalse(len(t) >= 4 and t[:2] == ("pool", "info") and t[-1] in ("bulk", "fast"), t)
 
-    def test_reconnect_announces_a_new_storage_topic(self):
+    def test_new_storage_topics_are_in_the_list(self):
         topics = [r[0] for r in ws.ls.topics()]
         self.assertIn("pool-info-bulk", topics)
         self.assertIn("fm-locations", topics)
 
 
-class Hub(RedisBase):
-    """Events._run against the fake Redis: backoff and the catch-up after a reconnect."""
-
-    def run_hub(self, subscribes):
-        waits, seen = [], []
-        hub = ws.Events(self.cfg)
-        q = hub.add()
-        script = list(subscribes)
-
-        class R(FakeResp):
-            def subscribe(self, channel):
-                step = script.pop(0)
-                if step is None:
-                    raise OSError("down")
-                for m in step:
-                    yield channel, m
-                raise OSError("lost")
-
-        class Stop(Exception):
-            pass
-
-        def sleep(t):
-            waits.append(t)
-            if not script:
-                raise Stop()
-        hub.sleep = sleep
-        ws.ls.Resp = R
-        try:
-            hub._run()
-        except Stop:
-            pass
-        while not q.empty():
-            seen.append(q.get())
-        return waits, seen
-
-    def test_backoff_doubles_and_is_capped(self):
-        waits, _ = self.run_hub([None] * 8)
-        self.assertEqual(waits, [1, 2, 4, 8, 16, 30, 30, 30])
-
-    def test_a_message_resets_the_backoff(self):
-        waits, _ = self.run_hub([None, None, ["status 1"], None])
-        self.assertEqual(waits, [1, 2, 1, 2])
-
-    def test_reconnect_announces_every_topic(self):
-        self.redis.keys["hs:v1:status"] = doc(gen=7)
-        waits, seen = self.run_hub([["status 8"], ["status 9"]])
-        topics = [r[0] for r in ws.ls.topics()]
-        self.assertEqual(seen.count(("up",)), 2)
-        self.assertEqual(seen.count(("down",)), 2)
-        self.assertIn(("changed", "status", 7), seen)
-        self.assertIn(("changed", "live", 0), seen)
-        self.assertEqual(len([m for m in seen if m[0] == "changed" and m[2] in (7, 0)]), 2 * len(topics))
-
-
-class Events(RedisBase):
+class Events(Base):
     def open(self, path="/api/events", headers=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         c.request("GET", path, headers=headers if headers is not None else self.ck)
@@ -682,14 +618,6 @@ class Events(RedisBase):
     def test_foreign_origin_is_refused(self):
         s = self.req("GET", "/api/events", headers=dict(self.ck, Origin="http://evil.example"))[0]
         self.assertEqual(s, 403)
-
-    def test_off_mode_serves_the_stream_too(self):
-        self.cfg.live = ""
-        c, r = self.open()
-        try:
-            self.assertEqual((r.status, r.getheader("Content-Type")), (200, "text/event-stream"))
-        finally:
-            c.close()
 
     def test_too_many_streams(self):
         self.cfg.events_max = 0
@@ -737,14 +665,12 @@ class Events(RedisBase):
         self.assertEqual(self.app.event_streams, 0)
 
 
-class Replay(RedisBase):
+class Replay(Base):
     """Domain events on /api/events: ids, Last-Event-ID replay, resync (docs/adr/0005-events.md rules 6 and 7)."""
 
     def setUp(self):
         super().setUp()
         import sqlite3
-        self.db = os.path.join(self.tmp, "state.db")
-        os.environ["HS_STATE_DB"] = self.db
         c = sqlite3.connect(self.db)
         c.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, kind TEXT NOT NULL, subject TEXT, text TEXT, "
                   "source TEXT NOT NULL DEFAULT 'storage', level TEXT NOT NULL DEFAULT 'info', payload TEXT, v INTEGER NOT NULL DEFAULT 1)")
@@ -852,7 +778,7 @@ class Replay(RedisBase):
 
 
 class Counters(Base):
-    """The change counters (table topics of state.db): the watcher feeds `changed` and clears the read cache, also in mode off."""
+    """The change counters (table topics of state.db): the watcher feeds `changed` and clears the read cache."""
 
     def setUp(self):
         super().setUp()
@@ -913,27 +839,19 @@ class Counters(Base):
         self.assertEqual(self.drain(), [("changed", "reads:monitor disks", 1)])
         self.assertEqual(cleared, [])
 
-    def test_redis_up_leaves_the_live_topics_to_redis(self):
-        self.hub.poll_counters()
-        self.hub.redis_up = True
-        self.bump("status")
-        self.hub.poll_counters()
-        self.assertEqual(self.drain(), [])
-
-    def test_job_records_counter_is_fed_with_redis_up_and_keeps_the_cache(self):
-        """The job record writer counts `reads:jobs-records` (no Redis publish for it): with Redis up it is still a `changed`, the cache stays.
-        A name without the `reads:` prefix would be left to Redis and clear the cache on every bump."""
+    def test_a_job_records_counter_keeps_the_cache(self):
+        """The job record writer counts `reads:jobs-records`: a `changed`, the cache stays. A name without the `reads:` prefix clears it."""
         cleared = []
         self.hub.on_change = lambda: cleared.append(1)
         self.hub.poll_counters()
-        self.hub.redis_up = True
         self.bump("reads:jobs-records")
         self.hub.poll_counters()
         self.assertEqual(self.drain(), [("changed", "reads:jobs-records", 1)])
         self.assertEqual(cleared, [])
         self.bump("jobs-records")
         self.hub.poll_counters()
-        self.assertEqual(self.drain(), [])
+        self.assertEqual(self.drain(), [("changed", "jobs-records", 1)])
+        self.assertEqual(cleared, [1])
 
     def test_a_change_clears_the_read_cache(self):
         self.app.reads.cache["k"] = (time.time(), (200, {}))
@@ -944,21 +862,14 @@ class Counters(Base):
 
 
 class DbMode(Base):
-    """liveState = "db" (ADR 0026 step 1): the store stays off, `down`/`up` come from the heartbeat row of the collector, live: counters keep the cache."""
+    """`down`/`up` come from the heartbeat row of the collector, live: counters keep the cache."""
 
     def setUp(self):
         super().setUp()
-        self.db = os.path.join(self.tmp, "state.db")
-        os.environ["HS_STATE_DB"] = self.db
         self.probe = os.path.join(self.tmp, "probe.tsv")
         self.cfg.probe_file = self.probe
-        self.cfg.live = "db"
         self.hub = self.app.events
         self.q = self.hub.add()
-
-    def tearDown(self):
-        os.environ.pop("HS_STATE_DB", None)
-        super().tearDown()
 
     def sql(self, *stmts):
         import sqlite3
@@ -984,12 +895,15 @@ class DbMode(Base):
             out.append(self.q.get())
         return out
 
-    def test_db_mode_store_is_off_and_feature_false(self):
-        self.assertEqual(ws.Config().live, "")
-        cfg = ws.Config()
-        cfg.live = "db"
-        self.assertFalse(ws.features(cfg)["live"])
-        self.assertIsInstance(ws.App(cfg, FakeAuth(cfg)).store, ws.OffStore)
+    def test_the_watcher_follows_the_heartbeat(self):
+        calls = []
+        self.hub.poll_heartbeat = lambda now=None: calls.append(1)
+        self.hub.poll_counters = lambda: None
+        self.hub.poll_events = lambda: None
+        self.hub.cfg.events_watch = 0.01
+        threading.Thread(target=self.hub._watch, daemon=True).start()
+        time.sleep(0.2)
+        self.assertTrue(calls)
 
     def test_heartbeat_fresh_then_old_feeds_down_then_up(self):
         self.beat(1000)
@@ -1010,27 +924,13 @@ class DbMode(Base):
         self.assertEqual(self.drain(), [("down",)])
         self.assertIs(self.hub.collector_up, False)
 
-    def test_no_heartbeat_poll_in_off_mode(self):
-        self.cfg.live = ""
-        calls = []
-        self.hub.poll_heartbeat = lambda now=None: calls.append(1)
-        self.hub.poll_counters = lambda: None
-        self.hub.poll_events = lambda: None
-        self.hub.cfg.events_watch = 0.01
-        threading.Thread(target=self.hub._watch, daemon=True).start()
-        time.sleep(0.2)
-        self.assertEqual(calls, [])
-        self.cfg.live = "db"
-        time.sleep(0.2)
-        self.assertTrue(calls)
-
     def test_live_prefix_does_not_clear_cache(self):
         cleared = []
         self.hub.on_change = lambda: cleared.append(1)
         self.hub.poll_counters()
         self.bump("live:status")
         self.hub.poll_counters()
-        self.assertEqual(self.drain(), [("changed", "live:status", 1)])
+        self.assertEqual(self.drain(), [("changed", "status", 1)])      # the page knows the topic by its own name
         self.assertEqual(cleared, [])
         self.bump("status")
         self.hub.poll_counters()
@@ -1052,7 +952,7 @@ class DbMode(Base):
         self.hub.poll_counters()
         self.assertFalse(os.path.exists(self.probe))
 
-    def test_stream_open_says_down_in_db_mode(self):
+    def test_stream_open_says_down_without_a_collector(self):
         self.hub.collector_up = False
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         c.request("GET", "/api/events", headers=self.ck)
@@ -1062,6 +962,106 @@ class DbMode(Base):
             r.fp.readline()
             self.assertEqual(r.fp.readline(), b"event: down\n")
             self.assertEqual(r.fp.readline(), b"data: {}\n")
+        finally:
+            c.close()
+
+
+class DbRead(DbBase):
+    """Topic reads and /api/events come from the state database only (no Redis, no process)."""
+
+    def test_store_and_feature(self):
+        self.assertIsInstance(self.app.store, ws.LiveStore)
+        self.assertTrue(ws.features(self.cfg)["live"])
+        self.assertEqual(ws.features(self.cfg)["topics"].get("/api/sys/status"), "status")
+
+    def test_status_comes_from_the_row_and_starts_no_process(self):
+        self.put(t=time.time() - 400)
+        self.beat()
+        s, d, r = self.get()
+        self.assertEqual((s, json.loads(d)["rows"]), (200, [["x", "y"]]))
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(r.getheader("X-HS-Status"), "fresh")                 # unchanged for 400 s, but the collector checked just now
+        self.assertIn(r.getheader("X-HS-Age"), ("0", "1"))                    # the age is the heartbeat's
+        self.assertIn(int(r.getheader("X-HS-Updated")), range(int(time.time()) - 402, int(time.time()) - 397))
+
+    def test_collector_stopped_marks_the_document_expired(self):
+        self.put(t=time.time() - 400)
+        self.beat(t=time.time() - 120)
+        s, d, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-Status")), (200, "expired"))   # still served, only marked
+        self.assertEqual(self.fake.calls, [])
+
+    def test_no_row_and_no_collector_reads_directly(self):
+        s, d, r = self.get()
+        self.assertEqual(s, 200)
+        self.assertEqual(self.fake.calls, [("status",)])
+
+    def test_no_row_with_a_collector_asks_to_retry(self):
+        self.beat()
+        s, d, r = self.get()
+        self.assertEqual((s, json.loads(d)["error"], r.getheader("Retry-After")), (503, "refreshing", "2"))
+        self.assertEqual(self.fake.calls, [])
+
+    def test_unreadable_database_reads_directly_never_503(self):
+        os.environ["HS_STATE_DB"] = self.tmp                                   # a directory: sqlite cannot open it
+        s, d, r = self.get()
+        self.assertEqual(s, 200)
+
+    def test_fresh_runs_the_command(self):
+        self.put()
+        self.beat()
+        s, d, r = self.req("GET", "/api/sys/status?fresh=1", headers=self.ck)
+        self.assertEqual((s, self.fake.calls), (200, [("status",)]))
+
+    def test_newer_failure_marks_it_stale(self):
+        self.put(t=time.time() - 30)
+        self.beat()
+        sdb.live_fail(self.c, "status", 1, 3, "boom", "test", 60, int(time.time()))
+        s, d, r = self.get()
+        self.assertEqual((s, r.getheader("X-HS-State"), r.getheader("X-HS-Error"), r.getheader("X-HS-Status")), (200, "stale", "boom", "stale"))
+
+    def test_events_come_from_the_counters_only(self):
+        self.beat()
+        self.counters()                                                        # baseline
+        gen = self.put()
+        self.assertEqual(self.counters(), [("changed", "status", gen)])
+        self.assertEqual(self.counters(), [])
+
+    def test_an_unchanged_document_bumps_nothing(self):
+        gen = self.put("a\tb\n")
+        self.counters()
+        self.assertEqual(self.counters(), [])                                  # nothing written: no event
+        self.assertEqual(self.c.execute("SELECT gen FROM live WHERE topic = 'status'").fetchone()[0], gen)
+        self.assertEqual(self.counters(), [])
+
+    def test_a_hook_bump_does_not_double_the_event(self):
+        self.put()
+        self.counters()
+        with self.c:
+            sdb.bump(self.c, ["status"])                                       # live_refresh from a hook
+        self.assertEqual(self.counters(), [])                                  # the collector's live:status is the one event
+        gen = self.put("z\n")
+        self.assertEqual(self.counters(), [("changed", "status", gen)])
+
+    def test_down_and_up_follow_the_heartbeat(self):
+        self.beat(t=1000)
+        self.hub.poll_heartbeat(now=1005)
+        self.hub.poll_heartbeat(now=1030)
+        self.assertEqual(self.q.get_nowait(), ("down",))
+        self.beat(t=1031)
+        self.hub.poll_heartbeat(now=1032)
+        self.assertEqual(self.q.get_nowait(), ("up",))
+
+    def test_reconnect_after_a_gap_resyncs(self):
+        self.c.execute("INSERT INTO events (time, kind) VALUES (1, \"x\")")
+        self.c.commit()
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/api/events", headers=dict(self.ck, **{"Last-Event-ID": "99"}))
+        r = c.getresponse()
+        try:
+            self.assertEqual(r.fp.readline(), b"retry: 3000\n")
+            r.fp.readline()
+            self.assertEqual(r.fp.readline(), b"event: resync\n")
         finally:
             c.close()
 

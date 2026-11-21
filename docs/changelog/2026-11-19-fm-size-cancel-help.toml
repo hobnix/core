@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "File manager: folder sizes and Cancel are easy to find; hs fm shows its commands"
+body  = """Every folder in the list has a Size button, and the toolbar has Folder size: they calculate the size of a folder in the background. The running-job banner now says Cancel job. `hs fm` on its own lists the file manager commands instead of "unknown command"."""

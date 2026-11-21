@@ -1,0 +1,4 @@
+date  = "2026-11-20"
+type  = "feature"
+title = "Acknowledge a health problem for a chosen time, with a note"
+body  = """The Acknowledge button on the Health page and in the bell now opens a small form: stay silent until the problem clears, or for a day, a week or 30 days, with an optional note. It is still only for admins."""

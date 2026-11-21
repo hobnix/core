@@ -5,3 +5,4 @@ logs/show
 health/next
 health/list
 disk/marks
+share/parity/refused

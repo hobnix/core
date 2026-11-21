@@ -162,6 +162,19 @@ check_eq "topics are known names" "" "$bad"
 bad=$(awk -F'\t' '$1 == "user" && $7 !~ /(^|,)(reads|changes)(,|$)/ { print $2 }' "$REG" | paste -sd, -)
 check_eq "every user row says reads or changes" "" "$bad"
 
+# Live state (ADR 0026): a terminal command that changes something must say so, or an open page does not follow. The dispatcher (hs.sh) refreshes
+# every topic: group of a `changes` row, so the registry is where a command can miss: a mutating word flagged reads, or a group no live topic listens to.
+bad=$(awk -F'	' '$1 == "user" && $7 ~ /(^|,)reads(,|$)/ { n = split($2, w, " "); if (w[n] ~ /^(add|remove|delete|rename|start|stop|restart|set|edit|restore|rollback|snapshot|passwd|lock|unlock|join|leave|attach|detach|offer|revoke|install|update|enable|disable|on|off|run|now|init|prune|sync|replace|convert|import|apply|adopt|pause|resume|ack|unack|clean|flush)$/) print $2 }' "$REG" | paste -sd, -)
+check_eq "no row ending in a changing word is flagged reads" "" "$bad"
+bad=$(awk -F'	' -v live="$SCRIPTS/lib/live-topics.tsv" '
+  BEGIN { while ((getline l < live) > 0) { if (l ~ /^#/) continue; split(l, c, "	"); n = split(c[6], g, ","); for (i = 1; i <= n; i++) if (g[i] != "any" && g[i] != "-") woken[g[i]] = 1 } }
+  $1 == "user" && $7 ~ /(^|,)changes(,|$)/ { n = split($7, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^topic:/) { t = substr(a[i], 7); if (t != "docs" && !(t in woken)) print $2 " " t } }' "$REG" | paste -sd, -)
+check_eq "every group a changing command refreshes is woken by a live topic" "" "$bad"
+for r in 'share add' 'share <share> rename' 'ct add' 'ct <ct> remove' 'ct <ct> stop' 'user add' 'pool <pool> add' 'backup now' 'snapshots run' 'iso add' 'dns clean' 'remote add' 'services add'; do
+  check_out "$r refreshes the live state (changes + topic)" "changes" bash -c "awk -F'	' -v r='$r' '\$1 == \"user\" && \$2 == r { print \$7 }' '$REG'"
+done
+check_eq "an app install or removal also refreshes the instances" "4" "$(awk -F'	' '$1 == "user" && $2 ~ /^pkg (install|update|remove|rollback) / && $7 ~ /topic:system,topic:instances/' "$REG" | wc -l | tr -d ' ')"
+
 echo "-- extension packages (capabilities/<name>/commands.tsv, scripts/lib/registry-load.sh)"
 . "$SCRIPTS/lib/registry-load.sh"
 check_eq "no package row is refused" "" "$(HS_REGISTRY=$REG registry_refused | paste -sd, -)"
@@ -184,6 +197,9 @@ pk=$WORK/pk; mkdir -p "$pk/demo"; printf 'name = "demo"\nextension = true\n' > "
 printf 'sys\tsys ext demo x\trust:x\t-\tx\t-\t-\n' > "$pk/demo/commands.tsv"
 check_out "a package row may not name the Rust binary" "rust: rows belong to the core" env HS_PACKAGES_DIR="$pk" HS_REGISTRY="$REG" bash -c '. "$1/lib/registry-load.sh"; registry_refused demo' _ "$SCRIPTS"
 
+echo "-- a bare group word"
+check_eq "hs fm alone lists its commands" "yes" "$($HS fm 2>&1 | grep -q "hs fm locations" && echo yes || echo no)"
+check_eq "an unknown word is still unknown" "yes" "$($HS nonsense 2>&1 | grep -q "unknown command" && echo yes || echo no)"
 echo "-- pool commands"
 check_eq "hs pool <TAB> offers the pools and record" "bulk fast record" "$($HS sys complete pool | paste -sd' ')"
 check_eq "hs pool bulk <TAB> offers the verbs" "add close convert import open remove replace sync" "$($HS sys complete pool bulk | paste -sd' ')"

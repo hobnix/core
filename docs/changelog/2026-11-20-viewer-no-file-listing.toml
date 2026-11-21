@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "security"
+title = "Viewers can no longer list file names or search backups"
+body  = """
+The file manager (places, folder listings, sizes, details) and the backup file search show names of files in every share, sensitive ones included. They now need the admin role (ADR 0012); a viewer sees the file manager greyed with its reason and no backup search.
+"""

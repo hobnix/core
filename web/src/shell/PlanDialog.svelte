@@ -3,9 +3,11 @@
   import TextInput from '../ui/TextInput.svelte';
   import { onMount } from 'svelte';
   import { plan as askPlan, start as doStart } from '../api.js';
-  import { ui, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
+  import { ui, starting, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
+  import { toast, dismissToast } from '../ui/toast.svelte.js';
   import { offersRebuild, effectOf } from './effect.js';
   import { jobKey } from '../jobkey.js';
+  import { tr } from '../i18n.js';
   import PlanSteps from './PlanSteps.svelte';
   import Halftone from './Halftone.svelte';
   import Chip from '../ui/Chip.svelte';
@@ -48,25 +50,40 @@
 
   function close() { ui.dialog = null; }
 
+  // Start closes the dialog at once; a toast reports the change (pending, started, done, refused). The one exception is a change that is saved
+  // and waits for a rebuild: that asks a question, so its dialog stays. A refusal has to travel with the toast, so "Show plan" opens the dialog again.
   async function go() {
-    busy = true;
-    startError = '';
+    const { area, title: dtitle, document } = dialog;
+    const name = dtitle || p.heading || 'Change';
+    const ask = p.confirm_name ? confirm : '';
+    const stay = area !== 'system' && offersRebuild(p.steps);
+    const tkey = `start:${jobKey(area, args)}`;
+    const steps = p.steps ?? [];
+    const again = () => openPlan(area, args, dtitle);
+    if (stay) { busy = true; startError = ''; } else { close(); }
+    toast({ key: tkey, kind: 'info', title: `${name}…`, busy: true });
+    const pk = jobKey(area, args);
+    starting.keys.push(pk);
     try {
-      const r = await doStart(dialog.area, args, p.confirm_name ? confirm : '', undefined, undefined, dialog.document);
+      const r = await doStart(area, args, ask, undefined, undefined, document);
       if (r.status === 'started' && r.unit) {
-        track(r.unit, dialog.title || p.heading, jobKey(dialog.area, args));
-        showTab('tasks');
-        close();
+        track(r.unit, name, jobKey(area, args));
+        toast({ key: tkey, kind: 'info', title: name, text: tr('Running in the background.'), action: () => showTab('tasks'), actionLabel: tr('Open Tasks') });
       } else if (r.status === 'done') {
-        trackDone(dialog.title || p.heading, p.steps ?? []);
-        showTab('tasks');
-        if (dialog.area !== 'system' && offersRebuild(p.steps)) saved = true; else close();
+        trackDone(name, steps);
+        if (stay) { saved = true; dismissToast(tkey); }
+        else toast({ key: tkey, kind: 'ok', title: `${name}: ${tr('done')}` });
       } else {
-        startError = r.reason || 'The server did not start it.';
+        const why = r.reason || tr('The server did not start it.');
+        if (stay) { startError = why; dismissToast(tkey); }
+        else toast({ key: tkey, kind: 'bad', title: `${name} ${tr('was refused')}`, text: why, action: again, actionLabel: tr('Show plan') });
       }
     } catch (e) {
-      startError = e.message;
+      if (stay) { startError = e.message; dismissToast(tkey); }
+      else toast({ key: tkey, kind: 'bad', title: `${name} ${tr('failed to start')}`, text: e.message, action: again, actionLabel: tr('Show plan') });
     } finally {
+      const i = starting.keys.indexOf(pk);
+      if (i >= 0) starting.keys.splice(i, 1);
       busy = false;
     }
   }

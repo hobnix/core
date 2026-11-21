@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Change counters (docs/adr/0005-events.md rule 5): the table `topics` of state.db, `state-db.py topic-bump` (names, @group, --all), the
-# collector's bump in `read-put`, and scripts/lib/live.sh live_refresh counting up without Redis. python3 stdlib only, no root.
+# collector's bump in `read-put`, and scripts/lib/live.sh live_refresh counting up. python3 stdlib only, no root.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
@@ -35,9 +35,8 @@ check_eq "other output" "2" "$(q "SELECT gen FROM topics WHERE topic='reads:moni
 echo "-- live: counters (ADR 0026 step 1) are counted like any topic"
 sdb topic-bump live:probe >/dev/null
 check_eq "live:probe gen 1" "1" "$(q "SELECT gen FROM topics WHERE topic='live:probe'")"
-echo "-- live_refresh counts up without Redis"
+echo "-- live_refresh counts up"
 unset HS_LIVE_LOG
-export HS_LIVE_SOCKET=$WORK/none.sock
 ( . "$SCRIPTS/lib/live.sh"; live_refresh ct )
 check_eq "live_refresh" "2" "$(q "SELECT gen FROM topics WHERE topic='ct'")"
 HS_LIVE_LOG=$WORK/log bash -c ". '$SCRIPTS/lib/live.sh'; live_refresh ct"

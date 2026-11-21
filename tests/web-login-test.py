@@ -168,7 +168,7 @@ class Csrf(Base):
 
 class CsrfGate(Base):
     """Issue #433: every changing request needs a session and the CSRF token, whatever its handler does. The list is every POST path of do_POST."""
-    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh",
+    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample",
                      "/api/sessions/end", "/api/sessions/end-others"]
 
     def test_every_changing_request_needs_session_and_token(self):
@@ -208,6 +208,13 @@ class CsrfGate(Base):
         c = r.getheader("Set-Cookie")
         for flag in ("HttpOnly", "SameSite=Strict", "Path=/", "Max-Age="):
             self.assertIn(flag, c)
+
+
+class RunExitCodes(unittest.TestCase):
+    def test_a_timeout_is_124_and_a_missing_command_127(self):
+        import sys
+        self.assertEqual(ws._run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.5), (124, ""))
+        self.assertEqual(ws._run(["/nonexistent/hs-no-such-command"]), (127, ""))
 
 
 class ThrottleBounds(unittest.TestCase):
@@ -613,6 +620,14 @@ class Changes(Base):
         self.assertEqual((d["status"], d["reason"], d["exit"]), ("refused", "Health check is running already.", 1))
         self.answer = (127, "")
         self.assertIn("exit 127", self.post("/api/plan", self.RUN)[1]["reason"])
+
+    def test_a_timeout_says_so(self):
+        # the web server stopped waiting (subprocess timeout): never "exit 127", and the reason says a start may still be running
+        self.answer = (124, "")
+        d = self.post("/api/start", self.RUN)[1]
+        self.assertEqual((d["status"], d["exit"]), ("refused", 124))
+        self.assertIn("stopped waiting after 60 s", d["reason"])
+        self.assertNotIn("exit", d["reason"])
 
     def test_danger_plan_and_start_with_confirm(self):
         self.answer = (0, "status\tok\nheading\tstop Parity sync\nstep\tstop it\ndanger\tHalf way is bad.\ncommand\tsystemctl stop x\nconfirm_name\tstop\nlong\tno\n")

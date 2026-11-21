@@ -245,7 +245,7 @@
               <Button need="app-manager" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
             {/if}
           {/each}
-          <Button variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
+          <Button need="admin" variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
           <Button variant="ghost" class="btn-icon" icon={copied === a.name ? 'check' : 'terminal-window'} tooltip={copied === a.name ? 'Copied' : 'Copy the terminal command: hs recipe ' + a.name} aria-label="Copy hs recipe {a.name}" onclick={() => copy(a.name)} />
         {/if}
       {/snippet}

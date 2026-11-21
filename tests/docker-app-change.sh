@@ -38,6 +38,7 @@ case "$1" in
           if [ -e "$STATE.legacy" ]; then printf 'legacy\t/opt/apps/%s\n' "$5"; else printf 'web\t/shares/apps/stacks/%s\n' "$5"; fi ;;
         *'mountpoint -q'*) [ ! -e "$STATE.nomount" ]; exit $? ;;
         *'docker inspect --format'*) printf '/opt/apps/arr\n' ;;
+        *'docker image inspect'*) [ ! -e "$STATE.missing" ] || printf 'ghcr.io/acme/app:1\nredis:7\n' ;;   # missing_images: the images not in docker yet
         *'config --images'*) printf 'ghcr.io/acme/app:1\n' ;;
         *'config --format json'*) cat "${CFGJSON:-/nonexistent}" 2>/dev/null ;;
         *'[ -e "$p" ]'*) printf '%s\n' "${@:5}" | grep '^/missing' || true ;;
@@ -90,14 +91,35 @@ check_eq "plan pull exit 0" 0 "$rc"
 echo "$out" | grep -qx "status${T}ok" && pass "plan pull status ok" || fail "plan pull status: $out"
 echo "$out" | grep -qx "long${T}yes" && pass "plan pull long yes" || fail "plan pull long: $out"
 
-echo "-- start/stop/restart run directly and use the right argv"
+echo "-- start/stop/restart run as a job (status started + unit), the job body uses the right argv"
 on webui
 for a in start stop restart; do
+  : > "$LOG"
   rc=0; out=$($D start arr "$a" </dev/null 2>&1) || rc=$?
   check_eq "start $a exit 0" 0 "$rc"
-  echo "$out" | grep -qx "status${T}done" && pass "start $a done" || fail "start $a: $out"
-  grep -qF "sh arr $a" "$LOG" && pass "start $a argv" || fail "start $a argv: $(cat "$LOG")"
+  echo "$out" | grep -qx "status${T}started" && pass "start $a status started" || fail "start $a: $out"
+  echo "$out" | grep -qE "^unit${T}hs-job-docker-app-$a-arr" && pass "start $a unit" || fail "start $a unit: $out"
+  grep -qF "sh arr $a" "$LOG" && fail "start $a ran inline: $(cat "$LOG")" || pass "start $a does not run inline"
+  rc=0; out=$($D --apply-action arr "$a" </dev/null 2>&1) || rc=$?
+  check_eq "apply-action $a exit 0" 0 "$rc"
+  grep -qF "sh arr $a" "$LOG" && pass "apply-action $a argv" || fail "apply-action $a argv: $(cat "$LOG")"
 done
+rc=0; $D --apply-action arr pull </dev/null >/dev/null 2>&1 || rc=$?
+check_eq "apply-action takes only start, stop and restart" 1 "$rc"
+echo "-- a refused check still answers at once (no job)"
+on webui
+rc=0; out=$($D start missing start </dev/null 2>&1) || rc=$?
+check_eq "start of an unknown app exit 1" 1 "$rc"
+echo "$out" | grep -qx "status${T}refused" && pass "start of an unknown app is refused, not started" || fail "start unknown: $out"
+echo "-- HS_DOCKER_NO_JOB runs start/stop/restart inline"
+export HS_DOCKER_NO_JOB=1
+for a in start stop restart; do
+  : > "$LOG"
+  rc=0; out=$($D start arr "$a" </dev/null 2>&1) || rc=$?
+  echo "$out" | grep -qx "status${T}done" && pass "inline $a done" || fail "inline $a: $out"
+  grep -qF "sh arr $a" "$LOG" && pass "inline $a argv" || fail "inline $a argv: $(cat "$LOG")"
+done
+unset HS_DOCKER_NO_JOB
 
 echo "-- normal pull runs as a job"
 on webui
@@ -129,6 +151,25 @@ grep -qE 'sh arr [^ ]+ up -d' "$LOG" && pass "recreate runs up -d" || fail "recr
 grep -qE -- '--build|--pull| down| -v( |$)' "$LOG" && fail "recreate must not build, pull or remove: $(cat "$LOG")" || pass "recreate has no --build/--pull/down/-v"
 rc=0; $D plan arr recreate extra </dev/null >/dev/null 2>&1 || rc=$?
 [ "$rc" != 0 ] && pass "recreate takes no arguments" || fail "recreate accepted an argument"
+
+echo "-- recreate with images not in docker yet = background job (an app moved to a new docker container)"
+on webui
+touch "$STATE.missing"
+rc=0; out=$($D plan arr recreate </dev/null 2>&1) || rc=$?
+check_eq "plan recreate (missing images) exit 0" 0 "$rc"
+echo "$out" | grep -qx "long${T}yes" && pass "plan recreate with missing images is long" || fail "plan recreate missing long: $out"
+echo "$out" | grep -q "^note${T}2 images are not in Docker yet (ghcr.io/acme/app:1, redis:7)" && pass "plan names the missing images" \
+  || fail "plan missing note: $out"
+echo "$out" | grep -q "No image is pulled" && fail "plan still says no image is pulled: $out" || pass "plan does not claim no pull"
+rc=0; out=$($D start arr recreate </dev/null 2>&1) || rc=$?
+check_eq "start recreate (missing images) exit 0" 0 "$rc"
+echo "$out" | grep -qx "status${T}started" && pass "start recreate with missing images starts a job" || fail "start recreate missing: $out"
+grep -q "docker-app-recreate-arr" "$SLOG" && pass "recreate job unit" || fail "recreate job unit: $(cat "$SLOG" 2>/dev/null)"
+: > "$LOG"
+rc=0; $D --apply-recreate arr </dev/null >/dev/null 2>&1 || rc=$?
+check_eq "apply-recreate exit 0" 0 "$rc"
+grep -qE 'sh arr [^ ]+ up -d' "$LOG" && pass "apply-recreate runs up -d" || fail "apply-recreate command: $(cat "$LOG")"
+rm -f "$STATE.missing"
 
 echo "-- delete keeps /opt/apps/<app> unless --delete-data"
 cat > "$BIN/docker.sh" <<'FAKE'
@@ -203,6 +244,7 @@ case "$1" in
 esac
 FAKE
 : > "$LOG"
+export HS_DOCKER_NO_JOB=1
 rc=0; out=$($D start web1 start </dev/null 2>&1) || rc=$?
 check_eq "start of a stopped app exit 0" 0 "$rc"
 echo "$out" | grep -qx "status${T}done" && pass "start of a stopped app done" || fail "start stopped: $out"

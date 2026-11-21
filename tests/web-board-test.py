@@ -105,7 +105,7 @@ class Board(unittest.TestCase):
     def test_board_reads_through_the_store(self):
         asked = []
 
-        class Store(ws.StateStore):
+        class Store:
             def get(self, spec, argv, key, fresh=False):
                 asked.append(tuple(key))
                 return (200, {"rows": []}, 1, ()) if key[-1] == "stats" else (503, {"error": "refreshing"}, None, ())

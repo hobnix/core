@@ -26,7 +26,7 @@
 
   const info = poll(() => `/api/sys/pool/info?pool=${pool}`, 60000, () => poolTopic('info', pool, live.topics));
   // the adopt listing also names encrypted disks (hs sys pool disks --role adopt), the plain one does not
-  const free = poll(() => (variant === 'adopt' ? '/api/sys/pool/disks?role=adopt' : '/api/sys/pool/disks'), 15000);
+  const free = poll(() => (variant === 'adopt' ? '/api/sys/pool/disks?role=adopt' : '/api/sys/pool/disks'), 15000, 'pool-disks');
 
   // does this pool use SnapRAID? the page that opened the form knows (snap0); a pool picked here is read
   const layout = $derived(parseInfo(rows(info)).facts.layout ?? '');

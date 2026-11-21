@@ -3,7 +3,7 @@
 # help.de: -
 # args: plan|start <app> <action> [--rev new|<rev>] [--delete-data]
 # Change the apps (compose projects) that run in the locked docker container.
-# Actions: start, stop, restart run directly; pull runs as a background job and recreates the containers.
+# Actions: start, stop, restart and pull run as background jobs (status started + unit; pull also recreates the containers).
 # app-save creates or updates a web-managed app and recreates it (up -d); app-write only writes the two files (the running app is not touched).
 # The plan of app-save/app-write is also the Test of the web editor: it collects every problem as `finding<TAB>error|warn<TAB>where<TAB>text`
 # (where = compose:<line> | compose:<dotted.path> | env:<line> | -) and refuses with "The test found N problems." when one is an error.
@@ -14,7 +14,7 @@
 # app-save at the plan (fix: hs vault open); start, stop, restart never need it.
 # The files of an app live in the share apps (seen in docker at /shares/apps): stacks/<app> for web-managed apps, recipes/<app> for recipes,
 # or the legacy /opt/apps/<app> (lib/docker-apps.sh docker_app_dir). delete keeps the folder unless --delete-data is given (the app stays editable and can be started again).
-# Test knobs: HS_DOCKER_NO_JOB=1 (run pull/rebuild/save/delete inline), HS_INCUS, HS_DOCKER_SH and HS_CT_CHANGE (stand in for docker.sh and ct-change.sh).
+# Test knobs: HS_DOCKER_NO_JOB=1 (run start/stop/restart/pull/rebuild/save/delete inline), HS_INCUS, HS_DOCKER_SH and HS_CT_CHANGE (stand in for docker.sh and ct-change.sh).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -693,27 +693,65 @@ apply_rebuild() {
 
 # ── recreate ──
 
+# missing_images <app>: the images of the app that are not in docker yet, one per line (up -d pulls or builds them first, which can take
+# minutes: an app moved to a new docker container has none). Prints nothing when every image is there or the list cannot be read.
+missing_images() {
+  local app=$1 dir
+  dir=${DOCKER_AUTH_DIR:-$(_auth_dir "$app")}
+  timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c '
+    cd "$2" || exit 0
+    docker compose -p "$1" config --images 2>/dev/null | sort -u | while IFS= read -r img; do
+      [ -n "$img" ] || continue
+      docker image inspect "$img" >/dev/null 2>&1 || printf "%s\n" "$img"
+    done' sh "$app" "$dir" </dev/null 2>/dev/null || true
+}
+
 cmd_plan_recreate() {
-  local app=$1
+  local app=$1 missing n
   base_checks "$app"
   auth_check "$app"
-  printf 'status	ok
-heading	recreate %s
-' "$app"
-  printf 'step	Recreate the containers whose settings changed and start the missing ones (docker compose up -d)
-'
-  printf 'note	No image is pulled or built and no volume is removed.
-'
-  printf 'long	no
-'
+  missing=$(missing_images "$app")
+  n=$(printf '%s\n' "$missing" | grep -c . || true)
+  printf 'status\tok\nheading\trecreate %s\n' "$app"
+  printf 'step\tRecreate the containers whose settings changed and start the missing ones (docker compose up -d)\n'
+  if [ "$n" -gt 0 ]; then
+    printf '%s\n' "$missing" | awk -v n="$n" '
+      NF && c < 3 { l = l (c++ ? ", " : "") $0 }
+      END { printf "note\t%s not in Docker yet (%s%s): downloaded or built first, so this runs as a background job.\n",
+              (n == 1 ? "1 image is" : n " images are"), l, (n > 3 ? ", ..." : "") }'
+    printf 'note\tNo volume is removed.\n'
+    printf 'long\tyes\n'
+  else
+    printf 'note\tNo image is pulled or built and no volume is removed.\n'
+    printf 'long\tno\n'
+  fi
 }
 
 cmd_start_recreate() {
-  local app=$1
+  local app=$1 unit
   base_checks "$app"
   auth_check "$app"
-  if docker_with_auth "$app" up -d; then printf 'status	done
-'; else refuse "The recreate of $app failed."; fi
+  if [ -z "${HS_DOCKER_NO_JOB:-}" ] && [ -n "$(missing_images "$app")" ]; then
+    # images to download or build: this can take longer than the web interface waits for an answer
+    unit=$(hs_job "docker-app-recreate-$app" "Recreate $app" -- bash "$0" --apply-recreate "$app") || refuse "The background job could not be started."
+    printf 'status\tstarted\nunit\t%s\n' "$unit"
+    return 0
+  fi
+  if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse "The recreate of $app failed."; fi
+}
+
+apply_recreate() {
+  local app=$1
+  [[ "$app" =~ $APP_RE ]] || fail "The app name is not valid."
+  docker_on_and_running || fail "Docker is not on or not running."
+  app_is_child "$app" || fail "No app called '$app' was found."
+  is_manager "$app" && fail "The app '$app' is the Docker manager."
+  step "$(t 'Recreate %s (missing images are downloaded or built first)' "$app")"
+  if docker_with_auth "$app" up -d; then
+    ok "$(t 'Recreated %s' "$app")"
+  else
+    fail "$(t 'The recreate of %s failed.' "$app")"
+  fi
 }
 
 # ── delete ──
@@ -809,20 +847,45 @@ cmd_plan_old() {
   if [ "$action" = pull ]; then printf 'long\tyes\n'; else printf 'long\tno\n'; fi
 }
 
+# run_action <app> <start|stop|restart>: the work itself (a stopped app without containers is brought up from its folder)
+run_action() {
+  local app=$1 action=$2
+  if [ "$action" != stop ] && [ "$(app_state "$app")" = stopped ]; then
+    docker_with_auth "$app" up -d
+  else
+    timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c 'docker compose -p "$1" "$2"' sh "$app" "$action" </dev/null
+  fi
+}
+
+apply_action() {
+  local app=$1 action=$2
+  [[ "$app" =~ $APP_RE ]] || fail "The app name is not valid."
+  docker_on_and_running || fail "Docker is not on or not running."
+  app_is_child "$app" || fail "No app called '$app' was found."
+  is_manager "$app" && fail "The app '$app' is the Docker manager."
+  step "$(t '%s %s' "${action^}" "$app")"
+  if run_action "$app" "$action"; then
+    ok "$(t 'Done: %s %s' "$action" "$app")"
+  else
+    fail "$(t 'The %s of %s failed.' "$action" "$app")"
+  fi
+}
+
 cmd_start_old() {
   local app=$1 action=$2 dir unit
   base_checks "$app"
   case "$action" in
     start|stop|restart)
-      if [ "$action" != stop ] && [ "$(app_state "$app")" = stopped ]; then
-        # no container (the data were kept): bring the app up from its folder
-        if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse "The $action of $app failed."; fi
-        return 0
-      fi
-      if timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c 'docker compose -p "$1" "$2"' sh "$app" "$action" </dev/null; then
-        printf 'status\tdone\n'
+      if [ -n "${HS_DOCKER_NO_JOB:-}" ]; then
+        run_action "$app" "$action" || refuse "The $action of $app failed."
+        printf 'status	done
+'
       else
-        refuse "The $action of $app failed."
+        # a background job with a record: the request returns at once, the row follows the job events, a toast reports the end (#896)
+        unit=$(hs_job "docker-app-$action-$app" "$(t '%s %s' "${action^}" "$app")" -- bash "$0" --apply-action "$app" "$action") || refuse "The background job could not be started."
+        printf 'status	started
+unit	%s
+' "$unit"
       fi
       ;;
     pull)
@@ -847,6 +910,13 @@ if [ "${1:-}" = "--apply-pull" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "--apply-action" ]; then
+  [ $# -eq 3 ] || exit 1
+  [[ "$3" =~ ^(start|stop|restart)$ ]] || exit 1
+  apply_action "$2" "$3"
+  exit 0
+fi
+
 if [ "${1:-}" = "--apply-save" ]; then
   [ $# -eq 6 ] || exit 1
   apply_save "$2" "$3" "$4" "$5" "$6"
@@ -856,6 +926,12 @@ fi
 if [ "${1:-}" = "--apply-rebuild" ]; then
   [ $# -eq 2 ] || exit 1
   apply_rebuild "$2"
+  exit 0
+fi
+
+if [ "${1:-}" = "--apply-recreate" ]; then
+  [ $# -eq 2 ] || exit 1
+  apply_recreate "$2"
   exit 0
 fi
 

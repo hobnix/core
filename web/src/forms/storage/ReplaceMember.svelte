@@ -14,7 +14,7 @@
   let encrypt = $state(false);
   let pass = $state('');
 
-  const free = poll('/api/sys/pool/disks', 15000);
+  const free = poll('/api/sys/pool/disks', 15000, 'pool-disks');
   const disks = $derived(freeDisks(rows(free)));
 
   const args = () => {

@@ -12,7 +12,7 @@ labels: bug
 
 **Version** (`hs system info`), and the storage layout (ZFS or SnapRAID):
 
-**Hardware test** (filled in with the fix: what to run on a real server to see that it is gone; the issue stays open in the board column
-Testing until the boxes are ticked):
+**Hardware test** (filled in with the fix: what to run on a real server to see that it is gone; at merge the steps move into the
+milestone's "Hardware test" tracker and this issue closes):
 
 - [ ] 

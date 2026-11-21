@@ -1,7 +1,9 @@
 // State that several parts of the shell share: the open plan dialog, the bottom panel, and the tasks started from this browser.
 import { get } from './api.js';
 import { jobMatches } from './jobkey.js';
+import { toast } from './ui/toast.svelte.js';
 import { roleOk, areaRole, refusal } from './roles.js';
+import { tr } from './i18n.js';
 
 export const ui = $state({
   dialog: null,                       // { area, args, title } while a plan dialog is open
@@ -10,6 +12,7 @@ export const ui = $state({
   role: 'viewer',                     // the role of this session (GET /api/session): viewer | app-manager | admin; roles.js decides what it may see
   host: 'homeserver',                 // this node's name (the dialogs name the node they act on)
   panel: { open: true, tab: 'tasks', height: 214 },   // height in px while open; the grip drags it
+  jobSel: '',                         // the id of a job record the Jobs tab should select (set by openJob, read and cleared by shell/JobRecords.svelte)
   offsitePass: '',                    // the own password of a NEW off-site repository: shown once on the Backup page, then dropped (never stored)
 });
 
@@ -37,6 +40,12 @@ export function showTab(tab) {
   ui.panel.open = true;
 }
 
+// Show a job record: open the Jobs tab (job records) and select the job there.
+export function openJob(id) {
+  ui.jobSel = id;
+  showTab('jobs');
+}
+
 // Tasks: jobs started here, newest first. A job runs on the server whether or not this page is open; the page only follows its journal.
 export const tasks = $state({ list: [], selected: '' });
 
@@ -53,7 +62,9 @@ export function track(unit, title, key = '') {
 
 // Does a job started from this browser for that plan still run? `args` left out = any job of the area. Only this page's jobs are known:
 // after a reload the button is idle again (the job itself runs on and the plan refuses a second start).
-export const jobRunning = (area, args) => tasks.list.some((t) => t.state === 'running' && jobMatches(t.key, area, args));
+// Between the click on Start and the answer of the server nothing is a task yet: `starting` holds the keys, so the button is busy from the click.
+export const starting = $state({ keys: [] });
+export const jobRunning = (area, args) => starting.keys.some((k) => jobMatches(k, area, args)) || tasks.list.some((t) => t.state === 'running' && jobMatches(t.key, area, args));
 
 // a change that finished at once (no background job): it still leaves a line in Tasks, so there is a trace of what was done
 let doneSeq = 0;
@@ -73,6 +84,14 @@ function apply(t, rows) {
     else if (row[0] === 'line') t.lines.push(row.slice(1).join('\t'));
     else if (row[0] === 'next') t.next = Number(row[1]) || t.next;
   }
+}
+
+// The second toast of a job: how it ended, with a link to its log in Tasks (a job.* event of the stream ends the follow, nothing polls for it).
+export function endToast(t) {
+  const ok = t.state === 'ok' || t.state === 'done';
+  const lost = t.state === 'unknown' || t.state === 'lost';      // no record of the unit (or the page lost the server): not the same as a failure
+  toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${tr(ok ? 'finished' : lost ? 'ended, result unknown' : 'failed')}`,
+    text: lost ? tr('No record of this job was found. Check Jobs to see whether it ran.') : '', action: () => { tasks.selected = t.unit; showTab('tasks'); }, actionLabel: tr('Show log') });
 }
 
 // Follow a job: a server-sent-events stream (GET /api/sys/jobs/stream/<unit>) while it works, polling the same journal every 2 s when
@@ -99,7 +118,7 @@ function stream(unit) {
       apply(t, rows);
       // a unit that was just started may not exist for a moment: not "gone" yet
       if (t.state === 'unknown' && ++gone < 4) t.state = 'running';
-      if (t.state !== 'running') { t.ended = new Date(); done(true); }
+      if (t.state !== 'running') { t.ended = new Date(); endToast(t); done(true); }
     };
     // the stream ends on its own (event: end) when the unit ended; if the task still runs then (session ended, stream time limit), poll
     es.addEventListener('end', () => {
@@ -111,18 +130,22 @@ function stream(unit) {
   });
 }
 
+export const POLL_MAX_ERRORS = 15;      // 15 failed reads in a row (about 30 s): say so instead of waiting for ever
 async function poll(unit) {
+  let errors = 0;
   for (;;) {
     const t = tasks.list.find((x) => x.unit === unit);
     if (!t) return;
     try {
       const r = await get(`/api/sys/jobs/tail/${encodeURIComponent(unit)}?from=${t.next}`);
+      errors = 0;
       apply(t, r.rows);
       // a unit that was just started may not exist for a moment: give it a few tries before calling it gone
       if (t.state === 'unknown' && ++t.gone < 4) t.state = 'running';
-      if (t.state !== 'running') { t.ended = new Date(); return; }
+      if (t.state !== 'running') { t.ended = new Date(); endToast(t); return; }
     } catch (e) {
       if (e.status === 401) return;
+      if (++errors >= POLL_MAX_ERRORS) { t.state = 'lost'; t.ended = new Date(); endToast(t); return; }
     }
     await new Promise((r) => setTimeout(r, 2000));
   }

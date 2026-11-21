@@ -1,0 +1,6 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "Lower CPU load: live collector, machine.toml reads and the status document"
+body  = """
+The live collector read `state-history` again every 10 seconds because the status document recorded a reading and asked for a refresh each time; that refresh is gone. A topic is now read at most once per short window however many refreshes ask for it, and a refresh of a change area wakes the general topics (status, deck, live ...) at most every 15 seconds. The collector and the web service keep `machine.toml` answers for at most 30 seconds (and only while the file is unchanged), so a read no longer starts a python process per key. The status timer waits 20 seconds after the last run ended instead of firing on a 10 second clock.
+"""

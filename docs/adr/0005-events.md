@@ -14,7 +14,7 @@ What is true today:
 
 - Facts are written to four stores in four formats: state.db `events` (disks, SMART; newest 2000), `/var/lib/hs/disk-events` (a second log
   of the udev part), the journal (`hs-notify`, job units) and the job records (ADR 0004). No shared id or time format (gap 17).
-- Invalidations travel on Redis pub/sub only, and only when `liveState = "redis"`. The default is `off`: the browser has no event stream,
+- (Superseded by ADR 0026 in 0.10: no Redis, no `liveState`, `/api/events` always exists.) Invalidations travel on Redis pub/sub only, and only when `liveState = "redis"`. The default is `off`: the browser has no event stream,
   `/api/events` answers 404 and pages catch up on their TTL (gap 1).
 - `/api/events` has no `id:`; a reconnect cannot ask what it missed. The per-stream queue (256) drops silently (gaps 3, 12).
 - Refreshes are sent only after success (`&&`, exit 0), so a failed backup or sync leaves pages stale (gap 6).

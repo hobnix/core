@@ -488,23 +488,10 @@ default afterwards. Boot time does not include `hs unlock`: with encrypted stora
 
 ## Measure the live state on the state database
 
-The live state is meant to move from Redis into the state database (ADR 0026, docs/adr/0026-live-state-one-mode-one-store.md). Before that goes
-further, this measures on your server what it costs: how many writes per minute, how much the database grows and how long a change takes to reach
-the stream of the web interface. The setting is off by default. In this mode only the collector `hs-live-db` and the heartbeat are new; the web
-interface keeps reading directly, and a refresh request does not wake a topic early (there is no Redis channel), so topics are read at their intervals.
-
-Set `liveState = "db"` in `/etc/nixos/machine.toml` with an editor (`sudo hs config set` does not offer this key; it needs `webUi = true` and the
-capability `live-state` must not be named by hand in `capabilities`):
-
-```bash
-sudo nano /etc/nixos/machine.toml
-```
-
-Apply it:
-
-```bash
-sudo hs rebuild
-```
+The live state (ADR 0026, docs/adr/0026-live-state-one-mode-one-store.md) is kept in the state database by the collector `hs-live`; there is no setting
+and no Redis. This measures on your server what it costs: how many writes per minute, how much the database grows and how long a change takes to reach
+the stream of the web interface. It needs `webUi = true` on a homeserver. A refresh request (a change from a terminal, `hs sys live refresh`) wakes the
+topic within about a second; all other topics are read at their intervals.
 
 Measure for an hour (it offers to run as a job; the default is 30 minutes, one probe every 10 seconds):
 
@@ -515,18 +502,26 @@ sudo hs live measure --minutes 60
 Watch the collector while it runs:
 
 ```bash
-journalctl -u hs-live-db --no-pager -n 30
+journalctl -u hs-live --no-pager -n 30
 ```
 
 What you see: one line per minute (`minute 3 of 60: 18 probes, median 540 ms`), then the result as a list and a file `/var/lib/hs/live-measure-<date>.md`
 with a `.tsv` next to it. It holds writes per minute (documents, failures, heartbeats), payload per minute, commits over 100 ms, the growth of the
 database and its WAL, and the change latency (min, median, p95, max). The latency ends where the web interface puts the change into the stream queue;
-the network hop and the browser's drawing time are not in it. The result has no host name. Paste the `.md` file into issue #481.
+the network hop and the browser's drawing time are not in it. The result has no host name. Paste the `.md` file into issue #566. Not tested on hardware yet.
 
-To switch back, set `liveState = "off"` (or remove the line) in `machine.toml` and run `sudo hs rebuild`. The tables `live` and `heartbeat` stay in the
-state database, unused.
+### Delay per topic
 
-Not tested on hardware yet.
+The collector also keeps, for every topic that was asked to read again, the last and the worst time from the request to the new generation, and the
+Live state page sends how long it needed to show it. Look at them with:
+
+```bash
+hs sys live status
+```
+
+Columns 11 to 14 hold the milliseconds (`-` = no sample yet), and the Live state page shows the same. The request time of a change from a terminal is
+the second the counter was changed, so the server number is at most one second too large. A change that only comes from the timer has no trigger and no
+sample. Over 10 seconds in the worst of the last 20 samples of a topic, `hs sys live check` and the Health page say so. Not tested on hardware yet.
 
 ## Reach the server from outside
 

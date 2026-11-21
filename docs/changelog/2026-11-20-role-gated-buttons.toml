@@ -1,0 +1,7 @@
+date  = "2026-11-20"
+type  = "fix"
+title = "Change buttons are greyed with the needed role, and the Events list is easier to read"
+docs  = "web-interface"
+body  = """A viewer no longer sees enabled buttons such as Add disk that the server would refuse. Every button that starts a change is greyed and says which role it needs (app manager or admin), from the same role table the server uses.
+
+On the Events page each day now sits on its own panel, so the list is readable in light and dark and on a phone."""

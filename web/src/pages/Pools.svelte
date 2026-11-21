@@ -23,6 +23,7 @@
   import RemoveMember from '../forms/storage/RemoveMember.svelte';
   import ConvertPool from '../forms/storage/ConvertPool.svelte';
   import CloseDisk from '../forms/storage/CloseDisk.svelte';
+  import SyncRefused from './storage/SyncRefused.svelte';
   import { parseInfo, percentOf, diskPool, serialIn, sizeTxt, parseSize, poolTopic } from './storage/pool.js';
   import { pools, loadPools, poolOfRole, poolRow } from '../pools.svelte.js';
   import { live } from '../live.svelte.js';
@@ -181,10 +182,10 @@
   <PageHeader title={pool} crumb="Storage › Pools" sub={layout ? `${layout}${members.length ? ` · ${members.length} disk${members.length === 1 ? '' : 's'}` : ''}${luks ? ' · LUKS' : ''}` : ''}>
     {#snippet actions()}
       <Button tooltip={'Back to the list of pools'} onclick={() => go('/storage/pools')}><i class="ph ph-caret-left"></i>All pools</Button>
-      <Button disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>
-      {#if snap}<Button disabled={why('') !== ''} tooltip={why('Bring a disk that already holds files into the pool')} onclick={() => addPool('adopt')}><i class="ph ph-hand-arrow-down"></i>Adopt disks</Button>{/if}
-      {#if snap}<Button disabled={why('') !== ''} tooltip={why('Take over the disks of an Unraid server: merged shares, the old parity disk becomes parity')} onclick={() => openCreate(MigrateUnraid, { pool })}><i class="ph ph-arrow-bend-down-right"></i>Take over Unraid</Button>{/if}
-      <Button variant="primary" icon={snap ? 'arrows-clockwise' : 'broom'} disabled={unavailable || notCreated} busy={snap ? rowstate.pending('system', ['sync']) : rowstate.pending('system', ['scrub', '--pool', pool])} tooltip={runTitle}
+      <Button need="admin" disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>
+      {#if snap}<Button need="admin" disabled={why('') !== ''} tooltip={why('Bring a disk that already holds files into the pool')} onclick={() => addPool('adopt')}><i class="ph ph-hand-arrow-down"></i>Adopt disks</Button>{/if}
+      {#if snap}<Button need="admin" disabled={why('') !== ''} tooltip={why('Take over the disks of an Unraid server: merged shares, the old parity disk becomes parity')} onclick={() => openCreate(MigrateUnraid, { pool })}><i class="ph ph-arrow-bend-down-right"></i>Take over Unraid</Button>{/if}
+      <Button need="admin" variant="primary" icon={snap ? 'arrows-clockwise' : 'broom'} disabled={unavailable || notCreated} busy={snap ? rowstate.pending('system', ['sync']) : rowstate.pending('system', ['scrub', '--pool', pool])} tooltip={runTitle}
         onclick={() => (snap ? openPlan('system', ['sync'], 'Sync parity') : openPlan('system', ['scrub', '--pool', pool], `Scrub ${pool}`))}>{snap ? 'Sync parity now' : 'Scrub now'}</Button>
     {/snippet}
   </PageHeader>
@@ -192,13 +193,14 @@
   <PageState loading={!info.loaded && !unknownPool} hasData={info.loaded} error={unknownPool ? `There is no pool ${pool} on this server.` : failed ? 'the pool could not be read' : ''}>
     {#if notCreated}
       <Banner tone="info">The pool {pool} has not been created yet. {#if freeDisks.length}{freeDisks.length} free disk{freeDisks.length === 1 ? ' is' : 's are'} available.{:else}There is no free disk to build it from.{/if}
-        {#snippet action()}<Button size="sm" tooltip={locked ? 'Storage is locked' : 'Pick free disks and make a new pool'} disabled={locked} onclick={() => addPool('empty')}>Create pool</Button>{/snippet}
+        {#snippet action()}<Button need="admin" size="sm" tooltip={locked ? 'Storage is locked' : 'Pick free disks and make a new pool'} disabled={locked} onclick={() => addPool('empty')}>Create pool</Button>{/snippet}
       </Banner>
     {:else}
      <Stack gap="4">
       {#if doing}<Banner tone="info">{doing}… a job is running on {pool}; this page follows it.</Banner>{/if}
       {#if failure}<ErrorNote error={failure.error} ondismiss={() => rowstate.dismiss(failure.id)} />{/if}
       {#if paused}<Banner tone="warn">The health check paused the parity sync, scrub and upload cache mover because of a failing disk or pool. Lift it under Health (<code>hs health resume</code>).</Banner>{/if}
+      {#if snap}<SyncRefused {locked} />{/if}
       {#if lockState === 'pool-change'}<Banner tone="info">A pool change is running and owns the bulk lock: syncs, scrubs and share renames wait or are skipped until it is done.</Banner>
       {:else if lockState === 'busy'}<Banner tone="info">{running ? 'A sync or scrub is running.' : 'Something holds the bulk lock (a parity sync, scrub, upload cache mover, share rename or disk move).'} Changes that need the lock wait until it is free.</Banner>{/if}
       <Card pad="lg">
@@ -227,10 +229,10 @@
               {:else}
                 <Row gap="1" justify="end">
                   {#if snap ? /^data-\d+$/.test(m.name) : true}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={snap ? 'Browse the files of this disk' : 'Browse the files of this pool'} aria-label="Browse" disabled={locked} onclick={() => go(filesLink({ left: snap ? `disk:${m.name}` : `pool:${pool}` }))}><i class="ph ph-folder-open"></i></Button>{/if}
-                  <Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={'Replace this disk'} aria-label="Replace" disabled={locked} onclick={() => openCreate(ReplaceMember, { pool, member: m.name, snap })}><i class="ph ph-swap"></i></Button>
-                  {#if snap}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={convertible.includes(m.name) ? 'Change filesystem or LUKS; its files are moved away first' : 'Only an online data disk can be converted'} aria-label="Convert" disabled={locked || !convertible.includes(m.name)} onclick={() => openCreate(ConvertPool, { pool, member: m.name, members: convertible })}><i class="ph ph-arrows-clockwise"></i></Button>{/if}
-                  {#if snap && m.group === 'data'}<Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={m.closed ? 'Closed: no new files. Open it again or move its files away' : 'Stop putting new files on this disk (optionally move its files away)'} aria-label={m.closed ? 'Open' : 'Close'} disabled={locked || m.state !== 'ONLINE'} onclick={() => openCreate(CloseDisk, { pool, member: m.name, closed: m.closed })}><i class="ph ph-{m.closed ? 'lock-key-open' : 'prohibit'}"></i></Button>{/if}
-                  <Button variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={snap ? 'Remove this disk' : 'Detach this disk'} aria-label={snap ? 'Remove' : 'Detach'} disabled={locked} onclick={() => openCreate(RemoveMember, { pool, member: m.name, snap })}><i class="ph ph-link-break"></i></Button>
+                  <Button need="admin" variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={'Replace this disk'} aria-label="Replace" disabled={locked} onclick={() => openCreate(ReplaceMember, { pool, member: m.name, snap })}><i class="ph ph-swap"></i></Button>
+                  {#if snap}<Button need="admin" variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={convertible.includes(m.name) ? 'Change filesystem or LUKS; its files are moved away first' : 'Only an online data disk can be converted'} aria-label="Convert" disabled={locked || !convertible.includes(m.name)} onclick={() => openCreate(ConvertPool, { pool, member: m.name, members: convertible })}><i class="ph ph-arrows-clockwise"></i></Button>{/if}
+                  {#if snap && m.group === 'data'}<Button need="admin" variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={m.closed ? 'Closed: no new files. Open it again or move its files away' : 'Stop putting new files on this disk (optionally move its files away)'} aria-label={m.closed ? 'Open' : 'Close'} disabled={locked || m.state !== 'ONLINE'} onclick={() => openCreate(CloseDisk, { pool, member: m.name, closed: m.closed })}><i class="ph ph-{m.closed ? 'lock-key-open' : 'prohibit'}"></i></Button>{/if}
+                  <Button need="admin" variant="ghost" class="btn-icon" style="width:28px;min-height:28px" tooltip={snap ? 'Remove this disk' : 'Detach this disk'} aria-label={snap ? 'Remove' : 'Detach'} disabled={locked} onclick={() => openCreate(RemoveMember, { pool, member: m.name, snap })}><i class="ph ph-link-break"></i></Button>
                 </Row>
               {/if}
             {/snippet}

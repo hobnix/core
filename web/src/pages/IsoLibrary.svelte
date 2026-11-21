@@ -30,14 +30,14 @@
 
 <PageHeader title="ISO images" crumb="Instances" sub="Install images for virtual machines. A checksum is verified before an image can be used.">
   {#snippet actions()}
-    <Button variant="primary" tooltip={'Add an image from a file on this server or from a URL'} busy={jobRunning('iso')} onclick={() => openCreate(IsoAdd)}><i class="ph ph-plus"></i>Add image</Button>
+    <Button need="admin" variant="primary" tooltip={'Add an image from a file on this server or from a URL'} busy={jobRunning('iso')} onclick={() => openCreate(IsoAdd)}><i class="ph ph-plus"></i>Add image</Button>
   {/snippet}
 </PageHeader>
 
 <PageState loading={!lst.loaded} error={lst.error?.message} hasData={lst.data != null} empty={lst.loaded && !images.length && !lst.error}
            emptyIcon="disc" emptyTitle="No images yet" emptyText="Add an installer image (an .iso file) from a file on this server or from a URL. It is checked against the checksum from the download page."
            retry={() => refresh(['/api/sys/iso/list'])}>
-  {#snippet emptyAction()}<Button variant="primary" tooltip={'Add an image from a file on this server or from a URL'} onclick={() => openCreate(IsoAdd)}><i class="ph ph-plus"></i>Add image</Button>{/snippet}
+  {#snippet emptyAction()}<Button need="admin" variant="primary" tooltip={'Add an image from a file on this server or from a URL'} onclick={() => openCreate(IsoAdd)}><i class="ph ph-plus"></i>Add image</Button>{/snippet}
   <div class="card" style="padding:0">
     <Table id="iso" {columns} rows={images} key="name" loading={!lst.loaded} empty="No images.">
       {#snippet cell(i, col)}
@@ -47,7 +47,7 @@
         {:else if col.key === 'checked'}{#if i.checked}<Chip title="The checksum matched the one that was given">verified</Chip>{:else}<Chip tone="warn" title="No checksum was given: compare the one shown with the download page">not checked</Chip>{/if}
         {:else if col.key === 'source'}<span class="src" use:tip={i.source}>{i.source}</span>
         {:else if col.key === 'used'}{i.used || '–'}
-        {:else}<Button variant="ghost" class="btn-icon iso-rm" icon="trash" aria-label="Remove {i.name}" tooltip={i.used ? `Attached to ${i.used}` : `Remove ${i.name} from the library`} disabled={!!i.used} busy={jobRunning('iso', ['remove', i.name])} onclick={() => openPlan('iso', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
+        {:else}<Button need="admin" variant="ghost" class="btn-icon iso-rm" icon="trash" aria-label="Remove {i.name}" tooltip={i.used ? `Attached to ${i.used}` : `Remove ${i.name} from the library`} disabled={!!i.used} busy={jobRunning('iso', ['remove', i.name])} onclick={() => openPlan('iso', ['remove', i.name], 'Remove ' + i.name)}></Button>{/if}
       {/snippet}
     </Table>
   </div>

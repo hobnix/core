@@ -257,4 +257,14 @@ rm -rf "$RT"
 BAD_EV=$(HS_STATE_DB=/nonexistent/x/ev.db hr new --slug evb --desc "no log" --unit hs-job-evb-1 --source cli >/dev/null; echo "rc=$?")
 check "an unwritable event log changes nothing for the job" "1" "$(grep -c 'rc=0' <<<"$BAD_EV")"
 
-exit $fail
+# skipped (the same work was already running): ends at once as skipped, exit 0, no error; a later finish keeps it
+sid=$($W new --slug backup-now --desc "hs backup now" --unit hs-job-backup-now-1 --source cli)
+$W run "$sid" >/dev/null
+$W skip "$sid" "Already running" >/dev/null
+check "skip: state skipped" "skipped" "$(jf "$sid" state)"
+check "skip: exit 0" "0" "$(jf "$sid" exit)"
+check "skip: the message is the result" "Already running" "$(jf "$sid" result.message)"
+$W finish "$sid" 0 >/dev/null
+check "finish keeps skipped" "skipped" "$(jf "$sid" state)"
+check "skip of an ended job is refused" "1" "$($W skip "$sid" x >/dev/null 2>&1; echo $?)"
+

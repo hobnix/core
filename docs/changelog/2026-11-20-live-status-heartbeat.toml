@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "change"
+title = "The Data page shows the live-state collector's heartbeat"
+body  = """
+`hs sys live status` has a new last column, the age in seconds of the collector's last round (`-` when there is none). The Data page shows it above the topic table and warns when the collector has no heartbeat.
+"""

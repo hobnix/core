@@ -1,72 +1,99 @@
 # Live state for the web interface
 
-The web interface shows the Summary facts from a small Redis cache that a collector fills, and updates the page when they change, without polling.
-It is for servers that run the web interface.
+The web interface shows its pages from the state database, which a collector keeps filled, and the open page follows changes without polling. This
+guide is for the owner of a server with the web interface: what runs, what you see, how to check it and what to do when it stops.
 
 ## Before you start
-- The web interface is on: `webUi = true` in `machine.toml` (see [Web interface](../../docs/web-interface.md)).
-- This guide is not tested on hardware yet.
+- The web interface is on: `webUi = true` in `machine.toml` (see [Web interface](../../docs/web-interface.md)). There is nothing else to switch on.
+- Not tested on hardware yet.
 
-## Switch it on
+## What live state is
+- **The collector** `hs-live` (a systemd service) runs the read commands (`hs sys ...`) of every page on its own interval and keeps the answer in
+  `/var/lib/hs/state.db`. It writes a topic only when its answer changed.
+- **Three tables** hold it: `live` (one document per topic), `heartbeat` (one row the collector refreshes every few seconds) and `topics` (a change
+  counter per topic).
+- **The refresh hook** `live_refresh` is called by commands that change something (`hs share`, `hs ct`, `hs disk`, `hs pool`, `hs vault`, `hs unlock`).
+  It counts the affected topics up; the collector sees the counter move within about a second and reads the topic again. This also covers a change made
+  in a terminal or by a timer.
+- **The stream** `/api/events` tells the open page what happened: `changed` (a topic has new data), `domain` (a new row in the event log),
+  `down` and `up` (the collector stopped or came back), `resync` (the page missed events and reads everything again).
+- Nothing is configured: there is no setting, no extra service and no Redis. Not tested on hardware yet.
+
+## What you see
+- **The page updates by itself** within a few seconds after a change, also when the change was made with `hs` in a terminal.
+- **The top bar** shows how old the data of the page is and has a refresh button. The refresh button reads from the system now instead of from the
+  state database.
+- **When the collector stops**, the pages keep their last data and mark it as old. They never wait for it, and the stream says `down`.
+- **The Diagnostics page** (Monitoring) lists every live topic with its status, interval, age, generation, exit code and error. Above the table it says
+  when the collector made its last round ("Collector heartbeat: last round 4 s ago") and warns when there is no heartbeat. While the stream is lost the
+  page polls every 5 seconds.
+- **Lists with an argument** (snapshots of a backup tag or of one instance, the free disks of a pool dialog, the SMART history of one disk, the facts
+  of one service) have no topic of their own. The page reads them again when the topic of its list changes (`backup-state`, `ct-list`, `pool-disks`,
+  `disk-health`, `services-list`) and keeps no timer while the stream is open.
+
 Not tested on hardware yet.
 
+## Check the live state
 ```bash
-sudo hs config set liveState '"redis"'
+sudo hs sys live status
 ```
 
-```bash
-sudo hs rebuild
-```
-
-Redis starts on a unix socket (no network port) and the collector `hs-live` starts. The Summary page then updates by itself.
-
-## Switch it off
-Set `liveState = "off"` in `machine.toml`, then rebuild. The web interface reads directly again.
+One line per topic: topic, interval, age in seconds (`-1` = nothing collected yet), generation, exit code, error, error time, needs, status
+(`fresh`, `stale`, `error` or `expired`) and, as the last field, the age in seconds of the collector's heartbeat (the same on every line, `-` = no heartbeat).
 
 ```bash
-sudo hs rebuild
+sudo hs sys live check
 ```
 
-## Check that it worked
+Prints nothing when all is well and one line per problem otherwise (the key `live:down`, `live:never:<topic>` or `live:stale:<topic>`, then a text).
+A fresh install whose collector has not started yet prints nothing.
+
+```bash
+sudo hs sys live raw <topic>
+```
+
+Shows the stored document of one topic as JSON (the output is cut at 64 KiB). `hs sys live inspect` lists all topics as JSON, the form the web
+interface uses. Not tested on hardware yet.
+
+## See how fast a change shows
 Not tested on hardware yet.
 
 ```bash
 hs sys live status
 ```
 
-Every topic shows an age of a few seconds (the age is `-1` when nothing has been collected yet) and an empty error (`-`).
+Columns 11 to 14 are the delay in milliseconds (`-` = no sample yet): the last and the worst time from the request to read a topic again (a change from
+a terminal, a container event) to its new generation in the database, then the last and the worst time a browser page needed from the `changed`
+message to showing the new data. The server numbers come from the collector; the browser numbers only while the Live state page is open and only
+for topics whose request the collector saw. Only numbers and the topic name are kept, nothing about who looked. The same two pairs are columns on
+the Live state page (Delay, Worst, Seen in page, Page worst).
 
-When live state is on, the Diagnostics page shows the live topics instead of the old collected-reads table. It follows the live stream
-(`/api/events`) and falls back to polling every 5 seconds when the stream is lost. If Redis or the collector is down, the page shows a
-"state service down" banner and keeps the last table data; it never runs the read directly. With live state off, Diagnostics keeps the
-collected-reads view it had before. Not tested on hardware yet.
+`hs sys live check` adds a line `live:slow:<topic>` (or `live:slowweb:<topic>` for the page numbers) when the worst of the last 20 samples of a topic is
+over 10 seconds. The limits (5 s for a topic with a hook, 20 s for a timed one, 10 s for the note) are in `scripts/lib/live-limits.tsv`.
+A server in a virtual machine shows numbers that say little about real hardware; do not tune from them.
 
-### Storage pages
-With live state on, the fixed reads of the Storage pages (Pools, Disks, Shares, Encryption, Vault and the file locations) come from Redis and
-update when the data changes. A quick change from the terminal (`hs share`, `hs disk`, `hs pool`, `hs vault`, `hs unlock`) asks for a focused
-refresh, and a finished background job refreshes everything. What you select for a single disk, share or file (SMART history, access lists,
-snapshots, folder contents) is still read directly. The two pools `bulk` and `fast` have their own topics; any other pool name is read
-directly. With live state off nothing changes. Not tested on hardware yet.
+## Measure the write load
+```bash
+sudo hs live measure --minutes 30
+```
 
-### Dashboard, Instances, Apps and Network pages
-With live state on, the Summary and top bar, Health, Settings, Instances and Services, the Marketplace and Apps, and the Network pages (gateway,
-DNS, router, open ports, remote shares) also come from Redis and update when the data changes. A change from the terminal or the web interface
-refreshes only the pages it can affect, and a finished background job refreshes everything. Reads for one named item (an instance's logs, one
-service, one user) stay direct. Parts that are switched off, such as the gateway without its capability, are skipped without an error.
-With live state off nothing changes. Not tested on hardware yet.
+Writes a result file with the writes per minute, the growth of the database and the time a change needs to reach the stream; see the
+[operations guide](../../docs/operations.md#measure-the-live-state-on-the-state-database). Not tested on hardware yet.
 
-### Users and Backup pages
-With live state on, the user and group lists, the domain controller certificate state and the Backup page (state, shares and containers with their
-backup switch) also come from Redis. They update after a user, share, instance or backup change, and the backup state also when the backup disk is
-plugged in or removed. Users and groups appear only when Active Directory is set up. What you look up for one user or group, and the snapshots and
-file search of the backup, are still read directly. With live state off nothing changes. Not tested on hardware yet.
+## After an upgrade
+Nothing to do. The next rebuild removes Redis and the old timer `hs-reads-collect` if the server had them. A `liveState` line in `machine.toml` is ignored:
+`hs config check` shows a note for this release, and you can delete the line. The commands `hs sys reads status` and `hs sys reads collect` are gone.
+Not tested on hardware yet.
 
 ## If something goes wrong
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| The page says "state service down" | Redis or the collector is not running | `systemctl status redis-hobnix hs-live`, then `sudo systemctl restart redis-hobnix hs-live` |
-| The page says "refreshing" for a few seconds | The first value is not collected yet | Wait; the page retries by itself |
-| `hs sys live status` shows a growing age | The collector is stuck or the read fails | `journalctl -u hs-live` |
+| `hs sys live check` says `live:down`, the Diagnostics page says there is no heartbeat | The collector `hs-live` is not running | `systemctl status hs-live`, then `sudo systemctl restart hs-live` |
+| Pages show old data and say so | The collector stopped, or the topic fails | `hs sys live status` (status and error per topic), then `journalctl -u hs-live` |
+| A page says "refreshing" for a few seconds | The collector runs but has not read this topic yet | Wait; the page retries by itself |
+| A topic stays `stale` or shows an error | The command behind it fails or is slow | `sudo hs sys live raw <topic>` shows the last answer and the error |
+| The page does not update by itself | The stream is lost (proxy, network) | The page polls every 5 seconds meanwhile; reload the page |
 
 ## Next
 - [Web interface](../../docs/web-interface.md)
+- [Operations](../../docs/operations.md)

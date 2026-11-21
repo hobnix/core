@@ -62,7 +62,7 @@
 {#each remote.filter((n) => n.key === 'ok') as n (n.name)}<NodeProbe name={n.name} onstate={report} />{/each}
 
 <PageHeader title="Nodes" crumb={ui.host} sub="The servers this one can look at. A remote server is only read: nothing here changes it.">
-  {#snippet actions()}<Button variant="primary" tooltip={'Add another server to this list'} onclick={() => openCreate(NodeAdd, { ondone: () => { /* the list is read again within 15 s */ } })}><i class="ph ph-plus"></i>Add a server</Button>{/snippet}
+  {#snippet actions()}<Button need="admin" variant="primary" tooltip={'Add another server to this list'} onclick={() => openCreate(NodeAdd, { ondone: () => { /* the list is read again within 15 s */ } })}><i class="ph ph-plus"></i>Add a server</Button>{/snippet}
 </PageHeader>
 
 <PageState loading={!nlist.loaded} error={nlist.error?.message} hasData={nlist.data != null} empty={false}>
@@ -107,7 +107,7 @@
           {#snippet actions()}
             <Button variant="primary" tooltip={'Switch the interface to this server'} onclick={() => go(`/node/${encodeURIComponent(sel.name)}`)}><i class="ph ph-arrow-right"></i>Open</Button>
             {#if sel.kind !== 'main' && sel.source === 'file'}
-              <Button variant="ghost" class="nodes-danger" icon="trash" busy={jobRunning('node', ['remove', sel.name])} tooltip={'Take this server off the list (the server itself is not touched)'} onclick={() => { const n = sel.name; selName = ''; openPlan('node', ['remove', n], `Remove ${n}`); }}>Remove…</Button>
+              <Button need="admin" variant="ghost" class="nodes-danger" icon="trash" busy={jobRunning('node', ['remove', sel.name])} tooltip={'Take this server off the list (the server itself is not touched)'} onclick={() => { const n = sel.name; selName = ''; openPlan('node', ['remove', n], `Remove ${n}`); }}>Remove…</Button>
             {/if}
           {/snippet}
         </Drawer>

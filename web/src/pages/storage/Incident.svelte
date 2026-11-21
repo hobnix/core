@@ -61,9 +61,9 @@
         <Button variant="primary" icon="swap" disabled={locked || !target || running || !free.length} busy={rowstate.active('pool', [target?.pool ?? '']).some((k) => k.split(' ')[2] === 'replace')}
           tooltip={running ? 'A replacement is already running' : !free.length ? 'Plug in a new disk that is at least as large first' : 'Pick the new disk, see the plan, type the disk name'} onclick={replace}>Replace the disk…</Button>
         {#if paused}
-          <Button icon="play" tooltip={'Let the paused apps run again'} onclick={() => openPlan('incident', ['resume'], 'Resume apps')}>Resume apps</Button>
+          <Button need="admin" icon="play" tooltip={'Let the paused apps run again'} onclick={() => openPlan('incident', ['resume'], 'Resume apps')}>Resume apps</Button>
         {:else}
-          <Button icon="pause" disabled={!writers.length} tooltip={writers.length ? 'Freeze the apps that write to an affected share (shows the plan first)' : 'No running app writes to an affected share'}
+          <Button need="admin" icon="pause" disabled={!writers.length} tooltip={writers.length ? 'Freeze the apps that write to an affected share (shows the plan first)' : 'No running app writes to an affected share'}
             onclick={() => openPlan('incident', ['pause'], 'Pause apps')}>Pause writing apps</Button>
         {/if}
       </Row>

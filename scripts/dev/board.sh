@@ -2,11 +2,11 @@
 # Dev tool (not an `hs` command): read and move issues of the GitHub project board (hobnix/server, project 1).
 #   board.sh open [N]      up to N (default 4) open issues of the current milestone: "#<n> [<status>] <title>"
 #   board.sh show <n>      title, labels and body of an issue
-#   board.sh move <n> <backlog|ready|in-progress|in-review|blocked|done>   set the board Status
+#   board.sh move <n> <backlog|ready|in-progress|in-review|blocked|testing|done>   set the board Status
 # `open` is quiet (exit 0, no output) when gh is missing, not logged in, offline or slower than 5 s: it runs in the session hook.
 REPO=hobnix/server
-PROJECT_ID=PVT_kwDOFNAdbs4Bp-c9
-STATUS_FIELD=PVTSSF_lADOFNAdbs4Bp-c9zhoXlec
+PROJECT_API=orgs/hobnix/projectsV2/1   # REST path of the project board (hobnix/server)
+STATUS_FIELD=437753319   # numeric id of the Status field (REST)
 
 cmd_open() {
   local n="${1:-4}" ms st
@@ -38,14 +38,27 @@ cmd_move() {
     in-progress) opt=7ebbdff7 ;;
     in-review) opt=4e0504f7 ;;
     blocked) opt=68455b7f ;;
+    testing) opt=1a4c944f ;;   # only the hardware-test trackers (scripts/dev/hwtest.sh); a dev issue goes from in-review to done
     done) opt=81ffda49 ;;
-    *) echo "usage: board.sh move <n> <backlog|ready|in-progress|in-review|blocked|done>" >&2; return 2 ;;
+    *) echo "usage: board.sh move <n> <backlog|ready|in-progress|in-review|blocked|testing|done>" >&2; return 2 ;;
   esac
   [ -n "$n" ] || { echo "usage: board.sh move <n> <status>" >&2; return 2; }
-  id=$(gh project item-list 1 --owner hobnix --limit 500 --format json -q ".items[]|select(.content.number==$n)|.id") \
-    || { echo "board.sh: cannot read the board" >&2; return 1; }
-  [ -n "$id" ] || { echo "board.sh: issue #$n is not on the board" >&2; return 1; }
-  gh project item-edit --id "$id" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$opt" >/dev/null \
+  # REST (Projects v2), not GraphQL: GraphQL shares one hourly budget with every tool and agent and ran dry during the 2026-11-20 migration.
+  # BOARD_CACHE=<file>: list the board once per run ("number<TAB>item id" lines, kept by the caller) instead of once per move
+  local cache="${BOARD_CACHE:-}"
+  if [ -z "$cache" ] || [ ! -s "$cache" ]; then
+    [ -n "$cache" ] || cache=$(mktemp)
+    gh api --paginate "$PROJECT_API/items?per_page=100" --jq '.[] | select(.content_type == "Issue") | "\(.content.number)\t\(.id)"' > "$cache" \
+      || { echo "board.sh: cannot read the board" >&2; return 1; }
+  fi
+  id=$(tr -d '\r' < "$cache" | awk -F'\t' -v n="$n" '$1 == n { print $2; exit }')
+  if [ -z "$id" ]; then   # not on the board yet: add it (a new issue or tracker)
+    id=$(gh api -X POST "$PROJECT_API/items" -f type=Issue -f owner=hobnix -f repo=server -F number="$n" --jq .id 2>/dev/null | tr -d '\r') \
+      || { echo "board.sh: issue #$n is not on the board and could not be added" >&2; return 1; }
+    [ -z "${BOARD_CACHE:-}" ] || printf '%s\t%s\n' "$n" "$id" >> "$BOARD_CACHE"
+  fi
+  [ -n "${BOARD_CACHE:-}" ] || rm -f "$cache"
+  printf '{"fields":[{"id":%s,"value":"%s"}]}' "$STATUS_FIELD" "$opt" | gh api -X PATCH "$PROJECT_API/items/$id" --input - >/dev/null \
     || { echo "board.sh: could not set the status of #$n" >&2; return 1; }
   echo "#$n -> $want"
 }

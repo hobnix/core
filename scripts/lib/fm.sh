@@ -80,6 +80,20 @@ fm_fill_size() {   # size/free/fs of LROOT
   [ -n "$LFS" ] || LFS=$(stat -f -c %T -- "$LROOT" 2>/dev/null || echo "-")
 }
 
+# 0 when the rotating disk behind the mount <dir> is in standby (hdparm -C reads the power state without waking it); 1 when awake, not rotating or unknown
+fm_disk_asleep() {
+  local dir=$1 src dev st
+  [ "$fm_test" != 1 ] || { [ -e "${dir%/}.asleep" ]; return; }
+  command -v hdparm >/dev/null 2>&1 || return 1
+  src=$(findmnt -no SOURCE -T "$dir" 2>/dev/null | head -n1) || return 1
+  [ -b "$src" ] || return 1
+  dev=$(lsblk -no PKNAME "$src" 2>/dev/null | head -n1); dev=${dev:-${src##*/}}
+  [ "$(cat "/sys/block/$dev/queue/rotational" 2>/dev/null)" = 1 ] || return 1
+  st=$(hdparm -C "/dev/$dev" 2>/dev/null | awk '/drive state is:/ { print $NF }')
+  case $st in standby|sleeping) return 0 ;; esac
+  return 1
+}
+
 fm_resolve() {
   local id=$1 n dir
   LID=$id; LKIND=""; LLABEL=""; LROOT=""; LFS="-"; LSIZE=0; LFREE=0; LADD=no; LMOD=no; LREASON="-"; LPOOL="-"; LDISK="-"

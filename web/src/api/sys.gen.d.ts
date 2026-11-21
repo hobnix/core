@@ -181,7 +181,7 @@ export interface SysOperations {
     path: "/backup/find/{word}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { word: string; };
     stdin: "none";
     exit: number;
@@ -998,7 +998,7 @@ export interface SysOperations {
     path: "/fm/du/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1020,7 +1020,7 @@ export interface SysOperations {
     path: "/fm/locations";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { };
     stdin: "none";
     exit: number;
@@ -1032,7 +1032,7 @@ export interface SysOperations {
     path: "/fm/ls/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1092,7 +1092,7 @@ export interface SysOperations {
     path: "/fm/stat/{location}";
     method: "get";
     class: "read";
-    role: "viewer";
+    role: "admin";
     params: { location: string; };
     stdin: "none";
     exit: number;
@@ -1394,7 +1394,7 @@ export interface SysOperations {
     params: { id: string; };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted" | "skipped", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.list": {
     /** timers and services with next and last run */
@@ -1454,7 +1454,7 @@ export interface SysOperations {
     params: { };
     stdin: "none";
     exit: number;
-    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
+    lines: ([id: Field, slug: Field, description: Field, state: "queued" | "running" | "waiting" | "ok" | "failed" | "cancelled" | "interrupted" | "skipped", queued: Field, started: Field, ended: Field, exit: Field, step_n: Field, step_of: Field, step_text: Field, progress_done: Field, progress_total: Field, progress_unit: Field, key: Field])[];
   };
   "jobs.running": {
     /** background jobs that are running now */
@@ -1520,7 +1520,7 @@ export interface SysOperations {
       | [tag: "next", count: Field])[];
   };
   "live.check": {
-    /** problems of the live state (Redis down, a topic older than three intervals): key and text */
+    /** problems of the live state (the collector down, a topic older than three intervals, a topic whose worst of the last 20 delays is over the limit of live-limits.tsv): key and text */
     words: ["live", "check"];
     path: "/live/check";
     method: "get";
@@ -1568,7 +1568,7 @@ export interface SysOperations {
     lines: string;
   };
   "live.status": {
-    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document) */
+    /** every live-state topic: topic, interval, age in seconds (-1 = none), generation, exit code, error, error time, needs (comma list of topics, - = none), status (fresh|stale|error|expired, - = no document), age in seconds of the collector heartbeat (same on every line, - = no heartbeat), delay in milliseconds from the trigger to the new generation (last, worst; - = none yet), delay until a browser page showed it (last, worst; - = none yet) */
     words: ["live", "status"];
     path: "/live/status";
     method: "get";
@@ -2284,30 +2284,6 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
-  "reads.collect": {
-    /** read the slow reads of the web interface and keep their output in the state database (the timer hs-reads-collect does it every 15 s; --all ignores the intervals) */
-    words: ["reads", "collect"];
-    path: "/reads/collect";
-    method: "post";
-    class: "change";
-    role: "admin";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string;
-  };
-  "reads.status": {
-    /** every read the collector keeps, as data: read, interval in seconds, age of the kept output (-1 = never), milliseconds, exit code, bytes */
-    words: ["reads", "status"];
-    path: "/reads/status";
-    method: "get";
-    class: "read";
-    role: "viewer";
-    params: { };
-    stdin: "none";
-    exit: number;
-    lines: string[][];
-  };
   "rebuild.pending": {
     /** the machine.toml changes that wait for one hs rebuild, one per line: key, the value the running system was built with, the value now (- = not set); empty: nothing waits or no copy was kept yet */
     words: ["rebuild", "pending"];
@@ -2648,6 +2624,32 @@ export interface SysOperations {
     stdin: "none";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "share.parity.refused": {
+    /** the shares the last parity sync stopped for: share, folder, removed, limit, share_total (nothing when the last sync was not refused) */
+    words: ["share", "parity", "refused"];
+    path: "/share/parity/refused";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [share: Field, folder: Field, removed: Field, limit: Field, share_total: Field][];
+  };
+  "share.parity.state.by_share": {
+    /** the parity settings of a share: limit (default|custom|off, number or -), default (floor, percent), skip (folder) per skipped folder */
+    words: ["share", "parity", "state", "<share>"];
+    path: "/share/parity/state/{share}";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { share: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "limit", mode: "default" | "custom" | "off", value: Field]
+      | [tag: "default", floor: Field, percent: Field]
+      | [tag: "skip", folder: Field])[];
   };
   "shares.acl": {
     /** who may use a share */
@@ -3046,7 +3048,7 @@ export interface SysOperations {
     lines: string;
   };
   "state.read-put.by_key": {
-    /** keep the output of a read (standard input) in the state database; only the collector (reads-collect.sh) calls it */
+    /** keep the output of a read (standard input) in the state database (the table `reads`; nothing writes it since ADR 0026) */
     words: ["state", "read-put", "<key>"];
     path: "/state/read-put/{key}";
     method: "get";

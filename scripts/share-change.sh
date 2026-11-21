@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change a share without asking anything: what would happen (plan), then do it as a background job (start)
 # help.de: eine Freigabe ändern, ohne etwas zu fragen: was passieren würde (plan), dann als Hintergrundjob ausführen (start)
-# args: plan|start <share> <backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore> [--to on|off|<new name>] [--label <name>] [--snapshot <name>] [--set <sid>=<level> ...] [--path <folder or file inside the share>] [--kind shares|sensitive] [--tier bulk|fast] [--ct <instance> --path <inside> [--as <uid>:<gid>]] [--confirm <word>]
+# args: plan|start <share> <backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore|parity-skip|parity-keep|parity-limit> [--to on|off|<new name>] [--label <name>] [--snapshot <name>] [--set <sid>=<level> ...] [--path <folder or file inside the share>] [--kind shares|sensitive] [--tier bulk|fast] [--ct <instance> --path <inside> [--as <uid>:<gid>]] [--confirm <word>]
 # System command (hs sys shares plan|start): for the interface, timers and tests. It never asks and prints plain
 # key<TAB>value lines like pool-change.sh and ct-change.sh. The console wizards
 # (share-snap-guided.sh, hs backup, ...) stay the console front ends over the same scripts.
@@ -17,6 +17,9 @@
 #   delete                        take the share away without erasing it: detach it from the instances, rename the folder to <share>.deleted-<date> (kept, never published again), remove the Samba share (red: the share's name is typed)
 #   purge                         <share> is a kept folder <name>.deleted-<date>: remove it for good (red: its name is typed)
 #   undelete                      <share> is a kept folder <name>.deleted-<date>: bring it back as the share <name> (a rename, nothing is overwritten or removed; the share starts closed: Domain Admins only)
+#   parity-skip  --folder <name>   leave a folder out of the parity (red: the FOLDER name is typed; its files lose their protection)
+#   parity-keep  --folder <name>   protect it again
+#   parity-limit --to <N>|off|default   removed files that stop the parity sync of the share (off: red, the share's name is typed)
 #   restore    --snapshot <id|latest> [--path <inside>]   bring files back from the backup into the share `restored` (the original is not touched)
 #   add        --kind shares|sensitive [--tier bulk|fast] [--ct <instance> --path <inside> [--as <uid>:<gid>]]   create the share <share>, optionally mount it into an instance
 #
@@ -40,20 +43,22 @@ deleter=${HS_SHARE_DELETE:-$here/share-delete.sh}
 purger=${HS_SHARE_PURGE:-$here/share-purge.sh}
 undeleter=${HS_SHARE_UNDELETE:-$here/share-undelete.sh}
 restorer=${HS_SHARE_RESTORE:-$here/share-restore.sh}
+parity=${HS_SHARE_PARITY:-$here/share-parity.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; share=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: share-change.sh plan|start <share> <action> [options]" >&2; exit 1 ;; esac
 [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid share name"
-case "$action" in backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore) ;; *) refuse "unknown action" ;; esac
+case "$action" in backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore|parity-skip|parity-keep|parity-limit) ;; *) refuse "unknown action" ;; esac
 shift 3
 
 tier=bulk
-to="" label="" snapname="" confirm="" kind="" ct="" ctpath="" as="" sets=() inside=""
+folder="" to="" label="" snapname="" confirm="" kind="" ct="" ctpath="" as="" sets=() inside=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --to)       to=${2:-}; shift 2 ;;
+    --folder)   folder=${2:-}; shift 2 ;;
     --label)    label=${2:-}; shift 2 ;;
     --snapshot) snapname=${2:-}; shift 2 ;;
     --confirm)  confirm=${2:-}; shift 2 ;;
@@ -72,7 +77,8 @@ for v in "$label" "$snapname"; do [ -z "$v" ] || [[ "$v" =~ $word ]] || refuse "
 needs=()
 case "$action" in
   backup|cache|auto) [ -n "$to" ] || needs+=(to) ;;
-  rename|visibility) [ -n "$to" ] || needs+=(to) ;;
+  rename|visibility|parity-limit) [ -n "$to" ] || needs+=(to) ;;
+  parity-skip|parity-keep) [ -n "$folder" ] || needs+=(folder) ;;
   rollback|restore) [ -n "$snapname" ] || needs+=(snapshot) ;;
   perm) [ ${#sets[@]} -gt 0 ] || needs+=(permission) ;;
   add) [ -n "$kind" ] || needs+=(kind); [ -z "$ct" ] || [ -n "$ctpath" ] || needs+=(path) ;;
@@ -84,6 +90,9 @@ if [ ${#needs[@]} -gt 0 ]; then
 fi
 case "$action" in
   backup|cache|auto) [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
+  parity-limit) [[ "$to" =~ ^[0-9]+$ ]] || [ "$to" = off ] || [ "$to" = default ] || refuse "--to is a number, off or default" ;;
+  parity-skip|parity-keep)
+    [[ "$folder" =~ ^[A-Za-z0-9._\ -]+(/[A-Za-z0-9._\ -]+)*$ ]] && [[ "/$folder/" != *"/../"* ]] && [[ "/$folder/" != *"/./"* ]] || refuse "'$folder' is not a folder inside the share" ;;
   visibility) [ "$to" = visible ] || [ "$to" = hidden ] || refuse "--to is visible or hidden" ;;
   rename) [[ "$to" =~ $word ]] || refuse "'$to' is not a usable name (letters, digits, . _ -)" ;;
   restore) [[ "$snapname" =~ ^[A-Za-z0-9]+$ ]] || refuse "'$snapname' is not a snapshot id (latest, or an id from the list)"
@@ -116,6 +125,9 @@ case "$action" in
   undelete) cmd=(bash "$undeleter" "$share") ;;
   restore)  cmd=(bash "$restorer" "$share"); [ -z "$inside" ] || cmd+=("${inside#/}"); cmd+=(--snapshot "$snapname" --yes) ;;
   perm)     cmd=(bash "$manage" "$share" --set "${sets[@]}") ;;
+  parity-skip)  cmd=(bash "$parity" "$share" skip "$folder" --yes) ;;
+  parity-keep)  cmd=(bash "$parity" "$share" keep "$folder") ;;
+  parity-limit) cmd=(bash "$parity" "$share" limit "$to"); [ "$to" != off ] || cmd+=(--yes) ;;
   add)      cmd=(bash "$create" "$share"); [ "$kind" != sensitive ] || cmd+=(--sensitive)
             [ "$tier" != fast ] || cmd+=(--fast)
             [ -z "$ct" ] || cmd+=(--ct "$ct" "$ctpath"); [ -z "$as" ] || cmd+=(--as "$as") ;;
@@ -177,6 +189,15 @@ case "$action" in
     if share_name_taken "$share"; then refuse "A share called '$share' exists already."; fi
     case "${share,,}" in shares|sensitive|global|homes|printers) refuse "'$share' is a reserved name." ;; esac
     [ -z "$ct" ] || ${HS_INCUS:-incus} info "$ct" >/dev/null 2>&1 || refuse "'$ct' does not exist." ;;
+  parity-skip|parity-keep|parity-limit)
+    rc=0
+    if [ "$action" = parity-limit ]; then dry=$(bash "$parity" "$share" limit "$to" --dry-run </dev/null 2>&1) || rc=$?
+    else dry=$(bash "$parity" "$share" "${action#parity-}" "$folder" --dry-run </dev/null 2>&1) || rc=$?; fi
+    if [ "$rc" -ne 0 ]; then
+      echo "status	refused"
+      printf '%s\n' "$dry" | sed -e 's/^[[:space:]]*//' -e 's/^✗ *//' -e 's/^! *//' | awk 'NF { print "reason\t" $0 }'
+      exit 1
+    fi ;;
   snapshot|auto)
     is_zfs || refuse "snapshots need the ZFS layout (the backup is the history on SnapRAID: hs share $share restore)" ;;
 esac
@@ -192,11 +213,19 @@ if [ "$action" = delete ]; then
     danger="'$share' disappears from Samba${who:+ and from the instances that mount it ($who)}. Its folder is already gone, so no files are touched."
   fi
 fi
+cname=$share   # the word that is typed to confirm: the share, but the folder for parity-skip
+if [ "$action" = parity-skip ]; then
+  cname=$folder
+  danger="The files in '$folder' lose their parity protection: a failed disk cannot bring them back."
+fi
+if [ "$action" = parity-limit ] && [ "$to" = off ]; then
+  danger="Without a limit the parity sync of '$share' never stops for removed files: a mistake or malware that deletes files is made permanent."
+fi
 long=no
 case "$action" in repair|restore|purge|undelete) long=yes ;; esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != "$share" ]; then refuse "type the name to confirm: $share"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$cname" ]; then refuse "type the name to confirm: $cname"; fi
   . "$here/lib/job.sh"
   unit=$(hs_job "share-$action-$share" "hs share $share $action" -- "${cmd[@]}") || refuse "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
@@ -249,6 +278,12 @@ case "$action" in
     printf 'note\tThe original is not touched: look in the share restored, below the full original path, and copy back what you need.\n'
     [ -n "$inside" ] || printf 'warn\tThe whole share is restored: this can be a lot of data.\n'
     ;;
+  parity-skip|parity-keep|parity-limit)
+    printf '%s\n' "$dry" | awk '
+      /^[ \t]*$/ || /^\(dry run/ { next }
+      /lose their protection/ || /Without a limit/ { next }
+      !h { sub(/:[ \t]*$/, ""); print "heading\t" $0; h = 1; next }
+      { sub(/^[ \t]+/, ""); print "step\t" $0 }' ;;
   delete)
     printf 'heading\tdelete the share %s\n' "$share"
     printf '%s\n' "$dry" | awk '
@@ -270,7 +305,7 @@ case "$action" in
 esac
 printf 'command\t%s\n' "${cmd[*]}"
 if [ -n "$danger" ]; then
-  printf 'danger\t%s\nconfirm_name\t%s\n' "$danger" "$share"
+  printf 'danger\t%s\nconfirm_name\t%s\n' "$danger" "$cname"
 fi
 printf 'long\t%s\n' "$long"
 exit 0

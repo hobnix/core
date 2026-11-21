@@ -10,7 +10,7 @@
 
   let { onclose, ondone } = $props();
 
-  const free = poll('/api/sys/pool/disks', 15000);
+  const free = poll('/api/sys/pool/disks', 15000, 'pool-disks');
   const disks = $derived(freeDisks(rows(free)));
   let picked = $state([]);
 

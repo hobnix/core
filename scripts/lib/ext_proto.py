@@ -328,7 +328,7 @@ def confined(prog, package):
         return None, str(e)
     if perms is None:
         return None, "%s does not declare permissions, so its command cannot be confined" % package
-    props, _, bad = _confine_module().properties(perms)
+    props, _, bad = _confine_module().properties(perms, package)
     if bad:
         return None, bad
     cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet",

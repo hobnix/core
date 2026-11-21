@@ -25,15 +25,15 @@
 {:else if info.key !== 'ok'}
   <div class="stack">
     <div class="muted">There is no key for {name} yet. The key lets this server ask for the status of {name}, and nothing else.</div>
-    {#if canChange}<Button variant="primary" size="sm" icon="key" busy={jobRunning('node', ['key', name])} busyLabel="Making…" tooltip={'Make the key that lets this server ask for the status'} onclick={() => openPlan('node', ['key', name], `Make the key for ${name}`)}>Make the key</Button>{/if}
+    {#if canChange}<Button need="admin" variant="primary" size="sm" icon="key" busy={jobRunning('node', ['key', name])} busyLabel="Making…" tooltip={'Make the key that lets this server ask for the status'} onclick={() => openPlan('node', ['key', name], `Make the key for ${name}`)}>Make the key</Button>{/if}
   </div>
 {:else}
   <div class="stack">
     <div class="muted">The owner of {name} puts this line into: <b>{info.file}</b>. Then {name} answers status requests from this server, and nothing else.</div>
     <pre class="line">{info.line}</pre>
     <div class="row">
-      <Button size="sm" tooltip={'Copy the line to the clipboard'} onclick={() => { copy(); }}><i class="ph ph-{copied ? 'check' : 'copy'}"></i>{copied ? 'Copied' : 'Copy the line'}</Button>
-      {#if canChange}<Button variant="ghost" size="sm" icon="arrows-clockwise" busy={jobRunning('node', ['key', name, '--new'])} tooltip={'Replace the key: the old line stops working'} onclick={() => openPlan('node', ['key', name, '--new'], `New key for ${name}`)}>New key…</Button>{/if}
+      <Button need="admin" size="sm" tooltip={'Copy the line to the clipboard'} onclick={() => { copy(); }}><i class="ph ph-{copied ? 'check' : 'copy'}"></i>{copied ? 'Copied' : 'Copy the line'}</Button>
+      {#if canChange}<Button need="admin" variant="ghost" size="sm" icon="arrows-clockwise" busy={jobRunning('node', ['key', name, '--new'])} tooltip={'Replace the key: the old line stops working'} onclick={() => openPlan('node', ['key', name, '--new'], `New key for ${name}`)}>New key…</Button>{/if}
     </div>
   </div>
 {/if}

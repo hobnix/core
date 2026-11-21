@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Measure the live state on the state database (ADR 0026 step 1, issue #481): scripts/live-measure.sh runs this.
+"""Measure the live state on the state database (ADR 0026, issues #481 and #566): scripts/live-measure.sh runs this.
 
-For --seconds it looks at state.db read-only (sizes, the heartbeat row of the collector hs-live-db, the change counters, the table reads) and sends
+For --seconds it looks at state.db read-only (sizes, the heartbeat row of the collector hs-live, the change counters, the table reads) and sends
 one probe every --probe-every seconds: `state-db.py topic-bump live:probe`. The web interface (Events.record_probe) appends a line
 "topic TAB gen TAB epoch-ms TAB streams" to the probe file when that counter reaches the stream queues; the time between the end of the bump and
 that line is the change latency (the server end of "browser-visible"). Writes <out>.tsv (label TAB value, "-" = empty) and <out>.md.
@@ -187,7 +187,7 @@ def write_files(out, args, rows):
         "",
         "Limits:",
         "",
-        "- In db mode nothing wakes a topic early (no refresh channel); topics are read at their intervals, so refresh-triggered reads are not in the write rate.",
+        "- Topics are read at their intervals; reads that a hook asked for are not in the write rate of this probe.",
         "- The latency ends where the web interface puts `changed` into the stream queues. The LAN hop and the browser render time are not included.",
         "- `probes with a stream open` counts the probes that found at least one open stream; with none open the latency is still measured at the hub.",
         "- The old collector's writes are counted from changes of `updated` / `ts_err` in the table `reads`; its unchanged runs show only as `updated` moves.",
@@ -203,7 +203,7 @@ def main():
     ap.add_argument("--seconds", type=float, required=True)
     ap.add_argument("--probe-every", type=float, default=10)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--mode", default="off")
+    ap.add_argument("--mode", default="db")
     args = ap.parse_args()
     if not os.path.exists(DB):
         print("no state database at %s" % DB)

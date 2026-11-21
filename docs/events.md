@@ -56,6 +56,7 @@ The payload is optional extra data for programs. Rules:
 | `job.running` | info | `key` | a job started |
 | `job.ok` | info | `key` | a job finished successfully |
 | `job.failed` | error | `exit`, `key` | a job failed |
+| `job.skipped` | info | none | a job found the same work already running and ended without doing it |
 | `job.cancelled` | info | none | a job was stopped on purpose |
 | `job.interrupted` | warn | none | a job was running when the server restarted |
 | `job.waiting` | info | `key`, `kind` | a job waits for an answer to a question (subject: the job id; the payload names the question key and kind, never a label or a value) |
@@ -146,6 +147,11 @@ If an event has no `label` or `icon` in its payload, the notification fills them
 
 Transition: the events of the media helper (`pkg.sabnzbd.*`, `pkg.maintainerr.*`) are kept as a copy in the same format in
 `scripts/lib/pkg-events/` until hobnix/recipes declares them. An installed file of the same package replaces the copy completely.
+
+**Deprecated:** the recipes `sabnzbd` (1.1.0) and `maintainerr` (1.2.0) now declare these events in their own `package.toml`. The core copy stays for
+one release so that an older install keeps its notifications, then `scripts/lib/pkg-events/` is deleted and the table below comes from the installed
+packages only. Add no new `pkg.` kind for a media event here; declare it in the recipe.
+
 The table is generated from that folder:
 
 <!-- BEGIN package events generated from scripts/lib/pkg-events (python3 scripts/events-doc-gen.py write) -->
