@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "Start in the plan dialog starts the job again"
+body  = """In 0.10.0-beta.3 the Start button of a plan dialog closed the dialog and showed its toast, but no job ran (console: "Cannot read properties of null"). The dialog now reads what it needs before it closes."""

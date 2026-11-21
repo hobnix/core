@@ -53,21 +53,23 @@
   // Start closes the dialog at once; a toast reports the change (pending, started, done, refused). The one exception is a change that is saved
   // and waits for a rebuild: that asks a question, so its dialog stays. A refusal has to travel with the toast, so "Show plan" opens the dialog again.
   async function go() {
+    // read everything from `dialog` and the derived `args` BEFORE close(): close() nulls ui.dialog, and `args` then throws on dialog.args
     const { area, title: dtitle, document } = dialog;
+    const startArgs = [...args];
     const name = dtitle || p.heading || 'Change';
     const ask = p.confirm_name ? confirm : '';
     const stay = area !== 'system' && offersRebuild(p.steps);
-    const tkey = `start:${jobKey(area, args)}`;
+    const tkey = `start:${jobKey(area, startArgs)}`;
     const steps = p.steps ?? [];
-    const again = () => openPlan(area, args, dtitle);
+    const again = () => openPlan(area, startArgs, dtitle);
     if (stay) { busy = true; startError = ''; } else { close(); }
     toast({ key: tkey, kind: 'info', title: `${name}…`, busy: true });
-    const pk = jobKey(area, args);
+    const pk = jobKey(area, startArgs);
     starting.keys.push(pk);
     try {
-      const r = await doStart(area, args, ask, undefined, undefined, document);
+      const r = await doStart(area, startArgs, ask, undefined, undefined, document);
       if (r.status === 'started' && r.unit) {
-        track(r.unit, name, jobKey(area, args));
+        track(r.unit, name, jobKey(area, startArgs));
         toast({ key: tkey, kind: 'info', title: name, text: tr('Running in the background.'), action: () => showTab('tasks'), actionLabel: tr('Open Tasks') });
       } else if (r.status === 'done') {
         trackDone(name, steps);
