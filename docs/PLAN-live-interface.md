@@ -1,7 +1,7 @@
 # Plan: live interface (milestone 0.10)
 
 Status: plan, written 2026-11-19 on branch `0.10` (cut from `0.9`, head `96380839`). Nothing here is built and nothing was run on a server. Epic #480
-("The interface follows events, it does not poll"), plus #617 and #619. Not part of this plan: milestone 0.10.1 "Network Map" (epic #870); where it
+("The interface follows events, it does not poll"), plus #617 and #619. Extended 2026-11-21 (steps 12 to 20, decisions D11 to D16: push, named events, subscriptions, demand-driven sampling, log streams, more producers, the ratchet floor). Not part of this plan: milestone 0.10.1 "Network Map" (epic #870); where it
 shares infrastructure this plan says so (section "Shared with 0.10.1").
 
 Related records: docs/adr/0005-events.md (events are signals), docs/adr/0026-live-state-one-mode-one-store.md (the store), docs/adr/0004-job-record.md,
@@ -16,7 +16,7 @@ collector has read again). "Snappy" becomes a number that is measured and shown.
 **Non-goals.**
 - The store decision. ADR 0026 decided it (the state database, no Redis). Building it is the milestone **0.3 Foundations** (#481, sub-issues #559 to #566),
   not this one. See decision D1: the plan only depends on it.
-- A push channel from the collector to the web server (ADR 0026 decision 9). Only if the real-server check says 1 s is too slow.
+- ~~A push channel from the collector to the web server (ADR 0026 decision 9)~~ is **now in scope** (step 12, D11): the owner wants no polling in the server either, so the 1 s watcher becomes the fallback and not the path.
 - Events that carry data. An event stays a signal "this topic changed, read again" (ADR 0026 decision 8).
 - The Network Map (0.10.1), new pages, a redesign. Components came in 0.9.
 - Browser notifications are in scope only as a held last step (D7).
@@ -60,6 +60,12 @@ choice costs after release.
 | D8 | How the delay is measured | server side only; plus a browser sample | both: the collector records, per topic, the time from trigger to new gen (last, worst, count). The browser reports a sample (`topic`, `gen`, time seen) only while the Live state page is open, so there is no per-user tracking and no load on other pages | no | Low |
 | D9 | The limits | fixed numbers | e2e test: 5 s for a topic with a hook, 20 s for a timed one; health note when the worst of the last 20 samples of a topic is over 10 s. Numbers live in one file so the owner can change them without code | **yes** (numbers) | Low |
 | D10 | A failed job and the row | revert and say why; keep "failed" until read | revert to the last real state and show the job's error in the row (shared `ErrorNote`, merged in 0.9), clear on the next topic change or by hand | no | Low |
+| D11 | How the web server learns of a change without reading the table every second | (a) a unix datagram socket the collector (and `live_refresh`, `state-db.py read-put`) pokes after a counter bump; the 1 s watcher stays as the fallback and as the only path while the socket is down; (b) inotify on the state.db WAL; (c) keep the 1 s watcher | (a). A datagram carries only "look at the counters now" (no data, ADR 0026 decision 8); a lost datagram costs at most one fallback period. (b) wakes on every write, also the heartbeat. The fallback period may grow (for example 1 s to 5 s) once the socket is proven. Supersedes ADR 0026 decision 9 ("only if 1 s feels slow"): add a one-line supersede note to the ADR | taken: (a), and the supersede is a one-line note in ADR 0026 decision 9, added by step 12 (2026-11-21) | Low |
+| D12 | Names of events | (a) named events (`service.created`, `ct.stopped`) in a table event kind to topics, replacing broad groups such as `@instances`; (b) keep groups | (a), group names kept as an alias for one release so hooks and extensions keep working. The table lives next to `event-kinds.tsv` (a new column or `event-topics.tsv`) and a test checks that every kind in it exists and every topic exists | no | Low |
+| D13 | Subscription by topic | (a) `/api/events?topics=a,b,c` fixed at connect, plus `POST /api/events/subscribe` to change the set of an open stream; (b) one stream per page; (c) all topics to everyone (today) | (a). The set is per stream; a domain event (`job.*`, `health.*`) is always delivered. A stream without `topics` keeps today's behaviour (old clients, tests). A page registers the topics of its reads in one place (`data.svelte.js`), derived from its reads, never listed by hand | no | Medium: a URL shape other scripts may use |
+| D14 | Demand-driven sampling | (a) the web server counts subscribers per topic and writes the set to the state database (table `demand`, with a lease time); the collector runs a topic marked `demand` in `live-topics.tsv` only while a lease is fresh, otherwise at a slow idle rate (the safety net); (b) always sample; (c) the browser starts a job per page | (a). Leases expire (30 s) so a crashed web server cannot keep the load on. Topics that feed health checks, notifications or push rules are never `demand`: they keep their interval. Opening a page triggers one immediate run of its idle topics | taken (2026-11-21): `disk-health` (SMART and temperatures), free space and sizes, node status over ssh with the VPS probe. Not demand: `testlab results` and anything a health check or notification reads | Medium: a column in a core table |
+| D15 | Logs and other streams without a topic | (a) a stream endpoint over SSE (`journalctl -f`, Incus and Docker log follow), one child process per open stream, killed when the client goes, capped per user and in total; (b) keep the timer with a reason | (a), reusing the cap logic of `events_max`. Logs may hold secrets: same role as the read today, never cached, never in a topic. First fill limited to N lines, then follow | **yes** (roles, caps) | Low |
+| D16 | The floor of the ratchet | (a) a fixed number; (b) only down, with a reason class per remaining row; (c) zero | (b): classes `sampled`, `external`, `free-query`, `dynamic` in `read-reasons.tsv`, a check that fails for a row without one. Not zero: a remote node over ssh and a VPS probe are external | no | Low |
 
 ## Steps
 
@@ -82,6 +88,15 @@ through scripts/lib/ui.sh. No change to a machine-readable line; new facts are n
 | 9 | M | #485 (built: tests/live-e2e.sh at stream level, scripts/dev/testlab-browser.py live + testlab-live.tsv wired in stage 6; the real run waits for step 0 and the nested VM) | End-to-end test in test-lab stage 6: open the Apps page, install an app from a second session or the terminal, the first page shows it without reload within the D9 limit; the same for stop a container and lock the storage; fails when the limit is passed | capabilities/testlab, scripts/testlab*.sh, a playwright script, tests/testlab-*.sh | 2, 3, 0 (store), nested VM | the stage passes in the test-lab and fails when the limit is set to 0 |
 | 10 | S | #888 (#619 b) | **Held (D7).** Browser notifications, opt-in | web/src/shell, a new settings key, guide | 7, D7 | see the issue |
 | 11 | S | #480 | Docs and the hardware pass: guide web-interface.md (live updates, the Live state page, acknowledge), changelog, a "Hardware test" box list on every issue, `Pruefliste-Server.md` rows, epic #480 ticked | docs/ | all | tests/docs.sh green; boxes ticked only for what was seen |
+| 12 | M | new (push) | **Push socket (D11).** One small helper `poke()` sends a datagram to `/run/hs/live.sock` after every counter bump (collector, `live_refresh`, `state-db.py read-put`, `disk-event.sh`, `unit-watch`); it never blocks and ignores errors. The web server listens in a thread, reads the counters on each datagram and on a longer fallback tick. Add the supersede note to ADR 0026 | scripts/live_state.py, live-collect.py, lib/live.sh, state-db.py, web-serve.py (`Events._watch`), configuration.nix (runtime dir, socket mode), docs/adr/0026, tests/web-live.*, tests/change-counters.sh | 5 (to compare the delay) | a fixture change reaches an open stream in under 100 ms; with the socket removed the fallback delivers it within the old period; `hs live measure` shows both; an idle server reads the counters only on the fallback tick |
+| 13 | M | #559 | **Named events (D12).** Table event kind to topics; `live_refresh` takes an event kind; the watchers (`hs-unit-watch`, `disk-event.sh`, Docker, Incus) emit the kind and the collector reads the table. Groups stay as aliases. One PR per area for the 30 hook scripts | lib/live-areas.tsv (or new event-topics.tsv), live.sh, live-collect.py, hook scripts, tests/refresh-groups.sh, tests/live-hook.sh | none | a `service.created` run wakes exactly the topics listed (fake feed); the number of topics woken per change is logged and is lower than with the group on the fixture |
+| 14 | M | new (subscribe) | **Subscribe by topic (D13).** Server: `topics=` on `/api/events` and `POST /api/events/subscribe`, filtering in `Events`; domain events always delivered. Browser: `data.svelte.js` collects the topics of the open page's reads and sends the set on route changes; `live.svelte.js` keeps one stream. Topic families `<topic>:<arg>` (D5 b) only for a free-argument read that step 6 could not serve by refetch | web-serve.py, web/src/live.svelte.js, data.svelte.js, polldelay.js, live-topics.tsv (families), docs/api, tests/web-live.mjs, tests/web-freshstate.* | 12 | a page gets no `changed` for a topic it does not read (fixture); a route change changes the set; an old client without `topics` still works; the count of `changed` per stream drops in `hs live measure` |
+| 15 | M | new (demand) | **Demand-driven sampling (D14).** Table `demand(topic, until)`; the web server writes a lease per topic with a subscriber (renewed every 10 s while the stream is open); new column `demand` in `live-topics.tsv` (`always` or `idle:<seconds>`); the inspector shows demand and idle. Topics decided in D14: `disk-health` (SMART and temperatures), free space and sizes, `node status` and the VPS probe. Never demand: topics a health check or notification reads | live-collect.py, live-topics.tsv, state-db.py, web-serve.py, LiveState.svelte, tests/live-demand.*, docs/operations.md | 14 | with no stream open the candidate topics run at their idle interval; opening the page wakes them at once and the page shows `fresh`; a killed web server's leases expire; health checks still run on schedule (test lists every health topic as `always`) |
+| 16 | M | new (logs) | **Log streams (D15).** An SSE endpoint with first fill and follow for container, docker, unit and system logs; caps per user and in total; the child process ends when the client goes (the `gone` check of `_run_watched`); `ct logs` x2, `docker logs`, `logs show` and `state events` switch from timers to it | web-serve.py, scripts/logs.sh (follow mode, plain output), registry.tsv, docs/api/sys.toml and generated files, web pages for logs, tests with a fake journal feed | 14 | a line appended to a fake journal shows in an open view within the D9 limit; closing the tab kills the child (test counts processes); those five reads leave `timed-reads.max` |
+| 17 | M | new (producers) | **More producers (D3 style), one PR each.** (a) network: `ip monitor` watcher marks the network topics; (b) ZFS: a ZED zedlet marks pool topics on state changes, scrub start and end, resilver (faults already emit); (c) inotify on config and share files for shares, users and config topics; (d) a journald filter for health-relevant units. Each source has a restart policy; each topic keeps its interval as a longer safety net (it may grow once the producer is proven) | scripts/net-watch.*, zed-hook.*, file-watch.*, configuration.nix (one service per source, one at a time), live-topics.tsv, unit-topics.tsv, tests with fake feeds | 12, 13 | a change made by hand in a terminal for each source shows in the open page within the D9 limit; a watcher killed with `kill -9` restarts, and a topic that missed an event is caught by its interval |
+| 18 | S | #886 (end) | **The ratchet floor (D16).** Reason classes in `read-reasons.tsv`, the check fails for a row without one, `timed-reads.max` lowered to the rows that remain, the final number written here | scripts/dev/reads-inventory.py, tests/reads-ratchet.sh, read-reasons.tsv, timed-reads.max | 6, 14, 16, 17 | `python3 scripts/dev/reads-inventory.py --check` green; every remaining timer has a class and a sentence |
+| 19 | S | new (health) | **The delay as a health signal.** Push versus fallback counts on the Live state page so a dead socket is seen; the health note of step 5 uses the new path | scripts/health-check.sh, live_measure.py, LiveState.svelte | 5, 12 | the note rises when the fixture socket is down and the delay passes the limit |
+| 20 | S | new (docs) | Docs and hardware pass for steps 12 to 19: web-interface.md ("how a change reaches the page"), operations.md (measure, demand, sockets), changelog entries, `docs/events.md` regenerated, hardware box lists per issue | docs/ | all | tests/docs.sh green; boxes ticked only for what was seen |
 
 Parallel lanes (steps that do not touch the same files):
 
@@ -91,12 +106,15 @@ Parallel lanes (steps that do not touch the same files):
 - **D acknowledge:** 7, then 10.
 - **E test:** 9 last, after B.
 - 6 runs after 3 because both edit the same page files.
+- **F delivery (steps 12 to 15):** 12 first (small, changes how everything arrives), then 13 and 14 in parallel (13 is scripts and hooks, 14 is web-serve and the browser), then 15.
+- **G sources (steps 16, 17):** 16 after 14, 17 after 12 and 13; each source is its own PR and its own `configuration.nix` change.
+- **H closing:** 18, 19, 20 at the end.
 
 Shared files, so these merge one at a time and rebase after each: `scripts/lib/event-kinds.tsv` (4, 7, 8; regenerate docs/events.md on every rebase,
 never merge it by hand); `docs/api/sys.toml`, `docs/api/openapi.json`, `web/src/api/sys.gen.d.ts` (1, 5, 7: regenerate on every rebase);
 `scripts/lib/read-reasons.tsv`, `timed-reads.max` (1, 3, 4, 6: each only lowers, so a conflict is resolved by recounting with
 `python3 scripts/dev/reads-inventory.py --check`); `web/src/ui.svelte.js` (2 only); `scripts/web-serve.py` (1, 5, 6: small, separate regions);
-`scripts/health-check.sh` (5, 7). Steps 4 and 7 add a service or timer to `configuration.nix`: one at a time.
+`scripts/health-check.sh` (5, 7). Steps 4 and 7 add a service or timer to `configuration.nix`: one at a time, and so do 12, 15 and each source of 17. `scripts/web-serve.py` is also touched by 12, 14, 15 and 16 (`Events` and the stream handlers): rebase after each. `scripts/lib/live-topics.tsv`: step 15 adds its new column once, no other step adds one.
 
 ### Step 6, status (#886)
 
@@ -120,6 +138,10 @@ counters. Step 6 must not rename or remove a topic that #873 may read; 0.10.1 st
 | H4 (7) | Failing SMART on a real or simulated disk: acknowledge, see it dim, resolve, fail again, the push arrives on a real channel (ntfy) |
 | H5 (9) | The nested VM (ADR 0023) runs the browser stage; real hardware only repeats the three actions once |
 | H6 (10) | A real browser on LAN over plain HTTP and over Tailscale HTTPS: whether the permission prompt and the notification appear |
+| H7 (12) | Latency of a terminal change to the open page with the socket, then with the socket removed: both numbers on real hardware, and the idle CPU of the web service |
+| H8 (13, 17) | Each producer: `ip link set` down and up, a ZFS scrub start, an edit of a share file, a `systemctl` stop, each with the page open |
+| H9 (15) | A server with real disks: SMART topics go idle with no page open and wake when the Disks page opens; the load figure of `hs live load` before and after |
+| H10 (16) | A log view of a busy container for ten minutes: no process left after the tab closes, memory of the web service flat |
 
 Everything else is tested with fakes (`t quick`). Not tested on hardware yet.
 
@@ -137,6 +159,12 @@ Everything else is tested with fakes (`t quick`). Not tested on hardware yet.
   resolves, the bell still lists acknowledged problems dimmed, and `hs health ack` with no argument shows them.
 - **Notification API on plain HTTP** may not exist (secure context). Mitigation: D7, step 10 held, the limit documented.
 - **Roles.** A new read (step 5 sample endpoint, step 7 ack) needs a role row; default admin, the sample endpoint and `list-acks` are viewer reads only after the owner confirms D2.
+- **The socket becomes a requirement.** A dead or unwritable socket must never block a collector write. Mitigation: `poke()` is non-blocking and ignores errors; the fallback tick stays; step 19 shows push versus fallback so a dead socket is seen.
+- **Wrong subscription set.** A page that forgets a topic never updates it. Mitigation: the set is derived from its reads, never listed by hand; a test opens each page fixture and compares the set with the topics of its reads; a stream without `topics` stays valid.
+- **Demand hides a stale value.** A page opened after a long idle shows an old document for a moment. Mitigation: opening a page triggers one run of its idle topics, and `Fresh.svelte` shows the age as today.
+- **Leases and health.** A topic that a health check reads must never become `demand`. Mitigation: a test that every topic named in `health-check.sh` or `notify-rules.tsv` is `always`.
+- **Log streams cost processes and may leak.** Mitigation: caps per user and in total, the child ends with the client, no cache, same role as today, a test that counts processes.
+- **More producers, more services on a small box.** Mitigation: one small watcher per source, each with a restart policy; step 17 is built last and may move to the next release if the hardware check shows a cost.
 - **Shared page files** (steps 3 and 6) cause merge conflicts. Mitigation: one page per PR, 6 after 3.
 
 ## Check that it worked
@@ -148,3 +176,7 @@ Everything else is tested with fakes (`t quick`). Not tested on hardware yet.
 - The Live state page shows last and worst delay per topic; a slow topic raises a health note.
 - A failing health problem is acknowledged once, stays quiet, and the next failure after it resolved is announced.
 - The test-lab browser stage passes and fails when the limit is exceeded.
+- An idle server reads the counters table only on the fallback tick; a terminal change reaches an open page in well under a second (numbers from `hs live measure`, steps 12 and 19).
+- A page receives only the topics it reads (`/api/events?topics=`), and a closed page costs the collector nothing for demand topics (step 15).
+- A log view follows without a timer and leaves no process behind (step 16).
+- `timed-reads.max` equals the number of rows with a reason class, and every class is `sampled`, `external`, `free-query` or `dynamic` (step 18).
