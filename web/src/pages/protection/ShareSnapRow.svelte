@@ -2,12 +2,13 @@
   import Chip from '../../ui/Chip.svelte';
   import { tip } from '../../ui/tooltip.svelte.js';
   import { poll, rows } from '../../data.svelte.js';
-  import { openPlan, jobRunning } from '../../ui.svelte.js';
+  import { openPlan } from '../../ui.svelte.js';
+  import { rowstate } from '../../rowstate.svelte.js';
   import Button from '../../ui/Button.svelte';
 
   let { name, pool } = $props();
   // name, created, auto|manual, used
-  const hist = poll(() => `/api/sys/shares/history/${encodeURIComponent(name)}`, 30000);
+  const hist = poll(() => `/api/sys/shares/history/${encodeURIComponent(name)}`, 30000, 'shares-overview');
   // oldest first, whatever the order of the answer ("YYYY-MM-DD HH:MM" sorts as text)
   const snaps = $derived([...rows(hist)].sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)));
   const auto = $derived(snaps.some((r) => r[2] === 'auto'));
@@ -23,8 +24,8 @@
   <td class="n300" style="padding:4px 8px">{hist.loaded && !hist.error ? newest : ''}</td>
   <td style="padding:2px 8px">
     <span class="acts">
-      <Button variant="ghost" class="btn-icon" icon="camera" busy={jobRunning('shares', [name, 'snapshot'])} aria-label="Snapshot now" tooltip={'Snapshot now'} onclick={() => openPlan('shares', [name, 'snapshot'], `Snapshot ${name}`)} />
-      <Button variant="ghost" class="btn-icon" icon="arrow-u-up-left" disabled={!newestName} busy={jobRunning('shares', [name, 'rollback', '--snapshot', newestName])} aria-label="Roll back to newest" tooltip={newestName ? `Roll back to ${newestName}` : 'No snapshot to roll back to'} onclick={() => openPlan('shares', [name, 'rollback', '--snapshot', newestName], `Roll back ${name}`)} />
+      <Button need="admin" variant="ghost" class="btn-icon" icon="camera" busy={rowstate.pending('shares', [name, 'snapshot'])} aria-label="Snapshot now" tooltip={'Snapshot now'} onclick={() => openPlan('shares', [name, 'snapshot'], `Snapshot ${name}`)} />
+      <Button need="admin" variant="ghost" class="btn-icon" icon="arrow-u-up-left" disabled={!newestName} busy={rowstate.pending('shares', [name, 'rollback', '--snapshot', newestName])} aria-label="Roll back to newest" tooltip={newestName ? `Roll back to ${newestName}` : 'No snapshot to roll back to'} onclick={() => openPlan('shares', [name, 'rollback', '--snapshot', newestName], `Roll back ${name}`)} />
     </span>
   </td>
 </tr>

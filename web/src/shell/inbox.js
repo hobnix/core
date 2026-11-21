@@ -19,7 +19,7 @@ export function problemItems(rows) {
     .filter((r) => Array.isArray(r) && r[0] && r[0] !== '-' && !String(r[0]).startsWith('mitigation:'))
     .map((r) => {
       const text = empty(r[1]) || empty(r[0]);
-      return { kind: 'problem', id: String(r[0]), text, acked: r[2] === 'acked', since: Number(r[3]) || 0, href: (PROBLEM_OBJECT.find(([re]) => re.test(text)) ?? [null, HEALTH])[1] };
+      return { kind: 'problem', id: String(r[0]), text, acked: r[2] === 'acked', since: Number(r[3]) || 0, until: /^\d+$/.test(r[5] ?? '') ? Number(r[5]) : 0, href: (PROBLEM_OBJECT.find(([re]) => re.test(text)) ?? [null, HEALTH])[1] };
     });
   return [...out.filter((p) => !p.acked), ...out.filter((p) => p.acked)];
 }

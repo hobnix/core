@@ -112,7 +112,7 @@ sudo hs group roles
 
 Creates the two groups in the domain: it shows a plan first and asks you to type the domain name. Add people to them with the tools of [Users and shares](users-and-shares.md).
 
-The page shows every page to every role. A page or button the role may not use is greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role. The Vault and the identity pages need admin. Under Settings, Users and access, a role below admin sees its own sessions only. Roles are enforced in the web server only: anyone with `sudo` on the server is not limited, so a viewer is not safe against a person with a shell.
+The page shows every page to every role. A page or button the role may not use is greyed with a lock and "Needs the admin role"; it stays clickable and opens a page that names the role. A button that starts a change (a plan, a form, a job) is greyed the same way for a role below the one the server asks for, and its tooltip says "Your role (viewer) may not do this. It needs admin."; the role of each button follows the area of its change in `scripts/lib/sys-roles.tsv`, the table the server uses, and `tests/web-roles-ui.sh` fails when a change button has no such gate. Not tested on hardware yet. The Vault and the identity pages need admin. Under Settings, Users and access, a role below admin sees its own sessions only. Roles are enforced in the web server only: anyone with `sudo` on the server is not limited, so a viewer is not safe against a person with a shell.
 
 The audit log names the signed-in person for every change made in the web interface (`<user>`, or `<user> via token <id>`): `hs audit`.
 
@@ -142,8 +142,15 @@ buttons **Update**, **Reboot** and **Shut down**.
 
 The **Jobs** tab of the task panel has two views. **Job records** lists what the server ran, newest first, also after the job is gone
 (finished, failed, cancelled, or interrupted by a restart), with state, step, progress and how long it took; click a row for the source,
-who started it and the error text of a failed job. The list updates when a job changes, without polling (it polls every 15 s only while the
+who started it and the error text of a failed job. The record opens to the right of the list (list about 60 %, record about 40 %, each
+scrolls on its own), so the list never moves and the record needs no scrolling; on a phone it opens full screen with a close button. The
+selected row is highlighted; a row opens with Tab and Enter or Space. The list updates when a job changes, without polling (it polls every 15 s only while the
 event stream is down). A state this page does not know is shown as text. **Scheduled** is the list of timers with **Run now**.
+Not tested on hardware yet.
+
+**Events** (Operations > Events) shows what happened on the server, newest first, and every signed-in role may read it. New entries appear
+at once while the event stream is open; the page asks the server again every 30 s only while the stream is down. **Show more** loads the
+next 100 older entries (by their number, `hs event list --before <id>`), so a long list stays fast. Filter by source, level, kind and time.
 Not tested on hardware yet.
 
 | Page | What you do there |
@@ -219,6 +226,13 @@ A line reads `web timing: plan pool bulk add --disks * 1834 ms run rc=0 status=o
 `run` (it ran), `cached` (answered again), `timeout` (took over 60 s) or `gone` (you changed the form, the check was stopped), the exit code and
 the result. Not tested on hardware yet.
 
+### Toasts report jobs
+**Start** closes the plan dialog at once. A small message (a toast) at the bottom right then says what happens: "Running in the background",
+"done", or, when the server refuses, the reason with a **Show plan** button that opens the plan again. When the job ends, a second toast says
+whether it worked and opens its log in **Tasks**. A job that stops to ask a question raises a toast with **Open the job**, on every page and
+also when you closed the install dialog; it goes away when the question is answered. The steps in the install dialog follow the job as it
+moves. Docker start, stop and restart of an app are jobs too: the answer comes at once, the row shows pending until the job ends, and the end toast says how it went. Not tested on hardware yet.
+
 ### Install and remove apps
 The Apps page has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**
 and **Remove what was created**. **Remove** keeps the data unless you choose **Delete the data** and type the name. Each app shows its stage
@@ -265,6 +279,25 @@ sudo hs config set webAccent '#4fb286'
 The logo, buttons and highlights follow the accent; light colours read better on the dark theme. The theme toggle in the top bar switches
 dark and light (it follows your system by default). No rebuild is needed.
 
+## Get a browser notification
+
+The bell in the top bar lists problems and warnings while you look at the page. If you want a message on your desktop while the page is open in
+another tab or window, turn it on: **Settings > General > Browser notifications**. It is off by default and is kept in this browser only: another
+browser, or another computer, has its own switch.
+
+1. Turn the switch on. The browser asks once for permission to show notifications; this is the only moment it asks, never when the page loads.
+2. Leave the page open in a background tab. A new problem that is not acknowledged, or a new warning or error, raises a notification with a short text
+   (no serial numbers or other identifiers). Clicking it brings the tab to the front and opens the page of the thing it is about.
+
+Nothing is raised for a problem you acknowledged, for something that was already open when you turned the switch on, twice for the same thing, or
+while you are looking at the page. This uses the notification function of the browser only: no push service, no account, and nothing leaves the server.
+
+It does not work everywhere. Browsers only allow notifications on a secure page. On plain HTTP over your home network (`http://server`) most
+browsers have no notification function, and the switch is greyed with the reason; use the HTTPS address of [Use HTTPS over Tailscale](#use-https-over-tailscale)
+or `localhost`. If you blocked notifications for the site once, the switch says so; allow them again in the site settings of the browser and turn the
+switch on again. A browser that is closed, or a page that is not open, shows nothing: the notification channels (email, push) of
+[Notification rules](notify-rules.md) stay the way to reach you then. Not tested on hardware yet.
+
 ## Pages for storage and backup
 
 - **Disks** has a **Sleep** column (asleep or spinning) and, in the detail of a disk, since when it sleeps and how often it woke today; the numbers
@@ -295,31 +328,72 @@ password once), the sign-in to the reverse proxy, anything that asks questions, 
 
 ## Live state
 
-`liveState = "db"` is a third value, only for measuring the state database as the store of the live state: see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
+Live state has no setting: on a server with the web interface the collector `hs-live` keeps the status of every page in the state database and tells
+the browser through `/api/events` when something changes. The Summary page updates within about a second or two after a change, without polling. If the
+collector stops, the pages keep their last data and mark it as old; `sudo hs sys live status` and `hs sys live check` show the state. A `liveState` line in
+`machine.toml` from an older version is ignored (`hs config check` says so). To measure the cost on your server see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
 
-With `liveState = "redis"` in `machine.toml` (default `off`) the Summary page updates within about a second after a change, without polling.
-The server keeps the status in a Redis service on a local socket (no network port) and tells the browser through `/api/events` when it changes.
-If the service is down, the status read answers "state service down" and the page retries every 15 seconds; "Live updates paused" shows when an already open live stream is lost. `sudo hs sys live status` shows the state.
+A page is told only about the topics it reads. The browser opens one stream per tab (`/api/events?topics=...&sid=...`) and, when you go to another page, sends the
+new list in a short `POST /api/events/subscribe` (`{sid, topics}`; only for the stream of the same session). Job and health events are never filtered. A stream
+opened without `topics` (an older page, a script) gets every topic, as before. Not tested on hardware or in a real browser yet.
 
-When live state is on, the Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
-follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. With
-live state off, Diagnostics keeps its old collected-reads view. Not tested on hardware yet.
+The Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
+follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. Not tested on hardware yet.
 
 The fixed reads of the Storage pages (Pools, Disks, Shares, Encryption, Vault, file locations, Other disk) use live state too: they come
-from Redis, have no polling timer while the stream is open, and the refresh button in the top bar refreshes them. Selected disk, share and
+from the state database, have no polling timer while the stream is open, and the refresh button in the top bar refreshes them. Selected disk, share and
 file details (SMART history, access lists, snapshots, directory contents) stay direct. The pools `bulk` and `fast` have their own topics;
 other pool names are read directly. While storage is locked the pool and share panels keep their last value (or show "refreshing") until
-unlock refreshes them. With live state off everything works as before. Not tested on hardware yet.
+unlock refreshes them. Not tested on hardware yet.
 
 The Summary and top bar, Health, Settings, the Instances and Services pages, the Marketplace and Apps, and the Network pages (gateway status, routes
-and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from Redis and update
+and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from the state database and update
 over the stream. A change from the terminal, from the web interface or from a job refreshes only the pages it can affect; a finished job refreshes
-everything. Reads that need an argument (one instance's logs, one service, one user) and on-demand reports stay direct. Pages whose feature is off
-(gateway, Active Directory, router connection) show nothing for it. With live state off everything works as before. Not tested on hardware yet.
+everything. Reads that need an argument (one service, one user) and on-demand reports stay direct. Pages whose feature is off
+(gateway, Active Directory, router connection) show nothing for it. Not tested on hardware yet.
 
 The Users and Backup pages follow the same rule: the user and group lists, the domain controller certificate state, the backup state and the list of
-shares and instances with their backup switch come from Redis and update after a user, share, instance or backup change. One user's or group's details,
+shares and instances with their backup switch come from the state database and update after a user, share, instance or backup change. One user's or group's details,
 the snapshots and the file search of the backup stay direct (they open the backup disk). Not tested on hardware yet.
+
+### How fast a change shows
+
+The limits are in `scripts/lib/live-limits.tsv`: 5 seconds for a topic whose change script announces it, 20 seconds for a topic that is only read on a timer.
+`tests/live-e2e.sh` (run by `scripts/dev/t quick live-e2e`) starts the web server on a real state database, opens a page model that has no timer and
+follows `/api/events`, and then changes an app list, a container and the storage state: the page must show the new state within the limit and read
+exactly once. It fails when the limit is passed. It does not run the Svelte code or a browser and has no real Incus or storage behind it
+(the browser stage of the test-lab and the timing on a server are #485 and #486). Not tested on hardware yet.
+
+### Services that stop or crash
+
+A unit that stops, starts or fails while a page is open shows within a second or two, also when it was stopped from a terminal (`systemctl stop`) or crashed.
+The service `hs-unit-watch` (web interface on, not on an edge node) listens on the system bus and, for the units the interface shows, marks their
+topics: failed `hs-*` units (Health), job units, extension services, `bulk-mount`, `samba-smbd`, the ZFS import and scrub units, Incus, Docker and the gateway proxy.
+The list is `scripts/lib/unit-topics.tsv`. The collector's timer stays as the safety net: if the watcher is down, the pages are still right within
+their interval. Disk plug and pull events come from udev, not from this service. These topics stay timed, because nothing announces a change:
+SMART values (`disk-health`), free space and temperatures (`monitor-disks`, `temp-disks`), sensors (`hardware`), the UPS, waiting updates,
+traffic counters and the UniFi clients.
+
+Check that it works: `systemctl status hs-unit-watch`, open the Services page and run `sudo systemctl stop docker` (then `start`): the Docker row changes without a reload.
+Not tested on hardware yet.
+
+### Logs follow a stream
+
+The log views (the Logs tab of an instance and of a Docker app, the instance log window, the Logs and Disk events tabs of the task panel) show new lines as
+they are written, without asking again and again. Each open view holds one stream of its own (`GET /api/logs/stream/<ct|docker|system|events>`,
+server-sent events): the server starts `hs sys ... follow` for it, sends the last 200 lines first and then every new line, and ends the command when the
+view closes, the tab goes away, you sign out or the stream ends.
+
+- **Who sees what:** the same role as the read the view replaces (instance and Docker logs: app manager, system journal: admin, disk events: viewer).
+  A log may hold secrets, so a stream is never cached and never part of a live topic.
+- **Limits:** 4 open log streams per person and 8 in all (`HS_WEB_LOGS_USER_MAX`, `HS_WEB_LOGS_MAX`), apart from the 32 event streams. A browser keeps
+  only 6 connections to one server and the page holds one for its events, so a view opens its stream only while it is shown, never when the pointer
+  passes over a link, and a switched-off *Follow* closes it.
+- **A tab nobody sees:** a stream with no visible tab closes after 15 minutes and opens again, with a fresh fill, when the tab is shown.
+- **When the stream is not there** (limit reached, the server restarting, the command ended): the view falls back to the old timed read until the stream is
+  back.
+
+Not tested on hardware yet.
 
 ## Inspect the live state
 

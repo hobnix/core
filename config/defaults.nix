@@ -20,7 +20,6 @@
   webTailscale = false;
   webLan = true;
   webDocs = true;
-  liveState = "off";
   testlabNightly = false;
   webTerminal = false;
   recipeQuestionHours = 24;
@@ -45,6 +44,8 @@
   fileManagerWrite = false;
   setupDone = false;
   backupNewShares = false;
+  syncMaxRemoved = 100;
+  syncMaxRemovedPercent = 1;
   backupNewInstances = true;
   offsiteDiskDays = 30;
   adDomain = null;

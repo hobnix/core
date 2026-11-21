@@ -6,7 +6,10 @@
   import { go } from '../route.svelte.js';
   import { sharesPath } from '../pools.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
-  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { userPending, userFailed } from './rows.js';
   import NewUser from '../forms/users/NewUser.svelte';
   import SetPassword from '../forms/users/SetPassword.svelte';
   import EditUser from '../forms/users/EditUser.svelte';
@@ -34,13 +37,15 @@
     name: r[0], full: r[1] && r[1] !== '-' ? r[1] : '', enabled: r[2] === 'enabled',
     groups: (r[3] ?? '').split(',').map((g) => g.trim()).filter(Boolean),
   })));
+  const doing = (u) => userPending(u.name, rowstate.pending);
+  const failure = (u) => (doing(u) ? null : userFailed(u.name, rowstate.failed));
   const sel = $derived(users.find((u) => u.name === selName));
 
   // share, level, via (reads every share ACL: only for the opened user)
-  const acc = poll(() => (sel ? `/api/sys/users/access/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const acc = poll(() => (sel ? `/api/sys/users/access/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const reach = $derived(rows(acc).map((r) => ({ share: r[0], level: r[1], via: r[2] })));
   // full, mail, description of the opened user ("-" = empty)
-  const det = poll(() => (sel ? `/api/sys/users/details/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const det = poll(() => (sel ? `/api/sys/users/details/${encodeURIComponent(sel.name)}` : ''), 30000, 'users-list');
   const detail = (k) => { const v = rows(det).find((r) => r[0] === k)?.[1]; return v && v !== '-' ? v : ''; };
   const isAdmin =$derived(sel?.name.toLowerCase() === 'administrator' && !!sel?.enabled);
   const reachColumns = [{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];
@@ -71,7 +76,7 @@
             {#if col.key === 'name'}<b>{u.name}</b>
             {:else if col.key === 'full'}<Muted>{u.full}</Muted>
             {:else if col.key === 'groups'}<Row gap="1" wrap>{#each u.groups as g}<Chip>{g}</Chip>{/each}</Row>
-            {:else}<StatusDot state={u.enabled ? 'ok' : 'off'} label={stateOf(u)} />{/if}
+            {:else}{#if doing(u)}<Muted><i class="ph ph-circle-notch spin"></i> {doing(u)}…</Muted>{:else}<StatusDot state={u.enabled ? 'ok' : 'off'} label={stateOf(u)} />{/if}{#if failure(u)}<Chip tone="bad">failed</Chip>{/if}{/if}
           {/snippet}
         </Table>
       </Card>
@@ -81,6 +86,7 @@
         <Drawer title={sel.name} chip={sel.full} state={sel.enabled ? 'ok' : 'off'} stateLabel={stateOf(sel)} bind:tab onclose={() => (selName = '')}
                 tabs={[{ id: 'info', label: 'Info' }, { id: 'access', label: 'Can reach' }]}>
           {#snippet children(t)}
+            {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
             {#if t === 'access'}
               <Table id="reach" columns={reachColumns} rows={reach} key="share" loading={!acc.loaded} empty={acc.loaded ? (acc.error ? 'The access could not be read.' : 'No share is reachable.') : 'Loading…'}>
                 {#snippet cell(r, col)}
@@ -99,9 +105,9 @@
             <Button tooltip={'Change the full name, email and description'} onclick={() => openCreate(EditUser, { user: sel.name })}><i class="ph ph-pencil-simple"></i>Edit</Button>
             <Button tooltip={'Set a new password for this user'} onclick={() => openCreate(SetPassword, { user: sel.name })}><i class="ph ph-password"></i>Password</Button>
             <Button tooltip={'Choose the groups of this user'} onclick={() => openCreate(Membership, { subject: 'user', name: sel.name, have: sel.groups, options: groupNames })}><i class="ph ph-users-three"></i>Groups</Button>
-            <Button variant="ghost" icon={sel.enabled ? 'lock' : 'lock-open'} disabled={isAdmin} busy={(jobRunning('users', [sel.name, 'lock']) || jobRunning('users', [sel.name, 'unlock']))} busyLabel={sel.enabled ? 'Locking…' : 'Unlocking…'} tooltip={isAdmin ? 'Administrator cannot be locked' : sel.enabled ? 'Lock the account (shows the plan first)' : 'Unlock the account (shows the plan first)'}
+            <Button variant="ghost" icon={sel.enabled ? 'lock' : 'lock-open'} disabled={isAdmin} busy={(rowstate.pending('users', [sel.name, 'lock']) || rowstate.pending('users', [sel.name, 'unlock']))} busyLabel={sel.enabled ? 'Locking…' : 'Unlocking…'} tooltip={isAdmin ? 'Administrator cannot be locked' : sel.enabled ? 'Lock the account (shows the plan first)' : 'Unlock the account (shows the plan first)'}
               onclick={() => openPlan('users', [sel.name, sel.enabled ? 'lock' : 'unlock'], `${sel.enabled ? 'Lock' : 'Unlock'} ${sel.name}`)}>{sel.enabled ? 'Lock' : 'Unlock'}</Button>
-            <Button variant="danger" icon="trash" disabled={isAdmin} busy={jobRunning('users', [sel.name, 'user-delete'])} busyLabel="Deleting…" tooltip={isAdmin ? 'Administrator cannot be deleted' : 'Delete the user (cannot be undone; you type the name)'}
+            <Button variant="danger" icon="trash" disabled={isAdmin} busy={rowstate.pending('users', [sel.name, 'user-delete'])} busyLabel="Deleting…" tooltip={isAdmin ? 'Administrator cannot be deleted' : 'Delete the user (cannot be undone; you type the name)'}
               onclick={() => openPlan('users', [sel.name, 'user-delete'], `Delete ${sel.name}`)}>Delete</Button>
           {/snippet}
         </Drawer>

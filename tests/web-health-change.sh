@@ -52,6 +52,29 @@ run start unack backup:stale
 check_eq "unack start: exit 0" 0 "$rc"
 check_eq "the ack file is empty again" "" "$(cat "$HS_ACK_FILE")"
 
+echo "-- ack with --for and --note, list-acks"
+run plan ack backup:stale --for 7d --note "waiting for the new disk"
+check_eq "plan with --for and --note: exit 0" 0 "$rc"
+run plan ack backup:stale --for soon
+check_eq "a bad --for: refused" 1 "$rc"
+run plan ack backup:stale --frob 1
+check_eq "an unknown option: refused" 1 "$rc"
+run start ack backup:stale --for 7d --note "waiting for the new disk"
+check_eq "start with --for and --note: exit 0" 0 "$rc"
+check_eq "five columns" 5 "$(awk -F'	' '{ print NF }' "$HS_ACK_FILE")"
+check_eq "the note is kept" "waiting for the new disk" "$(cut -f5 "$HS_ACK_FILE")"
+check "until is about 7 days away" test "$(( $(cut -f3 "$HS_ACK_FILE") - $(cut -f2 "$HS_ACK_FILE") ))" -ge 604790
+la=$(HS_PLAIN=1 bash "$SCRIPTS/health-ack.sh" list-acks)
+check_eq "list-acks is one tab row" 1 "$(grep -c '^backup:stale	[0-9]*	[0-9]*	[^	]*	waiting for the new disk$' <<<"$la")"
+check "sys health acks row" grep -q "^sys.sys health acks.health-ack.sh.list-acks" "$reg"
+printf 'old:row	100
+' >> "$HS_ACK_FILE"
+check_eq "a two column row (older file) is listed with - for the rest" 1 "$(HS_PLAIN=1 bash "$SCRIPTS/health-ack.sh" list-acks | grep -c '^old:row	100	-	-	-$')"
+printf 'gone:row	100	200	x	-
+' >> "$HS_ACK_FILE"
+check_eq "an ended row is not listed" 0 "$(HS_PLAIN=1 bash "$SCRIPTS/health-ack.sh" list-acks | grep -c '^gone:row')"
+: > "$HS_ACK_FILE"
+
 echo "-- resume"
 run plan resume
 check_eq "nothing paused: refused" 1 "$rc"

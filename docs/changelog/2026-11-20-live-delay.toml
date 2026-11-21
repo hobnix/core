@@ -1,0 +1,6 @@
+date  = "2026-11-20"
+type  = "feature"
+title = "The Live state page shows how fast changes arrive"
+body  = """
+Every live topic now records how long a change needed from the request to its new data, and the Live state page shows the last and the worst delay, on the server and as seen in the page. `hs sys live status` has the numbers as four new columns at the end. Health says so when the worst of the last 20 delays of a topic is over 10 seconds. Only numbers are kept, nothing about who looked. Not tested on hardware yet.
+"""

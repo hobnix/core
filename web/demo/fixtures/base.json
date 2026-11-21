@@ -172,7 +172,6 @@
    ]
   ],
   "state/disks": [],
-  "reads/status": [],
   "live/status": [],
   "live/inspect": {},
   "live/raw": {},
@@ -442,6 +441,8 @@
   "ports/list": [],
   "dns/list": [],
   "cache/state": [],
+  "share/parity/state": [["limit", "default", "-"], ["default", "100", "1"]],
+  "share/parity/refused": [],
   "system/config": "",
   "disk/results": [],
   "disk/marks": [],

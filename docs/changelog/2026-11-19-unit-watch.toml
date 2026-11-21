@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "feature"
+title = "A stopped or crashed service shows at once"
+body  = """The pages that show services (Health, Services, Pools, Shares, Instances, Docker, the gateway) now follow a unit that stops, starts or fails, also when it was changed in a terminal. A small service, hs-unit-watch, watches systemd for it."""

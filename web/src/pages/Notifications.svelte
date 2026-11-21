@@ -127,9 +127,9 @@
             {#if i.last.result}<StatusDot state={i.last.result === 'ok' ? 'ok' : 'bad'} label={i.last.result === 'ok' ? 'sent' : 'failed'} /> <span class="when" use:tip={i.last.reason}>{i.last.when}{i.last.reason ? ` · ${i.last.reason}` : ''}</span>{:else}<span class="when">never</span>{/if}
           {:else if col.key === 'act'}
             <span class="acts">
-              <Button variant="ghost" size="sm" disabled={!!busy && busy !== i.name + 'test'} busy={busy === i.name + 'test'} busyLabel="Sending…" tooltip={busy ? 'Another test is running' : 'Send one test message to this channel'} onclick={() => test(i)}>Send test</Button>
-              <Button variant="ghost" class="btn-icon" aria-label="Edit {i.name}" tooltip={'Edit'} onclick={() => edit(i)}><i class="ph ph-pencil-simple"></i></Button>
-              <Button variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('notify', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={'Remove'} onclick={() => openPlan('notify', ['remove', i.name], 'Remove ' + i.name)} />
+              <Button need="admin" variant="ghost" size="sm" disabled={!!busy && busy !== i.name + 'test'} busy={busy === i.name + 'test'} busyLabel="Sending…" tooltip={busy ? 'Another test is running' : 'Send one test message to this channel'} onclick={() => test(i)}>Send test</Button>
+              <Button need="admin" variant="ghost" class="btn-icon" aria-label="Edit {i.name}" tooltip={'Edit'} onclick={() => edit(i)}><i class="ph ph-pencil-simple"></i></Button>
+              <Button need="admin" variant="ghost" class="btn-icon" icon="trash" busy={jobRunning('notify', ['remove', i.name])} aria-label="Remove {i.name}" tooltip={'Remove'} onclick={() => openPlan('notify', ['remove', i.name], 'Remove ' + i.name)} />
             </span>
           {:else}
             <Switch box checked={i.cats.has(col.key) && i.caps.has(col.key)} disabled={!!busy || !i.caps.has(col.key)} reason={why(i, col.key)} label="{i.name} carries {col.label}" onchange={() => toggleClass(i, col.key)} />
@@ -147,7 +147,7 @@
           {/each}
           <div class="meta">Last send: {i.last.result ? `${i.last.result === 'ok' ? 'sent' : 'failed'} ${i.last.when}${i.last.reason ? ` (${i.last.reason})` : ''}` : 'never'}</div>
           <div class="meta">Lowest priority {i.minprio} · quiet hours {i.quiet === 'ignore' ? 'ignored' : 'respected'} · {i.outside === 'outside' ? 'outside this server' : 'on this server'}</div>
-          <div class="acts"><Button size="sm" disabled={!!busy && busy !== i.name + 'test'} busy={busy === i.name + 'test'} busyLabel="Sending…" tooltip={busy ? 'Another test is running' : 'Send one test message to this channel'} onclick={() => test(i)}>Send test</Button><Button variant="ghost" size="sm" tooltip={'Change this channel'} onclick={() => edit(i)}>Edit</Button><Button variant="ghost" size="sm" busy={jobRunning('notify', ['remove', i.name])} tooltip={'Remove this channel: no messages go there any more'} onclick={() => openPlan('notify', ['remove', i.name], 'Remove ' + i.name)}>Remove</Button></div>
+          <div class="acts"><Button need="admin" size="sm" disabled={!!busy && busy !== i.name + 'test'} busy={busy === i.name + 'test'} busyLabel="Sending…" tooltip={busy ? 'Another test is running' : 'Send one test message to this channel'} onclick={() => test(i)}>Send test</Button><Button need="admin" variant="ghost" size="sm" tooltip={'Change this channel'} onclick={() => edit(i)}>Edit</Button><Button need="admin" variant="ghost" size="sm" busy={jobRunning('notify', ['remove', i.name])} tooltip={'Remove this channel: no messages go there any more'} onclick={() => openPlan('notify', ['remove', i.name], 'Remove ' + i.name)}>Remove</Button></div>
         </div>
       {/each}
     </div>

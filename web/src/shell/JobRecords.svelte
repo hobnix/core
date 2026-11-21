@@ -11,7 +11,8 @@
   import Table from './Table.svelte';
   import Button from '../ui/Button.svelte';
   import Progress from '../ui/Progress.svelte';
-  import { openCreate } from '../ui.svelte.js';
+  import QuickLook from '../ui/QuickLook.svelte';
+  import { openCreate, ui } from '../ui.svelte.js';
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import { parseRecord, stateDot, stateKnown, stepText, progressText, clock, duration, lastJobEvent, latestOnly } from '../jobrecords.js';
 
@@ -23,6 +24,38 @@
   let detail = $state(null);     // the full record of `open`
   let detailErr = $state('');
   let now = $state(Date.now());
+  // phone width (up to 860 px): the record opens full screen (QuickLook) with a close button; wider, it stays beside the list (60/40)
+  let phone = $state(typeof matchMedia !== 'undefined' && matchMedia('(max-width: 860px)').matches);
+  $effect(() => {
+    if (typeof matchMedia === 'undefined') return;
+    const m = matchMedia('(max-width: 860px)');
+    const f = () => { phone = m.matches; };
+    m.addEventListener('change', f);
+    return () => m.removeEventListener('change', f);
+  });
+  const current = $derived((list ?? []).find((r) => r.id === open) ?? null);
+  let rootEl = $state(null);
+  // closing returns the focus to the row that was open (the keyboard user stays where they were)
+  const close = () => {
+    const id = open;
+    open = null; detail = null;
+    if (id !== null) queueMicrotask(() => rootEl?.querySelector(`tr[data-k="${CSS.escape(String(id))}"]`)?.focus());
+  };
+  // Escape closes the record wherever the focus is (also in the full-screen QuickLook); a dialog or menu that handled the key first keeps it
+  function onWindowKey(e) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !open) return;
+    if (ui.dialog || ui.create) return;
+    e.preventDefault();
+    close();
+  }
+  // another part of the shell asks for a job (openJob: the Backup now button of a running backup)
+  $effect(() => {
+    const id = ui.jobSel;
+    if (!id) return;
+    ui.jobSel = '';
+    open = id; detail = null; detailErr = '';
+    loadDetail(id);
+  });
 
   // reads can overlap (a slow read from job.running must not overwrite the answer after job.ok): latestOnly drops the older answer
   const readList = latestOnly(() => get('/api/sys/jobs/records?n=100'), (d) => {
@@ -92,9 +125,11 @@
   };
 </script>
 
+<svelte:window onkeydown={onWindowKey} />
 {#if failed && list === null}
   <div class="empty">{tr('The job records could not be read.')}</div>
 {:else}
+  <div class="jr" bind:this={rootEl} class:two={!!open && !phone}>
   <div class="tablescroll">
     <Table id="job-records" {columns} rows={list ?? []} key="id" onrow={pick} selected={open} loading={list === null} empty={tr('No job records yet.')} compact>
       {#snippet cell(r, col)}
@@ -111,23 +146,46 @@
       {/snippet}
     </Table>
   </div>
-  {#if open}
-    <div class="detail">
-      {#if detailErr}<div class="err">{detailErr}</div>
-      {:else if !detail}<div class="muted">{tr('Loading…')}</div>
-      {:else}
-        <div class="kv">{#each kv(detail) as [k, v]}<span class="k">{tr(k)}</span><span class="mono">{v}</span>{/each}</div>
-        {#if detail.state === 'waiting'}<div><Button variant="primary" size="sm" onclick={() => openCreate(InstallDialog, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
-        {#if detail.step && stepText(detail.step, detail.state)}<div>{tr('Step')}: {stepText(detail.step, detail.state)}</div>{/if}
-        {#if detail.error}<div class="err"><strong>{detail.error.category ?? ''}</strong> {detail.error.message ?? ''}</div>{/if}
-        {#if detail.cancel}<div class="muted">{tr('Cancel requested')}{detail.cancel.requested_by ? ` · ${detail.cancel.requested_by}` : ''}</div>{/if}
-      {/if}
-    </div>
+  {#if open && !phone}
+    <aside class="pane xh" aria-label={tr('Job record')} tabindex="-1">
+      <div class="rec-h">
+        <b class="nm">{current?.description ?? detail?.description ?? open}</b>
+        <Button variant="ghost" class="btn-icon" aria-label={tr('Close')} onclick={close}><i class="ph ph-x"></i></Button>
+      </div>
+      {@render record()}
+    </aside>
+  {/if}
+  </div>
+  {#if open && phone}
+    <QuickLook title={current?.description ?? detail?.description ?? open} state={current ? stateDot(current.state) : ''} stateLabel={current ? word(current.state) : ''} onclose={close}>
+      {@render record()}
+    </QuickLook>
   {/if}
 {/if}
 
+{#snippet record()}
+  <div class="detail">
+    {#if detailErr}<div class="err">{detailErr}</div>
+    {:else if !detail}<div class="muted">{tr('Loading…')}</div>
+    {:else}
+      <div class="kv">{#each kv(detail) as [k, v]}<span class="k">{tr(k)}</span><span class="mono">{v}</span>{/each}</div>
+      {#if detail.state === 'waiting'}<div><Button need="app-manager" variant="primary" size="sm" onclick={() => openCreate(InstallDialog, { job: detail.id })}>{tr('Answer the question')}</Button></div>{/if}
+      {#if detail.step && stepText(detail.step, detail.state)}<div>{tr('Step')}: {stepText(detail.step, detail.state)}</div>{/if}
+      {#if detail.error}<div class="err"><strong>{detail.error.category ?? ''}</strong> {detail.error.message ?? ''}</div>{/if}
+      {#if detail.cancel}<div class="muted">{tr('Cancel requested')}{detail.cancel.requested_by ? ` · ${detail.cancel.requested_by}` : ''}</div>{/if}
+    {/if}
+  </div>
+{/snippet}
+
 <style>
-  .detail { padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; display: grid; gap: 6px; }
+  /* wide: the list about 60 %, the record about 40 %, each scrolls on its own so selecting never moves the list; the panel body is the scroll container */
+  .jr { height: 100%; }
+  .jr.two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; align-items: stretch; }
+  .jr.two .tablescroll { min-height: 0; overflow-y: auto; }
+  .pane { min-height: 0; overflow: auto; margin: 4px 14px 4px 0; border: 1px solid var(--line); background: var(--panel); outline: none; }
+  .rec-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  .nm { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .detail { padding: 8px 12px; font-size: 12px; display: grid; gap: 6px; }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
   .k { color: var(--fg-3); }
   .err { color: var(--bad); }

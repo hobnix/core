@@ -16,8 +16,8 @@
 
   const STEPS = ['image', 'ports', 'storage', 'env', 'review'];
   const NAMES = [tr('Image'), tr('Ports'), tr('Folders'), tr('Settings'), tr('Review')];
-  const sharesPoll = poll('/api/sys/shares/list', 30000);
-  const storPoll = poll('/api/sys/ct/storage/docker', 15000);
+  const sharesPoll = poll('/api/sys/shares/list', 30000, 'shares-overview');
+  const storPoll = poll('/api/sys/ct/storage/docker', 15000, 'ct-list');
   const remotePoll = poll('/api/sys/remote/list', 30000);
   const mounts = $derived(mountsOf(rows(storPoll)));
   const shareOptions = $derived([

@@ -15,7 +15,7 @@ difflines() { diff "$M" "$EX" | grep -c '^[<>]' || true; }
 
 echo "-- the example itself"
 check "the example parses" python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$EX"
-check_eq "every option paragraph has a key the tool finds" "68" "$(grep -cE '^(# )?[A-Za-z][A-Za-z0-9]* = ' "$EX")"
+check_eq "every option paragraph has a key the tool finds" "67" "$(grep -cE '^(# )?[A-Za-z][A-Za-z0-9]* = ' "$EX")"
 check_out "check against itself: only CHANGEME is wrong" "hostId.*still CHANGEME" $TOOL check "$EX" "$EX"
 
 echo "-- sync creates the file from the example"
@@ -144,6 +144,8 @@ printf '#!/bin/sh\nexit 0\n' > "$BIN/logger"; chmod +x "$BIN/logger"
 unset HS_MACHINE_EXAMPLE   # the example of the checkout (scripts/..) is the one that counts here
 export HS_REPO=$REPO HS_LOCKED_MARKER=$WORK/nolock
 U="bash $SCRIPTS/update.sh"
+export HS_EVENT_NOROOT=1 HS_STATE_DB=$WORK/ev.db   # event_emit writes here (update.started, update.stopped)
+evs() { python3 "$SCRIPTS/state-db.py" event-list 100 | cut -f3-6 | tr '	' ' '; }
 upstream() {   # upstream <name>: a new option in the example, pushed
   printf '\n# %s does a thing\n# %s = true\n' "$1" "$1" >> "$PUSHER/machine.toml.example"
   ( cd "$PUSHER" && $G add -A && $G commit -q -m "add $1" && git push -q origin HEAD 2>/dev/null )
@@ -168,9 +170,11 @@ check_eq "and the option is in the file" "1" "$(grep -c '^# optionThree = true' 
 upstream optionFour
 env PATH="$BIN:$PATH" $U --stop-on-new > "$WORK/u.out" 2>&1 < /dev/null
 check_eq "--stop-on-new stops without asking" "0" "$(grep -c 'REBUILD RAN' "$WORK/u.out")"
+check_out "event: update.stopped when it stops for the new options" "update stopped .* info" evs
 upstream optionFive
 env PATH="$BIN:$PATH" HS_GUIDED_TTY=1 $U --yes > "$WORK/u.out" 2>&1 < /dev/null
 check_out "--yes rebuilds without asking" "REBUILD RAN" cat "$WORK/u.out"
+check_out "event: update.started when it applies" "update started .* info" evs
 check_eq "the question was not asked" "0" "$(grep -c 'Rebuild now' "$WORK/u.out")"
 
 
@@ -227,5 +231,32 @@ check_out "ZFS pool with a sleep time and hourly snapshots: warned" "bulk is ZFS
 sed -i '/^diskSpindownPools/d' "$WORK/sp.toml"; printf 'diskSpindownPools = { bulk = 0 }
 ' >> "$WORK/sp.toml"
 check "a pool set to 0 (never) gets no warning" bash -c "! HS_MACHINE_FILE=$WORK/sp.toml bash $SCRIPTS/machine-sync.sh check 2>&1 | grep -q 'every hour'"
+
+echo "-- machine_get keeps its answers: a repeated read starts no python until machine.toml changes"
+CNT=$WORK/pycount; : >"$CNT"
+printf '#!/bin/sh
+echo x >> "%s"
+exec python3 "$@"
+' "$CNT" >"$WORK/pycounter"; chmod +x "$WORK/pycounter"
+cm() { HS_PYTHON=$WORK/pycounter HS_MACHINE_CACHE=${CACHE:-$WORK/mcache} HS_MACHINE_FILE=$WORK/cm.toml bash -c '. "$1/lib/machine.sh"; "${@:2}"' _ "$SCRIPTS" "$@"; }
+printf 'keyMap = "de"
+bulkType = "zfs"
+' >"$WORK/cm.toml"
+check_eq "without HS_MACHINE_CACHE nothing is kept: a rewrite is seen at once" "us" "$(CACHE=off cm machine_get keyMap >/dev/null; printf 'keyMap = "us"
+' >"$WORK/cm.toml"; CACHE=off cm machine_get keyMap)"
+printf 'keyMap = "de"
+bulkType = "zfs"
+' >"$WORK/cm.toml"; : >"$CNT"
+check_eq "first read" "de" "$(cm machine_get keyMap)"
+cm machine_get keyMap >/dev/null; cm machine_get keyMap >/dev/null; cm machine_get_json keyMap >/dev/null; cm machine_get_json keyMap >/dev/null
+check_eq "5 reads of 2 shapes: 2 python runs" "2" "$(wc -l <"$CNT" | tr -d ' ')"
+check_eq "an unset key stays unset (and is cached)" "1" "$(cm machine_get nosuch >/dev/null; echo $?)"
+cm machine_get nosuch >/dev/null
+check_eq "the unset key cost one run" "3" "$(wc -l <"$CNT" | tr -d ' ')"
+sleep 1; printf 'keyMap = "us"
+' >"$WORK/cm.toml"
+check_eq "a changed file is read again" "us" "$(cm machine_get keyMap)"
+cm machine_set keyMap '"fr"' >/dev/null
+check_eq "machine_set drops the answers" "fr" "$(cm machine_get keyMap)"
 
 finish

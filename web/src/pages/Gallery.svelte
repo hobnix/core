@@ -305,7 +305,7 @@
       <div class="cell" style="width:420px"><small>one enabled, one off with reason</small><DangerZone actions={danger} /></div>
     </Entry>
 
-    <Entry name="Timeline" text="The body of a Feed page: entries by day, filters, severity word, acknowledge.">
+    <Entry name="Timeline" text="The body of a Feed page: entries by day, each day on the panel surface, filters, severity word, acknowledge.">
       <div class="cell wide"><small>entries</small><Timeline {entries} bind:values={timeFilters} filters={[{ key: 'level', label: 'Level', options: ['', 'info', 'warn', 'bad'] }]} onack={() => {}} onundo={() => {}} more onmore={() => {}} /></div>
       <div class="cell wide"><small>empty</small><Timeline entries={[]} emptyTitle="No events" empty="Nothing happened yet." /></div>
     </Entry>

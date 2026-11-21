@@ -123,6 +123,9 @@ pub struct Record {
     pub kind: Option<String>,
     /// ADR 0018: the pending question while the state is `waiting`.
     pub waiting: Option<Waiting>,
+    /// The row key (web/src/jobkey.js: area and arguments, "apps remove nextcloud"); set by the Python writer, kept by every rewrite here.
+    #[serde(default)]
+    pub key: Option<String>,
 }
 
 impl Record {
@@ -693,6 +696,20 @@ impl Store {
         })
     }
 
+    /// `key`: the row key (web/src/jobkey.js). Same cleaning as job-record.py: only A-Za-z0-9 and space . _ : / = @ , + -, trimmed, 200 characters at most.
+    pub fn set_key(&self, id: &str, key: &str) -> Result<()> {
+        let clean: String = key
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || " ._:/=@,+-".contains(*c))
+            .collect();
+        let clean: String = clean.trim().chars().take(200).collect();
+        self.locked(id, || {
+            let mut rec = self.load(id)?;
+            rec.key = (!clean.is_empty()).then(|| clean.clone());
+            self.save(&rec)
+        })
+    }
+
     /// `wait`: a question is pending, the state is `waiting`.
     pub fn wait(&self, id: &str, q: &Question) -> Result<()> {
         if !ASK_KINDS.contains(&q.kind) {
@@ -1080,6 +1097,26 @@ mod tests {
     }
 
     #[test]
+    fn the_row_key_is_cleaned_and_survives_a_rewrite() {
+        let t = Tmp::new();
+        let s = t.store();
+        let id = s
+            .new_record("pool-sync", "d", "u", "cli", "", "", "")
+            .unwrap();
+        s.set_key(&id, "bad;$(x) key").unwrap();
+        let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
+        assert!(text.contains("\"key\": \"badx key\""));
+        s.run(&id).unwrap();
+        s.finish(&id, 0).unwrap();
+        let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
+        assert!(text.contains("\"key\": \"badx key\""));
+        s.set_key(&id, "pool sync tank").unwrap();
+        assert!(String::from_utf8(s.get(&id).unwrap())
+            .unwrap()
+            .contains("\"key\": \"pool sync tank\""));
+    }
+
+    #[test]
     fn new_writes_the_documented_record() {
         let t = Tmp::new();
         let s = t.store();
@@ -1126,7 +1163,7 @@ mod tests {
         assert!(text.contains("\"initiator\": null"));
         assert!(text.contains("\"state\": \"queued\""));
         assert!(text.contains(
-            "\"version\": 1,\n  \"parent\": null,\n  \"kind\": null,\n  \"waiting\": null\n}\n"
+            "\"version\": 1,\n  \"parent\": null,\n  \"kind\": null,\n  \"waiting\": null,\n  \"key\": null\n}\n"
         ));
         #[cfg(unix)]
         {

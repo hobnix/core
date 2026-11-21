@@ -7,10 +7,12 @@ set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/bulkpath.sh"
+. "$here/lib/setting.sh"
+. "$here/lib/parity.sh"
 conf=${HS_SNAPRAID_CONF:-/var/lib/snapraid/snapraid.conf}
-# A sync makes deletions permanent. Refuse when unusually many files vanished
-# since the last sync (mistake, malware); --force runs it anyway.
-max_removed=100
+# A sync makes deletions permanent. Stop for a share when unusually many of its files vanished since the last
+# sync (mistake, malware); --force runs it anyway. The limit is per share (hs share <share> parity limit):
+# default max(syncMaxRemoved, syncMaxRemovedPercent % of the files). Folders left out of the parity do not count.
 
 force=false
 force_uuid=false
@@ -94,12 +96,57 @@ sync_args=()
 [ ${#removals[@]} -eq 0 ] || { sync_args=(-E); force=true; note "$(t 'Dropping the removed disk(s) from the parity: %s (files that moved count as removed here)' "${removals[*]}")"; }
 
 diff=$(snapraid -c "$conf" diff 2>&1) || true
-removed=$(awk '$2 == "removed" { print $1 }' <<<"$diff" | tail -n1)
-removed=${removed:-0}
-if [ "$removed" -gt "$max_removed" ] && ! $force; then
-  warn "$(t '%s files were removed since the last sync (limit %s).' "$removed" "$max_removed")"
+summary_removed=$(awk '$2 == "removed" { print $1 }' <<<"$diff" | tail -n1)
+summary_removed=${summary_removed:-0}
+[[ "$summary_removed" =~ ^[0-9]+$ ]] || summary_removed=0
+# one "remove <path>" line per file, paths relative to the disk root: shares/<share>/<folder>/...
+skiplist=$(parity_skipped | awk -F'\t' '{ print $1 "/" $2 "/" }')
+rows=$(awk -v skip="$skiplist" '
+  BEGIN { ns = split(skip, sk, "\n") }
+  $1 == "remove" {
+    all++
+    path = $0; sub(/^remove +/, "", path)
+    for (i = 1; i <= ns; i++) if (sk[i] != "" && index(path, sk[i]) == 1) next
+    n = split(path, a, "/")
+    if (a[1] == "shares" || a[1] == "sensitive") { s = a[1] "/" a[2]; f = (n > 3) ? a[3] : "-" }
+    else { s = a[1]; f = (n > 2) ? a[2] : "-" }
+    c[s "\t" f]++
+  }
+  END { for (k in c) print k "\t" c[k]; print "#all\t" all + 0 }' <<<"$diff")
+parsed_all=$(awk -F'\t' '$1 == "#all" { print $2 }' <<<"$rows")
+rows=$(grep -v '^#all' <<<"$rows" || true)
+# removals that no line explains (an old SnapRAID prints only the summary) count as one anonymous share
+if [ "$summary_removed" -gt "${parsed_all:-0}" ]; then rows+=$'\n'"-"$'\t'"-"$'\t'"$((summary_removed - parsed_all))"; fi
+refused_rows=""
+refused_shares=0
+snaproot=$(snap_root)
+while IFS=$'\t' read -r sh total; do
+  [ -n "$sh" ] || continue
+  mode=$(parity_limit_mode "$sh")
+  case "$mode" in
+    off) continue ;;
+    default)
+      limit=$(parity_limit_floor)
+      if [ "$total" -gt "$limit" ]; then   # the percentage needs the file count: only counted when the floor is passed
+        files=$(find "$snaproot/$sh" -type f 2>/dev/null | wc -l | tr -d ' ' || true)
+        limit=$(parity_limit_default $(( ${files:-0} + total )))
+      fi ;;
+    *) limit=$mode ;;
+  esac
+  [ "$total" -gt "$limit" ] || continue
+  refused_shares=$((refused_shares + 1))
+  while IFS=$'\t' read -r cnt fld; do
+    refused_rows+=$(printf '%s\t%s\t%s\t%s\t%s' "$sh" "$fld" "$cnt" "$limit" "$total")$'\n'
+  done < <(awk -F'\t' -v s="$sh" '$1 == s { print $3 "\t" $2 }' <<<"$rows" | sort -rn | awk 'NR <= 8')
+done < <(awk -F'\t' 'NF { c[$1] += $3 } END { for (s in c) print s "\t" c[s] }' <<<"$rows" | sort)
+if [ "$refused_shares" -gt 0 ] && ! $force; then
+  mkdir -p "$(dirname "$(parity_refused_file)")" 2>/dev/null || true
+  printf '%s' "$refused_rows" > "$(parity_refused_file)" 2>/dev/null || true
+  warn "$(t '%s files were removed since the last sync, in %s share(s) over their limit.' "$summary_removed" "$refused_shares")"
+  { thead 'Share' 'Folder' 'Removed' 'Limit'; cut -f1-4 <<<"$refused_rows" | grep -v '^$' || true; } | table
   note "$(t 'Not syncing, so they can still be restored: snapraid -c %s fix -m' "$conf")"
   note "If the deletions are intended: hs pool bulk sync --force"
+  note "Normal app work in a folder (downloads, unpacking)? hs share <share> parity skip <folder>, or hs share <share> parity limit <N>"
   exit 1
 fi
 
@@ -153,7 +200,18 @@ for attempt in 1 2 3; do
   fi
 done
 show_sync $($ok_sync && echo 14 || echo 40)
+if ! $ok_sync; then
+  # SnapRAID names the files in lines like "Unexpected time change at file ..." / "WARNING! ..."; the job log would otherwise keep none
+  unexpected=$(grep -E 'Unexpected|WARNING' <<<"$spin_out" | awk '!seen[$0]++' || true)
+  if [ -n "$unexpected" ]; then
+    note "$(t 'What SnapRAID complained about (each line once, at most %s):' 30)"
+    awk 'NR <= 30' <<<"$unexpected" | trail
+    total_unexpected=$(grep -c . <<<"$unexpected" || true)
+    [ "${total_unexpected:-0}" -le 30 ] || note "$(t '... and %s more different lines.' $((total_unexpected - 30)))"
+  fi
+fi
 if $ok_sync; then
+  rm -f "$(parity_refused_file)"
   ok "Parity is up to date"
   if [ ${#removals[@]} -gt 0 ]; then
     rm -f /var/lib/hs/removals

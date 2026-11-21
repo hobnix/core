@@ -4,6 +4,8 @@ Status: audit; the decisions are in docs/adr/0005-events.md (Proposed), nothing 
 
 Epic: hobnix/server#139 (event architecture), audit issue #141, next step ADR #143. Baseline: develop at a070a7c. Everything below is read
 from code; nothing was run on hardware. `liveState` defaults to `off`, so on a default install most of the live paths below are inactive.
+> **Note (2026-11-20, #565):** this audit is a snapshot of a070a7c and stays as written. Since #563 (ADR 0026) there is no `liveState` setting, no Redis and no `off` mode: live state is always on in the state database, `/api/events` always exists, and the Redis rows (E1 to E3, the keys `hs:v1:*`) describe code that is gone. Gap 1 below no longer holds.
+
 Line numbers are hints and drift; the file and function names are the reference.
 
 ## Terms

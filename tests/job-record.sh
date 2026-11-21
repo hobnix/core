@@ -20,7 +20,12 @@ check "a new record is queued" "queued" "$(jf "$id" state)"
 check "unit stored" "hs-job-pool-sync-120000" "$(jf "$id" unit)"
 check "initiator stored" "alice" "$(jf "$id" initiator)"
 check "version is 1" "1" "$(jf "$id" version)"
-check "fields are exactly the ADR list" "id,slug,description,source,initiator,unit,queued,started,ended,state,exit,step,progress,error,result,cancel,version,parent,kind,waiting" \
+$W key "$id" "pool sync tank" >/dev/null
+check "the row key is stored" "pool sync tank" "$(jf "$id" key)"
+$W key "$id" 'bad;$(x) key' >/dev/null
+check "a key keeps only its characters" "badx key" "$(jf "$id" key)"
+$W key "$id" "pool sync tank" >/dev/null
+check "fields are exactly the ADR list" "id,slug,description,source,initiator,unit,queued,started,ended,state,exit,step,progress,error,result,cancel,version,parent,kind,waiting,key" \
   "$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))))' "$HS_JOBS_DIR/$id.json")"
 check "absent values are null" "null" "$(jf "$id" started)"
 check "directory mode 0755" "755" "$(stat -c %a "$HS_JOBS_DIR")"
@@ -252,4 +257,14 @@ rm -rf "$RT"
 BAD_EV=$(HS_STATE_DB=/nonexistent/x/ev.db hr new --slug evb --desc "no log" --unit hs-job-evb-1 --source cli >/dev/null; echo "rc=$?")
 check "an unwritable event log changes nothing for the job" "1" "$(grep -c 'rc=0' <<<"$BAD_EV")"
 
-exit $fail
+# skipped (the same work was already running): ends at once as skipped, exit 0, no error; a later finish keeps it
+sid=$($W new --slug backup-now --desc "hs backup now" --unit hs-job-backup-now-1 --source cli)
+$W run "$sid" >/dev/null
+$W skip "$sid" "Already running" >/dev/null
+check "skip: state skipped" "skipped" "$(jf "$sid" state)"
+check "skip: exit 0" "0" "$(jf "$sid" exit)"
+check "skip: the message is the result" "Already running" "$(jf "$sid" result.message)"
+$W finish "$sid" 0 >/dev/null
+check "finish keeps skipped" "skipped" "$(jf "$sid" state)"
+check "skip of an ended job is refused" "1" "$($W skip "$sid" x >/dev/null 2>&1; echo $?)"
+

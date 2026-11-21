@@ -1,6 +1,7 @@
 <script>
   // Monitoring > Live state: every live-state topic with its static facts and its stored state, one read (`hs sys live inspect`).
   // Updates come from /api/events (topic live); 5 s polling only while the stream is down. Refresh asks the collector to read a topic now.
+  import { onDestroy } from 'svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import Table from '../shell/Table.svelte';
   import Button from '../ui/Button.svelte';
@@ -12,10 +13,12 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import { poll } from '../data.svelte.js';
   import { ui } from '../ui.svelte.js';
-  import { live } from '../live.svelte.js';
+  import { live, wantAllTopics } from '../live.svelte.js';
   import { tr } from '../i18n.js';
-  import { get, liveRefresh } from '../api.js';
+  import { get, liveRefresh, liveSamples } from '../api.js';
   import { parseInspect } from '../livestatus.js';
+  import { createSampler } from '../delaysample.js';
+  import { createBatcher } from '../samplebatch.js';
 
   const on = $derived(ui.features.live && (!Array.isArray(ui.features.capabilities) || ui.features.capabilities.includes('live-state')));
   const st = poll(() => (on ? '/api/sys/live/inspect' : ''), 5000, 'live');
@@ -23,17 +26,35 @@
   const down = $derived(st.error?.status === 503 && !st.error?.retryAfter);
   const starting = $derived(st.error?.status === 503 && st.error?.retryAfter > 0);
 
+  // The delay of the page (#486): from a `changed` event of the stream to the rows that show it; the numbers go to the server, per topic.
+  const batch = createBatcher((samples) => { liveSamples(samples).catch(() => {}); });
+  const sampler = createSampler((topic, ms) => batch.add(topic, ms));
+  onDestroy(() => batch.flush());
+  $effect(() => wantAllTopics());   // D13: this page measures every topic, so it subscribes to all of them
+  $effect(() => { for (const [topic, gen] of Object.entries(live.gen)) sampler.changed(topic, gen); });
+  $effect(() => {
+    const rows = parsed.rows;
+    if (rows.length) requestAnimationFrame(() => sampler.shown(rows));
+  });
+  const ms = (v) => (v === null || v === undefined ? '' : v < 1000 ? `${v} ms` : `${(v / 1000).toFixed(1)} s`);
   const secs = (s) => (s === null || s === undefined ? '' : s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
   const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString() : '');
-  const dot = (s) => ({ fresh: 'ok', ok: 'ok', pending: 'info', stale: 'warn', failing: 'warn', never: 'bad', off: 'off' }[s] || 'off');
+  const dot = (s) => ({ fresh: 'ok', ok: 'ok', pending: 'info', stale: 'warn', idle: 'info', failing: 'warn', never: 'bad', off: 'off' }[s] || 'off');
 
   const columns = $derived([
     { key: 'topic', label: 'Topic', value: (r) => r.topic },
     { key: 'source', label: 'Source', optional: true, value: (r) => r.words.join(' ') },
     { key: 'every', sort: 'num', optional: true, label: 'Every', value: (r) => r.every, align: 'right' },
     ...(parsed.has.ttl ? [{ key: 'ttl', sort: 'num', optional: true, label: 'TTL', value: (r) => r.ttl, align: 'right' }] : []),
+    ...(parsed.has.demand ? [{ key: 'demand', optional: true, label: 'Demand', value: (r) => r.demand }] : []),
     { key: 'state', label: 'State', value: (r) => r.state },
     { key: 'age', sort: 'num', label: 'Age', value: (r) => r.age, align: 'right' },
+    ...(parsed.has.delay ? [
+      { key: 'dlast', sort: 'num', optional: true, label: 'Delay', value: (r) => r.delay_ms_last ?? null, align: 'right' },
+      { key: 'dworst', sort: 'num', optional: true, label: 'Worst', value: (r) => r.delay_ms_worst ?? null, align: 'right' },
+      { key: 'wlast', sort: 'num', optional: true, label: 'Seen in page', value: (r) => r.delay_web_last ?? null, align: 'right' },
+      { key: 'wworst', sort: 'num', optional: true, label: 'Page worst', value: (r) => r.delay_web_worst ?? null, align: 'right' },
+    ] : []),
     { key: 'gen', sort: 'num', optional: true, label: 'Gen', value: (r) => r.gen, align: 'right' },
     { key: 'rc', sort: 'num', optional: true, label: 'Exit', value: (r) => r.rc, align: 'right' },
     { key: 'err', label: 'Error', value: (r) => r.err },
@@ -71,7 +92,7 @@
   {:else}
     {#if down}
       <div class="note bad"><i class="ph ph-warning-circle"></i>
-        <span>{tr('The live state service is down. The table shows the last data; polling every 5 s until it comes back. Check')} <code>systemctl status redis-hobnix hs-live</code>.</span>
+        <span>{tr('The live state data cannot be read. The table shows the last data; polling every 5 s until it comes back. Check')} <code>systemctl status hs-live</code>.</span>
       </div>
     {:else if starting}
       <div class="note"><i class="ph ph-circle-notch spin"></i>
@@ -96,9 +117,14 @@
           {#if col.key === 'topic'}<code>{r.topic}</code>{#if r.origin === 'extension'} <span class="chip">{tr('extension')}</span>{/if}
           {:else if col.key === 'source'}<code>{r.words.join(' ')}</code>
           {:else if col.key === 'every'}<span class="c">{secs(r.every)}</span>
+          {:else if col.key === 'demand'}<span class="c">{r.demand === 'always' ? tr('always') : r.lease ? tr('watched') + ' · ' + tr('idle') + ' ' + secs(r.idle) : tr('idle') + ' ' + secs(r.idle)}</span>
           {:else if col.key === 'ttl'}<span class="c">{r.ttl ?? ''}</span>
           {:else if col.key === 'state'}<StatusDot state={dot(r.state)} label={tr(r.state)} />
           {:else if col.key === 'age'}<span class="c">{secs(r.age)}</span>
+          {:else if col.key === 'dlast'}<span class="c">{ms(r.delay_ms_last) || '-'}</span>
+          {:else if col.key === 'dworst'}<span class="c">{ms(r.delay_ms_worst) || '-'}</span>
+          {:else if col.key === 'wlast'}<span class="c">{ms(r.delay_web_last) || '-'}</span>
+          {:else if col.key === 'wworst'}<span class="c">{ms(r.delay_web_worst) || '-'}</span>
           {:else if col.key === 'gen'}<span class="c">{r.gen}</span>
           {:else if col.key === 'rc'}<span class="c">{r.rc === null ? '-' : r.rc}</span>
           {:else if col.key === 'err'}<span class="c" style="color:{r.err ? 'var(--bad)' : ''}">{r.err ?? '-'}</span>{#if r.tsErr}<div class="c muted">{when(r.tsErr)}</div>{/if}

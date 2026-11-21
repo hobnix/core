@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "fix"
+title = "Pages follow more changes made in the terminal"
+body  = """Automatic snapshot commands (hs snapshots run, on, off) and hs pkg install, update, remove and rollback now tell the open pages what they changed, so Instances, Apps and Backup show the result without waiting for the next refresh."""

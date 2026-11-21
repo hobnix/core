@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Share changes name their event for the live pages"
+body  = """Creating, deleting, restoring, snapshotting or changing the permissions of a share now asks for one named change, so the live data behind the Shares pages is read again from a single list that is easy to read and extend. What the pages show stays the same."""

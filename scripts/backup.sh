@@ -529,7 +529,12 @@ cmd_now() {
   local lock=/run/hs-backup.lock
   [ -w /run ] || lock=$STATE/.backup.lock
   exec 9>"$lock"
-  flock -n 9 || die "Another backup is running."
+  if ! flock -n 9; then
+    # a second start is not a failure: as a job it ends skipped (exit 0), at a terminal it says so
+    if [ -n "${HS_JOB_ID:-}" ]; then . "$(dirname "$0")/lib/job.sh"; hs_job_skip "Already running" || true; fi
+    note "$(t 'Already running')"
+    return 0
+  fi
   note_state "last_try=$(date +%s)"
   # restic shows its own progress line on a terminal; in a job or a log (no terminal) one line a minute
   [ -t 1 ] || export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-0.0167}
@@ -546,37 +551,47 @@ cmd_now() {
   if [ -s "$OFFSITE" ]; then export HS_STEP_TOTAL=$((HS_STEP_TOTAL + 1)); fi
   if [ ${#paths[@]} -gt 0 ]; then
     step "$(t 'Shares: %s' "${on[*]}")"
-    R backup "${b[@]}" --tag shares "${paths[@]}" || fail=1
+    if R backup "${b[@]}" --tag shares "${paths[@]}"; then cat_event shares 0; else fail=1; cat_event shares 1; fi
   fi
 
   step "Domain controller and host files"
-  dc_backup || fail=1
+  local hfail=0
+  dc_backup || hfail=1
   inventory
   mapfile -t hf < <(host_files)
   if [ ${#hf[@]} -gt 0 ]; then
     mapfile -t hx < <(host_excludes)
-    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" --exclude "$OFFSITE_PASS" --exclude "$OFFSITE_CRED" --exclude "$OFFSITE" --exclude "$VAULT_SECRETS/${OFFSITE_PASS##*/}" --exclude "$VAULT_SECRETS/${OFFSITE_CRED##*/}" --exclude "$VAULT_SECRETS/${OFFSITE##*/}" "${hf[@]}"   # none of the off-site secrets goes into a backup (least of all into the off-site repository it protects) || fail=1
+    R backup "${b[@]}" --tag host "${hx[@]}" --exclude "$PASSFILE" --exclude "$VAULT_SECRETS/restic-password" --exclude "$OFFSITE_PASS" --exclude "$OFFSITE_CRED" --exclude "$OFFSITE" --exclude "$VAULT_SECRETS/${OFFSITE_PASS##*/}" --exclude "$VAULT_SECRETS/${OFFSITE_CRED##*/}" --exclude "$VAULT_SECRETS/${OFFSITE##*/}" "${hf[@]}" || hfail=1   # none of the off-site secrets goes into a backup (least of all into the off-site repository it protects) || fail=1
   fi
 
+  [ "$hfail" = 0 ] || fail=1
+  cat_event host "$hfail"
+
+  local cfail
   for name in "${cts[@]+"${cts[@]}"}"; do
+    cfail=0
     if [ "$(ct_kind "$name")" = virtual-machine ]; then
-      vm_backup "$name" "${b[@]}" || fail=1
+      vm_backup "$name" "${b[@]}" || cfail=1
+      [ "$cfail" = 0 ] || fail=1
+      cat_event "ct:$name" "$cfail"
       continue
     fi
     local root=$INCUS_ROOT/$name/rootfs
     if [ ! -d "$root" ]; then
       warn "$(t '%s: not running (its files are not mounted), skipped' "$name")"
       export HS_STEP_TOTAL=$((HS_STEP_TOTAL - 1))   # no step for it: the count stays true
-      fail=1; continue
+      fail=1; cat_event "ct:$name" 1; continue
     fi
     step "$(t 'Container %s' "$name")"
-    dump_hook "$name" || fail=1
+    dump_hook "$name" || cfail=1
     mapfile -t ex < <(ct_excludes "$root")
     if rules_has "$name"; then
-      ct_partial_backup "$name" "$root" "${b[@]}" -- "${ex[@]}" || fail=1
+      ct_partial_backup "$name" "$root" "${b[@]}" -- "${ex[@]}" || cfail=1
     else
-      R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || fail=1
+      R backup "${b[@]}" --tag "ct:$name" "${ex[@]}" "$root" || cfail=1
     fi
+    [ "$cfail" = 0 ] || fail=1
+    cat_event "ct:$name" "$cfail"
   done
 
   # Keep 7 daily, 4 weekly, 6 monthly per kind of snapshot. Space is only
@@ -975,11 +990,14 @@ cmd_drill() {
   local n=${1:-5} tmp picked f live size ok_n=0 bad=0 args=()
   [[ "$n" =~ ^[0-9]+$ ]] || die "$(t "'%s' is not a number of files. To try a container or virtual machine: hs backup drill ct %s" "$n" "$n")"
   [ "$n" -ge 1 ] || usage
+  steps 3   # a background job shows "step n of m" (#389): choose, restore, compare
+  step "$(t 'Choosing files from the newest backup')"
   need_repo
   mapfile -t picked < <(R ls --json latest --tag shares 2>/dev/null | jq -r 'select(.type == "file" and .size > 0) | .path' | shuf -n "$n")
   [ ${#picked[@]} -gt 0 ] || die "No file in the newest shares backup to try."
   tmp=$(mktemp -d)
   for f in "${picked[@]}"; do args+=(--include "$f"); done
+  step "$(t 'Restoring the files into a temporary folder')"
   R restore latest --tag shares --target "$tmp" "${args[@]}" >/dev/null || { rm -rf "$tmp"; die "The restore itself failed."; }
   step "$(t 'Restore drill: %s file(s)' "${#picked[@]}")"
   for f in "${picked[@]}"; do
@@ -1324,6 +1342,12 @@ included_bytes() {   # prints "bytes unknown-count"
   echo "$total $unknown"
 }
 
+# One event per part of a run (the subject is the part: shares, host, ct:<name>), next to the overall backup.ok / backup.failed of the run.
+cat_event() {   # cat_event <category> <failed: 0|1>
+  if [ "$2" = 0 ]; then event_emit backup.ok "$1" "Backup of $1 finished"
+  else event_emit backup.failed "$1" "Backup of $1 finished with errors"; fi
+}
+
 cmd_list() {
   need_repo
   step "Snapshots"
@@ -1371,7 +1395,7 @@ restore_make_datasets() {   # restore_make_datasets <snapshot> <tag> <path>
   done <<<"$names"
   for d in "${skipped[@]}"; do note "$(t '%s is a plain folder with files, left as it is.' "$d")"; done
   [ "${#want[@]}" -gt 0 ] || return 0
-  step "$(t 'Share datasets that are missing and will be created first')"
+  note "$(t 'Share datasets that are missing and will be created first:')"
   for name in "${want[@]}"; do note "bulk/$parent/$name"; done
   for name in "${want[@]}"; do
     zfs create -p "bulk/$parent/$name" || die "$(t 'Could not create the dataset %s. Nothing was restored.' "bulk/$parent/$name")"
@@ -1459,9 +1483,12 @@ cmd_restore() {
   done
   [ -n "$snap" ] && [ -n "$path" ] || usage
   [ -d "$to" ] || die "$(t '%s does not exist. For the default: hs share add restored' "$to")"
+  steps 2   # a background job shows "step n of m" (#389)
+  step "$(t 'Preparing the target')"
   need_repo
   [ -n "${to%/}" ] || restore_make_datasets "$snap" "$tag" "$path"
   # "latest" means the newest snapshot with that tag (shares, host, ct:<name>)
+  step "$(t 'Restoring %s' "$path")"
   R restore "$snap" --tag "$tag" --target "$to" --include "$path"
   # restic is happy to restore nothing when the path is not in the snapshot
   [ -e "$to/${path#/}" ] || die "$(t "Nothing restored: '%s' is not in that snapshot. Use the full original path (for example %s/shares/<share>/<file>); look it up with: hs backup find <name>" "$path" "$BULK")"
@@ -1708,7 +1735,10 @@ cmd_browse() {
 }
 
 cmd_verify() {
+  steps 2   # a background job shows "step n of m" (#389)
+  step "$(t 'Opening the backup repository')"
   need_repo
+  step "$(t 'Reading a tenth of the stored data')"
   R check --read-data-subset=10%
 }
 
@@ -1844,7 +1874,7 @@ cmd_state_kv() {
     printf 'disk\tabsent\n'
   fi
   if mountpoint -q "$BROWSE" 2>/dev/null; then printf 'browse\ton\n'; else printf 'browse\toff\n'; fi
-  # the address may carry user:password (rest:https://u:pw@host/); this output lands in Redis, so the password is masked
+  # the address may carry user:password (rest:https://u:pw@host/); this output lands in the live state, so the password is masked
   offsite_adopt_old
   printf 'offsite\t%s\n' "$({ cat "$OFFSITE" 2>/dev/null || true; } | sed -E 's#(://[^/@]*):[^/@]*@#\1:***@#')"
   printf 'offsite_ok\t%s\n' "$(get offsite_ok)"

@@ -49,4 +49,13 @@ check_eq "hs sys logs units" "$(L units)" "$($F sys logs units)"
 $F sys logs show --unit incus --level warning >/dev/null
 check_eq "hs sys logs show passes its options on" "-u incus -u incus-* -p warning --since today -n 300 --no-pager -o short-iso" "$(args)"
 
+echo "-- follow (the web log stream)"
+out=$(L follow)
+check_eq "follow: the last 200 lines since the boot, then -f" "-b -n 200 -f --no-pager -o short-iso" "$(args)"
+check_out "follow prints the journal lines" "Accepted key" echo "$out"
+L follow --unit kernel --level err --lines 20 >/dev/null
+check_eq "follow takes unit, level and count" "-k -p err -b -n 20 -f --no-pager -o short-iso" "$(args)"
+check_eq "follow refuses an unknown unit" "1" "$(L follow --unit sshd >/dev/null 2>&1; echo $?)"
+check_eq "hs sys logs follow is the same" "-u incus -u incus-* -b -n 200 -f --no-pager -o short-iso" "$($F sys logs follow --unit incus >/dev/null; args)"
+
 finish

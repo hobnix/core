@@ -6,7 +6,10 @@
   import { go } from '../route.svelte.js';
   import { sharesPath } from '../pools.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
-  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { groupPending, groupFailed } from './rows.js';
   import NewGroup from '../forms/users/NewGroup.svelte';
   import Membership from '../forms/users/Membership.svelte';
   import EditGroup from '../forms/users/EditGroup.svelte';
@@ -31,13 +34,15 @@
   const builtin = (n) => /^(domain (users|admins|guests|computers|controllers)|administrators|schema admins|enterprise admins)$/i.test(n);
   // name, members (comma separated)
   const groups = $derived(rows(list).map((r) => ({ name: r[0], members: (r[1] ?? '').split(',').map((m) => m.trim()).filter(Boolean) })));
+  const doing = (g) => groupPending(g.name, rowstate.pending);
+  const failure = (g) => (doing(g) ? null : groupFailed(g.name, rowstate.failed));
   const sel = $derived(groups.find((g) => g.name === selName));
 
   // share, level, via (the entries made for the group itself)
-  const acc = poll(() => (sel ? `/api/sys/users/group-access/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const acc = poll(() => (sel ? `/api/sys/users/group-access/${encodeURIComponent(sel.name)}` : ''), 30000, 'shares-overview');
   const reach = $derived(rows(acc).map((r) => ({ share: r[0], level: r[1], via: r[2] })));
   // field, value of the opened group ("-" = empty)
-  const det = poll(() => (sel ? `/api/sys/users/group-details/${encodeURIComponent(sel.name)}` : ''), 30000);
+  const det = poll(() => (sel ? `/api/sys/users/group-details/${encodeURIComponent(sel.name)}` : ''), 30000, 'users-groups');
   const descr = $derived((() => { const v = rows(det).find((r) => r[0] === 'description')?.[1]; return v && v !== '-' ? v : ''; })());
   const reachColumns =[{ key: 'share', label: 'Share' }, { key: 'level', label: 'Level' }, { key: 'via', label: 'Through' }];
   const toShare = (s) => { setSelection('shares', s); go(sharesPath()); };
@@ -50,7 +55,7 @@
 
 <PageHeader title="Groups" crumb="Identity" sub="Who is in which group, and which shares a group is entered on.">
   {#snippet actions()}
-    <Button icon="arrows-clockwise" busy={jobRunning('users', ['all', 'flush'])} busyLabel="Flushing…" tooltip={'Make the file server forget cached users and groups'} onclick={() => openPlan('users', ['all', 'flush'], 'Flush caches')}>Flush caches</Button>
+    <Button icon="arrows-clockwise" busy={rowstate.pending('users', ['all', 'flush'])} busyLabel="Flushing…" tooltip={'Make the file server forget cached users and groups'} onclick={() => openPlan('users', ['all', 'flush'], 'Flush caches')}>Flush caches</Button>
     <Button variant="primary" tooltip={'Create a group of users'} onclick={() => openCreate(NewGroup, { existing: groups.map((g) => g.name) })}><i class="ph ph-plus"></i>New group</Button>
   {/snippet}
 </PageHeader>
@@ -63,7 +68,7 @@
       <Card style="padding:0">
         <Table id="groups" {columns} rows={groups} key="name" selected={sel?.name} onrow={(g) => { selName = g.name; tab = 'info'; }}>
           {#snippet cell(g, col)}
-            {#if col.key === 'name'}<b>{g.name}</b>
+            {#if col.key === 'name'}<b>{g.name}</b>{#if doing(g)} <Muted><i class="ph ph-circle-notch spin"></i> {doing(g)}…</Muted>{:else if failure(g)} <Chip tone="bad">failed</Chip>{/if}
             {:else if col.key === 'count'}{g.members.length}
             {:else if col.key === 'members'}<Muted>{g.members.join(', ') || '—'}</Muted>
             {:else}<Muted><GroupShares name={g.name} /></Muted>{/if}
@@ -75,6 +80,7 @@
       {#if sel}
         <Drawer title={sel.name} chip={builtin(sel.name) ? 'built in' : ''} bind:tab onclose={() => (selName = '')} tabs={[{ id: 'info', label: 'Members' }, { id: 'access', label: 'Shares' }]}>
           {#snippet children(t)}
+            {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
             {#if t === 'access'}
               <Table id="reach" columns={reachColumns} rows={reach} key="share" loading={!acc.loaded} empty={acc.loaded ? (acc.error ? 'The access could not be read.' : 'The group is on no share.') : 'Loading…'}>
                 {#snippet cell(r, col)}
@@ -91,7 +97,7 @@
           {#snippet actions()}
             <Button disabled={builtin(sel.name)} tooltip={builtin(sel.name) ? 'A built-in group cannot be edited' : 'Change the description'} onclick={() => openCreate(EditGroup, { name: sel.name })}><i class="ph ph-pencil-simple"></i>Edit</Button>
             <Button disabled={sel.name.toLowerCase() === 'domain users'} tooltip={'Choose the members'} onclick={() => openCreate(Membership, { subject: 'group', name: sel.name, have: sel.members, options: userNames })}><i class="ph ph-user-plus"></i>Members</Button>
-            <Button variant="danger" icon="trash" disabled={builtin(sel.name)} busy={jobRunning('users', [sel.name, 'group-delete'])} busyLabel="Deleting…" tooltip={builtin(sel.name) ? 'A built-in group cannot be deleted' : 'Delete the group (cannot be undone; you type the name)'}
+            <Button variant="danger" icon="trash" disabled={builtin(sel.name)} busy={rowstate.pending('users', [sel.name, 'group-delete'])} busyLabel="Deleting…" tooltip={builtin(sel.name) ? 'A built-in group cannot be deleted' : 'Delete the group (cannot be undone; you type the name)'}
               onclick={() => openPlan('users', [sel.name, 'group-delete'], `Delete ${sel.name}`)}>Delete</Button>
           {/snippet}
         </Drawer>

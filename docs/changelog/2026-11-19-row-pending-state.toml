@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "Job records and events name the row they work on"
+body  = """Each job record now carries a key such as "apps remove nextcloud", and the job.running, job.ok and job.failed events carry it too. The web interface uses it to show a row as busy when the job was started in a terminal, and to put the row back with the job's error when it fails."""

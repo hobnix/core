@@ -1,0 +1,127 @@
+// The pending state of a row from job events and job records (web/src/rowstate.js), run with node.
+import { fromRecords, applyEvents, isPending, failureOf, jobEventState, activeJobs, activeJobOf, FAILED } from '../web/src/rowstate.js';
+import { parseRecord } from '../web/src/jobrecords.js';
+import { sharePending, shareFailed, userPending, userFailed, groupPending, backupPending, backupFailed, vaultFailed } from '../web/src/pages/rows.js';
+let bad = 0;
+const check = (n, ok) => { if (!ok) { bad++; console.log('FAIL: ' + n); } };
+const J1 = '20261119-100000-app-remove-nextcloud-abcd', J2 = '20261119-110000-app-remove-nextcloud-wxyz';
+const rec = (id, state, key, exit = '-', desc = 'hs apps remove nextcloud') => parseRecord([id, 's', desc, state, '-', '-', '-', exit, '-', '-', '-', '-', '-', '-', key]);
+const ev = (id, kind, subject, payload) => ({ id, source: 'job', kind, subject, payload });
+
+// the record has the key: parseRecord reads the 15th column, "-" and a missing column are none
+check('record key read', rec(J1, 'running', 'apps remove nextcloud').key === 'apps remove nextcloud');
+check('record key "-" and no column', rec(J1, 'running', '-').key === null && parseRecord(['i', '-', '-', 'ok']).key === null);
+
+// a job started in a terminal: the record is running with a key; the page has no task of its own
+{
+  const jobs = fromRecords([rec(J1, 'running', 'apps remove nextcloud')]);
+  check('terminal job: row is pending', isPending(jobs, [], 'apps', ['remove', 'nextcloud']));
+  check('terminal job: another row is not', !isPending(jobs, [], 'apps', ['remove', 'jellyfin']));
+  check('terminal job: area without args matches', isPending(jobs, [], 'apps'));
+}
+// the event arrives before the next read of the records
+{
+  const jobs = applyEvents(new Map(), [ev(5, 'running', J1, { key: 'apps remove nextcloud' })], 0);
+  check('event alone makes the row pending', isPending(jobs, [], 'apps', ['remove', 'nextcloud']));
+  const done = applyEvents(jobs, [ev(6, 'ok', J1, { key: 'apps remove nextcloud' })], 0);
+  check('job.ok clears it', !isPending(done, [], 'apps', ['remove', 'nextcloud']));
+  const old = applyEvents(fromRecords([rec(J1, 'running', 'apps remove nextcloud')]), [ev(4, 'ok', J1)], 4);
+  check('events covered by the records are skipped', isPending(old, [], 'apps', ['remove', 'nextcloud']));
+  check('payload as JSON text', jobEventState({ source: 'job', kind: 'running', subject: J1, payload: '{"key":"a b"}' }).key === 'a b');
+  check('not a job event', jobEventState({ source: 'disk', kind: 'removed' }) === null && jobEventState({ source: 'job', kind: 'odd' }) === null);
+}
+// this browser's own task still counts
+check('own task counts', isPending(new Map(), [{ key: 'apps remove nextcloud', state: 'running' }], 'apps', ['remove', 'nextcloud']) && !isPending(new Map(), [{ key: 'apps remove nextcloud', state: 'ended' }], 'apps', ['remove', 'nextcloud']));
+// a failed fixture job restores the row: not pending, error shown, dismissed by hand, replaced by a later job
+{
+  const failed = fromRecords([rec(J1, 'failed', 'apps remove nextcloud', '3')]);
+  check('failed: row is not pending any more', !isPending(failed, [], 'apps', ['remove', 'nextcloud']));
+  const f = failureOf(failed, new Set(), 'apps', ['remove', 'nextcloud']);
+  check('failed: the error is shown with the exit', f && f.id === J1 && f.error.code === 'job.failed' && f.error.what === 'hs apps remove nextcloud failed (exit 3)');
+  check('failed: other rows show nothing', failureOf(failed, new Set(), 'apps', ['remove', 'jellyfin']) === null);
+  check('failed: dismissed by hand', failureOf(failed, new Set([J1]), 'apps', ['remove', 'nextcloud']) === null);
+  const again = fromRecords([rec(J1, 'failed', 'apps remove nextcloud', '3'), rec(J2, 'running', 'apps remove nextcloud')]);
+  check('a later job replaces the failure and is pending', failureOf(again, new Set(), 'apps', ['remove', 'nextcloud']) === null && isPending(again, [], 'apps', ['remove', 'nextcloud']));
+  const viaEvent = applyEvents(fromRecords([rec(J1, 'running', 'apps remove nextcloud')]), [ev(9, 'failed', J1, { exit: 2, key: 'apps remove nextcloud' })], 0);
+  check('job.failed event restores the row at once', !isPending(viaEvent, [], 'apps', ['remove', 'nextcloud']) && failureOf(viaEvent, new Set(), 'apps', ['remove', 'nextcloud'])?.error.what.endsWith('(exit 2)'));
+  const intr = fromRecords([rec(J1, 'interrupted', 'apps remove nextcloud')]);
+  check('interrupted shows its own code', failureOf(intr, new Set(), 'apps', ['remove', 'nextcloud'])?.error.code === 'job.interrupted');
+}
+// Apps and Marketplace rows: installing, updating, start/stop from a job (also one started in a terminal), and a failed install puts the row back with its error
+{
+  const K = 'recipes nextcloud run', KI = 'apps install jellyfin';
+  const run = fromRecords([rec(J1, 'running', K, '-', 'hs recipes nextcloud run')]);
+  check('apps: a recipe run in a terminal makes the row pending', isPending(run, [], 'recipes', ['nextcloud', 'run']) && !isPending(run, [], 'recipes', ['jellyfin', 'run']));
+  check('apps: a start job is pending for its instance only', isPending(fromRecords([rec(J1, 'running', 'ct nextcloud start')]), [], 'ct', ['nextcloud', 'start']) && !isPending(fromRecords([rec(J1, 'running', 'ct nextcloud start')]), [], 'ct', ['nextcloud', 'stop']));
+  const dead = applyEvents(run, [ev(8, 'failed', J1, { exit: 1, key: K })], 0);
+  const f = failureOf(dead, new Set(), 'recipes', ['nextcloud', 'run']);
+  check('apps: failed install: not pending, error shown', !isPending(dead, [], 'recipes', ['nextcloud', 'run']) && f && f.error.what === 'hs recipes nextcloud run failed (exit 1)');
+  const mk = applyEvents(new Map(), [ev(3, 'running', J2, { key: KI })], 0);
+  check('marketplace: install pending from the event, failed shows the error', isPending(mk, [], 'apps', ['install', 'jellyfin'])
+    && failureOf(applyEvents(mk, [ev(4, 'failed', J2, { exit: 2, key: KI })], 0), new Set(), 'apps', ['install', 'jellyfin'])?.error.code === 'job.failed');
+}
+// Instances and Docker rows (web/src/pages/instances/pending.js): start/stop from a terminal job, a failed job puts the row back
+{
+  const { ctPending, ctFailed, dockerPending, dockerFailed } = await import('../web/src/pages/instances/pending.js');
+  const K1 = '20261119-120000-ct-start-dc1-abcd', K2 = '20261119-120100-ct-stop-dc1-efgh', K3 = '20261119-120200-docker-app-pull-web-ijkl';
+  const jobs = fromRecords([rec(K1, 'running', 'ct dc1 start', '-', 'hs ct dc1 start')]);
+  const pend = (a, g) => isPending(jobs, [], a, g), fail = (a, g) => failureOf(jobs, new Set(), a, g);
+  check('ct start from a terminal: Starting', ctPending('dc1', pend) === 'Starting' && ctPending('other', pend) === '');
+  const stop = fromRecords([rec(K2, 'running', 'ct dc1 stop --autostart off')]);
+  check('ct stop with --autostart off: Stopping', ctPending('dc1', (a, g) => isPending(stop, [], a, g)) === 'Stopping');
+  const bad1 = fromRecords([rec(K1, 'failed', 'ct dc1 start', '1', 'hs ct dc1 start')]);
+  const pf = (a, g) => failureOf(bad1, new Set(), a, g), pp = (a, g) => isPending(bad1, [], a, g);
+  check('failed start: not pending, error shown', ctPending('dc1', pp) === '' && ctFailed('dc1', pf)?.error.what === 'hs ct dc1 start failed (exit 1)' && ctFailed('x', pf) === null);
+  const dk = fromRecords([rec(K3, 'running', 'docker-app web pull')]);
+  check('docker pull: Pulling', dockerPending('web', (a, g) => isPending(dk, [], a, g)) === 'Pulling');
+  const dkf = fromRecords([rec(K3, 'failed', 'docker-app web pull', '2')]);
+  check('docker failed pull shows error', dockerFailed('web', (a, g) => failureOf(dkf, new Set(), a, g))?.error.code === 'job.failed');
+  void fail;
+}
+// Shares, Users, Groups, Backup, Vault: pending words and failures per row (web/src/pages/rows.js)
+{
+  const K = 'shares photos snapshot', KU = 'users anna lock', KB = 'backup now';
+  const pend = (jobs) => (a, args) => isPending(jobs, [], a, args);
+  const fld = (jobs) => (a, args) => failureOf(jobs, new Set(), a, args);
+  const run = fromRecords([rec(J1, 'running', K, '-', 'hs shares photos snapshot'), rec(J2, 'running', KU, '-', 'hs users anna lock')]);
+  check('shares: a snapshot started in a terminal shows on its row only', sharePending('photos', pend(run)) === 'Snapshotting' && sharePending('docs', pend(run)) === '');
+  check('users: lock shows on its user, not on a group', userPending('anna', pend(run)) === 'Locking' && userPending('bob', pend(run)) === '' && groupPending('anna', pend(run)) === '');
+  const dead = applyEvents(run, [ev(9, 'failed', J1, { exit: 3, key: K }), ev(10, 'ok', J2, { key: KU })], 0);
+  check('shares: failed snapshot is not pending and shows its error', sharePending('photos', pend(dead)) === '' && shareFailed('photos', fld(dead))?.error.what === 'hs shares photos snapshot failed (exit 3)');
+  check('users: an ok job leaves no failure', userFailed('anna', fld(dead)) === null);
+  const bk = fromRecords([rec(J1, 'running', KB, '-', 'hs backup now')]);
+  check('backup: running now is pending, failed shows the error', backupPending(pend(bk)) === 'Backing up'
+    && backupFailed(fld(applyEvents(bk, [ev(4, 'failed', J1, { exit: 1, key: KB })], 0)))?.error.code === 'job.failed');
+  check('vault: failed close shows the error', vaultFailed(fld(fromRecords([rec(J1, 'failed', 'secrets close', 2, 'hs secrets close')])))?.error.what === 'hs secrets close failed (exit 2)');
+}
+// Pools and Disks rows (web/src/pages/storage/pending.js): a pool or disk job by the leading arguments, from a terminal too
+{
+  const { activeKeys, failureOfLead } = await import('../web/src/rowstate.js');
+  const { poolPending, syncPending, diskPending, failedOf } = await import('../web/src/pages/storage/pending.js');
+  const P1 = '20261119-130000-pool-bulk-replace-abcd', P2 = '20261119-130100-disk-sdb-wipe-efgh', P3 = '20261119-130200-system-scrub-ijkl', P4 = '20261119-130300-system-sync-mnop';
+  const jobs = fromRecords([rec(P1, 'running', 'pool bulk replace --member x --disks sdc', '-', 'hs pool bulk replace'), rec(P2, 'running', 'disk sdb wipe'), rec(P3, 'running', 'system scrub --pool fast'), rec(P4, 'running', 'system sync')]);
+  const act = (a, l) => activeKeys(jobs, [], a, l);
+  check('pool replace from a terminal: Replacing a disk', poolPending('bulk', act) === 'Replacing a disk');
+  check('another pool, and a pool named by prefix, are not pending', poolPending('bul', act) === '' && poolPending('bulk2', act) === '');
+  check('scrub of a ZFS pool', poolPending('fast', act) === 'Scrubbing' && poolPending('bulk', act) !== 'Scrubbing');
+  check('parity sync names no pool', syncPending(act) === 'Syncing parity');
+  check('disk wipe by device or member', diskPending(['sdb', '', 'S1'], act) === 'Formatting' && diskPending(['sdc'], act) === '');
+  const bad2 = fromRecords([rec(P1, 'failed', 'pool bulk replace --member x', '1', 'hs pool bulk replace'), rec(P2, 'ok', 'disk sdb wipe')]);
+  const fl = (a, l) => failureOfLead(bad2, new Set(), a, l);
+  check('failed pool job: not pending, error shown', poolPending('bulk', (a, l) => activeKeys(bad2, [], a, l)) === '' && failedOf('pool', ['bulk'], fl)?.error.code === 'job.failed');
+  check('a later ok job of the same lead replaces the failure', failedOf('disk', ['sdb'], fl) === null);
+  check('dismissed failure is gone', failureOfLead(bad2, new Set([P1]), 'pool', ['bulk']) === null);
+  check('own task counts by lead', activeKeys(new Map(), [{ key: 'pool bulk add --disks a,b', state: 'running' }], 'pool', ['bulk']).length === 1);
+}
+// a reload: the Tasks tab lists the active jobs from the records; the newest active job of a row names the running backup
+{
+  const mk = (id, state, key, started) => parseRecord([id, 's', 'hs ' + key, state, '-', started, '-', '-', '-', '-', '-', '-', '-', '-', key]);
+  const jobs = fromRecords([mk('20261120-010000-backup-aaaa', 'running', 'backup now', '2026-11-20T01:00:00Z'), mk('20261120-000000-backup-bbbb', 'ok', 'backup now', '2026-11-20T00:00:00Z'),
+    mk('20261120-020000-pool-cccc', 'waiting', 'pool tank sync', '-'), mk('20261120-030000-backup-dddd', 'skipped', 'backup now', '2026-11-20T03:00:00Z')]);
+  const act = activeJobs(jobs);
+  check('active jobs: running and waiting only, newest first', act.length === 2 && act[0].id.includes('pool-cccc') && act[1].id.includes('backup-aaaa'));
+  check('active job of a row: the running backup with its start', activeJobOf(jobs, 'backup', ['now'])?.started === '2026-11-20T01:00:00Z');
+  check('a skipped or finished job is not active', activeJobOf(fromRecords([mk('20261120-030000-backup-dddd', 'skipped', 'backup now', '-')]), 'backup', ['now']) === null);
+  check('skipped event is a state, not a failure', jobEventState({ source: 'job', kind: 'skipped', subject: 'x' })?.state === 'skipped' && !FAILED.includes('skipped'));
+}
+if (bad) process.exit(1);

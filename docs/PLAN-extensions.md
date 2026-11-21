@@ -91,15 +91,15 @@ package is on, with these checks. If any check fails the whole declaration of th
   topic of that read off (it stays a direct read) and logs one line; an extension topic can never be needed, so no cycle can involve one;
 - reads always land under `ext/<name>/...` and changes under the area `ext/<name>`: a manifest cannot name a core read or another package.
 
-**Live reads (opt-in).** Without `live` a read is run by the web interface as before. With `live = <seconds>` and the live state on (`liveState`,
-capability `live-state`) the read gets the Redis topic `ext-<name>-<words joined by '-'>` (`games` + `list` gives `ext-games-list`): the collector
+**Live reads (opt-in).** Without `live` a read is run by the web interface as before. With `live = <seconds>` and the live state on (the capability
+`live-state`, on with the web interface) the read gets the live topic `ext-<name>-<words joined by '-'>` (`games` + `list` gives `ext-games-list`): the collector
 `scripts/live-collect.py` runs `hs sys ext <name> <words>` every `<live>` seconds, at most 4 reads at once, and again at once when something
 asks for the group `ext-<name>`, which the web interface does after every change started in the area `ext/<name>` (an extension script that changes
 state outside the web interface can call `live_refresh @ext-<name>`). The page keeps its URL (`/api/sys/ext/<name>/<words>`); the browser
 learns the topic from the session answer and then follows the stream instead of polling. The capability of the topic is the package itself: while it
 is off the read is gone from the web interface (no URL, like any read of a package that is off) and the collector stops the topic at its next look. The collector looks at the packages every 60 s (and when the
 web interface asks for an unknown `ext-` topic), starts the thread of a new topic and stops that of a removed one. The read's output is stored in
-Redis in clear text, so a read must not print a secret (it must not do that for the web interface either). Games and Posters do not opt in yet.
+the state database in clear text, so a read must not print a secret (it must not do that for the web interface either). Games and Posters do not opt in yet.
 The code is scripts/hs_ext.py (`ext_read` validates, `ext_live_rows` lists), shared by web-serve.py and the collector.
 
 Core pages stay in `web/src/`; the Games and Posters pages read `/api/sys/ext/games/...` and `/api/sys/ext/posters/...`. The answers are the

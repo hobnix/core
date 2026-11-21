@@ -1,0 +1,44 @@
+# Named events -> live-state topics (docs/PLAN-live-interface.md step 13, D12). Columns, tab separated: kind, topics (comma list of topics of
+# scripts/lib/live-topics.tsv), how, note. how = `log` (the kind is also written to the event log: it must be in scripts/lib/event-kinds.tsv) or
+# `refresh` (a name for a refresh only: it must NOT be in event-kinds.tsv, so the log keeps only real events). A script, a watcher or a hook says `live_refresh event:<kind>` (scripts/lib/live.sh); the same word works for
+# `hs sys live refresh` and for the collector. Only the topics listed are read again; the broad groups (`@instances`, `@disks`, ...) stay as aliases
+# for one release. A kind the table does not list wakes the group `@system` (a wrong refresh is
+# cheap, a missed one is what a page notices). Checked by tests/event-topics.sh. Every topic keeps its interval as the safety net.
+ct.created	status,deck,ct-list,ct-pools,services-list,services-app,services-routes,services-local-routes,services-tiles,apps-list,apps-health	log	a container or VM appeared
+ct.started	status,deck,ct-list,services-list,services-app,services-routes,services-tiles,apps-list,apps-health	log	an instance started
+ct.stopped	status,deck,ct-list,services-list,services-app,services-routes,services-tiles,apps-list,apps-health	log	an instance stopped
+ct.deleted	status,deck,ct-list,ct-pools,services-list,services-app,services-routes,services-local-routes,services-tiles,apps-list,apps-health	log	an instance was removed
+disk.plugged	monitor-disks,disk-inventory,temp-disks,fm-locations,backup-state	log	a disk was plugged in (disk-event.sh)
+disk.removed	monitor-disks,disk-inventory,temp-disks,fm-locations,backup-state	log	a disk was pulled (disk-event.sh)
+share.changed	status,shares-overview,shares-deleted,fm-locations,pool-info-bulk	refresh	a share was created, deleted, restored, purged, snapped, cached or its permissions or size changed (the share scripts)
+disk.changed	status,monitor-disks,disk-inventory,disk-marks,pool-info-bulk,pool-members-bulk,pool-state-bulk,shares-overview,fm-locations	refresh	a disk was detached or recovered (disk-detach.sh, disk-recover.sh)
+pool.changed	status,monitor-disks,disk-inventory,disk-marks,pool-info-bulk,pool-info-fast,pool-members-bulk,pool-members-fast,pool-state-bulk,pool-state-fast,shares-overview,fm-locations,encryption	refresh	a pool was created, changed or removed (manage-pool.sh)
+pool.imported	status,monitor-disks,disk-inventory,disk-marks,shares-overview,fm-locations,encryption	refresh	a pool was imported (pool-import.sh)
+temp-disk.changed	status,monitor-disks,temp-disks,shares-overview,fm-locations	refresh	a temporary disk was added or removed (temp-disk.sh)
+disk.health-checked	monitor-disks,disk-health	refresh	the disk health check ran (disk-health.sh)
+state.disk-seen	status,disk-inventory	refresh	the state database saw a disk (state.sh scan)
+state.smart-checked	monitor-disks,disk-health,disk-inventory,state-history	refresh	the daily SMART check ran (state.sh)
+state.collected	disk-inventory	refresh	the disk inventory was collected again (state.sh collect)
+health.checked	health-next,health-list,status,deck	refresh	the health check ran (health-check.sh)
+job.stopped	status,live,deck,jobs-running,jobs-list,health-next,setup-list,backup-state	refresh	a job unit was stopped by hand (jobs.sh stop; the topics of the group @jobs)
+pkg.changed	pkg-market,pkg-states,apps-list,apps-health,pkg-repos,recipes-list,recipes-versions,parts-list	refresh	a package was fetched, installed, removed, updated or a repository changed (pkg.sh)
+ups.changed	ups,deck,status	refresh	upsmon reported a UPS event (ups.sh event)
+vault.changed	status,encryption,vault-list,vault-usage,vault-uses	refresh	a vault was created, opened, closed, moved or removed (vault.sh)
+docker.changed	status,deck,docker-list,docker-apps,docker-status,docker-health,docker-containers,docker-registries	refresh	a Docker container or image changed (the Docker watcher of the collector)
+service.failed	health-next,health-list	refresh	an hs-* unit went into or out of failed (hs-unit-watch)
+mount.changed	monitor-disks,disk-health,disk-inventory,disk-marks,pool-info-bulk,pool-info-fast,pool-disks,pool-members-bulk,pool-members-fast,pool-state-bulk,pool-state-fast,state-history,temp-disks,backup-overview,backup-shares,shares-overview,fm-locations,health-next,health-list	refresh	the array mount came or went (hs-unit-watch)
+samba.changed	shares-overview,shares-principals,health-next,health-list	refresh	Samba started, stopped or failed (hs-unit-watch)
+pool-unit.changed	monitor-disks,disk-health,disk-inventory,disk-marks,pool-info-bulk,pool-info-fast,pool-disks,pool-members-bulk,pool-members-fast,pool-state-bulk,pool-state-fast,state-history,temp-disks,backup-overview,backup-shares,health-next,health-list	refresh	a pool import or scrub unit changed state (hs-unit-watch)
+incus.changed	ct-list,ct-pools,iso-list,services-list,apps-list,apps-health	refresh	Incus is up or down (hs-unit-watch)
+docker-service.changed	docker-list,docker-apps	refresh	Docker is up or down (hs-unit-watch)
+gateway.changed	gateway-status,gateway-health,gateway-routes	refresh	the gateway proxy is up or down (hs-unit-watch)
+area.backup	@backup	refresh	the change area backup: what the registry topic:backup flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.disks	@disks	refresh	the change area disks: what the registry topic:disks flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.docs	@docs	refresh	the change area docs: what the registry topic:docs flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.instances	@instances	refresh	the change area instances: what the registry topic:instances flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.jobs	@jobs	refresh	the change area jobs: what the registry topic:jobs flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.network	@network	refresh	the change area network: what the registry topic:network flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.security	@security	refresh	the change area security: what the registry topic:security flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.shares	@shares	refresh	the change area shares: what the registry topic:shares flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.system	@system	refresh	the change area system: what the registry topic:system flag and the timers ask for; an alias of the group, edit the topics here to narrow it
+area.users	@users	refresh	the change area users: what the registry topic:users flag and the timers ask for; an alias of the group, edit the topics here to narrow it

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # help: read the journal of this server: what the services wrote, filtered by unit, level and time (read only)
 # help.de: das Journal dieses Servers lesen: was die Dienste geschrieben haben, nach Dienst, Stufe und Zeit gefiltert (nur lesen)
-# args: units | show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>]
+# args: units | show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>] | follow [--unit <key>] [--level err|warning|info] [--lines <N>]
 # System command (hs sys logs units|show): for the interface (the Logs tab) and tests. Plain text, never asks, changes nothing.
 #   units   key<TAB>label of what is worth choosing (all, the hs jobs, incus, samba, ssh, zfs, the kernel)
 #   show    the last N lines (default 300, at most 2000) of the journal as `journalctl -o short-iso` prints them, oldest first
 #             --unit   one of the keys of `units` (default all)
 #             --level  err = errors and worse, warning = warnings and worse, info = everything (default info)
 #             --since  1h = the last hour, today, boot = since the boot (default today)
+#   follow  the same lines first (default 200), then every new one as it is written, until the reader closes the pipe or the process is
+#             killed (the web interface's log stream, one child process per open view). Plain lines, no terminal needed, never asks.
 # Test knob: HS_JOURNALCTL (stand-in for journalctl).
 set -euo pipefail
 journalctl=${HS_JOURNALCTL:-journalctl}
@@ -22,8 +24,9 @@ units() {
   printf 'kernel\tThe kernel (disks, network, drivers)\n'
 }
 
-show() {
+show() {   # show|follow: $mode
   local unit=all level=info since=today lines=300 a=()
+  [ "$mode" != follow ] || { lines=200; since=boot; }
   while [ $# -gt 0 ]; do
     case "$1" in
       --unit)  unit=${2:-}; shift 2 ;;
@@ -58,11 +61,15 @@ show() {
     boot)  a+=(-b) ;;
     *) echo "--since is 1h, today or boot" >&2; exit 1 ;;
   esac
+  if [ "$mode" = follow ]; then
+    exec "$journalctl" "${a[@]}" -n "$lines" -f --no-pager -o short-iso 2>/dev/null </dev/null
+  fi
   "$journalctl" "${a[@]}" -n "$lines" --no-pager -o short-iso 2>/dev/null </dev/null | grep -v '^-- ' || true
 }
 
 case "${1:-}" in
   units) units ;;
-  show)  shift; show "$@" ;;
-  *) echo "usage: logs.sh units | show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>]" >&2; exit 1 ;;
+  show)  shift; mode=show; show "$@" ;;
+  follow) shift; mode=follow; show "$@" ;;
+  *) echo "usage: logs.sh units | show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>] | follow [--unit <key>] [--level err|warning|info] [--lines <N>]" >&2; exit 1 ;;
 esac

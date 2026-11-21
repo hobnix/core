@@ -20,6 +20,8 @@ const rows = [['p1', 'SMART of sdb is failing. Details: x', '-', '100', '-'], ['
 const ps = problemItems(rows);
 eq('unacknowledged first, the pause row left out', ps.map((p) => [p.id, p.acked]), [['p1', false], ['p3', false], ['p2', true]]);
 eq('a problem links to its object, else the Health page', ps.map((p) => p.href), ['/storage/disks', '/operations/health', '/protection/backup']);
+eq('an acknowledgement with an end carries it', problemItems([['p9', 'x', 'acked', '5', '-', '1700000000', 'ann']])[0].until, 1700000000);
+eq('no end is 0', ps[0].until, 0);
 const ev = [
   { id: 5, time: 1, source: 'job', kind: 'failed', subject: 'hs-x', level: 'error', text: '', payload: { exit: 2 } },
   { id: 6, time: 2, source: 'job', kind: 'ok', subject: 'hs-y', level: 'info', text: '', payload: null },

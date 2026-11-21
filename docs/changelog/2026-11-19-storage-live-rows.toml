@@ -1,0 +1,4 @@
+date  = "2026-11-19"
+type  = "change"
+title = "Pools and Disks show what a job is doing, and a failed job shows its error"
+body  = """A pool or disk job started in a terminal shows on the row and on the page too. When a job fails, the row goes back to its last real state and an error note says why. The pool list is read again when a pool job ends."""

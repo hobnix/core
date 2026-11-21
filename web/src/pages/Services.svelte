@@ -2,7 +2,9 @@
   import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
-  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { rowstate } from '../rowstate.svelte.js';
+  import { ErrorNote } from '../ui/index.js';
   import { prefetchPlan } from '../api.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -56,7 +58,8 @@
 
   // a routes job (Apply, Adopt, Import, Forget) started from here: its buttons stay busy until it ends, then the plans are read again
   // (the next poll could be 15 s away and Apply would still show the old count)
-  const routesJob = $derived(jobRunning('routes'));
+  const routesJob = $derived(rowstate.pending('routes'));
+  const routesFail = $derived(rowstate.failed('routes'));
   let wasRunning = false;
   $effect(() => {
     if (wasRunning && !routesJob) readAgain();
@@ -74,12 +77,13 @@
 
 <PageHeader title="Services" crumb="{ui.host} › Instances" sub="What the reverse proxy publishes, and what each service wants. Public means reachable from the internet; admin pages never are.">
   {#snippet actions()}
-    <Button variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>
-    <Button icon="check-circle" disabled={noProxy || !todo || (routesJob && !jobRunning('routes', ['apply']))} busy={jobRunning('routes', ['apply'])} busyLabel="Applying…" tooltip={todo ? 'Make the routes the services want' : 'The proxy already matches the services'} onpointerenter={() => prefetchPlan('routes', ['apply'])} onfocus={() => prefetchPlan('routes', ['apply'])} onclick={() => openPlan('routes', ['apply'], 'Apply the routes')}>Apply{todo ? ` (${todo})` : ''}…</Button>
-    <Button variant="ghost" icon="hand-grabbing" disabled={noProxy || !handmade || (routesJob && !jobRunning('routes', ['adopt']))} busy={jobRunning('routes', ['adopt'])} busyLabel="Adopting…" tooltip={'Let hs manage routes that were made by hand'} onclick={() => openPlan('routes', ['adopt'], 'Adopt routes')}>Adopt…</Button>
-    <Button variant="ghost" icon="download-simple" disabled={noProxy || (routesJob && !jobRunning('routes', ['import']))} busy={jobRunning('routes', ['import'])} busyLabel="Importing…" tooltip={'Describe the routes of the proxy as services'} onclick={() => openPlan('routes', ['import'], 'Import services')}>Import…</Button>
+    <Button need="admin" variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>
+    <Button need="admin" icon="check-circle" disabled={noProxy || !todo || (routesJob && !rowstate.pending('routes', ['apply']))} busy={rowstate.pending('routes', ['apply'])} busyLabel="Applying…" tooltip={todo ? 'Make the routes the services want' : 'The proxy already matches the services'} onpointerenter={() => prefetchPlan('routes', ['apply'])} onfocus={() => prefetchPlan('routes', ['apply'])} onclick={() => openPlan('routes', ['apply'], 'Apply the routes')}>Apply{todo ? ` (${todo})` : ''}…</Button>
+    <Button need="admin" variant="ghost" icon="hand-grabbing" disabled={noProxy || !handmade || (routesJob && !rowstate.pending('routes', ['adopt']))} busy={rowstate.pending('routes', ['adopt'])} busyLabel="Adopting…" tooltip={'Let hs manage routes that were made by hand'} onclick={() => openPlan('routes', ['adopt'], 'Adopt routes')}>Adopt…</Button>
+    <Button need="admin" variant="ghost" icon="download-simple" disabled={noProxy || (routesJob && !rowstate.pending('routes', ['import']))} busy={rowstate.pending('routes', ['import'])} busyLabel="Importing…" tooltip={'Describe the routes of the proxy as services'} onclick={() => openPlan('routes', ['import'], 'Import services')}>Import…</Button>
   {/snippet}
 </PageHeader>
+{#if routesFail}<ErrorNote error={routesFail.error} ondismiss={() => rowstate.dismiss(routesFail.id)} />{/if}
 
 {#if boardOn}
   <div class="card tc">
@@ -101,7 +105,7 @@
 
 <PageState loading={!svc.loaded} error={svc.error?.message} hasData={svc.data != null} empty={svc.loaded && !svc.error && !services.length}
            emptyIcon="arrows-split" emptyTitle="No services yet" emptyText="Import the routes of the proxy, or run a recipe: it describes its own service.">
-  {#snippet emptyAction()}<Button variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>{/snippet}
+  {#snippet emptyAction()}<Button need="admin" variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>{/snippet}
   <Card title="Services">
     <Table id="services" {columns} rows={services} key="name" loading={!svc.loaded} empty="No services.">
       {#snippet cell(s, col)}
@@ -113,7 +117,7 @@
         {:else if col.key === 'exposure'}<Chip tone={s.exposure === 'public-ok' ? 'accent' : ''}>{s.exposure}</Chip>
         {:else if col.key === 'names'}<span class="c">{dash(s.names)}</span>
         {:else if col.key === 'wants'}<span class="c">{dash(s.wants)}</span>
-        {:else}<Button variant="ghost" class="btn-icon services-rm" tooltip={`Change ${s.name}`} aria-label="Change {s.name}" onclick={() => describe({ edit: s.name })}><i class="ph ph-pencil-simple"></i></Button><Button variant="ghost" class="btn-icon services-rm" tooltip={`Forget the description of ${s.name} (its routes stay)`} aria-label="Forget {s.name}" onclick={() => openPlan('routes', ['remove', s.name], 'Forget ' + s.name)}><i class="ph ph-x"></i></Button>{/if}
+        {:else}<Button need="admin" variant="ghost" class="btn-icon services-rm" tooltip={`Change ${s.name}`} aria-label="Change {s.name}" onclick={() => describe({ edit: s.name })}><i class="ph ph-pencil-simple"></i></Button><Button need="admin" variant="ghost" class="btn-icon services-rm" tooltip={`Forget the description of ${s.name} (its routes stay)`} aria-label="Forget {s.name}" onclick={() => openPlan('routes', ['remove', s.name], 'Forget ' + s.name)}><i class="ph ph-x"></i></Button>{/if}
       {/snippet}
     </Table>
   </Card>
@@ -135,8 +139,8 @@
     {#if gw.loaded && gwv.wildcard && gwv.wildcard !== 'ok'}<Banner tone="warn">The wildcard DNS record is {gwv.wildcard}. Run <code>hs gateway check</code> in a terminal.</Banner>{/if}
     <Kv items={[{ k: 'Service', v: gwv.service ?? '' }, { k: 'Web interface', v: gwv.webui ?? '' }, { k: 'Domain', v: gwv.domain ?? '' }, { k: 'Wildcard', v: gwv.wildcard ?? '' }, { k: 'Port 80', v: gwv.port80 ?? '' }]} />
     <Row>
-      <Button icon="check-circle" disabled={!localTodo || (routesJob && !jobRunning('routes', ['apply', '--proxy', 'local']))} busy={jobRunning('routes', ['apply', '--proxy', 'local'])} busyLabel="Applying…" tooltip={localTodo ? 'Make the local names the services want' : 'The gateway proxy already matches the services'} onclick={() => openPlan('routes', ['apply', '--proxy', 'local'], 'Apply the local names')}>Apply local{localTodo ? ` (${localTodo})` : ''}…</Button>
-      <Button variant="ghost" icon="download-simple" disabled={routesJob && !jobRunning('routes', ['import', '--proxy', 'local'])} busy={jobRunning('routes', ['import', '--proxy', 'local'])} busyLabel="Importing…" tooltip={'Let every service without a choice get a local name'} onclick={() => openPlan('routes', ['import', '--proxy', 'local'], 'Import local names')}>Import local…</Button>
+      <Button need="admin" icon="check-circle" disabled={!localTodo || (routesJob && !rowstate.pending('routes', ['apply', '--proxy', 'local']))} busy={rowstate.pending('routes', ['apply', '--proxy', 'local'])} busyLabel="Applying…" tooltip={localTodo ? 'Make the local names the services want' : 'The gateway proxy already matches the services'} onclick={() => openPlan('routes', ['apply', '--proxy', 'local'], 'Apply the local names')}>Apply local{localTodo ? ` (${localTodo})` : ''}…</Button>
+      <Button need="admin" variant="ghost" icon="download-simple" disabled={routesJob && !rowstate.pending('routes', ['import', '--proxy', 'local'])} busy={rowstate.pending('routes', ['import', '--proxy', 'local'])} busyLabel="Importing…" tooltip={'Let every service without a choice get a local name'} onclick={() => openPlan('routes', ['import', '--proxy', 'local'], 'Import local names')}>Import local…</Button>
     </Row>
     <Table id="service-local-routes" columns={routeCols} rows={localRoutes} loading={!local.loaded}
            empty={local.error ? 'The local names could not be read.' : 'No services want a local name.'}>

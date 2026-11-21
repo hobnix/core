@@ -61,11 +61,8 @@ let
   isHome = role == "homeserver";
   isEdge = role == "edge";
   roleCapabilities = lib.optionals isHome [ "storage" "incus" "samba" "backup" ];
-  # live state (capability live-state): the web reads from Redis; off means direct reads (machine.toml liveState)
-  liveOn = webUi && isHome && machine.liveState == "redis";
-  # ADR 0026 step 1: the collector writes to state.db (hs-live-db), no Redis
-  liveDb = webUi && isHome && machine.liveState == "db";
-  capabilities = lib.unique (capabilitiesSetting ++ lib.optional metrics "metrics" ++ lib.optional (tailscaleRouter || webTailscale) "tailscale" ++ lib.optional (ad != null) "ad" ++ lib.optional (webUi && machine.webDocs) "docs" ++ lib.optional liveOn "live-state" ++ roleCapabilities);
+  # live state (capability live-state, ADR 0026): no setting, no mode. With the web interface on a homeserver the capability is on: the collector hs-live keeps the topics in state.db.
+  capabilities = lib.unique (capabilitiesSetting ++ lib.optional metrics "metrics" ++ lib.optional (tailscaleRouter || webTailscale) "tailscale" ++ lib.optional (ad != null) "ad" ++ lib.optional (webUi && machine.webDocs) "docs" ++ lib.optional (webUi && isHome) "live-state" ++ roleCapabilities);
   hasStorage = builtins.elem "storage" capabilities;
   hasIncus = builtins.elem "incus" capabilities;
   hasSamba = builtins.elem "samba" capabilities;
@@ -217,9 +214,6 @@ in
     assertion = builtins.stringLength (bridgeOf name) <= 15;
     message = "machine.toml: VLAN name '${name}' is too long (max. 12 characters).";
   }) vlans) ++ [{
-    assertion = !(liveDb && builtins.elem "live-state" capabilities);
-    message = "machine.toml: liveState = \"db\" and the capability live-state cannot both be on (two collectors).";
-  } {
     # port 22 closed on the network cards and no private interface to reach it on = locked out
     assertion = sshOverIp || config.hs.privateInterfaces != [ ];
     message = "machine.toml: sshOverIp = false closes SSH on the network cards, so something must provide private access (capabilities = [\"tailscale\"]); otherwise nothing can reach this server over SSH.";
@@ -293,7 +287,7 @@ in
   ];
 
   # ──────────────────────── Status document (Stream Deck, wall monitor, Home Assistant) ────────────────────────
-  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 10 s (as root: it
+  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 20 s after the last run ended (as root: it
   # reads disks and pools), hs-deck-api hands out that file (and /disks, /events written next to it) on port 9740, read only, as nobody. Home networks
   # and Tailscale only. Format: scripts/deck-status.sh, test: tests/deck-status.sh
   systemd.services.hs-deck-status = lib.mkIf deckApi {
@@ -310,7 +304,12 @@ in
         bash ${./scripts}/state.sh $what-json > /run/hs-deck/deck-$what.json.new && chmod 644 /run/hs-deck/deck-$what.json.new && mv /run/hs-deck/deck-$what.json.new /run/hs-deck/deck-$what.json || true
       done
     '';
-    startAt = "*:*:0/10";
+    # A timer that starts 20 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
+    # The history is hourly medians and a display reads the counters twice, so 20 s is plenty.
+  };
+  systemd.timers.hs-deck-status = lib.mkIf deckApi {
+    wantedBy = [ "timers.target" ];
+    timerConfig = { OnBootSec = "30s"; OnUnitInactiveSec = "20s"; AccuracySec = "1s"; };
   };
   systemd.services.hs-deck-api = lib.mkIf deckApi {
     description = "Read-only status endpoint for displays (port 9740)";
@@ -339,6 +338,7 @@ in
     path = [ "/run/current-system/sw" config.services.samba.package ];
     environment = {
       HS_CALLER = "web";
+      HS_MACHINE_CACHE = "/run/hs-machine-cache";    # machine.toml answers kept 30 s at most (scripts/lib/machine-toml helpers)
       HS_WEB_PORT = toString webPort;
       HS_WEB_ROOT = "${hsWeb}";
       HS_WEB_BIND = if webTailscale && !webLan then "127.0.0.1" else "";
@@ -350,7 +350,6 @@ in
       # PrivateTmp gives hs-web its own mount namespace: the unlock (vault mount) must run outside it, in a transient unit
       HS_WEB_UNLOCK_IN_UNIT = "1";
       HS_WEB_SESSION_FILE = "/run/hs-web/sessions.json";
-      HS_WEB_LIVE = if builtins.elem "live-state" capabilities then "redis" else if liveDb then "db" else "";
     };
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/web-serve.py";
@@ -361,8 +360,6 @@ in
       RuntimeDirectory = "hs-web";
       RuntimeDirectoryMode = "0700";
       RuntimeDirectoryPreserve = "yes";
-      # the Redis socket of the live state (capability live-state); hs-web still starts without Redis and answers 503
-      SupplementaryGroups = lib.optionals (builtins.elem "live-state" capabilities) [ "hs-live" "redis-hobnix" ];
     };
   };
 
@@ -619,31 +616,14 @@ in
   };
 
 
-  # The slow reads of the web interface (scripts/lib/collected-reads.tsv) are kept in the state database, so a page opens without waiting for the
-  # scripts (scripts/reads-collect.sh, scripts/web-serve.py). Only with the web interface; every 15 s, it reads what is older than its own interval.
-  # If it stops, the web interface starts the scripts itself again. Nothing runs while the storage is locked (the script checks).
-  systemd.services.hs-reads-collect = lib.mkIf webUi {
-    description = "Keep the slow reads of the web interface in the state database (hs sys reads collect)";
-    path = [ "/run/current-system/sw" pkgs.python3 ];
-    serviceConfig.Type = "oneshot";
-    script = "bash ${./scripts}/reads-collect.sh";
-    onFailure = notifyFailure;
-  };
-  systemd.timers.hs-reads-collect = lib.mkIf webUi {
-    description = "Timer of hs-reads-collect";
-    wantedBy = [ "timers.target" ];
-    timerConfig = { OnBootSec = "1min"; OnUnitInactiveSec = "15s"; AccuracySec = "1s"; };
-  };
-
-  # ADR 0026 step 1 (liveState = "db", off by default): the live-state collector without Redis; it writes the topics and one heartbeat row into
-  # state.db (scripts/live-collect.py, HS_LIVE_STORE=db). Only for the measurement (hs live measure). Not tested on hardware yet.
-  systemd.services.hs-live-db = lib.mkIf liveDb {
-    description = "Live state collector into the state database (ADR 0026 step 1)";
+  # Live interface step 4 (docs/PLAN-live-interface.md, D4): one watcher on the system bus (busctl monitor, PropertiesChanged of the units) marks the
+  # topics of the units the interface shows (scripts/lib/unit-topics.tsv) so a stop or a crash shows without waiting for the collector, which stays
+  # the safety net. It only calls live_refresh; it never changes a unit. Exit 1 when the monitor ends: Restart = always. Not tested on hardware yet.
+  systemd.services.hs-unit-watch = lib.mkIf (webUi && isHome) {
+    description = "Mark the live-state topics of changed units (scripts/unit-watch.py)";
     wantedBy = [ "multi-user.target" ];
     path = [ "/run/current-system/sw" pkgs.python3 ];
-    environment = { HS_CALLER = "ui"; HS_LIVE_STORE = "db"; };
-    serviceConfig = { ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/live-collect.py"; Restart = "always"; RestartSec = 5; };
-    onFailure = notifyFailure;
+    serviceConfig = { ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/unit-watch.py"; Restart = "always"; RestartSec = 5; };
   };
 
   # Notifications are a subscriber of the event log (docs/adr/0005-events.md, docs/notify-rules.md): this reads the rows after its cursor,

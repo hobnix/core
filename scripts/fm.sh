@@ -1013,11 +1013,35 @@ for k, v in (("files_done", f[0]), ("files_total", f[1]), ("bytes_done", b[0]), 
   echo "status	ok"
   pid=$(awk -F'\t' '$1 == "pid" { print $2; exit }' "$sf")
   local res; res=$(awk -F'\t' '$1 == "result" { print $2; exit }' "$sf")
-  if [ "$res" = running ] && [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-    awk -F'\t' '$1 == "result" { print "result\tfailed"; next } $1 == "phase" { print "phase\tthe job ended without a result"; next } $1 != "pid" { print }' "$sf"
-  else
-    grep -v '^pid	' "$sf" || true
+  # the state file is the detail (files, bytes, speed); the job record is the shared truth for result and phase when it has one
+  local rid="" rec=""
+  if [ -f "$fm_dir/jobs/$id.rec" ]; then
+    rid=$(cat "$fm_dir/jobs/$id.rec" 2>/dev/null)
+    if [[ $rid =~ ^[A-Za-z0-9._-]{1,100}$ ]] && [ -f "$here/job-record.py" ]; then rec=$(python3 "$here/job-record.py" get "$rid" 2>/dev/null) || rec=""; fi
   fi
+  {
+    if [ "$res" = running ] && [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      awk -F'\t' '$1 == "result" { print "result\tfailed"; next } $1 == "phase" { print "phase\tthe job ended without a result"; next } $1 != "pid" { print }' "$sf"
+    else
+      grep -v '^pid	' "$sf" || true
+    fi
+  } | FM_REC="$rec" python3 -c '
+import json, os, sys
+lines = sys.stdin.read().splitlines()
+try:
+    r = json.loads(os.environ.get("FM_REC") or "")
+    if not isinstance(r, dict): r = {}
+except ValueError:
+    r = {}   # no record, or one this reader cannot parse: the state file stands alone
+res = {"ok": "done", "cancelled": "cancelled", "failed": "failed", "interrupted": "failed"}.get(r.get("state"))
+st = r.get("step")
+text = str(st.get("text") or "").replace("\t", " ") if isinstance(st, dict) else ""
+for l in lines:
+    k = l.split("\t", 1)[0]
+    if k == "result" and res: l = "result\t" + res
+    elif k == "phase" and text and res is None: l = "phase\t" + text
+    print(l)
+'
   local k f
   for k in skipped failed; do
     f=$fm_dir/jobs/$id.$k

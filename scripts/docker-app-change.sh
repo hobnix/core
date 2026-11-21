@@ -3,7 +3,7 @@
 # help.de: -
 # args: plan|start <app> <action> [--rev new|<rev>] [--delete-data]
 # Change the apps (compose projects) that run in the locked docker container.
-# Actions: start, stop, restart run directly; pull runs as a background job and recreates the containers.
+# Actions: start, stop, restart and pull run as background jobs (status started + unit; pull also recreates the containers).
 # app-save creates or updates a web-managed app and recreates it (up -d); app-write only writes the two files (the running app is not touched).
 # The plan of app-save/app-write is also the Test of the web editor: it collects every problem as `finding<TAB>error|warn<TAB>where<TAB>text`
 # (where = compose:<line> | compose:<dotted.path> | env:<line> | -) and refuses with "The test found N problems." when one is an error.
@@ -14,7 +14,7 @@
 # app-save at the plan (fix: hs vault open); start, stop, restart never need it.
 # The files of an app live in the share apps (seen in docker at /shares/apps): stacks/<app> for web-managed apps, recipes/<app> for recipes,
 # or the legacy /opt/apps/<app> (lib/docker-apps.sh docker_app_dir). delete keeps the folder unless --delete-data is given (the app stays editable and can be started again).
-# Test knobs: HS_DOCKER_NO_JOB=1 (run pull/rebuild/save/delete inline), HS_INCUS, HS_DOCKER_SH and HS_CT_CHANGE (stand in for docker.sh and ct-change.sh).
+# Test knobs: HS_DOCKER_NO_JOB=1 (run start/stop/restart/pull/rebuild/save/delete inline), HS_INCUS, HS_DOCKER_SH and HS_CT_CHANGE (stand in for docker.sh and ct-change.sh).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -847,20 +847,45 @@ cmd_plan_old() {
   if [ "$action" = pull ]; then printf 'long\tyes\n'; else printf 'long\tno\n'; fi
 }
 
+# run_action <app> <start|stop|restart>: the work itself (a stopped app without containers is brought up from its folder)
+run_action() {
+  local app=$1 action=$2
+  if [ "$action" != stop ] && [ "$(app_state "$app")" = stopped ]; then
+    docker_with_auth "$app" up -d
+  else
+    timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c 'docker compose -p "$1" "$2"' sh "$app" "$action" </dev/null
+  fi
+}
+
+apply_action() {
+  local app=$1 action=$2
+  [[ "$app" =~ $APP_RE ]] || fail "The app name is not valid."
+  docker_on_and_running || fail "Docker is not on or not running."
+  app_is_child "$app" || fail "No app called '$app' was found."
+  is_manager "$app" && fail "The app '$app' is the Docker manager."
+  step "$(t '%s %s' "${action^}" "$app")"
+  if run_action "$app" "$action"; then
+    ok "$(t 'Done: %s %s' "$action" "$app")"
+  else
+    fail "$(t 'The %s of %s failed.' "$action" "$app")"
+  fi
+}
+
 cmd_start_old() {
   local app=$1 action=$2 dir unit
   base_checks "$app"
   case "$action" in
     start|stop|restart)
-      if [ "$action" != stop ] && [ "$(app_state "$app")" = stopped ]; then
-        # no container (the data were kept): bring the app up from its folder
-        if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse "The $action of $app failed."; fi
-        return 0
-      fi
-      if timeout 30 "${HS_INCUS:-incus}" exec "$CT" -- sh -c 'docker compose -p "$1" "$2"' sh "$app" "$action" </dev/null; then
-        printf 'status\tdone\n'
+      if [ -n "${HS_DOCKER_NO_JOB:-}" ]; then
+        run_action "$app" "$action" || refuse "The $action of $app failed."
+        printf 'status	done
+'
       else
-        refuse "The $action of $app failed."
+        # a background job with a record: the request returns at once, the row follows the job events, a toast reports the end (#896)
+        unit=$(hs_job "docker-app-$action-$app" "$(t '%s %s' "${action^}" "$app")" -- bash "$0" --apply-action "$app" "$action") || refuse "The background job could not be started."
+        printf 'status	started
+unit	%s
+' "$unit"
       fi
       ;;
     pull)
@@ -882,6 +907,13 @@ cmd_start_old() {
 if [ "${1:-}" = "--apply-pull" ]; then
   [ $# -eq 3 ] || exit 1
   apply_pull "$2" "$3"
+  exit 0
+fi
+
+if [ "${1:-}" = "--apply-action" ]; then
+  [ $# -eq 3 ] || exit 1
+  [[ "$3" =~ ^(start|stop|restart)$ ]] || exit 1
+  apply_action "$2" "$3"
   exit 0
 fi
 

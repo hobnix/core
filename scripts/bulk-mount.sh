@@ -229,6 +229,13 @@ done
   # SABnzbd/Radarr/Sonarr unpack here and the file grows for hours: SnapRAID would report "Unexpected size change"
   # (soft errors, exit 1, failure alarm). The finished file is hard-linked into the library and synced from there.
   echo "exclude _UNPACK_*/"
+  # folders the owner left out of the parity per share (hs share <share> parity skip <folder>, #952)
+  if [ -r "${HS_PARITY_SKIP:-/var/lib/hs/parity-skip}" ]; then
+    while IFS=$'	' read -r prel pfolder _; do
+      [ -n "$prel" ] && [ -n "$pfolder" ] || continue
+      echo "exclude /$prel/$pfolder/"
+    done < "${HS_PARITY_SKIP:-/var/lib/hs/parity-skip}"
+  fi
 } > "$conf"
 
 echo "bulk: ${#data[@]} data disk(s), ${#parity[@]} parity disk(s)$([ "$cached" -eq 0 ] || echo ", $cached share(s) with upload cache")"

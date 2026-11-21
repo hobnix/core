@@ -4,7 +4,7 @@
   // disk and the pool of the same array never meet) is enforced by the server; the picker and the plan dialog only show its answer.
   // Links open it pre-filled: /storage/files?left=disk:data-04&path=/shares/x&right=pool:<name>[&rpath=/y][&select=<name>].
   import { onDestroy, untrack } from 'svelte';
-  import { live } from '../live.svelte.js';
+  import { live, wantTopic } from '../live.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Banner from '../ui/Banner.svelte';
@@ -37,6 +37,7 @@
     started = true;
     untrack(() => fm.init(route.query));
   });
+  $effect(() => wantTopic('fm-locations'));   // D13: the stream carries it while this page is open
   // while live state is on, refresh only the location list when the server publishes a change
   $effect(() => {
     if (!started || !live.open) return;
