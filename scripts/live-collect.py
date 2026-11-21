@@ -114,6 +114,10 @@ class DockerWatch:
         """True when the event line is a change that asks for a refresh. IncusWatch narrows it."""
         return True
 
+    def flush(self):
+        """One burst ends: ask for the refresh (IncusWatch asks per named event)."""
+        self.refresh(self.GROUP)
+
     def _mark_up(self):
         if self.down:
             self.log("%s events back" % self.NAME)
@@ -150,7 +154,7 @@ class DockerWatch:
                             first = first or now
                             last = now
                     if first is not None and now >= min(last + self.COALESCE, first + self.MAX_WAIT):
-                        self.refresh(self.GROUP)
+                        self.flush()
                         first = last = None
                     continue
                 if line is None:
@@ -175,7 +179,7 @@ class DockerWatch:
                     proc.kill()
                     proc.wait()
         if first is not None:
-            self.refresh(self.GROUP)                 # flush what came before the end
+            self.flush()                             # flush what came before the end
         return up, msg or "exit %s" % proc.returncode
 
     def run(self):
@@ -252,6 +256,7 @@ class IncusWatch(DockerWatch):
         self.emit = emit
         self.clock = clock
         self.seen = {}                  # (kind, instance) -> time of the last event
+        self.asked = set()              # refresh words of the burst that is running (named events; @instances for an action without a kind)
         self.win_start, self.win_n, self.win_skipped = None, 0, 0
         self.outq = queue.Queue()
         self.writer = None
@@ -262,9 +267,16 @@ class IncusWatch(DockerWatch):
             return False
         action, name, project = p
         kind = INCUS_KIND.get(action)
+        self.asked.add("event:" + kind if kind else self.GROUP)
         if kind and self._admit(kind, name):
             self.outq.put((kind, name, INCUS_TEXT[kind] % name, {"instance": name, "project": project, "action": "instance-" + action}))
         return True
+
+    def flush(self):
+        """The topics of each named event of the burst (D12); an action without a kind (restarted, renamed, ...) keeps the group."""
+        asked, self.asked = sorted(self.asked) or [self.GROUP], set()
+        for w in asked:
+            self.refresh(w)
 
     def _admit(self, kind, name):
         now = self.clock()
@@ -550,6 +562,11 @@ class Collector:
         counted (seconds), the start of the delay measure; default now."""
         if topic.startswith("ext-") and topic not in self.events:
             self.rescan(self.RESCAN_MIN)      # a package was switched on a moment ago: the web interface asks for its topic
+        kind_topics = None
+        if topic.startswith("event:"):        # a named event (D12): the topics event-topics.tsv lists; an unknown kind falls back to @system
+            kind_topics = set(ls.event_topics().get(topic[6:]) or ())
+            if not kind_topics:
+                return self.refresh("@system", since)
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
@@ -557,7 +574,7 @@ class Collector:
         t_trig = since if since else time.time()
         for t, ev in items:
             hard = soft = False
-            if topic == "*" or topic == t:
+            if topic == "*" or topic == t or (kind_topics is not None and t in kind_topics):
                 hard = True
             elif topic.startswith("@"):
                 groups = (info.get(t) or {}).get("groups", set())

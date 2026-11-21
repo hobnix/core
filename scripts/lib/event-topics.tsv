@@ -1,0 +1,11 @@
+# Named events -> live-state topics (docs/PLAN-live-interface.md step 13, D12). Columns, tab separated: kind, topics (comma list of topics of
+# scripts/lib/live-topics.tsv), note. A script, a watcher or a hook says `live_refresh event:<kind>` (scripts/lib/live.sh); the same word works for
+# `hs sys live refresh` and for the collector. Only the topics listed are read again; the broad groups (`@instances`, `@disks`, ...) stay as aliases
+# for one release. The kind must be in scripts/lib/event-kinds.tsv; a kind the table does not list wakes the group `@system` (a wrong refresh is
+# cheap, a missed one is what a page notices). Checked by tests/event-topics.sh. Every topic keeps its interval as the safety net.
+ct.created	status,deck,ct-list,ct-pools,services-list,services-app,services-routes,services-local-routes,services-tiles,apps-list,apps-health	a container or VM appeared
+ct.started	status,deck,ct-list,services-list,services-app,services-routes,services-tiles,apps-list,apps-health	an instance started
+ct.stopped	status,deck,ct-list,services-list,services-app,services-routes,services-tiles,apps-list,apps-health	an instance stopped
+ct.deleted	status,deck,ct-list,ct-pools,services-list,services-app,services-routes,services-local-routes,services-tiles,apps-list,apps-health	an instance was removed
+disk.plugged	monitor-disks,disk-inventory,temp-disks,fm-locations,backup-state	a disk was plugged in (disk-event.sh)
+disk.removed	monitor-disks,disk-inventory,temp-disks,fm-locations,backup-state	a disk was pulled (disk-event.sh)
