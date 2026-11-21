@@ -75,7 +75,7 @@ case "$cmd" in
     [ "$rc" -ne 0 ] || ! people || exec bash "$0" baseline
     exit "$rc" ;;
   collect) db collect "$@"; rc=$?; if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh disk-inventory || true; fi; exit "$rc" ;;
-  history-record) db history-record "$@"; rc=$?; if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh state-history || true; fi; exit "$rc" ;;
+  history-record) db history-record "$@"; exit $? ;;     # no live_refresh: the deck timer records every few seconds and the hourly medians of state-history are read every 30 s anyway
   disks|smart|problems|deck-disks|inventory-json|disks-json|events-json|history|usage-record|usage|read-put|read-fail|read-get|reads|topic-bump) db "$cmd" "$@" ;;
   *) echo "usage: hs disk inventory | hs disk events | hs disk <serial> forget" >&2; exit 1 ;;
 esac

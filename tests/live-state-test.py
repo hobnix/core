@@ -203,6 +203,67 @@ class Collect(unittest.TestCase):
         self.assertTrue(c.events["status"].is_set())
 
 
+class Coalesce(unittest.TestCase):
+    """a burst of refreshes of one topic is one read (beta.1 read state-history again and again); a group `any` wake waits longer"""
+
+    def make(self, groups):
+        rows = [(n, [n], 300, "run") for n in groups]
+        calls = []
+
+        def run(words):
+            calls.append(words[0])
+            return 0, "%s %d\n" % (words[0], len(calls)), ""
+        c = lc.Collector(FakeResp(), run=run, topic_rows=rows, topic_info={n: {"cap": None, "groups": g} for n, g in groups.items()}, topic_needs={})
+        return c, calls
+
+    def run_loop(self, c, topic, secs):
+        t = threading.Thread(target=c.loop, args=(topic, [topic], 300, "run"), daemon=True)
+        t.start()
+        time.sleep(secs)
+        c.stop.set()
+        c.events[topic].set()
+        t.join(3)
+
+    def test_burst_is_one_read(self):
+        c, calls = self.make({"hist": {"disks"}})
+        c.min_gap = 0.4
+
+        def burst():
+            time.sleep(0.15)                      # the first read is done, the topic sleeps
+            for _ in range(20):
+                c.refresh("hist")
+                c.refresh("@disks")
+                time.sleep(0.01)
+        b = threading.Thread(target=burst)
+        b.start()
+        self.run_loop(c, "hist", 1.0)
+        b.join()
+        self.assertEqual(calls, ["hist", "hist"])          # the first read, then ONE for the 40 refreshes
+
+    def test_any_wake_waits_for_any_gap_but_own_group_does_not(self):
+        c, calls = self.make({"st": {"any"}})
+        c.min_gap, c.any_gap = 0, 30
+        t = threading.Thread(target=c.loop, args=("st", ["st"], 300, "run"), daemon=True)
+        t.start()
+        time.sleep(0.2)
+        c.refresh("@docker")                               # `any` only: held back by any_gap
+        time.sleep(0.3)
+        self.assertEqual(calls, ["st"])
+        c.refresh("st")                                    # asked for by name: not held back by any_gap
+        time.sleep(0.3)
+        c.stop.set()
+        c.events["st"].set()
+        t.join(3)
+        self.assertEqual(calls, ["st", "st"])
+
+    def test_refresh_log_counts_the_queued(self):
+        c, _ = self.make({"a": {"x"}})
+        with unittest.mock.patch.object(lc, "log") as lg:
+            c.refresh("a")
+            c.refresh("a")
+        self.assertEqual(lg.call_count, 1)                 # the second one woke nothing new: no line
+
+
 class Needs(unittest.TestCase):
     """dependency graph and waves (#153)"""
 

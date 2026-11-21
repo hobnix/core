@@ -45,8 +45,39 @@ machine_tool() {   # machine_tool <args>: the python tool
   command -v "$py" >/dev/null 2>&1 || py=python
   PYTHONUTF8=1 "$py" "${BASH_SOURCE[0]%/*}/../machine-toml.py" "$@"
 }
-machine_get() { [ -f "$(machine_file)" ] || return 1; machine_tool get "$(machine_file)" "$1"; }
-machine_get_json() { [ -f "$(machine_file)" ] || return 1; machine_tool get "$(machine_file)" "$1" --json; }
+# The read path asks for the same keys again and again (pools, bulkType ...): each answer is kept in a file under the runtime folder and used
+# while machine.toml is not newer than it, so a repeated read starts no python. Test knob HS_MACHINE_CACHE=off (or a folder).
+_machine_cache_dir() {
+  local d=${HS_MACHINE_CACHE:-}
+  [ "$d" != off ] || return 1
+  [ -n "$d" ] || { d=${XDG_RUNTIME_DIR:-/run}; [ -w "$d" ] || d=${TMPDIR:-/tmp}; d=$d/hs-machine-cache-${UID:-0}; }
+  [ -d "$d" ] || (umask 077; mkdir -p "$d") 2>/dev/null || return 1
+  [ -w "$d" ] || return 1
+  printf '%s' "$d"
+}
+_machine_cached() {   # _machine_cached <mode> <key> [--json]: print the answer, return its exit code
+  local f; f=$(machine_file)
+  [ -f "$f" ] || return 1
+  local d c rc out
+  if d=$(_machine_cache_dir) && [[ $2 =~ ^[A-Za-z0-9_.-]{1,80}$ ]]; then
+    c=$d/$(printf '%s' "$f" | tr -c 'A-Za-z0-9' '_' | tail -c 60).$2.${3:+json}
+    if [ -f "$c" ] && [ "$c" -nt "$f" ]; then
+      { IFS= read -r rc; out=$(cat); } <"$c" 2>/dev/null || rc=
+      if [[ $rc =~ ^[0-9]+$ ]]; then [ -z "$out" ] || printf '%s
+' "$out"; return "$rc"; fi
+    fi
+    out=$(machine_tool get "$f" "$2" $3); rc=$?
+    ( umask 077; { printf '%s
+' "$rc"; printf '%s' "$out"; } >"$c.$$" && mv -f "$c.$$" "$c" ) 2>/dev/null || true
+    [ -z "$out" ] || printf '%s
+' "$out"
+    return "$rc"
+  fi
+  machine_tool get "$f" "$2" $3
+}
+_machine_cache_clear() { local d; d=$(_machine_cache_dir) && rm -f "$d"/* 2>/dev/null; return 0; }
+machine_get() { _machine_cached get "$1"; }
+machine_get_json() { _machine_cached get "$1" --json; }
 machine_has() { machine_get_json "$1" >/dev/null 2>&1; }
 _machine_backup() {   # _machine_backup <tag>: the --backup option for a change, when there is a state folder
   local state=${HS_STATE_DIR:-/var/lib/hs}
@@ -54,11 +85,13 @@ _machine_backup() {   # _machine_backup <tag>: the --backup option for a change,
 }
 machine_set() {
   local -a bk=(); mapfile -t bk < <(_machine_backup "${3:-config}")
-  machine_tool set "$(machine_file)" "$1" "$2" "${bk[@]}"
+  machine_tool set "$(machine_file)" "$1" "$2" "${bk[@]}"; local rc=$?
+  _machine_cache_clear; return "$rc"
 }
 machine_unset() {
   local -a bk=(); mapfile -t bk < <(_machine_backup "${2:-config}")
-  machine_tool unset "$(machine_file)" "$1" "${bk[@]}"
+  machine_tool unset "$(machine_file)" "$1" "${bk[@]}"; local rc=$?
+  _machine_cache_clear; return "$rc"
 }
 config_overlay_key() {
   local f; f=$(machine_generated_dir)/config-keys.overlay
