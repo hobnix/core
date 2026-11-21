@@ -1171,6 +1171,12 @@ def bump(c, names):
 
 # ADR 0026: the documents of the live-state collector and its heartbeat. Created only by live_open(), so a server
 # with the switch off never gets the tables. In-process only: scripts/live-collect.py loads this file and calls these functions on one connection.
+# D14: a lease per topic that an open stream wants (topic `*` = every topic: a stream without a topic set). Written by the web server, read by the
+# collector and `hs sys live inspect`; a row past `until` counts for nothing, so a killed web server cannot keep the load on.
+DEMAND_SCHEMA = """
+CREATE TABLE IF NOT EXISTS demand (topic TEXT PRIMARY KEY, until INTEGER NOT NULL);
+"""
+
 LIVE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS live (topic TEXT PRIMARY KEY, payload TEXT NOT NULL, updated INTEGER NOT NULL, ms INTEGER, rc INTEGER NOT NULL DEFAULT 0,
   gen INTEGER NOT NULL DEFAULT 0, err TEXT, ts_err INTEGER, ttl INTEGER, src TEXT);
@@ -1181,15 +1187,38 @@ CREATE TABLE IF NOT EXISTS heartbeat (name TEXT PRIMARY KEY, time INTEGER NOT NU
 -- (browser sample: web_*). last/worst since the row exists, n samples, recent = the last DELAY_KEEP samples as a comma list (the health note looks at it).
 CREATE TABLE IF NOT EXISTS live_delay (topic TEXT PRIMARY KEY, ms_last INTEGER, ms_worst INTEGER, ms_n INTEGER NOT NULL DEFAULT 0, ms_recent TEXT, ms_time INTEGER,
   web_last INTEGER, web_worst INTEGER, web_n INTEGER NOT NULL DEFAULT 0, web_recent TEXT, web_time INTEGER);
-"""
+""" + DEMAND_SCHEMA
 
 DELAY_KEEP = 20
+DEMAND_LEASE = 30       # seconds a lease holds (D14); the web server renews it every 10 s while a stream wants the topic
 
 
 def live_open():
     c = open_rw(threads=True)
     c.executescript(LIVE_SCHEMA)
     return c
+
+
+def demand_open():
+    """The connection of the web server for its leases: short busy wait (a lease never blocks anything), no migration, only the one table."""
+    os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
+    c = sqlite3.connect(DB, timeout=2, check_same_thread=False)
+    c.execute("PRAGMA busy_timeout=2000")
+    c.executescript(DEMAND_SCHEMA)
+    return c
+
+
+def demand_put(c, topics, t, lease=None):
+    """Lease the topics until t + lease seconds (a topic nobody renews just runs out); expired rows are deleted here."""
+    until = int(t) + int(lease or DEMAND_LEASE)
+    with c:
+        c.execute("DELETE FROM demand WHERE until <= ?", (int(t),))
+        c.executemany("INSERT INTO demand (topic, until) VALUES (?, ?) ON CONFLICT(topic) DO UPDATE SET until = excluded.until", [(x, until) for x in topics])
+
+
+def demand_active(c, t):
+    """-> {topic: until} of the leases that have not run out"""
+    return {k: int(u) for k, u in c.execute("SELECT topic, until FROM demand WHERE until > ?", (int(t),))}
 
 
 def live_load(c):
@@ -1282,7 +1311,7 @@ def expand_topics(args):
         if a.startswith("event:"):
             if kinds is None:
                 kinds = event_topic_rows()
-            out += kinds.get(a[6:]) or [t for t, groups in rows if "system" in groups or "any" in groups]   # unknown kind: @system
+            out += expand_topics(kinds.get(a[6:]) or ["@system"])      # a kind may list topics and @groups; an unknown kind: @system
         elif a in ("--all", "*"):
             out += [r[0] for r in rows]
         elif a.startswith("@"):

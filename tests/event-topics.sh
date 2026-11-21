@@ -24,7 +24,7 @@ bad=""; for k in $used; do case "$k" in disk.) continue;; esac; grep -q "^$k$T" 
 check_eq "every event:<kind> a script asks for is in event-topics.tsv" "" "$bad"
 check_eq "the ten share scripts ask for share.changed" "10" "$(grep -l 'live_refresh event:share.changed' "$SCRIPTS"/*.sh | wc -l | tr -d ' ')"
 bad=""
-for t in $(grep -v '^#' "$ET" | cut -f2 | tr ',' '\n' | sort -u); do grep -q "^$t$T" "$SCRIPTS/lib/live-topics.tsv" || bad="$bad $t"; done
+for t in $(grep -v '^#' "$ET" | cut -f2 | tr ',' '\n' | grep -v '^@' | sort -u); do grep -q "^$t$T" "$SCRIPTS/lib/live-topics.tsv" || bad="$bad $t"; done
 check_eq "every topic of event-topics.tsv is a live-state topic" "" "$bad"
 check_eq "no kind is listed twice" "" "$(grep -v '^#' "$ET" | cut -f1 | sort | uniq -d)"
 
@@ -53,4 +53,16 @@ rm -f "$WORK/d/state.db"
 sdb topic-bump event:ct.started status
 check_eq "a named event and a plain topic mix" "1" "$(q | tr ',' '\n' | grep -c '^ct-list$')"
 check_eq "live_refresh passes event:<kind> through (HS_LIVE_LOG)" "event:ct.stopped" "$(HS_LIVE_LOG=$(wp "$WORK/l.log") bash -c '. "$1/lib/live.sh"; live_refresh event:ct.stopped; cat "$HS_LIVE_LOG"' _ "$SCRIPTS")"
+
+echo "-- area.<name> events: the registry's topic: words resolve through the table; the group stays an alias"
+words=$(grep -o 'topic:[a-z]*' "$SCRIPTS/lib/registry.tsv" | sed 's/topic://' | sort -u)
+bad=""; for w in $words; do grep -q "^area.$w$T@$w$T" "$ET" || bad="$bad $w"; done
+check_eq "every topic: word of the registry has an area.<word> row naming its group" "" "$bad"
+bad=""; for g in $(grep '^area\.' "$ET" | cut -f1 | sed 's/area\.//'); do
+  rm -f "$WORK/d/state.db"; sdb topic-bump "event:area.$g"; a=$(q)
+  rm -f "$WORK/d/state.db"; sdb topic-bump "@$g"; b=$(q)
+  [ "$a" = "$b" ] || bad="$bad $g"
+done
+check_eq "event:area.<name> wakes exactly what @<name> wakes" "" "$bad"
+check_eq "the Nix timers and the dispatcher no longer say @group" "0" "$(grep -rhE --include=*.nix --include=*.sh 'live.sh refresh @|live_refresh @[a-z]' "$SCRIPTS/../capabilities" "$SCRIPTS/lib/hs.sh" "$SCRIPTS/lib/job.sh" | grep -c .)"
 finish

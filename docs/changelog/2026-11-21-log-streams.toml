@@ -1,0 +1,5 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Log views follow the log as it is written"
+docs  = "web-interface#logs-follow-a-stream"
+body  = """The logs of an instance and of a Docker app, the Logs and Disk events tabs of the task panel and the instance log window now show a new line within a moment, from a stream the server keeps open while you look at the view. Each person may have 4 such views open (8 on the server). A tab nobody sees closes its stream after 15 minutes. If the stream is not available, the view asks again every few seconds as before."""

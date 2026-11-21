@@ -146,7 +146,7 @@ hs_job() {
     [ -z "$jid" ] || hs_job_record finish "$jid" 1 2>/dev/null || true
     return 1
   }
-  bash "$here/live.sh" refresh @jobs >/dev/null 2>&1 || true   # live state: the job list shows the new job (no-op without the capability)
+  bash "$here/live.sh" refresh event:area.jobs >/dev/null 2>&1 || true   # live state: the job list shows the new job (no-op without the capability)
   printf '%s\n' "$unit"
 }
 

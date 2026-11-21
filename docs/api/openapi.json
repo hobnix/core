@@ -1859,6 +1859,51 @@
     }
    }
   },
+  "/ct/follow/{ct}": {
+   "get": {
+    "operationId": "ct.follow.by_ct",
+    "summary": "the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "ct",
+      "follow",
+      "<ct>"
+     ],
+     "script": "ct-access.sh",
+     "args": "{1} follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "ct",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/ct/list": {
    "get": {
     "operationId": "ct.list",
@@ -3679,6 +3724,51 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/docker/follow/{app}": {
+   "get": {
+    "operationId": "docker.follow.by_app",
+    "summary": "the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "docker",
+      "follow",
+      "<app>"
+     ],
+     "script": "docker.sh",
+     "args": "--follow-logs {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "app",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }
@@ -7613,7 +7703,7 @@
      "query": []
     },
     "x-hs-described": false,
-    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
+    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
     "responses": {
      "0": {
       "description": "ok",
@@ -7746,6 +7836,40 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/logs/follow": {
+   "get": {
+    "operationId": "logs.follow",
+    "summary": "the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "logs",
+      "follow"
+     ],
+     "script": "logs.sh",
+     "args": "follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }
@@ -14359,6 +14483,40 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/state/events-follow": {
+   "get": {
+    "operationId": "state.events-follow",
+    "summary": "the last disk events, then every new row until the reader goes (the web log stream; plain rows)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "state",
+      "events-follow"
+     ],
+     "script": "state.sh",
+     "args": "events-follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }

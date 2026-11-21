@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Every change asks for its area by a named event"
+body  = """After a change command and after the backup, storage and share timers, the live pages are asked by a named event per area (area.backup, area.disks, ...) from one list, instead of a group name. Which pages update stays the same; the list can now be narrowed one area at a time."""

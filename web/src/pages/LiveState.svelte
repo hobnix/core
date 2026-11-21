@@ -39,13 +39,14 @@
   const ms = (v) => (v === null || v === undefined ? '' : v < 1000 ? `${v} ms` : `${(v / 1000).toFixed(1)} s`);
   const secs = (s) => (s === null || s === undefined ? '' : s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
   const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString() : '');
-  const dot = (s) => ({ fresh: 'ok', ok: 'ok', pending: 'info', stale: 'warn', failing: 'warn', never: 'bad', off: 'off' }[s] || 'off');
+  const dot = (s) => ({ fresh: 'ok', ok: 'ok', pending: 'info', stale: 'warn', idle: 'info', failing: 'warn', never: 'bad', off: 'off' }[s] || 'off');
 
   const columns = $derived([
     { key: 'topic', label: 'Topic', value: (r) => r.topic },
     { key: 'source', label: 'Source', optional: true, value: (r) => r.words.join(' ') },
     { key: 'every', sort: 'num', optional: true, label: 'Every', value: (r) => r.every, align: 'right' },
     ...(parsed.has.ttl ? [{ key: 'ttl', sort: 'num', optional: true, label: 'TTL', value: (r) => r.ttl, align: 'right' }] : []),
+    ...(parsed.has.demand ? [{ key: 'demand', optional: true, label: 'Demand', value: (r) => r.demand }] : []),
     { key: 'state', label: 'State', value: (r) => r.state },
     { key: 'age', sort: 'num', label: 'Age', value: (r) => r.age, align: 'right' },
     ...(parsed.has.delay ? [
@@ -116,6 +117,7 @@
           {#if col.key === 'topic'}<code>{r.topic}</code>{#if r.origin === 'extension'} <span class="chip">{tr('extension')}</span>{/if}
           {:else if col.key === 'source'}<code>{r.words.join(' ')}</code>
           {:else if col.key === 'every'}<span class="c">{secs(r.every)}</span>
+          {:else if col.key === 'demand'}<span class="c">{r.demand === 'always' ? tr('always') : r.lease ? tr('watched') + ' · ' + tr('idle') + ' ' + secs(r.idle) : tr('idle') + ' ' + secs(r.idle)}</span>
           {:else if col.key === 'ttl'}<span class="c">{r.ttl ?? ''}</span>
           {:else if col.key === 'state'}<StatusDot state={dot(r.state)} label={tr(r.state)} />
           {:else if col.key === 'age'}<span class="c">{secs(r.age)}</span>
