@@ -74,6 +74,7 @@ class Base(unittest.TestCase):
         cfg = ws.Config()
         cfg.root, cfg.workgroup, cfg.realm, cfg.fail_delay = self.tmp, "HOME", "ad.home.lan", 0
         cfg.hs = "/nonexistent/hs"
+        cfg.live_sock, cfg.live_push_file = "", ""     # no push socket and no stats file unless a test asks (never /run/hs of the machine)
         self.cfg = cfg
         self.db = os.path.join(self.tmp, "state.db")
         os.environ["HS_STATE_DB"] = self.db      # the state database of the test: not there until a test makes it
@@ -859,6 +860,93 @@ class Counters(Base):
         self.bump("storage")
         self.hub.poll_counters()
         self.assertEqual(self.app.reads.cache, {})
+
+
+@unittest.skipUnless(hasattr(__import__("socket"), "AF_UNIX"), "no unix sockets here")
+class PushSocket(Base):
+    """D11: a datagram on live.sock wakes the watcher at once; the watcher keeps polling at events_watch when there is no socket or nobody sends."""
+
+    def setUp(self):
+        super().setUp()
+        self.hub = self.app.events
+        self.cfg.live_sock = os.path.join(self.tmp, "live.sock")
+        self.cfg.live_push_file = os.path.join(self.tmp, "live-push.json")
+        self.rounds = []
+        self.hub.poll_counters = lambda: self.rounds.append(time.time())
+        self.hub.poll_events = lambda: None
+        self.hub.poll_heartbeat = lambda now=None: None
+
+    def poke(self, path=None):
+        import socket
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.setblocking(False)
+        try:
+            s.sendto(b"1", path or self.cfg.live_sock)
+        finally:
+            s.close()
+
+    def test_a_poke_wakes_the_loop_without_waiting(self):
+        self.cfg.events_watch = 30.0                      # the fallback would take half a minute
+        self.assertTrue(self.hub.start_push())
+        threading.Thread(target=self.hub._watch, daemon=True).start()
+        time.sleep(0.2)
+        n, t0 = len(self.rounds), time.time()
+        self.poke()
+        deadline = time.time() + 2
+        while len(self.rounds) == n and time.time() < deadline:
+            time.sleep(0.005)
+        self.assertGreater(len(self.rounds), n)
+        self.assertLess(self.rounds[n] - t0, 0.5)
+        self.assertEqual(self.hub.woke_push, 1)
+        self.assertEqual(self.hub.woke_fallback, 0)
+
+    def test_without_a_socket_the_fallback_keeps_polling(self):
+        self.cfg.live_sock = os.path.join(self.tmp, "no", "such", "dir", "live.sock")
+        self.cfg.live_sock = os.path.join(self.tmp, "afile", "live.sock")
+        open(os.path.join(self.tmp, "afile"), "w").close()      # a folder that cannot be made: the bind fails
+        self.assertFalse(self.hub.start_push())
+        self.cfg.events_watch = 0.02
+        threading.Thread(target=self.hub._watch, daemon=True).start()
+        time.sleep(0.3)
+        self.assertGreater(len(self.rounds), 3)
+        self.assertEqual(self.hub.woke_push, 0)
+        self.assertGreater(self.hub.woke_fallback, 3)
+
+    def test_a_dead_listener_leaves_the_fallback(self):
+        self.cfg.events_watch = 0.02
+        self.assertTrue(self.hub.start_push())
+        os.unlink(self.cfg.live_sock)                     # the socket file is gone: pokes go nowhere
+        threading.Thread(target=self.hub._watch, daemon=True).start()
+        time.sleep(0.3)
+        self.assertGreater(self.hub.woke_fallback, 3)
+
+    def test_a_poke_without_a_listener_or_with_a_full_queue_never_blocks(self):
+        import socket
+        sdb_spec = importlib.util.spec_from_file_location("state_db", os.path.join(here, "..", "scripts", "state-db.py"))
+        sdb = importlib.util.module_from_spec(sdb_spec)
+        sdb_spec.loader.exec_module(sdb)
+        os.environ["HS_LIVE_SOCK"] = os.path.join(self.tmp, "nobody.sock")
+        try:
+            self.assertFalse(sdb.poke())                  # no socket: False, no exception
+            path = os.path.join(self.tmp, "deaf.sock")
+            os.environ["HS_LIVE_SOCK"] = path
+            deaf = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)   # bound, never reads
+            deaf.bind(path)
+            t0 = time.time()
+            for _ in range(5000):                         # far more than the queue holds
+                sdb.poke()
+            self.assertLess(time.time() - t0, 5)
+            deaf.close()
+            self.assertFalse(sdb.poke())                  # a dead listener (file left behind): refused, ignored
+        finally:
+            os.environ.pop("HS_LIVE_SOCK", None)
+
+    def test_the_counters_are_written_for_hs_live_load(self):
+        self.hub.woke_push, self.hub.woke_fallback = 4, 2
+        self.hub.write_push_stats()
+        with open(self.cfg.live_push_file, encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertEqual((d["push"], d["fallback"]), (4, 2))
 
 
 class DbMode(Base):

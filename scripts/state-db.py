@@ -42,6 +42,7 @@ HS_EVENT_KEEP (rows kept in the event log, default 5000), HS_EVENT_DAYS (age lim
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -69,6 +70,34 @@ BASELINE_STALE_S = int(os.environ.get("HS_SMART_STALE", str(2 * 86400 + 3600)))
 
 def now():
     return int(os.environ.get("HS_NOW") or time.time())
+
+
+def live_sock_path():
+    return os.environ.get("HS_LIVE_SOCK") or os.path.join(os.environ.get("HS_RUN_DIR") or "/run/hs", "live.sock")
+
+
+def poke():
+    """ADR 0026 decision 9 (D11): one datagram to the web server, "look at the counters now", sent after the commit of a counter bump. It carries no
+    data. It never blocks and never fails the write: non-blocking, every error ignored (no socket, nobody listening, a full queue). Returns True when
+    the datagram was handed over (tests). The 1 s watcher of web-serve.py stays the fallback."""
+    s = None
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.setblocking(False)
+        s.sendto(b"1", live_sock_path())
+        return True
+    except Exception:           # also AttributeError on a platform without unix sockets
+        return False
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
+
+
+# the commands that count a topic up or write an event-log row (topic-bump pokes itself, only when it counted): after one of them the web server is poked (never after a read)
+POKE_CMDS = ("read-put", "emit", "collect", "forget")
 
 
 SCHEMA = """
@@ -1179,6 +1208,7 @@ def live_put(c, topic, payload, rc, ms, src, ttl, t):
                   (topic, payload, t, ms, rc, ttl, src))
         gen = c.execute("SELECT gen FROM live WHERE topic = ?", (topic,)).fetchone()[0]
         bump(c, ["live:" + topic])
+    poke()                  # after the commit: the web server reads the new counter at once
     return gen
 
 
@@ -1254,7 +1284,8 @@ def cmd_topic_bump(args):
             bump(c, names)
         c.close()
     except (sqlite3.Error, OSError):
-        pass
+        return 0
+    poke()
     return 0
 
 
@@ -1399,7 +1430,10 @@ def main(argv):
 
 if __name__ == "__main__":
     try:
-        sys.exit(main(sys.argv))
+        rc = main(sys.argv)
+        if rc == 0 and len(sys.argv) > 1 and sys.argv[1] in POKE_CMDS:
+            poke()
+        sys.exit(rc)
     except SchemaTooNew as e:
         print("hs: %s" % e, file=sys.stderr)
         sys.exit(1)
