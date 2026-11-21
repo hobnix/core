@@ -1,5 +1,6 @@
 // The job record helpers of the Jobs panel (web/src/jobrecords.js), run with node.
 import { parseRecord, stateDot, stateKnown, stepText, percent, progressText, duration, isJobEvent, lastJobEvent, latestOnly, jobChanged, askDiff } from '../web/src/jobrecords.js';
+import { readFileSync } from 'node:fs';
 let bad = 0;
 const check = (n, ok) => { if (!ok) { bad++; console.log('FAIL: ' + n); } };
 const run = parseRecord(['20261109-101010-update-abcd', 'update', 'Update', 'running', '-', '2026-11-09T10:10:10Z', '-', '-', '2', '5', 'Fetching', '30', '120', 'files']);
@@ -69,10 +70,16 @@ check('step of an ok job is empty, of a running and a failed job shown', stepTex
 }
 // the layout of the Jobs panel (#973): the record beside the list on wide screens, QuickLook on a phone, never below the list
 {
-  const { readFileSync } = await import('node:fs');
+
   const src = readFileSync(new URL('../web/src/shell/JobRecords.svelte', import.meta.url), 'utf8');
   check('jobs layout: 60/40 grid', /grid-template-columns:\s*minmax\(0, 3fr\) minmax\(0, 2fr\)/.test(src));
   check('jobs layout: phone uses the QuickLook', /import QuickLook/.test(src) && /<QuickLook[^>]*onclose=\{close\}/.test(src) && /max-width: 860px/.test(src));
   check('jobs layout: the record is not rendered below the table any more', !/<\/Table>\s*<\/div>\s*\{#if open\}\s*<div class="detail">/.test(src));
+}
+{
+  check('skipped: neutral dot, known word', stateDot('skipped') === 'off' && stateKnown('skipped'));
+  const jr = readFileSync(new URL('../web/src/shell/JobRecords.svelte', import.meta.url), 'utf8');
+  check('Escape closes the record from anywhere (window key handler) and gives the focus back to the row', /<svelte:window onkeydown=\{onWindowKey\}/.test(jr) && /e\.key !== 'Escape'/.test(jr) && /\.focus\(\)/.test(jr));
+  check('another part of the shell can select a job (ui.jobSel)', /ui\.jobSel/.test(jr));
 }
 if (bad) process.exit(1);

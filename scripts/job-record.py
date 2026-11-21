@@ -270,6 +270,8 @@ def cmd_finish(a):
         rec["waiting"] = None
         if rec.get("state") == "cancelled":   # a cancel stays cancelled; the earlier end time and cancel block stay
             rec["ended"] = rec.get("ended") or now_iso()
+        elif rec.get("state") == "skipped":   # a skip stays skipped (exit 0, no error)
+            rec["ended"] = rec.get("ended") or now_iso()
         elif a.exit == 0:
             rec["ended"] = now_iso()
             rec["state"] = "ok"
@@ -288,6 +290,22 @@ def cmd_finish(a):
         os.unlink(os.path.join(jobs_dir(), "%s.lock" % a.id))
     except OSError:
         pass
+
+
+def cmd_skip(a):
+    """End a job that found the same work already running: state skipped, exit 0, the message in `result.message`. Not an error, no failure notice."""
+    with locked(a.id):
+        rec = load(a.id)
+        if rec.get("state") not in ACTIVE:
+            raise Fail("job has ended already")
+        rec["state"] = "skipped"
+        rec["exit"] = 0
+        rec["ended"] = now_iso()
+        rec["waiting"] = None
+        rec["error"] = None
+        rec["result"] = {"message": a.message}
+        save(rec)
+    bump_records()
 
 
 def cmd_key(a):
@@ -474,6 +492,7 @@ def main():
     s.add_argument("--parent", default="")
     s.add_argument("--kind", default="")
     s.set_defaults(fn=cmd_new)
+    s = sub.add_parser("skip"); s.add_argument("id"); s.add_argument("message"); s.set_defaults(fn=cmd_skip)
     s = sub.add_parser("key"); s.add_argument("id"); s.add_argument("key"); s.set_defaults(fn=cmd_key)
     s = sub.add_parser("run"); s.add_argument("id"); s.set_defaults(fn=cmd_run)
     s = sub.add_parser("wait"); s.add_argument("id"); s.add_argument("--seq", type=int, required=True)

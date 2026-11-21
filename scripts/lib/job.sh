@@ -41,6 +41,11 @@ hs_job_record() {
   local cmd=${1:-} out rc=0 id=${2:-} line text
   case "$cmd" in
     new|run|wait|resume|finish|reconcile|uncancel) ;;
+    skip)   # a job that found the same work running ends as skipped (exit 0): only the Python writer knows it
+      python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@" || return $?
+      # shellcheck source=scripts/lib/event.sh
+      . "${BASH_SOURCE[0]%/*}/event.sh" 2>/dev/null && { event_emit job.skipped "$id" "${3:-Already running}" || true; }
+      return 0 ;;
     error|result|key)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
       _hs_job_record_write "$@" && return
       python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"; return ;;
@@ -50,6 +55,9 @@ hs_job_record() {
       return 0 ;;
     *) _hs_job_record_write "$@"; return ;;
   esac
+  if [ "$cmd" = finish ] && _hs_job_record_write get "$id" 2>/dev/null | grep -Eq '"state": *"skipped"'; then
+    return 0   # skipped stays skipped (exit 0): no job.ok, no second end
+  fi
   if [ "$cmd" = finish ] && ! _hs_job_record_write get "$id" 2>/dev/null | grep -Eq '"state": *"(queued|running|waiting)"'; then
     _hs_job_record_write "$@"; return   # already ended (a cancel stays cancelled): no second event
   fi
@@ -132,7 +140,8 @@ hs_job() {
                . "$0/lib/event.sh"; event_emit job.failed "${HS_JOB_UNIT:-job}" "$d failed (exit $rc)" --payload "{\"exit\":$rc}" || true
              fi
              bash "$0/live.sh" refresh --all >/dev/null 2>&1 || true   # live state: read again (no-op without the capability)
-             [ "$rc" -ne 0 ] || bash "$0/notify.sh" --category ok hs "$d finished" >/dev/null 2>&1
+             skipped=; [ -z "${HS_JOB_ID:-}" ] || ! hs_job_record get "$HS_JOB_ID" 2>/dev/null | grep -Eq "\"state\": *\"skipped\"" || skipped=1
+             [ "$rc" -ne 0 ] || [ -n "$skipped" ] || bash "$0/notify.sh" --category ok hs "$d finished" >/dev/null 2>&1
              exit "$rc"' "$here" "$desc" "$@" || {
     [ -z "$jid" ] || hs_job_record finish "$jid" 1 2>/dev/null || true
     return 1
@@ -156,4 +165,11 @@ hs_job_progress() {
 hs_job_cancelled() {
   [ -n "${HS_JOB_ID:-}" ] || return 1
   hs_job_record cancelled "$HS_JOB_ID" 2>/dev/null
+}
+
+# hs_job_skip [MESSAGE]: this job found the same work already running; its record ends as skipped (exit 0, not a failure). The caller then
+# returns 0. Outside a job it only returns 1, so the caller prints its own line.
+hs_job_skip() {
+  [ -n "${HS_JOB_ID:-}" ] || return 1
+  hs_job_record skip "$HS_JOB_ID" "${1:-Already running}" 2>/dev/null
 }

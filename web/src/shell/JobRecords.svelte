@@ -12,7 +12,7 @@
   import Button from '../ui/Button.svelte';
   import Progress from '../ui/Progress.svelte';
   import QuickLook from '../ui/QuickLook.svelte';
-  import { openCreate } from '../ui.svelte.js';
+  import { openCreate, ui } from '../ui.svelte.js';
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import { parseRecord, stateDot, stateKnown, stepText, progressText, clock, duration, lastJobEvent, latestOnly } from '../jobrecords.js';
 
@@ -34,7 +34,28 @@
     return () => m.removeEventListener('change', f);
   });
   const current = $derived((list ?? []).find((r) => r.id === open) ?? null);
-  const close = () => { open = null; detail = null; };
+  let rootEl = $state(null);
+  // closing returns the focus to the row that was open (the keyboard user stays where they were)
+  const close = () => {
+    const id = open;
+    open = null; detail = null;
+    if (id !== null) queueMicrotask(() => rootEl?.querySelector(`tr[data-k="${CSS.escape(String(id))}"]`)?.focus());
+  };
+  // Escape closes the record wherever the focus is (also in the full-screen QuickLook); a dialog or menu that handled the key first keeps it
+  function onWindowKey(e) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !open) return;
+    if (ui.dialog || ui.create) return;
+    e.preventDefault();
+    close();
+  }
+  // another part of the shell asks for a job (openJob: the Backup now button of a running backup)
+  $effect(() => {
+    const id = ui.jobSel;
+    if (!id) return;
+    ui.jobSel = '';
+    open = id; detail = null; detailErr = '';
+    loadDetail(id);
+  });
 
   // reads can overlap (a slow read from job.running must not overwrite the answer after job.ok): latestOnly drops the older answer
   const readList = latestOnly(() => get('/api/sys/jobs/records?n=100'), (d) => {
@@ -104,10 +125,11 @@
   };
 </script>
 
+<svelte:window onkeydown={onWindowKey} />
 {#if failed && list === null}
   <div class="empty">{tr('The job records could not be read.')}</div>
 {:else}
-  <div class="jr" class:two={!!open && !phone}>
+  <div class="jr" bind:this={rootEl} class:two={!!open && !phone}>
   <div class="tablescroll">
     <Table id="job-records" {columns} rows={list ?? []} key="id" onrow={pick} selected={open} loading={list === null} empty={tr('No job records yet.')} compact>
       {#snippet cell(r, col)}
@@ -125,7 +147,7 @@
     </Table>
   </div>
   {#if open && !phone}
-    <aside class="pane xh" aria-label={tr('Job record')} tabindex="-1" onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), close())}>
+    <aside class="pane xh" aria-label={tr('Job record')} tabindex="-1">
       <div class="rec-h">
         <b class="nm">{current?.description ?? detail?.description ?? open}</b>
         <Button variant="ghost" class="btn-icon" aria-label={tr('Close')} onclick={close}><i class="ph ph-x"></i></Button>

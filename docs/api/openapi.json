@@ -6795,7 +6795,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {
@@ -7153,7 +7154,8 @@
              "ok",
              "failed",
              "cancelled",
-             "interrupted"
+             "interrupted",
+             "skipped"
             ]
            },
            {

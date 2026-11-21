@@ -3,7 +3,8 @@
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { bytes, ago } from '../format.js';
-  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { clock } from '../jobrecords.js';
+  import { openPlan, openCreate, openJob, ui } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
   import ErrorNote from '../ui/ErrorNote.svelte';
   import { backupPending, backupFailed } from './rows.js';
@@ -86,6 +87,7 @@
   // actions that need the backup disk: say why one is not possible
   const why = $derived(!st.loaded ? 'Loading…' : !configured ? 'The backup is not set up yet' : s.vault === 'closed' ? 'The vault is closed: unlock it first' : s.disk !== 'present' ? 'The backup disk is not plugged in' : '');
   const browsing = $derived(s.browse === 'on');
+  const runningNow = $derived(rowstate.activeJob('backup', ['now']));   // a backup job runs: the button is busy, its tooltip names it and a click shows the job
   const tipWhy = (t) => (why ? `${t} (${why})` : t);
   const headDot = $derived(!configured ? 'off' : s.status === 'failed' ? 'bad' : s.last_ok ? 'ok' : 'warn');
   const itemLink = (i) => (i.kind === 'ct' ? link('/instances', 'instances', i.name) : link(sharesPath(), 'shares', i.name));
@@ -111,7 +113,7 @@
     <Button need="admin" icon="broom" busy={rowstate.pending('backup', ['prune'])} busyLabel="Freeing space…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['prune'])} onfocus={() => prefetchPlan('backup', ['prune'])} tooltip={tipWhy('Give space back: delete leftovers of a failed run, apply the retention, prune')} onclick={() => openPlan('backup', ['prune'], 'Free space on the backup disk')}>Free space</Button>
     <Button need="admin" icon="first-aid-kit" busy={rowstate.pending('backup', ['drill'])} disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['drill'])} onfocus={() => prefetchPlan('backup', ['drill'])} tooltip={tipWhy('Restore a few random files and compare them with the originals')} onclick={() => openPlan('backup', ['drill'], 'Restore drill')}>Restore drill</Button>
     <Button need="admin" icon="folder-open" busy={(rowstate.pending('backup', ['browse', '--to', 'off']) || rowstate.pending('backup', ['browse', '--to', 'on']))} disabled={!!why && !browsing} tooltip={browsing ? 'Stop showing the backup as a read-only share' : tipWhy('Show the whole backup as a read-only share')} onclick={() => openPlan('backup', ['browse', '--to', browsing ? 'off' : 'on'], browsing ? 'Stop browsing the backup' : 'Browse the backup')}>{browsing ? 'Stop browsing' : 'Browse'}</Button>
-    <Button need="admin" variant="primary" icon="cloud-arrow-up" busy={rowstate.pending('backup', ['now'])} busyLabel="Backing up…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['now'])} onfocus={() => prefetchPlan('backup', ['now'])} tooltip={tipWhy('Back up right now')} onclick={() => openPlan('backup', ['now'], 'Back up now')}>Back up now</Button>
+    <Button need="admin" variant="primary" icon="cloud-arrow-up" busy={rowstate.pending('backup', ['now'])} busyLabel="Backing up…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['now'])} onfocus={() => prefetchPlan('backup', ['now'])} tooltip={runningNow ? `Backup running since ${clock(runningNow.started)}` : tipWhy('Back up right now')} onbusyclick={() => runningNow && openJob(runningNow.id)} onclick={() => openPlan('backup', ['now'], 'Back up now')}>Back up now</Button>
   {/snippet}
 </PageHeader>
 {#if backupFailed(rowstate.failed) && !backupPending(rowstate.pending)}{@const bf = backupFailed(rowstate.failed)}<ErrorNote error={bf.error} ondismiss={() => rowstate.dismiss(bf.id)} />{/if}
