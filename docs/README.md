@@ -35,6 +35,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-live-interface](PLAN-live-interface.md) | Milestone 0.10: the interface follows events, pending rows, delay measured, acknowledge |
+| [PLAN-navigation](PLAN-navigation.md) | Milestone 0.11: navigation and pages, decisions D1 to D12 |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |

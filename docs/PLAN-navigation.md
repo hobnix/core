@@ -39,7 +39,7 @@ pages that say how the group is doing.
 | Rows | `rowstate` (0.10): a row shows pending and failed state from job events | web/src/rowstate.svelte.js |
 | Remote nodes | a node is a root of the tree (`nodeItems` by kind); a peer shows Storage, Instances and Backup as read-only summaries (`NodeFacts`), a vps/edge node the proxy pages | nav.js, routes.js |
 | Top bar | search (`/`), node switcher already exists, Update and power menus, Inbox (bell). Docs and What's new are tree entries | shell/TopBar.svelte |
-| Errors | `ErrorNote` (0.9) shows the text of a failure. ADR 0028 "error codes" is **Proposed and merged to `develop`** (PR #903), not to `0.10` or `0.11`: `docs/adr/0028-error-codes.md` exists only there, while `0.11` already has `0028-component-gallery-instead-of-storybook.md`. The number is taken twice, so one of them is renumbered at the merge | docs/adr/ |
+| Errors | `ErrorNote` (0.9) shows the text of a failure. ADR 0028 "error codes" is **Accepted** (`docs/adr/0028-error-codes.md`; the build is #488 in 0.12). The component gallery ADR is 0029 (`docs/adr/0029-component-gallery-instead-of-storybook.md`); the number clash was settled in the merge of `0.10` into `0.11` | docs/adr/ |
 | Accessibility | `aria-*` on the new components (0.9); no walk through the pages, no automatic check in the test-lab browser stage (stage 6 opens every page, it does not check them) | capabilities/testlab |
 | Phone | 39 `max-width` queries, `QuickLook` and the tree slide-over (`onmenu` in TopBar) are phone-aware; no page was checked as a whole at 390 px; no read-only status page | web/src |
 | Tests that already guard | tests/web-routes.mjs (+ .sh), web-rowstate, web-demo.mjs, web-prefetch.mjs (every first read is in the `READS` allowlist), web-ratchet.sh, web-buttons.sh, web-undefined.sh, web-sort.sh | tests/ |
@@ -198,7 +198,7 @@ Everything else is tested in node or by the shell tests (`t quick`).
 - **Roles.** Every page is listed for every role and greyed by the row (0.8). New pages must use `lockedWhy`; a viewer opening an object page by address must see the page read-only, not an error. Tested with the three roles in step 1.
 - **Capability-hidden entries** and the redirect: a redirect to a place that is hidden by a capability that is off lands on a page that still works by address (as today), and says "part off" through `PageFrame`.
 - **Dependence on 0.10.** The job strip and the pending row need `rowstate`, merged in `0.10`; if the live-state mode is off the pages still work with the timers of 0.9 (no new reads).
-- **ADR number clash.** Two ADRs named 0028 (error codes on `develop`, component gallery on `0.11`). Mitigation: the owner accepts or renumbers ADR 0028 error codes now (D11); this plan builds nothing on it unless D11 (a) or (b).
+- **ADR number clash (settled).** Error codes is 0028 and the component gallery is 0029; the merge of `0.10` into `0.11` kept both numbers.
 - **Scope.** #487, #488 and #427 together are larger than the rest. D10 to D12 cut them; without a cut the milestone does not finish.
 
 ## Check that it worked
