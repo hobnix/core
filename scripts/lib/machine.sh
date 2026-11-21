@@ -71,7 +71,7 @@ _machine_cached() {   # _machine_cached <mode> <key> [--json]: print the answer,
       if [ "$have" = "$sig" ] && [[ $at =~ ^[0-9]+$ ]] && [ "$now" -gt 0 ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -lt "$ttl" ] && [[ $rc =~ ^[0-9]+$ ]]; then [ -z "$out" ] || printf '%s
 ' "$out"; return "$rc"; fi
     fi
-    out=$(machine_tool get "$f" "$2" $3); rc=$?
+    out=$(machine_tool get "$f" "$2" ${3-}); rc=$?
     ( umask 077; { printf '%s
 %s
 %s
@@ -80,7 +80,7 @@ _machine_cached() {   # _machine_cached <mode> <key> [--json]: print the answer,
 ' "$out"
     return "$rc"
   fi
-  machine_tool get "$f" "$2" $3
+  machine_tool get "$f" "$2" ${3-}
 }
 _machine_cache_clear() { local d; d=$(_machine_cache_dir) && rm -f "$d"/* 2>/dev/null; return 0; }
 machine_get() { _machine_cached get "$1"; }
