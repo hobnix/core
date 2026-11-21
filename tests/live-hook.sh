@@ -93,7 +93,8 @@ for w in "user add:@users" "user bob unlock:@users" "user flush:@users" "group g
   check_eq "hs ${w%%:*} asks for ${w##*:}" "${w##*:}" "$(cat "$WORK/live.log")"
 done
 check_eq "the backup timers (backup, drill, drill ct) refresh @backup after a run" "3" "$(grep -c 'live.sh refresh @backup' "$SCRIPTS/../capabilities/backup/module.nix")"
-check_eq "disk-event.sh also asks for backup-state (backup disk plugged or removed)" "yes" "$(grep -q 'refresh monitor-disks disk-inventory temp-disks fm-locations backup-state' "$SCRIPTS/disk-event.sh" && echo yes || echo no)"
+check_eq "disk-event.sh asks for the named event disk.<plugged|removed>" "yes" "$(grep -q 'refresh "event:disk\.' "$SCRIPTS/disk-event.sh" && echo yes || echo no)"
+check_eq "...and event-topics.tsv lists backup-state for both (backup disk plugged or removed)" "2" "$(grep -E '^disk\.(plugged|removed)'"$T" "$SCRIPTS/lib/event-topics.tsv" | grep -c backup-state)"
 
 echo "-- live_refresh counts the topics up in the state database (no Redis, no socket)"
 if command -v python3 >/dev/null; then

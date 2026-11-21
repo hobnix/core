@@ -501,6 +501,26 @@ class Groups(unittest.TestCase):
         c.refresh("@nothing")
         self.assertEqual(self.set_of(c), ["b"])
 
+    def test_named_event_wakes_exactly_its_topics(self):
+        """D12: event:<kind> wakes the topics event-topics.tsv lists (hard, no `any` wake), and fewer than the group it replaces."""
+        rows, info = ls.topics(), ls.topic_info()
+        c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.refresh("event:ct.started")
+        want = sorted(t for t in ls.event_topics()["ct.started"] if t in c.events)
+        self.assertEqual(self.set_of(c), want)
+        self.assertTrue(c.soft == set())
+        g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.refresh("@instances")
+        self.assertLess(len(self.set_of(c)), len(self.set_of(g)))
+
+    def test_unknown_named_event_falls_back_to_system(self):
+        rows, info = ls.topics(), ls.topic_info()
+        c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.refresh("event:no.such-kind")
+        s = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        s.refresh("@system")
+        self.assertEqual(self.set_of(c), self.set_of(s))
+
     def test_system_groups_wake_the_system_topics(self):
         rows, info = ls.topics(), ls.topic_info()
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
@@ -1410,7 +1430,7 @@ class IncusEvents(DockerEvents):
         self.make("start")
         self.assertTrue(self.wait_for(lambda: self.calls and self.emitted))
         time.sleep(0.5)
-        self.assertEqual(self.calls, ["@instances"])
+        self.assertEqual(self.calls, ["event:ct.started"])
         self.assertEqual(self.logs, [])
 
     def test_only_instance_facts_and_no_secrets(self):
@@ -1425,7 +1445,7 @@ class IncusEvents(DockerEvents):
         self.make("burst", limit=25)
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.8)
-        self.assertEqual(self.calls, ["@instances"])
+        self.assertEqual(self.calls, ["event:ct.created", "event:ct.deleted", "event:ct.started", "event:ct.stopped"])
         self.assertEqual(len(self.emitted), 25)
         self.assertEqual(len(set((k, s) for k, s, _, _ in self.emitted)), 25)   # the repeat of c1 started is not written twice
         self.assertEqual({k for k, _, _, _ in self.emitted} - {"ct.started", "ct.stopped", "ct.created", "ct.deleted"}, set())
@@ -1434,7 +1454,7 @@ class IncusEvents(DockerEvents):
         self.make("restart")
         self.assertTrue(self.wait_for(lambda: self.runs() >= 4 and len(self.calls) >= 2))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@instances", "@instances"])
+        self.assertEqual(self.calls, ["event:ct.stopped", "@instances"])   # the stop, then the full refresh after the reconnect
         self.assertEqual(len([l for l in self.logs if "incus events down" in l]), 1)
         self.assertEqual(len([l for l in self.logs if "incus events back" in l]), 1)
         self.assertEqual([e[0] for e in self.emitted], ["ct.stopped"])

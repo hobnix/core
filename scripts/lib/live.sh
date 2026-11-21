@@ -2,7 +2,8 @@
 # live_refresh <topic>...|--all : say that these topics changed: count them up in the state database (table `topics`, state-db.py topic-bump,
 # docs/adr/0005-events.md rule 5). The web interface watches the counters, and the live-state collector reads a counted topic again at once
 # (ADR 0026). Best effort, no output, always returns 0 (a change script must not break on it).
-# <topic>, @<group> (every topic of that change area and of `any`) or --all. Test knob HS_LIVE_LOG: append the arguments as one line to that file
+# <topic>, event:<kind> (the topics scripts/lib/event-topics.tsv lists for that named event, D12), @<group> (every topic of that change area and
+# of `any`; an alias for one release) or --all. Test knob HS_LIVE_LOG: append the arguments as one line to that file
 # instead of counting.
 live_refresh() {
   if [ -n "${HS_LIVE_LOG:-}" ]; then printf '%s\n' "$*" >>"$HS_LIVE_LOG" 2>/dev/null || true; return 0; fi

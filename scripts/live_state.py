@@ -174,6 +174,21 @@ def topic_info(path=None):
     return info
 
 
+def event_topics(path=None):
+    """{kind: [topic]} from scripts/lib/event-topics.tsv (named events, D12; test knob HS_EVENT_TOPICS)."""
+    path = path or os.environ.get("HS_EVENT_TOPICS") or os.path.join(HERE, "lib", "event-topics.tsv")
+    out = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                c = line.rstrip("\r\n").split("\t")
+                if c[0] and not c[0].startswith("#") and len(c) > 1:
+                    out[c[0]] = [t for t in c[1].split(",") if t and t != "-"]
+    except OSError:
+        pass
+    return out
+
+
 def topic_needs(path=None):
     """{topic: tuple of topics} from column 7 of live-topics.tsv (whose new gen re-reads the topic in a wave); extensions add theirs for the real file."""
     own = path is not None

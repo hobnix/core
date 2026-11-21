@@ -24,7 +24,7 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
   read-get <key>             the kept output (nothing and exit 1 when there is none)
   live-sample <topic> <ms>            a browser sample of the delay of a live topic (#486; the web interface calls it)
-  topic-bump <topic|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
+  topic-bump <topic|event:kind|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
   read-fail <key> --err TEXT [--ms N] [--rc N]  a run with no output: keeps the old output, records err and ts_err (#324)
   reads                      key TAB age in seconds (-1 = never read well) TAB milliseconds TAB exit code TAB bytes TAB status TAB gen TAB err TAB err age, oldest first
   live_open, live_load, live_put, live_fail, live_delete, live_beat: in-process only, used by live-collect.py
@@ -1250,8 +1250,22 @@ def live_beat(c, name, every, started, t, counts, read):
                    counts.get("slow", 0), counts.get("wait_ms", 0), read))
 
 
+def event_topic_rows():
+    """{kind: [topic]} from scripts/lib/event-topics.tsv (named events, docs/PLAN-live-interface.md step 13)."""
+    out = {}
+    try:
+        with open(os.environ.get("HS_EVENT_TOPICS", os.path.join(HERE, "lib", "event-topics.tsv")), encoding="utf-8") as f:
+            for line in f:
+                p = line.rstrip("\r\n").split("\t")
+                if p[0] and not p[0].startswith("#") and len(p) > 1:
+                    out[p[0]] = [t for t in p[1].split(",") if t and t != "-"]
+    except OSError:
+        pass
+    return out
+
+
 def expand_topics(args):
-    """topic names as given; @group = every live topic of that change area and of `any`; --all or * = every live topic
+    """topic names as given; event:<kind> = the topics of that named event (event-topics.tsv); @group = every live topic of that change area and of `any`; --all or * = every live topic
     (scripts/lib/live-topics.tsv, column 6 = groups). Without the list the names stay as given."""
     rows = []
     try:
@@ -1263,8 +1277,13 @@ def expand_topics(args):
     except OSError:
         pass
     out = []
+    kinds = None
     for a in args:
-        if a in ("--all", "*"):
+        if a.startswith("event:"):
+            if kinds is None:
+                kinds = event_topic_rows()
+            out += kinds.get(a[6:]) or [t for t, groups in rows if "system" in groups or "any" in groups]   # unknown kind: @system
+        elif a in ("--all", "*"):
             out += [r[0] for r in rows]
         elif a.startswith("@"):
             out += [t for t, groups in rows if a[1:] in groups or "any" in groups]
@@ -1276,6 +1295,13 @@ def expand_topics(args):
 def cmd_topic_bump(args):
     """Best effort and silent: no database folder (a test box), not root, a busy database: nothing happens and the exit code is 0."""
     names = [n for n in expand_topics(args) if re.fullmatch(r"[A-Za-z0-9_:. -]{1,64}", n)]
+    wl = os.environ.get("HS_LIVE_WAKE_LOG")
+    if wl and names:      # test knob and measure: how many topics each change wakes
+        try:
+            with open(wl, "a", encoding="utf-8") as f:
+                f.write("%s\t%d\n" % (" ".join(args), len(names)))
+        except OSError:
+            pass
     if not names or not os.path.isdir(os.path.dirname(DB) or "."):
         return 0
     try:
