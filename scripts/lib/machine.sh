@@ -45,12 +45,14 @@ machine_tool() {   # machine_tool <args>: the python tool
   command -v "$py" >/dev/null 2>&1 || py=python
   PYTHONUTF8=1 "$py" "${BASH_SOURCE[0]%/*}/../machine-toml.py" "$@"
 }
-# The read path asks for the same keys again and again (pools, bulkType ...): each answer is kept in a file under the runtime folder and used
-# while machine.toml is not newer than it, so a repeated read starts no python. Test knob HS_MACHINE_CACHE=off (or a folder).
+# The read path of the long-running services (hs-live, hs-web) asks for the same keys again and again (pools, bulkType ...): with
+# HS_MACHINE_CACHE=<folder> (set in their units; OFF everywhere else, so the CLI and the tests always read the file) each answer is kept in a file
+# there for at most HS_MACHINE_CACHE_TTL seconds (default 30) and only while the file has the same modification time (ns), size and inode.
+# A file system stamps a file with a coarse clock, so a rewrite within the same few milliseconds can look unchanged: that is why the answer also
+# expires, and machine_set / machine_unset drop every answer.
 _machine_cache_dir() {
   local d=${HS_MACHINE_CACHE:-}
-  [ "$d" != off ] || return 1
-  [ -n "$d" ] || { d=${XDG_RUNTIME_DIR:-/run}; [ -w "$d" ] || d=${TMPDIR:-/tmp}; d=$d/hs-machine-cache-${UID:-0}; }
+  [ -n "$d" ] && [ "$d" != off ] || return 1
   [ -d "$d" ] || (umask 077; mkdir -p "$d") 2>/dev/null || return 1
   [ -w "$d" ] || return 1
   printf '%s' "$d"
@@ -58,17 +60,22 @@ _machine_cache_dir() {
 _machine_cached() {   # _machine_cached <mode> <key> [--json]: print the answer, return its exit code
   local f; f=$(machine_file)
   [ -f "$f" ] || return 1
-  local d c rc out
-  if d=$(_machine_cache_dir) && [[ $2 =~ ^[A-Za-z0-9_.-]{1,80}$ ]]; then
-    c=$d/$(printf '%s' "$f" | tr -c 'A-Za-z0-9' '_' | tail -c 60).$2.${3:+json}
-    if [ -f "$c" ] && [ "$c" -nt "$f" ]; then
-      { IFS= read -r rc; out=$(cat); } <"$c" 2>/dev/null || rc=
-      if [[ $rc =~ ^[0-9]+$ ]]; then [ -z "$out" ] || printf '%s
+  local d c rc out sig have
+  if d=$(_machine_cache_dir) && [[ $2 =~ ^[A-Za-z0-9_.-]{1,80}$ ]] && sig=$(stat -c '%.9Y %s %i' -- "$f" 2>/dev/null) && [ -n "$sig" ]; then
+    local now=${EPOCHSECONDS:-0} ttl=${HS_MACHINE_CACHE_TTL:-30} at
+    # exact: the answer is used only while the file has the same modification time (ns), size and inode as when it was read; any writer
+    # (machine_set, the python tool, an editor, a copy over it) changes at least one of them
+    c=$d/$(printf '%s' "$f" | cksum | tr -c '0-9' _).$2.${3:+json}
+    if [ -f "$c" ]; then
+      { IFS= read -r have; IFS= read -r at; IFS= read -r rc; out=$(cat); } <"$c" 2>/dev/null || rc=
+      if [ "$have" = "$sig" ] && [[ $at =~ ^[0-9]+$ ]] && [ "$now" -gt 0 ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -lt "$ttl" ] && [[ $rc =~ ^[0-9]+$ ]]; then [ -z "$out" ] || printf '%s
 ' "$out"; return "$rc"; fi
     fi
     out=$(machine_tool get "$f" "$2" $3); rc=$?
     ( umask 077; { printf '%s
-' "$rc"; printf '%s' "$out"; } >"$c.$$" && mv -f "$c.$$" "$c" ) 2>/dev/null || true
+%s
+%s
+' "$sig" "$now" "$rc"; printf '%s' "$out"; } >"$c.$$" && mv -f "$c.$$" "$c" ) 2>/dev/null || true
     [ -z "$out" ] || printf '%s
 ' "$out"
     return "$rc"

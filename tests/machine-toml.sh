@@ -238,10 +238,15 @@ printf '#!/bin/sh
 echo x >> "%s"
 exec python3 "$@"
 ' "$CNT" >"$WORK/pycounter"; chmod +x "$WORK/pycounter"
-cm() { HS_PYTHON=$WORK/pycounter HS_MACHINE_CACHE=$WORK/mcache HS_MACHINE_FILE=$WORK/cm.toml bash -c '. "$1/lib/machine.sh"; "${@:2}"' _ "$SCRIPTS" "$@"; }
+cm() { HS_PYTHON=$WORK/pycounter HS_MACHINE_CACHE=${CACHE:-$WORK/mcache} HS_MACHINE_FILE=$WORK/cm.toml bash -c '. "$1/lib/machine.sh"; "${@:2}"' _ "$SCRIPTS" "$@"; }
 printf 'keyMap = "de"
 bulkType = "zfs"
 ' >"$WORK/cm.toml"
+check_eq "without HS_MACHINE_CACHE nothing is kept: a rewrite is seen at once" "us" "$(CACHE=off cm machine_get keyMap >/dev/null; printf 'keyMap = "us"
+' >"$WORK/cm.toml"; CACHE=off cm machine_get keyMap)"
+printf 'keyMap = "de"
+bulkType = "zfs"
+' >"$WORK/cm.toml"; : >"$CNT"
 check_eq "first read" "de" "$(cm machine_get keyMap)"
 cm machine_get keyMap >/dev/null; cm machine_get keyMap >/dev/null; cm machine_get_json keyMap >/dev/null; cm machine_get_json keyMap >/dev/null
 check_eq "5 reads of 2 shapes: 2 python runs" "2" "$(wc -l <"$CNT" | tr -d ' ')"
