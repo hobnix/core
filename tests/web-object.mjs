@@ -109,5 +109,19 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('a key with a quote is escaped in the selector', returnTarget(doc(false, { 'a"b': row }), 'a"b', null), row);
 }
 
+// ── the user object (step 5): address, tabs, the read-only marker, and the pages
+{
+  const { userPath, builtInUser, userOf } = await import('../web/src/pages/identity/user.js');
+  eq('a user page address', [userPath('alice'), userPath('alice', 'groups'), userPath('a b', 'overview')], ['/identity/users/alice', '/identity/users/alice/groups', '/identity/users/a%20b']);
+  eq('a user address reads back', objectOf(userPath('a b', 'access')), { kind: 'user', id: 'a b', tab: 'access' });
+  eq('the users list is not a user object', objectOf(P.users), null);
+  eq('the user tabs are Overview, Groups, Access', objects.user.tabs.map((t) => t.id), ['overview', 'groups', 'access']);
+  eq('the built-in accounts are marked, others not', [builtInUser('Administrator'), builtInUser('krbtgt'), builtInUser('alice')], [true, true, false]);
+  eq('a users row is parsed, "-" is empty', userOf(['bob', '-', 'disabled', 'Domain Users, staff']), { name: 'bob', full: '', enabled: false, groups: ['Domain Users', 'staff'] });
+  const page = src('pages/identity/User.svelte'), ul = src('pages/Users.svelte');
+  eq('the user page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
+  eq('the users list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(ul), /selection\.svelte\.js/.test(ul), /<Split|<Drawer/.test(ul)], [true, true, false]);
+}
+
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
