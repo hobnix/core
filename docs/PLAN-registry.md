@@ -1,8 +1,13 @@
 # Package registry: a signed index over git, a core that is only the framework
 
 Status: design, decided with the owner on 2026-11-22; milestone 0.13 "Package Registry" (before the marketplace, 0.14). Nothing is built yet.
-It replaces "What stays in the core", the repository list and the tag-based version rule in docs/PLAN-packages.md, and the plan of the
-closed milestone 0.5 (`hobnix/capabilities`, optional-only move, release channels).
+It replaces "What stays in the core", the repository list and the tag-based version rule in docs/PLAN-packages.md, and part of the plan of
+the closed milestone 0.5 (docs/PLAN-capabilities-repo.md and ADR 0017, accepted 2026-11-10 and 2026-11-16): the repository
+`hobnix/capabilities` and the optional-only move. **Kept from that plan:** vendoring of Nix modules with a lock and a pure evaluation
+(ADR 0017 rules 8 to 12, `scripts/lib/pkg_vendor.py`), `nix-matrix.sh --vendor`, CI across repositories. **Not yet reconciled:** the
+channels (`updateChannel`, rules 24 to 26) against one version per package; see "Open points". The old plan was not read in full when this page
+was first written; the steps and issues of 0.5 (#221, #224, #228, #229, #231, #235, #615) need to be checked against this page before
+step 4.
 
 ## Why
 
@@ -122,9 +127,11 @@ For this each package brings its whole surface:
 - `needs` and `provides` between packages (`backup` needs `storage`). The installer and `hs pkg` resolve them and refuse a removal that
   breaks a dependent.
 
-Capabilities are NixOS modules (`default.nix`, `options.nix`, `nix-api-level`). They reach the core as **flake inputs** of
-`hobnix/official`, pinned by commit in `flake.lock` (Nix checks the content hash); the index names the commit to pin. `nix-api-level` and
-`requires_core` guard the pair. Packages the core refers to by name today (`docker` as a need, `zoraxy`, `domain`, `monitoring`, `ntfy`)
+Capabilities are NixOS modules (`default.nix`, `options.nix`, `nix-api-level`). The system is a plain, non-flake NixOS configuration, so
+they reach the core the way ADR 0017 (rules 8 to 12) already decided: **vendoring**. `hs pkg install|update|remove` copies the verified
+package tree into `/etc/nixos/vendor/capabilities/<name>/` and records name, version, commit and tree hash in `capabilities.lock`; the
+evaluation stays pure and `default.nix` asserts the hash. This plan changes what the lock line is made from (the index entry and its tree
+hash instead of a release tag) and nothing else in that mechanism. `nix-api-level` and `requires_core` guard the pair. Packages the core refers to by name today (`docker` as a need, `zoraxy`, `domain`, `monitoring`, `ntfy`)
 are packages with `core = true` in the index: a core change that breaks them fails CI, and a blueprint that needs them pulls them.
 
 **Removing a capability never destroys data.** Disabling `storage` on a server with pools is a destructive command: show a plan, make the
@@ -150,7 +157,7 @@ become blueprints.
    name; update docs, CI badges and board links). Never create another repository called `server`.
 2. Index format, CI that builds and signs it, `hs pkg` reading the index and fetching by tree hash, the timer and the event.
 3. Per-package registry rows, config keys, probes and web declarations, so the core stops hard-coding capabilities. Target: the vps profile.
-4. Merge `recipes`, `extensions` and `capabilities` into `official`; the capabilities move one by one as flake inputs, starting with the
+4. Merge `recipes`, `extensions` and `capabilities` into `official`; the capabilities move one by one, vendored (ADR 0017), starting with the
    pilot (#225).
 5. Blueprints and the installer choice; core-only and vps CI profiles.
 6. `hobnix/community` and the verified tier; the assets in the index feed the marketplace (0.14).
@@ -162,7 +169,9 @@ installer) and is "Not tested on hardware yet." until it runs on a real server.
 
 - Which capability is the pilot (`tailscale` or `metrics`; a small one with few dependants).
 - Whether `base`-like groups are only blueprints or also a `group` field in the index (start with blueprints only).
-- Channels (stable and beta) per package: not now; one stream. A `channel` field can be added to the index later without a format break.
+- Channels: the core already has `updateChannel` (stable, beta; docs/PLAN-channels.md) and ADR 0017 extends it to capabilities. With one
+  version per package the natural fit is one index per channel (or a `channel` field per entry), a server reading the index of its
+  channel. Decide when step 2 starts, after reading the PLAN-capabilities-repo.md steps that are already built; do not drop what exists.
 - Whether a mirror of the index is shipped in the core as a fallback URL.
 - A second index host (for availability) once the first one is in use.
 - Restricted web access through the local proxy: expose only parts of the web interface (for example a user's self-service page, or

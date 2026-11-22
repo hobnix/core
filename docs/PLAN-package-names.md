@@ -98,8 +98,10 @@ The rest are unchanged: `audiobookshelf`, `authentik`, `bazarr`, `bulwark`, `clo
 - Docker, the shape: the capability keeps the Docker host container and the `docker` service; the manager variants (`arcane`, `portainer`,
   `none`) go. Each manager becomes a recipe with `needs = ["docker"]`, never public like today. Three things to handle: (1) servers that
   have Arcane or Portainer through the variant (installs from before count as Arcane) must be migrated to the recipe with the volume and
-  compose file kept, as the variant switch does today; (2) the "never public" guard (`ADMIN_TARGETS` in scripts/services.py) is a list of
-  names, which does not cover a manager recipe from another repository, so a package declares `admin = true` in its manifest and the guard
-  reads that; (3) the interface `provides = ["docker-manager"]` moves from the capability to the manager recipes.
+  compose file kept, as the variant switch does today; (2) the "never public" guard: a manager recipe declares its route `never-public`, or `admin = true`
+  on the route (both exist today: `[app.routes]` in docs/Package-API.md, tests/pkg.sh), and services.py then refuses a public route. The
+  name list `ADMIN_TARGETS` stays as a built-in floor for the apps the core knows. What no guard can catch is a package that declares its
+  own admin page `public-ok` without the mark; that is what the signed repository, the diff before an update and the typed confirmation
+  are for; (3) the interface `provides = ["docker-manager"]` moves from the capability to the manager recipes.
 - Counts above were read on 2026-11-22 from `capabilities/*/capability.toml` and the indexes of hobnix/recipes and hobnix/extensions.
 - Not tested on hardware yet: nothing here changes behaviour; a rename is checked in the retouch pass of each package.
