@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Quick look and tree on a phone: larger touch targets"
+body  = """On a narrow screen the quick look covers the screen with buttons and tabs of at least 44 px, keeps its action row above the home bar, and no longer scrolls the page behind it. Not tested on hardware yet."""
