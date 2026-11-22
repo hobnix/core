@@ -1735,6 +1735,18 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "netmap.counters": {
+    /** byte counters of the network map nodes (wan, host, bridges, instances), one sample: rows id, rx_bytes, tx_bytes */
+    words: ["netmap", "counters"];
+    path: "/netmap/counters";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: string;
+  };
   "node.keyline.by_name": {
     /** the key of a node as data: key (ok|locked|missing), user, file (where the other server's owner puts the line) and line (the public half with the forced command; never the private key) */
     words: ["node", "keyline", "<name>"];

@@ -189,6 +189,7 @@ health acks	admin	read
 health plan <action>	admin	plan
 health start <action>	admin	start
 deck	viewer	read
+netmap counters	viewer	read
 status	viewer	read
 system plan <action>	admin	plan
 system start <action>	admin	start
