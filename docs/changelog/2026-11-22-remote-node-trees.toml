@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Other servers in the tree: Health is now System"
+body  = """The tree of a peer, edge or VPS server keeps its pages, but the Health entry is now called System, like the group of this server. Addresses do not change. Not tested on hardware yet."""
