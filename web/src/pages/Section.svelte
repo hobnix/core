@@ -1,14 +1,12 @@
 <script>
-  import { poolPath } from '../paths.js';
-  // The overview of a group in the tree (Storage, Identity, Protection, Operations): one card per child page with the note the tree shows,
-  // and for Storage the capacity of the pools on top. Nothing is read here that the tree does not read already.
+  // The overview of a group that has no state page of its own (Instances, Apps, Network, People, Settings, Developer): one card per child page with the
+  // note the tree shows (a count or a problem chip). Storage, Backup and System have pages/GroupPage.svelte. Nothing is read here that the tree does not read.
   import { route, go } from '../route.svelte.js';
   import { lockedWhy } from '../roles.js';
   import { ui } from '../ui.svelte.js';
   import { tip } from "../ui/tooltip.svelte.js";
-  import { tree, poolItems, poolIcon } from '../nav.js';
-  import { pools as poolStore } from '../pools.svelte.js';
-  import { bytes } from '../format.js';
+  import { tree } from '../nav.js';
+  import Icon from '../ui/Icon.svelte';
 
   let { deck, meta = {} } = $props();
 
@@ -23,50 +21,30 @@
   const node = $derived(find(tree, route.path));
   const locked = $derived(!!deck?.data?.locked);
 
-  // a child may be a group itself (Pools holds one page per pool): its pages are listed under it
-  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, needs: lockedWhy(ui.role, c.path), kids: c.path === '/storage/pools' ? poolItems(poolStore.rows) : c.children ?? [] })));
+  const cards = $derived((node?.children ?? []).map((c) => ({ ...c, needs: lockedWhy(ui.role, c.path), kids: c.children ?? [] })));
   const dim = (c) => locked && c.storage;
   const note = (it) => (dim(it) ? { text: 'locked', warn: true } : meta[it.path] ?? null);
   const shown = (n) => n.text ?? '●';
-
-  const pools = $derived(poolStore.rows.map((r) => ({ name: r.name, role: r.role, ...(deck?.data?.pools?.[r.name] ?? {}) })).filter((p) => p.size > 0));
-  const pct = (p) => Math.round((p.used / p.size) * 100);
-  const isStorage = $derived(route.path === '/storage');
 </script>
 
 <div class="page">
   <div class="crumb">homeserver</div>
-  <h3 style="margin:0">{node?.label ?? 'Overview'}</h3>
-
-  {#if isStorage && pools.length && !locked}
-    <div class="two">
-      {#each pools as p}
-        <button class="card elev-sm pool" onclick={() => go(poolPath(p.name))}>
-          <div class="row"><i class="ph ph-{poolIcon(p.role)}" style="color:var(--color-accent)"></i><span class="nm">{p.name}</span><span class="sub" style="margin-left:auto">{pct(p)} % used</span></div>
-          <div class="bar"><div style="width:{pct(p)}%"></div></div>
-          <div class="sub">{bytes(p.used)} of {bytes(p.size)}</div>
-        </button>
-      {/each}
-    </div>
-  {/if}
-  {#if isStorage && locked}
-    <div class="card elev-sm sub" style="padding:12px 14px">The storage is locked: unlock it under Encryption to see the pools.</div>
-  {/if}
+  <h3>{node?.label ?? 'Overview'}</h3>
 
   <div class="grid">
     {#each cards as c}
       {@const n = note(c)}
       <div class="card elev-sm item" class:dim={dim(c) || !!c.needs}>
         <button class="head" use:tip={c.needs || ""} aria-label={c.needs ? `${c.label}. ${c.needs}` : undefined} onclick={() => c.path && go(c.path)}>
-          <i class="ph ph-{c.icon}"></i><span class="nm">{c.label}</span>
+          <Icon name={c.icon} /><span class="nm">{c.label}</span>
           {#if n}<span class="meta" class:warn={n.warn}>{shown(n)}</span>{/if}
-          {#if dim(c) || c.needs}<i class="ph ph-lock-simple" style="color:var(--color-neutral-600)" aria-hidden="true"></i>{/if}
+          {#if dim(c) || c.needs}<Icon name="lock-simple" class="lock" />{/if}
         </button>
         {#each c.kids as k}
           {@const kn = note(k)}
           {@const kneeds = lockedWhy(ui.role, k.path)}
           <button class="kid" class:grey={!!kneeds} use:tip={kneeds || ""} aria-label={kneeds ? `${k.label}. ${kneeds}` : undefined} onclick={() => go(k.path)}>
-            <i class="ph ph-{k.icon}"></i><span>{k.label}</span>
+            <Icon name={k.icon} /><span>{k.label}</span>
             {#if kn}<span class="meta" class:warn={kn.warn}>{shown(kn)}</span>{/if}
           </button>
         {/each}
@@ -78,22 +56,17 @@
 <style>
   .page { display: flex; flex-direction: column; gap: 14px; }
   .crumb { font-size: 11px; color: var(--color-neutral-500); }
-  h3 { font-size: 20px; }
-  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  h3 { font-size: 20px; margin: 0; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-  .pool { text-align: left; padding: 14px 16px; gap: 8px; cursor: pointer; color: inherit; font: inherit; border: 0; }
   .item { padding: 6px; gap: 0; }
   .item.dim { opacity: 0.6; }
   .kid.grey { opacity: 0.6; }
-  .row { display: flex; align-items: center; gap: 8px; }
-  .nm { font-size: 14px; font-weight: 500; }
-  .sub { font-size: 12px; color: var(--color-neutral-500); }
-  .bar { height: 8px; border-radius: var(--r); background: var(--color-neutral-800); }
-  .bar div { height: 8px; border-radius: var(--r); background: linear-gradient(90deg, var(--color-accent-700), var(--color-accent-500)); }
   .head, .kid { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; border-radius: var(--r); cursor: pointer; }
   .head:hover, .kid:hover { background: var(--color-neutral-900); }
-  .head i, .kid i { font-size: 16px; color: var(--color-neutral-400); }
+  .head :global(i), .kid :global(i) { font-size: 16px; color: var(--color-neutral-400); }
+  .head :global(i.lock) { color: var(--color-neutral-600); }
   .kid { padding-left: 30px; font-size: 13px; color: var(--color-neutral-300); }
+  .nm { font-size: 14px; font-weight: 500; }
   .meta { margin-left: auto; font-size: 11px; color: var(--color-neutral-500); }
   .meta.warn { color: var(--st-warn); }
 </style>

@@ -33,6 +33,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
   if ((m = path.match(/^\/storage\/pools\/([a-z0-9-]+)$/))) return pool(m[1]);
   if (/^\/storage\/disks\/[^/]+/.test(path)) return DISKS;   // the page of one disk reads what the list reads (its SMART history and tests are read by the page itself)
   if (path.startsWith('/settings/capabilities')) return [`${A}config/list`, `${A}parts/list`, `${A}parts/pending`];
+  if (path === P.settingsUpdates) return [`${A}config/list`, `${A}system/updates`];
   if (path.startsWith('/settings/')) return [`${A}config/list`];
   switch (path) {
     case P.summary: return [`${A}status`, `${A}monitor/disks`, `${A}setup/list`, `${A}ups/status`];
@@ -62,6 +63,10 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case P.disks: return [...DISKS, ...poolList.filter((p) => p.kind !== 'zfs').slice(0, 1).map((p) => `${A}pool/members?pool=${p.name}`)];
     case P.shares: return SHARES;
     case P.files: return [`${A}fm/locations`];
+    // the group pages (pages/groups/): only reads their places already have
+    case P.storage: return [`${A}monitor/disks`, `${A}shares/overview`];
+    case P.protection: return [`${A}backup/state`, `${A}expiry/list`];
+    case P.operations: return [`${A}health/list`, `${A}system/updates`, `${A}dc/state`, `${A}ups/status`, `${A}event/list?n=100`];
     case P.settings: return [`${A}config/list`];
     case P.setup: return [`${A}setup/list`];
     case P.firstRun: return [`${A}preset/list`, `${A}parts/list`, `${A}setup/list`];

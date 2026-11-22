@@ -1,0 +1,6 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Storage, Backup and System open on a page that says how the group is doing"
+body  = """
+The group pages Storage, Backup and System start with one line of state (healthy, a warning, a problem, or no data) and then show one card per place with its state instead of a description: pools with their capacity, disks that need attention, shares and the encryption (locked storage is shown as locked, not as empty); the last backup and the dates that run out; open problems, updates, certificates, the UPS and the recent events. The group pages read nothing that their places do not read already. The other groups keep the card list. Not tested on hardware yet.
+"""
