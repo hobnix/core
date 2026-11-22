@@ -751,6 +751,23 @@ role = "admin"
 ["deck"]
 role = "viewer"
 
+["netmap"]
+role = "viewer"
+kind = "tsv"
+columns = ["id", "kind", "parent", "label", "state", "rx_bytes", "tx_bytes"]
+enums = { kind = ["wan", "gateway", "host", "bridge", "instance", "service"] }
+note = "The graph of the network map, one row per node. Ids: wan, gateway, host, bridge:<name>, instance:<name>, service:<name> (the same ids as the netmap counters stream). parent is - for the root. Counters are totals since the boot, - when unknown."
+
+["netmap topology"]
+role = "viewer"
+kind = "tsv"
+columns = ["id", "kind", "parent", "label", "state", "rx_bytes", "tx_bytes"]
+enums = { kind = ["wan", "gateway", "host", "bridge", "instance", "service"] }
+note = "The same rows as netmap, with - in both counter columns: the live-state topic netmap reads this, so only a change of the topology changes the document."
+
+["netmap counters"]
+role = "viewer"
+
 ["status"]
 role = "viewer"
 
