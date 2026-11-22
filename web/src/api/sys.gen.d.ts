@@ -1757,7 +1757,7 @@ export interface SysOperations {
     params: { };
     stdin: "none";
     exit: number;
-    lines: string;
+    lines: string[][];
   };
   "netmap.topology": {
     /** the network map graph without counters (- in both columns), for the live-state topic: same rows as sys netmap */

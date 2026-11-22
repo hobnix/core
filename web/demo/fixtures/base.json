@@ -178,7 +178,8 @@
   "state/events": [],
   "testlab/results": [],
   "event/list": [],
-  "netmap/topology": [["wan", "wan", "-", "eno1", "up", "-", "-"], ["gateway", "gateway", "wan", "192.168.1.1", "-", "-", "-"], ["host", "host", "gateway", "hobnix", "up", "-", "-"], ["bridge:br0", "bridge", "host", "br0", "up", "-", "-"], ["instance:nextcloud", "instance", "bridge:br0", "nextcloud", "running", "-", "-"], ["service:nextcloud", "service", "instance:nextcloud", "Nextcloud", "-", "-", "-"]],
+  "netmap/topology": [["wan", "wan", "-", "eno1", "up", "-", "-"], ["gateway", "gateway", "wan", "192.168.1.1", "-", "-", "-"], ["host", "host", "gateway", "hobnix", "up", "-", "-"], ["bridge:br0", "bridge", "host", "br0", "up", "-", "-"], ["bridge:incusbr1", "bridge", "host", "incusbr1", "up", "-", "-"], ["instance:nextcloud", "instance", "bridge:br0", "nextcloud", "running", "-", "-"], ["instance:jellyfin", "instance", "bridge:br0", "jellyfin", "running", "-", "-"], ["instance:paperless", "instance", "bridge:br0", "paperless", "running", "-", "-"], ["instance:testvm", "instance", "bridge:incusbr1", "testvm", "stopped", "-", "-"], ["instance:homeassistant", "instance", "bridge:incusbr1", "homeassistant", "running", "-", "-"], ["service:nextcloud", "service", "instance:nextcloud", "Nextcloud", "-", "-", "-"], ["service:jellyfin", "service", "instance:jellyfin", "Jellyfin", "-", "-", "-"], ["service:paperless", "service", "instance:paperless", "Paperless", "-", "-", "-"]],
+  "netmap/counters": [["wan", "3000000", "500000"], ["host", "4000000", "750000"], ["bridge:br0", "5000000", "1000000"], ["bridge:incusbr1", "6000000", "1250000"], ["instance:nextcloud", "7000000", "1500000"], ["instance:jellyfin", "8000000", "1750000"], ["instance:paperless", "9000000", "2000000"], ["instance:testvm", "10000000", "2250000"], ["instance:homeassistant", "11000000", "2500000"]],
   "ct/list": [
    [
     "nextcloud",

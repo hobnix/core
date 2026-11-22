@@ -97,3 +97,19 @@ export function answer(method, path, query, body, fx) {
   if (path === '/api/login') return json(200, { user: 'demo', realm: 'local', role: 'admin', csrf: 'demo' });
   return json(403, { error: DEMO_NOTE });
 }
+
+// One frame of the network map counters stream (GET /api/netmap/stream): totals that grow at a made-up, wobbling rate for every node that has
+// counters in the fixture's `netmap/counters` read, so the page shows moving dots without a server. A stopped instance stays at its total.
+// `at` is the time in ms. Pure: the same time gives the same frame.
+export function netmapFrame(fx, at = Date.now()) {
+  const state = new Map((fx.reads['netmap/topology'] || []).map((r) => [r[0], r[4]]));
+  const sec = at / 1000;
+  const rows = (fx.reads['netmap/counters'] || []).map(([id, rx0, tx0], i) => {
+    if (state.get(id) === 'stopped') return [id, String(Number(rx0)), String(Number(tx0))];
+    const w = 0.35 + 0.1 * (i % 4);            // rad/s: each node wobbles a little differently
+    const rx = (60000 + 90000 * ((i * 7) % 11)) * (sec - 0.5 * Math.cos(w * sec) / w);
+    const tx = (12000 + 25000 * ((i * 5) % 7)) * (sec - 0.5 * Math.cos(w * sec + 1) / w);
+    return [id, String(Math.floor(Number(rx0) + rx)), String(Math.floor(Number(tx0) + tx))];
+  });
+  return { t: at, rows };
+}
