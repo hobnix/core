@@ -202,7 +202,6 @@ in old notifications still work. The table is kept through 0.12 and is removed i
 A refused change shows the code of the reason, the text and a link to the guide in the plan dialog (for a code the page does not know, the text only).
 
 Not tested on hardware yet. The keyboard walk, the axe check in the browser and the 390 px pass for these pages were not run.
-Docs: [Errors](troubleshooting.md).
 
 **Settings** has subpages in the left tree: **General** (name, language, look, the Nodes link), **Network and DNS**, **Storage**, **Backups**,
 **Users and access** (SSH keys, web access, the terminal, Active Directory), and, in the System group, **Updates** (installed revision, how many changes are
