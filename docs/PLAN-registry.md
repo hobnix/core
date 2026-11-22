@@ -81,6 +81,29 @@ One `index.json` per repository, built and signed by CI on every merge to the ma
   key, so a CI leak does not lose the root of trust. A package name that exists in two repositories is refused for the second one.
 - Everything else in docs/PLAN-packages.md "Trust" stays.
 
+## Names
+
+Qualified names for everyone: `repo/name` always works in the CLI and the web interface, and a bare `name` means the official package and
+only that.
+
+- `hs pkg install jellyfin` is `official/jellyfin`; `community/metrics-extra` and `acme/cool-app` name packages of other repositories,
+  where `acme` is the alias of that repository **on this server**.
+- The alias is local, chosen when the repository is added and stored in `machine.toml` (like a Flatpak remote name). The index may suggest
+  an `id`, which the add dialog offers as the default; the user can change it, and a clash with an existing alias is refused when adding.
+  A repository never decides its own name on a server.
+- `official`, `community`, `core` and `local` are reserved aliases.
+- A bare name never falls back to another repository: if it is not in official the command fails and suggests `community/<name>` where it
+  exists. A repository added later cannot change what a bare name means.
+- Trust is tied to the signer fingerprint, not to name or alias. `installed.toml` records alias and fingerprint, so a changed key shows
+  as a changed repository even under the same alias.
+- All three tiers work the same in the CLI; the tier shows as a label (Official, Verified, Unverified), not as a different syntax.
+- **Dependencies stay inside what a tier may trust** (against dependency confusion): official needs only official; community needs
+  official and community; a third-party package needs its own repository and official. Blueprints follow the same rule. Inside a
+  repository `foo` or `self/foo` means the same repository; the index stores the repository reference, not the local alias, so a package
+  behaves the same whatever alias a server uses.
+- **Renames:** an index entry may carry `renamed_from = ["old-name"]`, so a package renamed in the retouch pass (docs/PLAN-package-names.md)
+  updates on servers that have the old name installed instead of showing as a new package.
+
 ## What the core is
 
 The core keeps: `hs` and the registry loader, `hs pkg` (index, fetch, verify, install), `scripts/lib/ui.sh` and the other libraries that make
@@ -142,3 +165,5 @@ installer) and is "Not tested on hardware yet." until it runs on a real server.
 - Channels (stable and beta) per package: not now; one stream. A `channel` field can be added to the index later without a format break.
 - Whether a mirror of the index is shipped in the core as a fallback URL.
 - A second index host (for availability) once the first one is in use.
+- Rewriting packages (and maybe `hs`) in Rust: an idea for after the move, one package and one version at a time. Depends on how the
+  package API (`_lib.sh`, `ui.sh`) looks by then, because that is the contract a package is written against. No decision.
