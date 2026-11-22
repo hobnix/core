@@ -33,7 +33,9 @@ assert.ok(layout.caps.gateway.steps.length >= 5 && layout.caps.gateway.steps.eve
 assert.ok(Object.values(layout.caps).every((c) => c.status === undefined || typeof c.status === 'string'));
 // (5) every page id has a tree child under /settings; the capability children land under Capabilities
 const settings = mainTree.find((i) => i.path === '/settings');
-for (const p of layout.pages) assert.ok(settings.children.some((c) => c.path === `/settings/${p}`), p);
+// the page id `updates` lives in System > Updates since step 8 (SettingsPage reads the page id from the second path segment)
+for (const p of layout.pages.filter((x) => x !== 'updates')) assert.ok(settings.children.some((c) => c.path === `/settings/${p}`), p);
+assert.ok(mainTree.find((i) => i.path === '/system').children.some((c) => c.path === '/system/updates'));
 const withCap = nodeItems('main', null, [], capEntries(layout, ['gateway'])).find((i) => i.path === '/settings');
 assert.deepEqual(withCap.children.find((c) => c.path === '/settings/capabilities').children.map((c) => c.path), ['/settings/capabilities/gateway']);
 assert.equal(settings.children.find((c) => c.path === '/settings/capabilities').children, undefined, 'the static tree is not changed');
