@@ -56,7 +56,7 @@ Most are named after their app and stay as they are. Only the ones with a questi
 | Now | What it is for | Proposed | Note |
 | --- | --- | --- | --- |
 | `docker` | Docker apps (compose) with Arcane or Portainer | removed | Replaced by the capability `docker`; not moved to official. |
-| `domain` | the domain controller, this server joined to it | see `active-directory` | The installer of that capability. |
+| `domain` | the domain controller, this server joined to it | part of `active-directory` | Its "controller" mode; not moved as a recipe (see "What the answers change"). |
 | `monitoring` | Grafana and Loki: history of load, disks, containers, logs | `grafana` | Names the app; Loki is part of it. Needs `metrics`. |
 | `upload-storage` | file sync and upload server (Seafile or ownCloud) | `seafile` and `owncloud` | Decided: a combined recipe is split, one recipe per app. The name `upload-storage` goes away (it was also confusing next to the capability `storage`). |
 | `homeassistant` | Home Assistant in its own VM | `home-assistant` | The app's own spelling. |
@@ -81,10 +81,16 @@ The rest are unchanged: `audiobookshelf`, `authentik`, `bazarr`, `bulwark`, `clo
 - Decided the same day: `gateway` becomes `local-proxy` (its `provides` entry stays `local-proxy`: service descriptors say
   `local-proxy = true`, so changing it would touch every recipe); the `docker` recipe, `sunshine`, `catalyst-node` and `catalyst-panel`
   are not moved; `steamos` and `pelican` stay, `pelican` gets a retouch.
-- Decided the same day: `upload-storage` is split into `seafile` and `owncloud`; the Active Directory family (`ad`, `domain`,
-  `ad-selfservice`) becomes one package, `active-directory`.
-- Open design point for that merge: the family mixes a NixOS module (`ad`), a container installer (`domain`) and an extension page
-  (`ad-selfservice`). The package model has one `kind` per package, so step 3 decides how one package carries a module, an installable
-  payload and a page (parts of one package, or kept as separate packages that need each other and share the `active-directory` prefix).
+- Decided the same day: `upload-storage` is split into `seafile` and `owncloud`.
+- Active Directory, the shape (owner's idea, 2026-11-22): the same pattern as the `docker` capability, which installs a container
+  and offers variants. `ad` (this server is a member: Samba joins, winbind, Kerberos, Domain Admins sign in; no module of its own, on
+  exactly when `adDomain` is set) and recipe `domain` (the domain controller container) become one capability, `active-directory`, with a
+  mode chosen when it is turned on: **controller** (create the domain controller container here, system-labelled so it cannot be deleted
+  by accident, and this server joins it; today's `domain`) or **member** (join a domain that already exists). The DC container is
+  installed by the capability, not by a separate recipe. `ad-selfservice` stays a small extension (`needs` the capability), renamed
+  `active-directory-selfservice` so the family sorts together. Not `ad-host` and `ad-client`: there is one switch (`adDomain`) and the
+  commands `hs user`, `hs dns` and `hs dc cert` serve both roles. Checked in the code: `ad` has no module and its notes name `domain` as the
+  controller; not checked: whether joining a domain that a Windows server hosts works today. That decides whether "member" is a real
+  mode or only the second half of "controller".
 - Counts above were read on 2026-11-22 from `capabilities/*/capability.toml` and the indexes of hobnix/recipes and hobnix/extensions.
 - Not tested on hardware yet: nothing here changes behaviour; a rename is checked in the retouch pass of each package.
