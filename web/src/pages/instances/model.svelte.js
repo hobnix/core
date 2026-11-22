@@ -44,8 +44,8 @@ export function instanceModel({ sel = () => '', detail = false, tab = () => '' }
   const snaps = $derived([...rows(snap)].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).map((r) => ({ name: r[0], created: r[1] })));
 
   return {
-    ctl, svc, all, doing, failure, busyOf, bind, snap, isRunning, isVm,
-    get ct() { return ct; }, get backupOf() { return backupOf; }, get backupKnown() { return backupKnown; }, get services() { return services; },
+    ctl, svc, doing, failure, busyOf, bind, snap, isRunning, isVm,
+    get all() { return all; }, get ct() { return ct; }, get backupOf() { return backupOf; }, get backupKnown() { return backupKnown; }, get services() { return services; },
     get myServices() { return myServices; }, get myRecipes() { return myRecipes; }, get bindings() { return bindings; }, get snaps() { return snaps; },
   };
 }
