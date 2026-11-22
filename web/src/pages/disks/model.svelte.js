@@ -11,7 +11,7 @@ import { diskPending, failedOf } from '../storage/pending.js';
 import { diskPool, poolTopic, hoursTxt, roleLabel, serialIn } from '../storage/pool.js';
 
 export function diskModel({ filter = () => 'all', sel = () => '', detail = false } = {}) {
-  // the one SnapRAID pool (its disks are labelled "bulk data-01" by monitor disks, an internal prefix)
+  // the one SnapRAID pool (monitor disks labels its disks with an internal prefix)
   const snapName = $derived(pools.rows.find((p) => p.kind !== 'zfs')?.name ?? '');
 
   const mon = poll('/api/sys/monitor/disks', 30000, 'monitor-disks');
@@ -37,7 +37,7 @@ export function diskModel({ filter = () => 'all', sel = () => '', detail = false
   const missing = $derived(known.filter((k) => k.state === 'missing'));
 
   const isLoose = (d) => d.role === 'free' || d.role === 'mounted';
-  // the pool a disk belongs to ("bulk ..." labels are the SnapRAID pool, whatever its name)
+  // the pool a disk belongs to (prefixed labels are the SnapRAID pool, whatever its name)
   const poolOf = (d) => { const p = diskPool(d.role); return p === 'bulk' && snapName ? snapName : p; };
   const disk = $derived(filter() === 'missing' ? null : all.find((d) => d.name === sel()) ?? null);
   const gone = $derived(filter() === 'missing' ? missing.find((m) => m.serial === sel()) ?? null : null);
@@ -57,7 +57,7 @@ export function diskModel({ filter = () => 'all', sel = () => '', detail = false
     const v = verdicts[d.name]?.verdict;
     return v && v !== '-' ? v : d.smart && d.smart !== '-' ? d.smart : 'idle';
   };
-  // the pool member a disk is (SnapRAID: "bulk data-01" -> data-01; ZFS: the by-id name of the members list) and its group (data | parity | mirror-0 ...)
+  // the pool member a disk is (SnapRAID: the prefixed label, minus the prefix; ZFS: the by-id name of the members list) and its group (data | parity | mirror-0 ...)
   const membRows = (p) => (p === snapName ? rows(membSnap) : p === zName ? rows(membZ) : []);
   const snapRole = (d) => /^bulk (data|parity)-\d+$/.test(d?.role ?? '');
   const memberOf = (d) => {
