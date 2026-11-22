@@ -18,6 +18,7 @@ export const ICONS = [
   'stack-plus', 'stethoscope', 'stop', 'storefront', 'swap', 'tag', 'terminal-window', 'thermometer', 'trash', 'trash-simple', 'tray',
   'tray-arrow-down', 'usb', 'user', 'user-plus', 'users-four', 'users-three', 'vault', 'video-camera', 'warning', 'warning-circle',
   'warning-octagon', 'wifi-slash', 'wrench', 'x',
+  'chart-line', 'film-strip', 'identification-badge', 'images', 'wind',
 ];
 const known = new Set(ICONS);
 export const isIcon = (n) => known.has(n);
