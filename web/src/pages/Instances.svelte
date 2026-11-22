@@ -1,39 +1,35 @@
 <script>
   import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
-  // Instances: containers and VMs in one list. A row opens the quick look over the list (?sel=<name>: selection.svelte.js); "Open page" goes to the page of the instance
-  // (pages/instances/Instance.svelte) with its tabs Overview, Config, Network and Console. Every action opens a plan. Snapshots of an instance live on its page (Config tab);
+  // Instances: containers and VMs in one list. No quick look (owner decision 2026-11-23, as on Disks): the name and the "Open instance" button at the end of a row go to the page
+  // of the instance (pages/instances/Instance.svelte) with its tabs Overview, Config, Network and Console; start/stop and restart are on the row. Every action opens a plan. Snapshots of an instance live on its page (Config tab);
   // the "in the backup" switch lives on Backup, this page only shows the badge.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { selected, select, close } from '../selection.svelte.js';
   import { openPlan, openCreate, ui } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
-  import ErrorNote from '../ui/ErrorNote.svelte';
   import { route, go, url } from '../route.svelte.js';
   import CreateInstance from '../forms/instances/CreateInstance.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
-  import QuickLook from '../ui/QuickLook.svelte';
-  import { Icon, Kv, Chip, StatusDot, Card, Row, Stack, Muted } from '../ui/index.js';
+  import { Icon, Chip, StatusDot, Card, Row, Stack, Muted } from '../ui/index.js';
   import { sizeToBytes } from '../format.js';
   import { ctIcon, isVm, isRunning, link, servicesOf } from './instances/ct.js';
   import { childrenOf } from './docker/apps.js';
   import { instanceModel, kindOf, word, dot, boots, spaced, dash } from './instances/model.svelte.js';
   import { instancePath } from './instances/path.js';
 
-  const selName = $derived(selected());
-  const m = instanceModel({ sel: () => selName });
+  const m = instanceModel();
   const dl = poll('/api/sys/docker/list', 30000);
 
   let open = $state((() => {
     try { const s = sessionStorage.getItem('instances:docker-apps'); return new Set(s ? JSON.parse(s) : []); } catch { return new Set(); }
   })());
   $effect(() => { try { sessionStorage.setItem('instances:docker-apps', JSON.stringify([...open])); } catch {} });
-  // another page (Apps, Services, Network, Docker) names an instance to look at: it becomes the quick look
-  $effect(() => { const n = takeSelection('instances'); if (n) select(n); });
+  // another page (Apps, Services, Network, Docker) names an instance to look at: its page opens
+  $effect(() => { const n = takeSelection('instances'); if (n) go(instancePath(n)); });
   // /instances?view=snapshots (the old Snapshots page) opens the Config tab (snapshots) of the first instance
   let snapOpened = false;
   $effect(() => {
@@ -41,7 +37,6 @@
   });
 
   const cts = $derived(m.all);
-  const sel = $derived(m.ct);
   const running = $derived(cts.filter(isRunning).length);
   const kids = $derived(childrenOf(rows(dl)));
   const services = $derived(m.services);
@@ -67,7 +62,7 @@
     { key: 'address', label: 'Address' }, { key: 'boot', label: 'Starts at boot', optional: true, value: (c) => (boots(c) ? 'yes' : 'no') }, { key: 'ram', label: 'RAM', sort: 'num', optional: true, value: (c) => sizeToBytes(c.ram) },
     { key: 'cpu', label: 'CPU', sort: 'num', optional: true, value: (c) => Number(c.cpu) },
     { key: 'lastSnap', label: 'Last snapshot', optional: true }, { key: 'route', label: 'Route', optional: true, value: (c) => servicesOf(c, services).length },
-    { key: 'actions', label: '', sort: false, align: 'right' },
+    { key: 'act', label: '', sort: false, align: 'right', width: '1%' },
   ];
 </script>
 
@@ -84,7 +79,7 @@
   {#snippet emptyAction()}<Button need="app-manager" variant="primary" icon="plus" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}>Create</Button>{/snippet}
   <div style="position:relative">
     <Card style="padding:4px 8px;overflow-x:auto">
-      <Table id="instances" {columns} rows={cts} key="name" compact selected={sel?.name} onrow={(c) => select(c.name)} loading={!m.ctl.loaded} empty="No instances."
+      <Table id="instances" {columns} rows={cts} key="name" compact loading={!m.ctl.loaded} empty="No instances."
              below={subRow} hasBelow={(c) => open.has(c.name) && eligible(c)}>
         {#snippet cell(c, col)}
           {#if col.key === 'name'}
@@ -104,6 +99,7 @@
             {#if s.length}<a {...link(P.services)}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<Muted>–</Muted>{/if}
           {:else}
             <Row gap="1" justify="end">
+              <Button variant="ghost" class="btn-icon" icon="arrow-square-out" label="Open instance" tooltip={'Open instance'} onclick={() => go(instancePath(c.name))} />
               <Button need="app-manager" variant="ghost" class="btn-icon" icon={isRunning(c) ? 'stop' : 'play'} busy={m.busyOf(c, ['stop'], ['stop', '--autostart', 'off'], ['start'])} tooltip={isRunning(c) ? 'Stop' : 'Start'} label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
               <Button need="app-manager" variant="ghost" class="btn-icon" icon="arrow-clockwise" busy={m.busyOf(c, ['restart'])} tooltip={'Restart'} label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
             </Row>
@@ -123,23 +119,5 @@
         {/snippet}
       </Table>
     </Card>
-    {#if selName}
-      {#if sel}
-        <QuickLook title={sel.name} chip={kindOf(sel)} state={failure(sel) ? 'bad' : doing(sel) ? 'info' : dot(sel.state)} stateLabel={failure(sel) ? 'failed' : doing(sel) ? `${doing(sel).toLowerCase()}…` : word(sel.state)} rowKey={sel.name} href={instancePath(sel.name)} onclose={close}>
-          <Kv items={[
-            { k: 'Address', v: dash(sel.address) }, { k: 'RAM / CPU', v: `${spaced(sel.ram) || '–'} / ${sel.cpu || '–'}` },
-            { k: 'Starts at boot', v: boots(sel) ? 'yes' : 'no' }, { k: 'Last snapshot', v: dash(sel.lastSnap) },
-            { k: 'Backup', v: m.backupKnown && sel.name in m.backupOf ? (m.backupOf[sel.name] ? 'in the nightly backup' : 'not in the backup') : '' },
-            { k: 'Locked by', v: sel.owner },
-          ]} />
-          {#if failure(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} /></div>{/if}
-          {#snippet actions()}
-            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={m.busyOf(sel, ['stop'], ['stop', '--autostart', 'off'], ['start'])} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
-          {/snippet}
-        </QuickLook>
-      {:else if m.ctl.loaded}
-        <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No instance called “{selName}” exists. It may have been deleted or renamed.</Muted></QuickLook>
-      {/if}
-    {/if}
   </div>
 </PageState>
