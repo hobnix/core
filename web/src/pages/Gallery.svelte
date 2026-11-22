@@ -14,7 +14,7 @@
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
-    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted, NetMap, NodePopover,
+    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Grid, Icon, Kv, Menu, Muted, NetMap, NodePopover,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
   } from '../ui/index.js';
@@ -178,6 +178,10 @@
     <Entry name="Stack" text="Children one below the other.">
       <div class="cell"><small>gap 1 / stretch</small><Stack gap="1"><Chip>a</Chip><Chip>b</Chip></Stack></div>
       <div class="cell"><small>gap 6 / center</small><Stack gap="6" align="center"><Chip>a</Chip><Chip>b</Chip></Stack></div>
+    </Entry>
+
+    <Entry name="Grid" text="Children in equal columns that wrap, as many as fit.">
+      <div class="cell"><small>min 120 px</small><Grid min="120" gap="2"><Chip>a</Chip><Chip>b</Chip><Chip>c</Chip></Grid></div>
     </Entry>
 
     <Entry name="Muted" text="The one secondary text style.">

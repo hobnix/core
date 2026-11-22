@@ -45,6 +45,9 @@ const lazy = (load) => ({ lazy: load });
 const Gallery = lazy(() => import('./pages/Gallery.svelte'));
 const NetworkMap = lazy(() => import('./pages/NetworkMap.svelte'));
 import Section from './pages/Section.svelte';
+import StorageGroup from './pages/groups/Storage.svelte';
+import BackupGroup from './pages/groups/Backup.svelte';
+import SystemGroup from './pages/groups/System.svelte';
 import Proxy from './pages/Proxy.svelte';
 import ProxyPorts from './pages/ProxyPorts.svelte';
 import ProxyTailscale from './pages/ProxyTailscale.svelte';
@@ -66,11 +69,11 @@ const objectPages = { pool: Pools, disk: Disk, user: User, share: Share, instanc
 export const routes = {
   [P.summary]: Summary,
   [P.instances]: Instances,
-  [P.storage]: Section,
+  [P.storage]: StorageGroup,
   [P.appsGroup]: Section,
   [P.people]: Section,
-  [P.system]: Section,
-  [P.backupGroup]: Section,
+  [P.system]: SystemGroup,
+  [P.backupGroup]: BackupGroup,
   [P.pools]: Pools,
   [P.incident]: Incident,
   [P.disks]: Disks,

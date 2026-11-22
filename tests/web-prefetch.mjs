@@ -20,7 +20,7 @@ check('the allowlist was read', known.size > 50 && known.has('ct/list') && known
 
 const routes = ['/', '/instances', '/network', '/people/users', '/people/groups', '/system/certificates', '/system/hardware', '/backup/overview', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
   '/backup/expiry', '/system/health', '/apps/installed', '/apps/marketplace', '/network/services', '/storage/encryption', '/storage/vault',
-  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/system/diagnostics', '/system/updates', '/network/map'];
+  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/system/diagnostics', '/system/updates', '/network/map', '/storage', '/backup', '/system'];
 const missing = [];
 let total = 0;
 for (const r of routes) {
@@ -52,6 +52,12 @@ check('storage prefetch lists are identical with live mode off and on', storageP
 check('storage pages still prefetch URLs, none named like a topic', storagePages.every((r) => readsFor(r).length > 0 && readsFor(r).every((p) => p.startsWith('/api/sys/') && !/\/(pool-(info|members|state)-|shares-overview|monitor-disks)/.test(p))));
 check('storage prefetch is unchanged by live mode', JSON.stringify(readsFor('/storage/pools/bulk')) === JSON.stringify(readsFor('/storage/pools/bulk', [], true)));
 check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/system/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/system/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
+
+// a group page reads only reads its places already use (pages/groups/): every path is in the reads of some page below the group
+const group = (g, places) => { const own = new Set(places.flatMap((r) => readsFor(r))); return readsFor(g).length > 0 && readsFor(g).every((p) => own.has(p)); };
+check('the Storage group page reads only what its places read', group('/storage', ['/storage/pools', '/storage/disks', '/storage/shares', '/storage/encryption']));
+check('the Backup group page reads only what its places read', group('/backup', ['/backup/overview', '/backup/expiry']));
+check('the System group page reads only what its places read', group('/system', ['/system/health', '/system/certificates', '/system/hardware', '/system/events', '/system/updates']));
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
