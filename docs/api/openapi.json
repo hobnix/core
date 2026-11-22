@@ -8429,6 +8429,82 @@
     }
    }
   },
+  "/netmap": {
+   "get": {
+    "operationId": "netmap",
+    "summary": "the network map graph as data: id, kind, parent, label, state, rx_bytes, tx_bytes (wan, gateway, host, bridges, instances, services; - when unknown)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap"
+     ],
+     "script": "netmap.sh",
+     "args": "-",
+     "class": "read",
+     "rest": false
+    },
+    "description": "The graph of the network map, one row per node. Ids: wan, gateway, host, bridge:<name>, instance:<name>, service:<name> (the same ids as the netmap counters stream). parent is - for the root. Counters are totals since the boot, - when unknown.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "id"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind",
+            "enum": [
+             "wan",
+             "gateway",
+             "host",
+             "bridge",
+             "instance",
+             "service"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "parent"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "label"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "rx_bytes"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "tx_bytes"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/netmap/counters": {
    "get": {
     "operationId": "netmap.counters",
@@ -8453,6 +8529,89 @@
        "text/plain": {
         "schema": {
          "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/netmap/topology": {
+   "get": {
+    "operationId": "netmap.topology",
+    "summary": "the network map graph without counters (- in both columns), for the live-state topic: same rows as sys netmap",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap",
+      "topology"
+     ],
+     "script": "netmap.sh",
+     "args": "topology",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/netmap/topology",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The same rows as netmap, with - in both counter columns: the live-state topic netmap reads this, so only a change of the topology changes the document.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "id"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind",
+            "enum": [
+             "wan",
+             "gateway",
+             "host",
+             "bridge",
+             "instance",
+             "service"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "parent"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "label"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "rx_bytes"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "tx_bytes"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
         }
        }
       }

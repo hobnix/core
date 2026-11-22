@@ -178,6 +178,7 @@
   "state/events": [],
   "testlab/results": [],
   "event/list": [],
+  "netmap/topology": [["wan", "wan", "-", "eno1", "up", "-", "-"], ["gateway", "gateway", "wan", "192.168.1.1", "-", "-", "-"], ["host", "host", "gateway", "hobnix", "up", "-", "-"], ["bridge:br0", "bridge", "host", "br0", "up", "-", "-"], ["instance:nextcloud", "instance", "bridge:br0", "nextcloud", "running", "-", "-"], ["service:nextcloud", "service", "instance:nextcloud", "Nextcloud", "-", "-", "-"]],
   "ct/list": [
    [
     "nextcloud",

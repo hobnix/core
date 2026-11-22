@@ -594,6 +594,7 @@ SYSTEM_TOPICS = {'deck': 5, 'jobs-running': 10, 'jobs-list': 30, 'health-next': 
 
 INSTANCE_TOPICS = {
     'ct-list': (['ct', 'list'], 10, 'skip', 'incus', {'instances', 'shares', 'network'}),
+    'netmap': (['netmap', 'topology'], 10, 'skip', None, {'instances', 'network'}),
     'iso-list': (['iso', 'list'], 10, 'skip', 'incus', {'instances'}),
     'ct-pools': (['ct', 'pools'], 15, 'skip', 'incus', {'instances'}),
     'ct-profiles': (['ct', 'profiles'], 120, 'skip', 'incus', {'instances', 'network', 'system'}),
@@ -791,7 +792,7 @@ class Cli(unittest.TestCase):
     def test_instance_topics(self):
         info = ls.topic_info()
         rows = {t[0]: t for t in ls.topics()}
-        self.assertEqual(len(INSTANCE_TOPICS), 10)
+        self.assertEqual(len(INSTANCE_TOPICS), 11)
         for name, (words, iv, lock, cap, groups) in INSTANCE_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
             self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
@@ -893,7 +894,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 80)
+        self.assertEqual(len(lines), 81)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)
