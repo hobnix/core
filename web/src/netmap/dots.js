@@ -8,7 +8,7 @@ const lg = (rate) => Math.log2(1 + rate / 1024);          // 1 KiB/s = 1, 1 MiB/
 
 // How many dots a link carries: none at zero, then growing slowly with the rate (log scale), at most MAX_DOTS.
 export const dotCount = (rate) => (num(rate) ? Math.min(MAX_DOTS, 1 + Math.floor(lg(rate) / 1.5)) : 0);
-// How fast they move, in drawing units per second: slow at a trickle, 160 at most.
+// Their speed in drawing units per second: slow at a trickle, 160 at most.
 export const dotSpeed = (rate) => (num(rate) ? Math.min(160, 24 + 12 * lg(rate)) : 0);
 // The static stand-in for `prefers-reduced-motion`: the width of the link line.
 export const thickness = (rate) => (num(rate) ? Math.min(6, 1.5 + 0.35 * lg(rate)) : 1);
