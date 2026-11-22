@@ -525,9 +525,9 @@ class StorageTopics(DbBase):
         "forms/backup/SetupDisk.svelte": ["pool-disks"], "forms/storage/AddDisks.svelte": ["pool-disks"],
         "forms/storage/ReplaceMember.svelte": ["pool-disks"],
         "forms/shares/RestoreShare.svelte": ["backup-state"], "pages/Backup.svelte": ["backup-state", "backup-state"],
-        "pages/Shares.svelte": ["backup-state"],
-        "pages/Instances.svelte": ["ct-list"], "pages/protection/CtSnapRow.svelte": ["ct-list"],
-        "pages/Disks.svelte": ["disk-health"], "forms/ops/ServiceForm.svelte": ["services-list"],
+        "pages/shares/model.svelte.js": ["backup-state"],
+        "pages/instances/model.svelte.js": ["ct-list"], "pages/protection/CtSnapRow.svelte": ["ct-list"],
+        "pages/disks/model.svelte.js": ["disk-health"], "forms/ops/ServiceForm.svelte": ["services-list"],
     }
 
     def test_free_argument_reads_follow_the_topic_of_their_list(self):
