@@ -191,9 +191,11 @@ Extensions pages stay as filtered views.
 
 ## What stays in the core
 
-"Could someone else write this?" decides, as for extensions. The core keeps: storage, backup, encryption, vault, samba, incus, the web
-interface and its generic renderers, `hs services`, the registry loader, notifications, metrics, docs build, tailscale, vps, edge roles,
-presets, the installer. These stay capabilities of the core.
+Superseded on 2026-11-22 by docs/PLAN-registry.md: the core is only the framework (`hs`, registry loader, `hs pkg`, libraries, schema,
+Nix glue, installer, generic web shell). Storage, incus, samba and every other capability become packages in `hobnix/official`, and a
+server works with any subset. The same plan replaces the repository list above (three repositories: core, official, community), the
+"latest release tag is the available version" rule (a signed index with one version per package) and the tag signatures in "Trust"
+(the index is signed). The rest of this page stays.
 
 Recipes that other parts reference by name (`docker` is a **need**, `zoraxy` is the reverse proxy the `reverse-proxy` capability
 manages, `homepage` (removed 2026-10-29, the dashboard is built into the web interface) was the dashboard capability's backend, `domain` is the Active Directory capability's installer, `monitoring`, `ntfy`)
