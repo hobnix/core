@@ -9,6 +9,7 @@ id is its identity in the index, so a name is cheapest to change **before** the 
 - Lowercase, hyphens, no repository or kind prefix (`jellyfin`, not `recipe-jellyfin`).
 - **Unique across all kinds in one repository.** Today `docker` is both a capability and a recipe; that cannot stay (see the table).
 - A recipe is named after the app it installs (`radarr`); a capability after the function it gives (`reverse-proxy`, `backup`).
+- **One recipe, one app.** A recipe that offers a choice of apps is split (`upload-storage` into `seafile` and `owncloud`).
 - A family shares a prefix (`edge-mail`, `edge-ports`); a name never repeats what the kind already says.
 - A name says what it is for, so someone who has not read the docs can guess (`gateway` does not; `local-names` does).
 - Renames are listed in the index with `renamed_from`, so installed servers follow.
@@ -57,7 +58,7 @@ Most are named after their app and stay as they are. Only the ones with a questi
 | `docker` | Docker apps (compose) with Arcane or Portainer | removed | Replaced by the capability `docker`; not moved to official. |
 | `domain` | the domain controller, this server joined to it | see `active-directory` | The installer of that capability. |
 | `monitoring` | Grafana and Loki: history of load, disks, containers, logs | `grafana` | Names the app; Loki is part of it. Needs `metrics`. |
-| `upload-storage` | file sync and upload server (Seafile or ownCloud) | `file-sync` | Not an app name, but it holds two apps; `storage` in the name is confusing next to the capability `storage`. |
+| `upload-storage` | file sync and upload server (Seafile or ownCloud) | `seafile` and `owncloud` | Decided: a combined recipe is split, one recipe per app. The name `upload-storage` goes away (it was also confusing next to the capability `storage`). |
 | `homeassistant` | Home Assistant in its own VM | `home-assistant` | The app's own spelling. |
 | `paperless-ngx` | scanned documents, OCR, search | `paperless` | The `-ngx` is the project's, not what people say. |
 | `matrix-hook` | Radarr, Sonarr and others post events to a Matrix room | `matrix-notify` | Says what it does. |
@@ -80,6 +81,10 @@ The rest are unchanged: `audiobookshelf`, `authentik`, `bazarr`, `bulwark`, `clo
 - Decided the same day: `gateway` becomes `local-proxy` (its `provides` entry stays `local-proxy`: service descriptors say
   `local-proxy = true`, so changing it would touch every recipe); the `docker` recipe, `sunshine`, `catalyst-node` and `catalyst-panel`
   are not moved; `steamos` and `pelican` stay, `pelican` gets a retouch.
-- Still open: whether the Active Directory family (`ad`, `domain`, `ad-selfservice`) becomes one package.
+- Decided the same day: `upload-storage` is split into `seafile` and `owncloud`; the Active Directory family (`ad`, `domain`,
+  `ad-selfservice`) becomes one package, `active-directory`.
+- Open design point for that merge: the family mixes a NixOS module (`ad`), a container installer (`domain`) and an extension page
+  (`ad-selfservice`). The package model has one `kind` per package, so step 3 decides how one package carries a module, an installable
+  payload and a page (parts of one package, or kept as separate packages that need each other and share the `active-directory` prefix).
 - Counts above were read on 2026-11-22 from `capabilities/*/capability.toml` and the indexes of hobnix/recipes and hobnix/extensions.
 - Not tested on hardware yet: nothing here changes behaviour; a rename is checked in the retouch pass of each package.
