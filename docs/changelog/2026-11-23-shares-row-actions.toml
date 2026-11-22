@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Shares: Open and Browse buttons on each row instead of a quick look"
+body  = """Selecting a share in the Shares list no longer opens a panel over the table. Each row now ends with a Browse files button and an Open share button that goes to the page of the share (the share name is still a link)."""

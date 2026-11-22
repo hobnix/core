@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Instances: an Open button on each row instead of a quick look"
+body  = """Selecting an instance in the list no longer opens a panel over the table. Each row now ends with an Open instance button, followed by Start or Stop and Restart; the instance name is still a link to its page."""

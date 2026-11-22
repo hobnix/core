@@ -135,9 +135,14 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('an instance page is a page of the Instances item', itemOf(instancePath('x'))?.path, P.instances);
   const page = src('pages/instances/Instance.svelte'), il = src('pages/Instances.svelte');
   eq('the instance page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
-  eq('the instances list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il)], [true, true, false]);
+  eq('the instances list has no QuickLook, selection helper, Split or Drawer; a row ends with "Open instance"', [/<QuickLook|QuickLook\.svelte/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il), /label="Open instance"/.test(il), /icon="arrow-square-out"/.test(il), /go\(instancePath\(c\.name\)\)/.test(il), /<Table id="instances"[^>]*onrow/.test(il)], [false, false, false, true, true, true, false]);
   eq('the console tab opens the existing terminal and VM console windows', [/Terminal\.svelte/.test(src('pages/instances/ConsoleTab.svelte')), /VmConsole\.svelte/.test(src('pages/instances/ConsoleTab.svelte'))], [true, true]);
 }
+
+// ── Shares list: no quick look (owner decision 2026-11-23); a row ends with Browse and "Open share" buttons
+const shl = src('pages/Shares.svelte');
+eq('Shares has no QuickLook, selection helper, Split or Drawer', [/<QuickLook|QuickLook\.svelte/.test(shl), /selection\.svelte\.js/.test(shl), /<Split|<Drawer/.test(shl)], [false, false, false]);
+eq('a share row ends with an "Open share" icon button that goes to the share page', [/label="Open share"/.test(shl), /icon="arrow-square-out"/.test(shl), /go\(sharePath\(s\.name\)\)/.test(shl), /<Table id="shares"[^>]*onrow/.test(shl)], [true, true, true, false]);
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
