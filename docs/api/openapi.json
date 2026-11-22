@@ -8521,12 +8521,18 @@
      "class": "read",
      "rest": false
     },
+    "x-hs-web": {
+     "path": "/api/sys/netmap/counters",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": []
+    },
     "x-hs-described": false,
     "responses": {
      "0": {
       "description": "ok",
       "content": {
-       "text/plain": {
+       "text/tab-separated-values": {
         "schema": {
          "type": "string"
         }
