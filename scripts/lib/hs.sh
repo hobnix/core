@@ -430,8 +430,8 @@ case ",$row_flags," in
     . "$here/live.sh"
     # every topic: word of the row is a change area that is read again (a package install also changes the instances: topic:system,topic:instances)
     local_grps=()
-    for w in ${row_flags//,/ }; do case "$w" in topic:*) local_grps+=("@${w#topic:}") ;; esac; done
-    [ "${#local_grps[@]}" -gt 0 ] || local_grps=(@system)
+    for w in ${row_flags//,/ }; do case "$w" in topic:*) local_grps+=("event:area.${w#topic:}") ;; esac; done
+    [ "${#local_grps[@]}" -gt 0 ] || local_grps=(event:area.system)
     if "${run_cmd[@]}" ${cmd_args[@]+"${cmd_args[@]}"}; then rc=0; else rc=$?; fi
     # also after a failure: a half-done change leaves a changed state (docs/adr/0005-events.md, rule 8)
     live_refresh "${local_grps[@]}"

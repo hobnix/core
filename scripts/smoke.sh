@@ -69,6 +69,7 @@ default_probes() {
     $'hs status\tstatus\t0 1' \
     $'hs health\thealth\t0 1\t120' \
     $'hs health list-acks\thealth list-acks\t0 1\t30' \
+    $'hs live load\tlive load\t0 1' \
     $'hs ct list\tct list\t0' \
     $'hs ct hardware\tct hardware\t0 1' \
     $'hs disk list\tdisk list\t0 1' \
@@ -80,6 +81,8 @@ default_probes() {
     $'hs audit\taudit\t0' \
     $'hs sys audit\tsys audit\t0' \
     $'hs sys event list\tsys event list\t0' \
+    $'hs sys netmap\tsys netmap\t0' \
+    $'hs sys netmap counters\tsys netmap counters\t0' \
     $'hs sys jobs records\tsys jobs records\t0' \
     $'hs sys jobs children\tsys jobs children 20200101-000000-x-aaaa\t0' \
     $'hs pool bulk\tpool bulk\t0 1' \

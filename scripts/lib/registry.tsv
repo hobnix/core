@@ -14,6 +14,7 @@ user	smoke	smoke.sh	{rest}	quick check that the commands work here: needed progr
 user	cheatsheet	cheatsheet.sh	{rest}	one-page German cheat sheet of the most useful commands (Markdown, to print)	Spickzettel auf einer Seite mit den wichtigsten Befehlen (Markdown, zum Ausdrucken)	topic:docs,reads
 user	jobs reconcile	job-reconcile.sh	-	-	-	nohelp,topic:system,changes
 user	timing	read-timing.sh	{rest}	how long the reads of the interface take (every tab loads through them), slowest first; needs root	wie lange die Lesezugriffe der Oberfläche dauern (jeder Reiter lädt damit), die langsamsten zuerst	nohelp,topic:system,reads
+user	live load	live-load.sh	{rest}	what the live-state collector costs now: CPU seconds and reads per topic in the last minute	was der Live-Zustand-Sammler gerade kostet: CPU-Sekunden und Lesevorgänge je Thema in der letzten Minute	reads,topic:system
 user	live measure	live-measure.sh	{rest}	measure the live state on the state database for a while (writes per minute, database growth, change latency) and write a result file; needs root	-	nohelp,long,topic:system,changes
 user	motd	motd.sh	{rest}	three status lines: problems, last backup, system (also shown at SSH login)	drei Statuszeilen: Probleme, letztes Backup, System (erscheint auch beim SSH-Login)	topic:system,reads
 user	docs build	docs-build.sh	{rest}	build the documentation pages again (guides and command reference)	Dokumentationsseiten neu bauen (Anleitungen und Befehlsübersicht)	topic:docs,changes
@@ -275,6 +276,7 @@ sys	sys config plan <action>	config-change.sh	plan {1} {rest}	what changing a se
 sys	sys config start <action>	config-change.sh	start {1} {rest}	do it (hs sys config start set <key> <value>); the file is checked and put back when the check fails	-
 sys	sys logs units	logs.sh	units	what the journal can be filtered by (key and label)	-
 sys	sys logs show	logs.sh	show {rest}	the journal as plain lines: hs sys logs show [--unit <key>] [--level err|warning|info] [--since 1h|today|boot] [--lines <N>]	-
+sys	sys logs follow	logs.sh	follow {rest}	the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]	-
 sys	sys jobs tail <unit>	jobs.sh	tail {1} {rest}	state and new journal lines of a job since line N (state, exit, line, next)	-
 sys	sys jobs stop <unit>	jobs.sh	stop {1}	stop a running background job	-
 sys	sys jobs record <id>	jobs.sh	--record {1}	one job record as JSON (ADR 0004): state, step, progress, times, exit, error, result	-	reads,topic:jobs
@@ -303,6 +305,7 @@ sys	sys state forget <serial>	state.sh	forget {1} --yes	remove a MISSING disk fr
 sys	sys state collect	state.sh	collect {rest}	read the disks and update the state database (the one writer; root)	-
 sys	sys state disks	state.sh	disks	the disk inventory: serial, model, size, name, state ok|missing|unknown, role, pool, first and last seen, worse, note	-
 sys	sys state events	state.sh	events {rest}	disk events from the state database: time, kind, serial, text	-
+sys	sys state events-follow	state.sh	events-follow {rest}	the last disk events, then every new row until the reader goes (the web log stream; plain rows)	-
 sys	sys state smart <serial>	state.sh	smart {1}	the stored SMART readings of one disk over time	-
 sys	sys state problems	state.sh	problems	problems the state database knows (missing or worsening disks, a stopped collector): key and text	-
 sys	sys state baseline	state.sh	baseline	the daily SMART check per disk: serial, name, kind, level healthy|watch|failing, since, last read, first read, wwn, realloc, pending, uncorr, crc, nv_crit, nv_media, nv_used, nv_spare, present, note	-
@@ -409,6 +412,7 @@ sys	sys ct bindings <ct>	ct-bindings.sh	{1}	the storage of an instance with pool
 sys	sys ct plan <ct> <action>	ct-change.sh	plan {1} {2} {rest}	what a change of an instance would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
 sys	sys ct start <ct> <action>	ct-change.sh	start {1} {2} {rest}	do a change of an instance as a background job; needs --confirm <name> when the plan has a danger line	-
 sys	sys ct logs <ct>	ct-access.sh	{1} logs {rest}	the last lines of the journal inside an instance (hs sys ct logs <ct> [lines])	-
+sys	sys ct follow <ct>	ct-access.sh	{1} follow {rest}	the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])	-
 sys	sys monitor disks	monitor.sh	--disks	disk table of the overview	-
 sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev, state, since, wakes today) and the measured power numbers with their source (UPS, CPU package)	Schlafzustand der drehenden Platten (Platte, Zustand, seit, Aufwachen heute) und die gemessenen Leistungswerte mit Quelle (USV, CPU-Paket)	-
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
@@ -418,6 +422,9 @@ sys	sys health acks	health-ack.sh	list-acks	the acknowledgements as id, since (e
 sys	sys health plan <action>	health-change.sh	plan {1} {rest}	what acknowledging a problem, taking it back or lifting the pause of the bulk jobs would do, as data: status, plan lines (never asks)	-
 sys	sys health start <action>	health-change.sh	start {1} {rest}	do it (hs sys health start ack <id> | unack <id> | resume), answers status done	-
 sys	sys deck	deck-status.sh	-	one JSON document with the numbers for a status display (network and cpu counters, pools, disks, backup, problems, instances)	-
+sys	sys netmap	netmap.sh	-	the network map graph as data: id, kind, parent, label, state, rx_bytes, tx_bytes (wan, gateway, host, bridges, instances, services; - when unknown)	-
+sys	sys netmap topology	netmap.sh	topology	the network map graph without counters (- in both columns), for the live-state topic: same rows as sys netmap	-
+sys	sys netmap counters	netmap-counters.sh	-	byte counters of the network map nodes (wan, host, bridges, instances), one sample: rows id, rx_bytes, tx_bytes	-
 sys	sys status	overview-status.sh	-	the facts the Overview shows: backup age, encryption, parity sync and scrub, upload cache, disk health, instances, hottest disk, last disk event, the Hobnix version	-
 sys	sys system plan <action>	system-change.sh	plan {1} {rest}	what updating the parity, a scrub, an update, a rebuild, a rollback or a garbage collection would do, as data: status, plan lines (never asks; exit 2 = something is missing)	-
 sys	sys system start <action>	system-change.sh	start {1} {rest}	do it as a background job (hs sys system start sync | scrub --pool <pool> | update | rebuild | rollback --confirm rollback | gc --days <N>)	-
@@ -569,6 +576,7 @@ sys	sys docker start <action>	docker-setup.sh	start {1} {rest}	do it (hs sys doc
 sys	sys docker apps	docker.sh	--apps	the apps in Docker as name, parent, project, state, running/total, ports, address, images, managed, update, files (same|changed|new|invalid|-; - when empty; kind unmanaged = a container without a compose project; no row when Docker is off or does not answer)	-
 sys	sys docker containers	docker.sh	--containers	every container in Docker as name, project, state (- when empty; no row when Docker is off or does not answer): the editor checks container_name against it	-
 sys	sys docker logs <app>	docker.sh	--logs {1} {rest}	the Compose log of one app: name parent project state ports, then log lines (--tail 200 by default, up to 2000)	-	changes
+sys	sys docker follow <app>	docker.sh	--follow-logs {1} {rest}	the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)	-
 sys	sys docker app <app>	docker.sh	--app {1}	the app as JSON: rev, managed (web|recipe|other), env NAMES only, compose text (no env values; compose may hold secrets)	-
 sys	sys docker rev <app>	docker.sh	--rev {1}	the revision of the compose file and .env of one app, one line (what hs sys docker app prints as rev): the open editor polls it for "changed on disk"	-
 sys	sys docker-app plan <app> <action>	docker-app-change.sh	plan {1} {2} {rest}	what starting, stopping, restarting, pulling, saving, rebuilding, recreating or deleting an app in Docker would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused with a reason); app-save and app-write (the files only) take --rev new|<rev> with document stdin and print `finding<TAB>level<TAB>where<TAB>text` lines (the editor's Test); delete confirms by name	-	changes

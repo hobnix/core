@@ -36,6 +36,7 @@ export const tree = [
       ] },
       { label: 'Monitoring', icon: 'gauge', path: P.monitoring, children: [
         { label: 'Hardware', icon: 'cpu', path: P.hardware },
+        { label: 'Network map', icon: 'share-network', path: P.networkMap },
         { label: 'Diagnostics', icon: 'stethoscope', path: P.diagnostics },
         { label: 'Live state', icon: 'pulse', path: P.liveState, capability: 'live-state' },
         { label: 'Test-lab', icon: 'flask', path: P.testLab, capability: 'testlab' },

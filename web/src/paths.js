@@ -16,7 +16,8 @@ export const P = Object.freeze({
   // identity
   groups: '/identity/groups', users: '/identity/users', certificates: '/identity/certificates',
   // monitoring, protection, operations
-  hardware: '/monitoring/hardware', diagnostics: '/monitoring/diagnostics', liveState: '/monitoring/live-state', testLab: '/monitoring/test-lab',
+  // networkMap moves to /network/map in step 8 of docs/PLAN-navigation.md (owner decision): change this one line and its redirect row
+  hardware: '/monitoring/hardware', networkMap: '/monitoring/network-map', diagnostics: '/monitoring/diagnostics', liveState: '/monitoring/live-state', testLab: '/monitoring/test-lab',
   backup: '/protection/backup', expiry: '/protection/expiry',
   health: '/operations/health', notifications: '/operations/notifications', events: '/operations/events', whatsNew: '/operations/whats-new',
   components: '/developer/components', docs: '/docs', setup: '/setup', firstRun: '/setup/first-run', nodes: '/nodes',

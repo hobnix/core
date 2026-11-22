@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Named events (docs/PLAN-live-interface.md step 13, D12): scripts/lib/event-topics.tsv maps an event kind to the live-state topics it wakes.
+# Every kind exists in event-kinds.tsv, every topic exists in live-topics.tsv; `event:<kind>` wakes exactly the listed topics (state-db.py topic-bump,
+# fake state database) and fewer than the group it replaces; an unknown kind wakes @system; the groups still work as aliases.
+# shellcheck source=tests/lib.sh
+. "$(dirname "$0")/lib.sh"
+command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
+wp() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
+export HS_PLAIN=1 HS_LANG=en HS_CALLER=test
+T=$'\t'
+ET=$SCRIPTS/lib/event-topics.tsv
+kinds=$(grep -v '^#' "$ET" | cut -f1)
+check "the table lists kinds" test -n "$kinds"
+bad=""
+for k in $(grep -v '^#' "$ET" | awk -F'	' '$3=="log" {print $1}'); do grep -q "^$k$T" "$SCRIPTS/lib/event-kinds.tsv" || bad="$bad $k"; done
+check_eq "every kind with how=log is in event-kinds.tsv" "" "$bad"
+bad=""
+for k in $(grep -v '^#' "$ET" | awk -F'	' '$3=="refresh" {print $1}'); do ! grep -q "^$k$T" "$SCRIPTS/lib/event-kinds.tsv" || bad="$bad $k"; done
+check_eq "a how=refresh name is not an event kind of the log" "" "$bad"
+check_eq "the how column is log or refresh" "" "$(grep -v '^#' "$ET" | awk -F'	' '$3!="log" && $3!="refresh" {print $1}')"
+# every named event a script asks for is in the table
+used=$(grep -rhoE 'live_refresh event:[a-z.-]+|refresh "?event:[a-z.-]+' "$SCRIPTS"/*.sh "$SCRIPTS"/lib/*.sh | sed -E 's/.*event://' | sort -u)
+bad=""; for k in $used; do case "$k" in disk.) continue;; esac; grep -q "^$k$T" "$ET" || bad="$bad $k"; done
+check_eq "every event:<kind> a script asks for is in event-topics.tsv" "" "$bad"
+check_eq "the ten share scripts ask for share.changed" "10" "$(grep -l 'live_refresh event:share.changed' "$SCRIPTS"/*.sh | wc -l | tr -d ' ')"
+bad=""
+for t in $(grep -v '^#' "$ET" | cut -f2 | tr ',' '\n' | grep -v '^@' | sort -u); do grep -q "^$t$T" "$SCRIPTS/lib/live-topics.tsv" || bad="$bad $t"; done
+check_eq "every topic of event-topics.tsv is a live-state topic" "" "$bad"
+check_eq "no kind is listed twice" "" "$(grep -v '^#' "$ET" | cut -f1 | sort | uniq -d)"
+
+mkdir -p "$WORK/d"
+export HS_STATE_DB=$(wp "$WORK/d/state.db") HS_LIVE_WAKE_LOG=$(wp "$WORK/wake.log")
+q() { python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(",".join(r[0] for r in c.execute("SELECT topic FROM topics ORDER BY topic")))' "$HS_STATE_DB"; }
+sdb() { python3 "$SCRIPTS/state-db.py" "$@"; }
+want=$(grep "^ct.created$T" "$ET" | cut -f2 | tr ',' '\n' | sort | paste -sd,)
+sdb topic-bump event:ct.created
+check_eq "ct.created wakes exactly the listed topics (fake feed: the real tables)" "$want" "$(q)"
+n_event=$(cut -f2 "$WORK/wake.log" | tail -1)
+: > "$WORK/wake.log"; rm -f "$WORK/d/state.db"
+sdb topic-bump @instances
+n_group=$(cut -f2 "$WORK/wake.log" | tail -1)
+echo "topics woken: event:ct.created $n_event, @instances $n_group"
+check "a named event wakes fewer topics than the group it replaces" test "$n_event" -lt "$n_group"
+rm -f "$WORK/d/state.db"; : > "$WORK/wake.log"
+sdb topic-bump event:disk.plugged
+check_eq "disk.plugged keeps the five topics disk-event.sh woke before" "backup-state,disk-inventory,fm-locations,monitor-disks,temp-disks" "$(q)"
+check_eq "the wake log says how many" "event:disk.plugged${T}5" "$(cat "$WORK/wake.log")"
+rm -f "$WORK/d/state.db"
+sdb topic-bump event:no.such-kind
+check "an unknown kind wakes the @system topics" test "$(q | tr ',' '\n' | grep -c .)" -gt 3
+check_eq "...among them status" "1" "$(q | tr ',' '\n' | grep -c '^status$')"
+rm -f "$WORK/d/state.db"
+sdb topic-bump event:ct.started status
+check_eq "a named event and a plain topic mix" "1" "$(q | tr ',' '\n' | grep -c '^ct-list$')"
+check_eq "live_refresh passes event:<kind> through (HS_LIVE_LOG)" "event:ct.stopped" "$(HS_LIVE_LOG=$(wp "$WORK/l.log") bash -c '. "$1/lib/live.sh"; live_refresh event:ct.stopped; cat "$HS_LIVE_LOG"' _ "$SCRIPTS")"
+
+echo "-- area.<name> events: the registry's topic: words resolve through the table; the group stays an alias"
+words=$(grep -o 'topic:[a-z]*' "$SCRIPTS/lib/registry.tsv" | sed 's/topic://' | sort -u)
+bad=""; for w in $words; do grep -q "^area.$w$T@$w$T" "$ET" || bad="$bad $w"; done
+check_eq "every topic: word of the registry has an area.<word> row naming its group" "" "$bad"
+bad=""; for g in $(grep '^area\.' "$ET" | cut -f1 | sed 's/area\.//'); do
+  rm -f "$WORK/d/state.db"; sdb topic-bump "event:area.$g"; a=$(q)
+  rm -f "$WORK/d/state.db"; sdb topic-bump "@$g"; b=$(q)
+  [ "$a" = "$b" ] || bad="$bad $g"
+done
+check_eq "event:area.<name> wakes exactly what @<name> wakes" "" "$bad"
+check_eq "the Nix timers and the dispatcher no longer say @group" "0" "$(grep -rhE --include=*.nix --include=*.sh 'live.sh refresh @|live_refresh @[a-z]' "$SCRIPTS/../capabilities" "$SCRIPTS/lib/hs.sh" "$SCRIPTS/lib/job.sh" | grep -c .)"
+finish

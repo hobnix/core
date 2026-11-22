@@ -14,7 +14,8 @@ This file is the whole HTTP side of the entry page:
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
-  GET  /api/events    server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
+  GET  /api/netmap/stream  the byte counters of the network map nodes as server-sent events (one JSON {t, rows} about every 2 s, sampled only while a stream is open, at most HS_WEB_NETMAP_MAX streams), session needed
+  GET  /api/events    (?topics=a,b&sid=<id>: only those topics; POST /api/events/subscribe {sid, topics} changes the set of an open stream, D13) server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
   GET  /api/board     the dashboard tiles and their stats, only while the dashboard variant is web; a session, or (setting dashboardOpen) a private address
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
@@ -48,6 +49,7 @@ import mimetypes
 import os
 import queue
 import re
+import importlib.util
 import sqlite3
 import secrets
 import select
@@ -346,10 +348,18 @@ class Config:
         self.stream_every = float(env("HS_WEB_STREAM_EVERY", "1"))        # seconds between two looks at the journal
         self.stream_max = int(env("HS_WEB_STREAM_MAX", "6"))              # streams open at once (one thread each)
         self.stream_hours = float(env("HS_WEB_STREAM_HOURS", "6"))        # a stream ends after this long; the page reconnects or falls back
+        self.netmap_every = float(env("HS_WEB_NETMAP_EVERY", "2"))        # seconds between two samples of the network map counters (only while a stream is open)
+        self.netmap_max = int(env("HS_WEB_NETMAP_MAX", "4"))              # /api/netmap/stream open at once (one thread each; they share one sample)
         self.probe_file = env("HS_WEB_PROBE_FILE", "/run/hs-web/probe.tsv")      # hs live measure: when a live:probe counter reached the streams ("" = off)
+        self.live_sock = env("HS_LIVE_SOCK", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live.sock"))   # push socket (D11): "" = off, the watcher polls alone
+        self.live_push_file = env("HS_LIVE_PUSH_FILE", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live-push.json"))   # the wake counters for hs live load ("" = off)
         self.events_watch = 1.0                                           # seconds between two reads of the change counters (table topics of state.db)
         self.events_ping = 15.0                                           # seconds of silence before a `: ping` on /api/events (tests shorten it)
         self.events_max = int(env("HS_WEB_EVENTS_MAX", "32"))             # /api/events streams open at once
+        self.logs_user_max = int(env("HS_WEB_LOGS_USER_MAX", "4"))        # /api/logs/stream: open log streams per user (D15; one child process each)
+        self.logs_max = int(env("HS_WEB_LOGS_MAX", "8"))                  # ... and in total, apart from events_max
+        self.logs_tick = float(env("HS_WEB_LOGS_TICK", "1"))              # seconds a log stream waits for a line before it looks at the client again
+        self.logs_ping = int(env("HS_WEB_LOGS_PING", "15"))               # quiet ticks before a `: ping`
 
 
 # ─────────────────────────── colours ───────────────────────────
@@ -613,6 +623,34 @@ def _run_watched(cmd, stdin=None, timeout=60, gone=None):
             if how:
                 _kill_tree(p)
                 return RC_TIMEOUT, "", how
+
+
+LOG_KINDS = ("system", "ct", "docker", "events")      # what /api/logs/stream/<kind> can follow
+
+
+def log_follow_words(kind, query):
+    """-> the words after `hs sys` for a log stream, or None when the kind or an argument is not valid (D15). Every value is checked
+    against the pattern of the read it replaces, nothing else reaches a command line. `target` is the instance or the app."""
+    def one(key, rx, default=""):
+        v = (query.get(key) or [default])[0]
+        return v if re.fullmatch(rx, v) else None
+    lines = one("lines", r"[0-9]{1,4}", "200")
+    if lines is None or not 1 <= int(lines) <= 2000:
+        return None
+    if kind == "ct":
+        t = one("target", NAME[1:-1], "")
+        return ["ct", "follow", t, lines] if t else None
+    if kind == "docker":
+        t = one("target", APP[1:-1], "")
+        return ["docker", "follow", t, lines] if t else None
+    if kind == "events":
+        return ["state", "events-follow", lines]
+    if kind == "system":
+        unit, level = one("unit", r"[a-z0-9-]{1,32}", "all"), one("level", r"err|warning|info", "info")
+        if unit is None or level is None:
+            return None
+        return ["logs", "follow", "--unit", unit, "--level", level, "--lines", lines]
+    return None
 
 
 class Auth:
@@ -1083,6 +1121,8 @@ READS = {
     ("testlab", "results"): {"kind": "tsv", "ttl": 10},      # the Test-lab page (capability testlab)
     ("event", "list"): {"kind": "tsv", "ttl": 10, "query": {"n": (r"^[0-9]{1,4}$", ""), "source": (r"^[a-z][a-z0-9-]{0,30}$", "--source"), "after": (r"^[0-9]{1,9}$", "--after"), "before": (r"^[0-9]{1,9}$", "--before")}},      # the event log (docs/adr/0005-events.md)
     ("ct", "list"): {"kind": "tsv", "ttl": 5, "topic": "ct-list"},
+    ("netmap", "topology"): {"kind": "tsv", "ttl": 10, "topic": "netmap"},      # the network map graph (docs/PLAN-network-map.md); counters come from the stream
+    ("netmap", "counters"): {"kind": "tsv", "ttl": 0},      # the fallback of /api/netmap/stream: the map reads it only while the stream is down
     ("ct", "profiles"): {"kind": "tsv", "ttl": 30, "topic": "ct-profiles"},
     ("ct", "pools"): {"kind": "tsv", "ttl": 15, "topic": "ct-pools"},
     ("ct", "bindings"): {"kind": "tsv", "ttl": 10, "args": [NAME]},
@@ -2366,31 +2406,104 @@ class SampleGate:
             return True
 
 
+SID = re.compile(r"[A-Za-z0-9_-]{8,64}$")
+MAX_STREAM_TOPICS = 256
+
+
+def parse_topics(raw):
+    """D13: the topic list of a subscription: a comma separated string or a list of names -> frozenset; None when it is not one (a topic is a
+    name, `<topic>` or `<topic>:<arg>`, at most MAX_STREAM_TOPICS of them). `*` alone or in the list means every topic."""
+    if isinstance(raw, str):
+        raw = [x for x in raw.split(",") if x]
+    if not isinstance(raw, list) or len(raw) > MAX_STREAM_TOPICS:
+        return None
+    out = set()
+    for t in raw:
+        if not isinstance(t, str) or not (t == "*" or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:@=-]{0,127}", t)):
+            return None
+        out.add(t)
+    return frozenset(out)
+
+
+class StreamQueue(queue.Queue):
+    """The queue of one open stream plus what it wants: `topics` None = every `changed` (no `topics=` at connect: old clients, tests), else the
+    set it subscribed to (`*` in it = all); `sid` and `owner` (the session token) let POST /api/events/subscribe find it."""
+    topics = None
+    sid = ""
+    owner = ""
+
+    def wants(self, topic):
+        t = self.topics
+        return t is None or topic in t or "*" in t
+
+
 class Events:
     """The hub behind /api/events: a watcher follows the change counters and the heartbeat of the collector and hands every change to each open stream. A stream is a
     queue of ("changed", topic, gen) | ("domain", row) | ("resync",) | ("down",) | ("up",). feed() is also how tests push a message."""
 
     def __init__(self, cfg):
         self.cfg, self.lock, self.queues = cfg, threading.Lock(), set()
+        self.by_sid = {}             # stream id (chosen by the page) -> its queue, for the subscribe call
+        self.sent_changed = 0        # `changed` items put on a stream queue (after the topic filter) / offered to one: for `hs live measure` (D13)
+        self.offered_changed = 0
         self.counters = None         # topic -> gen as the watcher saw it last; None = not read yet (the first read is the baseline, no event)
         self.last_event = None       # id of the newest event-log row the watcher saw; None = not read yet (the first read is the baseline)
         self.collector_up = None     # the heartbeat of hs-live is fresh; None = not looked at yet
         self.on_change = None        # App sets it: called once per round that saw a change made outside the web (clears the read cache)
+        self.wake = threading.Event()  # set by the push socket: a writer said "look at the counters now" (D11)
+        self.woke_push = 0           # rounds the watcher started because of a datagram
+        self.woke_fallback = 0       # rounds it started because the fallback period ran out
+        self.push_up = False         # the socket is bound and the listener runs
+        self.lease_now = threading.Event()   # set when a stream came or changed its topics: the lease thread writes at once (D14)
+        self.lease_every = 10.0      # seconds between two renewals of the leases while a stream is open
+        self.lease_written = 0       # rounds that wrote leases (a test and `hs live measure` look at it)
+        self._sdb = None
 
-    def add(self):
-        q = queue.Queue(maxsize=256)
+    def add(self, topics=None, sid="", owner=""):
+        q = StreamQueue(maxsize=256)
+        q.topics, q.sid, q.owner = topics, sid, owner
         with self.lock:
             self.queues.add(q)
+            if sid:
+                self.by_sid[sid] = q
+        self.lease_now.set()
         return q
 
     def remove(self, q):
         with self.lock:
             self.queues.discard(q)
+            if q.sid and self.by_sid.get(q.sid) is q:
+                del self.by_sid[q.sid]
+
+    def subscribe(self, sid, owner, topics):
+        """D13: replace the topic set of the open stream `sid` of this session. -> (added topics, {topic: gen}) or None when there is no such stream
+        (of this owner). The gens let the page see a change that came between its read and this call."""
+        with self.lock:
+            q = self.by_sid.get(sid)
+            if q is None or q.owner != owner:
+                return None
+            old = q.topics
+            q.topics = topics
+            counters = dict(self.counters or {})
+        self.lease_now.set()
+        added = sorted(t for t in topics if t != "*" and (old is not None and t not in old and "*" not in old))
+        gens = {}
+        for t in added:
+            g = counters.get("live:" + t, counters.get(t))
+            if g is not None:
+                gens[t] = g
+        return added, gens
 
     def feed(self, *item):
         with self.lock:
             targets = list(self.queues)
+        changed = item[0] == "changed"
         for q in targets:
+            if changed:
+                self.offered_changed += 1
+                if not q.wants(item[1]):
+                    continue                # D13: this stream did not subscribe to the topic; domain events and the rest always go out
+                self.sent_changed += 1
             try:
                 q.put_nowait(item)
             except queue.Full:
@@ -2406,7 +2519,107 @@ class Events:
                     pass
 
     def start_watch(self):
+        self.start_push()
         threading.Thread(target=self._watch, daemon=True).start()
+        threading.Thread(target=self._lease, daemon=True).start()
+
+    def demanded(self):
+        """D14: the topics the open streams want: the union of their sets; a stream without a set (old client) or with `*` wants every topic (`*`)."""
+        with self.lock:
+            sets = [q.topics for q in self.queues]
+        out = set()
+        for t in sets:
+            if t is None or "*" in t:
+                return {"*"}
+            out |= set(t)
+        return out
+
+    def write_leases(self):
+        """Lease the wanted topics in the table `demand` (state-db.py, 30 s). Best effort: no database, a busy one, no table: nothing happens and the
+        collector runs the topics at their idle interval. Only this thread writes, so a slow database never holds up a request or the watcher."""
+        topics = self.demanded()
+        db = env("HS_STATE_DB", os.path.join(env("HS_STATE_DIR", "/var/lib/hs"), "state.db"))
+        if not topics or not os.path.exists(db):
+            return False
+        try:
+            if self._sdb is None:
+                spec = importlib.util.spec_from_file_location("state_db", os.path.join(os.path.dirname(os.path.abspath(__file__)), "state-db.py"))
+                self._sdb = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(self._sdb)
+            c = self._sdb.demand_open()
+            try:
+                self._sdb.demand_put(c, sorted(topics), time.time())
+            finally:
+                c.close()
+        except Exception:
+            return False
+        self.lease_written += 1
+        return True
+
+    def _lease(self):
+        while True:
+            try:
+                self.write_leases()
+            except Exception:
+                pass
+            if self.lease_now.wait(self.lease_every):
+                self.lease_now.clear()
+                time.sleep(0.05)        # a page that registers several topics in a row is one write
+
+    def start_push(self):
+        """D11: listen on the unix datagram socket cfg.live_sock; every datagram wakes the watcher at once. Best effort: no folder, no rights, a dead
+        listener: nothing else changes, the watcher keeps polling at cfg.events_watch (the fallback). Returns True when the socket is bound."""
+        path = self.cfg.live_sock
+        if not path or not hasattr(socket, "AF_UNIX"):
+            return False
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            sock.bind(path)
+            try:
+                os.chmod(path, 0o600)       # only root pokes (the collector, hs); the datagram carries no data anyway
+            except OSError:
+                pass
+        except OSError:
+            return False
+        self.push_up = True
+        threading.Thread(target=self._listen, args=(sock,), daemon=True).start()
+        return True
+
+    def _listen(self, sock):
+        try:
+            while True:
+                sock.recv(64)
+                self.wake.set()
+        except Exception:
+            pass
+        finally:
+            self.push_up = False
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def push_stats(self):
+        return {"push": self.woke_push, "fallback": self.woke_fallback, "socket": self.push_up, "time": int(time.time()),
+                "changed_sent": self.sent_changed, "changed_offered": self.offered_changed}
+
+    def write_push_stats(self):
+        """The counters for `hs live load` (and the Live state page, step 19): a small file in the run folder, best effort."""
+        path = self.cfg.live_push_file
+        if not path:
+            return
+        try:
+            tmp = path + ".new"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.push_stats(), f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
 
     def read_counters(self):
         """-> {topic: gen} from the table `topics` of the state database (read-only, no subprocess); {} while there is no database or table;
@@ -2555,6 +2768,7 @@ class Events:
                 self.record_probe(t, g)
 
     def _watch(self):
+        saved = (0, 0, 0, 0)
         while True:
             try:
                 self.poll_counters()
@@ -2568,7 +2782,16 @@ class Events:
                 self.poll_heartbeat()
             except Exception:
                 pass
-            time.sleep(self.cfg.events_watch)
+            # sleep until a datagram comes or the fallback period is over; a missing socket just means the full period every time
+            if self.wake.wait(self.cfg.events_watch):
+                self.wake.clear()
+                self.woke_push += 1
+            else:
+                self.woke_fallback += 1
+            now = (self.woke_push, self.woke_fallback, self.sent_changed, self.offered_changed)
+            if now != saved and (self.woke_push + self.woke_fallback) % 5 == 0:
+                saved = now
+                self.write_push_stats()
 
 
 class ChangesSeen:
@@ -2600,6 +2823,61 @@ class ChangesSeen:
                 os.replace(tmp, self.path)
             except OSError:
                 pass
+
+
+class NetmapSampler:
+    """The counters stream of the network map (docs/PLAN-network-map.md, part 2). ONE sample (`hs sys netmap counters`) per tick for all open pages:
+    a thread runs only while at least one stream is open (join() starts it, leave() of the last one stops it), so a server nobody looks at is
+    never sampled. A stream waits for the next sample number and sends it; it never starts a process itself. Counters, not rates."""
+
+    def __init__(self, app):
+        self.app, self.cond, self.users = app, threading.Condition(), 0
+        self.seq, self.sample, self.thread = 0, None, None
+
+    def join(self):
+        """-> True when a stream may open (at most cfg.netmap_max), False when the limit is reached."""
+        with self.cond:
+            if self.users >= self.app.cfg.netmap_max:
+                return False
+            self.users += 1
+            if self.thread is None:
+                self.thread = threading.Thread(target=self._loop, daemon=True, name="netmap-sampler")
+                self.thread.start()
+            return True
+
+    def leave(self):
+        with self.cond:
+            self.users = max(0, self.users - 1)
+            self.cond.notify_all()
+
+    def _take(self):
+        """One reading: {t: epoch ms, rows: [[id, rx, tx], ...]} or None when the command failed (the stream then sends nothing, no old value)."""
+        t0 = time.time()
+        rc, out = _run([self.app.cfg.hs, "sys", "netmap", "counters"], timeout=10)
+        if rc != 0:
+            return None
+        rows = [line.split("\t") for line in out.splitlines() if line.count("\t") == 2]
+        return {"t": int(t0 * 1000), "rows": rows}
+
+    def _loop(self):
+        while True:
+            with self.cond:
+                if self.users == 0:
+                    self.thread, self.sample = None, None      # nobody is looking: stop, and forget the old numbers
+                    return
+            started = time.time()
+            s = self._take()
+            with self.cond:
+                self.seq += 1
+                self.sample = s
+                self.cond.notify_all()
+            time.sleep(max(0.2, self.app.cfg.netmap_every - (time.time() - started)))
+
+    def wait(self, last, timeout):
+        """-> (seq, sample) newer than `last`, or (last, None) after `timeout` seconds."""
+        with self.cond:
+            self.cond.wait_for(lambda: self.seq != last, timeout)
+            return (self.seq, self.sample) if self.seq != last else (last, None)
 
 
 class App:
@@ -2646,6 +2924,8 @@ class App:
         self.vmconsoles = vc.consoles()
         self.incus = vc.IncusApi()                      # tests replace this with a fake
         self.stream_lock, self.streams, self.event_streams = threading.Lock(), 0, 0
+        self.log_streams = {}                           # user -> open log streams (D15)
+        self.netmap = NetmapSampler(self)               # the counters stream of the network map
         self.term_spawn = lambda target, name=None: wt.pty_spawn(target, self.cfg.local_user, name=name)      # tests replace this with a fake
 
 
@@ -2884,6 +3164,10 @@ def make_handler(app):
                 return self._board()
             if path == "/api/events":
                 return self._events()
+            if path.startswith("/api/logs/stream/"):
+                return self._logs_stream(path[len("/api/logs/stream/"):], urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
+            if path == "/api/netmap/stream":
+                return self._netmap_stream()
             if path.startswith("/api/sys/jobs/stream/"):
                 return self._jobs_stream(urllib.parse.unquote(path[len("/api/sys/jobs/stream/"):]), urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path.startswith("/api/sys/"):
@@ -3050,6 +3334,123 @@ def make_handler(app):
                 with app.stream_lock:
                     app.streams -= 1
 
+        def _netmap_stream(self):
+            """The counters of the network map as server-sent events: `data: {t, rows: [[id, rx, tx], ...]}` about every cfg.netmap_every seconds
+            (totals; `-` = unreadable; the page divides two readings). The samples come from one shared thread that runs only while a stream is
+            open. 503 at cfg.netmap_max streams: the page then polls `sys netmap counters` as its fallback."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            if not self._allowed(s, ["netmap", "counters"]):
+                return
+            if not app.netmap.join():
+                return self._json(503, {"error": "too many open streams"})
+            try:
+                self.close_connection = True
+                self._headers(200, "text/event-stream", None, (("Cache-Control", "no-cache"), ("Connection", "close"), ("X-Accel-Buffering", "no")))
+                self.wfile.write(b"retry: 3000\n\n")
+                self.wfile.flush()
+                seq, t0, quiet = -1, time.time(), 0
+                while time.time() - t0 < cfg.stream_hours * 3600:
+                    if not app.sessions.get(self._token(), app.auth.storage_locked()):
+                        break                                               # signed out, expired or locked
+                    seq, sample = app.netmap.wait(seq, 5)
+                    if sample is not None:
+                        self.wfile.write(b"data: " + json.dumps(sample).encode() + b"\n\n")
+                        quiet = 0
+                    else:
+                        quiet += 1
+                        self.wfile.write(b": ping\n\nevent: beat\ndata: {}\n\n")   # also tells a closed browser (the write fails)
+                    self.wfile.flush()
+                self.wfile.write(b"event: end\ndata: {}\n\n")
+                self.wfile.flush()
+            except (OSError, ValueError):
+                pass                                                         # the browser went away
+            finally:
+                app.netmap.leave()
+
+        def _logs_stream(self, kind, query):
+            """D15: follow a log as server-sent events. `data: {"lines": [...]}` batches (the first ones are the fill, then what is appended), `event: end` when
+            the command ends, `: ping` after silence. One child process per stream (`hs sys ... follow`, plain lines), killed when the browser goes, the session
+            ends, the time passed or the cap is hit: cfg.logs_user_max per user and cfg.logs_max in all (apart from events_max). The role is the one of the
+            read it replaces (`ct logs`, `docker logs`, `logs show`, `state events`). Never cached, never in a topic: a log may hold secrets. The page
+            falls back to the timed read when this answers anything but 200."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            if self.headers.get("Origin") and not self._same_origin():
+                return self._json(403, {"error": "origin"})
+            words = log_follow_words(kind, query) if kind in LOG_KINDS else None
+            if words is None:
+                return self._json(404, {"error": "unknown"})
+            if not self._allowed(s, words[:3] if kind in ("ct", "docker") else words[:2]):
+                return
+            user = s["user"]
+            with app.stream_lock:
+                if sum(app.log_streams.values()) >= cfg.logs_max or app.log_streams.get(user, 0) >= cfg.logs_user_max:
+                    return self._json(503, {"error": "too many open log streams"})
+                app.log_streams[user] = app.log_streams.get(user, 0) + 1
+            p = None
+            try:
+                try:
+                    p = subprocess.Popen([cfg.hs, "sys"] + words, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         start_new_session=hasattr(os, "killpg"), env=_command_env())
+                except (OSError, ValueError):
+                    return self._json(503, {"error": "could not start"})
+                q = queue.Queue()
+
+                def pump(f=p.stdout):
+                    try:
+                        for raw in iter(f.readline, b""):
+                            q.put(raw.decode("utf-8", "replace").rstrip("\r\n"))
+                    except (OSError, ValueError):
+                        pass
+                    q.put(None)
+                threading.Thread(target=pump, daemon=True).start()
+                self.close_connection = True
+                self._headers(200, "text/event-stream", None, (("Connection", "close"), ("X-Accel-Buffering", "no")))
+                self.wfile.write(b"retry: 3000\n\n")
+                self.wfile.flush()
+                t0, quiet, done = time.time(), 0, False
+                while not done and time.time() - t0 < cfg.stream_hours * 3600:
+                    batch = []
+                    try:
+                        item = q.get(timeout=cfg.logs_tick)
+                        while True:
+                            if item is None:
+                                done = True
+                                break
+                            batch.append(item)
+                            if len(batch) >= 500:
+                                break
+                            item = q.get_nowait()
+                    except queue.Empty:
+                        pass
+                    if not app.sessions.get(self._token(), app.auth.storage_locked()):
+                        break                                                # signed out, expired or locked
+                    if batch:
+                        self.wfile.write(b"data: " + json.dumps({"lines": batch}).encode() + b"\n\n")
+                        quiet = 0
+                    else:
+                        quiet += 1
+                        if quiet % cfg.logs_ping == 0 and not done:
+                            self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    if _client_gone(self.connection):
+                        break
+                if done:
+                    self.wfile.write(b"event: end\ndata: {}\n\n")
+                    self.wfile.flush()
+            except (OSError, ValueError):
+                pass                                                         # the browser went away
+            finally:
+                if p is not None:
+                    _kill_tree(p)
+                with app.stream_lock:
+                    app.log_streams[user] = app.log_streams.get(user, 1) - 1
+                    if app.log_streams[user] <= 0:
+                        app.log_streams.pop(user, None)
+
         def _events(self):
             """Server-sent events: `changed` {topic, gen} when a change counter moved or the collector read a topic again (Events.poll_counters); `domain` (id = event log id) per new log row, replayed after Last-Event-ID (up to 500, else `resync`,
             also sent when a stream queue overflowed); `down` / `up` when the heartbeat of the collector stops or returns; `beat` after events_ping seconds of silence. One thread per stream (at most cfg.events_max). The page reads the topic again when `changed` arrives."""
@@ -3061,7 +3462,18 @@ def make_handler(app):
                 if app.event_streams >= cfg.events_max:
                     return self._json(503, {"error": "too many open streams"})
                 app.event_streams += 1
-            q = app.events.add()
+            qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query, keep_blank_values=True)
+            topics = None
+            if "topics" in qs:                                              # D13: no `topics` = every topic (old clients); `topics=` empty = none
+                topics = parse_topics(qs["topics"][0])
+                if topics is None:
+                    with app.stream_lock:
+                        app.event_streams -= 1
+                    return self._json(400, {"error": "topics must be a comma separated list of topic names."})
+            sid = (qs.get("sid") or [""])[0]
+            if sid and not SID.match(sid):
+                sid = ""
+            q = app.events.add(topics, sid, self._token())
             try:
                 self.close_connection = True
                 self._headers(200, "text/event-stream", None, (("Cache-Control", "no-cache"), ("Connection", "close"), ("X-Accel-Buffering", "no")))
@@ -3158,7 +3570,7 @@ def make_handler(app):
                 return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
-            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
+            if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/events/subscribe", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
             if bearer and path not in ("/api/plan", "/api/start"):
@@ -3192,6 +3604,8 @@ def make_handler(app):
                 return self._live_refresh(body)
             if path == "/api/live/sample":
                 return self._live_sample(body)
+            if path == "/api/events/subscribe":
+                return self._events_subscribe(body)
             if path in ("/api/plan", "/api/start"):
                 return self._change(path[len("/api/"):], body)
             if path == "/api/logout":
@@ -3248,6 +3662,18 @@ def make_handler(app):
             app.store.request(topic)      # the same message ?fresh=1 sends
             print("web live refresh: %s %s" % (re.sub(r"[^A-Za-z0-9._@-]", "_", str(s["user"])), topic), flush=True)
             return self._json(200, {"ok": True})
+
+        def _events_subscribe(self, body):
+            """D13: change the topic set of this session's open stream `sid`. Short on purpose (no subprocess, no disk): the browser keeps only a
+            few connections per server and a long request would starve the Start clicks. Any signed-in role; the answer lists the gens of the added
+            topics so the page can catch a change that came before the call."""
+            sid, topics = body.get("sid"), parse_topics(body.get("topics"))
+            if not isinstance(sid, str) or not SID.match(sid) or topics is None:
+                return self._json(400, {"error": "Need sid (the stream id) and topics (a list of topic names)."})
+            r = app.events.subscribe(sid, self._token(), topics)
+            if r is None:
+                return self._json(404, {"error": "No such open stream."})
+            return self._json(200, {"ok": True, "count": len(topics), "gens": r[1]})
 
         def _live_sample(self, body):
             """#486 (D8): the Live state page says how long after `changed` it showed the new data. Any signed-in role (a viewer too); only numbers
@@ -3323,6 +3749,7 @@ def make_handler(app):
                 rc, out, how = _run_watched(cmd, stdin=data, timeout=CHANGE_LIMIT, gone=lambda: _client_gone(self.connection))
                 if how == "gone":           # the browser asked something newer: no answer, the connection is closed
                     _timing("plan", shape, t0, how, None, None)
+                    print("web plan dropped: %s after %d ms, the browser closed the connection (no answer was sent)" % (shape, (time.monotonic() - t0) * 1000), flush=True)
                     self.close_connection = True
                     return
                 d = parse_change(out, rc)

@@ -1859,6 +1859,51 @@
     }
    }
   },
+  "/ct/follow/{ct}": {
+   "get": {
+    "operationId": "ct.follow.by_ct",
+    "summary": "the last lines of the journal inside an instance, then every new line until the reader goes (hs sys ct follow <ct> [lines])",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "ct",
+      "follow",
+      "<ct>"
+     ],
+     "script": "ct-access.sh",
+     "args": "{1} follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "ct",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/ct/list": {
    "get": {
     "operationId": "ct.list",
@@ -3679,6 +3724,51 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/docker/follow/{app}": {
+   "get": {
+    "operationId": "docker.follow.by_app",
+    "summary": "the Compose log of one app, then every new line until the reader goes (the web log stream; plain lines, 200 first by default)",
+    "x-hs-exit": true,
+    "x-hs-role": "app-manager",
+    "x-hs-sys": {
+     "words": [
+      "docker",
+      "follow",
+      "<app>"
+     ],
+     "script": "docker.sh",
+     "args": "--follow-logs {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "app",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }
@@ -7613,7 +7703,7 @@
      "query": []
     },
     "x-hs-described": false,
-    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
+    "description": "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page).",
     "responses": {
      "0": {
       "description": "ok",
@@ -7746,6 +7836,40 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/logs/follow": {
+   "get": {
+    "operationId": "logs.follow",
+    "summary": "the journal as plain lines, then every new line until the reader goes (the web log stream): hs sys logs follow [--unit <key>] [--level err|warning|info] [--lines <N>]",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "logs",
+      "follow"
+     ],
+     "script": "logs.sh",
+     "args": "follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }
@@ -8301,6 +8425,205 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/netmap": {
+   "get": {
+    "operationId": "netmap",
+    "summary": "the network map graph as data: id, kind, parent, label, state, rx_bytes, tx_bytes (wan, gateway, host, bridges, instances, services; - when unknown)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap"
+     ],
+     "script": "netmap.sh",
+     "args": "-",
+     "class": "read",
+     "rest": false
+    },
+    "description": "The graph of the network map, one row per node. Ids: wan, gateway, host, bridge:<name>, instance:<name>, service:<name> (the same ids as the netmap counters stream). parent is - for the root. Counters are totals since the boot, - when unknown.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "id"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind",
+            "enum": [
+             "wan",
+             "gateway",
+             "host",
+             "bridge",
+             "instance",
+             "service"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "parent"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "label"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "rx_bytes"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "tx_bytes"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/netmap/counters": {
+   "get": {
+    "operationId": "netmap.counters",
+    "summary": "byte counters of the network map nodes (wan, host, bridges, instances), one sample: rows id, rx_bytes, tx_bytes",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap",
+      "counters"
+     ],
+     "script": "netmap-counters.sh",
+     "args": "-",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/netmap/counters",
+     "kind": "tsv",
+     "ttl": 0,
+     "query": []
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/netmap/topology": {
+   "get": {
+    "operationId": "netmap.topology",
+    "summary": "the network map graph without counters (- in both columns), for the live-state topic: same rows as sys netmap",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap",
+      "topology"
+     ],
+     "script": "netmap.sh",
+     "args": "topology",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/netmap/topology",
+     "kind": "tsv",
+     "ttl": 10,
+     "query": []
+    },
+    "description": "The same rows as netmap, with - in both counter columns: the live-state topic netmap reads this, so only a change of the topology changes the document.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "id"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind",
+            "enum": [
+             "wan",
+             "gateway",
+             "host",
+             "bridge",
+             "instance",
+             "service"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "parent"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "label"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "rx_bytes"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "tx_bytes"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
      }
     }
    }
@@ -14359,6 +14682,40 @@
       "description": "ok",
       "content": {
        "text/tab-separated-values": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/state/events-follow": {
+   "get": {
+    "operationId": "state.events-follow",
+    "summary": "the last disk events, then every new row until the reader goes (the web log stream; plain rows)",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "state",
+      "events-follow"
+     ],
+     "script": "state.sh",
+     "args": "events-follow {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
         "schema": {
          "type": "string"
         }

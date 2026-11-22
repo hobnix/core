@@ -333,6 +333,10 @@ the browser through `/api/events` when something changes. The Summary page updat
 collector stops, the pages keep their last data and mark it as old; `sudo hs sys live status` and `hs sys live check` show the state. A `liveState` line in
 `machine.toml` from an older version is ignored (`hs config check` says so). To measure the cost on your server see [Measure the live state on the state database](operations.md#measure-the-live-state-on-the-state-database).
 
+A page is told only about the topics it reads. The browser opens one stream per tab (`/api/events?topics=...&sid=...`) and, when you go to another page, sends the
+new list in a short `POST /api/events/subscribe` (`{sid, topics}`; only for the stream of the same session). Job and health events are never filtered. A stream
+opened without `topics` (an older page, a script) gets every topic, as before. Not tested on hardware or in a real browser yet.
+
 The Diagnostics page lists every live topic (topic, interval, age, generation, exit code, error and error time) and
 follows the same stream, falling back to polling every 5 seconds. The `live` topic row describes the previous collection by design. Not tested on hardware yet.
 
@@ -345,7 +349,7 @@ unlock refreshes them. Not tested on hardware yet.
 The Summary and top bar, Health, Settings, the Instances and Services pages, the Marketplace and Apps, and the Network pages (gateway status, routes
 and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from the state database and update
 over the stream. A change from the terminal, from the web interface or from a job refreshes only the pages it can affect; a finished job refreshes
-everything. Reads that need an argument (one instance's logs, one service, one user) and on-demand reports stay direct. Pages whose feature is off
+everything. Reads that need an argument (one service, one user) and on-demand reports stay direct. Pages whose feature is off
 (gateway, Active Directory, router connection) show nothing for it. Not tested on hardware yet.
 
 The Users and Backup pages follow the same rule: the user and group lists, the domain controller certificate state, the backup state and the list of
@@ -372,6 +376,40 @@ traffic counters and the UniFi clients.
 
 Check that it works: `systemctl status hs-unit-watch`, open the Services page and run `sudo systemctl stop docker` (then `start`): the Docker row changes without a reload.
 Not tested on hardware yet.
+
+### Logs follow a stream
+
+The log views (the Logs tab of an instance and of a Docker app, the instance log window, the Logs and Disk events tabs of the task panel) show new lines as
+they are written, without asking again and again. Each open view holds one stream of its own (`GET /api/logs/stream/<ct|docker|system|events>`,
+server-sent events): the server starts `hs sys ... follow` for it, sends the last 200 lines first and then every new line, and ends the command when the
+view closes, the tab goes away, you sign out or the stream ends.
+
+- **Who sees what:** the same role as the read the view replaces (instance and Docker logs: app manager, system journal: admin, disk events: viewer).
+  A log may hold secrets, so a stream is never cached and never part of a live topic.
+- **Limits:** 4 open log streams per person and 8 in all (`HS_WEB_LOGS_USER_MAX`, `HS_WEB_LOGS_MAX`), apart from the 32 event streams. A browser keeps
+  only 6 connections to one server and the page holds one for its events, so a view opens its stream only while it is shown, never when the pointer
+  passes over a link, and a switched-off *Follow* closes it.
+- **A tab nobody sees:** a stream with no visible tab closes after 15 minutes and opens again, with a fresh fill, when the tab is shown.
+- **When the stream is not there** (limit reached, the server restarting, the command ended): the view falls back to the old timed read until the stream is
+  back.
+
+Not tested on hardware yet.
+
+## See the network map
+
+Monitoring > Network map draws how this server reaches the network: the way out, the gateway, the host, its bridges, the instances and their services,
+with the traffic as moving dots (more and faster dots for more traffic; none for none). The same facts as a table: the button above the map.
+
+The full guide is [Network map](network-map.md).
+
+1. Open Monitoring > Network map. The graph as text: `sudo hs sys netmap`.
+2. Hover or press Tab to reach a node; Enter or Space opens its details, with a link to the page of that node where there is one.
+3. The map follows the server: an instance that starts or stops changes the graph by itself. The traffic comes from a stream of its own
+   (`GET /api/netmap/stream`, about every 2 seconds, only while the page is open, 4 streams in all). When the stream is not available the page says so
+   and reads the counters every 5 seconds until it is back.
+4. In demo mode (`npm run demo` in `web/`) the page shows a made-up graph with made-up traffic; nothing is read from a server.
+
+The page loads when you first open it, so the other pages do not wait for it. Not tested on hardware yet.
 
 ## Inspect the live state
 

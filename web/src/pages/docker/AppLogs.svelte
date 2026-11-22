@@ -1,6 +1,6 @@
 <script>
-  // The Logs tab of a Docker app drawer: the Compose log of the app, followed while the tab is open.
-  import { poll } from '../../data.svelte.js';
+  // The Logs tab of a Docker app drawer: the Compose log of the app, followed while the tab is open (a log stream, D15; the timed read only while the stream is down).
+  import { logfeed } from '../../logfeed.svelte.js';
   import { Select, Checkbox, Muted } from '../../ui/index.js';
 
   let { app } = $props();
@@ -8,8 +8,8 @@
   let follow = $state(true);
   let box = $state(null);
 
-  const logs = poll(() => (follow || !logs?.loaded ? `/api/sys/docker/logs/${encodeURIComponent(app)}?lines=${lines}` : ''), 5000);
-  const list = $derived(((logs.data?.text ?? '').trimEnd() || '').split('\n').filter((l, i, a) => a.length > 1 || l));
+  const logs = logfeed({ stream: () => `/api/logs/stream/docker?target=${encodeURIComponent(app)}&lines=${lines}`, read: () => `/api/sys/docker/logs/${encodeURIComponent(app)}?lines=${lines}`, follow: () => follow, every: 5000 });
+  const list = $derived(logs.lines);
   const cls = (l) => (/\b(error|err|fail|failed|crit|alert|emerg)\b/i.test(l) ? 'bad' : /\bwarn(ing)?\b/i.test(l) ? 'warn' : '');
   $effect(() => { if (follow && box && list.length) box.scrollTop = box.scrollHeight; });
 </script>
@@ -21,7 +21,7 @@
   </div>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div class="log" bind:this={box} tabindex="0" role="log" aria-label="Compose log of {app}">
-    {#if logs.error && !logs.data}
+    {#if logs.error}
       <div class="bad">The log could not be read (is the app running?).</div>
     {:else if !logs.loaded}
       <Muted as="div">Loading…</Muted>

@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -168,7 +169,7 @@ class Csrf(Base):
 
 class CsrfGate(Base):
     """Issue #433: every changing request needs a session and the CSRF token, whatever its handler does. The list is every POST path of do_POST."""
-    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample",
+    SESSION_POSTS = ["/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/events/subscribe",
                      "/api/sessions/end", "/api/sessions/end-others"]
 
     def test_every_changing_request_needs_session_and_token(self):
@@ -1082,6 +1083,207 @@ class SessionFile(Base):
         self.assertIsNone(ws.Sessions(self.cfg).get(token, False) if a._save() is None else None)
         open(path, "w").write("{not json")
         self.assertEqual(ws.Sessions(self.cfg).restored, {})
+
+
+class LogStreams(Base):
+    """D15 (live step 16): GET /api/logs/stream/<kind> follows a log as server-sent events, one child process per open stream. The child is a fake `hs`
+    (a shell script) that prints two fill lines and then every line appended to a feed file, so a line "appended to a fake journal" can be timed and the
+    processes can be counted. Needs a POSIX shell (the Linux test run)."""
+
+    FAKE = """#!/bin/sh
+echo $$ >> "$FAKE_PIDS"
+echo "$*" >> "$FAKE_ARGS"
+echo "fill 1"
+echo "fill 2"
+pos=0
+while :; do
+  n=$(wc -l < "$FAKE_FEED")
+  if [ "$n" -gt "$pos" ]; then tail -n +$((pos + 1)) "$FAKE_FEED"; pos=$n; fi
+  sleep 0.05
+done
+"""
+
+    def setUp(self):
+        super().setUp()
+        d = os.path.join(self.tmp, "fake")
+        os.makedirs(d)
+        self.feed, self.pids, self.args = (os.path.join(d, n) for n in ("feed", "pids", "args"))
+        for f in (self.feed, self.pids, self.args):
+            open(f, "w").close()
+        hs = os.path.join(d, "hs")
+        with open(hs, "w") as f:
+            f.write(self.FAKE)
+        os.chmod(hs, 0o755)
+        self.cfg.hs = hs
+        self.cfg.logs_tick = 0.1
+        self.saved = {k: os.environ.get(k) for k in ("FAKE_PIDS", "FAKE_ARGS", "FAKE_FEED")}
+        os.environ.update(FAKE_PIDS=self.pids, FAKE_ARGS=self.args, FAKE_FEED=self.feed)
+        self.open = []
+        self.admin = self.session("adminuser")
+
+    def tearDown(self):
+        for c, r in self.open:
+            r.close()
+            c.close()
+        time.sleep(0.3)
+        for pid in self.child_pids():
+            try:
+                os.killpg(pid, 9)
+            except OSError:
+                pass
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        super().tearDown()
+
+    def session(self, user, role="admin"):
+        token = self.app.sessions.create(user, "local", "127.0.0.1", role=role)
+        return {"Cookie": "hs_session=" + token, "X-CSRF-Token": ws.csrf_for(token)}
+
+    def child_pids(self):
+        with open(self.pids) as f:
+            return [int(x) for x in f.read().split()]
+
+    def alive(self):
+        n = 0
+        for pid in self.child_pids():
+            try:
+                os.kill(pid, 0)
+                n += 1
+            except OSError:
+                pass
+        return n
+
+    def wait(self, cond, secs=4.0):
+        end = time.time() + secs
+        while time.time() < end:
+            if cond():
+                return True
+            time.sleep(0.05)
+        return cond()
+
+    def open_stream(self, path, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", path, headers=self.admin if headers is None else headers)
+        r = c.getresponse()
+        self.open.append((c, r))
+        return c, r
+
+    def hangup(self, c, r):
+        """what closing the tab does: the socket goes (the response holds a second handle of it)"""
+        r.close()
+        c.close()
+
+    def read_until(self, r, text, secs=4.0):
+        """-> the seconds it took until a line with `text` came, or None"""
+        t0 = time.time()
+        while time.time() - t0 < secs:
+            line = r.fp.readline().decode()
+            if not line:
+                return None
+            if text in line:
+                return time.time() - t0
+        return None
+
+    def test_fill_then_follow_and_the_child_ends_with_the_client(self):
+        c, r = self.open_stream("/api/logs/stream/system?unit=incus&level=err&lines=50")
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.getheader("Cache-Control")), (200, "text/event-stream", "no-store"))
+        self.assertIsNotNone(self.read_until(r, "fill 2"))
+        self.assertEqual(self.alive(), 1)
+        with open(self.args) as f:
+            self.assertEqual(f.read().strip(), "sys logs follow --unit incus --level err --lines 50")
+        with open(self.feed, "a") as f:                      # a line appended to the fake journal shows within the D9 limit (5 s, here far less)
+            f.write("appended later\n")
+        took = self.read_until(r, "appended later", 5)
+        self.assertIsNotNone(took)
+        self.assertLess(took, 2.0)
+        self.hangup(c, r)
+        self.assertTrue(self.wait(lambda: self.alive() == 0), "the child process is still running after the client went")
+        self.assertTrue(self.wait(lambda: app_streams(self) == {}), "the stream is still counted")
+
+    def test_the_kinds_map_to_commands(self):
+        for path, words in (("/api/logs/stream/ct?target=web&lines=100", "sys ct follow web 100"),
+                            ("/api/logs/stream/docker?target=paperless", "sys docker follow paperless 200"),
+                            ("/api/logs/stream/events?lines=60", "sys state events-follow 60"),
+                            ("/api/logs/stream/system", "sys logs follow --unit all --level info --lines 200")):
+            c, r = self.open_stream(path)
+            self.assertEqual(r.status, 200, path)
+            self.assertIsNotNone(self.read_until(r, "fill 1"), path)
+            self.hangup(c, r)
+            with open(self.args) as f:
+                self.assertEqual(f.read().strip().splitlines()[-1], words)
+        self.assertTrue(self.wait(lambda: self.alive() == 0))
+
+    def test_bad_arguments_start_nothing(self):
+        for bad in ("/api/logs/stream/nothing", "/api/logs/stream/ct", "/api/logs/stream/ct?target=a;b", "/api/logs/stream/ct?target=x&lines=0",
+                    "/api/logs/stream/ct?target=x&lines=2001", "/api/logs/stream/ct?target=x&lines=-1", "/api/logs/stream/docker?target=Bad",
+                    "/api/logs/stream/system?unit=a/b", "/api/logs/stream/system?level=debug", "/api/logs/stream/"):
+            c, r = self.open_stream(bad)
+            self.assertEqual(r.status, 404, bad)
+        self.assertEqual(self.child_pids(), [])
+        self.assertEqual(self.open_stream("/api/logs/stream/events", headers={})[1].status, 401)
+
+    def test_a_foreign_origin_is_refused(self):
+        h = dict(self.admin, Origin="http://evil.example")
+        self.assertEqual(self.open_stream("/api/logs/stream/events", headers=h)[1].status, 403)
+        self.assertEqual(self.child_pids(), [])
+
+    def test_roles_are_those_of_the_reads(self):
+        viewer = self.session("vera", "viewer")
+        self.assertEqual(self.open_stream("/api/logs/stream/system", headers=viewer)[1].status, 403)      # logs show: admin
+        self.assertEqual(self.open_stream("/api/logs/stream/ct?target=web", headers=viewer)[1].status, 403)   # ct logs: app-manager
+        self.assertEqual(self.open_stream("/api/logs/stream/docker?target=x", headers=viewer)[1].status, 403)  # docker logs: app-manager
+        self.assertEqual(self.child_pids(), [])
+        c, r = self.open_stream("/api/logs/stream/events", headers=viewer)                              # state events: viewer
+        self.assertEqual(r.status, 200)
+        self.assertIsNotNone(self.read_until(r, "fill 1"))
+
+    def test_caps_per_user_and_in_total(self):
+        self.assertEqual((self.cfg.logs_user_max, self.cfg.logs_max), (4, 8))
+        for _ in range(4):
+            c, r = self.open_stream("/api/logs/stream/events")
+            self.assertEqual(r.status, 200)
+            self.assertIsNotNone(self.read_until(r, "fill 1"))
+        self.assertEqual(self.alive(), 4)
+        c, r = self.open_stream("/api/logs/stream/events")
+        self.assertEqual(r.status, 503)                                 # the 5th of one user
+        self.assertEqual(self.alive(), 4)                               # no child was started for it
+        self.cfg.logs_max = 4
+        other = self.session("vera", "viewer")
+        c, r = self.open_stream("/api/logs/stream/events", headers=other)
+        self.assertEqual(r.status, 503)                                 # the total is reached, another user is refused too
+        self.assertEqual(self.alive(), 4)
+        self.assertEqual(self.app.event_streams, 0)                     # apart from the events_max streams
+        self.hangup(*self.open[0])                                      # one goes: its slot is free again
+        self.assertTrue(self.wait(lambda: self.alive() == 3))
+        c, r = self.open_stream("/api/logs/stream/events", headers=other)
+        self.assertEqual(r.status, 200)
+
+    def test_the_session_ending_ends_the_child(self):
+        c, r = self.open_stream("/api/logs/stream/events")
+        self.assertIsNotNone(self.read_until(r, "fill 1"))
+        self.app.sessions.drop(self.admin["Cookie"].split("=", 1)[1])
+        with open(self.feed, "a") as f:
+            f.write("x\n")
+        self.assertTrue(self.wait(lambda: self.alive() == 0), "the child is still running after sign-out")
+
+    def test_the_command_ending_ends_the_stream_with_end(self):
+        with open(self.fake_path(), "w") as f:
+            f.write("#!/bin/sh\necho one\necho two\n")
+        c, r = self.open_stream("/api/logs/stream/events")
+        body = r.read().decode()
+        self.assertIn('"lines": ["one", "two"]', body)
+        self.assertTrue(body.rstrip().endswith("event: end\ndata: {}"))
+
+    def fake_path(self):
+        return self.cfg.hs
+
+
+def app_streams(t):
+    with t.app.stream_lock:
+        return dict(t.app.log_streams)
 
 
 if __name__ == "__main__":

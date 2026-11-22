@@ -50,6 +50,7 @@ config plan <action>	admin	plan
 config start <action>	admin	start
 logs units	admin	read
 logs show	admin	read
+logs follow	admin	read
 jobs tail <unit>	viewer	read
 jobs stop <unit>	admin	change
 jobs record <id>	viewer	read
@@ -76,6 +77,7 @@ state forget <serial>	admin	change
 state collect	admin	change
 state disks	viewer	read
 state events	viewer	read
+state events-follow	viewer	read
 state smart <serial>	viewer	read
 state problems	viewer	read
 state baseline	viewer	read
@@ -177,6 +179,7 @@ ct bindings <ct>	viewer	read
 ct plan <ct> <action>	app-manager	plan
 ct start <ct> <action>	app-manager	start
 ct logs <ct>	app-manager	read
+ct follow <ct>	app-manager	read
 monitor disks	viewer	read
 disk power	viewer	read
 health dry-run	viewer	read
@@ -186,6 +189,9 @@ health acks	admin	read
 health plan <action>	admin	plan
 health start <action>	admin	start
 deck	viewer	read
+netmap	viewer	read
+netmap topology	viewer	read
+netmap counters	viewer	read
 status	viewer	read
 system plan <action>	admin	plan
 system start <action>	admin	start
@@ -268,6 +274,7 @@ docker start <action>	app-manager	start
 docker apps	viewer	read
 docker containers	viewer	read
 docker logs <app>	app-manager	change
+docker follow <app>	app-manager	read
 docker app <app>	viewer	read
 docker rev <app>	viewer	read
 docker-app plan <app> <action>	app-manager	plan

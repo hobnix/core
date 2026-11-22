@@ -17,7 +17,7 @@ here=$(cd "$(dirname "$0")" && pwd)   # absolute
 . "$here/lib/live.sh"
 
 live_refresh_detach() {
-  live_refresh status monitor-disks disk-inventory disk-marks pool-info-bulk pool-members-bulk pool-state-bulk shares-overview fm-locations
+  live_refresh event:disk.changed
 }
 state=${HS_STATE_DIR:-/var/lib/hs}
 detdir=$state/detached

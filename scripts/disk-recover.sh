@@ -22,7 +22,7 @@ here=$(cd "$(dirname "$0")" && pwd)   # absolute: the background job runs from a
 adm="$(admin_user)"
 
 live_refresh_recover() {
-  live_refresh status monitor-disks disk-inventory disk-marks pool-info-bulk pool-members-bulk pool-state-bulk shares-overview fm-locations
+  live_refresh event:disk.changed
 }
 base=${HS_BULK_BASE:-$(disks_root)}
 rawpool=${HS_RAW_POOL:-/mnt/bulk/pool}   # the cache-free merge of the pool (not a disk)

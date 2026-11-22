@@ -64,9 +64,9 @@ event_log() {   # event_log <plugged|removed> <kernel name> <text>: a row in the
 }
 
 # the state database learns about the change at once; so does the live state (no-op without the capability); never fails the service
-collect_state() {
+collect_state() {   # collect_state <plugged|removed>: the named event disk.<...> wakes the topics of scripts/lib/event-topics.tsv
   bash "$here/state.sh" collect --event >/dev/null 2>&1 || true
-  bash "$here/live.sh" refresh monitor-disks disk-inventory temp-disks fm-locations backup-state >/dev/null 2>&1 || true
+  bash "$here/live.sh" refresh "event:disk.${1:-plugged}" >/dev/null 2>&1 || true
 }
 
 push() {   # push <title> <text> <priority> <category>: never fails the service
@@ -105,7 +105,7 @@ case "${1:-log}" in
         record "$name" "$info"
         echo "plugged in: $text"
         event_log plugged "$name" "$text"
-        collect_state
+        collect_state plugged
         if [[ "$text" == *"the rotating off-site backup disk" ]]; then
           # D18: only a message; the copy is started by a person (hs backup offsite now), never by the plug-in
           push "$host: off-site backup disk plugged in" "$text. Copy now? Run: hs backup offsite now" default info
@@ -120,7 +120,7 @@ case "${1:-log}" in
         rm -f "$seen/$name"
         echo "taken out: $text"
         event_log removed "$name" "$text"
-        collect_state
+        collect_state removed
         if [ "$member" = yes ]; then
           push "$host: disk taken out" "$text. It belonged to a pool: see \`hs health\`." high alarm
         else

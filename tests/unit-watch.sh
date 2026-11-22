@@ -38,24 +38,27 @@ run() {   # run <feed lines...>: the topics of the one refresh call (sorted), "-
 
 check_eq "a job unit marks jobs-running" "jobs-running" "$(run "$(sig hs-job-pool-bulk-1.service active)")"
 check_eq "a plain hs unit that runs marks nothing (only failed counts)" "-" "$(run "$(sig hs-event-notify.service active)" "$(sig hs-event-notify.service inactive)")"
-check_eq "an hs unit that fails marks the health topics" "health-list,health-next" "$(run "$(sig hs-backup.service active)" "$(sig hs-backup.service failed)")"
-check_eq "...and so does the one that leaves failed" "health-list,health-next" "$(run "$(sig hs-backup.service failed)" "$(sig hs-backup.service inactive)" | head -n 1)"
+check_eq "an hs unit that fails marks the health topics" "event:service.failed" "$(run "$(sig hs-backup.service active)" "$(sig hs-backup.service failed)")"
+check_eq "...and so does the one that leaves failed" "event:service.failed" "$(run "$(sig hs-backup.service failed)" "$(sig hs-backup.service inactive)" | head -n 1)"
 check_eq "a template unit marks the group of its instance" "@ext-confinefx" "$(run "$(sig 'hs-ext-svc@confinefx.service' active)")"
-check_eq "samba stopping marks the share and health topics" "health-list,health-next,shares-overview,shares-principals" "$(run "$(sig samba-smbd.service inactive)")"
-check_eq "docker marks the docker topics" "docker-apps,docker-list" "$(run "$(sig docker.service failed)")"
+check_eq "samba stopping marks the share and health topics" "event:samba.changed" "$(run "$(sig samba-smbd.service inactive)")"
+check_eq "docker marks the docker topics" "event:docker-service.changed" "$(run "$(sig docker.service failed)")"
 check_eq "a unit nobody shows marks nothing" "-" "$(run "$(sig sshd.service failed)" "$(sig NetworkManager.service inactive)")"
 check_eq "a SubState-only change marks nothing" "-" "$(run "$(sig incus.service -)")"
-check_eq "the same state twice marks once, a new one again (one call, union)" "docker-apps,docker-list" "$(run "$(sig docker.service inactive)" "$(sig docker.service inactive)")"
+check_eq "the same state twice marks once, a new one again (one call, union)" "event:docker-service.changed" "$(run "$(sig docker.service inactive)" "$(sig docker.service inactive)")"
 check_eq "another interface of the unit object marks nothing" "-" "$(run "$(sig incus.service other)")"
 check_eq "a signal of another object marks nothing" "-" "$(run '{"type":"signal","path":"/org/freedesktop/systemd1","member":"PropertiesChanged"}')"
-check_eq "garbage lines are skipped, the next one still counts" "gateway-health,gateway-routes,gateway-status" "$(run 'not json' '' '[1]' "$(sig traefik.service active)")"
-check_eq "a unit message without a readable payload marks its topics" "docker-apps,docker-list" "$(run "$(sig docker.service raw)")"
+check_eq "garbage lines are skipped, the next one still counts" "event:gateway.changed" "$(run 'not json' '' '[1]' "$(sig traefik.service active)")"
+check_eq "a unit message without a readable payload marks its topics" "event:docker-service.changed" "$(run "$(sig docker.service raw)")"
 check_eq "several units in the window are ONE refresh call" "1" "$(run "$(sig docker.service active)" "$(sig traefik.service active)" "$(sig samba-smbd.service active)" >/dev/null; grep -c . "$WORK/live.log")"
 
 # every topic a rule names exists in live-topics.tsv (or is an @group of it / @ext-%i); a timed topic exists and is not also watched
 cat > "$WORK/rules.py" <<'PYEOF'
 import sys
-topics, groups = set(), set()
+topics, groups, kinds = set(), set(), set()
+for line in open(sys.argv[3], encoding="utf-8"):
+    if not line.startswith("#") and line.strip():
+        kinds.add(line.split("	")[0])
 for line in open(sys.argv[1], encoding="utf-8"):
     if line.startswith("#") or not line.strip():
         continue
@@ -76,13 +79,16 @@ for line in open(sys.argv[2], encoding="utf-8"):
     for t in f[3].split(","):
         watched.add(t)
         if t.startswith("@ext-"): continue
+        if t.startswith("event:"):
+            if t[6:] not in kinds: bad.append("event " + t)
+            continue
         if t.startswith("@"):
             if t[1:] not in groups: bad.append("group " + t)
         elif t not in topics: bad.append("topic " + t)
 bad += ["both watched and timed: " + t for t in sorted(watched & timed)]
 print(" ".join(bad) or "ok")
 PYEOF
-check_eq "unit-topics.tsv names real topics and groups" "ok" "$("$PY" -I "$(wp "$WORK/rules.py")" "$(wp "$SCRIPTS/lib/live-topics.tsv")" "$(wp "$SCRIPTS/lib/unit-topics.tsv")")"
+check_eq "unit-topics.tsv names real topics and groups" "ok" "$("$PY" -I "$(wp "$WORK/rules.py")" "$(wp "$SCRIPTS/lib/live-topics.tsv")" "$(wp "$SCRIPTS/lib/unit-topics.tsv")" "$(wp "$SCRIPTS/lib/event-topics.tsv")")"
 
 # the monitor ends (a kill of busctl): exit 1, so that systemd restarts the service; a monitor that prints then ends still marks
 cat > "$WORK/busctl.py" <<'PYEOF'
@@ -93,7 +99,7 @@ printf '%s\n' "$(sig docker.service failed)" > "$WORK/feed"
 : > "$WORK/live.log"
 env -u HS_UNIT_FEED HS_BUSCTL="$PY $(wp "$WORK/busctl.py") $(wp "$WORK/feed")" $W; rc=$?
 check_eq "the monitor ending is exit 1 (Restart=always brings it back)" "1" "$rc"
-check_eq "...after it marked what it had seen" "docker-list" "$(tr ' ' '\n' < "$WORK/live.log" | grep -x docker-list)"
+check_eq "...after it marked what it had seen" "event:docker-service.changed" "$(tr ' ' '\n' < "$WORK/live.log" | grep -x event:docker-service.changed)"
 check "the service restarts on its own" grep -q 'hs-unit-watch' "$ROOT/configuration.nix"
 check "...with Restart = always" grep -q 'Restart = "always"' <(grep -A6 'systemd.services.hs-unit-watch' "$ROOT/configuration.nix")
 finish

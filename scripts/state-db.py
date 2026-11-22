@@ -24,7 +24,7 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
   read-get <key>             the kept output (nothing and exit 1 when there is none)
   live-sample <topic> <ms>            a browser sample of the delay of a live topic (#486; the web interface calls it)
-  topic-bump <topic|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
+  topic-bump <topic|event:kind|@group|--all>...  count one change up in the table `topics` (docs/adr/0005-events.md rule 5): live_refresh and the collector call it
   read-fail <key> --err TEXT [--ms N] [--rc N]  a run with no output: keeps the old output, records err and ts_err (#324)
   reads                      key TAB age in seconds (-1 = never read well) TAB milliseconds TAB exit code TAB bytes TAB status TAB gen TAB err TAB err age, oldest first
   live_open, live_load, live_put, live_fail, live_delete, live_beat: in-process only, used by live-collect.py
@@ -42,6 +42,7 @@ HS_EVENT_KEEP (rows kept in the event log, default 5000), HS_EVENT_DAYS (age lim
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -69,6 +70,34 @@ BASELINE_STALE_S = int(os.environ.get("HS_SMART_STALE", str(2 * 86400 + 3600)))
 
 def now():
     return int(os.environ.get("HS_NOW") or time.time())
+
+
+def live_sock_path():
+    return os.environ.get("HS_LIVE_SOCK") or os.path.join(os.environ.get("HS_RUN_DIR") or "/run/hs", "live.sock")
+
+
+def poke():
+    """ADR 0026 decision 9 (D11): one datagram to the web server, "look at the counters now", sent after the commit of a counter bump. It carries no
+    data. It never blocks and never fails the write: non-blocking, every error ignored (no socket, nobody listening, a full queue). Returns True when
+    the datagram was handed over (tests). The 1 s watcher of web-serve.py stays the fallback."""
+    s = None
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.setblocking(False)
+        s.sendto(b"1", live_sock_path())
+        return True
+    except Exception:           # also AttributeError on a platform without unix sockets
+        return False
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
+
+
+# the commands that count a topic up or write an event-log row (topic-bump pokes itself, only when it counted): after one of them the web server is poked (never after a read)
+POKE_CMDS = ("read-put", "emit", "collect", "forget")
 
 
 SCHEMA = """
@@ -1142,6 +1171,12 @@ def bump(c, names):
 
 # ADR 0026: the documents of the live-state collector and its heartbeat. Created only by live_open(), so a server
 # with the switch off never gets the tables. In-process only: scripts/live-collect.py loads this file and calls these functions on one connection.
+# D14: a lease per topic that an open stream wants (topic `*` = every topic: a stream without a topic set). Written by the web server, read by the
+# collector and `hs sys live inspect`; a row past `until` counts for nothing, so a killed web server cannot keep the load on.
+DEMAND_SCHEMA = """
+CREATE TABLE IF NOT EXISTS demand (topic TEXT PRIMARY KEY, until INTEGER NOT NULL);
+"""
+
 LIVE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS live (topic TEXT PRIMARY KEY, payload TEXT NOT NULL, updated INTEGER NOT NULL, ms INTEGER, rc INTEGER NOT NULL DEFAULT 0,
   gen INTEGER NOT NULL DEFAULT 0, err TEXT, ts_err INTEGER, ttl INTEGER, src TEXT);
@@ -1152,15 +1187,38 @@ CREATE TABLE IF NOT EXISTS heartbeat (name TEXT PRIMARY KEY, time INTEGER NOT NU
 -- (browser sample: web_*). last/worst since the row exists, n samples, recent = the last DELAY_KEEP samples as a comma list (the health note looks at it).
 CREATE TABLE IF NOT EXISTS live_delay (topic TEXT PRIMARY KEY, ms_last INTEGER, ms_worst INTEGER, ms_n INTEGER NOT NULL DEFAULT 0, ms_recent TEXT, ms_time INTEGER,
   web_last INTEGER, web_worst INTEGER, web_n INTEGER NOT NULL DEFAULT 0, web_recent TEXT, web_time INTEGER);
-"""
+""" + DEMAND_SCHEMA
 
 DELAY_KEEP = 20
+DEMAND_LEASE = 30       # seconds a lease holds (D14); the web server renews it every 10 s while a stream wants the topic
 
 
 def live_open():
     c = open_rw(threads=True)
     c.executescript(LIVE_SCHEMA)
     return c
+
+
+def demand_open():
+    """The connection of the web server for its leases: short busy wait (a lease never blocks anything), no migration, only the one table."""
+    os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
+    c = sqlite3.connect(DB, timeout=2, check_same_thread=False)
+    c.execute("PRAGMA busy_timeout=2000")
+    c.executescript(DEMAND_SCHEMA)
+    return c
+
+
+def demand_put(c, topics, t, lease=None):
+    """Lease the topics until t + lease seconds (a topic nobody renews just runs out); expired rows are deleted here."""
+    until = int(t) + int(lease or DEMAND_LEASE)
+    with c:
+        c.execute("DELETE FROM demand WHERE until <= ?", (int(t),))
+        c.executemany("INSERT INTO demand (topic, until) VALUES (?, ?) ON CONFLICT(topic) DO UPDATE SET until = excluded.until", [(x, until) for x in topics])
+
+
+def demand_active(c, t):
+    """-> {topic: until} of the leases that have not run out"""
+    return {k: int(u) for k, u in c.execute("SELECT topic, until FROM demand WHERE until > ?", (int(t),))}
 
 
 def live_load(c):
@@ -1179,6 +1237,7 @@ def live_put(c, topic, payload, rc, ms, src, ttl, t):
                   (topic, payload, t, ms, rc, ttl, src))
         gen = c.execute("SELECT gen FROM live WHERE topic = ?", (topic,)).fetchone()[0]
         bump(c, ["live:" + topic])
+    poke()                  # after the commit: the web server reads the new counter at once
     return gen
 
 
@@ -1220,8 +1279,22 @@ def live_beat(c, name, every, started, t, counts, read):
                    counts.get("slow", 0), counts.get("wait_ms", 0), read))
 
 
+def event_topic_rows():
+    """{kind: [topic]} from scripts/lib/event-topics.tsv (named events, docs/PLAN-live-interface.md step 13)."""
+    out = {}
+    try:
+        with open(os.environ.get("HS_EVENT_TOPICS", os.path.join(HERE, "lib", "event-topics.tsv")), encoding="utf-8") as f:
+            for line in f:
+                p = line.rstrip("\r\n").split("\t")
+                if p[0] and not p[0].startswith("#") and len(p) > 1:
+                    out[p[0]] = [t for t in p[1].split(",") if t and t != "-"]
+    except OSError:
+        pass
+    return out
+
+
 def expand_topics(args):
-    """topic names as given; @group = every live topic of that change area and of `any`; --all or * = every live topic
+    """topic names as given; event:<kind> = the topics of that named event (event-topics.tsv); @group = every live topic of that change area and of `any`; --all or * = every live topic
     (scripts/lib/live-topics.tsv, column 6 = groups). Without the list the names stay as given."""
     rows = []
     try:
@@ -1233,8 +1306,13 @@ def expand_topics(args):
     except OSError:
         pass
     out = []
+    kinds = None
     for a in args:
-        if a in ("--all", "*"):
+        if a.startswith("event:"):
+            if kinds is None:
+                kinds = event_topic_rows()
+            out += expand_topics(kinds.get(a[6:]) or ["@system"])      # a kind may list topics and @groups; an unknown kind: @system
+        elif a in ("--all", "*"):
             out += [r[0] for r in rows]
         elif a.startswith("@"):
             out += [t for t, groups in rows if a[1:] in groups or "any" in groups]
@@ -1246,6 +1324,13 @@ def expand_topics(args):
 def cmd_topic_bump(args):
     """Best effort and silent: no database folder (a test box), not root, a busy database: nothing happens and the exit code is 0."""
     names = [n for n in expand_topics(args) if re.fullmatch(r"[A-Za-z0-9_:. -]{1,64}", n)]
+    wl = os.environ.get("HS_LIVE_WAKE_LOG")
+    if wl and names:      # test knob and measure: how many topics each change wakes
+        try:
+            with open(wl, "a", encoding="utf-8") as f:
+                f.write("%s\t%d\n" % (" ".join(args), len(names)))
+        except OSError:
+            pass
     if not names or not os.path.isdir(os.path.dirname(DB) or "."):
         return 0
     try:
@@ -1254,7 +1339,8 @@ def cmd_topic_bump(args):
             bump(c, names)
         c.close()
     except (sqlite3.Error, OSError):
-        pass
+        return 0
+    poke()
     return 0
 
 
@@ -1399,7 +1485,10 @@ def main(argv):
 
 if __name__ == "__main__":
     try:
-        sys.exit(main(sys.argv))
+        rc = main(sys.argv)
+        if rc == 0 and len(sys.argv) > 1 and sys.argv[1] in POKE_CMDS:
+            poke()
+        sys.exit(rc)
     except SchemaTooNew as e:
         print("hs: %s" % e, file=sys.stderr)
         sys.exit(1)

@@ -264,6 +264,89 @@ class Coalesce(unittest.TestCase):
         self.assertEqual(lg.call_count, 1)                 # the second one woke nothing new: no line
 
 
+class Load(unittest.TestCase):
+    """the collector cannot burn a core by itself: no self-triggering loop, a duty cycle per topic, a budget for all reads (#1008)"""
+
+    def make(self, run, interval=0.05, names=("a",)):
+        rows = [(n, [n], interval, "run") for n in names]
+        c = lc.Collector(FakeResp(), run=run, topic_rows=rows, topic_info={n: {"cap": None, "groups": {"g"}} for n in names}, topic_needs={})
+        return c
+
+    def spin(self, c, secs, topic="a"):
+        t = threading.Thread(target=c.loop, args=(topic, [topic], c.rows[0][2], "run"), daemon=True)
+        t.start()
+        time.sleep(secs)
+        c.stop.set()
+        c.events[topic].set()
+        t.join(3)
+
+    def test_a_read_that_asks_for_itself_again_is_no_loop(self):
+        """a topic whose read emits a change that refreshes the same topic (an event feedback) is read once per min_gap, not as fast as it can"""
+        calls = []
+        box = {}
+
+        def run(words):
+            calls.append(time.time())
+            box["c"].refresh("a")                     # the read counts a change that wakes the topic again
+            return 0, "x %d\n" % len(calls), ""
+        c = box["c"] = self.make(run, interval=60)
+        c.min_gap, c.duty = 0.3, 0
+        self.spin(c, 1.6)
+        self.assertGreaterEqual(len(calls), 3)
+        self.assertLessEqual(len(calls), 7)         # 1.6 s / 0.3 s gap + the first read; unbounded it would be thousands
+        gaps = [b - a for a, b in zip(calls, calls[1:])]
+        self.assertGreaterEqual(min(gaps), 0.25)
+
+    def test_duty_cycle_spaces_a_slow_read(self):
+        """a read that takes 50 ms with a 50 ms interval is repeated at most every 10 x 50 ms"""
+        calls = []
+
+        def run(words):
+            calls.append(1)
+            time.sleep(0.05)
+            return 0, "y\n", ""
+        c = self.make(run, interval=0.05)
+        c.duty = 10
+        self.spin(c, 2.0)
+        self.assertLessEqual(len(calls), 6)         # without the duty cycle: ~20
+        c2 = self.make(run, interval=0.05)
+        calls.clear()
+        c2.duty, c2.budget = 0, 1000
+        self.spin(c2, 1.0)
+        self.assertGreaterEqual(len(calls), 8)      # the stand-in without both: the old behaviour
+
+    def test_budget_stretches_the_timed_intervals(self):
+        c = self.make(lambda w: (0, "z\n", ""))
+        c.budget = 0.5
+        self.assertEqual(c.stretch(), 1.0)
+        now = time.time()
+        c.busy_log.extend([(now, 60.0)])            # a core busy for the whole look-back
+        self.assertAlmostEqual(c.stretch(), 2.0, places=1)
+        c.busy_log.extend([(now, 6000.0)])
+        self.assertEqual(c.stretch(), 10.0)
+
+    def test_stats_file_counts_reads_per_topic(self):
+        c = self.make(lambda w: (0, "z\n", ""), names=("a", "b"))
+        for _ in range(3):
+            c.collect("a", ["a"])
+        c.collect("b", ["b"])
+        with tempfile.TemporaryDirectory() as d:
+            with unittest.mock.patch.dict(os.environ, {"HS_LIVE_LOAD_FILE": os.path.join(d, "load.json")}):
+                c.write_stats()
+            doc = json.load(open(os.path.join(d, "load.json"), encoding="utf-8"))
+        self.assertEqual((doc["reads"], doc["topics"]["a"]["reads"], doc["topics"]["b"]["reads"]), (4, 3, 1))
+        self.assertIn("cpu_s", doc)
+
+    def test_a_loop_is_said_once(self):
+        c = self.make(lambda w: (0, "z\n", ""), interval=30)
+        c.window = 60.0
+        with unittest.mock.patch.object(lc, "log") as lg:
+            for _ in range(200):
+                c.collect("a", ["a"])
+        said = [x for x in lg.call_args_list if "a loop?" in x[0][0]]
+        self.assertEqual(len(said), 1)
+
+
 class Needs(unittest.TestCase):
     """dependency graph and waves (#153)"""
 
@@ -418,6 +501,36 @@ class Groups(unittest.TestCase):
         c.refresh("@nothing")
         self.assertEqual(self.set_of(c), ["b"])
 
+    def test_named_event_wakes_exactly_its_topics(self):
+        """D12: event:<kind> wakes the topics event-topics.tsv lists (hard, no `any` wake), and fewer than the group it replaces."""
+        rows, info = ls.topics(), ls.topic_info()
+        c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.refresh("event:ct.started")
+        want = sorted(t for t in ls.event_topics()["ct.started"] if t in c.events)
+        self.assertEqual(self.set_of(c), want)
+        self.assertTrue(c.soft == set())
+        g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.refresh("@instances")
+        self.assertLess(len(self.set_of(c)), len(self.set_of(g)))
+
+    def test_area_event_asks_like_its_group(self):
+        """area.<name> lists the group @<name>: the same hard and soft (`any`) wake as the group, so the registry flags can resolve through the table."""
+        rows, info = ls.topics(), ls.topic_info()
+        a = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        a.refresh("event:area.disks")
+        g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.refresh("@disks")
+        self.assertEqual(self.set_of(a), self.set_of(g))
+        self.assertEqual(a.soft, g.soft)
+
+    def test_unknown_named_event_falls_back_to_system(self):
+        rows, info = ls.topics(), ls.topic_info()
+        c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.refresh("event:no.such-kind")
+        s = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        s.refresh("@system")
+        self.assertEqual(self.set_of(c), self.set_of(s))
+
     def test_system_groups_wake_the_system_topics(self):
         rows, info = ls.topics(), ls.topic_info()
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
@@ -481,6 +594,7 @@ SYSTEM_TOPICS = {'deck': 5, 'jobs-running': 10, 'jobs-list': 30, 'health-next': 
 
 INSTANCE_TOPICS = {
     'ct-list': (['ct', 'list'], 10, 'skip', 'incus', {'instances', 'shares', 'network'}),
+    'netmap': (['netmap', 'topology'], 10, 'skip', None, {'instances', 'network'}),
     'iso-list': (['iso', 'list'], 10, 'skip', 'incus', {'instances'}),
     'ct-pools': (['ct', 'pools'], 15, 'skip', 'incus', {'instances'}),
     'ct-profiles': (['ct', 'profiles'], 120, 'skip', 'incus', {'instances', 'network', 'system'}),
@@ -584,7 +698,7 @@ class Cli(unittest.TestCase):
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in ID_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
-            self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
+            self.assertEqual({k: v for k, v in info[name].items() if k != "idle"}, {"cap": cap, "groups": groups}, name)      # idle: D14, tests/live-demand-test.py
 
     def test_every_change_row_wakes_the_identity_and_backup_topics_it_can_alter(self):
         # system rows (config set, rebuild, update ...) can switch ad/backup on or move the dc/timer; instance rows start/stop the dc and change
@@ -678,7 +792,7 @@ class Cli(unittest.TestCase):
     def test_instance_topics(self):
         info = ls.topic_info()
         rows = {t[0]: t for t in ls.topics()}
-        self.assertEqual(len(INSTANCE_TOPICS), 10)
+        self.assertEqual(len(INSTANCE_TOPICS), 11)
         for name, (words, iv, lock, cap, groups) in INSTANCE_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
             self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
@@ -780,7 +894,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 80)
+        self.assertEqual(len(lines), 81)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)
@@ -1218,20 +1332,20 @@ class DockerEvents(unittest.TestCase):
         self.make("start")
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.5)
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
         self.assertEqual(self.logs, [])
 
     def test_burst_is_coalesced(self):
         self.make("burst")
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
 
     def test_daemon_restart_reconnects_once_and_refreshes(self):
         self.make("restart")
         self.assertTrue(self.wait_for(lambda: self.runs() >= 4 and len(self.calls) >= 2))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@docker", "@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed", "event:docker.changed"])
         down = [l for l in self.logs if "docker events down" in l]
         self.assertEqual(len(down), 1)
         self.assertIn("down", down[0])
@@ -1240,7 +1354,7 @@ class DockerEvents(unittest.TestCase):
     def test_first_connect_after_failures_refreshes(self):
         self.make("late")
         self.assertTrue(self.wait_for(lambda: self.calls))
-        self.assertEqual(self.calls, ["@docker"])
+        self.assertEqual(self.calls, ["event:docker.changed"])
         self.assertEqual(len([l for l in self.logs if "docker events down" in l]), 1)
         self.assertEqual(len([l for l in self.logs if "docker events back" in l]), 1)
 
@@ -1327,7 +1441,7 @@ class IncusEvents(DockerEvents):
         self.make("start")
         self.assertTrue(self.wait_for(lambda: self.calls and self.emitted))
         time.sleep(0.5)
-        self.assertEqual(self.calls, ["@instances"])
+        self.assertEqual(self.calls, ["event:ct.started"])
         self.assertEqual(self.logs, [])
 
     def test_only_instance_facts_and_no_secrets(self):
@@ -1342,7 +1456,7 @@ class IncusEvents(DockerEvents):
         self.make("burst", limit=25)
         self.assertTrue(self.wait_for(lambda: self.calls))
         time.sleep(0.8)
-        self.assertEqual(self.calls, ["@instances"])
+        self.assertEqual(self.calls, ["event:ct.created", "event:ct.deleted", "event:ct.started", "event:ct.stopped"])
         self.assertEqual(len(self.emitted), 25)
         self.assertEqual(len(set((k, s) for k, s, _, _ in self.emitted)), 25)   # the repeat of c1 started is not written twice
         self.assertEqual({k for k, _, _, _ in self.emitted} - {"ct.started", "ct.stopped", "ct.created", "ct.deleted"}, set())
@@ -1351,7 +1465,7 @@ class IncusEvents(DockerEvents):
         self.make("restart")
         self.assertTrue(self.wait_for(lambda: self.runs() >= 4 and len(self.calls) >= 2))
         time.sleep(0.6)
-        self.assertEqual(self.calls, ["@instances", "@instances"])
+        self.assertEqual(self.calls, ["event:ct.stopped", "@instances"])   # the stop, then the full refresh after the reconnect
         self.assertEqual(len([l for l in self.logs if "incus events down" in l]), 1)
         self.assertEqual(len([l for l in self.logs if "incus events back" in l]), 1)
         self.assertEqual([e[0] for e in self.emitted], ["ct.stopped"])

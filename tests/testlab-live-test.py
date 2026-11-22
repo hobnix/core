@@ -72,7 +72,7 @@ class Files(unittest.TestCase):
     def test_scenarios_use_known_limit_classes(self):
         lim = tlb.load_limits(os.path.join(root, "scripts", "lib", "live-limits.tsv"))
         rows = tlb.load_scenarios(os.path.join(root, "scripts", "dev", "testlab-live.tsv"))
-        self.assertEqual(len(rows), 3)
+        self.assertEqual(len(rows), 4)
         for r in rows:
             self.assertIn(r["klass"], lim)
             self.assertTrue(r["path"].startswith("/") and r["cmd"] and r["before"] != r["after"])

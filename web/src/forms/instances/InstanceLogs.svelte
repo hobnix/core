@@ -1,7 +1,7 @@
 <script>
   import { Button, Dialog, Select, Checkbox, Row, Muted } from '../../ui/index.js';
   // The last lines of an instance's journal (`hs sys ct logs <ct> [lines]`, read only), in a window over the page.
-  import { poll } from '../../data.svelte.js';
+  import { logfeed } from '../../logfeed.svelte.js';
   import { ui } from '../../ui.svelte.js';
 
   let { ct } = $props();
@@ -10,9 +10,8 @@
   let follow = $state(true);
   let box = $state(null);
 
-  const logs = poll(() => (follow || !logs?.loaded ? `/api/sys/ct/logs/${encodeURIComponent(ct)}?lines=${lines}` : ''), 4000);
-  const text = $derived((logs.data?.text ?? '').trimEnd());
-  const list = $derived(text ? text.split('\n') : []);
+  const logs = logfeed({ stream: () => `/api/logs/stream/ct?target=${encodeURIComponent(ct)}&lines=${lines}`, read: () => `/api/sys/ct/logs/${encodeURIComponent(ct)}?lines=${lines}`, follow: () => follow, every: 4000 });
+  const list = $derived(logs.lines);
 
   const cls = (l) => (/\b(error|err|fail|failed|crit|alert|emerg)\b/i.test(l) ? 'bad' : /\bwarn(ing)?\b/i.test(l) ? 'warn' : '');
   const close = () => { ui.create = null; };
@@ -30,7 +29,7 @@
       <Button onclick={close}>Close</Button>
     </Row>
     <div class="log" bind:this={box}>
-      {#if logs.error && !logs.data}
+      {#if logs.error}
         <div class="bad">The log could not be read (is the instance running, is the storage unlocked?).</div>
       {:else if !logs.loaded}
         <Muted as="div">Loading…</Muted>

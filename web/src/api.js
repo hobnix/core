@@ -78,6 +78,8 @@ export const liveRefresh = (topic) => call('POST', '/api/live/refresh', { topic 
 // one POST carries up to 20 samples ({samples: [{topic, ms}, ...]}); the single form {topic, ms} still works
 export const liveSamples = (samples) => call('POST', '/api/live/sample', { samples });
 export const liveSample = (topic, ms) => call('POST', '/api/live/sample', { topic, ms });
+// D13: the topics of the open event stream `sid` (the answer carries the gens of the added topics)
+export const subscribeTopics = (sid, topics) => call('POST', '/api/events/subscribe', { sid, topics });
 export const markChangesSeen = (rev) => call('POST', '/api/changes/seen', { rev });
 
 export const hello = () => call('GET', '/api/hello');
@@ -148,25 +150,44 @@ export async function get(path, fresh = false) {
 // document: the docker app-save body (the server serializes it as bytes on stdin)
 const planCall = (area, args, stdin, selection, signal, document) => call('POST', '/api/plan', { area, args, ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, signal, CHANGE_WAIT_MS);   // an aborted call rejects with e.name === 'AbortError'
 
-// A plan only reads, so a button can ask for it when the pointer arrives (prefetchPlan) and the dialog that opens a moment later takes the
+// A plan only reads, so a button can ask for it when the pointer arrives (prefetchPlan, never more than PREFETCH_MAX at once) and the dialog that opens a moment later takes the
 // answer that is already running or done. Never with stdin, a selection or a document (secrets, file lists); a start forgets everything.
 const PLAN_KEEP_MS = 30000;
-const planned = new Map();   // "area\0args" -> { at, p }
-const planKey = (area, args) => [area, ...args].join('\0');
+const PREFETCH_MAX = 2;          // plans a hover or focus may have running at once: a browser keeps 6 connections per server, the rest belongs to the click, the reads and the streams
+const PREFETCH_WAIT_MS = 20000;  // a hover plan that is not answered by then is dropped (the click asks again): it must not hold a connection for the full minute
+const planned = new Map();   // "area args" -> { at, p, speculative, done }
+const planKey = (area, args) => [area, ...args].join(' ');
+const running = () => { let n = 0; for (const e of planned.values()) if (e.speculative && !e.done) n++; return n; };
 
-export function prefetchPlan(area, args) {
+// speculative: a hover or focus asked it, nobody waits for it yet. It is skipped when PREFETCH_MAX are running (null), is never asked twice while the
+// first one still runs (the 30 s count from the answer, not from the question), and is aborted after PREFETCH_WAIT_MS. Without these limits a slow
+// server filled the browser's 6 connections with plans and the Start of the click never left the browser (no /api/start in the log, a toast that spun).
+export function prefetchPlan(area, args, speculative = true) {
   const key = planKey(area, args);
   const hit = planned.get(key);
-  if (hit && Date.now() - hit.at < PLAN_KEEP_MS) return hit.p;
-  const p = planCall(area, args);
-  const entry = { at: Date.now(), p };
+  if (hit && (!hit.done || Date.now() - hit.at < PLAN_KEEP_MS)) return hit.p;
+  if (speculative && running() >= PREFETCH_MAX) return Promise.resolve(null);
+  const ctl = new AbortController();
+  const entry = { at: Date.now(), p: null, speculative, done: false, ctl };
+  const timer = speculative ? setTimeout(() => { entry.timedOut = true; ctl.abort(); }, PREFETCH_WAIT_MS) : 0;
+  entry.p = planCall(area, args, undefined, undefined, ctl.signal);
   planned.set(key, entry);
-  p.catch(() => { if (planned.get(key) === entry) planned.delete(key); });   // a failure is asked again, not kept
-  return p;
+  entry.p.then(() => { entry.done = true; entry.at = Date.now(); }, () => { entry.done = true; if (planned.get(key) === entry) planned.delete(key); }).finally(() => clearTimeout(timer));   // a failure is asked again, not kept
+  return entry.p;
 }
 
-// a call with a signal (the create dialog's live plan: a newer question cancels the older one) is never shared; a document bypasses prefetch
-export const plan = (area, args, stdin, selection, signal, document) => (stdin || selection || signal || document !== undefined) ? planCall(area, args, stdin, selection, signal, document) : prefetchPlan(area, args);
+// a call with a signal (the create dialog's live plan: a newer question cancels the older one) is never shared; a document bypasses prefetch.
+// A click joins a hover plan that is running; when that one is dropped for being slow, the click asks once itself.
+export const plan = (area, args, stdin, selection, signal, document) => {
+  if (stdin || selection || signal || document !== undefined) return planCall(area, args, stdin, selection, signal, document);
+  const key = planKey(area, args);
+  const hit = planned.get(key);
+  if (hit) hit.speculative = false;      // somebody waits for it now
+  return prefetchPlan(area, args, false).catch((e) => {
+    if (hit && hit.timedOut) return prefetchPlan(area, args, false);
+    throw e;
+  });
+};
 export const start = (area, args, confirm, stdin, selection, document) => {
   planned.clear();
   return call('POST', '/api/start', { area, args, ...(confirm ? { confirm } : {}), ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, undefined, CHANGE_WAIT_MS);
