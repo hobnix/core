@@ -26,6 +26,7 @@ export { default as Slider } from './Slider.svelte';           // native range: 
 export { default as Card } from './Card.svelte';             // the one card: title or header slot, actions, `dither` corner for the node card
 export { default as Row } from './Row.svelte';               // flex row, gap from the spacing tokens
 export { default as Stack } from './Stack.svelte';           // flex column, gap from the spacing tokens
+export { default as Grid } from './Grid.svelte';             // grid of equal columns that wrap (the cards of a group page)
 export { default as Muted } from './Muted.svelte';           // the one secondary text style (not `mute`, not `muted`)
 export { default as StateCard } from './StateCard.svelte';     // Group page card: status dot, one line, link
 export { default as DangerZone } from './DangerZone.svelte';   // marked section of an Object page; each action opens a plan
