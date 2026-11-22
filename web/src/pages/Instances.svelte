@@ -1,81 +1,57 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
-  // Instances: containers and VMs. Table, then a drawer (Storage, Snapshots, Logs, Route); every action opens a plan.
-  // Snapshots of an instance live HERE (the Snapshots page is gone); the "in the backup" switch lives on Backup, this page only shows the badge.
+  // Instances: containers and VMs in one list. A row opens the quick look over the list (?sel=<name>: selection.svelte.js); "Open page" goes to the page of the instance
+  // (pages/instances/Instance.svelte) with its tabs Overview, Config, Network and Console. Every action opens a plan. Snapshots of an instance live on its page (Config tab);
+  // the "in the backup" switch lives on Backup, this page only shows the badge.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
+  import { selected, select, close } from '../selection.svelte.js';
   import { openPlan, openCreate, ui } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
   import ErrorNote from '../ui/ErrorNote.svelte';
-  import { ctPending, ctFailed } from './instances/pending.js';
-  import { route } from '../route.svelte.js';
-  import Terminal from '../shell/Terminal.svelte';
-  import VmConsole from '../shell/VmConsole.svelte';
+  import { route, go, url } from '../route.svelte.js';
   import CreateInstance from '../forms/instances/CreateInstance.svelte';
-  import InstanceSettings from '../forms/instances/InstanceSettings.svelte';
-  import BindStorage from '../forms/instances/BindStorage.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
-  import Split from '../ui/Split.svelte';
-  import Drawer from '../ui/Drawer.svelte';
-  import Kv from '../ui/Kv.svelte';
-  import Chip from '../ui/Chip.svelte';
-  import StatusDot from '../ui/StatusDot.svelte';
-  import LogsTab from './instances/LogsTab.svelte';
+  import QuickLook from '../ui/QuickLook.svelte';
+  import { Icon, Kv, Chip, StatusDot, Card, Row, Stack, Muted } from '../ui/index.js';
   import { sizeToBytes } from '../format.js';
-  import { ctOf, ctIcon, isVm, isRunning, link, servicesOf } from './instances/ct.js';
+  import { ctIcon, isVm, isRunning, link, servicesOf } from './instances/ct.js';
   import { childrenOf } from './docker/apps.js';
+  import { instanceModel, kindOf, word, dot, boots, spaced, dash } from './instances/model.svelte.js';
+  import { instancePath } from './instances/path.js';
 
-  const ctl = poll('/api/sys/ct/list', 5000);
-  const bk = poll('/api/sys/backup/overview', 60000);
-  const svc = poll('/api/sys/services/list', 30000);
-  const rec = poll('/api/sys/recipes/list', 60000);
+  const selName = $derived(selected());
+  const m = instanceModel({ sel: () => selName });
   const dl = poll('/api/sys/docker/list', 30000);
 
-  let selName = $state('');
-  let tab = $state('storage');
   let open = $state((() => {
     try { const s = sessionStorage.getItem('instances:docker-apps'); return new Set(s ? JSON.parse(s) : []); } catch { return new Set(); }
   })());
   $effect(() => { try { sessionStorage.setItem('instances:docker-apps', JSON.stringify([...open])); } catch {} });
-  $effect(() => { const n = takeSelection('instances'); if (n) selName = n; });
-  // /instances?view=snapshots (the old Snapshots page) opens the Snapshots tab of the first instance
-  $effect(() => { if (route.query.view === 'snapshots') tab = 'snap'; });
+  // another page (Apps, Services, Network, Docker) names an instance to look at: it becomes the quick look
+  $effect(() => { const n = takeSelection('instances'); if (n) select(n); });
+  // /instances?view=snapshots (the old Snapshots page) opens the Config tab (snapshots) of the first instance
+  let snapOpened = false;
+  $effect(() => {
+    if (route.query.view === 'snapshots' && !snapOpened && m.ctl.loaded && m.all.length) { snapOpened = true; go(instancePath(m.all[0].name, 'config')); }
+  });
 
-  const cts = $derived(rows(ctl).map(ctOf));
-  const sel = $derived(cts.find((c) => c.name === selName) ?? (route.query.view === 'snapshots' ? cts[0] : null) ?? null);
+  const cts = $derived(m.all);
+  const sel = $derived(m.ct);
   const running = $derived(cts.filter(isRunning).length);
   const kids = $derived(childrenOf(rows(dl)));
+  const services = $derived(m.services);
 
-  // backup overview: kind, name, on|off, bytes. Read only here; empty while the backup disk or the storage is not there
-  const backupOf = $derived(Object.fromEntries(rows(bk).filter((r) => r[0] === 'ct').map((r) => [r[1], r[2] === 'on'])));
-  const backupKnown = $derived(bk.loaded && !bk.error);
-  // services list: name, title, target, exposure, names, wants
-  const services = $derived(rows(svc).map((r) => ({ name: r[0], title: r[1], target: r[2], exposure: r[3], names: r[4], wants: r[5] })));
-  // recipes list: name, description, containers (comma separated, - for none), state
-  const recipes = $derived(rows(rec).map((r) => ({ name: r[0], cts: r[2] === '-' ? [] : r[2].split(',') })));
-
-  const bind = poll(() => (sel ? `/api/sys/ct/bindings/${encodeURIComponent(sel.name)}` : ''), 15000, 'ct-list');
-  // binding, kind, pool, source, inside, mode, cache, backup, share, used_bytes, disks, also_used_by
-  const bindings = $derived(rows(bind).map((r) => ({ device: r[0], kind: r[1], pool: r[2], source: r[3], inside: r[4], mode: r[5], backup: r[7], share: r[8], also: r[11] })));
-  const snap = poll(() => (sel ? `/api/sys/ct/snapshots/${encodeURIComponent(sel.name)}` : ''), 15000, 'ct-list');
-  // name, created; newest first ("YYYY-MM-DD HH:MM" sorts as text)
-  const snaps = $derived([...rows(snap)].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).map((r) => ({ name: r[0], created: r[1] })));
-
-  const doing = (c) => ctPending(c.name, rowstate.pending);
-  const failure = (c) => (doing(c) ? null : ctFailed(c.name, rowstate.failed));
-  const busyOf = (c, ...a) => a.some((x) => rowstate.pending('ct', [c.name, ...x]));
-  const kind = (c) => (isVm(c) ? 'VM' : 'CT');
-  const word = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
-  const dot = (s) => (/running/i.test(s) ? 'ok' : /partial/i.test(s) ? 'warn' : 'off');
+  const doing = m.doing;
+  const failure = m.failure;
   const plan = (e, c, action) => {
     e.stopPropagation();
     // a stop can also keep the instance off at boot (`--autostart off` unsets boot.autostart)
     openPlan('ct', [c.name, action], `${action} ${c.name}`, action === 'stop' ? { option: { label: 'also keep it off at boot', args: ['--autostart', 'off'] } } : {});
   };
-  const boots = (c) => /^(true|yes|on)$/i.test(c.autostart || '');
   const eligible = (c) => c.owner === 'docker' && (kids.get(c.name)?.length || 0) > 0;
   const toggleApps = (e, name) => {
     e.stopPropagation();
@@ -83,191 +59,86 @@
     if (next.has(name)) next.delete(name); else next.add(name);
     open = next;
   };
-  const spaced = (v) => (v || '').replace(/^(\d+)([A-Za-z]+)$/, '$1 $2');
-  const dash = (v) => (v && v !== '-' ? v : '–');
-  const myServices = $derived(sel ? servicesOf(sel, services) : []);
-  const myRecipes = $derived(sel ? recipes.filter((r) => r.cts.includes(sel.name)) : []);
-  const sharePath = (b) => (b.pool === 'fast' ? '/storage/shares?pool=fast' : '/storage/shares?pool=bulk');
+  const pageLink = (e, name) => { e.stopPropagation(); if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.button)) { e.preventDefault(); go(instancePath(name)); } };
 
   const columns = [
-    { key: 'name', label: 'Name' }, { key: 'owner', label: 'Lock', width: '64px', value: (c) => c.owner }, { key: 'type', label: 'Type', value: kind, optional: true }, { key: 'state', label: 'State', value: (c) => word(c.state) },
+    { key: 'name', label: 'Name' }, { key: 'owner', label: 'Lock', width: '64px', value: (c) => c.owner }, { key: 'type', label: 'Type', value: kindOf, optional: true }, { key: 'state', label: 'State', value: (c) => word(c.state) },
     { key: 'address', label: 'Address' }, { key: 'boot', label: 'Starts at boot', optional: true, value: (c) => (boots(c) ? 'yes' : 'no') }, { key: 'ram', label: 'RAM', sort: 'num', optional: true, value: (c) => sizeToBytes(c.ram) },
     { key: 'cpu', label: 'CPU', sort: 'num', optional: true, value: (c) => Number(c.cpu) },
     { key: 'lastSnap', label: 'Last snapshot', optional: true }, { key: 'route', label: 'Route', optional: true, value: (c) => servicesOf(c, services).length },
     { key: 'actions', label: '', sort: false, align: 'right' },
   ];
-  const tabs = [{ id: 'storage', label: 'Storage' }, { id: 'snap', label: 'Snapshots' }, { id: 'logs', label: 'Logs' }, { id: 'route', label: 'Route' }];
 </script>
 
 <PageHeader title="Instances" crumb={ui.host} sub={cts.length ? `${running} of ${cts.length} running` : 'Containers and virtual machines.'}>
   {#snippet actions()}
     <Button need="app-manager" icon="arrows-clockwise" disabled={!running} busy={rowstate.pending('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
-    <Button need="app-manager" variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>
+    <Button need="app-manager" variant="primary" icon="plus" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}>Create</Button>
   {/snippet}
 </PageHeader>
 
-<PageState loading={!ctl.loaded} error={ctl.error?.message} hasData={ctl.data != null} empty={ctl.loaded && !cts.length && !ctl.error}
+<PageState loading={!m.ctl.loaded} error={m.ctl.error?.message} hasData={m.ctl.data != null} empty={m.ctl.loaded && !cts.length && !m.ctl.error}
            emptyIcon="cube" emptyTitle="No instances yet" emptyText="An instance is a container or a virtual machine. Create the first one, or set an app up from Apps."
            retry={() => refresh(['/api/sys/ct/list'])}>
-  {#snippet emptyAction()}<Button need="app-manager" variant="primary" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}><i class="ph ph-plus"></i>Create</Button>{/snippet}
-  <Split open={!!sel}>
-    {#snippet list()}
-      <div class="card" style="padding:0">
-      <Table id="instances" {columns} rows={cts} key="name" selected={sel?.name} onrow={(c) => { selName = c.name; }} loading={!ctl.loaded} empty="No instances."
+  {#snippet emptyAction()}<Button need="app-manager" variant="primary" icon="plus" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}>Create</Button>{/snippet}
+  <div style="position:relative">
+    <Card style="padding:4px 8px;overflow-x:auto">
+      <Table id="instances" {columns} rows={cts} key="name" compact selected={sel?.name} onrow={(c) => select(c.name)} loading={!m.ctl.loaded} empty="No instances."
              below={subRow} hasBelow={(c) => open.has(c.name) && eligible(c)}>
         {#snippet cell(c, col)}
           {#if col.key === 'name'}
-            <span class="nm"><i class="ph ph-{ctIcon(c)} ic"></i>{c.name}</span>
-            {#if eligible(c)}<Chip>{kids.get(c.name).length} apps</Chip>{/if}
-            {#if eligible(c)}<Button variant="ghost" class="btn-icon instances-chev" icon={open.has(c.name) ? 'caret-down' : 'caret-right'} aria-label="{open.has(c.name) ? 'Collapse' : 'Expand'} apps" onclick={(e) => toggleApps(e, c.name)} />{/if}
-          {:else if col.key === 'owner'}{#if c.owner}<span class="kd" role="img" aria-label="Locked by {c.owner}" use:tip={`Locked by ${c.owner}: only hs ${c.owner} disable removes it`}><i class="ph ph-lock"></i></span>{/if}
-          {:else if col.key === 'type'}<span class="kd">{kind(c)}</span>
-          {:else if col.key === 'state'}{#if doing(c)}<span class="kd"><i class="ph ph-circle-notch spin"></i> {doing(c)}…</span>{:else}<StatusDot state={dot(c.state)} label={word(c.state)} />{/if}{#if failure(c)}<span use:tip={failure(c).error.what}><Chip tone="bad">failed</Chip></span>{/if}
-          {:else if col.key === 'address'}<span class="mono addr">{c.address}</span>
-          {:else if col.key === 'boot'}<span class="kd">{boots(c) ? 'yes' : 'no'}</span>
+            <Row gap="2" style="display:inline-flex"><Icon name={ctIcon(c)} /><a href={url(instancePath(c.name))} onclick={(e) => pageLink(e, c.name)}>{c.name}</a></Row>
+            {#if eligible(c)} <Chip>{kids.get(c.name).length} apps</Chip>{/if}
+            {#if eligible(c)}<Button variant="ghost" class="btn-icon" icon={open.has(c.name) ? 'caret-down' : 'caret-right'} label="{open.has(c.name) ? 'Collapse' : 'Expand'} apps of {c.name}" onclick={(e) => toggleApps(e, c.name)} />{/if}
+          {:else if col.key === 'owner'}{#if c.owner}<span role="img" aria-label="Locked by {c.owner}" use:tip={`Locked by ${c.owner}: only hs ${c.owner} disable removes it`}><Icon name="lock" /></span>{/if}
+          {:else if col.key === 'type'}<Muted>{kindOf(c)}</Muted>
+          {:else if col.key === 'state'}{#if doing(c)}<Muted><Icon name="circle-notch" spin /> {doing(c)}…</Muted>{:else}<StatusDot state={dot(c.state)} label={word(c.state)} />{/if}{#if failure(c)} <span use:tip={failure(c).error.what}><Chip tone="bad">failed</Chip></span>{/if}
+          {:else if col.key === 'address'}<code>{c.address}</code>
+          {:else if col.key === 'boot'}<Muted>{boots(c) ? 'yes' : 'no'}</Muted>
           {:else if col.key === 'ram'}{spaced(c.ram)}
           {:else if col.key === 'cpu'}{c.cpu}
-          {:else if col.key === 'lastSnap'}<span class="kd">{dash(c.lastSnap)}</span>
+          {:else if col.key === 'lastSnap'}<Muted>{dash(c.lastSnap) || '–'}</Muted>
           {:else if col.key === 'route'}
             {@const s = servicesOf(c, services)}
-            {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<span class="kd">–</span>{/if}
+            {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<Muted>–</Muted>{/if}
           {:else}
-            <span class="acts">
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon={isRunning(c) ? 'stop' : 'play'} busy={busyOf(c, ['stop'], ['stop', '--autostart', 'off'], ['start'])} tooltip={isRunning(c) ? 'Stop' : 'Start'} aria-label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-clockwise" busy={rowstate.pending('ct', [c.name, 'restart'])} tooltip={'Restart'} aria-label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
-              <Button need="app-manager" variant="ghost" class="btn-icon instances-ib instances-nophone" icon="camera" busy={rowstate.pending('ct', [c.name, 'snapshot'])} tooltip={'Snapshot'} aria-label="Snapshot {c.name}" onclick={(e) => plan(e, c, 'snapshot')} />
-            </span>
+            <Row gap="1" justify="end">
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon={isRunning(c) ? 'stop' : 'play'} busy={m.busyOf(c, ['stop'], ['stop', '--autostart', 'off'], ['start'])} tooltip={isRunning(c) ? 'Stop' : 'Start'} label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
+              <Button need="app-manager" variant="ghost" class="btn-icon" icon="arrow-clockwise" busy={m.busyOf(c, ['restart'])} tooltip={'Restart'} label="Restart {c.name}" onclick={(e) => plan(e, c, 'restart')} />
+            </Row>
           {/if}
         {/snippet}
         {#snippet subRow(c)}
-          <div class="subrow">
+          <Stack gap="2" style="padding:8px 12px">
             {#each kids.get(c.name) as r (r[0])}
-              <div class="subapp">
-                <span class="indent"><i class="ph ph-corners-out"></i>{r[0]}</span>
+              <Row gap="4" align="center">
+                <Row gap="2" style="margin-left:16px;min-width:140px"><Icon name="corners-out" />{r[0]}</Row>
                 <StatusDot state={dot(r[3])} label={r[3]} bare />
-                <span class="ports">{r[4]}</span>
+                <Muted style="min-width:80px">{r[4]}</Muted>
                 <a {...link('/instances/docker', 'docker', r[0])}>open in Docker</a>
-              </div>
+              </Row>
             {/each}
-          </div>
+          </Stack>
         {/snippet}
       </Table>
-      </div>
-    {/snippet}
-    {#snippet side()}
+    </Card>
+    {#if selName}
       {#if sel}
-        <Drawer title={sel.name} chip={kind(sel)} state={dot(sel.state)} stateLabel={word(sel.state)} {tabs} bind:tab onclose={() => { selName = ''; }}>
-          {#snippet children(t)}
-            {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
-            <Chip>{boots(sel) ? 'starts at boot' : 'not set to start at boot'}</Chip>
-            {#if sel.owner}<span use:tip={`Managed by ${sel.owner}: turn it off under Settings, Capabilities to change or delete it`}><Chip kind="strong"><i class="ph ph-lock"></i> locked: {sel.owner}</Chip></span>{/if}
-            <Kv items={[
-              { k: 'Address', v: sel.address }, { k: 'RAM / CPU', v: `${spaced(sel.ram) || '–'} / ${sel.cpu || '–'}` },
-            ]} />
-            <div class="bk">
-              <span class="kd">Backup</span>
-              {#if backupKnown && sel.name in backupOf}
-                <a {...link('/protection/backup')} use:tip={'Change this on the Backup page'}><Chip tone={backupOf[sel.name] ? 'accent' : ''}>{backupOf[sel.name] ? 'in the backup' : 'not in the backup'}</Chip></a>
-              {:else}<span class="kd">{backupKnown ? 'not listed' : 'not known (no backup disk, or storage locked)'}</span>{/if}
-            </div>
-
-            {#if t === 'storage'}
-              <div class="sec">
-                <div class="sh"><b>Storage</b><span class="kd">disks and shares this instance sees</span></div>
-                <div class="rows">
-                  {#each bindings as b (b.device)}
-                    <div class="r">
-                      <div class="rt">
-                        <Chip>{b.kind}</Chip>
-                        {#if b.share && b.share !== '-'}<a {...link(sharePath(b), 'shares', b.share)} use:tip={'Open the share'}>{b.share}</a>{:else}<span class="mono">{b.source}</span>{/if}
-                        <span class="kd">{b.mode}</span>
-                        {#if !sel.owner}<Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="x" style="margin-left:auto" busy={rowstate.pending('ct', [sel.name, 'remove-storage', '--device', b.device])} tooltip={'Remove this binding'} aria-label="Remove {b.device}" onclick={() => openPlan('ct', [sel.name, 'remove-storage', '--device', b.device], `Remove ${b.device} from ${sel.name}`)} />{/if}
-                      </div>
-                      <div class="rs mono">{b.source} → {b.inside}</div>
-                      {#if b.also && b.also !== '-'}<div class="rs">Also mounted by {b.also}</div>{/if}
-                    </div>
-                  {:else}
-                    <div class="kd pad">{bind.loaded ? 'No storage bindings.' : 'Loading…'}</div>
-                  {/each}
-                </div>
-                {#if !sel.owner}<Button need="app-manager" size="sm" tooltip={'Give this instance a folder of a pool or a share'} onclick={() => openCreate(BindStorage, { ct: sel.name })}><i class="ph ph-plus"></i>Bind a share</Button>{/if}
-              </div>
-            {:else if t === 'snap'}
-              <div class="sec">
-                <div class="sh"><b>Snapshots</b><span class="kd">nightly at 02:00, kept 7 days. ZFS goes back to the newest only: restoring an older one deletes the newer ones first.</span></div>
-                <div class="rows">
-                  {#each snaps as sn, i (sn.name)}
-                    <div class="r"><div class="rt">
-                      <span class="mono">{sn.name}</span><span class="kd">{sn.created}</span>
-                      <span class="acts" style="margin-left:auto">
-                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib" icon="arrow-u-up-left" busy={rowstate.pending('ct', [sel.name, 'restore', '--snapshot', sn.name])} aria-label="Restore {sn.name}" tooltip={i === 0 ? 'Go back to this snapshot' : 'Go back to this snapshot (the newer ones are deleted)'} onclick={() => openPlan('ct', [sel.name, 'restore', '--snapshot', sn.name], `Restore ${sel.name}`)} />
-                        <Button need="app-manager" variant="ghost" class="btn-icon instances-ib bad" icon="trash" busy={rowstate.pending('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name])} aria-label="Delete {sn.name}" tooltip={'Delete this snapshot (the plan asks for the instance name)'} onclick={() => openPlan('ct', [sel.name, 'delete-snapshot', '--snapshot', sn.name], `Delete snapshot ${sn.name}`)} />
-                      </span>
-                    </div></div>
-                  {:else}
-                    <div class="kd pad">{snap.loaded ? (snap.error ? 'The snapshots could not be read.' : 'No snapshots yet.') : 'Loading…'}</div>
-                  {/each}
-                </div>
-                <Button need="app-manager" size="sm" icon="camera" busy={rowstate.pending('ct', [sel.name, 'snapshot'])} busyLabel="Snapshotting…" tooltip={'Take a snapshot of this instance now'} onclick={() => openPlan('ct', [sel.name, 'snapshot'], `Snapshot ${sel.name}`)}>Snapshot now</Button>
-              </div>
-            {:else if t === 'logs'}
-              {#key sel.name}<LogsTab ct={sel.name} />{/key}
-            {:else}
-              <div class="sec">
-                <div class="sh"><b>Route</b><span class="kd">what the reverse proxy publishes for this instance</span></div>
-                <div class="rows">
-                  {#each myServices as s (s.name)}
-                    <div class="r"><div class="rt">
-                      <a {...link('/instances/services')}>{s.title && s.title !== '-' ? s.title : s.name}</a>
-                      <Chip tone={s.exposure === 'public-ok' ? 'accent' : ''}>{s.exposure}</Chip>
-                    </div><div class="rs">{s.names && s.names !== '-' ? s.names : 'no public name'} → {s.target}</div></div>
-                  {:else}
-                    <div class="kd pad">{svc.loaded ? 'No service describes this instance, so it has no route.' : 'Loading…'}</div>
-                  {/each}
-                </div>
-                {#if myRecipes.length}<div class="rs">Set up by the recipe {#each myRecipes as r, i}{i ? ', ' : ''}<a {...link('/instances/apps', 'recipes', r.name)}>{r.name}</a>{/each}.</div>{/if}
-              </div>
-            {/if}
-          {/snippet}
+        <QuickLook title={sel.name} chip={kindOf(sel)} state={failure(sel) ? 'bad' : doing(sel) ? 'info' : dot(sel.state)} stateLabel={failure(sel) ? 'failed' : doing(sel) ? `${doing(sel).toLowerCase()}…` : word(sel.state)} rowKey={sel.name} href={instancePath(sel.name)} onclose={close}>
+          <Kv items={[
+            { k: 'Address', v: dash(sel.address) }, { k: 'RAM / CPU', v: `${spaced(sel.ram) || '–'} / ${sel.cpu || '–'}` },
+            { k: 'Starts at boot', v: boots(sel) ? 'yes' : 'no' }, { k: 'Last snapshot', v: dash(sel.lastSnap) },
+            { k: 'Backup', v: m.backupKnown && sel.name in m.backupOf ? (m.backupOf[sel.name] ? 'in the nightly backup' : 'not in the backup') : '' },
+            { k: 'Locked by', v: sel.owner },
+          ]} />
+          {#if failure(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} /></div>{/if}
           {#snippet actions()}
-            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={busyOf(sel, ['stop'], ['stop', '--autostart', 'off'], ['start'])} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
-            <Button need="app-manager" size="sm" icon="arrow-clockwise" busy={rowstate.pending('ct', [sel.name, 'restart'])} busyLabel="Restarting…" tooltip={'Stop and start this instance again'} onclick={(e) => plan(e, sel, 'restart')}>Restart</Button>
-            <Button need="app-manager" size="sm" icon="arrows-clockwise" busy={rowstate.pending('ct', [sel.name, 'update'])} busyLabel="Updating…" tooltip={'Snapshot the instance, then update the software inside'} onclick={() => openPlan('ct', [sel.name, 'update'], `Update ${sel.name}`)}>Update</Button>
-            <Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'A shell inside the instance' : 'The instance is not running'} onclick={() => openCreate(Terminal, { target: sel.name, title: sel.name })}><i class="ph ph-terminal-window"></i>Terminal</Button>
-            {#if isVm(sel)}<Button need="admin" size="sm" disabled={!ui.features.terminal || !isRunning(sel)} tooltip={!ui.features.terminal ? 'Switch on webTerminal in machine.toml' : isRunning(sel) ? 'The screen of the virtual machine' : 'The instance is not running'} onclick={() => openCreate(VmConsole, { target: sel.name, title: sel.name })}><i class="ph ph-monitor"></i>Console</Button>{/if}
-            <Button need="app-manager" size="sm" tooltip={'Change memory, CPU, storage and other settings'} onclick={() => openCreate(InstanceSettings, { ct: sel })}><i class="ph ph-sliders"></i>Settings</Button>
-            {#if !sel.owner}<Button need="app-manager" variant="danger" size="sm" icon="trash" busy={rowstate.pending('ct', [sel.name, 'delete'])} busyLabel="Deleting…" tooltip={'Delete the instance (the plan asks for its name)'} onclick={() => openPlan('ct', [sel.name, 'delete'], `Delete ${sel.name}`)}>Delete</Button>{/if}
+            <Button need="app-manager" size="sm" icon={isRunning(sel) ? 'stop' : 'play'} busy={m.busyOf(sel, ['stop'], ['stop', '--autostart', 'off'], ['start'])} busyLabel={isRunning(sel) ? 'Stopping…' : 'Starting…'} tooltip={isRunning(sel) ? 'Stop this instance' : 'Start this instance'} onclick={(e) => plan(e, sel, isRunning(sel) ? 'stop' : 'start')}>{isRunning(sel) ? 'Stop' : 'Start'}</Button>
           {/snippet}
-        </Drawer>
+        </QuickLook>
+      {:else if m.ctl.loaded}
+        <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No instance called “{selName}” exists. It may have been deleted or renamed.</Muted></QuickLook>
       {/if}
-    {/snippet}
-  </Split>
+    {/if}
+  </div>
 </PageState>
-
-<style>
-  .nm { display: flex; align-items: center; gap: 7px; font-weight: 500; }
-  .ic { color: var(--fg-3); }
-  .kd { color: var(--fg-3); }
-  .addr { font-size: 12px; color: var(--fg-2); }
-  .acts { display: flex; justify-content: flex-end; gap: 2px; }
-  :global(.btn.instances-ib) { width: 28px; min-height: 28px; color: var(--fg-2); }
-  :global(.btn.instances-ib.bad) { color: var(--bad); }
-  /* a phone: Stop/Start and Restart stay in the row, Snapshot is in the drawer (Snapshots tab) */
-  @media (max-width: 860px) { :global(.btn.instances-nophone) { display: none; } }
-  .bk { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
-  .sec { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; align-items: flex-start; }
-  .sh { display: flex; flex-direction: column; gap: 2px; }
-  .sh .kd { font-size: 12px; }
-  .rows { align-self: stretch; border: 1px solid var(--line); }
-  .r { padding: 8px 10px; border-bottom: 1px solid var(--line); }
-  .r:last-child { border-bottom: 0; }
-  .rt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-  .rs { font-size: 12px; color: var(--fg-3); overflow-wrap: anywhere; margin-top: 2px; }
-  .rs.mono, .mono { font-size: 12px; }
-  .pad { padding: 10px; font-size: 12.5px; }
-  .subrow { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; }
-  .subapp { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
-  .subapp .indent { display: inline-flex; align-items: center; gap: 6px; margin-left: 16px; min-width: 140px; }
-  .subapp .ports { color: var(--fg-3); min-width: 80px; }
-  :global(.btn.instances-chev) { width: 24px; min-height: 24px; color: var(--fg-3); }
-</style>

@@ -1,0 +1,6 @@
+date  = "2026-11-22"
+type  = "change"
+title = "An instance has its own page, and the Instances list opens a quick look"
+body  = """
+A click on an instance in Instances opens a quick look over the list (the address keeps ?sel=, so Back, reload and a pasted link work); the instance's name opens its page at /instances/ct/<name>. The page has the tabs Overview (facts, backup, linked shares, route), Config (settings, storage bindings, snapshots), Network (address and route) and Console (terminal, the screen of a VM, the journal). Start or Stop and one more action are in the header, the rest are under More, and Delete is in the danger section at the end. A running or failed job shows on the row and on the page header. Not tested on hardware yet.
+"""
