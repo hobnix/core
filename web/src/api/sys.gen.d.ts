@@ -1735,6 +1735,18 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "netmap": {
+    /** the network map graph as data: id, kind, parent, label, state, rx_bytes, tx_bytes (wan, gateway, host, bridges, instances, services; - when unknown) */
+    words: ["netmap"];
+    path: "/netmap";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([id: Field, kind: "wan" | "gateway" | "host" | "bridge" | "instance" | "service", parent: Field, label: Field, state: Field, rx_bytes: Field, tx_bytes: Field])[];
+  };
   "netmap.counters": {
     /** byte counters of the network map nodes (wan, host, bridges, instances), one sample: rows id, rx_bytes, tx_bytes */
     words: ["netmap", "counters"];
@@ -1746,6 +1758,18 @@ export interface SysOperations {
     stdin: "none";
     exit: number;
     lines: string;
+  };
+  "netmap.topology": {
+    /** the network map graph without counters (- in both columns), for the live-state topic: same rows as sys netmap */
+    words: ["netmap", "topology"];
+    path: "/netmap/topology";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([id: Field, kind: "wan" | "gateway" | "host" | "bridge" | "instance" | "service", parent: Field, label: Field, state: Field, rx_bytes: Field, tx_bytes: Field])[];
   };
   "node.keyline.by_name": {
     /** the key of a node as data: key (ok|locked|missing), user, file (where the other server's owner puts the line) and line (the public half with the forced command; never the private key) */

@@ -38,6 +38,11 @@ address. The map shows what the Instances and Services pages already show, no mo
    `sys.gen.d.ts`): tab-separated rows `id  kind  parent  label  state  rx_bytes  tx_bytes`, an empty field is `-`, a source that cannot be
    read leaves the counters `-`, never an old value. Topology changes (an instance starts or stops) go through the live-state topic
    `netmap` and the event stream, as everything else.
+   **Built (#872):** `hs sys netmap` (`scripts/netmap.sh`). Ids as in the counters stream: `wan`, `gateway`, `host`, `bridge:<name>`,
+   `instance:<name>`, plus `service:<name>`. Parents: wan, gateway (next hop, if any), host, bridge (under host), instance (under the bridge of its
+   first NIC, else the default bridge, else host), service (under its instance, else host). A service row carries no address. The live topic
+   `netmap` reads `hs sys netmap topology` (the same rows, counters `-`), so that only a change of the topology is a change of the document;
+   `/api/sys/netmap/topology` serves it, `/api/sys/netmap` has the current totals.
 2. **Counters stream.** Counters change all the time, so an invalidation event per change would flood the stream.
    **Decision (#873, 2026-11-22):** a stream of its own, `GET /api/netmap/stream` (server-sent events, session needed, role of the read
    `sys netmap counters`), not the `/api/events` stream and not a live topic: a topic would be sampled by the collector all the time and
@@ -93,4 +98,4 @@ behaviour.
 
 Nothing in this plan was run on a server. Counters stream (#873), to run on the server: open the stream with a signed-in browser or `curl -N`
 and watch rows arrive every 2 s; start an instance with traffic and see its totals rise; close the page and see (`ps`) that no
-`hs sys netmap counters` runs; time one `hs sys netmap counters` with 20 or more instances. Every issue carries its "Hardware test" steps when its pull request is opened.
+`hs sys netmap counters` runs; run `hs sys netmap` on the server and check the rows against `incus list` and `hs services list`; stop an instance and see the `netmap` topic change; time one `hs sys netmap counters` with 20 or more instances. Every issue carries its "Hardware test" steps when its pull request is opened.
