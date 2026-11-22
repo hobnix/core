@@ -1,0 +1,9 @@
+file	buttons
+forms/docker/BindShare.svelte	4
+pages/Backup.svelte	5
+pages/Docker.svelte	8
+pages/Instances.svelte	7
+pages/Pools.svelte	5
+pages/Services.svelte	4
+pages/Vault.svelte	4
+pages/docker/AppEditPage.svelte	4
