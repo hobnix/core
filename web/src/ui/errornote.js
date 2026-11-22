@@ -31,3 +31,8 @@ export function resolveError(e = {}) {
     known: !!k,
   };
 }
+
+// The "reload" offer of a plan that changed meanwhile (ADR 0028 point 6: act on the code, not the text). The code name is not in a catalogue yet
+// (scripts/lib/error-codes.tsv comes with the scripts half of #488, 0.12); until a script prints it, the old English match stays as the fallback.
+export const RELOAD_CODES = ['plan.changed'];
+export const offersReload = (code, text = '') => RELOAD_CODES.includes(clean(code)) || String(text ?? '').includes('changed meanwhile');

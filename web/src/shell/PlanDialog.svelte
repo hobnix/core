@@ -14,6 +14,8 @@
   import Checkbox from '../ui/Checkbox.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Dialog from '../ui/Dialog.svelte';
+  import ErrorNote from '../ui/ErrorNote.svelte';
+  import { offersReload } from '../ui/errornote.js';
 
   let { dialog } = $props();            // { area, args, title, option?: { label, args } } (option = a checkbox that adds its args and asks the plan again)
 
@@ -112,7 +114,8 @@
         <Skeleton lines={3} />
         <div class="lede">Asking the server what would happen…</div>
       {:else if !allowed}
-        <div class="refused"><i class="ph ph-prohibit"></i>{p.reason || 'The server refused this.'}</div>
+        {#if p.code}<ErrorNote code={p.code} what={p.reason || 'The server refused this.'} />
+        {:else}<div class="refused"><i class="ph ph-prohibit"></i>{p.reason || 'The server refused this.'}</div>{/if}
         {#each p.fixes ?? [] as f}<div class="lede">To make it possible, run <code class="cmd">{f}</code></div>{/each}
         <div class="lede">Nothing has run.</div>
       {:else}
@@ -140,7 +143,7 @@
     <div class="dfoot">
       <span class="note">{allowed ? 'Nothing has run yet. The result appears under Jobs.' : ''}</span>
       <Button onclick={close}>{allowed ? 'Cancel' : 'Close'}</Button>
-      {#if !allowed && (p?.reason?.includes('changed meanwhile') || startError.includes('changed meanwhile')) && dialog.onReload}
+      {#if !allowed && (offersReload(p?.code, p?.reason) || offersReload('', startError)) && dialog.onReload}
         <Button variant="primary" onclick={() => { const cb = dialog.onReload; close(); cb(); }}>Reload</Button>
       {/if}
       {#if allowed}
