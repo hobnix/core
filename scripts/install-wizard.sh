@@ -64,7 +64,7 @@ py=${HS_PYTHON:-python3}
 # the repository to copy: the one this script belongs to (on the ISO: /etc/hs-installer)
 [ -n "$repo" ] || repo=$(cd "$here/.." && pwd)
 # what the ISO was built from: describe=<git describe> and commit=<full hash>, "-" when unknown (a stick built from a dirty tree)
-origin=${HS_INSTALL_ORIGIN:-https://github.com/hobnix/server.git}
+origin=${HS_INSTALL_ORIGIN:-https://github.com/hobnix/core.git}
 iso_describe=-; iso_commit=-
 if [ -r "${HS_INSTALLER_VERSION_FILE:-/etc/hs-installer-version}" ]; then
   iso_describe=$(sed -n 's/^describe=//p' "${HS_INSTALLER_VERSION_FILE:-/etc/hs-installer-version}" | head -n1)

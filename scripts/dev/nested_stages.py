@@ -352,7 +352,7 @@ def upgrade_steps(params):
     Not tested on hardware yet: the command lines are written from the scripts, never run in a VM."""
     user, pw = "adminuser", params["password"]
     cand = params.get("candidate") or os.environ.get("HS_NESTED_CANDIDATE") or "<candidate-branch>"   # the branch the server updates to
-    repo = params.get("candidate_repo") or os.environ.get("HS_NESTED_CANDIDATE_REPO") or "https://github.com/hobnix/server.git"
+    repo = params.get("candidate_repo") or os.environ.get("HS_NESTED_CANDIDATE_REPO") or "https://github.com/hobnix/core.git"
     app, share = params.get("app") or os.environ.get("HS_NESTED_UPGRADE_APP", ""), "upgrade-test"
     db = "/var/lib/hs/state.db"
     ver = "python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute(\"PRAGMA user_version\").fetchone()[0])' " + db

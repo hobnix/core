@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Releases of the core (hobnix/server): milestone branch sync, signed tag, checks. Guide: docs/RELEASE-PROCESS.md.
+# Releases of the core (hobnix/core): milestone branch sync, signed tag, checks. Guide: docs/RELEASE-PROCESS.md.
 # Not an `hs` command. Works from any checkout or worktree of the repository and never switches its branch (it uses origin/* refs and,
 # where a merge is needed, a temporary worktree). The package repositories keep scripts/dev/release.sh.
 #
@@ -94,7 +94,7 @@ if [ "$cmd" = follow-check ]; then
   exit 0
 fi
 
-git rev-parse --show-toplevel >/dev/null 2>&1 || fail "Run this inside a checkout of hobnix/server."
+git rev-parse --show-toplevel >/dev/null 2>&1 || fail "Run this inside a checkout of hobnix/core."
 cd "$(git rev-parse --show-toplevel)" || exit 1
 git remote get-url "$remote" >/dev/null 2>&1 || fail "There is no remote $remote."
 
@@ -219,7 +219,7 @@ tag)
     exit 1
   fi
   ok "$tag pushed"
-  next_step "gh run watch --repo ${slug:-hobnix/server}; then release-core.sh verify $tag"
+  next_step "gh run watch --repo ${slug:-hobnix/core}; then release-core.sh verify $tag"
   ;;
 verify)
   tag=$arg

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Dev tool (not an `hs` command): read and move issues of the GitHub project board (hobnix/server, project 1).
+# Dev tool (not an `hs` command): read and move issues of the GitHub project board (hobnix/core, project 1).
 #   board.sh open [N]      up to N (default 4) open issues of the current milestone: "#<n> [<status>] <title>"
 #   board.sh show <n>      title, labels and body of an issue
 #   board.sh move <n> <backlog|ready|in-progress|in-review|blocked|testing|done>   set the board Status
 # `open` is quiet (exit 0, no output) when gh is missing, not logged in, offline or slower than 5 s: it runs in the session hook.
-REPO=hobnix/server
-PROJECT_API=orgs/hobnix/projectsV2/1   # REST path of the project board (hobnix/server)
+REPO=hobnix/core
+PROJECT_API=orgs/hobnix/projectsV2/1   # REST path of the project board (hobnix/core)
 STATUS_FIELD=437753319   # numeric id of the Status field (REST)
 
 cmd_open() {

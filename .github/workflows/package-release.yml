@@ -24,7 +24,7 @@ on:
         type: string
         default: ""
       core_ref:
-        description: "ref of hobnix/server that holds release.sh and the trusted keys"
+        description: "ref of hobnix/core that holds release.sh and the trusted keys"
         type: string
         default: develop
     secrets:
@@ -47,7 +47,7 @@ jobs:
           path: repo
       - uses: actions/checkout@v5
         with:
-          repository: hobnix/server
+          repository: hobnix/core
           ref: ${{ inputs.core_ref }}
           path: core
       - name: Check the release (nothing is signed or pushed)
@@ -77,7 +77,7 @@ jobs:
           path: repo
       - uses: actions/checkout@v5
         with:
-          repository: hobnix/server
+          repository: hobnix/core
           ref: ${{ inputs.core_ref }}
           path: core
       - name: Sign, verify against the trusted key, push
