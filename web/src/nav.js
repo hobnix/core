@@ -109,7 +109,8 @@ export function visible(items, caps) {
 // proxyserver pages (Mail entry, Ports, Outside watcher, Certificate, Tailscale, Settings). `caps` null/undefined = the node did not say: a vps node
 // shows all its pages (an old document), any other node only Summary and Health.
 export const mainTree = tree[0].children;
-const HEALTH = { label: 'Health', icon: 'heartbeat', path: P.nodeHealth };
+// the health page of a remote node is the "System" entry of the new group names (D8 (a)); its address stays /node/<name>/health
+const HEALTH = { label: 'System', icon: 'heartbeat', path: P.nodeHealth };
 const edgeItems = tree[1].children;
 // page -> the edge capability that brings it (a vps node has no list: every page)
 const EDGE_NEEDS = { [P.mail]: 'edge-mail', [P.certificate]: 'edge-mail', [P.ports]: 'edge-ports', [P.watcher]: 'edge-watcher' };
