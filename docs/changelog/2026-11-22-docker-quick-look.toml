@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Docker: the quick look no longer narrows the list"
+body  = """On Instances > Docker, selecting an app opens a quick look over the list instead of a side panel next to it. The list keeps its width and columns, and the address carries the app (?sel=), so a reload, a pasted link and Back/Forward work."""
