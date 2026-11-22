@@ -181,6 +181,7 @@ input[type='checkbox']:disabled, input[type='radio']:where(:not(.radio input, .s
      the sticky header needs the page as its scroll area, so on a phone it gives that up */
   .tablescroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tablescroll > .table { min-width: min-content; }
+  .table .btn-icon { width: 44px; min-height: 44px; }   /* a row action is a 44 px tap area on a phone */
   .card { min-width: 0; max-width: 100%; }
 }
 .hr { height: 1px; border: 0; margin: var(--space-4) 0; background: var(--line); }

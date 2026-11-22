@@ -70,11 +70,10 @@ eq('Format sits in the danger section', /danger = \$derived\(loose/.test(disk) &
 eq('the disk page passes the roles through the frame (need=admin)', /need="admin"/.test(disk.slice(disk.indexOf('<ObjectPage'))), true);
 eq('an unknown disk is a sentence and a way back', /notFound=\{/.test(disk) && /backTo=\{P\.disks\}/.test(disk), true);
 
-// ── the list: the quick look replaces the Split and the drawer; nothing else of the page changed its reads
+// ── the list: no quick look (owner decision 2026-11-22); a row has an "Open disk" button at its end
 const list = src('pages/Disks.svelte');
-eq('Disks uses QuickLook and the selection helper, not Split or Drawer', [/<QuickLook/.test(list), /selection\.svelte\.js/.test(list), /<Split|<Drawer|takeSelection/.test(list)], [true, true, false]);
-eq('the quick look is in a relative container next to the list', /position:relative/.test(list), true);
-eq('the quick look never has a destructive visible action of a disk that is connected', /variant="danger"/.test(list.slice(list.indexOf('{#if selName}', list.indexOf('<Table id="disks"')))), false);
+eq('Disks has no QuickLook, selection helper, Split or Drawer', [/<QuickLook|QuickLook\.svelte/.test(list), /selection\.svelte\.js/.test(list), /<Split|<Drawer|takeSelection/.test(list)], [false, false, false]);
+eq('a row ends with an "Open disk" icon button that goes to the disk page', [/label="Open disk"/.test(list), /icon="arrow-square-out"/.test(list), /go\(diskPath\(d\.name\)\)/.test(list), /<Table id="disks"[^>]*onrow/.test(list)], [true, true, true, false]);
 eq('the list does not read the SMART history or the self-tests (the page does)', [/detail: true/.test(disk), /detail/.test(list)], [true, false]);
 eq('QuickLook restores focus and listens for Escape and presses', /returnTarget/.test(src('ui/QuickLook.svelte')) && /closesOnKey/.test(src('ui/QuickLook.svelte')) && /closesOnPress/.test(src('ui/QuickLook.svelte')), true);
 eq('QuickLook is a non-modal dialog (role dialog, no aria-modal, no scroll lock)', [/role="dialog"/.test(src('ui/QuickLook.svelte')), /aria-modal/.test(src('ui/QuickLook.svelte')), /overflow\s*:\s*hidden/.test(src('ui/QuickLook.svelte'))], [true, false, false]);

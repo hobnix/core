@@ -1,27 +1,24 @@
 <script>
   import { P, diskPath, withQuery } from '../paths.js';
-  // Storage > Disks: every disk of this server in one list (/storage/disks, filter ?pool=<pool name>|none|missing). A row opens the quick look over the list
-  // (?sel=<name>, so a reload, a pasted link and Back/Forward work: selection.svelte.js); "Open page" goes to the page of the disk (pages/disks/Disk.svelte), where the
-  // SMART history, the self-tests and the actions of a single disk are. Changing pool membership (replace, remove, close, convert) stays on Pools; a free disk is added from here.
+  // Storage > Disks: every disk of this server in one list (/storage/disks, filter ?pool=<pool name>|none|missing). No quick look here (owner decision 2026-11-22: the table
+  // already shows what it would show): the name and the "Open disk" button at the end of a row go to the page of the disk (pages/disks/Disk.svelte), where the
+  // SMART history, the self-tests and the actions of a single disk are. A missing disk has a "Forget" button. Changing pool membership (replace, remove, close, convert) stays on Pools; a free disk is added from here.
   import UsageBar from '../shell/UsageBar.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { StatusDot, Chip, Kv, Banner, Card, Muted, Segmented } from '../ui/index.js';
-  import QuickLook from '../ui/QuickLook.svelte';
+  import { StatusDot, Chip, Banner, Card, Muted, Segmented } from '../ui/index.js';
   import { onMount } from 'svelte';
   import { pools, loadPools } from '../pools.svelte.js';
-  import { selected, select, close } from '../selection.svelte.js';
   import { route, go, url } from '../route.svelte.js';
   import { sleepText, sleepDot, powerText } from '../disk-sleep.js';
   import { openCreate } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
-  import ErrorNote from '../ui/ErrorNote.svelte';
   import Button from '../ui/Button.svelte';
   import AddDisks from '../forms/storage/AddDisks.svelte';
   import ForgetDisk from '../forms/storage/ForgetDisk.svelte';
   import OtherDisk from '../forms/storage/OtherDisk.svelte';
-  import { diskPool, sizeTxt, hoursTxt, dateOf } from './storage/pool.js';
+  import { diskPool, hoursTxt, dateOf } from './storage/pool.js';
   import { diskModel } from './disks/model.svelte.js';
 
   let { deck } = $props();
@@ -33,19 +30,14 @@
   $effect(() => { const b = anyPoolJob; if (wasBusy && !b) loadPools(true); wasBusy = b; });
   const TABS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name })), { id: 'none', label: 'Free' }, { id: 'missing', label: 'Missing' }]);
   const filter = $derived(TABS.some((t) => t.id === route.query.pool) ? route.query.pool : 'all');
-  const setFilter = (id) => go(withQuery(P.disks, id === 'all' ? {} : { pool: id }));   // a new address: no ?sel= goes with it
-  const selName = $derived(selected());
+  const setFilter = (id) => go(withQuery(P.disks, id === 'all' ? {} : { pool: id }));  
 
   const locked = $derived(!!deck?.data?.locked);
-  const m = diskModel({ filter: () => filter, sel: () => selName });
-  const sel = $derived(m.disk);
-  const selMissing = $derived(m.gone);
+  const m = diskModel({ filter: () => filter });
   const lockTip = (t) => (locked ? 'The storage is locked' : t);
   const fsText = (d) => (d.fs && d.fs !== '-' ? d.fs : '–');
   const addToPool = (pool) => openCreate(AddDisks, { pool, variant: 'empty', snap: pool === m.snapName ? m.snapPool : false });
   const poolForNew = $derived(pools.rows.some((p) => p.name === filter) ? filter : m.snapName || (pools.rows[0]?.name ?? ''));
-  const open = (d) => select(d.name);
-  const openMissing = (x) => select(x.serial);
   const link = (e, name) => { e.stopPropagation(); if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.button)) { e.preventDefault(); go(diskPath(name)); } };
 
   const columns = [
@@ -54,8 +46,9 @@
     { key: 'smart', label: 'SMART', value: (d) => m.verdictOf(d) }, { key: 'temp', label: 'Temp', sort: 'num', value: (d) => Number(d.temp), optional: true },
     { key: 'hours', label: 'Power-on', sort: 'num', value: (d) => Number(d.hours), optional: true },
     { key: 'sleep', label: 'Sleep', value: (d) => sleepText(d.sleep), optional: true },
+    { key: 'act', label: '', sort: false, align: 'right', width: '1%' },
   ];
-  const missCols = [{ key: 'model', label: 'Disk' }, { key: 'dev', label: 'Was' }, { key: 'serial', label: 'Serial' }, { key: 'seen', label: 'Last seen', sort: 'num', value: (x) => x.lastSeen }];
+  const missCols = [{ key: 'model', label: 'Disk' }, { key: 'dev', label: 'Was' }, { key: 'serial', label: 'Serial' }, { key: 'seen', label: 'Last seen', sort: 'num', value: (x) => x.lastSeen }, { key: 'act', label: '', sort: false, align: 'right', width: '1%' }];
 </script>
 
 <PageHeader title="Disks" crumb="Storage" sub="Every disk of this server: where it belongs, how healthy it is, what it has been through.">
@@ -71,34 +64,22 @@
 <PageState loading={!m.mon.loaded} hasData={m.mon.data != null} error={m.mon.error?.message ?? ''} empty={m.mon.loaded && !m.all.length && !m.missing.length} emptyIcon="hard-drive" emptyTitle="No disks found"
            emptyText="The disks could not be listed. Is the storage locked or the collector not running?">
   {#if filter === 'missing'}
-    <div style="position:relative">
+    <div>
       <Card>
         {#if m.missing.length}
-          <Table id="disks-missing" columns={missCols} rows={m.missing} key="serial" compact selected={selMissing?.serial} onrow={openMissing} empty="No disk is missing.">
+          <Table id="disks-missing" columns={missCols} rows={m.missing} key="serial" compact empty="No disk is missing.">
             {#snippet cell(x, col)}
               {#if col.key === 'model'}<StatusDot state="warn" label={x.model || x.serial} />
               {:else if col.key === 'dev'}<code>{x.dev}</code>
               {:else if col.key === 'serial'}<code>{x.serial}</code>
-              {:else}<Muted>{x.lastSeen ? dateOf(x.lastSeen) : '–'}</Muted>{/if}
+              {:else if col.key === 'act'}<Button need="admin" variant="ghost" size="sm" class="btn-icon" icon="trash-simple" label="Forget {x.model || x.serial}" disabled={locked} tooltip={lockTip('Take this disk off the list for good')} onclick={() => openCreate(ForgetDisk, { serial: x.serial, model: x.model, dev: x.dev })} />
+              {:else if col.key === 'seen'}<Muted>{x.lastSeen ? dateOf(x.lastSeen) : '–'}</Muted>{/if}
             {/snippet}
           </Table>
         {:else}
           <Muted as="p">Nothing is missing: every disk the server has seen is still connected.</Muted>
         {/if}
       </Card>
-      {#if selName}
-        {#if selMissing}
-          <QuickLook title={selMissing.model || selMissing.serial} chip="missing" state="warn" stateLabel="not connected" rowKey={selMissing.serial} onclose={close}>
-            <Kv items={[{ k: 'Serial', v: selMissing.serial }, { k: 'Was', v: selMissing.dev }, { k: 'Size', v: sizeTxt(selMissing.size) }, { k: 'First seen', v: dateOf(selMissing.first) }, { k: 'Last seen', v: dateOf(selMissing.lastSeen) }, { k: 'Role', v: selMissing.role }]} />
-            <Muted as="p" style="padding:12px 16px;margin:0">A missing disk can only be forgotten. If it is a pool member, replace it from its pool first.</Muted>
-            {#snippet actions()}
-              <Button need="admin" variant="danger" disabled={locked} tooltip={'Take this disk off the list for good'} onclick={() => openCreate(ForgetDisk, { serial: selMissing.serial, model: selMissing.model, dev: selMissing.dev })}><i class="ph ph-trash-simple"></i>Forget…</Button>
-            {/snippet}
-          </QuickLook>
-        {:else if m.mon.loaded}
-          <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No missing disk has the serial “{selName}”.</Muted></QuickLook>
-        {/if}
-      {/if}
     </div>
   {:else}
     {#if deck?.data?.locked}<Banner tone="warn">Storage is locked: pool disks may be missing from this list until it is unlocked.</Banner>{/if}
@@ -107,9 +88,9 @@
         {#snippet action()}<Button size="sm" tooltip={'Show the disks that are missing'} onclick={() => setFilter('missing')}>Show</Button>{/snippet}
       </Banner>
     {/if}
-    <div style="position:relative">
+    <div>
       <Card>
-        <div style="overflow-x:auto"><Table id="disks" {columns} rows={m.visible} key="name" compact selected={sel?.name} onrow={open}
+        <div style="overflow-x:auto"><Table id="disks" {columns} rows={m.visible} key="name" compact
                empty={filter === 'none' ? 'Every disk belongs to a pool, the system or the backup.' : 'No disks here.'}>
           {#snippet cell(d, col)}
             {#if col.key === 'name'}<a href={url(diskPath(d.name))} onclick={(e) => link(e, d.name)}><code>{d.name}</code></a>{#if m.doingOf(d)} <Chip>{m.doingOf(d).toLowerCase()}…</Chip>{/if}
@@ -121,31 +102,11 @@
             {:else if col.key === 'smart'}<StatusDot state={m.stateOf(d)} label={m.wordOf(d)} />
             {:else if col.key === 'temp'}<span style="white-space:nowrap">{d.temp && d.temp !== '-' ? `${d.temp} °C` : '–'}</span>
             {:else if col.key === 'sleep'}{#if d.sleep}<StatusDot state={sleepDot(d.sleep)} label={sleepText(d.sleep)} />{:else}<Muted>–</Muted>{/if}
+            {:else if col.key === 'act'}<Button variant="ghost" size="sm" class="btn-icon" icon="arrow-square-out" label="Open disk" tooltip={'Open disk'} onclick={() => go(diskPath(d.name))} />
             {:else}<Muted style="white-space:nowrap">{hoursTxt(d.hours)}</Muted>{/if}
           {/snippet}
         </Table></div>
       </Card>
-      {#if selName}
-        {#if sel}
-          <QuickLook title={sel.name} chip={m.poolText(sel)} state={m.stateOf(sel)} stateLabel={m.wordOf(sel)} rowKey={sel.name} href={diskPath(sel.name)} onclose={close}>
-            <Kv items={[
-              { k: 'Model', v: m.modelOf(sel) }, { k: 'Serial', v: m.serialOf(sel) }, { k: 'Size', v: sizeTxt(sel.size) }, { k: 'Format', v: fsText(sel) },
-              { k: 'Pool', v: m.poolText(sel) }, { k: 'Role', v: diskPool(sel.role) ? m.roleText(sel) : sel.role },
-              { k: 'Temperature', v: sel.temp && sel.temp !== '-' ? `${sel.temp} °C` : '' }, { k: 'Power-on', v: hoursTxt(sel.hours) },
-            ]} />
-            {#if m.doingOf(sel)}<div style="padding:12px 16px;margin:0"><Banner tone="info">{m.doingOf(sel)}… a job is running on this disk; the page follows it.</Banner></div>
-            {:else if m.failureOfDisk(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={m.failureOfDisk(sel).error} ondismiss={() => rowstate.dismiss(m.failureOfDisk(sel).id)} /></div>{/if}
-            {#if m.verdicts[sel.name]?.reason && m.verdicts[sel.name].reason !== '-'}<p style="padding:12px 16px;margin:0">{m.verdicts[sel.name].reason}</p>{/if}
-            {#snippet actions()}
-              {#if m.isLoose(sel)}
-                <Button need="admin" variant="primary" size="sm" disabled={locked} tooltip={lockTip('Pick this disk and see the plan')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add to a pool…</Button>
-              {/if}
-            {/snippet}
-          </QuickLook>
-        {:else if m.mon.loaded}
-          <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No disk called “{selName}” is connected. It may have been removed or renamed.</Muted></QuickLook>
-        {/if}
-      {/if}
     </div>
   {/if}
 </PageState>
