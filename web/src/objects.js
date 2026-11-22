@@ -7,6 +7,7 @@ import { P } from './paths.js';
 export const objects = {
   pool: { label: 'Pool', list: P.pools, base: `${P.pools}/`, tabs: [] },
   disk: { label: 'Disk', list: P.disks, base: `${P.disks}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'smart', label: 'SMART' }, { id: 'tests', label: 'Tests' }, { id: 'files', label: 'Files' }] },
+  user: { label: 'User', list: P.users, base: `${P.users}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'groups', label: 'Groups' }, { id: 'access', label: 'Access' }] },
   share: { label: 'Share', list: P.shares, base: `${P.shares}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'access', label: 'Access' }, { id: 'snapshots', label: 'Snapshots' }] },
 };
 
