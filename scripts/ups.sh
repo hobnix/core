@@ -135,7 +135,7 @@ case "$cmd" in
       REPLBATT) notify --category problem "$host: UPS battery" "The UPS reports that its battery should be replaced." default ;;
       *) ;;
     esac
-    live_refresh ups deck status
+    live_refresh event:ups.changed
     ;;
   deadline)
     configured || exit 0

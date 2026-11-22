@@ -314,6 +314,13 @@ check_eq "bad count no output" "" "$out"
 rc=0; out=$($D --logs arr 0) || rc=$?
 check_eq "zero count exit 1" 1 "$rc"
 check_eq "zero count no output" "" "$out"
+rc=0; out=$($D --follow-logs arr 30) || rc=$?
+check_eq "follow exit 0" 0 "$rc"
+grep -qF -- "--tail 30" "$LOG" && grep -qF -- " -f" "$LOG" && pass "follow asks for the tail and -f" || fail "follow: $(cat "$LOG")"
+rc=0; out=$($D --follow-logs unknown 30) || rc=$?
+check_eq "follow of an unknown app exit 1" 1 "$rc"
+rc=0; out=$($D --follow-logs arr 99999) || rc=$?
+check_eq "follow with a bad count exit 1" 1 "$rc"
 reset
 rc=0; out=$($D --logs arr) || rc=$?
 check_eq "off: logs exit 1" 1 "$rc"; check_eq "off: logs no output" "" "$out"

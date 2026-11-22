@@ -92,6 +92,7 @@ anticipated.
 9. Instant push is optional and later: if 1 s feels slow on real hardware, the collector pokes the web server over a unix socket after a
    write. The one-second watcher stays as the fallback, so the socket is an accelerator, never a requirement. It is not built unless the
    check on a real server asks for it.
+   *Superseded by D11 of docs/PLAN-live-interface.md (2026-11-21, step 12): the push socket `/run/hs/live.sock` is built now, not only on request; the watcher stays the fallback.*
 
 ## Consequences
 

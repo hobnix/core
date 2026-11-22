@@ -105,7 +105,7 @@ enums = { "offer.state" = ["none", "unknown", "current", "kept", "update"], "sta
 ["live inspect"]
 role = "viewer"
 kind = "json"
-note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
+note = "{now, topics: [{topic, words[], interval, lock (run|skip), origin (core|extension), cap (null = always), cap_on, groups[], age (null = never read), gen, rc, err, ts_err, bytes}]}. demand (always|idle:<seconds>, D14; for idle also idle seconds and lease = the time in seconds since 1970 a lease of the web server runs out, only while a page wants the topic), Optional per topic, only when known: needs[] (#153), status, ttl, source (#322), and once a sample exists delay_ms_last, delay_ms_worst, delay_ms_n (trigger to new generation, milliseconds), delay_web_last, delay_web_worst, delay_web_n (seen in a page)."
 
 ["live raw <topic>"]
 role = "viewer"
@@ -373,6 +373,9 @@ role = "admin"
 ["logs show"]
 role = "admin"
 
+["logs follow"]
+role = "admin"
+
 ["jobs stop <unit>"]
 role = "admin"
 
@@ -431,6 +434,9 @@ role = "admin"
 role = "viewer"
 
 ["state events"]
+role = "viewer"
+
+["state events-follow"]
 role = "viewer"
 
 ["state smart <serial>"]
@@ -718,6 +724,9 @@ role = "app-manager"
 ["ct logs <ct>"]
 role = "app-manager"
 
+["ct follow <ct>"]
+role = "app-manager"
+
 ["monitor disks"]
 role = "viewer"
 
@@ -740,6 +749,23 @@ role = "admin"
 role = "admin"
 
 ["deck"]
+role = "viewer"
+
+["netmap"]
+role = "viewer"
+kind = "tsv"
+columns = ["id", "kind", "parent", "label", "state", "rx_bytes", "tx_bytes"]
+enums = { kind = ["wan", "gateway", "host", "bridge", "instance", "service"] }
+note = "The graph of the network map, one row per node. Ids: wan, gateway, host, bridge:<name>, instance:<name>, service:<name> (the same ids as the netmap counters stream). parent is - for the root. Counters are totals since the boot, - when unknown."
+
+["netmap topology"]
+role = "viewer"
+kind = "tsv"
+columns = ["id", "kind", "parent", "label", "state", "rx_bytes", "tx_bytes"]
+enums = { kind = ["wan", "gateway", "host", "bridge", "instance", "service"] }
+note = "The same rows as netmap, with - in both counter columns: the live-state topic netmap reads this, so only a change of the topology changes the document."
+
+["netmap counters"]
 role = "viewer"
 
 ["status"]
@@ -966,6 +992,9 @@ role = "viewer"
 role = "viewer"
 
 ["docker logs <app>"]
+role = "app-manager"
+
+["docker follow <app>"]
 role = "app-manager"
 
 ["docker app <app>"]

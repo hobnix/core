@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "feature"
+title = "Network map: a page that draws how the server reaches the network, with live traffic"
+docs  = "web-interface#see-the-network-map"

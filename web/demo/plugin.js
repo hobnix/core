@@ -1,7 +1,7 @@
 // Vite plugin of demo mode (`npm run demo` in web/): answers /api/* from the fixtures in web/demo/fixtures, nothing else runs.
 // The fixture is chosen with ?fixture=<name> on any page (kept in a cookie); HS_DEMO_FIXTURE sets the default. Names: fixtures/*.json.
 import { INDEX, page, search } from './docs.js';
-import { answer, fixture, fixtureNames, DEFAULT_FIXTURE } from './engine.js';
+import { answer, netmapFrame, fixture, fixtureNames, DEFAULT_FIXTURE } from './engine.js';
 
 const cookieOf = (req) => (/(?:^|;\s*)hs-demo=([a-z0-9-]+)/.exec(req.headers.cookie || '') || [])[1];
 
@@ -33,9 +33,27 @@ export default function demoPlugin() {
           req.on('close', () => clearInterval(t));
           return;
         }
+        if (url.pathname === '/api/netmap/stream') {      // the counters of the network map: made-up totals that grow, a frame every 2 s
+          stream('retry: 3000\n\n' + `data: ${JSON.stringify(netmapFrame(fx))}\n\n`);
+          const t = setInterval(() => res.write(`data: ${JSON.stringify(netmapFrame(fx))}\n\n`), 2000);
+          req.on('close', () => clearInterval(t));
+          return;
+        }
         if (url.pathname.startsWith('/api/sys/jobs/stream/')) {      // no job ever runs, so there is nothing to follow
           stream('data: {"rows":[]}\n\n');
           res.end();
+          return;
+        }
+        const ls = /^\/api\/logs\/stream\/(ct|docker|system|events)$/.exec(url.pathname);
+        if (ls) {      // a log stream (D15): the fixture's log as the fill, then the stream stays open and quiet
+          const target = encodeURIComponent(url.searchParams.get('target') || '');
+          const read = { ct: `/api/sys/ct/logs/${target}`, docker: `/api/sys/docker/logs/${target}`, system: '/api/sys/logs/show', events: '/api/sys/state/events' }[ls[1]];
+          const a = answer('GET', read, Object.fromEntries(url.searchParams), undefined, fx);
+          const b = a.body || {};
+          const lines = Array.isArray(b.rows) ? [...b.rows].reverse().map((r) => r.join('\t')) : String(b.text || '').split('\n').filter(Boolean);
+          stream('retry: 3000\n\n' + (lines.length ? `data: ${JSON.stringify({ lines })}\n\n` : ': empty\n\n'));
+          const t = setInterval(() => res.write(': ping\n\n'), 15000);
+          req.on('close', () => clearInterval(t));
           return;
         }
         if (url.pathname === '/theme.css') {

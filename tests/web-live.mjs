@@ -55,6 +55,9 @@ check('inspect: capability off wins', pi({ cap_on: false, age: null }).rows[0].s
 check('inspect: doc status wins', pi({ status: 'error', cap_on: true }).rows[0].state === 'error');
 check('inspect: has.needs only with the key', !pi({}).has.needs && pi({ needs: ['a', 'b'] }).has.needs && pi({ needs: ['a', 'b'] }).rows[0].needs.join(', ') === 'a, b');
 check('inspect: has.status and has.ttl', pi({ status: 'ok', ttl: 45 }).has.status && pi({ ttl: 45 }).has.ttl && !pi({}).has.ttl && !pi({ ttl: null }).has.ttl);
+check('inspect: a resting demand topic is idle, a watched or old one is stale', pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 200 }).rows[0].state === 'idle'
+  && pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 200, lease: 1100 }).rows[0].state === 'expired'
+  && pi({ status: 'expired', idle: 300, demand: 'idle:300', age: 2000 }).rows[0].state === 'expired' && pi({ demand: 'always' }).has.demand && !pi({}).has.demand);
 check('inspect: garbage gives no rows', parseInspect(null).rows.length === 0 && parseInspect({ topics: 5 }).rows.length === 0 && parseInspect({ topics: [null, {}, { topic: 3 }] }).rows.length === 0);
 check('inspect: unknown keys are kept', pi({ extra: 1 }).rows[0].extra === 1);
 const TOPICS = { '/api/sys/pool/info?pool=bulk': 'pool-info-bulk', '/api/sys/pool/members?pool=fast': 'pool-members-fast', '/api/sys/pool/state?pool=bulk': 'pool-state-bulk', '/api/sys/pool/info?pool=fast': 'pool-info-fast' };
@@ -100,6 +103,56 @@ for (const [f, path, topic] of refetch) {
   const src = readFileSync(new URL('../web/src/' + f, import.meta.url), 'utf8');
   const line = src.split(String.fromCharCode(10)).find((l) => l.includes('poll(') && l.includes('/api/sys/' + path)) || '';
   check(`refetch: ${f} ${path} follows ${topic}`, line.includes(`, '${topic}');`) && topicNames.has(topic));
+}
+// D13: the topics a page reads are the set of the stream (web/src/topicset.js); data.svelte.js registers every poll topic in one place
+import { TopicSet, streamQuery, newSid, createSubscriber } from '../web/src/topicset.js';
+{
+  const set = new TopicSet(['base']);
+  check('topic set: the always-on topics are in it', set.key() === 'base');
+  const offA = set.want('apps-list'), offB = set.want('apps-list'), offC = set.want('status');
+  check('topic set: sorted and without duplicates', set.key() === 'apps-list,base,status');
+  offA();
+  check('topic set: two reads of one topic, one gone: still there', set.list().includes('apps-list'));
+  offA();
+  check('topic set: a release counts once', set.list().includes('apps-list'));
+  offB();
+  check('topic set: the last release removes it', !set.list().includes('apps-list'));
+  const off = set.want('x'); off(); const again = set.want('x');
+  check('topic set: release then want (a re-run) leaves it in', set.list().includes('x')); again(); offC();
+  check('topic set: no topic is a no-op', set.want(undefined)() === undefined && set.key() === 'base');
+  const all = set.want('*');
+  check('topic set: * swallows the rest', set.key() === '*'); all();
+  check('stream query', streamQuery(['a', 'b:c'], 'sid1') === 'topics=a,b%3Ac&sid=sid1');
+  check('empty set: topics= is empty, not missing', streamQuery([], 's') === 'topics=&s'.replace('&s', '&sid=s'));
+  check('sid is 16 chars of [a-z0-9]', /^[a-z0-9]{16}$/.test(newSid()));
+
+  // a route change: the page's reads release, the next page's register; one POST with the new set, none when the set did not change
+  const sent = []; const timers = [];
+  const sub = createSubscriber({ set, send: async (l) => { sent.push(l.join(',')); return { gens: {} }; }, setTimer: (f) => { timers.push(f); return timers.length; }, clearTimer: () => {} });
+  const flush = async () => { while (timers.length) await timers.shift()(); };
+  const p1 = set.want('apps-list');
+  sub.schedule(); await flush();
+  check('subscriber: nothing is sent before the stream is open', sent.length === 0);
+  sub.opened('base'); await flush();
+  check('subscriber: the first set is sent after open', sent.join('|') === 'apps-list,base');
+  p1(); const p2 = set.want('apps-list'); sub.schedule(); await flush();
+  check('subscriber: release + want of the same topic sends nothing', sent.length === 1);
+  p2(); const p3 = set.want('shares-overview'); sub.schedule(); await flush();
+  check('subscriber: a route change sends the new set', sent.length === 2 && sent[1] === 'base,shares-overview');
+  sub.schedule(); sub.schedule(); await flush();
+  check('subscriber: bursts are one call', timers.length === 0 && sent.length === 2);
+  sub.closed(); p3(); sub.schedule(); await flush();
+  check('subscriber: a closed stream sends nothing', sent.length === 2);
+  sub.opened('base', false); await flush();
+  check('subscriber: a reopened stream after an error sends the set again', sent.length === 3 && sent[2] === 'base');
+}
+{
+  const dsrc = readFileSync(new URL('../web/src/data.svelte.js', import.meta.url), 'utf8');
+  check('poll: registers its topic and gives it back', /const release = wantTopic\(t\)/.test(dsrc) && /release\(\);\s*\};/.test(dsrc));
+  const lsrc = readFileSync(new URL('../web/src/live.svelte.js', import.meta.url), 'utf8');
+  check('live: one EventSource, with the topics and the stream id', (lsrc.match(/new EventSource/g) || []).length === 1 && /streamQuery\(list, sid\)/.test(lsrc));
+  const pages = [['pages/Files.svelte', "wantTopic('fm-locations')"], ['pages/LiveState.svelte', 'wantAllTopics()']];
+  for (const [f, needle] of pages) check(`${f} subscribes to what it reads directly`, readFileSync(new URL('../web/src/' + f, import.meta.url), 'utf8').includes(needle));
 }
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

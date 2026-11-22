@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the state database: which disks the server has had (also the ones that are gone), what happened to them, how their SMART values moved
 # help.de: die Zustandsdatenbank: welche Platten der Server hatte (auch die fehlenden), was mit ihnen geschah, wie sich ihre SMART-Werte entwickelten
-# args: inventory | events [N] | forget <disk> [--yes] | collect | disks | smart <serial> | problems | deck-disks | inventory-json | history <now> | history-record <readings> | usage-record <key> <used> <size> | usage <key> [days] | read-put <key> | read-fail <key> --err <text> | read-get <key> | reads | baseline | baseline-run
+# args: inventory | events [N] | events-follow [N] | forget <disk> [--yes] | collect | disks | smart <serial> | problems | deck-disks | inventory-json | history <now> | history-record <readings> | usage-record <key> <used> <size> | usage <key> [days] | read-put <key> | read-fail <key> --err <text> | read-get <key> | reads | baseline | baseline-run
 # Front end of scripts/state-db.py. `collect` is the ONE writer (root; hs-deck-status / hs-state-collect / disk-event.sh start it);
 # everything else reads /var/lib/hs/state.db read-only. A person at a terminal gets tables (inventory, events); `hs sys state ...` and
 # pipes get the tab separated lines. `forget` removes a MISSING disk from the list for good and asks first (--yes skips it).
@@ -34,6 +34,17 @@ case "$cmd" in
         awk -F'\t' -v OFS='\t' '{ cmd = "date -d @" $1 " +\"%Y-%m-%d %H:%M\""; cmd | getline w; close(cmd); print w, $2, $4 }' <<<"$out"
       } | table
     else db events "$@"; fi ;;
+  events-follow)   # the web interface's log stream of the disk events: the last N rows, then every new row, plain; ends when the reader goes
+    n=${1:-60}; [[ "$n" =~ ^[0-9]+$ ]] || { echo "usage: state.sh events-follow [N]" >&2; exit 1; }
+    declare -A seen=()
+    while :; do
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        [ -z "${seen[$line]:-}" ] || continue
+        seen[$line]=1; printf '%s\n' "$line"
+      done < <(db events "$n" | sort -t "$(printf '\t')" -k1,1n)
+      sleep "${HS_FOLLOW_EVERY:-2}" || exit 0
+    done ;;
   forget)
     who=${1:-}; shift || true
     [ -n "$who" ] || { echo "usage: hs disk <serial> forget [--yes]" >&2; exit 1; }
@@ -46,7 +57,7 @@ case "$cmd" in
     rc=0; serial=$(db forget "$who") || rc=$?
     case "$rc" in
       0) ok "$(t 'Forgot %s' "$serial")"
-         if [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh status disk-inventory || true; fi ;;
+         if [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh event:state.disk-seen || true; fi ;;
       2) fail "$(t '%s is in the machine: only a missing disk can be forgotten' "$who")" ;;
       *) fail "$(t '%s is not in the inventory. See: hs disk inventory' "$who")" ;;
     esac ;;
@@ -71,10 +82,10 @@ case "$cmd" in
       fail "$(t 'The daily SMART check reads the disks and writes the state database: it needs root. Run it as: sudo hs disk baseline run')"
     fi
     db baseline-run "$@"; rc=$?
-    if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh monitor-disks disk-health disk-inventory state-history || true; fi
+    if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh event:state.smart-checked || true; fi
     [ "$rc" -ne 0 ] || ! people || exec bash "$0" baseline
     exit "$rc" ;;
-  collect) db collect "$@"; rc=$?; if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh disk-inventory || true; fi; exit "$rc" ;;
+  collect) db collect "$@"; rc=$?; if [ "$rc" -eq 0 ] && [ -f "$here/lib/live.sh" ]; then . "$here/lib/live.sh"; live_refresh event:state.collected || true; fi; exit "$rc" ;;
   history-record) db history-record "$@"; exit $? ;;     # no live_refresh: the deck timer records every few seconds and the hourly medians of state-history are read every 30 s anyway
   disks|smart|problems|deck-disks|inventory-json|disks-json|events-json|history|usage-record|usage|read-put|read-fail|read-get|reads|topic-bump) db "$cmd" "$@" ;;
   *) echo "usage: hs disk inventory | hs disk events | hs disk <serial> forget" >&2; exit 1 ;;

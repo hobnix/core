@@ -58,6 +58,9 @@ export function parseInspect(doc, nowSec) {
       else if (age === null) state = err ? 'never' : 'pending';
       else if (age > 3 * every) state = 'stale';
       else if (err && tsErr !== null && storedTs !== null && tsErr > storedTs) state = 'failing';
+      // D14: a demand topic nobody watches is read once per idle period; an old value inside that period is resting, not stale (opening the page reads it)
+      const idle = Number(t.idle) || 0;
+      if (idle && !t.lease && (state === 'stale' || state === 'expired') && age !== null && age <= 3 * idle) state = 'idle';
       return { ...t, every, age, rc, err, tsErr, gen: Number(t.gen) || 0, words: Array.isArray(t.words) ? t.words : [],
                groups: Array.isArray(t.groups) ? t.groups : [], state };
     });
@@ -67,6 +70,7 @@ export function parseInspect(doc, nowSec) {
       needs: rows.some((r) => Array.isArray(r.needs)),
       status: rows.some((r) => typeof r.status === 'string'),
       ttl: rows.some((r) => r.ttl !== undefined && r.ttl !== null),
+      demand: rows.some((r) => typeof r.demand === 'string'),
       delay: rows.some((r) => Object.keys(r).some((k) => k.startsWith('delay_'))),
     },
   };

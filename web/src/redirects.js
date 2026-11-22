@@ -46,6 +46,7 @@ export const MOVED = Object.freeze({
   '/identity/users':              'users',
   '/identity/certificates':       'certificates',
   '/monitoring/hardware':         'hardware',
+  '/monitoring/network-map':      'networkMap',
   '/monitoring/diagnostics':      'diagnostics',
   '/monitoring/live-state':       'liveState',
   '/monitoring/test-lab':         'testLab',

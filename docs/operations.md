@@ -493,6 +493,12 @@ and no Redis. This measures on your server what it costs: how many writes per mi
 the stream of the web interface. It needs `webUi = true` on a homeserver. A refresh request (a change from a terminal, `hs sys live refresh`) wakes the
 topic within about a second; all other topics are read at their intervals.
 
+See what the collector itself costs (CPU seconds since it started, reads started in the last minute per topic; no `ps` needed). The collector keeps itself in bounds: a topic is left alone for ten times as long as its last read took, and when all reads together keep more than half a core busy the timed reads slow down (`stretch` in the list; `HS_LIVE_DUTY`, `HS_LIVE_BUDGET`). Not tested on hardware yet.
+
+```bash
+hs live load
+```
+
 Measure for an hour (it offers to run as a job; the default is 30 minutes, one probe every 10 seconds):
 
 ```bash
@@ -522,6 +528,22 @@ hs sys live status
 Columns 11 to 14 hold the milliseconds (`-` = no sample yet), and the Live state page shows the same. The request time of a change from a terminal is
 the second the counter was changed, so the server number is at most one second too large. A change that only comes from the timer has no trigger and no
 sample. Over 10 seconds in the worst of the last 20 samples of a topic, `hs sys live check` and the Health page say so. Not tested on hardware yet.
+
+### Pages nobody has open cost almost nothing
+
+A few live topics exist only for a page: SMART findings (`disk-health`), free space and sizes (`monitor-disks`, `shares-overview`, `shares-deleted`,
+`vault-usage`, `fm-locations`, `backup-overview`, `backup-shares`). While no page that shows them is open, the collector reads each one only
+every 2 to 10 minutes (their idle interval); when you open the page it reads them at once, and the page shows `fresh` after a moment. The web interface
+tells the collector what is open: it writes one lease per wanted topic into the table `demand` (30 seconds, renewed every 10 s while the page is
+open). A stopped or killed web interface leaves leases that run out by themselves, and the topics go back to their idle interval. Nothing a health
+check or a notification reads is ever idle. A change you make (a hook, a named event) still reads the topic at once. Look at it:
+
+```bash
+hs sys live inspect
+```
+
+The Live state page has a column Demand: `always`, `idle 5 min`, or `watched` while a page is open. A topic that rests inside its idle period shows the
+state `idle`, not `stale`. Not tested on hardware yet.
 
 ## Reach the server from outside
 

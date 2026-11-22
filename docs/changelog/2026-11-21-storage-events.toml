@@ -1,0 +1,4 @@
+date  = "2026-11-21"
+type  = "change"
+title = "Disk and pool changes name their event for the live pages"
+body  = """Detaching or recovering a disk, changing or importing a pool, temporary disks and the disk health check now ask for one named change each, so the live data behind the Storage pages is read again from a single list. What the pages show stays the same."""
