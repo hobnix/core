@@ -32,7 +32,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 state=${HS_TESTLAB_DIR:-${HS_STATE_DIR:-/var/lib/hs}/testlab}
 git=${HS_TESTLAB_GIT:-git}
 incus=${HS_NESTED_INCUS:-incus}
-repo_url=${HS_TESTLAB_REPO:-https://github.com/hobnix/server.git}
+repo_url=${HS_TESTLAB_REPO:-https://github.com/hobnix/core.git}
 
 # The stages. Adding one (#435 does the upgrade test): a case line in stage_name, its number in STAGES_ALL, a function stage_<name> in the run part.
 stage_name() { case "$1" in 1) echo install ;; 2) echo smoke ;; 3) echo rollback ;; 4) echo backup ;; 5) echo pool ;; 6) echo browser ;; 7) echo upgrade ;; *) return 1 ;; esac; }

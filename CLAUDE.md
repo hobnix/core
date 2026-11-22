@@ -1,4 +1,4 @@
-# Hobnix server (repository hobnix/server)
+# Hobnix server (repository hobnix/core)
 
 NixOS home server: Incus containers on ZFS or SnapRAID, Samba shares, backups, a web interface, one command `hs`. The repo lives at
 /etc/nixos on a server. Apply changes with `hs rebuild` or `hs update`. Commands are `scripts/<name>.sh`, `hs help` lists them,
