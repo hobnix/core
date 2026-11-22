@@ -4,3 +4,4 @@
 install an app	/apps	Not installed	Installed	hook	sudo hs pkg install whoami
 stop a container	/instances	Running	Stopped	hook	sudo incus stop whoami
 lock the storage	/	Unlocked	Locked	hook	sudo hs lock
+start an instance	/monitoring/network-map	Network map	netmaplab	timed	sudo incus copy whoami netmaplab

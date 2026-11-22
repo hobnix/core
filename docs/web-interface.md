@@ -400,6 +400,8 @@ Not tested on hardware yet.
 Monitoring > Network map draws how this server reaches the network: the way out, the gateway, the host, its bridges, the instances and their services,
 with the traffic as moving dots (more and faster dots for more traffic; none for none). The same facts as a table: the button above the map.
 
+The full guide is [Network map](network-map.md).
+
 1. Open Monitoring > Network map. The graph as text: `sudo hs sys netmap`.
 2. Hover or press Tab to reach a node; Enter or Space opens its details, with a link to the page of that node where there is one.
 3. The map follows the server: an instance that starts or stops changes the graph by itself. The traffic comes from a stream of its own
