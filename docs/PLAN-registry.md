@@ -165,5 +165,8 @@ installer) and is "Not tested on hardware yet." until it runs on a real server.
 - Channels (stable and beta) per package: not now; one stream. A `channel` field can be added to the index later without a format break.
 - Whether a mirror of the index is shipped in the core as a fallback URL.
 - A second index host (for availability) once the first one is in use.
+- Restricted web access through the local proxy: expose only parts of the web interface (for example a user's self-service page, or
+  start and stop of incus and docker) with manager and viewer modes, so not the whole server is reachable. An idea of the owner; it touches
+  the web login and roles, so it needs its own design and is not part of 0.13. "Admin pages are never public" stays the rule.
 - Rewriting packages (and maybe `hs`) in Rust: an idea for after the move, one package and one version at a time. Depends on how the
   package API (`_lib.sh`, `ui.sh`) looks by then, because that is the contract a package is written against. No decision.
