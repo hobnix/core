@@ -116,8 +116,8 @@ for bad in refs/pull/12/head pull/12/head -x '../x' 'a..b' 'a b' 'refs/heads/mai
   out=$($T run --ref "$bad" --dry-run 2>&1); rc=$?
   check_eq "ref '$bad' is refused (exit $rc)" "1" "$rc"
 done
-for url in https://github.com/evil/server.git http://github.com/hobnix/server.git https://github.com.evil.example/hobnix/server.git \
-           'https://github.com/hobnix/../evil/x' https://user@github.com/hobnix/server.git git@github.com:hobnix/server.git /tmp/repo 'https://github.com/hobnix/'; do
+for url in https://github.com/evil/server.git http://github.com/hobnix/core.git https://github.com.evil.example/hobnix/core.git \
+           'https://github.com/hobnix/../evil/x' https://user@github.com/hobnix/core.git git@github.com:hobnix/core.git /tmp/repo 'https://github.com/hobnix/'; do
   out=$(HS_TESTLAB_REPO=$url $T run --dry-run 2>&1); rc=$?
   check_eq "repository '$url' is refused" "1" "$rc"
 done
@@ -146,7 +146,7 @@ check_eq "exit 0" "0" "$rc"
 check_eq "stage 1 ok" "ok" "$(res 1)"
 check_eq "stage 2 ok" "ok" "$(res 2)"
 check_out "fetched the ref, shallow, from the Hobnix repository" "fetch -q --depth 1 origin develop" cat "$B/git.log"
-check_out "with that address" "remote add origin https://github.com/hobnix/server.git" cat "$B/git.log"
+check_out "with that address" "remote add origin https://github.com/hobnix/core.git" cat "$B/git.log"
 check_out "built the ISO once" "build" cat "$B/build.log"
 check_out "ran the whole harness in a named VM" "nested run --stage all --name hs-testlab-" cat "$B/nested.log"
 check_out "deleted the VM afterwards" "delete -f hs-testlab-" cat "$B/incus.log"

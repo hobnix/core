@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev tool (not an `hs` command): the hardware-test trackers of the GitHub project (hobnix/server).
+# Dev tool (not an `hs` command): the hardware-test trackers of the GitHub project (hobnix/core).
 # Development and hardware testing are tracked apart: a dev issue closes when its pull request is merged (milestone progress = built);
 # what still has to run on a real server is a line in ONE tracker issue per milestone, "Hardware test: <milestone title>" (label
 # hardware-test, no milestone, board column Testing while a box is open). Nothing here blocks a release: a line that is not ticked
@@ -11,7 +11,7 @@
 # Needs gh (logged in) and bash with awk. Output is plain text; this is a dev tool, not part of the hs interface.
 # Every call goes through the REST API (gh api), never GraphQL: GraphQL has one hourly budget shared with every tool and agent, and it ran
 # dry in the middle of the first migration (2026-11-20). The board is written by board.sh (REST as well).
-REPO=hobnix/server
+REPO=hobnix/core
 LABEL=hardware-test
 here=$(cd "$(dirname "$0")" && pwd)
 
