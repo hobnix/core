@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "feature"
+title = "A refused change shows its error code and a link to the guide"
+body  = """When the server refuses a change and names a code for the reason, the plan dialog shows the code, the text and a link to the guide. A reason without a known code looks as before."""
