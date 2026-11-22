@@ -19,19 +19,19 @@ id is its identity in the index, so a name is cheapest to change **before** the 
 | --- | --- | --- | --- |
 | `ad` | Active Directory: domain users, Domain Admins sign in | `active-directory` | `ad` is short but unclear. Same family as recipe `domain` and extension `ad-selfservice`: decide whether they become one package with parts. |
 | `backup` | restic to the backup disk, restore drills; needs storage | keep | |
-| `dashboard` | tiles for the services | decide | The dashboard is built into the web interface since 2026-10-29; probably core, not a package. |
+| `dashboard` | tiles for the services | extension, later | Owner leans to an extension: the core stays light. Today it is code inside the web bundle (`web/src/dashboard/`, used by `App.svelte` and `Services.svelte`), so it can only leave once a package can place its own page and the block list covers tiles (milestone 0.12, #473). Until then it stays; a fresh server needs a fallback landing page. |
 | `docker` | Docker host with a web page to manage it | `docker-host` or merge | Clashes with recipe `docker`. They look like one thing: merge into one package, or keep two with different names. |
-| `docs` | guides and command reference in the web interface | decide | Built by `hs docs build`; probably core. |
+| `docs` | guides and command reference in the web interface | core | Decided with the owner 2026-11-22. |
 | `edge-mail` | public mail entry (MX) on the VPS | keep | Family `edge-*`; a blueprint `vps-edge` pulls them. |
 | `edge-ports` | public game and call ports | keep | |
 | `edge-status` | status document of the edge node | keep | |
 | `edge-watcher` | outside watcher of the home server | keep | Only one of the four without `requires = ["tailscale"]`; check why. |
-| `gateway` | Traefik: local names for the services | `local-names` | Today three things sound alike: `gateway`, `reverse-proxy` (publishes services) and recipe `zoraxy`. |
+| `gateway` | Traefik owns port 80: a local name `<label>.<site>.<domain>` per service, by Host header; with `passthrough` also outside domains | `local-proxy` or keep | Not DNS: it answers no DNS queries. It only checks that `*.<site>.<domain>` points at this server and holds the ACME DNS-01 token. `local-proxy` is already the name of its slot in the reverse-proxy interface (`provides = ["local-proxy"]`). `local-names` and `dns` both mislead. Absorbs extension `passthrough`. |
 | `incus` | containers and VMs, VLAN profiles; needs storage | keep | |
-| `live-state` | collector that feeds the web interface | decide | The web interface needs it; probably core. |
+| `live-state` | collector that feeds the web interface | core | Decided with the owner 2026-11-22. |
 | `metrics` | Prometheus, node and smartctl exporters on the host | keep | Grafana is already apart (recipe `monitoring`). Pilot candidate (#225), moved unchanged first. |
 | `network` | router connection, fixed addresses for instances (UniFi) | `router` | Providers (`unifi`) stay inside. |
-| `notifications` | channels (ntfy and others) | keep or core | `hs health` uses it; decide whether it is core. |
+| `notifications` | channels (ntfy and others) | core | Decided with the owner 2026-11-22; `hs health` uses it. |
 | `reverse-proxy` | publishes the services (providers: Zoraxy, Traefik) | keep | The interface name; Zoraxy and Traefik are its providers. |
 | `samba` | shares and network discovery; needs storage | keep | |
 | `storage` | ZFS or SnapRAID pools, shares, encrypted disks | keep | |
@@ -45,7 +45,7 @@ id is its identity in the index, so a name is cheapest to change **before** the 
 | --- | --- | --- | --- |
 | `ad-selfservice` | domain users change their own password | keep | Family of `active-directory`. |
 | `games` | game PCs (wake, list) and the Game streaming page | `game-pcs` | `games` is confused with game servers (`pelican`, `catalyst-*`). |
-| `passthrough` | outside domains to reverse proxies on the LAN | `domain-passthrough` | |
+| `passthrough` | outside domains to reverse proxies on the LAN | built into `gateway` | It requires `gateway`, writes route files into its folder, reads its public-port options and has no Nix module of its own. Becomes a part of that package. Its `ext passthrough` and `sys ext passthrough` rows are a contract with the web interface: keep them with `legacy:<new>` and migrate servers that have the extension enabled (`renamed_from` / `replaces` in the index). |
 | `posters` | posters drawn from the command line or the web | keep | |
 
 ## Recipes (40 today)
@@ -73,7 +73,9 @@ The rest are unchanged: `audiobookshelf`, `authentik`, `bazarr`, `bulwark`, `clo
 
 ## What the answers change
 
-- The three questions with the biggest effect: which of `dashboard`, `docs`, `live-state` and `notifications` stay in the core; what to do
-  with the `docker` name clash; and whether the Active Directory family becomes one package.
+- Decided 2026-11-22: `docs`, `live-state` and `notifications` stay in the core; `dashboard` leaves as an extension once packages can place
+  their own page; `passthrough` is built into the gateway package.
+- Still open: the name of `gateway`; the `docker` name clash; whether the Active Directory family becomes one package; the overlaps
+  between `steamos` and `sunshine` and between the three game server panels.
 - Counts above were read on 2026-11-22 from `capabilities/*/capability.toml` and the indexes of hobnix/recipes and hobnix/extensions.
 - Not tested on hardware yet: nothing here changes behaviour; a rename is checked in the retouch pass of each package.
