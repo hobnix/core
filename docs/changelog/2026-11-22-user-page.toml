@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "feature"
+title = "Users: a page for each user and a quick look over the list"
+body  = """Every user now has a page of its own at Identity > Users > <name> with the tabs Overview, Groups and Access, the groups and shares it is linked to, and the actions: Edit and Password in the header, Groups and Lock in the More menu, Delete in the danger section at the bottom. On the list, selecting a user opens a quick look over it, and the address carries the user (?sel=). The built-in accounts are marked and cannot be locked or deleted."""
