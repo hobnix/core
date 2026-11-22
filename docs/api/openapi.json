@@ -8429,6 +8429,40 @@
     }
    }
   },
+  "/netmap/counters": {
+   "get": {
+    "operationId": "netmap.counters",
+    "summary": "byte counters of the network map nodes (wan, host, bridges, instances), one sample: rows id, rx_bytes, tx_bytes",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "netmap",
+      "counters"
+     ],
+     "script": "netmap-counters.sh",
+     "args": "-",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-described": false,
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/node/keyline/{name}": {
    "get": {
     "operationId": "node.keyline.by_name",
