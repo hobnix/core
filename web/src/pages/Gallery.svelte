@@ -247,8 +247,9 @@
       <div class="cell"><small>align start</small><Menu items={menu} align="start" label="Actions" /></div>
     </Entry>
 
-    <Entry name="NetMap" text="The network map (issue 875): SVG nodes, canvas dots that follow the rate (none at zero). With the system setting 'reduce motion' the dots stop and a busy link is drawn thicker. Fixture graphs from netmap/fixtures.js.">
-      <div class="cell wide"><small>small server, traffic</small><NetMap graph={SMALL} rates={SMALL_RATES} label="Fixture: small server" /></div>
+    <Entry name="NetMap" text="The network map (issue 875): SVG nodes, canvas dots that follow the rate (none at zero). With the system setting 'reduce motion' the dots stop and a busy link is drawn thicker. Issue 876, without a mouse: Tab enters the map at one node, arrow keys move to the parent, first child and neighbours, Home and End to the ends, Enter or Space opens the detail popover (the first map below has a link for instances), Escape closes it and focus returns to the node. Each node is read with its kind, state and rates. The button above a map switches to the table with the same facts. Fixture graphs from netmap/fixtures.js.">
+      <div class="cell wide"><small>small server, traffic</small><NetMap graph={SMALL} rates={SMALL_RATES} label="Fixture: small server" hrefFor={(r) => (r.kind === 'instance' ? '#/instances/' + r.id : '')} /></div>
+      <div class="cell wide"><small>table view (the text alternative)</small><NetMap graph={SMALL} rates={SMALL_RATES} label="Fixture: small server" table hrefFor={(r) => (r.kind === 'instance' ? '#/instances/' + r.id : '')} /></div>
       <div class="cell wide"><small>no traffic (no dots)</small><NetMap graph={SMALL} label="Fixture: idle server" /></div>
       <div class="cell wide"><small>100 nodes (wrapped tiers)</small><NetMap graph={bigMap.graph} rates={bigMap.rates} label="Fixture: 100 nodes" /></div>
       <div class="cell wide"><small>empty graph</small><NetMap graph={[]} /></div>
