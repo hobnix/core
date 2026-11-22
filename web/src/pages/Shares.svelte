@@ -1,29 +1,26 @@
 <script>
   import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
-  // Storage > Shares: every share (the Samba shares, the instance volumes) in one list (/storage/shares, filter ?pool=<pool name>). A row opens the quick
-  // look over the list (?sel=<name>: selection.svelte.js); "Open page" goes to the page of the share (pages/shares/Share.svelte) with its permissions, snapshots and actions.
+  // Storage > Shares: every share (the Samba shares, the instance volumes) in one list (/storage/shares, filter ?pool=<pool name>). No quick look here (owner decision
+  // 2026-11-23, like Disks): the name and the "Open share" button at the end of a row go to the page of the share (pages/shares/Share.svelte) with its permissions, snapshots and actions;
+  // "Browse" next to it opens the files of the share.
   // The folders of deleted shares are kept in the second view (?view=kept). The "in the backup" switch is NOT here (it lives on Backup): a share only shows a read-only badge.
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { StatusDot, Chip, Kv, Banner, Segmented, Card, Row, Muted } from '../ui/index.js';
-  import QuickLook from '../ui/QuickLook.svelte';
+  import { StatusDot, Chip, Banner, Segmented, Card, Row, Muted } from '../ui/index.js';
   import { poll, rows } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { selected, select, close } from '../selection.svelte.js';
   import { route, go, url } from '../route.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
-  import ErrorNote from '../ui/ErrorNote.svelte';
   import { sharePending, shareFailed } from './rows.js';
   import Button from '../ui/Button.svelte';
   import NewShare from '../forms/shares/NewShare.svelte';
-  import { poolPath } from '../paths.js';
   import { filesLink } from '../files/links.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
   import { onMount } from 'svelte';
-  import { shareModel, dash, sizeText, mountedBy } from './shares/model.svelte.js';
+  import { shareModel, dash, sizeText } from './shares/model.svelte.js';
   import { sharePath } from './shares/path.js';
 
   onMount(() => { loadPools(); });
@@ -39,17 +36,14 @@
     for (const [k, v] of [...q]) if (!v || v === 'all' || (k === 'view' && v === 'shares')) q.delete(k);
     return `${P.shares}${[...q].length ? `?${q}` : ''}`;
   };
-  const selName = $derived(selected());
-  // another page (Groups, Users) names a share to look at: it becomes the quick look
-  $effect(() => { const n = takeSelection('shares'); if (n) select(n); });
+  // another page (Groups, Users) names a share to look at: open its page
+  $effect(() => { const n = takeSelection('shares'); if (n) go(sharePath(n)); });
   const locked = $derived(!!deck?.data?.locked);
 
-  const m = shareModel({ sel: () => selName });
+  const m = shareModel();
   const deleted = poll('/api/sys/shares/deleted', 60000, 'shares-deleted');
   const shares = $derived(m.all.filter((s) => pool === 'all' || s.pool === pool));
-  const sel = $derived(shares.find((s) => s.name === selName) ?? null);
   const kept = $derived(rows(deleted).map((r) => ({ name: r[0], kind: r[1], size: Number(r[2]) || 0, disks: r[3] })));
-  const host = $derived(deck?.data?.host ?? 'homeserver');
   const link = (e, name) => { e.stopPropagation(); if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.button)) { e.preventDefault(); go(sharePath(name)); } };
 
   // the old Snapshots address (?view=snapshots) opens the Snapshots tab of the first ZFS share
@@ -67,6 +61,7 @@
     { key: 'name', label: 'Share' }, { key: 'kind', label: 'Kind', optional: true }, { key: 'pool', label: 'Pool', optional: true },
     { key: 'size', label: 'Size', sort: 'num', value: (s) => s.size }, { key: 'backup', label: 'Backup', optional: true },
     { key: 'cache', label: 'Cache', optional: true }, { key: 'disks', label: 'Where', optional: true }, { key: 'mounted', label: 'Mounted by', optional: true },
+    { key: 'act', label: '', sort: false, align: 'right', width: '1%' },
   ];
   const keptCols = [{ key: 'name', label: 'Kept folder' }, { key: 'kind', label: 'Kind' }, { key: 'size', label: 'Size', sort: 'num' }, { key: 'disks', label: 'Where' }, { key: 'actions', label: '', sort: false, align: 'right' }];
 </script>
@@ -108,9 +103,9 @@
   <PageState loading={!m.overview.loaded} hasData={m.overview.data != null} error={m.overview.error?.message ?? ''} empty={m.overview.loaded && !shares.length} emptyIcon="folders"
              emptyTitle={pool === 'all' ? 'No shares yet' : `No shares on ${pool}`} emptyText={pool !== 'all' && pool === poolOfRole('apps') ? 'This pool holds the instances’ own volumes; network shares live on the data pool.' : 'A share is a folder that Windows and Linux computers on the network can open.'}>
     {#snippet emptyAction()}<Button need="admin" variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>{/snippet}
-    <div style="position:relative">
+    <div>
       <Card style="padding:4px 8px;overflow-x:auto">
-        <Table id="shares" {columns} rows={shares} key="name" compact selected={sel?.name} onrow={(s) => select(s.name)} empty="No shares.">
+        <Table id="shares" {columns} rows={shares} key="name" compact empty="No shares.">
           {#snippet cell(s, col)}
             {#if col.key === 'name'}<Row gap="2" style="display:inline-flex"><i class="ph {s.volume ? 'ph-cube' : s.kind === 'sensitive' ? 'ph-folder-lock' : 'ph-folder'}"></i><a href={url(sharePath(s.name))} onclick={(e) => link(e, s.name)}>{s.name}</a></Row>{#if m.doing(s)} <Muted><i class="ph ph-circle-notch spin"></i> {m.doing(s)}…</Muted>{:else if m.failure(s)} <Chip tone="bad">failed</Chip>{/if}
             {:else if col.key === 'kind'}<Muted>{s.kind}</Muted>
@@ -119,29 +114,14 @@
             {:else if col.key === 'backup'}{#if s.volume || s.kind === 'other'}<Muted>–</Muted>{:else}<StatusDot state={s.backup === 'on' ? 'ok' : 'off'} label={s.backup === 'on' ? 'in backup' : 'not in backup'} />{/if}
             {:else if col.key === 'cache'}<Muted>{dash(s.cache) || '–'}</Muted>
             {:else if col.key === 'disks'}<Muted>{dash(s.disks) || '–'}</Muted>
+            {:else if col.key === 'act'}<Row gap="1" justify="end" style="flex-wrap:nowrap">
+              {#if !s.volume}<Button variant="ghost" size="sm" class="btn-icon" icon="folder-open" label="Browse files" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Browse files'} onclick={() => go(filesLink({ left: `share:${s.name}` }))} />{/if}
+              <Button variant="ghost" size="sm" class="btn-icon" icon="arrow-square-out" label="Open share" tooltip={'Open share'} onclick={() => go(sharePath(s.name))} />
+            </Row>
             {:else}<Muted>{dash(s.mounted) || '–'}</Muted>{/if}
           {/snippet}
         </Table>
       </Card>
-      {#if selName}
-        {#if sel}
-          <QuickLook title={sel.name} chip={sel.volume ? 'volume' : sel.kind} state={m.failure(sel) ? 'bad' : m.doing(sel) ? 'info' : ''} stateLabel={m.failure(sel) ? 'failed' : m.doing(sel) ? `${m.doing(sel).toLowerCase()}…` : ''} rowKey={sel.name} href={sharePath(sel.name)} onclose={close}>
-            <Kv items={[
-              { k: 'Pool', v: sel.pool }, { k: 'Size', v: sizeText(sel.size) },
-              { k: 'Network path', v: sel.volume ? '' : `\\\\${host}\\${sel.name}` }, { k: 'Where', v: dash(sel.disks) },
-              { k: 'Backup', v: sel.volume || sel.kind === 'other' ? '' : sel.backup === 'on' ? 'in the nightly backup' : 'not in the backup' },
-              { k: 'Mounted by', v: mountedBy(sel).map((x) => x.text).join(', ') },
-            ]} />
-            {#if m.failure(sel)}<div style="padding:12px 16px;margin:0"><ErrorNote error={m.failure(sel).error} ondismiss={() => rowstate.dismiss(m.failure(sel).id)} /></div>{/if}
-            <p style="padding:12px 16px;margin:0"><a href={url(poolPath(sel.pool))} onclick={(e) => { e.preventDefault(); go(poolPath(sel.pool)); }}>Pool {sel.pool}</a></p>
-            {#snippet actions()}
-              {#if !sel.volume}<Button size="sm" icon="folder-open" disabled={locked} tooltip={locked ? 'Storage is locked' : 'Look at the files of this share in the file manager'} onclick={() => go(filesLink({ left: `share:${sel.name}` }))}>Browse</Button>{/if}
-            {/snippet}
-          </QuickLook>
-        {:else if m.overview.loaded}
-          <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No share called “{selName}” {pool === 'all' ? 'exists' : `is on ${pool}`}. It may have been deleted or renamed.</Muted></QuickLook>
-        {/if}
-      {/if}
     </div>
   </PageState>
 {/if}

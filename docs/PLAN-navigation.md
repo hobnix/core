@@ -210,7 +210,9 @@ Everything else is tested in node or by the shell tests (`t quick`).
 - **Scope.** #487, #488 and #427 together are larger than the rest. D10 to D12 cut them; without a cut the milestone does not finish.
 
 ## Decision note: the Disks list has no quick look (owner, 2026-11-22)
-The Disks list uses an **Open disk** action at the end of each row (icon `arrow-square-out`, tooltip and aria-label "Open disk", goes to `/storage/disks/<name>`), not `QuickLook`. Reason: the table cannot scroll sideways, the overlay hid much of it, and what it showed is already in the columns; the name in the Disk column opens the page too. Disks no longer writes `?sel=`; the Missing filter has a Forget button per row. The other lists (Shares, Instances, Users, Groups, Nodes, Live state, Docker) keep the quick look until the owner decides for them.
+The Disks list uses an **Open disk** action at the end of each row (icon `arrow-square-out`, tooltip and aria-label "Open disk", goes to `/storage/disks/<name>`), not `QuickLook`. Reason: the table cannot scroll sideways, the overlay hid much of it, and what it showed is already in the columns; the name in the Disk column opens the page too. Disks no longer writes `?sel=`; the Missing filter has a Forget button per row. The other lists (Instances, Users, Groups, Nodes, Live state, Docker) keep the quick look until the owner decides for them.
+
+The same holds for **Shares** (owner, 2026-11-23): each row ends with **Browse files** (icon `folder-open`, not on instance volumes) and **Open share** (icon `arrow-square-out`, goes to `/storage/shares/<name>`); the name links there too. Shares no longer reads `?sel=`: a share named by Groups or a user page (`setSelection('shares', ...)`) opens the share page.
 
 ## Check that it worked
 

@@ -192,7 +192,7 @@ action (Delete, Roll back) is in the danger section at the end and asks you to t
 
 On a list, selecting a row opens a **quick look** over the list: the list keeps its width and columns. The address carries the row (`?sel=<name>`),
 so reload, Back and Forward and a pasted link work. Escape closes it, and **Open page** goes to the object page. On a phone the quick look covers the
-screen. Groups, Nodes, Docker apps and the stored output on Live state use the quick look too. The **Disks** list does not: the table already shows the data and cannot scroll sideways, so each row ends with an **Open disk** button (and the name is a link) that goes to the disk page; on the Missing filter the row has a **Forget** button. An address of a removed object says "not found".
+screen. Groups, Nodes, Docker apps and the stored output on Live state use the quick look too. The **Disks** list does not: the table already shows the data and cannot scroll sideways, so each row ends with an **Open disk** button (and the name is a link) that goes to the disk page; on the Missing filter the row has a **Forget** button. The **Shares** list does not either: each row ends with **Browse files** and **Open share** buttons (and the name is a link); the share page holds the rest. An address of a removed object says "not found".
 
 ### Addresses
 Every address is `/node/<name>/<inner path>`, for example `/node/myserver/storage/disks/sda`. The old addresses (Identity, Protection, Operations,
