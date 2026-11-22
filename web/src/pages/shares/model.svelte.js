@@ -53,8 +53,8 @@ export function shareModel({ sel = () => '', detail = false, tab = () => '' } = 
   const visibility = $derived(String(rows(vis)[0]?.[0] ?? '') === 'hidden' ? 'hidden' : 'visible');
 
   return {
-    overview, cts, samba, all, doing, failure, acl, vis, hist, backups,
-    get share() { return share; }, get measured() { return measured; }, get snapraid() { return snapraid; }, get hasCache() { return hasCache; },
+    overview, cts, doing, failure, acl, vis, hist, backups,
+    get samba() { return samba; }, get all() { return all; }, get share() { return share; }, get measured() { return measured; }, get snapraid() { return snapraid; }, get hasCache() { return hasCache; },
     get entries() { return entries; }, get snaps() { return snaps; }, get auto() { return auto; }, get newest() { return newest; }, get points() { return points; },
     get visibility() { return visibility; }, get zfs() { return isZfs(share); },
   };
