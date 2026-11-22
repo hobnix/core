@@ -46,6 +46,7 @@ jobs tail	free argument: output of one job unit from a cursor, fetched on demand
 live inspect	ttl 0 and never cached: the Live state page re-reads it on each change of topic live
 live raw	free argument: one topic's stored output, fetched on demand on the Live state page
 logs show	free query: unit, level and time chosen by the user; the logs tab follows a log stream (D15) and reads this only while the stream is down
+netmap counters	ttl 0, totals of one moment: the map follows /api/netmap/stream (docs/PLAN-network-map.md part 2) and reads this only while the stream is down
 pool list	rows change only through hs pool; the web store reads them once per page load, no timer
 pool disks	free query: depends on the role, no fixed topic; the pickers read again when the topic pool-disks changes (D5 a), no timer while the stream is open
 share parity state	free argument: the settings of one share, polled while its drawer is open

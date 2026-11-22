@@ -13,6 +13,7 @@
   import { ui } from '../ui.svelte.js';
   import Banner from '../ui/Banner.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import Skeleton from '../ui/Skeleton.svelte';
   import UnlockForm from '../forms/unlock/UnlockForm.svelte';
   import Placeholder from './Placeholder.svelte';
   import PendingRebuild from './PendingRebuild.svelte';
@@ -57,7 +58,15 @@
   {/if}
   <div class="pg" class:down inert={down || undefined}>
     {#if node.local}<PendingRebuild />{/if}
-    {#if Page}<Page {deck} {meta} {node} />{:else}<Placeholder />{/if}
+    {#if Page?.lazy}
+      {#await Page.lazy()}
+        <Skeleton />
+      {:then m}
+        {@const Loaded = m.default}<Loaded {deck} {meta} {node} />
+      {:catch}
+        <Banner tone="bad">This page could not be loaded. Reload the browser tab and try again.</Banner>
+      {/await}
+    {:else if Page}<Page {deck} {meta} {node} />{:else}<Placeholder />{/if}
   </div>
 {/if}
 

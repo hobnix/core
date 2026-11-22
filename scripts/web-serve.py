@@ -1122,6 +1122,7 @@ READS = {
     ("event", "list"): {"kind": "tsv", "ttl": 10, "query": {"n": (r"^[0-9]{1,4}$", ""), "source": (r"^[a-z][a-z0-9-]{0,30}$", "--source"), "after": (r"^[0-9]{1,9}$", "--after"), "before": (r"^[0-9]{1,9}$", "--before")}},      # the event log (docs/adr/0005-events.md)
     ("ct", "list"): {"kind": "tsv", "ttl": 5, "topic": "ct-list"},
     ("netmap", "topology"): {"kind": "tsv", "ttl": 10, "topic": "netmap"},      # the network map graph (docs/PLAN-network-map.md); counters come from the stream
+    ("netmap", "counters"): {"kind": "tsv", "ttl": 0},      # the fallback of /api/netmap/stream: the map reads it only while the stream is down
     ("ct", "profiles"): {"kind": "tsv", "ttl": 30, "topic": "ct-profiles"},
     ("ct", "pools"): {"kind": "tsv", "ttl": 15, "topic": "ct-pools"},
     ("ct", "bindings"): {"kind": "tsv", "ttl": 10, "args": [NAME]},
