@@ -4,7 +4,8 @@
 // Every page lives under a node: /node/<name>/<inner path>. An address without a node ("/storage/pools", an entry address, `go('/x')`) gets the
 // local node in front. An OLD inner path (the tree of 0.10, snapshot in tests/fixtures/old-tree.json) is mapped to the place's current path
 // (docs/PLAN-navigation.md, step 7, D7): the table below says old path -> place KEY of paths.js, so the target is whatever paths.js says now.
-// While the tree has not moved a key's path is the old path itself and the row does nothing; the step that moves a page changes paths.js only.
+// Step 8 moved the pages (the tree of D2 c, paths.js); a row whose key still has the old path does nothing.
+// The old groups (Identity, Protection, Operations, Monitoring) end on the group that took most of their places (People, Backup, System).
 // A page that merges into another one (Releases into Updates) writes [key, { tab }] instead of the key.
 // D7: the table is kept for two releases (0.11 and 0.12) and removed in 0.13: REMOVE_IN is read by the test; delete the table, the
 // fixture and the test together then.
@@ -19,10 +20,10 @@ export const VPS_NODE = 'proxyserver';
 export const MOVED = Object.freeze({
   '/storage':                     'storage',
   '/instances':                   'instances',
-  '/identity':                    'identity',
-  '/protection':                  'protection',
-  '/operations':                  'operations',
-  '/monitoring':                  'monitoring',
+  '/identity':                    'people',
+  '/protection':                  'backupGroup',
+  '/operations':                  'system',
+  '/monitoring':                  'system',
   '/developer':                   'developer',
   '/settings':                    'settings',
   '/storage/pools':               'pools',
@@ -66,8 +67,8 @@ export const MOVED = Object.freeze({
   '/settings/storage':            'settingsStorage',
   '/settings/backups':            'settingsBackups',
   '/settings/access':             'settingsAccess',
-  '/settings/updates':            'settingsUpdates',
-  '/settings/releases':           'releases',
+  '/settings/updates':            'updates',
+  '/settings/releases':           ['updates', { tab: 'releases' }],
   '/settings/capabilities':       'capabilities',
   '/settings/advanced':           'settingsAdvanced',
   '/health':                      'nodeHealth',

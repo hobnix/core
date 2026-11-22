@@ -1,8 +1,9 @@
 <script>
+  import { P } from '../paths.js';
   import Button from '../ui/Button.svelte';
   import TextInput from '../ui/TextInput.svelte';
   // Jump-to search of the top bar. Client side only: the lists are the reads the pages already use, fetched when the box gets focus.
-  import { nodeItems, vpsTree, visible } from '../nav.js';
+  import { nodeItems, vpsTree, visible, offTree } from '../nav.js';
   import { pools, poolNames, poolOfRole } from '../pools.svelte.js';
   import { ui } from '../ui.svelte.js';
   import { poll, rows } from '../data.svelte.js';
@@ -46,6 +47,7 @@
       }
     };
     walk(nodeItems('main', ui.features.capabilities, null, [], pools.rows), [], ui.host);
+    walk(offTree, [], ui.host);   // Docs, What's new, Incident, Setup, Servers: places that are not tree rows
     if ((ui.features.capabilities ?? ['vps']).includes('vps')) walk(vpsTree, [VPS_NODE], VPS_NODE);
     return out;
   });
@@ -62,10 +64,10 @@
     pages: pages.map((p) => ({ ...p, kind: 'pages', keys: [p.name, p.hint] })),
     instances: rows(cts).map((r) => ({ kind: 'instances', name: r[0], hint: r[2] ?? '', path: local('/instances'), keys: [r[0]] })),
     shares: rows(shares).map((r) => ({ kind: 'shares', name: r[0], hint: r[2] ?? '', path: local('/storage/shares'), keys: [r[0]] })),
-    users: rows(users).map((r) => ({ kind: 'users', name: r[0], hint: r[1] && r[1] !== '-' ? r[1] : '', path: local('/identity/users'), keys: [r[0], r[1] ?? ''] })),
-    groups: rows(groups).map((r) => ({ kind: 'groups', name: r[0], hint: '', path: local('/identity/groups'), keys: [r[0]] })),
+    users: rows(users).map((r) => ({ kind: 'users', name: r[0], hint: r[1] && r[1] !== '-' ? r[1] : '', path: local(P.users), keys: [r[0], r[1] ?? ''] })),
+    groups: rows(groups).map((r) => ({ kind: 'groups', name: r[0], hint: '', path: local(P.groups), keys: [r[0]] })),
     disks: rows(disks).map((r) => ({ kind: 'disks', name: r[0], hint: [r[10], r[3]].filter(Boolean).join(' · '), path: local(diskPath(r[3] ?? '')), keys: [r[0], r[10] ?? ''] })),
-    recipes: rows(recipes).map((r) => ({ kind: 'recipes', name: r[0], hint: r[3] ?? '', path: local('/instances/apps'), keys: [r[0]] })),
+    recipes: rows(recipes).map((r) => ({ kind: 'recipes', name: r[0], hint: r[3] ?? '', path: local(P.apps), keys: [r[0]] })),
   });
 
   // 0 = starts with the text, 1 = a word starts with it, 2 = contains it, -1 = no match; the best of the item's strings counts

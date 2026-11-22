@@ -9,7 +9,7 @@ const paths = (kind, caps) => nodeItems(kind, caps).map((i) => i.path);
 // a peer: Health always; Storage, Instances, Backup only for the capabilities it names
 assert.deepEqual(paths('peer', null), ['/health']);
 assert.deepEqual(paths('peer', []), ['/health']);
-assert.deepEqual(paths('peer', ['storage', 'incus', 'backup', 'samba']), ['/health', '/storage', '/instances', '/protection/backup']);
+assert.deepEqual(paths('peer', ['storage', 'incus', 'backup', 'samba']), ['/health', '/storage', '/instances', '/backup/overview']);
 assert.deepEqual(paths('peer', ['incus']), ['/health', '/instances']);
 
 // an edge node: the pages follow its edge capabilities; Tailscale and Settings are always there
@@ -18,10 +18,10 @@ assert.deepEqual(paths('edge', ['edge-mail', 'edge-ports', 'edge-watcher', 'edge
 // a vps node (the old proxyserver) does not report a list: every page
 assert.deepEqual(paths('vps', null), ['/health', '/mail', '/ports', '/watcher', '/certificate', '/tailscale', '/settings']);
 // the main node keeps its long tree and the Nodes page
-assert.ok(paths('main', ['docs']).includes('/nodes'));
+assert.ok(!paths('main', ['docs']).includes('/nodes'));   // Nodes is the SERVERS header of the tree, not a row
 assert.ok(paths('main', null).includes('/settings'));
 // nothing of a remote tree is a local page by accident: a peer never gets Settings, Network or Identity
-for (const p of ['/settings', '/network', '/identity', '/nodes', '/setup']) assert.ok(!paths('peer', ['storage', 'incus', 'backup']).includes(p), p);
+for (const p of ['/settings', '/network', '/people', '/nodes', '/setup']) assert.ok(!paths('peer', ['storage', 'incus', 'backup']).includes(p), p);
 
 // the capability pages go under Settings > Capabilities (a copy: without the 4th argument nothing changes)
 const gw = [{ label: 'Gateway proxy', icon: 'puzzle-piece', path: '/settings/capabilities/gateway' }];

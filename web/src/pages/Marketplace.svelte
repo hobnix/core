@@ -37,7 +37,7 @@
 
   const tabs = [{ id: 'packages', label: 'Packages' }, { id: 'repos', label: 'Repositories' }];
   const tab = $derived(tabs.some((t) => t.id === route.query.tab) ? route.query.tab : 'packages');
-  const pick = (id) => go(id === 'packages' ? '/marketplace' : `/marketplace?tab=${id}`);
+  const pick = (id) => go(id === 'packages' ? P.marketplace : `${P.marketplace}?tab=${id}`);
 
   let q = $state('');
   let kind = $state('all');

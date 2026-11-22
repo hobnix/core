@@ -62,7 +62,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case P.disks: return [...DISKS, ...poolList.filter((p) => p.kind !== 'zfs').slice(0, 1).map((p) => `${A}pool/members?pool=${p.name}`)];
     case P.shares: return SHARES;
     case P.files: return [`${A}fm/locations`];
-    case P.settings: return [`${A}config/list`];
+    case P.settings: case P.updates: return [`${A}config/list`];
     case P.setup: return [`${A}setup/list`];
     case P.firstRun: return [`${A}preset/list`, `${A}parts/list`, `${A}setup/list`];
     case P.nodes: return [`${A}node/list`];

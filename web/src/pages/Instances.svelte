@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   // Instances: containers and VMs in one list. A row opens the quick look over the list (?sel=<name>: selection.svelte.js); "Open page" goes to the page of the instance
   // (pages/instances/Instance.svelte) with its tabs Overview, Config, Network and Console. Every action opens a plan. Snapshots of an instance live on its page (Config tab);
@@ -100,7 +101,7 @@
           {:else if col.key === 'lastSnap'}<Muted>{dash(c.lastSnap) || '–'}</Muted>
           {:else if col.key === 'route'}
             {@const s = servicesOf(c, services)}
-            {#if s.length}<a {...link('/instances/services')}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<Muted>–</Muted>{/if}
+            {#if s.length}<a {...link(P.services)}>{s[0].names && s[0].names !== '-' ? s[0].names.split(',')[0] : s[0].name}{s.length > 1 ? ` +${s.length - 1}` : ''}</a>{:else}<Muted>–</Muted>{/if}
           {:else}
             <Row gap="1" justify="end">
               <Button need="app-manager" variant="ghost" class="btn-icon" icon={isRunning(c) ? 'stop' : 'play'} busy={m.busyOf(c, ['stop'], ['stop', '--autostart', 'off'], ['start'])} tooltip={isRunning(c) ? 'Stop' : 'Start'} label="{isRunning(c) ? 'Stop' : 'Start'} {c.name}" onclick={(e) => plan(e, c, isRunning(c) ? 'stop' : 'start')} />
@@ -115,7 +116,7 @@
                 <Row gap="2" style="margin-left:16px;min-width:140px"><Icon name="corners-out" />{r[0]}</Row>
                 <StatusDot state={dot(r[3])} label={r[3]} bare />
                 <Muted style="min-width:80px">{r[4]}</Muted>
-                <a {...link('/instances/docker', 'docker', r[0])}>open in Docker</a>
+                <a {...link(P.docker, 'docker', r[0])}>open in Docker</a>
               </Row>
             {/each}
           </Stack>

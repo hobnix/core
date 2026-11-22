@@ -18,9 +18,9 @@ for (const name of readdirSync(capDir)) {
 }
 check('the allowlist was read', known.size > 50 && known.has('ct/list') && known.has('status'), String(known.size));
 
-const routes = ['/', '/instances', '/network', '/identity/users', '/identity/groups', '/identity/certificates', '/monitoring/hardware', '/protection/backup', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
-  '/protection/expiry', '/operations/health', '/instances/apps', '/marketplace', '/instances/services', '/storage/encryption', '/storage/vault',
-  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/monitoring/diagnostics'];
+const routes = ['/', '/instances', '/network', '/people/users', '/people/groups', '/system/certificates', '/system/hardware', '/backup/overview', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
+  '/backup/expiry', '/system/health', '/apps/installed', '/apps/marketplace', '/network/services', '/storage/encryption', '/storage/vault',
+  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/system/diagnostics', '/system/updates', '/network/map'];
 const missing = [];
 let total = 0;
 for (const r of routes) {
@@ -51,7 +51,7 @@ const storagePages = ['/storage/pools', '/storage/pools/bulk', '/storage/pools/f
 check('storage prefetch lists are identical with live mode off and on', storagePages.every((r) => JSON.stringify(readsFor(r)) === JSON.stringify(readsFor(r, [], true))));
 check('storage pages still prefetch URLs, none named like a topic', storagePages.every((r) => readsFor(r).length > 0 && readsFor(r).every((p) => p.startsWith('/api/sys/') && !/\/(pool-(info|members|state)-|shares-overview|monitor-disks)/.test(p))));
 check('storage prefetch is unchanged by live mode', JSON.stringify(readsFor('/storage/pools/bulk')) === JSON.stringify(readsFor('/storage/pools/bulk', [], true)));
-check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/monitoring/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/monitoring/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
+check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/system/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/system/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

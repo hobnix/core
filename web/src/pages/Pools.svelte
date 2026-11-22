@@ -158,6 +158,7 @@
 {#if !pool}
   <PageHeader title="Pools" crumb="Storage" sub="How the disks are grouped, how full they are and whether the redundancy holds.">
     {#snippet actions()}
+      <Button tooltip={'A disk failed or a pool will not open: the guided recovery'} onclick={() => go(P.incident)}><i class="ph ph-first-aid-kit"></i>Incident</Button>
       {#if freeDisks.length}<Button tooltip={'Show the disks that belong to no pool'} onclick={() => go(P.disks + '?pool=none')}><i class="ph ph-hard-drive"></i>{freeDisks.length} free disk{freeDisks.length === 1 ? '' : 's'}</Button>{/if}
     {/snippet}
   </PageHeader>

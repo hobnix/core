@@ -79,7 +79,7 @@ const values = Object.values(P);
 eq('every place has its own path', new Set(values).size, values.length);
 eq('every path is an inner path', values.filter((v) => !v.startsWith('/')), []);
 eq('pool path', poolPath('tank'), '/storage/pools/tank');
-eq('docker app path is encoded', dockerAppPath('a b'), '/instances/docker/app/a%20b');
+eq('docker app path is encoded', dockerAppPath('a b'), '/apps/docker/app/a%20b');
 eq('capability path', capabilityPath('docker'), '/settings/capabilities/docker');
 eq('node path', nodePath('home server'), '/node/home%20server');
 eq('a list with a filter', withQuery(P.disks, { pool: 'none' }), '/storage/disks?pool=none');

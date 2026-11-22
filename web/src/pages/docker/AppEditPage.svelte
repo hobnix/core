@@ -1,7 +1,7 @@
 <script>
   import { P } from '../../paths.js';
   // The editor of one Docker app on its own page: docker-compose.yml left, the real .env text right (one column on a phone).
-  // /instances/docker/app/<app> edits a web-managed app, /instances/docker/new starts one. The read `docker app` is never cached by the server
+  // /apps/docker/app/<app> edits a web-managed app, /apps/docker/new starts one. The read `docker app` is never cached by the server
   // (it holds the .env text): this page reads it with get() and keeps the text only in its own state, never in a store or the browser's storage.
   // Test = the plan of `docker-app app-save` with the document {compose, env}, asked without a dialog: its `finding` lines are shown at their
   // lines in the panels (editor/findings.js), the ones without a place in a banner. Save (`app-write`) writes the two files only; Apply
@@ -26,8 +26,8 @@
   import { convert } from '../../editor/dockerrun.js';
   import { takeHandoff } from '../../editor/wizard.js';
 
-  const NEW = '/instances/docker/new';
-  const PREFIX = '/instances/docker/app/';
+  const NEW = P.dockerNew;
+  const PREFIX = `${P.docker}/app/`;
   const template = 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    env_file: .env\n    restart: unless-stopped\n';
 
   const isNew = $derived(route.path === NEW);

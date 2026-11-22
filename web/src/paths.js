@@ -3,28 +3,30 @@
 // These are INNER paths (route.path); `url()`/`go()` of route.svelte.js put the node in front. A literal path is a test failure (tests/web-select.mjs).
 export const P = Object.freeze({
   summary: '/',
-  // groups
-  storage: '/storage', instances: '/instances', identity: '/identity', protection: '/protection', operations: '/operations', monitoring: '/monitoring',
+  // groups (D2 c: Storage, Instances, Apps, Network, People, System, Backup, Settings; Developer only while its capability is on)
+  storage: '/storage', instances: '/instances', appsGroup: '/apps', people: '/people', system: '/system', backupGroup: '/backup',
   developer: '/developer', settings: '/settings',
   // storage
   pools: '/storage/pools', incident: '/storage/incident', disks: '/storage/disks', shares: '/storage/shares', files: '/storage/files',
   encryption: '/storage/encryption', vault: '/storage/vault',
-  // instances and apps
-  apps: '/instances/apps', iso: '/instances/iso', services: '/instances/services', docker: '/instances/docker', registries: '/instances/docker/registries',
-  dockerNew: '/instances/docker/new', dockerWizard: '/instances/docker/wizard', marketplace: '/marketplace', builder: '/marketplace/builder',
-  network: '/network',
-  // identity
-  groups: '/identity/groups', users: '/identity/users', certificates: '/identity/certificates',
-  // monitoring, protection, operations
-  // networkMap moves to /network/map in step 8 of docs/PLAN-navigation.md (owner decision): change this one line and its redirect row
-  hardware: '/monitoring/hardware', networkMap: '/monitoring/network-map', diagnostics: '/monitoring/diagnostics', liveState: '/monitoring/live-state', testLab: '/monitoring/test-lab',
-  backup: '/protection/backup', expiry: '/protection/expiry',
-  health: '/operations/health', notifications: '/operations/notifications', events: '/operations/events', whatsNew: '/operations/whats-new',
+  // instances
+  iso: '/instances/iso',
+  // apps
+  apps: '/apps/installed', docker: '/apps/docker', registries: '/apps/docker/registries',
+  dockerNew: '/apps/docker/new', dockerWizard: '/apps/docker/wizard', marketplace: '/apps/marketplace', builder: '/apps/marketplace/builder',
+  // network
+  network: '/network', services: '/network/services', networkMap: '/network/map',
+  // people
+  groups: '/people/groups', users: '/people/users',
+  // system: Hardware, Updates (with the Releases tab) and Certificates live here (D2 c)
+  health: '/system/health', events: '/system/events', notifications: '/system/notifications', hardware: '/system/hardware', updates: '/system/updates',
+  certificates: '/system/certificates', diagnostics: '/system/diagnostics', liveState: '/system/live-state', testLab: '/system/test-lab', whatsNew: '/system/whats-new',
+  // backup
+  backup: '/backup/overview', expiry: '/backup/expiry',
   components: '/developer/components', docs: '/docs', setup: '/setup', firstRun: '/setup/first-run', nodes: '/nodes',
   // settings
   settingsGeneral: '/settings/general', settingsNetwork: '/settings/network', settingsStorage: '/settings/storage', settingsBackups: '/settings/backups',
-  settingsAccess: '/settings/access', settingsUpdates: '/settings/updates', releases: '/settings/releases', capabilities: '/settings/capabilities',
-  settingsAdvanced: '/settings/advanced',
+  settingsAccess: '/settings/access', capabilities: '/settings/capabilities', settingsAdvanced: '/settings/advanced',
   // pages of a remote node (edge, vps: the proxy pages; every remote kind: its health)
   nodeHealth: '/health', mail: '/mail', ports: '/ports', watcher: '/watcher', certificate: '/certificate', tailscale: '/tailscale',
 });

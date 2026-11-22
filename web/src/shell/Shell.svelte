@@ -1,5 +1,5 @@
 <script>
-  import { nodePath } from '../paths.js';
+  import { P, nodePath } from '../paths.js';
   import { route, setLocalNode, go } from '../route.svelte.js';
   import { poll, rows, prefetch, refresh } from '../data.svelte.js';
   import TopBar from './TopBar.svelte';
@@ -61,8 +61,8 @@
     prefetched = true;
     // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them)
     loadPools().then(() => {
-      const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', '/operations/health', '/protection/backup', '/network', '/identity/users',
-        '/instances/apps', '/instances/services', '/storage/vault', '/storage/encryption', '/monitoring/hardware', '/protection/expiry'];
+      const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
+        P.apps, P.services, '/storage/vault', '/storage/encryption', P.hardware, P.expiry];
       prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
         '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
@@ -124,13 +124,13 @@
       }
       m['/storage/disks'] = watchAll ? { text: `${watchAll} watch`, warn: true } : { text: String(dl.length) };
     }
-    if (changes.count) m['/operations/whats-new'] = { text: `${changes.count} new` };
+    if (changes.count) m[P.whatsNew] = { text: `${changes.count} new` };
     const sl = rows(shares).filter((r) => r[1] !== 'other');
     if (sl.length) m['/storage/shares'] = { text: String(sl.length) };
     const cl = rows(cts);
     if (cl.length) m['/instances'] = { text: `${cl.filter((r) => /^running$/i.test(r[2])).length}/${cl.length}` };
-    if (rows(groups).length) m['/identity/groups'] = { text: String(rows(groups).length) };
-    if (rows(users).length) m['/identity/users'] = { text: String(rows(users).length) };
+    if (rows(groups).length) m[P.groups] = { text: String(rows(groups).length) };
+    if (rows(users).length) m[P.users] = { text: String(rows(users).length) };
     if (d) m['/storage/encryption'] = locked ? { text: 'locked', warn: true } : d.encryption && d.encryption !== 'none' ? { text: 'open' } : null;
     if (locked) m['/storage/vault'] = { text: 'locked', warn: true };
     else if (vault.loaded && rows(vault).length) m['/storage/vault'] = { text: `${rows(vault).length} items` };
@@ -138,10 +138,10 @@
     const b = rows(status).find((r) => r[0] === 'backup');
     if (b && /^[0-9]+$/.test(b[2] ?? '')) {
       const h = Math.floor(Number(b[2]) / 3600);
-      m['/protection/backup'] = { text: h < 1 ? '< 1 h' : h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`, warn: b[1] !== 'ok' };
+      m[P.backup] = { text: h < 1 ? '< 1 h' : h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`, warn: b[1] !== 'ok' };
     }
     if (dockerHealth.loaded && dockerOn) Object.assign(m, dockerTree(rows(dockerHealth), dockerChildren(tree)));
-    if (d?.problems > 0) m['/operations/health'] = { text: String(d.problems), warn: true };
+    if (d?.problems > 0) m[P.health] = { text: String(d.problems), warn: true };
     // a remote node's rows are keyed "<node>:<inner path>"
     for (const [p, v] of Object.entries(treeMeta(proxState, prox.data))) m[`${VPS_NODE}:${p}`] = v;
     for (const [nm, r] of Object.entries(reports)) {
