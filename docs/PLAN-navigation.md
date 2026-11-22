@@ -1,8 +1,16 @@
 # Plan: navigation and pages (milestone 0.11)
 
-Status: plan, written 2026-11-19 on branch `0.11` (cut from `0.10`, head `a6d0e8c1`). Nothing here is built and nothing was run on a server or seen in a
-browser. Epic #451 ("Navigation and page structure") with #452, #453, #454, #455, #457, #776, and the three items the milestone may take or leave:
-#488, #487, #427. The owner decided D1 to D12 on 2026-11-20 (see "Decisions for the owner"; D2 and D3 differ from the recommendation). Building 0.11 starts when 0.10 is finished and merged into 0.11.
+Status: built 2026-11-22 on `0.11`, steps 0 to 14 merged (step 14 is the docs PR). Written 2026-11-19 on branch `0.11` (cut from `0.10`, head `a6d0e8c1`).
+Epic #451 ("Navigation and page structure") with #452, #453, #454, #455, #457, #776, and #488, #487, #427. The owner decided D1 to D12 on 2026-11-20 (see "Decisions for the owner"; D2 and D3 differ from the recommendation). **Nothing was run on a server**; the release is the beta `v0.11.0-beta.1` (docs/RELEASE-NOTES-0.11.md).
+
+**Deviations from this plan, as built**
+- The group Health is named **System** (D2 c); docs/PLAN-web-design.md 2.2 and 2.5 say so.
+- **Incident is a button** on Pools and on Health, not a tree entry.
+- **Developer** is not a group of the design: it shows only while the `testlab` capability is on (`DEVELOPER_CAP` in nav.js).
+- Step 13 (#488) is the web half only. The note recognises the code `plan.changed` as a placeholder (`RELOAD_CODES` in ui/errornote.js) until the scripts print real codes (0.12).
+- The cleanup of `ui/Split` (the `.opt` rules; Files keeps it) is **tracked separately**, not part of this milestone.
+- Step 11 built the axe check (test-lab stage 6, baseline `scripts/dev/axe-baseline.tsv`) and the contrast test, but the browser passes were **not run**: keyboard walk, axe on the VM, screen reader (R1). Step 12 (390 px) was a code review with fixes in `QuickLook` and the tree; the browser pass at 390 px was **not run** (R2, R3).
+- The old-path table (`web/src/redirects.js`) stays through 0.12 and is removed in 0.13 (`REMOVE_IN`, D7).
 
 Related records: docs/PLAN-web-design.md (the design this milestone builds: sections 1 to 3 are decided on 2026-11-18), docs/PLAN-live-interface.md (0.10:
 `rowstate`, the event stream), docs/adr/0007-branches-and-releases.md, docs/adr/0012 (roles), docs/adr/0025-translation-scope.md, web/CLAUDE.md,

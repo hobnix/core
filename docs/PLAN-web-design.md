@@ -102,7 +102,7 @@ Per node. Summary and eight groups instead of Summary and twelve entries, and th
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
 | Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
 | People | Users, Groups, Certificates | Identity |
-| Health | Health, Jobs, Events, Notifications, Hardware, Diagnostics, Live state, Test-lab | Monitoring, Operations, and the new Jobs page (#385) |
+| System | Health, Jobs, Events, Notifications, Hardware, Updates, Certificates, Diagnostics, Live state, Test-lab | Monitoring, Operations, Certificates, Updates, and the new Jobs page (#385). Named Health in the first draft; renamed System in 0.11 (docs/PLAN-navigation.md D2 c) |
 | Backup | Backup, Expiry dates | Protection |
 | Settings | General, Network and DNS, Storage, Backups, Users and access, Updates, Capabilities, Advanced | Settings minus Releases |
 
@@ -115,7 +115,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 | Summary | the node root: a click on the server opens Summary |
 | Storage > Pools, bulk, fast | Storage > Pools; the pools are rows of that list and each opens its page, not tree children |
 | Storage > Disks, Shares, Files, Encryption, Vault | unchanged |
-| Storage > Incident | action on Pools and Health |
+| Storage > Incident | action on Pools and Health (the page) |
 | Instances > Instances | Instances > Instances |
 | Instances > ISO images | Instances > ISO images |
 | Instances > Apps | Apps > Installed |
@@ -150,7 +150,7 @@ Decided 2026-11-18:
 
 - **Instances and Apps stay two groups.** Summary and eight groups per node.
 - **Expiry dates stays in Backup.**
-- **Certificates are in People, Services in Network.**
+- **Certificates are in People, Services in Network.** Changed by the owner on 2026-11-20 (PLAN-navigation D2 c): Certificates, Hardware and Updates are in the group System, and the group Health is named **System**.
 - **The Jobs drawer stays and the Jobs page (#385) sits beside it.** How the two relate (what each shows) is for the page templates, section 3.
 - **The Setup banner shows until every check is done.**
 
@@ -166,7 +166,7 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 
 | Template | Used for | Body | Address |
 |---|---|---|---|
-| **Group** | Storage, Instances, Apps, Network, People, Health, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
+| **Group** | Storage, Instances, Apps, Network, People, System, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
 | **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes, Services, Marketplace (card view), Updates | filter tabs (or content tabs where a list has several views: Updates, Releases, What's new), `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
 | **Object** | one disk, pool, share, instance, user, package or app | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
 | **Feed** | Events, Notifications, Jobs, Health problems | time-ordered entries with filters; each entry links to the object it is about; acknowledge where it applies (#619) | `/<group>/<kind>`, filters in the address |

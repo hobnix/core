@@ -148,27 +148,64 @@ selected row is highlighted; a row opens with Tab and Enter or Space. The list u
 event stream is down). A state this page does not know is shown as text. **Scheduled** is the list of timers with **Run now**.
 Not tested on hardware yet.
 
-**Events** (Operations > Events) shows what happened on the server, newest first, and every signed-in role may read it. New entries appear
+**Events** (System > Events) shows what happened on the server, newest first, and every signed-in role may read it. New entries appear
 at once while the event stream is open; the page asks the server again every 30 s only while the stream is down. **Show more** loads the
 next 100 older entries (by their number, `hs event list --before <id>`), so a long list stays fast. Filter by source, level, kind and time.
 Not tested on hardware yet.
 
-| Page | What you do there |
+The left tree has Summary (the server itself) and eight groups. Click a group to open its page, which says in one line how the group is doing.
+
+| Group | Places |
 | --- | --- |
-| Summary | CPU, memory, disks per pool, UPS, important states; **Run health check** |
-| Storage | pools `bulk` and `fast`, disks (SMART, self-tests, unassigned and foreign disks), shares, encryption, vault (values are never shown) |
-| Instances | containers and VMs (start, stop, snapshot, update, settings, fixed address, mounts, create, delete), **Apps** (the recipes), **Services** (what the reverse proxy publishes) |
-| Marketplace | the packages of the repositories (apps and extensions): install, update, remove; the repositories themselves, signed only; the Package builder checks the manifest of a new package as you type |
-| Network | addresses of the instances, router networks, DNS names, open ports |
-| Identity | users, groups, certificates (only with a domain) |
-| Monitoring | hardware (temperatures, fans), diagnostics |
-| Protection | backup (back up now, verify, restore test, browse, restore files), expiry dates |
-| Operations | health (each problem with the command that helps, and a button where a safe fix exists), notifications |
-| Docs | the guides and the command reference, rendered in the page, with search |
-| Nodes, Setup, Settings | other servers, the first-run checklist, the `machine.toml` settings on subpages (see below) |
+| Storage | Pools, Disks, Shares, Files, Encryption, Vault |
+| Instances | Instances (containers and VMs), ISO images |
+| Apps | Installed (the recipes), Docker, Marketplace (apps and extensions, the repositories, the Package builder) |
+| Network | Network (addresses, router networks, DNS names, open ports), Services, Network map |
+| People | Users, Groups |
+| System | Health, Events, Notifications, Hardware, Updates (with a Releases tab), Certificates, Diagnostics, Live state, Test-lab |
+| Backup | Backup, Expiry dates |
+| Settings | General, Network and DNS, Storage, Backups, Users and access, Capabilities, Advanced |
+
+**Docs** and **What's new** are buttons in the top bar, **Incident** is a button on Pools and on Health, and the list of servers opens from the
+**Servers** header of the tree. **Setup** is a banner on Summary until you mark it done. **Developer** (the components gallery) shows at the bottom
+only while the test-lab capability is on. The tree of another server (peer, edge, VPS) keeps its own pages; its Health entry is called System too.
+
+### Group pages
+**Storage**, **Backup** and **System** show one line of state (healthy, a warning, a problem, or no data) and one card per place with its state:
+pools with capacity, disks that need attention, shares and encryption (locked storage shows as locked, not empty); the last backup and the dates
+that run out; open problems, updates, certificates, the UPS and recent events. They read only what their places read already. The other groups
+show a card list.
+
+### Object pages and the quick look
+A disk, a share, an instance and a user each have a page of their own, and so has a pool:
+
+| Object | Address (inner path) | Tabs |
+| --- | --- | --- |
+| Pool | `/storage/pools/<name>` | none |
+| Disk | `/storage/disks/<name>[/<tab>]` | Overview, SMART, Tests, Files |
+| Share | `/storage/shares/<name>[/<tab>]` | Overview, Access, Snapshots |
+| Instance | `/instances/ct/<name>[/<tab>]` | Overview, Config, Network, Console |
+| User | `/people/users/<name>[/<tab>]` | Overview, Groups, Access |
+
+A page has a header with one main action (Start or Stop, Browse files, Edit) and at most one more; the rest are under **More**, and a destructive
+action (Delete, Roll back) is in the danger section at the end and asks you to type the name. Running jobs show on the header and on the row.
+
+On a list, selecting a row opens a **quick look** over the list: the list keeps its width and columns. The address carries the row (`?sel=<name>`),
+so reload, Back and Forward and a pasted link work. Escape closes it, and **Open page** goes to the object page. On a phone the quick look covers the
+screen. Groups, Nodes, Docker apps and the stored output on Live state use the quick look too. An address of a removed object says "not found".
+
+### Addresses
+Every address is `/node/<name>/<inner path>`, for example `/node/myserver/storage/disks/sda`. The old addresses (Identity, Protection, Operations,
+Monitoring, Marketplace and the other places of 0.10 and before) are kept in a redirect table and open the place that took over, so bookmarks and links
+in old notifications still work. The table is kept through 0.12 and is removed in 0.13: change old bookmarks before then.
+
+A refused change shows the code of the reason, the text and a link to the guide in the plan dialog (for a code the page does not know, the text only).
+
+Not tested on hardware yet. The keyboard walk, the axe check in the browser and the 390 px pass for these pages were not run.
+Docs: [Errors](troubleshooting.md).
 
 **Settings** has subpages in the left tree: **General** (name, language, look, the Nodes link), **Network and DNS**, **Storage**, **Backups**,
-**Users and access** (SSH keys, web access, the terminal, Active Directory), **Updates** (installed revision, how many changes are
+**Users and access** (SSH keys, web access, the terminal, Active Directory), and, in the System group, **Updates** (installed revision, how many changes are
 waiting upstream, the update channel with the version the next update would install (beta and edge carry a warning: they can break things and are never applied by themselves), **Update**, a link to What's new, and **Sync new options** for new keys in `machine.toml`), **Capabilities** (every optional
 part and extension with its switch) and **Advanced** (every key, read-only ones too, and **Check** for typos in `machine.toml`). Each
 capability that is switched on and has settings of its own (the gateway, metrics, Tailscale ...) also gets a page under **Capabilities**:
@@ -397,12 +434,12 @@ Not tested on hardware yet.
 
 ## See the network map
 
-Monitoring > Network map draws how this server reaches the network: the way out, the gateway, the host, its bridges, the instances and their services,
+Network > Network map draws how this server reaches the network: the way out, the gateway, the host, its bridges, the instances and their services,
 with the traffic as moving dots (more and faster dots for more traffic; none for none). The same facts as a table: the button above the map.
 
 The full guide is [Network map](network-map.md).
 
-1. Open Monitoring > Network map. The graph as text: `sudo hs sys netmap`.
+1. Open Network > Network map. The graph as text: `sudo hs sys netmap`.
 2. Hover or press Tab to reach a node; Enter or Space opens its details, with a link to the page of that node where there is one.
 3. The map follows the server: an instance that starts or stops changes the graph by itself. The traffic comes from a stream of its own
    (`GET /api/netmap/stream`, about every 2 seconds, only while the page is open, 4 streams in all). When the stream is not available the page says so
@@ -415,7 +452,7 @@ The page loads when you first open it, so the other pages do not wait for it. No
 
 When live state is on, one page lists every topic the collector reads and what is stored for it.
 
-1. Open Monitoring > Live state. The same list as text: `sudo hs sys live inspect`.
+1. Open System > Live state. The same list as text: `sudo hs sys live inspect`.
 2. Read a row: Source is the `hs sys` command the topic runs, Every is how often it is read, State is `fresh`, `stale`, `failing`, `never`,
    `pending` or `off` (its capability is off), Age is the time since the last good reading, Gen counts the readings, Exit and Error are the
    last failure with its time, Capability, Groups and (when known) Needs say when it is read and which changes wake it.
