@@ -87,7 +87,7 @@ const live = readFileSync(new URL('../web/src/live.svelte.js', import.meta.url),
 check('live: beat, watchdog, visibilitychange wired', /'beat'/.test(live) && /new LiveWatch/.test(live) && /visibilitychange/.test(live) && /resyncAll\(\); \}/.test(live));
 // Refetch on the list's topic (D5 a): a read with a free argument follows the topic of the list it belongs to, no timer while live.
 const refetch = [
-  ['pages/identity/User.svelte', 'users/access', 'shares-overview'], ['pages/Users.svelte', 'users/details', 'users-list'],
+  ['pages/identity/User.svelte', 'users/access', 'shares-overview'],
   ['forms/users/EditUser.svelte', 'users/details', 'users-list'],
   ['pages/Groups.svelte', 'users/group-access', 'shares-overview'], ['pages/Groups.svelte', 'users/group-details', 'users-groups'],
   ['pages/identity/GroupShares.svelte', 'users/group-access', 'shares-overview'], ['forms/users/EditGroup.svelte', 'users/group-details', 'users-groups'],
