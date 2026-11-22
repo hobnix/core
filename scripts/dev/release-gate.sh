@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The checks and the signing of the release workflow (.github/workflows/release.yml), kept in a script so they run in a test. Not an `hs`
-# command. Run it inside a full checkout of hobnix/server (fetch-depth 0, tags fetched). Guide: docs/RELEASE-PROCESS.md, "Release from GitHub".
+# command. Run it inside a full checkout of hobnix/core (fetch-depth 0, tags fetched). Guide: docs/RELEASE-PROCESS.md, "Release from GitHub".
 #
 #   release-gate.sh check <version> [--sha <commit>]
 #       <version> is vX.Y.Z (stable, hotfix) or vX.Y.Z-beta.N. Refuses unless: the commit (default HEAD) is the tip of origin/main and a merge
@@ -39,7 +39,7 @@ beta=false; [[ "$ver" == *-beta.* ]] && beta=true
 base_ver=${ver%%-*}                     # vX.Y.Z
 mm=${base_ver#v}; mm=${mm%.*}           # X.Y
 notes=docs/RELEASE-NOTES-$mm.md
-repo_dir=$(git rev-parse --show-toplevel 2>/dev/null) || fail "Run this inside a checkout of hobnix/server."
+repo_dir=$(git rev-parse --show-toplevel 2>/dev/null) || fail "Run this inside a checkout of hobnix/core."
 cd "$repo_dir" || exit 1
 sha=$(git rev-parse --verify -q "${sha:-HEAD}^{commit}") || fail "That commit is not here."
 

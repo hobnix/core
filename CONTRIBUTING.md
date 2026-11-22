@@ -79,7 +79,7 @@ Signed-off-by: Your Name <you@example.org>
 ## Community
 
 - Everyone who takes part follows the [code of conduct](CODE_OF_CONDUCT.md).
-- **Discussions** (https://github.com/hobnix/server/discussions) are for questions, "how do I", show-and-tell and early ideas that are not yet
+- **Discussions** (https://github.com/hobnix/core/discussions) are for questions, "how do I", show-and-tell and early ideas that are not yet
   a change. An issue is for something that can be built or fixed. A Discussion that turns into work becomes an issue, and the issue links back.
 - **Good first issues** carry the label `good first issue`. We label an issue that way only when it names the files to touch, says what
   done looks like (a command and its output, or a test that passes) and needs no change to storage, the network or the firewall. Typical

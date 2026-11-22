@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       core_ref:
-        description: "ref of hobnix/server that holds prepare-release.sh"
+        description: "ref of hobnix/core that holds prepare-release.sh"
         type: string
         default: develop
 
@@ -28,7 +28,7 @@ jobs:
           path: repo
       - uses: actions/checkout@v5
         with:
-          repository: hobnix/server
+          repository: hobnix/core
           ref: ${{ inputs.core_ref }}
           path: core
       - name: Prepare
