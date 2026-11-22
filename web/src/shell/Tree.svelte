@@ -45,6 +45,7 @@
   .thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 4px 16px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   .all { margin-left: auto; margin-right: 8px; color: var(--fg-3); text-decoration: none; text-transform: none; letter-spacing: 0; }
   .all:hover { color: var(--fg); }
+  @media (max-width: 860px) { .all { padding: 14px 8px; margin: -14px 0; } }
   .cnt { font: 500 11px var(--mono); color: var(--fg-2); background: var(--panel-3); padding: 0 6px; }
   .tscroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 4px 8px 10px; }
 </style>

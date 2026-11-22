@@ -61,4 +61,5 @@
   .sl { flex: none; width: 16px; display: grid; place-items: center; }
   .cnt { font: 500 11px var(--mono); color: var(--fg-2); background: var(--panel-3); padding: 0 6px; min-width: 18px; text-align: center; white-space: nowrap; }
   .cnt.warn { color: var(--warn-ink); }
+  @media (max-width: 860px) { .trow { height: 44px; } .caret { width: 44px; height: 44px; } .cs { width: 44px; } .g { margin-left: 15px; } }
 </style>
