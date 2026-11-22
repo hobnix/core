@@ -49,3 +49,4 @@ Issue: hobnix/server#<n>
 | [0027](0027-package-lifecycle-states.md) | Package lifecycle states: four stages (available, installed, on, running) and flags for every kind; `sys pkg states`; verbs Install/Remove/Update | Accepted (2026-11-16) |
 | [0028](0028-error-codes.md) | Error codes: a `code` line beside `reason`, dotted names in one catalogue (error-codes.tsv, generated docs), exit numbers stay 0/1/other | Accepted |
 | [0029](0029-component-gallery-instead-of-storybook.md) | The component gallery page (`Developer > Components`) instead of Storybook; triggers to revisit #193 | Accepted (2026-11-18) |
+| [0030](0030-ui-sdk-for-the-map.md) | UI SDK for the Network Map: use it for behaviour, exact pin, one part at a time; +37 kB gzip for the first popover | Accepted (2026-11-21), spike result |

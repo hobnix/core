@@ -57,6 +57,7 @@ expiry	expiry list	300	run	-	system	-
 notify-channels	notify channels	60	run	notifications	system	-
 notify-providers	notify providers	3600	run	notifications	-	-
 ct-list	ct list	10	skip	incus	instances,shares,network	-
+netmap	netmap topology	10	skip	-	instances,network	-
 iso-list	iso list	10	skip	incus	instances	-
 ct-pools	ct pools	15	skip	incus	instances	-
 ct-profiles	ct profiles	120	skip	incus	instances,network,system	-

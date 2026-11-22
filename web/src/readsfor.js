@@ -40,6 +40,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case '/network': return [`${A}ct/list`, `${A}dns/list`, `${A}ports/list`, `${A}remote/list`, `${A}unifi/clients`, `${A}unifi/networks`];
     case '/identity/users': case '/identity/groups': return [`${A}users/list`, `${A}users/groups`];
     case '/identity/certificates': return [`${A}dc/state`];
+    case '/monitoring/network-map': return [`${A}netmap/topology`];
     case '/monitoring/hardware': return [`${A}hardware`, `${A}monitor/disks`, `${A}ups/status`];
     case '/protection/backup': return [`${A}backup/state`, `${A}backup/overview`, `${A}backup/snapshots?tag=shares`, `${A}backup/snapshots?tag=host`];
     case '/protection/expiry': return [`${A}expiry/list`];

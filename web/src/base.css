@@ -222,3 +222,42 @@ input[type='checkbox']:disabled, input[type='radio']:where(:not(.radio input, .s
 .gal-states .cell > small { font: 400 10px var(--mono, monospace); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.04em; }
 .gal-states .cell.wide { flex: 1 1 100%; }
 .gal-states .box { position: relative; border: 1px dashed var(--line-2); padding: 8px; width: 100%; box-sizing: border-box; }
+
+/* NodePopover (ui/NodePopover.svelte, spike, issue 871): parts of @ui-sdk/svelte, drawn with the tokens */
+  .np-trigger { padding: 4px 10px; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line-2); border-radius: var(--r); font: inherit; cursor: pointer; }
+  .np-trigger:hover { border-color: var(--accent); }
+  .np-trigger:focus-visible, .np-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .np-content { position: relative; z-index: 70; min-width: 220px; max-width: 320px; padding: 12px 14px; background: var(--panel-3); color: var(--fg);
+                         border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: var(--shadow); font-size: 13px;
+                         transition: opacity 90ms ease-out; }
+  .np-content[data-starting-style], .np-content[data-ending-style] { opacity: 0; }
+  .np-title { margin: 0 24px 8px 0; font-size: 13px; font-weight: 600; }
+  .np-close { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; background: none; border: 0; color: var(--fg-3); cursor: pointer; font-size: 16px; line-height: 1; }
+  @media (prefers-reduced-motion: reduce) { .np-content { transition: none; } }
+
+/* NetMap (ui/NetMap.svelte, issue 875): SVG nodes and links, a canvas of traffic dots on top; tokens only, so dark and light follow the theme */
+  .nm { position: relative; width: 100%; margin: 0 auto; }
+  .nm-svg, .nm-dots { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .nm-dots { pointer-events: none; }
+  .nm-c { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+  .nm-c-rx { color: var(--info); }
+  .nm-c-tx { color: var(--accent); }
+  .nm-link { stroke: var(--line-2); stroke-width: 1px; }
+  .nm-link.busy { stroke: var(--info); }
+  .nm-box { fill: var(--panel-2); stroke: var(--line-2); stroke-width: 1px; rx: var(--r); }
+  .nm-node.k-host .nm-box { stroke: var(--accent); }
+  .nm-node.k-other .nm-box { stroke-dasharray: 4 3; }
+  .nm-kind { fill: var(--fg-2); font: 400 11px var(--mono, monospace); }
+  .nm-name { fill: var(--fg); font-size: 13px; font-weight: 600; }
+  .nm-dot { fill: var(--off); }
+  .nm-dot.ok { fill: var(--ok); }
+  .nm-dot.warn { fill: var(--warn); }
+  .nm-dot.bad { fill: var(--bad); }
+  .nm-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .nm-hint { color: var(--fg-3); font-size: 12px; }
+  .nm-cap { caption-side: top; text-align: left; color: var(--fg-3); font-size: 12px; padding: 0 12px 6px; }
+  .nm-node { cursor: pointer; outline: none; }
+  .nm-node:hover .nm-box { stroke: var(--accent); }
+  .nm-node:focus-visible .nm-box { stroke: var(--accent); stroke-width: 3px; }
+  .np-link { display: inline-block; margin-top: 8px; color: var(--accent); }
+  .nm-empty { color: var(--fg-3); font-size: 13px; }
