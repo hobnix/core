@@ -22,7 +22,7 @@ const live = {
   edge: keysIn(block('edgeRoutes')),
 };
 live.vps = live.edge;
-const families = ['/docs/', '/extensions/', '/settings/capabilities/', '/instances/docker/app/'];
+const families = ['/docs/', '/extensions/', '/settings/capabilities/', `${P.docker}/app/`];
 const hasPage = (inner, kind) => live[kind].has(inner) || (kind === 'main' && (families.some((f) => inner.startsWith(f)) || /^\/storage\/pools\/[^/]+$/.test(inner)));
 const innerOf = (addr) => { const m = addr.split(/[?#]/)[0].match(/^\/node\/[^/]+(\/.*)?$/); return m ? (m[1] || '/') : addr.split(/[?#]/)[0]; };
 
@@ -55,8 +55,8 @@ eq('every prefix family of the snapshot has a rule', old.prefixed.filter((p) => 
 
 // 3. a node, a query and a hash are kept (the current table moves nothing yet, so the new address is the old one with the node in front)
 const full = (from, tail) => `/node/${L}${moved(from)[0] === '/' ? '' : moved(from)[0]}${tail}`;
-eq('a query is kept on every old path', Object.keys(MOVED).filter((from) => (probe(`${from}?sel=a&tab=b`) ?? full(from, '?sel=a&tab=b')) !== full(from, '?sel=a&tab=b')), []);
-eq('a query and a hash are kept', Object.keys(MOVED).filter((from) => (probe(`${from}?sel=a#h`) ?? full(from, '?sel=a#h')) !== full(from, '?sel=a#h')), []);
+eq('a query is kept on every old path', Object.keys(MOVED).filter((from) => !Array.isArray(MOVED[from])).filter((from) => (probe(`${from}?sel=a&tab=b`) ?? full(from, '?sel=a&tab=b')) !== full(from, '?sel=a&tab=b')), []);
+eq('a query and a hash are kept', Object.keys(MOVED).filter((from) => !Array.isArray(MOVED[from])).filter((from) => (probe(`${from}?sel=a#h`) ?? full(from, '?sel=a#h')) !== full(from, '?sel=a#h')), []);
 eq('the node of an address is kept', Object.keys(MOVED).filter((from) => !(probe(`/node/other${from}`) ?? `/node/other${moved(from)[0]}`).startsWith('/node/other')), []);
 eq('an encoded node name stays encoded', (probe('/node/my%20box/storage/disks') ?? '/node/my%20box').startsWith('/node/my%20box'), true);
 

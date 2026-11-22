@@ -133,7 +133,7 @@ export function systemState({ problems = null, updates = null, certs = null, ups
       : { state: events.length ? 'ok' : 'off', label: events.length ? 'quiet' : 'none', line: events.length ? `${plural(events.length, 'recent event')}${warn ? `, ${plural(warn, 'warning')}` : ''}.` : 'No event yet.' };
   }
   const cards = [
-    card('health', 'Health', P.health, 'Open health', h), card('updates', 'Updates', P.settingsUpdates, 'Open updates', u),
+    card('health', 'Health', P.health, 'Open health', h), card('updates', 'Updates', P.updates, 'Open updates', u),
     card('certificates', 'Certificates', P.certificates, 'Open certificates', c), card('hardware', 'Hardware', P.hardware, 'Open hardware', hw),
     card('events', 'Events', P.events, 'Open events', ev),
   ];

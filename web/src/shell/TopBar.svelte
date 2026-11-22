@@ -1,5 +1,5 @@
 <script>
-  import { nodePath } from '../paths.js';
+  import { P, nodePath } from '../paths.js';
   // Top bar: logo, node switcher, search, data age with refresh, storage state, theme toggle, power/update actions, user.
   // host = this node's name; node = the node the page on screen belongs to (the buttons act on it, and only on this server);
   // nodes = [{ name, kind, local, dot }] for the switcher; onmenu opens the tree as a slide-over on a phone.
@@ -64,6 +64,10 @@
     <i class="ph ph-{locked ? 'lock-simple' : 'lock-simple-open'}"></i><span class="lbl">{locked ? 'Storage locked' : 'Storage open'}</span>
   </span>
   <span class="vr hide-s"></span>
+  {#if (ui.features.capabilities ?? ['docs']).includes('docs')}
+  <button class="ib" aria-label="Docs" use:tip={{ text: 'Docs', side: 'bottom' }} onclick={() => go(P.docs)}><i class="ph ph-book-open" style="font-size:16px"></i></button>
+  {/if}
+  <button class="ib" aria-label="What's new" use:tip={{ text: "What's new", side: 'bottom' }} onclick={() => go(P.whatsNew)}><i class="ph ph-sparkle" style="font-size:16px"></i></button>
   <Inbox />
   <button class="ib" aria-label={theme.dark ? 'Switch to the light look' : 'Switch to the dark look'} use:tip={{ text: theme.dark ? 'Light look' : 'Dark look', side: 'bottom' }} onclick={toggleTheme}>
     <i class="ph ph-{theme.dark ? 'sun' : 'moon'}" style="font-size:16px"></i>

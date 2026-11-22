@@ -112,7 +112,7 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
 // ── the user object (step 5): address, tabs, the read-only marker, and the pages
 {
   const { userPath, builtInUser, userOf } = await import('../web/src/pages/identity/user.js');
-  eq('a user page address', [userPath('alice'), userPath('alice', 'groups'), userPath('a b', 'overview')], ['/identity/users/alice', '/identity/users/alice/groups', '/identity/users/a%20b']);
+  eq('a user page address', [userPath('alice'), userPath('alice', 'groups'), userPath('a b', 'overview')], ['/people/users/alice', '/people/users/alice/groups', '/people/users/a%20b']);
   eq('a user address reads back', objectOf(userPath('a b', 'access')), { kind: 'user', id: 'a b', tab: 'access' });
   eq('the users list is not a user object', objectOf(P.users), null);
   eq('the user tabs are Overview, Groups, Access', objects.user.tabs.map((t) => t.id), ['overview', 'groups', 'access']);

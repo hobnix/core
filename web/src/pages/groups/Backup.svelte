@@ -1,5 +1,5 @@
 <script>
-  // The Backup group page: the last backup and the dates that run out, as state cards. It reads what those places read (readsfor.js, P.protection).
+  // The Backup group page: the last backup and the dates that run out, as state cards. It reads what those places read (readsfor.js, P.backupGroup).
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan, jobRunning } from '../../ui.svelte.js';
   import GroupPage from '../GroupPage.svelte';

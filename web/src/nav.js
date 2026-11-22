@@ -2,6 +2,8 @@
 // A page that is not built yet shows a placeholder (shell/Placeholder.svelte) with its title from here.
 import { P, poolPath, extensionPath } from './paths.js';
 import { objectOf, objects } from './objects.js';
+// the capability that shows the Developer group
+export const DEVELOPER_CAP = 'testlab';
 export const tree = [
   {
     label: 'homeserver', icon: 'hard-drives', path: P.summary, node: true,
@@ -9,65 +11,63 @@ export const tree = [
       {
         label: 'Storage', icon: 'database', path: P.storage, storage: true,
         children: [
-          // the pools of this server are added under it at render time (nodeItems poolRows)
+          // the pools of this server are added under it at render time (nodeItems poolRows). Incident is an action on Pools and on System, not an entry.
           { label: 'Pools', icon: 'cylinder', path: P.pools, storage: true },
           { label: 'Disks', icon: 'hard-drive', path: P.disks, prefix: true, storage: true },
-          { label: 'Incident', icon: 'first-aid-kit', path: P.incident, storage: true },
           { label: 'Shares', icon: 'folders', path: P.shares, storage: true },
           { label: 'Files', icon: 'folder-open', path: P.files, storage: true },
           { label: 'Encryption', icon: 'lock-key', path: P.encryption },
           { label: 'Vault', icon: 'vault', path: P.vault },
         ],
       },
+      // Instances is a place itself (the list of containers and VMs) with the ISO images under it
       { label: 'Instances', icon: 'cube', path: P.instances, storage: true, children: [
-        { label: 'Apps', icon: 'package', path: P.apps, storage: true },
         { label: 'ISO images', icon: 'disc', path: P.iso, storage: true, capability: 'incus' },
-        { label: 'Services', icon: 'arrows-split', path: P.services, capability: 'reverse-proxy' },
+      ] },
+      { label: 'Apps', icon: 'package', path: P.appsGroup, storage: true, children: [
+        { label: 'Installed', icon: 'package', path: P.apps, storage: true },
         { label: 'Docker', icon: 'shipping-container', path: P.docker, capability: 'docker', children: [
           { label: 'Registries', icon: 'key', path: P.registries, capability: 'docker' },
         ] },
+        { label: 'Marketplace', icon: 'storefront', path: P.marketplace, prefix: true },
       ] },
-      { label: 'Marketplace', icon: 'storefront', path: P.marketplace },
-      { label: 'Network', icon: 'network', path: P.network },
-      { label: 'Identity', icon: 'users-three', path: P.identity, storage: true, capability: 'ad', children: [
-        { label: 'Groups', icon: 'users-four', path: P.groups, storage: true },
-        { label: 'Users', icon: 'user', path: P.users, storage: true },
-        { label: 'Certificates', icon: 'certificate', path: P.certificates, storage: true },
-      ] },
-      { label: 'Monitoring', icon: 'gauge', path: P.monitoring, children: [
-        { label: 'Hardware', icon: 'cpu', path: P.hardware },
+      { label: 'Network', icon: 'network', path: P.network, children: [
+        { label: 'Services', icon: 'arrows-split', path: P.services, capability: 'reverse-proxy' },
         { label: 'Network map', icon: 'share-network', path: P.networkMap },
+      ] },
+      // People is no longer hidden by the capability `ad`: local users exist without it (only the directory parts depend on it)
+      { label: 'People', icon: 'users-three', path: P.people, storage: true, children: [
+        { label: 'Users', icon: 'user', path: P.users, storage: true },
+        { label: 'Groups', icon: 'users-four', path: P.groups, storage: true },
+      ] },
+      { label: 'System', icon: 'heartbeat', path: P.system, children: [
+        { label: 'Health', icon: 'heartbeat', path: P.health },
+        { label: 'Events', icon: 'list-bullets', path: P.events },
+        { label: 'Notifications', icon: 'bell', path: P.notifications, capability: 'notifications' },
+        { label: 'Hardware', icon: 'cpu', path: P.hardware },
+        { label: 'Updates', icon: 'arrow-circle-up', path: P.updates },
+        { label: 'Certificates', icon: 'certificate', path: P.certificates, storage: true },
         { label: 'Diagnostics', icon: 'stethoscope', path: P.diagnostics },
         { label: 'Live state', icon: 'pulse', path: P.liveState, capability: 'live-state' },
         { label: 'Test-lab', icon: 'flask', path: P.testLab, capability: 'testlab' },
       ] },
-      { label: 'Protection', icon: 'shield', path: P.protection, children: [
+      { label: 'Backup', icon: 'cloud-arrow-up', path: P.backupGroup, children: [
         { label: 'Backup', icon: 'cloud-arrow-up', path: P.backup },
         { label: 'Expiry dates', icon: 'calendar-x', path: P.expiry },
       ] },
-      { label: 'Operations', icon: 'gear-six', path: P.operations, children: [
-        { label: 'Health', icon: 'heartbeat', path: P.health },
-        { label: 'Notifications', icon: 'bell', path: P.notifications, capability: 'notifications' },
-        { label: 'Events', icon: 'list-bullets', path: P.events },
-        { label: "What's new", icon: 'sparkle', path: P.whatsNew },
-      ] },
-      { label: 'Docs', icon: 'book-open', path: P.docs, prefix: true, capability: 'docs' },
-      { label: 'Developer', icon: 'wrench', path: P.developer, children: [
-        { label: 'Components', icon: 'squares-four', path: P.components },
-      ] },
-      { label: 'Nodes', icon: 'hard-drives', path: P.nodes },
-      { label: 'Setup', icon: 'list-checks', path: P.setup },
       { label: 'Settings', icon: 'sliders', path: P.settings, children: [
         { label: 'General', icon: 'sliders-horizontal', path: P.settingsGeneral },
         { label: 'Network and DNS', icon: 'network', path: P.settingsNetwork },
         { label: 'Storage', icon: 'database', path: P.settingsStorage, capability: 'storage' },
         { label: 'Backups', icon: 'cloud-arrow-up', path: P.settingsBackups, capability: 'backup' },
         { label: 'Users and access', icon: 'users-three', path: P.settingsAccess },
-        { label: 'Updates', icon: 'arrow-circle-up', path: P.settingsUpdates },
-        { label: 'Releases', icon: 'git-branch', path: P.releases },
         // one child per capability that is on and has a settings page of its own is added at render time (nodeItems capItems)
         { label: 'Capabilities', icon: 'puzzle-piece', path: P.capabilities, prefix: true },
         { label: 'Advanced', icon: 'wrench', path: P.settingsAdvanced },
+      ] },
+      // Developer is not a group of the design: it shows at the bottom only while its capability is on (the test-lab capability is the developer one)
+      { label: 'Developer', icon: 'wrench', path: P.developer, capability: DEVELOPER_CAP, children: [
+        { label: 'Components', icon: 'squares-four', path: P.components },
       ] },
     ],
   },
@@ -82,6 +82,16 @@ export const tree = [
       { label: 'Settings', icon: 'sliders', path: P.settings },
     ],
   },
+];
+
+// Places that are not rows of the tree but have a title and the flags of a place: Docs and What's new are in the top bar, Setup is a banner on Summary,
+// Incident is an action on Pools and System, Nodes is the SERVERS header of the tree. Search lists them, titleOf/itemOf know them.
+export const offTree = [
+  { label: 'Docs', icon: 'book-open', path: P.docs, prefix: true, capability: 'docs' },
+  { label: "What's new", icon: 'sparkle', path: P.whatsNew },
+  { label: 'Incident', icon: 'first-aid-kit', path: P.incident, storage: true },
+  { label: 'Setup', icon: 'list-checks', path: P.setup },
+  { label: 'Servers', icon: 'hard-drives', path: P.nodes },
 ];
 
 // The tree without the parts of capabilities that are off (docs/PLAN-modular-core.md step 3). `caps` is the list from the session answer
@@ -118,7 +128,7 @@ export const vpsTree = [HEALTH, ...edgeItems];
 // Every page is in the tree for every role (a page above the role is greyed by the row, roles.js lockedWhy).
 export function nodeItems(kind, caps, exts, capItems = [], poolRows = []) {
   if (kind === 'main') {
-    return [...withPoolItems(withCapItems(visible(mainTree, caps), capItems), poolRows), ...extensionItems(exts)];
+    return withExtItems(withPoolItems(withCapItems(visible(mainTree, caps), capItems), poolRows), exts);
   }
   if (kind === 'vps' || kind === 'edge') {
     const have = Array.isArray(caps) ? caps : null;
@@ -149,11 +159,17 @@ function withCapItems(items, capItems) {
     : it);
 }
 
-// The Extensions group: one page per extension package that is on AND declares a web page (ui.features.extensions, the manifests' [web.page]).
-// Nothing is shown while there is no such package. The pages are /extensions/<name> (pages/Extension.svelte renders the declaration).
-export function extensionItems(exts) {
-  if (!Array.isArray(exts) || !exts.length) return [];
-  return [{ label: 'Extensions', icon: 'puzzle-piece', children: exts.map((e) => ({ label: e.title, icon: e.icon || 'puzzle-piece', path: extensionPath(e.name) })) }];
+// Extension pages: one page per extension package that is on AND declares a web page (ui.features.extensions, the manifests' [web.page]). A page
+// goes into the group its `group` key names (storage, instances, apps, network, people, system, backup, settings; default apps, an unknown name
+// too), after the places of the core. Nothing is added while there is no such package. The pages are /extensions/<name> (pages/Extension.svelte).
+export const EXT_GROUPS = Object.freeze({ storage: P.storage, instances: P.instances, apps: P.appsGroup, network: P.network, people: P.people, system: P.system, backup: P.backupGroup, settings: P.settings });
+export const extGroup = (e) => EXT_GROUPS[e?.group] ?? P.appsGroup;
+export function withExtItems(items, exts) {
+  if (!Array.isArray(exts) || !exts.length) return items;
+  return items.map((it) => {
+    const mine = exts.filter((e) => extGroup(e) === it.path);
+    return mine.length ? { ...it, children: [...(it.children ?? []), ...mine.map((e) => ({ label: e.title, icon: e.icon || 'puzzle-piece', path: extensionPath(e.name) }))] } : it;
+  });
 }
 
 // the icon of a node root by kind
@@ -170,7 +186,7 @@ export function itemOf(path) {
   };
   // an object page (a pool: /storage/pools/<name>) is a page of the item of its list
   const obj = objectOf(path);
-  return walk(tree) ?? (obj ? itemOf(objects[obj.kind].list) : null);
+  return walk(tree) ?? walk(offTree) ?? (obj ? itemOf(objects[obj.kind].list) : null);
 }
 
 export function titleOf(path) {
@@ -183,5 +199,5 @@ export function titleOf(path) {
     return null;
   };
   const obj = objectOf(path);
-  return walk(tree, []) ?? (obj ? [...(titleOf(objects[obj.kind].list) ?? []), obj.id] : null);
+  return walk(tree, []) ?? walk(offTree, []) ?? (obj ? [...(titleOf(objects[obj.kind].list) ?? []), obj.id] : null);
 }

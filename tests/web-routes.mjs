@@ -23,9 +23,9 @@ eq('without a local name nothing happens', redirect('/storage', ''), null);
 eq('an old storage path only gets the node', redirect('/storage/bulk/disks', L), '/node/homeserver/storage/bulk/disks');
 eq('an old path with the node in front is left alone', redirect('/node/homeserver/storage/unassigned', L), null);
 eq('/proxy is no longer mapped to the proxyserver', [redirect('/proxy', L), redirect('/proxy/ports', L)], ['/node/homeserver/proxy', '/node/homeserver/proxy/ports']);
-eq('the new Apps page prefetches the recipes', readsFor('/node/homeserver/instances/apps').includes('/api/sys/recipes/list'), true);
-eq('the Apps page prefetches the versions', readsFor('/node/homeserver/instances/apps').includes('/api/sys/recipes/versions'), true);
-eq('the old Apps address prefetches nothing', readsFor('/operations/apps'), []);
+eq('the new Apps page prefetches the recipes', readsFor('/node/homeserver/apps/installed').includes('/api/sys/recipes/list'), true);
+eq('the Apps page prefetches the versions', readsFor('/node/homeserver/apps/installed').includes('/api/sys/recipes/versions'), true);
+eq('the old Apps address prefetches nothing', readsFor('/instances/apps'), []);
 
 
 eq('inner path strips node and query', innerPath('/node/homeserver/storage/bulk/disks?pool=bulk'), '/storage/bulk/disks');
@@ -44,9 +44,9 @@ eq('every tree path has a route', missing, []);
 
 // the Live state page: a route, a nav entry behind the capability, and its one read only with live state on
 eq('live-state has a route', routes.includes('[P.liveState]: LiveState'), true);
-eq('the Live state nav entry carries the capability', tree[0].children.find((x) => x.path === P.monitoring).children.find((x) => x.path === P.liveState).capability, 'live-state');
-eq('the Live state read, live on', readsFor('/monitoring/live-state', [], true), ['/api/sys/live/inspect']);
-eq('the Live state page reads nothing, live off', readsFor('/monitoring/live-state', [], false), []);
+eq('the Live state nav entry carries the capability', tree[0].children.find((x) => x.path === P.system).children.find((x) => x.path === P.liveState).capability, 'live-state');
+eq('the Live state read, live on', readsFor(P.liveState, [], true), ['/api/sys/live/inspect']);
+eq('the Live state page reads nothing, live off', readsFor(P.liveState, [], false), []);
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

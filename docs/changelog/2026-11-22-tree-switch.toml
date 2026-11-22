@@ -1,0 +1,6 @@
+date  = "2026-11-22"
+type  = "change"
+title = "The tree has new groups: Apps, People, System and Backup"
+body  = """The left tree now has Storage, Instances, Apps, Network, People, System, Backup and Settings. Hardware, Updates and Certificates moved into System, the Network map into Network, Services into Network, Marketplace and Docker into Apps. Docs and What's new are buttons in the top bar, Incident is a button on Pools and on Health, and the list of servers opens from the Servers header.
+
+Releases is now a tab of Updates. Old addresses and bookmarks keep working: they open the new place. Not tested on hardware yet."""

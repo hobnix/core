@@ -2,16 +2,17 @@
 // Problems: the rows of `hs sys health list` (id, text, acked|-, since, told). Notifications: the warn and error rows of the domain event stream
 // (live.events, the same row shape as pages/events.js). The count is the unacknowledged problems plus the unread notifications; an acknowledged
 // problem stays in the list, dimmed, and is not counted. Everything is plain text: nothing here becomes HTML.
+import { P } from '../paths.js';
 import { parseRow, eventText } from '../pages/events.js';
 
 const empty = (v) => (v == null || v === '-' ? '' : String(v));
 
 // The page of the object a problem text is about (a few words of the texts of scripts/health-check.sh); anything else goes to the Health page.
 const PROBLEM_OBJECT = [
-  [/backup|restore drill|off-site/i, '/protection/backup'],
+  [/backup|restore drill|off-site/i, P.backup],
   [/disk|SMART|self-test|scrub|parity|snapraid|zfs|pool/i, '/storage/disks'],
 ];
-const HEALTH = '/operations/health';
+const HEALTH = P.health;
 
 // rows of health/list -> [{ kind: 'problem', id, text, acked, since, href }], acknowledged ones last
 export function problemItems(rows) {
@@ -27,11 +28,11 @@ export function problemItems(rows) {
 // the page of the object an event is about, from its source and subject
 export function eventHref(e) {
   const s = encodeURIComponent(e.subject);
-  if (e.source === 'job') return '/operations/jobs';
+  if (e.source === 'job') return `${P.system}/jobs`;
   if (e.source === 'disk') return '/storage/disks';
   if (e.source === 'storage') return e.subject ? `/storage/pools/${s}` : '/storage/pools';
   if (e.source === 'ct') return '/instances';
-  return '/operations/events';
+  return P.events;
 }
 
 // rows of the event stream -> notifications, newest first. Health rows are the problems above and audit rows are the log, so both are left out.

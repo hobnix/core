@@ -50,12 +50,12 @@ eq('System: no UPS is off', by(sys, 'hardware').state, 'off');
 eq('System: the worst card is the line on top', [sys.head.state, sys.head.label], ['bad', '1 problem']);
 const ns = systemState({});
 eq('System: no data is off on all five cards and on top', [ns.head.state, ns.cards.map((c) => c.state)], ['off', ['off', 'off', 'off', 'off', 'off']]);
-eq('System: Hardware, Updates and Certificates sit inside it', ns.cards.map((c) => c.href), [P.health, P.settingsUpdates, P.certificates, P.hardware, P.events]);
+eq('System: Hardware, Updates and Certificates sit inside it', ns.cards.map((c) => c.href), [P.health, P.updates, P.certificates, P.hardware, P.events]);
 eq('headOf: nothing known says no data', headOf([{ state: 'off' }], 'x').label, 'no data');
 
 // ── the pages (source checks stand in for the components)
 const pages = { Storage: 'pages/groups/Storage.svelte', Backup: 'pages/groups/Backup.svelte', System: 'pages/groups/System.svelte' };
-const ofGroup = { Storage: P.storage, Backup: P.protection, System: P.operations };
+const ofGroup = { Storage: P.storage, Backup: P.backupGroup, System: P.system };
 for (const [n, f] of Object.entries(pages)) {
   const s = src(f);
   const polled = [...s.matchAll(/poll\('([^']+)'/g)].map((m) => m[1]);

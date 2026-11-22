@@ -16,7 +16,7 @@ import Hardware from './pages/Hardware.svelte';
 import Backup from './pages/Backup.svelte';
 import SettingsPage from './settings/SettingsPage.svelte';
 import AccessPage from './settings/AccessPage.svelte';
-import Releases from './settings/Releases.svelte';
+import Updates from './pages/system/Updates.svelte';
 import CapsOverview from './settings/CapsOverview.svelte';
 import CapabilitySettings from './settings/CapabilitySettings.svelte';
 import Setup from './pages/Setup.svelte';
@@ -70,10 +70,10 @@ export const routes = {
   [P.summary]: Summary,
   [P.instances]: Instances,
   [P.storage]: StorageGroup,
-  [P.identity]: Section,
-  [P.protection]: BackupGroup,
-  [P.operations]: SystemGroup,
-  [P.monitoring]: Section,
+  [P.appsGroup]: Section,
+  [P.people]: Section,
+  [P.system]: SystemGroup,
+  [P.backupGroup]: BackupGroup,
   [P.pools]: Pools,
   [P.incident]: Incident,
   [P.disks]: Disks,
@@ -116,8 +116,7 @@ export const routes = {
   [P.settingsStorage]: SettingsPage,
   [P.settingsBackups]: SettingsPage,
   [P.settingsAccess]: AccessPage,
-  [P.settingsUpdates]: SettingsPage,
-  [P.releases]: Releases,
+  [P.updates]: Updates,
   [P.capabilities]: CapsOverview,
   [P.settingsAdvanced]: SettingsPage,
   [P.nodes]: Nodes,
@@ -141,5 +140,5 @@ export function pageFor(path, kind = 'main') {
   if (kind !== 'main') return (nodeRoutes[kind] ?? peerRoutes)[path];
   const obj = objectOf(path);
   if (obj) return objectPages[obj.kind];
-  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : path.startsWith('/instances/docker/app/') ? AppEditPage : undefined);
+  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : path.startsWith(`${P.docker}/app/`) ? AppEditPage : undefined);
 }

@@ -11,7 +11,7 @@ echo "-- frontend wiring"
 W="$ROOT/web/src"
 check "the route is listed" grep -q '\[P.whatsNew\]: WhatsNew' "$W/routes.js"
 check "the tree entry is under Operations" grep -q 'path: P.whatsNew' "$W/nav.js"
-check "the tree shows the count" grep -q "m\['/operations/whats-new'\]" "$W/shell/Shell.svelte"
+check "the tree shows the count" grep -q "m\[P.whatsNew\]" "$W/shell/Shell.svelte"
 check "the Summary has the banner" grep -q 'go(P.whatsNew)' "$W/pages/Summary.svelte"
 check "the page never renders HTML from an entry" bash -c "! grep -q '@html' '$W/pages/WhatsNew.svelte'"
 finish

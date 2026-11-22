@@ -3,6 +3,7 @@
 //
 // The page table follows the `x-hs-role` of the `sys` rows a page reads or changes (docs/api/openapi.json, scripts/lib/sys-roles.tsv): a page that
 // reads an admin row is an admin page (only the secret ones are hidden, see ADMIN_ONLY); a page whose changes are the app rows (apps, ct, recipes, docker*) is open to an app manager for those.
+import { P } from './paths.js';
 export const ROLES = ['viewer', 'app-manager', 'admin'];
 const rank = (r) => ROLES.indexOf(r);
 
@@ -12,7 +13,7 @@ export const roleOk = (have, need) => rank(have) >= 0 && rank(need) >= 0 && rank
 // The page table (design behaviour 4.9, docs/PLAN-web-design.md): EVERY page is listed for EVERY role, nothing is hidden. A page above the role is drawn
 // greyed with a lock and the reason (`lockedWhy`), stays clickable, and opens "Not for your role" without reading anything. The pages that need admin are
 // the ones whose whole content is admin secrets: the Vault, the user / token / identity pages and the file manager (it lists file names of every share, `fm` rows are admin, #946). The server decides; this only explains.
-const ADMIN_PAGES = ['/identity', '/storage/vault', '/storage/files'];
+const ADMIN_PAGES = [P.people, P.certificates, P.vault, P.files];
 export function pageRole(path) {
   return ADMIN_PAGES.some((p) => path === p || path.startsWith(p + '/')) ? 'admin' : 'viewer';
 }

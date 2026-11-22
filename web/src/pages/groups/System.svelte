@@ -1,6 +1,6 @@
 <script>
   // The System group page (the former Health): problems, updates, certificates, hardware and events as state cards. It reads what those places
-  // read (readsfor.js, P.operations).
+  // read (readsfor.js, P.system).
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan, jobRunning } from '../../ui.svelte.js';
   import GroupPage from '../GroupPage.svelte';
