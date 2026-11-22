@@ -14,10 +14,11 @@
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
-    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted, NodePopover,
+    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Icon, Kv, Menu, Muted, NetMap, NodePopover,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
   } from '../ui/index.js';
+  import { SMALL, SMALL_RATES, big } from '../netmap/fixtures.js';
   import { theme, toggleTheme } from '../theme.svelte.js';
   import { tr } from '../i18n.js';
 
@@ -39,6 +40,7 @@
   let wiz = $state(1);
   let choice = $state('a');
 
+  const bigMap = big(100);
   const now = Math.floor(Date.now() / 1000);
   const entries = [
     { id: 1, time: now - 60, severity: 'bad', title: 'Backup failed', text: 'The target was not reachable.', kind: 'job.failed', object: { label: 'nightly', href: '#' }, ackable: true },
@@ -245,7 +247,14 @@
       <div class="cell"><small>align start</small><Menu items={menu} align="start" label="Actions" /></div>
     </Entry>
 
-    <Entry name="NodePopover" text="Spike for the Network Map (issue 871): the detail popover of a node, behaviour from @ui-sdk/svelte, look from our tokens. Press Enter on the trigger, Tab inside, Escape closes and focus returns.">
+    <Entry name="NetMap" text="The network map (issue 875): SVG nodes, canvas dots that follow the rate (none at zero). With the system setting 'reduce motion' the dots stop and a busy link is drawn thicker. Fixture graphs from netmap/fixtures.js.">
+      <div class="cell wide"><small>small server, traffic</small><NetMap graph={SMALL} rates={SMALL_RATES} label="Fixture: small server" /></div>
+      <div class="cell wide"><small>no traffic (no dots)</small><NetMap graph={SMALL} label="Fixture: idle server" /></div>
+      <div class="cell wide"><small>100 nodes (wrapped tiers)</small><NetMap graph={bigMap.graph} rates={bigMap.rates} label="Fixture: 100 nodes" /></div>
+      <div class="cell wide"><small>empty graph</small><NetMap graph={[]} /></div>
+    </Entry>
+
+    <Entry name="NodePopover"text="Spike for the Network Map (issue 871): the detail popover of a node, behaviour from @ui-sdk/svelte, look from our tokens. Press Enter on the trigger, Tab inside, Escape closes and focus returns.">
       <div class="cell"><small>default</small><NodePopover label="gateway" title="Gateway 192.168.1.1"><Kv items={[{ k: 'Seen from here', v: '12 Mbit/s' }, { k: 'State', v: 'up' }]} /></NodePopover></div>
       <div class="cell"><small>near the edge (flips)</small><div style="text-align:right"><NodePopover label="br0" title="Bridge br0"><Kv items={[{ k: 'Ports', v: '4' }]} /></NodePopover></div></div>
     </Entry>
