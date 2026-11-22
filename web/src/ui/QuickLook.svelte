@@ -44,5 +44,9 @@
   .ql { position: absolute; top: 0; right: 0; bottom: 0; z-index: 12; display: flex; align-items: flex-start; pointer-events: none; }
   .ql :global(.arow:empty) { display: none; }
   .ql :global(.sdr) { pointer-events: auto; position: sticky; top: var(--sticky-top, 0); width: 400px; max-height: calc(100vh - 140px); height: auto; }
-  @media (max-width: 860px) { .ql { position: fixed; inset: 52px 0 0 0; z-index: 13; } .ql :global(.sdr) { position: static; width: 100vw; height: 100%; max-height: 100%; } }
+  @media (max-width: 860px) { .ql { position: fixed; inset: 52px 0 0 0; z-index: 13; } .ql :global(.sdr) { position: static; width: 100%; height: 100%; max-height: 100%; }
+    .ql :global(.sdr .drawer-sq), .ql :global(.sdr .stab), .ql :global(.sdr .arow .btn) { min-height: 44px; }
+    .ql :global(.sdr .drawer-sq) { width: 44px; }
+    .ql :global(.sdr .arow) { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+    .ql :global(.sdr .body) { overscroll-behavior: contain; } }
 </style>
