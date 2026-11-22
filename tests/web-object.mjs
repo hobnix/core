@@ -134,7 +134,7 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('an instance page is a page of the Instances item', itemOf(instancePath('x'))?.path, P.instances);
   const page = src('pages/instances/Instance.svelte'), il = src('pages/Instances.svelte');
   eq('the instance page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
-  eq('the instances list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il)], [true, true, false]);
+  eq('the instances list has no QuickLook, selection helper, Split or Drawer; a row ends with "Open instance"', [/<QuickLook|QuickLook\.svelte/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il), /label="Open instance"/.test(il), /icon="arrow-square-out"/.test(il), /go\(instancePath\(c\.name\)\)/.test(il), /<Table id="instances"[^>]*onrow/.test(il)], [false, false, false, true, true, true, false]);
   eq('the console tab opens the existing terminal and VM console windows', [/Terminal\.svelte/.test(src('pages/instances/ConsoleTab.svelte')), /VmConsole\.svelte/.test(src('pages/instances/ConsoleTab.svelte'))], [true, true]);
 }
 
