@@ -62,7 +62,11 @@ eq('an unknown group falls back to Apps', where([ext('a', 'nowhere')]), ['Apps']
 eq('no extension, no change', withExtItems(groups, []) === groups, true);
 
 // 7. a remote node keeps its tree (D8 a): the names that match are the new ones
-eq('a peer keeps Storage, Instances and Backup', nodeItems('peer', ['storage', 'incus', 'backup']).map((i) => i.label), ['Health', 'Storage', 'Instances', 'Backup']);
+eq('a peer keeps Storage, Instances and Backup', nodeItems('peer', ['storage', 'incus', 'backup']).map((i) => i.label), ['System', 'Storage', 'Instances', 'Backup']);
+eq('a peer without capabilities has only System', nodeItems('peer', null).map((i) => i.label), ['System']);
+eq('an edge node keeps its proxy pages, Health is System', nodeItems('edge', ['edge-ports']).map((i) => i.label), ['System', 'Ports', 'Tailscale', 'Settings']);
+eq('a vps node keeps all its proxy pages', nodeItems('vps', null).map((i) => i.label), ['System', 'Mail entry', 'Ports', 'Outside watcher', 'Certificate', 'Tailscale', 'Settings']);
+eq('the address of a remote System page stays /health', ['peer', 'edge', 'vps'].map((k) => nodeItems(k, [])[0].path), ['/health', '/health', '/health']);
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
