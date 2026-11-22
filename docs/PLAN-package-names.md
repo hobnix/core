@@ -21,7 +21,7 @@ id is its identity in the index, so a name is cheapest to change **before** the 
 | `ad` | Active Directory: domain users, Domain Admins sign in | `active-directory` | `ad` is short but unclear. Same family as recipe `domain` and extension `ad-selfservice`: decide whether they become one package with parts. |
 | `backup` | restic to the backup disk, restore drills; needs storage | keep | |
 | `dashboard` | tiles for the services | extension, later | Owner leans to an extension: the core stays light. Today it is code inside the web bundle (`web/src/dashboard/`, used by `App.svelte` and `Services.svelte`), so it can only leave once a package can place its own page and the block list covers tiles (milestone 0.12, #473). Until then it stays; a fresh server needs a fallback landing page. |
-| `docker` | Docker host with a web page to manage it | keep | Decided: the capability replaced the recipe `docker`, so the recipe is not moved and the name is free. Packages that `needs = ["docker"]` resolve to the capability. |
+| `docker` | Docker host with a web page to manage it | keep, slimmer | Decided: the capability replaced the recipe `docker`, so the recipe is not moved and the name is free. Packages that `needs = ["docker"]` resolve to the capability. Decided 2026-11-22: it loses the manager variants (Arcane, Portainer) and is only the Docker host container; each manager becomes its own recipe (`arcane`, `portainer`) that `needs` `docker`, so a person adds one only if wanted, next to the web interface's own Docker controls. See the notes under "What the answers change". |
 | `docs` | guides and command reference in the web interface | core | Decided with the owner 2026-11-22. |
 | `edge-mail` | public mail entry (MX) on the VPS | keep | Family `edge-*`; a blueprint `vps-edge` pulls them. |
 | `edge-ports` | public game and call ports | keep | |
@@ -85,12 +85,21 @@ The rest are unchanged: `audiobookshelf`, `authentik`, `bazarr`, `bulwark`, `clo
 - Active Directory, the shape (owner's idea, 2026-11-22): the same pattern as the `docker` capability, which installs a container
   and offers variants. `ad` (this server is a member: Samba joins, winbind, Kerberos, Domain Admins sign in; no module of its own, on
   exactly when `adDomain` is set) and recipe `domain` (the domain controller container) become one capability, `active-directory`, with a
-  mode chosen when it is turned on: **controller** (create the domain controller container here, system-labelled so it cannot be deleted
-  by accident, and this server joins it; today's `domain`) or **member** (join a domain that already exists). The DC container is
+  mode chosen when it is turned on: **controller** (a domain controller container here, system-labelled so it cannot be deleted by
+  accident, and this server is a member of the domain; today's `domain`) or **member** (join a domain without a controller of its own).
+  A controller either **creates** a new domain or **joins an existing one as an additional controller**: the owner runs two servers that
+  are each a controller and a member of the same domain and replicate to each other (dc1 and dc2). That setup is in use and **must keep
+  working** (an acceptance criterion of the move; not checked here whether the recipe already does the replica case, or how). The DC container is
   installed by the capability, not by a separate recipe. `ad-selfservice` stays a small extension (`needs` the capability), renamed
   `active-directory-selfservice` so the family sorts together. Not `ad-host` and `ad-client`: there is one switch (`adDomain`) and the
   commands `hs user`, `hs dns` and `hs dc cert` serve both roles. Checked in the code: `ad` has no module and its notes name `domain` as the
-  controller; not checked: whether joining a domain that a Windows server hosts works today. That decides whether "member" is a real
-  mode or only the second half of "controller".
+  controller; not checked: whether a member-only join (for example a domain on a Windows server) works today. If it does not, "member" is
+  only the second half of "controller" until the retouch adds it.
+- Docker, the shape: the capability keeps the Docker host container and the `docker` service; the manager variants (`arcane`, `portainer`,
+  `none`) go. Each manager becomes a recipe with `needs = ["docker"]`, never public like today. Three things to handle: (1) servers that
+  have Arcane or Portainer through the variant (installs from before count as Arcane) must be migrated to the recipe with the volume and
+  compose file kept, as the variant switch does today; (2) the "never public" guard (`ADMIN_TARGETS` in scripts/services.py) is a list of
+  names, which does not cover a manager recipe from another repository, so a package declares `admin = true` in its manifest and the guard
+  reads that; (3) the interface `provides = ["docker-manager"]` moves from the capability to the manager recipes.
 - Counts above were read on 2026-11-22 from `capabilities/*/capability.toml` and the indexes of hobnix/recipes and hobnix/extensions.
 - Not tested on hardware yet: nothing here changes behaviour; a rename is checked in the retouch pass of each package.
