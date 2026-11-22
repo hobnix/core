@@ -123,5 +123,21 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('the users list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(ul), /selection\.svelte\.js/.test(ul), /<Split|<Drawer/.test(ul)], [true, true, false]);
 }
 
+// ── the instance object (step 4): address (own kind segment, an instance may be called docker), tabs, the pages
+{
+  const { instancePath } = await import('../web/src/pages/instances/path.js');
+  eq('an instance page address', [instancePath('docker'), instancePath('jellyfin', 'config'), instancePath('a b', 'overview')], ['/instances/ct/docker', '/instances/ct/jellyfin/config', '/instances/ct/a%20b']);
+  eq('an instance address reads back', objectOf(instancePath('a b', 'console')), { kind: 'instance', id: 'a b', tab: 'console' });
+  eq('the instance named docker is not the Docker page', [objectOf(instancePath('docker'))?.kind, objectOf(P.docker)], ['instance', null]);
+  eq('the other pages under /instances are no instance objects', [P.apps, P.iso, P.services, P.registries].map((p) => objectOf(p)), [null, null, null, null]);
+  eq('the instances list is not an instance object', objectOf(P.instances), null);
+  eq('the instance tabs are Overview, Config, Network, Console', objects.instance.tabs.map((t) => t.id), ['overview', 'config', 'network', 'console']);
+  eq('an instance page is a page of the Instances item', itemOf(instancePath('x'))?.path, P.instances);
+  const page = src('pages/instances/Instance.svelte'), il = src('pages/Instances.svelte');
+  eq('the instance page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
+  eq('the instances list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il)], [true, true, false]);
+  eq('the console tab opens the existing terminal and VM console windows', [/Terminal\.svelte/.test(src('pages/instances/ConsoleTab.svelte')), /VmConsole\.svelte/.test(src('pages/instances/ConsoleTab.svelte'))], [true, true]);
+}
+
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
