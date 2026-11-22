@@ -119,7 +119,8 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('a users row is parsed, "-" is empty', userOf(['bob', '-', 'disabled', 'Domain Users, staff']), { name: 'bob', full: '', enabled: false, groups: ['Domain Users', 'staff'] });
   const page = src('pages/identity/User.svelte'), ul = src('pages/Users.svelte');
   eq('the user page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
-  eq('the users list uses QuickLook and ?sel=, not Split or Drawer', [/<QuickLook/.test(ul), /selection\.svelte\.js/.test(ul), /<Split|<Drawer/.test(ul)], [true, true, false]);
+  eq('the users list has no QuickLook, selection helper, Split or Drawer (owner decision 2026-11-23)', [/<QuickLook|QuickLook\.svelte/.test(ul), /selection\.svelte\.js|takeSelection/.test(ul), /<Split|<Drawer/.test(ul)], [false, false, false]);
+  eq('a users row ends with Edit, Change password and Open user (three buttons, no row click)', [/icon="pencil-simple"/.test(ul), /icon="password"/.test(ul), /label="Open user"/.test(ul), /icon="arrow-square-out"/.test(ul), /go\(userPath\(u\.name\)\)/.test(ul), /<Table id="users"[^>]*onrow/.test(ul)], [true, true, true, true, true, false]);
 }
 
 // ── the instance object (step 4): address (own kind segment, an instance may be called docker), tabs, the pages
