@@ -38,9 +38,24 @@ address. The map shows what the Instances and Services pages already show, no mo
    `sys.gen.d.ts`): tab-separated rows `id  kind  parent  label  state  rx_bytes  tx_bytes`, an empty field is `-`, a source that cannot be
    read leaves the counters `-`, never an old value. Topology changes (an instance starts or stops) go through the live-state topic
    `netmap` and the event stream, as everything else.
-2. **Counters stream.** Counters change all the time, so an invalidation event per change would flood the stream. Open decision (architect):
-   a stream like `/api/sys/jobs/stream/<unit>` that samples every 2 s **only while a page is open**, with a limit of streams. Polling is
-   allowed only as the fallback while the stream is down.
+2. **Counters stream.** Counters change all the time, so an invalidation event per change would flood the stream.
+   **Decision (#873, 2026-11-22):** a stream of its own, `GET /api/netmap/stream` (server-sent events, session needed, role of the read
+   `sys netmap counters`), not the `/api/events` stream and not a live topic: a topic would be sampled by the collector all the time and
+   counted as a change on every round.
+   - **Frame:** `data: {"t": <epoch ms of the reading>, "rows": [[id, rx_bytes, tx_bytes], ...]}`. Totals, `-` for a counter that cannot be
+     read (never an old value). The client divides two readings by their `t`. `: ping` + `event: beat` every 5 s of silence; `event: end`
+     after `HS_WEB_STREAM_HOURS`, after sign-out or when storage locks; the page reconnects.
+   - **Source:** the new read `hs sys netmap counters` (`scripts/netmap-counters.sh`): `/sys/class/net/<if>/statistics` for `wan` (the
+     physical port, as `hs sys deck` finds it), `host`, `bridge:<name>`, and ONE `incus query /1.0/instances?recursion=2` for
+     `instance:<name>` (the sum of the NICs without `lo`). The node ids are the contract with the graph document (#872) and must match.
+   - **Interval:** 2 s (`HS_WEB_NETMAP_EVERY`). One shared sampler thread for all open streams, not one sample per stream.
+   - **Only while a page is open:** the sampler thread starts with the first stream and ends when the last one closes; no stream, no
+     process, no old numbers kept.
+   - **Limit:** 4 streams at once (`HS_WEB_NETMAP_MAX`); the fifth gets 503 and polls `sys netmap counters` every 5 s as its fallback.
+     Polling is allowed only while the stream is down.
+   - **Cost:** one `hs sys netmap counters` run per 2 s while somebody looks, whatever the number of pages. Measured on a server with many
+     instances: not yet (needs hardware; see "Not tested on hardware yet"). The plan above assumed `recursion=1`; Incus returns the state
+     only with `recursion=2`, to confirm on the server.
 3. **Layout** (web, pure function, no DOM). Graph in, positions out: tiers from the root, siblings spaced evenly, a wide tier wraps or
    scrolls, an unknown kind falls back to a generic node, an empty graph gives an empty state. Unit-tested without a browser.
 4. **Drawing** (web). SVG for nodes and links, a canvas layer for the moving dots (speed and density follow the rate, none at zero).
@@ -76,4 +91,6 @@ behaviour.
 
 ## Not tested on hardware yet
 
-Nothing in this plan was run. Every issue carries its "Hardware test" steps when its pull request is opened.
+Nothing in this plan was run on a server. Counters stream (#873), to run on the server: open the stream with a signed-in browser or `curl -N`
+and watch rows arrive every 2 s; start an instance with traffic and see its totals rise; close the page and see (`ps`) that no
+`hs sys netmap counters` runs; time one `hs sys netmap counters` with 20 or more instances. Every issue carries its "Hardware test" steps when its pull request is opened.

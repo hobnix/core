@@ -14,6 +14,7 @@ This file is the whole HTTP side of the entry page:
   GET  /api/settings-layout  layout.overlay.json: the Settings page of the options of installed capability packages ({} when none), session needed
   GET  /api/sys/...   a read-only `hs sys` call from the allowlist READS below (session needed), e.g. /api/sys/ct/list
   GET  /api/sys/jobs/stream/<unit>  the same job journal as `sys jobs tail`, as server-sent events (one JSON {rows} per look, `event: end` when the unit ended), session needed
+  GET  /api/netmap/stream  the byte counters of the network map nodes as server-sent events (one JSON {t, rows} about every 2 s, sampled only while a stream is open, at most HS_WEB_NETMAP_MAX streams), session needed
   GET  /api/events    (?topics=a,b&sid=<id>: only those topics; POST /api/events/subscribe {sid, topics} changes the set of an open stream, D13) server-sent events `changed` ({topic, gen}) (a watcher reads the table `topics` of state.db once a second; a `live:<topic>` counter is sent as `changed` <topic>), `down`/`up` when the heartbeat of hs-live stops or returns; session, same Origin
   GET  /api/board     the dashboard tiles and their stats, only while the dashboard variant is web; a session, or (setting dashboardOpen) a private address
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
@@ -347,6 +348,8 @@ class Config:
         self.stream_every = float(env("HS_WEB_STREAM_EVERY", "1"))        # seconds between two looks at the journal
         self.stream_max = int(env("HS_WEB_STREAM_MAX", "6"))              # streams open at once (one thread each)
         self.stream_hours = float(env("HS_WEB_STREAM_HOURS", "6"))        # a stream ends after this long; the page reconnects or falls back
+        self.netmap_every = float(env("HS_WEB_NETMAP_EVERY", "2"))        # seconds between two samples of the network map counters (only while a stream is open)
+        self.netmap_max = int(env("HS_WEB_NETMAP_MAX", "4"))              # /api/netmap/stream open at once (one thread each; they share one sample)
         self.probe_file = env("HS_WEB_PROBE_FILE", "/run/hs-web/probe.tsv")      # hs live measure: when a live:probe counter reached the streams ("" = off)
         self.live_sock = env("HS_LIVE_SOCK", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live.sock"))   # push socket (D11): "" = off, the watcher polls alone
         self.live_push_file = env("HS_LIVE_PUSH_FILE", os.path.join(env("HS_RUN_DIR", "/run/hs"), "live-push.json"))   # the wake counters for hs live load ("" = off)
@@ -2820,6 +2823,61 @@ class ChangesSeen:
                 pass
 
 
+class NetmapSampler:
+    """The counters stream of the network map (docs/PLAN-network-map.md, part 2). ONE sample (`hs sys netmap counters`) per tick for all open pages:
+    a thread runs only while at least one stream is open (join() starts it, leave() of the last one stops it), so a server nobody looks at is
+    never sampled. A stream waits for the next sample number and sends it; it never starts a process itself. Counters, not rates."""
+
+    def __init__(self, app):
+        self.app, self.cond, self.users = app, threading.Condition(), 0
+        self.seq, self.sample, self.thread = 0, None, None
+
+    def join(self):
+        """-> True when a stream may open (at most cfg.netmap_max), False when the limit is reached."""
+        with self.cond:
+            if self.users >= self.app.cfg.netmap_max:
+                return False
+            self.users += 1
+            if self.thread is None:
+                self.thread = threading.Thread(target=self._loop, daemon=True, name="netmap-sampler")
+                self.thread.start()
+            return True
+
+    def leave(self):
+        with self.cond:
+            self.users = max(0, self.users - 1)
+            self.cond.notify_all()
+
+    def _take(self):
+        """One reading: {t: epoch ms, rows: [[id, rx, tx], ...]} or None when the command failed (the stream then sends nothing, no old value)."""
+        t0 = time.time()
+        rc, out = _run([self.app.cfg.hs, "sys", "netmap", "counters"], timeout=10)
+        if rc != 0:
+            return None
+        rows = [line.split("\t") for line in out.splitlines() if line.count("\t") == 2]
+        return {"t": int(t0 * 1000), "rows": rows}
+
+    def _loop(self):
+        while True:
+            with self.cond:
+                if self.users == 0:
+                    self.thread, self.sample = None, None      # nobody is looking: stop, and forget the old numbers
+                    return
+            started = time.time()
+            s = self._take()
+            with self.cond:
+                self.seq += 1
+                self.sample = s
+                self.cond.notify_all()
+            time.sleep(max(0.2, self.app.cfg.netmap_every - (time.time() - started)))
+
+    def wait(self, last, timeout):
+        """-> (seq, sample) newer than `last`, or (last, None) after `timeout` seconds."""
+        with self.cond:
+            self.cond.wait_for(lambda: self.seq != last, timeout)
+            return (self.seq, self.sample) if self.seq != last else (last, None)
+
+
 class App:
     def _token_owner(self, owner, realm):
         """The role of the owner of a token now (tk.TokenAuth reads it at most once an hour): ("role", r), ("gone", None) or ("down", None).
@@ -2865,6 +2923,7 @@ class App:
         self.incus = vc.IncusApi()                      # tests replace this with a fake
         self.stream_lock, self.streams, self.event_streams = threading.Lock(), 0, 0
         self.log_streams = {}                           # user -> open log streams (D15)
+        self.netmap = NetmapSampler(self)               # the counters stream of the network map
         self.term_spawn = lambda target, name=None: wt.pty_spawn(target, self.cfg.local_user, name=name)      # tests replace this with a fake
 
 
@@ -3105,6 +3164,8 @@ def make_handler(app):
                 return self._events()
             if path.startswith("/api/logs/stream/"):
                 return self._logs_stream(path[len("/api/logs/stream/"):], urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
+            if path == "/api/netmap/stream":
+                return self._netmap_stream()
             if path.startswith("/api/sys/jobs/stream/"):
                 return self._jobs_stream(urllib.parse.unquote(path[len("/api/sys/jobs/stream/"):]), urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path.startswith("/api/sys/"):
@@ -3270,6 +3331,41 @@ def make_handler(app):
             finally:
                 with app.stream_lock:
                     app.streams -= 1
+
+        def _netmap_stream(self):
+            """The counters of the network map as server-sent events: `data: {t, rows: [[id, rx, tx], ...]}` about every cfg.netmap_every seconds
+            (totals; `-` = unreadable; the page divides two readings). The samples come from one shared thread that runs only while a stream is
+            open. 503 at cfg.netmap_max streams: the page then polls `sys netmap counters` as its fallback."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            if not self._allowed(s, ["netmap", "counters"]):
+                return
+            if not app.netmap.join():
+                return self._json(503, {"error": "too many open streams"})
+            try:
+                self.close_connection = True
+                self._headers(200, "text/event-stream", None, (("Cache-Control", "no-cache"), ("Connection", "close"), ("X-Accel-Buffering", "no")))
+                self.wfile.write(b"retry: 3000\n\n")
+                self.wfile.flush()
+                seq, t0, quiet = -1, time.time(), 0
+                while time.time() - t0 < cfg.stream_hours * 3600:
+                    if not app.sessions.get(self._token(), app.auth.storage_locked()):
+                        break                                               # signed out, expired or locked
+                    seq, sample = app.netmap.wait(seq, 5)
+                    if sample is not None:
+                        self.wfile.write(b"data: " + json.dumps(sample).encode() + b"\n\n")
+                        quiet = 0
+                    else:
+                        quiet += 1
+                        self.wfile.write(b": ping\n\nevent: beat\ndata: {}\n\n")   # also tells a closed browser (the write fails)
+                    self.wfile.flush()
+                self.wfile.write(b"event: end\ndata: {}\n\n")
+                self.wfile.flush()
+            except (OSError, ValueError):
+                pass                                                         # the browser went away
+            finally:
+                app.netmap.leave()
 
         def _logs_stream(self, kind, query):
             """D15: follow a log as server-sent events. `data: {"lines": [...]}` batches (the first ones are the fill, then what is appended), `event: end` when

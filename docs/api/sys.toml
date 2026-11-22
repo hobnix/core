@@ -751,6 +751,9 @@ role = "admin"
 ["deck"]
 role = "viewer"
 
+["netmap counters"]
+role = "viewer"
+
 ["status"]
 role = "viewer"
 
