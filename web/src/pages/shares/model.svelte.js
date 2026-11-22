@@ -23,7 +23,7 @@ export function shareModel({ sel = () => '', detail = false, tab = () => '' } = 
     name: r[0], kind: r[1], path: r[2], cache: r[3], size: Number(r[4]) || 0, measured: r[5], backup: r[6], disks: r[7], mounted: r[8],
     pool: (r[2] ?? '').split('/')[1] || poolOfRole('data'), volume: false,
   })));
-  // ct list: name, type, state, ..., disk (col 9): the instances' own volumes on fast (read only here; the instance owns them)
+  // ct list: name, type, state, ..., disk (col 9): the instances' own volumes on the instance pool (read only here; the instance owns them)
   const volumes = $derived(rows(cts).filter((r) => r[9] && r[9] !== '-').map((r) => ({
     name: r[0], kind: 'volume', path: '', cache: '-', size: parseSize(r[9]), measured: '', backup: '-', disks: poolOfRole('apps'), mounted: r[0], pool: poolOfRole('apps'), volume: true,
   })));

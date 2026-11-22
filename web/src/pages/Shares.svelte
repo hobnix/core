@@ -1,7 +1,7 @@
 <script>
   import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
-  // Storage > Shares: every share (the Samba shares of bulk, the instance volumes of fast) in one list (/storage/shares, filter ?pool=<pool name>). A row opens the quick
+  // Storage > Shares: every share (the Samba shares, the instance volumes) in one list (/storage/shares, filter ?pool=<pool name>). A row opens the quick
   // look over the list (?sel=<name>: selection.svelte.js); "Open page" goes to the page of the share (pages/shares/Share.svelte) with its permissions, snapshots and actions.
   // The folders of deleted shares are kept in the second view (?view=kept). The "in the backup" switch is NOT here (it lives on Backup): a share only shows a read-only badge.
   import Table from '../shell/Table.svelte';
