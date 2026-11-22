@@ -1,7 +1,7 @@
 // Vite plugin of demo mode (`npm run demo` in web/): answers /api/* from the fixtures in web/demo/fixtures, nothing else runs.
 // The fixture is chosen with ?fixture=<name> on any page (kept in a cookie); HS_DEMO_FIXTURE sets the default. Names: fixtures/*.json.
 import { INDEX, page, search } from './docs.js';
-import { answer, fixture, fixtureNames, DEFAULT_FIXTURE } from './engine.js';
+import { answer, netmapFrame, fixture, fixtureNames, DEFAULT_FIXTURE } from './engine.js';
 
 const cookieOf = (req) => (/(?:^|;\s*)hs-demo=([a-z0-9-]+)/.exec(req.headers.cookie || '') || [])[1];
 
@@ -30,6 +30,12 @@ export default function demoPlugin() {
         if (url.pathname === '/api/events') {          // the live stream: open, then a beat; nothing ever changes
           stream('event: open\ndata: {}\n\n');
           const t = setInterval(() => res.write('event: beat\ndata: {}\n\n'), 15000);
+          req.on('close', () => clearInterval(t));
+          return;
+        }
+        if (url.pathname === '/api/netmap/stream') {      // the counters of the network map: made-up totals that grow, a frame every 2 s
+          stream('retry: 3000\n\n' + `data: ${JSON.stringify(netmapFrame(fx))}\n\n`);
+          const t = setInterval(() => res.write(`data: ${JSON.stringify(netmapFrame(fx))}\n\n`), 2000);
           req.on('close', () => clearInterval(t));
           return;
         }

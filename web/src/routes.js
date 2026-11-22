@@ -40,7 +40,10 @@ import WhatsNew from './pages/WhatsNew.svelte';
 import Data from './pages/Data.svelte';
 import LiveState from './pages/LiveState.svelte';
 import TestLab from './pages/TestLab.svelte';
-import Gallery from './pages/Gallery.svelte';
+// A page behind `lazy()` is its own chunk, loaded when it is first opened (PageFrame awaits it): the map and the UI SDK it pulls in do not weigh on every page (ADR 0030).
+const lazy = (load) => ({ lazy: load });
+const Gallery = lazy(() => import('./pages/Gallery.svelte'));
+const NetworkMap = lazy(() => import('./pages/NetworkMap.svelte'));
 import Section from './pages/Section.svelte';
 import Proxy from './pages/Proxy.svelte';
 import ProxyPorts from './pages/ProxyPorts.svelte';
@@ -87,6 +90,7 @@ export const routes = {
   '/operations/events': Events,
   '/operations/whats-new': WhatsNew,
   '/monitoring/diagnostics': Data,
+  '/monitoring/network-map': NetworkMap,
   '/monitoring/live-state': LiveState,
   '/monitoring/test-lab': TestLab,
   '/developer': Section,
