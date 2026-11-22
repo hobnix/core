@@ -253,4 +253,11 @@ input[type='checkbox']:disabled, input[type='radio']:where(:not(.radio input, .s
   .nm-dot.ok { fill: var(--ok); }
   .nm-dot.warn { fill: var(--warn); }
   .nm-dot.bad { fill: var(--bad); }
+  .nm-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .nm-hint { color: var(--fg-3); font-size: 12px; }
+  .nm-cap { caption-side: top; text-align: left; color: var(--fg-3); font-size: 12px; padding: 0 12px 6px; }
+  .nm-node { cursor: pointer; outline: none; }
+  .nm-node:hover .nm-box { stroke: var(--accent); }
+  .nm-node:focus-visible .nm-box { stroke: var(--accent); stroke-width: 3px; }
+  .np-link { display: inline-block; margin-top: 8px; color: var(--accent); }
   .nm-empty { color: var(--fg-3); font-size: 13px; }
