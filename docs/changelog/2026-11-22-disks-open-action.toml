@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Disks: an Open button on each row instead of a quick look"
+body  = """Selecting a disk in the Disks list no longer opens a panel over the table. Each row now ends with an Open disk button that goes to the page of the disk (the disk name is still a link). On the Missing tab each row has a Forget button."""
