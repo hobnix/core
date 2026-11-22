@@ -53,9 +53,10 @@ import NodeFacts from './pages/nodes/NodeFacts.svelte';
 import { P } from './paths.js';
 import { objectOf } from './objects.js';
 import Disk from './pages/disks/Disk.svelte';
+import Share from './pages/shares/Share.svelte';
 
 // the component of each kind in objects.js (one line per object page)
-const objectPages = { pool: Pools, disk: Disk };
+const objectPages = { pool: Pools, disk: Disk, share: Share };
 
 export const routes = {
   [P.summary]: Summary,
