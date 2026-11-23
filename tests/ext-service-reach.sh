@@ -271,4 +271,42 @@ check_eq "the first package of a name wins, a name that is not the folder is dro
 check_out "and both are said on stderr" "name is not its folder name" cat "$WORK/mf.err"
 check_out "the duplicate too" "another package has the name aaa" cat "$WORK/mf.err"
 
+
+echo "-- the shipped recipes declare key_file = /var/lib/hs/stat-<app> (hobnix/recipes develop): valid, and only for their own name"
+python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/flat.txt" 2>&1 || true
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("pi", os.path.join(sys.argv[1], "lib", "pkg_integrations.py")); pi = importlib.util.module_from_spec(s); s.loader.exec_module(pi)
+# the four manifests, reduced to what matters here (name, integrations.media, key_file, key_header)
+real = {"jellyfin": "X-Emby-Token", "radarr": "X-Api-Key", "sonarr": "X-Api-Key", "sabnzbd": "X-Api-Key"}
+for n, h in real.items():
+    m = {"name": n, "kind": "recipe", "integrations": {"media": {"api_url": "http://{host}:{port}", "key_file": "/var/lib/hs/stat-" + n, "key_header": h, "kind": "x"}}}
+    print("VALID_%s=%r" % (n, pi.manifest_problems(m)))
+# somebody else's stat- file, or another flat file, is not allowed
+for label, n, f in (("OTHERSTAT", "radarr", "/var/lib/hs/stat-sonarr"), ("FLATOTHER", "radarr", "/var/lib/hs/restic-password"), ("FLATOWN", "radarr", "/var/lib/hs/radarr"),
+                    ("STATUP", "radarr", "/var/lib/hs/stat-radarr/../restic-password"), ("STATDIR", "radarr", "/var/lib/hs/stat-radarr/"), ("RESERVEDSTAT", "disks", "/var/lib/hs/stat-disks")):
+    m = {"name": n, "integrations": {"media": {"key_file": f}}}
+    print("%s=%r" % (label, bool(pi.manifest_problems(m))))
+root = os.path.join(sys.argv[2], "flatroot"); os.makedirs(root)
+f = lambda p, prov="radarr", caller="media": pi.key_file_problem(p, prov, caller, root=root, resolve=True)
+open(os.path.join(root, "stat-radarr"), "w").write("APIKEY\n")
+print("FLATOK=%r" % f(root + "/stat-radarr"))
+print("FLATREAD=%r" % (pi.read_key(root + "/stat-radarr", "radarr", "media", root=root),))
+print("FLATSELF=%r" % (f(root + "/stat-radarr", "radarr", "radarr") is not None))
+# a stat- secret leaving by a link to another file is refused; a locked vault turns it into a link to <vault>/secrets/stat-radarr (secrets.sh: -L)
+os.symlink("/etc/passwd", os.path.join(root, "stat-sonarr")); print("FLATLINK=%r" % (f(root + "/stat-sonarr", "sonarr") is not None))
+vault = os.path.join(sys.argv[2], "flatvault"); os.makedirs(os.path.join(vault, "secrets")); os.environ["HS_VAULT_DIR"] = vault
+os.remove(os.path.join(root, "stat-radarr")); os.symlink(os.path.join(vault, "secrets", "stat-radarr"), os.path.join(root, "stat-radarr"))
+print("LOCKED=%r" % f(root + "/stat-radarr"))
+open(os.path.join(vault, "secrets", "stat-radarr"), "w").write("VK")
+print("UNLOCKED=%r" % (pi.read_key(root + "/stat-radarr", "radarr", "media", root=root),))
+os.remove(os.path.join(root, "stat-radarr")); os.symlink(os.path.join(vault, "secrets", "stat-other"), os.path.join(root, "stat-radarr"))
+open(os.path.join(vault, "secrets", "stat-other"), "w").write("x"); print("VAULTWRONG=%r" % (f(root + "/stat-radarr") is not None))
+PY
+for n in jellyfin radarr sonarr sabnzbd; do check_out "the $n recipe manifest validates" "VALID_$n=\\[\\]" cat "$WORK/flat.txt"; done
+for k in OTHERSTAT FLATOTHER FLATOWN STATUP STATDIR RESERVEDSTAT FLATSELF FLATLINK VAULTWRONG; do check_out "refused: $k" "^$k=True" cat "$WORK/flat.txt"; done
+check_out "the provider's own stat- file is read" "FLATOK=None" cat "$WORK/flat.txt"
+check_out "and its bytes come back" "FLATREAD=\\(b'APIKEY.n', None\\)" cat "$WORK/flat.txt"
+check_out "a locked vault (a dangling link to the designated vault file) is no problem for the check" "LOCKED=None" cat "$WORK/flat.txt"
+check_out "an unlocked one is read through the link" "UNLOCKED=\\(b'VK', None\\)" cat "$WORK/flat.txt"
+
 finish

@@ -33,7 +33,7 @@ RESERVED_PREFIXES = ("apps-", "backup", "remote", "node-key", "node-known", "doc
                      "dc-ca", "machine", "last-rebuild", "live-measure", "restic", "health", "heartbeat", "migrate", "pkg-", "services", "share-",
                      "snapshots", "scrub", "selftest", "update-", "vps-", "wear-", "zoraxy", "grafana", "testlab", "ext-", "bulk-", "deck-", "event-",
                      "first-run", "gateway", "homepage", "incident", "parity-", "pci-", "spindown", "sync-", "cf-", "api-tokens", "tailscale", "unifi-",
-                     "iso-", "src-", "state", "hs-")
+                     "iso-", "src-", "state", "stat-", "hs-")
 
 
 def is_reserved(name):
@@ -54,6 +54,16 @@ def designated(path, root=STATE_ROOT):
     return os.path.join(vault, "secrets", path[len(root.rstrip("/")) + 1:])
 
 
+STAT_SECRET = re.compile(r"^stat-[a-z0-9][a-z0-9-]{0,40}$")   # the core's name of the API key of a service (scripts/services.py, secrets.sh, hs services key)
+
+
+def flat_key(path, provider, root=STATE_ROOT):
+    """True for exactly <root>/stat-<provider>: the one flat file in the state folder a package may offer (the recipes declare key_file =
+    "/var/lib/hs/stat-<app>", the existing convention). Only the provider's OWN name, nothing else flat."""
+    name = "stat-" + provider
+    return path == root.rstrip("/") + "/" + name and bool(STAT_SECRET.match(name))
+
+
 def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False):
     """The ONE check of a key file before it is handed out (integration_key, `grant`, the validator, the bridge before it copies the key for
     LoadCredential): None or the reason. The file must lie below <root>/<provider>/ (the folder of the package that offers the integration; the
@@ -71,12 +81,16 @@ def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False
     if re.search(r"[\x00-\x20\x7f]", path) or not path.startswith("/") or ".." in path.split("/"):
         return "the key file path is not valid"
     base = root.rstrip("/") + "/" + provider + "/"
-    if not path.startswith(base) or len(path) == len(base) or path.endswith("/") or "//" in path:
-        return "the key file must lie below %s" % base
+    flat = flat_key(path, provider, root)
+    if not flat and (not path.startswith(base) or len(path) == len(base) or path.endswith("/") or "//" in path):
+        return "the key file must lie below %s (or be %s/stat-%s)" % (base, root.rstrip("/"), provider)
     if resolve:
         import stat
         top = os.path.realpath(base)
-        if not _within(os.path.realpath(os.path.dirname(path)), top):
+        if flat:    # the folder is the state root itself: it must not be a link either
+            if os.path.realpath(os.path.dirname(path)) != os.path.realpath(root):
+                return "the folder of the key file leads out of %s" % root
+        elif not _within(os.path.realpath(os.path.dirname(path)), top):
             return "the folder of the key file leads out of %s" % base
         try:
             st = os.lstat(path)
@@ -115,7 +129,8 @@ def read_key(path, provider, caller=None, root=STATE_ROOT):
             now = os.readlink("/proc/self/fd/%d" % fd)
         except OSError:
             return None, "cannot verify the opened key file"
-        if not (_within(now, os.path.realpath(root.rstrip("/") + "/" + provider)) or now == designated(path, root)):
+        own = os.path.realpath(path) if flat_key(path, provider, root) else None
+        if not (_within(now, os.path.realpath(root.rstrip("/") + "/" + provider)) or now == designated(path, root) or now == own):
             return None, "the opened key file lies outside the provider's folder"
         return os.read(fd, MAX_KEY + 1)[:MAX_KEY], None
     finally:

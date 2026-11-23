@@ -108,14 +108,7 @@ printf '#!/usr/bin/env bash\nexec python3 -I "%s" "${FIX_MODE:-crash}"\n' "$SVC"
 printf '#!/usr/bin/env bash\nprintf "%%s\n" "$*" >> "%s"\n' "$WORK/emitted" > "$WORK/emit.sh"; chmod +x "$WORK/emit.sh"
 export HS_EXT_EMIT=$WORK/emit.sh
 # the bridge starts the service through systemd-run (a confined transient unit): a fake that runs what follows `--` and a fake systemctl
-printf '#!/usr/bin/env bash
-while [ "$1" != -- ]; do shift; done; shift
-exec "$@"
-' > "$WORK/systemd-run"; chmod +x "$WORK/systemd-run"
-printf '#!/usr/bin/env bash
-exit 0
-' > "$WORK/systemctl0"; chmod +x "$WORK/systemctl0"
-export HS_SYSTEMD_RUN=$WORK/systemd-run HS_SYSTEMCTL=$WORK/systemctl0 HS_CRED_DIR=$WORK/cred
+fake_service_systemd
 SR="python3 -I $SCRIPTS/lib/ext_service.py svc-run --name fixsvc --dir $PKG --state-dir $WORK/svcstate"
 check "has-service sees the [service] table" python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$PKG"
 check_eq "a folder without [service] has none" 1 "$(python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$WORK" >/dev/null 2>&1; echo $?)"

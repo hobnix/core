@@ -14,6 +14,7 @@ printf 'name = "fixsvc"\n[service]\nexec = "@/run.sh"\nsubscribe = ["job.*"]\nhe
 printf '#!/usr/bin/env bash\nexec python3 -I "%s" "${FIX_MODE:-good}"\n' "$SVC" > "$PKG/run.sh"
 printf '#!/usr/bin/env bash\nprintf "%%s\n" "$*" >> "%s"\n' "$WORK/emitted" > "$WORK/emit.sh"; chmod +x "$WORK/emit.sh"
 export HS_EXT_EMIT=$WORK/emit.sh
+fake_service_systemd
 CUR=$HS_STATE_DIR/ext-cursors/fixsvc
 SR="python3 -I $SCRIPTS/lib/ext_service.py svc-run --name fixsvc --dir $PKG --state-dir $WORK/svcstate"
 python3 -I - "$HS_STATE_DB" <<'PY'
