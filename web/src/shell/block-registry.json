@@ -73,6 +73,24 @@
         "keys": { "read": "string", "job": "string", "value": "number", "max": "number", "label": "string", "labelCol": "number", "state": "number", "unit": "string", "topic": "string", "every": "number" },
         "blocks": []
       }
+    },
+    "chart": {
+      "component": "GenBlock",
+      "text": "A series over time from a declared read: one field of each row is a point, oldest first.",
+      "schema": {
+        "required": ["read"],
+        "keys": { "read": "string", "value": "number", "max": "number", "hot": "number", "unit": "string", "empty": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "stat": {
+      "component": "GenBlock",
+      "text": "Stat tiles from the first row of a declared read: label, value, unit and an optional state dot.",
+      "schema": {
+        "required": ["read", "items"],
+        "keys": { "read": "string", "items": "list", "every": "number" },
+        "blocks": []
+      }
     }
   }
 }

@@ -11,6 +11,7 @@
   import JobStrip from '../shell/JobStrip.svelte';
   import Inbox from '../shell/Inbox.svelte';
   import Entry from './gallery/Entry.svelte';
+  import GenBlock from '../shell/GenBlock.svelte';
   import { BLOCKS, BLOCK_API_LEVEL } from '../shell/blocks.js';
   import GenBlock from '../shell/GenBlock.svelte';
   // answers for the block samples below (GenBlock takes `data` instead of polling)
@@ -392,6 +393,15 @@
         {/each}
         <div class="cell wide"><small>progress · running</small><GenBlock block={{ type: 'progress', read: '/api/sys/sample/copy', value: 0, max: 1, labelCol: 2, state: 3 }} data={BLOCK_DATA} /></div>
         <div class="cell wide"><small>progress · done, with a unit</small><GenBlock block={{ type: 'progress', read: '/api/sys/sample/done', value: 0, max: 1, labelCol: 2, state: 3, unit: 'files' }} data={BLOCK_DATA} /></div>
+        <!-- chart: the points of a read (#473) -->
+        <div class="cell wide"><small>chart · points of a read, newest right, hot over 80</small>
+          <GenBlock block={{ type: 'chart', title: 'Load', read: '/gallery/chart', value: 1, unit: '%', max: 100, hot: 80 }} data={{ '/gallery/chart': { rows: hist.map((v, i) => [String(i), String(v)]) } }} /></div>
+        <div class="cell wide"><small>chart · too few readings</small>
+          <GenBlock block={{ type: 'chart', title: 'Load', read: '/gallery/chart1', value: 1 }} data={{ '/gallery/chart1': { rows: [['0', '5']] } }} /></div>
+        <!-- stat: the tiles of the first row (#473) -->
+        <div class="cell wide"><small>stat · value, unit, optional dot</small>
+          <GenBlock block={{ type: 'stat', read: '/gallery/stat', items: [{ label: 'Uptime', col: 0, unit: 'days' }, { label: 'Disk used', col: 1, unit: 'GB', fmt: 'bytes' }, { label: 'Service', col: 2, map: { up: ['ok', 'running'], down: ['bad', 'stopped'] } }, { label: 'Queue', col: 3 }] }}
+                    data={{ '/gallery/stat': { rows: [['12', '2147483648', 'up', '-']] } }} /></div>
       </div>
     </section>
   </div>

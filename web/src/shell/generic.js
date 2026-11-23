@@ -86,3 +86,22 @@ export function progressOf(block, row, rec) {
   const state = at(block.state);
   return { value: num(block.value), total: num(block.max), label: at(block.labelCol) || block.label || '', state, tone: progressTone(state) };
 }
+
+// The `chart` block (#473): one field of every row of a read is a point, oldest first. Spark draws 0 to 100, so the points are scaled to `max` (default:
+// the highest point, or 100 when all are 0) and `hot` (same unit as the points) becomes a percentage too. A field that is empty or `-` is skipped.
+export function chartSeries(answerRows, col = 1, max = 0, hot = 0) {
+  const pts = answerRows.map((r) => clean(r[col])).filter((v) => v !== '' && v !== undefined && Number.isFinite(Number(v))).map(Number);
+  const top = max > 0 ? max : Math.max(0, ...pts) || 100;
+  const pct = (n) => Math.max(0, Math.min(100, (n / top) * 100));
+  return { values: pts.map(pct), last: pts.length ? pts[pts.length - 1] : null, max: top, hot: hot > 0 ? pct(hot) : 101 };
+}
+
+// The `stat` block (#473): tiles from the first row of a read, items [{ label, col, unit, fmt, map }] -> [{ label, value, unit, dot }]. `map` is a dot
+// column's map ({ value: [state, word] }); a tile without `map` has no dot.
+export function statTiles(firstRow, items = []) {
+  const row = firstRow ?? [];
+  return items.map((it) => {
+    const raw = clean(row[it.col ?? 0]);
+    return { label: it.label ?? '', value: fmtValue(it.fmt, raw), unit: raw === '' ? '' : it.unit ?? '', dot: it.map ? dotOf(it, raw) : null };
+  });
+}

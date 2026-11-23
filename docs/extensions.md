@@ -100,14 +100,19 @@ Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"ap
 | `state` | `{ read, dot, line }`: one declared read; `dot` and `line` are field numbers of its first row (`dot` is ok, warn, bad, info or off); one dot and one line for the card on the group page and the Apps list |
 | `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled, with the reason; the page role is the floor for the page's buttons |
 
-### Blocks of a page
+### Blocks
 
-The blocks are listed in `web/src/shell/block-registry.json` and in the component gallery under "Page blocks"; `hs pkg validate` checks each `[[web.page.blocks]]` against that list. Not tested on hardware yet.
+Each `[[web.page.blocks]]` entry has a `type`. `hs pkg validate` checks it against the block list (`web/src/shell/block-registry.json`): a missing required key, a key the block does not have or a value of the wrong type fails. Not tested on hardware yet.
 
-| `type` | Keys | What it shows |
+| Block | What it shows | Required keys |
 | --- | --- | --- |
-| `log` | `stream` and `read` (both required: a `/api/logs/stream/...` path and the `/api/sys/...` read that serves while the stream is down), `lines` (kept, default 200, at most 2000), `follow` (default true), `every` (seconds of the fallback read), `empty`, `title` | the tail of a log; it follows the stream, so there is no timer while the stream is up, and it keeps only the last lines |
-| `progress` | `read` with the field numbers `value`, `max`, `labelCol`, `state` of its first row, or `job` (the slug of a job); `label`, `unit`, `topic`, `every`, `title` | a bar with the percent beside it; a job is followed through the job events, a read through its `topic` (give one, or it is polled) |
+| `table`, `kv`, `cards`, `text`, `empty`, `gallery` | rows, key and value cells, cards, text, an empty state, pictures | see the Components page in Developer |
+| `chart` | a series over time: field `value` (a field number, default 1) of each row of `read` is one point, oldest first; `max` scales it (default: the highest point), `hot` marks points at or above it, `unit` is written beside the newest value | `read` |
+| `stat` | tiles from the first row of `read`: `items` is a list of `{ label, col, unit, fmt, map }`; `map` (`{ value = ["ok", "running"] }`) adds a state dot with a word | `read`, `items` |
+| `log` | the tail of a log: `stream` is a `/api/logs/stream/...` path, `read` the `/api/sys/...` read that serves while the stream is down; `lines` is how many lines are kept (default 200, at most 2000), `follow` (default true), `every` seconds of the fallback read. It follows the stream, so there is no timer while the stream is up | `stream`, `read` |
+| `progress` | a bar with the percent beside it: `read` with the field numbers `value`, `max`, `labelCol` and `state` of its first row, or `job` (the slug of a job, followed through the job events); `label`, `unit`. A read follows its `topic` (give one, or it is polled every `every` seconds) | `read` or `job` |
+
+A block whose `type` the web interface does not know shows a note instead of the block.
 
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 
