@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The Rust extension SDK (rust/hobnix-ext-sdk, issue #240): its two example extensions built with cargo and driven by the reference
 # runners of the protocols (scripts/lib/ext_proto.py for commands, ADR 0010; scripts/lib/ext_service.py for services, ADR 0011).
+# The API example (http client, integration listing, credential) runs against a local python server; the musl build only when the target is installed.
 # The SDK's own unit tests are `cargo test -p hobnix-ext-sdk` (CI runs them). Skipped (77) without cargo or python3, or off Linux.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
@@ -32,4 +33,40 @@ rc=0; out=$(python3 -I "$SCRIPTS/lib/ext_service.py" run --name ticker --health-
 check_eq "the service runs and stops cleanly" 0 "$rc"
 check_out "it publishes snapshots" '"topic":"ticks"' printf '%s' "$out"
 check_out "it ends in the state stopped" '"final","state":"stopped"' printf '%s' "$out"
+
+echo "-- API example (http client, integration listing, credential)"
+mkdir -p "$WORK/cred"; printf 's3cret\n' > "$WORK/cred/integration-jf"
+cat > "$WORK/srv.py" <<'PY'
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        b = json.dumps({"path": self.path, "key": self.headers.get("X-Emby-Token")}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+print(s.server_address[1], flush=True)
+s.handle_request(); s.handle_request()
+PY
+python3 -I "$WORK/srv.py" > "$WORK/port" &
+SRV=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$WORK/port" ] && break; sleep 0.3; done
+PORT=$(cat "$WORK/port")
+printf 'media-hub\tjf\trecipe\thttp://127.0.0.1:%s\t-\t-\tX-Emby-Token\nmedia-hub\tnokey\trecipe\thttp://127.0.0.1:%s\t-\t-\t-\n' "$PORT" "$PORT" > "$WORK/listing.tsv"
+rc=0; out=$(CREDENTIALS_DIRECTORY=$WORK/cred $RUN call --command get --arg "$WORK/listing.tsv" --arg jf --arg /System/Info -- "$EX/apiprobe" 2>&1) || rc=$?
+check_eq "apiprobe exits 0" 0 "$rc"
+check_out "it sent the key from the credential in the key header" '"key":"s3cret"' printf '%s' "$out"
+check_out "it asked for the path" '"path":"/System/Info"' printf '%s' "$out"
+rc=0; out=$(CREDENTIALS_DIRECTORY=$WORK/cred $RUN call --command get --arg "$WORK/listing.tsv" --arg nokey --arg /x -- "$EX/apiprobe" 2>&1) || rc=$?
+check_out "a row without a key header sends no key" '"key":null' printf '%s' "$out"
+kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null
+rc=0; out=$($RUN call --command get --arg "$WORK/listing.tsv" --arg nosuch --arg /x -- "$EX/apiprobe" 2>&1) || rc=$?
+check_out "an unknown integration is bad_request" '"code":"bad_request"' printf '%s' "$out"
+
+echo "-- static musl build"
+if rustup target list --installed 2>/dev/null | grep -q x86_64-unknown-linux-musl; then
+  if (cd "$ROOT/rust" && cargo build --locked -q --release --target x86_64-unknown-linux-musl -p hobnix-ext-sdk --example apiprobe) > "$WORK/musl.log" 2>&1; then
+    ok_file=$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/examples/apiprobe
+    check_out "the musl build is statically linked" 'statically linked|static-pie linked' sh -c "file '$ok_file'"
+  else fail "musl build: $(tail -n 5 "$WORK/musl.log" | tr '\n' ' ')"; fi
+else echo "  skip  target x86_64-unknown-linux-musl not installed (rustup target add)"; fi
 finish
