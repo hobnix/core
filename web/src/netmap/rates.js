@@ -1,3 +1,4 @@
+import { P } from '../paths.js';
 // Counters to rates for the network map page (#877). Plain JS, no runes, so that node can test it (tests/web-netmap-rates.mjs).
 // A frame is what the counters stream sends: { t: epoch ms of the reading, rows: [[id, rx_bytes, tx_bytes], ...] } (totals, `-` = not readable).
 
@@ -31,13 +32,13 @@ export function ratesFrom(prev, cur) {
 // The rows of `hs sys netmap` (arrays) -> the objects NetMap takes.
 export const graphOf = (rows) => (rows || []).map((r) => ({ id: r[0], kind: r[1], parent: r[2], label: r[3], state: r[4], rx_bytes: r[5] ?? '-', tx_bytes: r[6] ?? '-' }));
 
-// The page of a node (NetMap `hrefFor`): '' where there is none.
+// The inner path (paths.js) of a node's page, '' where there is none; the page puts the node in front with url() (route.svelte.js).
 export function hrefOf(row) {
   switch (row.kind) {
-    case 'instance': return '#/instances';
-    case 'service': return '#/instances/services';
-    case 'host': return '#/monitoring/hardware';
-    case 'wan': case 'gateway': case 'bridge': return '#/network';
+    case 'instance': return P.instances;
+    case 'service': return P.services;
+    case 'host': return P.hardware;
+    case 'wan': case 'gateway': case 'bridge': return P.network;
     default: return '';
   }
 }

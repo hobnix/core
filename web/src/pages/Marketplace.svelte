@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   // The Marketplace: every package of every repository (recipes and extensions are both just packages), and the repositories they come from.
   // Reads: hs sys pkg market / repos. Changes: hs sys pkg plan|start (install, update, remove, fetch, repo-add, repo-remove); a package or repository
   // that came from a repository somebody added is red (the typed word is its name).
@@ -36,7 +37,7 @@
 
   const tabs = [{ id: 'packages', label: 'Packages' }, { id: 'repos', label: 'Repositories' }];
   const tab = $derived(tabs.some((t) => t.id === route.query.tab) ? route.query.tab : 'packages');
-  const pick = (id) => go(id === 'packages' ? '/marketplace' : `/marketplace?tab=${id}`);
+  const pick = (id) => go(id === 'packages' ? P.marketplace : `${P.marketplace}?tab=${id}`);
 
   let q = $state('');
   let kind = $state('all');
@@ -141,7 +142,7 @@
             sub={market.loaded && !market.error ? `${pkgs.length} packages from ${repos.length} repositories${updates ? ` · ${updates} update${updates > 1 ? 's' : ''}` : ''}` : 'Apps and extensions from the repositories you trust.'}>
   {#snippet actions()}
     <Button icon="arrows-clockwise" busy={rowstate.pending('pkg', ['fetch'])} busyLabel="Checking…" tooltip={'Read the repositories again and find the newest releases'} onclick={fetchAll}>Check for updates</Button>
-    <Button icon="hammer" tooltip={'Write the manifest of a new app or extension'} onclick={() => go('/marketplace/builder')}>Package builder</Button>
+    <Button icon="hammer" tooltip={'Write the manifest of a new app or extension'} onclick={() => go(P.builder)}>Package builder</Button>
     <Button variant="primary" tooltip={'Add a repository of packages'} onclick={addRepo}><i class="ph ph-plus"></i>Add repository</Button>
   {/snippet}
 </PageHeader>

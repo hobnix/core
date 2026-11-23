@@ -1,0 +1,6 @@
+date  = "2026-11-22"
+type  = "change"
+title = "A share has its own page, and the Shares list opens a quick look"
+body  = """
+A click on a share in Storage > Shares opens a quick look over the list (the address keeps ?sel=, so Back, reload and a pasted link work); the share's name opens its page at /storage/shares/<name>. The page has the tabs Overview, Access (visibility and permissions) and Snapshots (ZFS snapshots and backup restore points), the running jobs of the share, and the linked pool and instances. Browse files and one more action are in the header, the rest are under More, and Roll back and Delete are in the danger section at the end. Not tested on hardware yet.
+"""

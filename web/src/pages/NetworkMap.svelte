@@ -9,6 +9,7 @@
   import Muted from '../ui/Muted.svelte';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { ui } from '../ui.svelte.js';
+  import { url } from '../route.svelte.js';
   import { netmapCounters } from '../netmap/counters.svelte.js';
   import { graphOf, hrefOf } from '../netmap/rates.js';
 
@@ -28,7 +29,7 @@
   retry={() => refresh(['/api/sys/netmap/topology'])}>
   {#if counters.mode === 'poll'}<Banner tone="info">{status}</Banner>{/if}
   <div class="card">
-    <NetMap {graph} rates={counters.rates} label="Network map of {ui.host}" hrefFor={hrefOf} />
+    <NetMap {graph} rates={counters.rates} label="Network map of {ui.host}" hrefFor={(r) => { const p = hrefOf(r); return p ? url(p) : ''; }} />
   </div>
   {#if counters.mode !== 'poll'}<Muted>{status}</Muted>{/if}
 </PageState>

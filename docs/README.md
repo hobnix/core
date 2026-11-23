@@ -36,6 +36,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-live-interface](PLAN-live-interface.md) | Milestone 0.10: the interface follows events, pending rows, delay measured, acknowledge |
+| [PLAN-navigation](PLAN-navigation.md) | Milestone 0.11: navigation and pages, decisions D1 to D12 |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-registry](PLAN-registry.md) | Milestone 0.13: a signed package index with one version per package, core as framework, names, blueprints (plan, nothing built) |
 | [PLAN-package-names](PLAN-package-names.md) | Every capability, extension and recipe with its proposed name, for the retouch pass (draft) |
@@ -72,6 +73,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.8](RELEASE-NOTES-0.8.md) | Draft release notes of 0.8.0, with what is not verified |
 | [RELEASE-NOTES-0.9](RELEASE-NOTES-0.9.md) | Draft release notes of 0.9.0, with what is not verified |
 | [RELEASE-NOTES-0.10](RELEASE-NOTES-0.10.md) | Draft release notes of 0.10.0, with what is not verified |
+| [RELEASE-NOTES-0.11](RELEASE-NOTES-0.11.md) | Draft release notes of 0.11.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

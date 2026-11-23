@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   // The storage step: import a ZFS pool that is on the disks, or make a pool from empty disks. Both open a plan (the same `pool` change the
   // Pools page uses); the disks it only shows are listed with the way out. Next moves on, whatever was done here.
   import { onMount } from 'svelte';
@@ -75,5 +76,5 @@
   <div class="muted">Shown only</div>
   <Table id="first-run-shown" columns={shownCols} rows={g.shown} key="id" />
   <p class="muted">These disks hold data and are not offered for a new pool. To use one, erase it on its disk page first.
-    <Button variant="ghost" size="sm" tooltip="Open the disks page" onclick={() => go('/storage/disks')}>Disks</Button></p>
+    <Button variant="ghost" size="sm" tooltip="Open the disks page" onclick={() => go(P.disks)}>Disks</Button></p>
 {/if}

@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
   import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
@@ -104,13 +105,14 @@
   // grouped as the design shows them (storage, backup, system, network) and each with the page of the object it is about
   const GROUPS = [['Storage', 'hard-drive', ['hard-drive', 'database', 'lock', 'usb', 'folders']], ['Backup', 'cloud-arrow-up', ['cloud-arrow-up']], ['Network', 'network', []], ['System', 'gear-six', ['lightning', 'calendar-x', 'git-branch', 'gear-six', 'warning']]];
   const dataPool = $derived(poolOfRole('data'));
-  const OBJECT = $derived({ 'cloud-arrow-up': ['Backup', '/protection/backup'], 'hard-drive': ['Disks', dataPool ? `/storage/disks?pool=${dataPool}` : '/storage/disks'], database: ['Pools', dataPool ? `/storage/pools/${dataPool}` : '/storage/pools'], lock: ['Encryption', '/storage/encryption'], usb: ['Unassigned disks', '/storage/disks?pool=none'], folders: ['Shares', dataPool ? `/storage/shares?pool=${dataPool}` : '/storage/shares'], lightning: ['Hardware', '/monitoring/hardware'], 'calendar-x': ['Expiry dates', '/protection/expiry'] });
+  const OBJECT = $derived({ 'cloud-arrow-up': ['Backup', P.backup], 'hard-drive': ['Disks', dataPool ? `/storage/disks?pool=${dataPool}` : '/storage/disks'], database: ['Pools', dataPool ? `/storage/pools/${dataPool}` : '/storage/pools'], lock: ['Encryption', '/storage/encryption'], usb: ['Unassigned disks', '/storage/disks?pool=none'], folders: ['Shares', dataPool ? `/storage/shares?pool=${dataPool}` : '/storage/shares'], lightning: ['Hardware', P.hardware], 'calendar-x': ['Expiry dates', P.expiry] });
   const groups = $derived(GROUPS.map(([name, icon, icons]) => ({ name, icon, items: problems.filter((p) => icons.includes(p.icon)) })).filter((g) => g.items.length));
 </script>
 
 <div class="page">
   <PageHeader title="Health" crumb="{ui.host} / Health" {sub}>
     {#snippet actions()}
+      <Button tooltip={'A disk failed or a pool will not open: the guided recovery'} icon="first-aid-kit" onclick={() => go(P.incident)}>Incident</Button>
       <Button need="admin" icon="bell-ringing" busy={jobRunning('admin', ['test-push'])} busyLabel="Sending…" tooltip={'Send a test message to the push address'} onclick={() => openPlan('admin', ['test-push'], 'Test push message')}>Send test push</Button>
       <Button need="admin" variant="primary" icon="shield-check" busy={jobRunning('jobs', ['run', 'hs-health-check.service'])} busyLabel="Checking…" tooltip={'Check everything now and list the problems'} onclick={() => openPlan('jobs', ['run', 'hs-health-check.service'], 'Health check')}>Run health check</Button>
     {/snippet}

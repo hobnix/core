@@ -63,13 +63,13 @@ assert.equal(st.nodeCount('off'), 1);
 assert.equal(st.nodeCount('down'), 1);
 
 // every proxyserver row has its own path (inner paths of the node: /mail, /ports, ...), and every path has a page in the table of edge nodes
-const nav = readFileSync(join(root, 'nav.js'), 'utf8');
+const { tree } = await import(pathToFileURL(join(root, 'nav.js')).href);
+const { P } = await import(pathToFileURL(join(root, 'paths.js')).href);
 const routes = readFileSync(join(root, 'routes.js'), 'utf8');
-const edgeBlock = nav.slice(nav.indexOf("label: 'proxyserver'"), nav.indexOf('];', nav.indexOf("label: 'proxyserver'")));
-const edgePaths = [...edgeBlock.matchAll(/path: '(\/[^']*)'/g)].map((x) => x[1]).filter((p) => p !== '/');
+const edgePaths = tree.find((n) => n.label === 'proxyserver').children.map((c) => c.path).filter((p) => p !== '/');
 assert.equal(new Set(edgePaths).size, edgePaths.length, 'proxy rows share a path');
 assert.ok(edgePaths.length >= 6);
 const edgeRoutes = routes.slice(routes.indexOf('const edgeRoutes'), routes.indexOf('const peerRoutes'));
-for (const p of [...edgePaths, '/', '/health']) assert.ok(edgeRoutes.includes(`'${p}':`), `no edge route for ${p}`);
+for (const p of [...edgePaths, '/', '/health']) assert.ok(edgeRoutes.includes(`[P.${Object.keys(P).find((k) => P[k] === p)}]:`), `no edge route for ${p}`);
 for (const p of Object.keys(m)) assert.ok(p === '/' || edgePaths.includes(p), `the tree has no row for ${p}`);
 console.log('ok');

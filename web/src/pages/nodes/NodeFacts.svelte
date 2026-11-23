@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../../paths.js';
   // The read only pages of a peer: Storage, Instances and Backup, each a summary of the node's status document.
   // One component, the address says which. No button: what the other server allows is its owner's decision.
   import { route } from '../../route.svelte.js';
@@ -15,7 +16,7 @@
   const st = poll(() => `/api/sys/node/status/${encodeURIComponent(node.name)}`, 30000);
   const d = $derived(st.data);
   const f = $derived(facts(d));
-  const which = $derived(route.path.startsWith('/protection') ? 'backup' : route.path === '/instances' ? 'instances' : 'storage');
+  const which = $derived(route.path === P.backup ? 'backup' : route.path === P.instances ? 'instances' : 'storage');
   const title = $derived({ backup: 'Backup', instances: 'Instances', storage: 'Storage' }[which]);
   const empty = $derived(d != null && !f.locked && (which === 'storage' ? !f.pools.length : which === 'instances' ? !f.instances : !f.backup));
 </script>

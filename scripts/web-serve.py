@@ -1854,6 +1854,8 @@ def parse_change(out, rc):
             d["id"] = v
         elif k in ("status", "reason", "heading", "command", "confirm_name", "unit"):
             d[k] = v
+        elif k == "code" and v:
+            d["code"] = v          # ADR 0028: the stable name of a refusal, only when the script printed one
         elif k == "job" and re.fullmatch(r"[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]{1,60}-[a-z]{4}", v):
             d["job"] = v           # the job record of an interactive recipe run (ADR 0018): the page follows it
         elif k == "secret":

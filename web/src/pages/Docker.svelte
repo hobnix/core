@@ -1,7 +1,10 @@
 <script>
-  // The Docker page: the apps (compose projects) that run in the locked docker container.
+  import { P, capabilityPath, dockerAppPath } from '../paths.js';
+  // The Docker page: the apps (compose projects) that run in the locked docker container. A row opens the quick look over the list (?sel=<app>); an app has no page
+  // of its own until 0.12 (only the compose editor), so the quick look is the whole view.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
+  import { selected, select, close } from '../selection.svelte.js';
   import { tip } from '../ui/tooltip.svelte.js';
   import { openPlan } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
@@ -12,8 +15,7 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
-  import Split from '../ui/Split.svelte';
-  import Drawer from '../ui/Drawer.svelte';
+  import QuickLook from '../ui/QuickLook.svelte';
   import Kv from '../ui/Kv.svelte';
   import Chip from '../ui/Chip.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
@@ -27,9 +29,10 @@
   const statusPoll = poll('/api/sys/docker/status', 15000);
   const healthPoll = poll('/api/sys/docker/health', 30000);
 
-  let selName = $state('');
+  const selName = $derived(selected());
   let tab = $state('overview');
-  $effect(() => { const n = takeSelection('docker'); if (n) selName = n; });
+  // a search result asks for an app with setSelection (select.svelte.js): it becomes ?sel= here
+  $effect(() => { const n = takeSelection('docker'); if (n) select(n); });
   $effect(() => { if (sel) tab = 'overview'; });
 
   const apps = $derived(rows(appsPoll).map(appOf).filter(Boolean));
@@ -67,7 +70,7 @@
 {#if broken.length}
   <Banner tone="bad">
     Docker is on, but not complete: {broken.map((b) => b.reason).join(' ')}
-    {#snippet action()}<a class="btn" href={url('/settings/capabilities/docker')}>Open Docker settings</a>{/snippet}
+    {#snippet action()}<a class="btn" href={url(capabilityPath('docker'))}>Open Docker settings</a>{/snippet}
   </Banner>
 {/if}
 
@@ -76,14 +79,13 @@
            retry={() => refresh(['/api/sys/docker/apps'])}>
   {#if status.state !== 'on'}
     <EmptyState icon="shipping-container" title="Docker is off" tone="info" text="Turn Docker on under Settings, Capabilities, Docker.">
-      {#snippet action()}<a class="btn" href={url('/settings/capabilities/docker')}>Open Docker settings</a>{/snippet}
+      {#snippet action()}<a class="btn" href={url(capabilityPath('docker'))}>Open Docker settings</a>{/snippet}
     </EmptyState>
   {:else}
-    <div class="toolbar"><Button need="app-manager" size="sm" icon="plus" onclick={() => go('/instances/docker/new')}>New app</Button> <Button size="sm" icon="magic-wand" onclick={() => go('/instances/docker/wizard')}>Guided</Button></div>
-    <Split open={!!sel}>
-      {#snippet list()}
+    <div class="toolbar"><Button need="app-manager" size="sm" icon="plus" onclick={() => go(P.dockerNew)}>New app</Button> <Button size="sm" icon="magic-wand" onclick={() => go(P.dockerWizard)}>Guided</Button></div>
+    <div style="position:relative">
         <div class="card" style="padding:0">
-          <Table id="docker-apps" {columns} rows={apps} key="name" selected={sel?.name} onrow={(a) => { selName = a.name; }} loading={!appsPoll.loaded} empty="No apps.">
+          <Table id="docker-apps" {columns} rows={apps} key="name" selected={sel?.name} onrow={(a) => select(a.name)} loading={!appsPoll.loaded} empty="No apps.">
             {#snippet cell(a, col)}
               {#if col.key === 'name'}{a.name}
                 {#if filesChip(a)}{@const c = filesChip(a)} <Chip tone={c.tone} title={c.tip}>{c.text}</Chip>{/if}
@@ -115,16 +117,14 @@
             {/snippet}
           </Table>
         </div>
-      {/snippet}
-      {#snippet side()}
         {#if sel}
-          <Drawer title={sel.name} chip={sel.managed} state={dot(sel.state)} stateLabel={sel.state} {tabs} bind:tab onclose={() => { selName = ''; }}>
+          <QuickLook title={sel.name} chip={sel.managed} state={dot(sel.state)} stateLabel={sel.state} rowKey={sel.name} {tabs} bind:tab onclose={close}>
             {#snippet children(t)}
               {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
               {#if t === 'overview'}
                 <Kv items={[{ k: 'State', v: sel.state }, { k: 'Running', v: sel.running }, { k: 'Project', v: sel.project }, { k: 'Address', v: sel.address }, { k: 'Ports', v: sel.ports }, { k: 'Images', v: sel.images }, { k: 'Managed', v: sel.managed }, { k: 'Update', v: sel.update }, ...(sel.files !== '-' ? [{ k: 'Files', v: sel.files }] : [])]} />
               {:else if t === 'compose'}
-                <Button need="app-manager" icon="pencil-simple" onclick={() => go(`/instances/docker/app/${encodeURIComponent(sel.name)}`)}>Open editor</Button>
+                <Button need="app-manager" icon="pencil-simple" onclick={() => go(dockerAppPath(sel.name))}>Open editor</Button>
               {:else}
                 {#key sel.name}<AppLogs app={sel.name} />{/key}
               {/if}
@@ -150,10 +150,11 @@
               {/if}
               {/if}
             {/snippet}
-          </Drawer>
+          </QuickLook>
+        {:else if selName && appsPoll.loaded}
+          <QuickLook title={selName} onclose={close}><p style="padding:12px 16px;margin:0;color:var(--fg-3)">No app called “{selName}” runs in Docker. It may have been deleted.</p></QuickLook>
         {/if}
-      {/snippet}
-    </Split>
+    </div>
   {/if}
 </PageState>
 

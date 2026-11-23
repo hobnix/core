@@ -1,0 +1,6 @@
+date  = "2026-11-21"
+type  = "feature"
+title = "Every disk has a page of its own, and a row in the Disks list opens a quick look"
+body  = """A click on a disk opens a quick look over the list: the list keeps its width and the address carries the disk, so a reload or a pasted link opens the same view. Escape or a click outside closes it.
+
+"Open page" shows the whole disk: Overview, SMART, Tests and Files, the jobs of the disk, the pages it belongs to, and the actions. Format is in a marked section at the bottom. A viewer sees the page read-only."""

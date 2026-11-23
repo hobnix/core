@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "fix"
+title = "Shares and Instances lists said 'No shares/instances yet' although some existed"
+body  = """The Shares and Instances lists stayed empty on a server that had shares and instances, while the tree showed them. The pages now follow the data as it arrives."""

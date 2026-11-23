@@ -5,6 +5,7 @@
   import TreeRow from './TreeRow.svelte';
   import { route, go } from '../route.svelte.js';
   import { nodeItems } from '../nav.js';
+  import { P } from '../paths.js';
   import { capEntries } from '../settings/layout.js';
   import { useLayout } from '../settings/layoutstate.svelte.js';
   import { ui } from '../ui.svelte.js';
@@ -21,7 +22,7 @@
 </script>
 
 <div class="tree" role="tree" aria-label="Servers and pages">
-  <div class="thead"><span>Servers</span><span class="cnt">{nodes.length}</span></div>
+  <div class="thead"><span>Servers</span><a class="all" href={`/node/${encodeURIComponent(route.node || nodes[0]?.name || '')}${P.nodes}`} onclick={(e) => { e.preventDefault(); go(P.nodes); }}>manage</a><span class="cnt">{nodes.length}</span></div>
   <div class="tscroll">
     {#each nodes as n (n.name)}
       {@const items = nodeItems(n.kind, n.local ? ui.features.capabilities : n.caps, n.local ? ui.features.extensions : null, n.local ? capEntries(getLayout(), ui.features.capabilities) : [], pools.rows).filter((i) => i.path !== '/')}
@@ -42,6 +43,9 @@
 <style>
   .tree { display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 4px 16px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+  .all { margin-left: auto; margin-right: 8px; color: var(--fg-3); text-decoration: none; text-transform: none; letter-spacing: 0; }
+  .all:hover { color: var(--fg); }
+  @media (max-width: 860px) { .all { padding: 14px 8px; margin: -14px 0; } }
   .cnt { font: 500 11px var(--mono); color: var(--fg-2); background: var(--panel-3); padding: 0 6px; }
   .tscroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 4px 8px 10px; }
 </style>

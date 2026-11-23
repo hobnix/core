@@ -1,7 +1,8 @@
 // The checks of `hs sys docker health` (rows id state fix detail reason): what the Docker page, the tree and the capability page say when
 // Docker is on but something it needs is missing (the share apps, its mount). One place, so a banner and a dimmed tree entry never disagree.
+import { P } from '../../paths.js';
 
-export const DOCKER_PATH = '/instances/docker';
+export const DOCKER_PATH = P.docker;
 
 // the rows that are not fine: state warn or fail ("off" is a check that does not apply yet)
 export function problems(list) {

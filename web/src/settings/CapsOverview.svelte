@@ -1,4 +1,5 @@
 <script>
+  import { capabilityPath } from '../paths.js';
   // /settings/capabilities: every optional part and extension of this server with its switch (the Parts and Extensions cards of the old Settings
   // page). A row with a settings page of its own links to it.
   import { go } from '../route.svelte.js';
@@ -33,7 +34,7 @@
         <div class="prow">
           <PartTag part={p} />
           <div class="pt"><code>{p.name}</code><span class="hp">{p.title}</span></div>
-          {#if hasPage(p)}<Button size="sm" tooltip={'Open the settings of this part'} onclick={() => go(`/settings/capabilities/${p.name}`)}><i class="ph ph-sliders"></i>Settings</Button>{/if}
+          {#if hasPage(p)}<Button size="sm" tooltip={'Open the settings of this part'} onclick={() => go(capabilityPath(p.name))}><i class="ph ph-sliders"></i>Settings</Button>{/if}
           <Button size="sm" busy={(jobRunning('parts', ['disable', p.name]) || jobRunning('parts', ['enable', p.name]))} busyLabel="Switching…" disabled={!p.canSwitch} tooltip={!p.canSwitch ? 'This part cannot be switched here' : p.on || p.pending ? 'Switch this part off (shows the plan)' : 'Switch this part on (shows the plan)'} onclick={() => flip(p)}>{p.on || p.pending ? 'Switch off…' : 'Switch on…'}</Button>
         </div>
       {:else}

@@ -1,10 +1,12 @@
 <script>
+  import { nodePath } from '../paths.js';
   // All servers at a glance: this server and every node of `hs node list`, one row each. Each remote node is asked for
   // its status document over SSH (the word status only); a node that does not answer keeps its last document and says since when.
-  // A row opens the drawer: facts, the key line its owner has to allow, remove. Adding a node changes nothing on the other server.
+  // A row opens the quick look over the list (?sel=<name>; a node has no page here, so it is the whole view): facts, the key line its owner has to allow, remove. Adding a node changes nothing on the other server.
   import { untrack } from 'svelte';
   import { poll, rows } from '../data.svelte.js';
   import { go } from '../route.svelte.js';
+  import { selected, select, close } from '../selection.svelte.js';
   import { ui, openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import Table from '../shell/Table.svelte';
   import NodeProbe from '../shell/NodeProbe.svelte';
@@ -14,8 +16,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import Chip from '../ui/Chip.svelte';
   import Kv from '../ui/Kv.svelte';
-  import Split from '../ui/Split.svelte';
-  import Drawer from '../ui/Drawer.svelte';
+  import QuickLook from '../ui/QuickLook.svelte';
   import NodeAdd from '../forms/ops/NodeAdd.svelte';
   import NodeKey from './nodes/NodeKey.svelte';
   import { since, capList } from './nodes/nodes.js';
@@ -48,7 +49,7 @@
     return out;
   });
 
-  let selName = $state('');
+  const selName = $derived(selected());
   const sel = $derived(nodes.find((n) => n.name === selName));
 
   const columns = [
@@ -66,10 +67,9 @@
 </PageHeader>
 
 <PageState loading={!nlist.loaded} error={nlist.error?.message} hasData={nlist.data != null} empty={false}>
-  <Split open={!!sel}>
-    {#snippet list()}
+  <div style="position:relative">
       <div class="card" style="padding:0">
-        <Table id="nodes" {columns} rows={nodes} key="name" selected={sel?.name} onrow={(n) => (selName = n.name)} sort={{ key: 'name', dir: 'asc' }} empty="No other servers yet.">
+        <Table id="nodes" {columns} rows={nodes} key="name" selected={sel?.name} onrow={(n) => select(n.name)} sort={{ key: 'name', dir: 'asc' }} empty="No other servers yet.">
           {#snippet cell(n, col)}
             {#if col.key === 'name'}<b>{n.name}</b>
             {:else if col.key === 'kind'}<Chip>{kindLabel[n.kind] ?? n.kind}</Chip>
@@ -87,10 +87,8 @@
       {#if remote.length === 0 && nlist.loaded}
         <p class="muted pad">No other server yet. Add one, make its key, and give its owner one line to allow; it then shows up here with its own pages.</p>
       {/if}
-    {/snippet}
-    {#snippet side()}
       {#if sel}
-        <Drawer title={sel.name} chip={kindLabel[sel.kind] ?? sel.kind} state={sel.state} stateLabel={sel.word} onclose={() => (selName = '')}>
+        <QuickLook title={sel.name} chip={kindLabel[sel.kind] ?? sel.kind} state={sel.state} stateLabel={sel.word} rowKey={sel.name} onclose={close}>
           <Kv items={[
             { k: 'Host', v: sel.host }, { k: 'Port', v: sel.port }, { k: 'Last answer', v: sel.kind === 'main' ? 'now' : since(sel.time) },
             { k: 'Problems', v: sel.problems }, { k: 'Source', v: sel.source === 'setting' ? 'the setting vpsHost' : sel.source === 'file' ? 'the node list' : 'this server' },
@@ -105,15 +103,16 @@
             </div>
           {/if}
           {#snippet actions()}
-            <Button variant="primary" tooltip={'Switch the interface to this server'} onclick={() => go(`/node/${encodeURIComponent(sel.name)}`)}><i class="ph ph-arrow-right"></i>Open</Button>
+            <Button variant="primary" tooltip={'Switch the interface to this server'} onclick={() => go(nodePath(sel.name))}><i class="ph ph-arrow-right"></i>Open</Button>
             {#if sel.kind !== 'main' && sel.source === 'file'}
-              <Button need="admin" variant="ghost" class="nodes-danger" icon="trash" busy={jobRunning('node', ['remove', sel.name])} tooltip={'Take this server off the list (the server itself is not touched)'} onclick={() => { const n = sel.name; selName = ''; openPlan('node', ['remove', n], `Remove ${n}`); }}>Remove…</Button>
+              <Button need="admin" variant="ghost" class="nodes-danger" icon="trash" busy={jobRunning('node', ['remove', sel.name])} tooltip={'Take this server off the list (the server itself is not touched)'} onclick={() => { const n = sel.name; close(); openPlan('node', ['remove', n], `Remove ${n}`); }}>Remove…</Button>
             {/if}
           {/snippet}
-        </Drawer>
+        </QuickLook>
+      {:else if selName && nlist.loaded}
+        <QuickLook title={selName} onclose={close}><p class="muted pad">No server called “{selName}” is on the list. It may have been removed.</p></QuickLook>
       {/if}
-    {/snippet}
-  </Split>
+  </div>
 </PageState>
 
 <style>

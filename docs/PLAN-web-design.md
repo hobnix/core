@@ -102,7 +102,7 @@ Per node. Summary and eight groups instead of Summary and twelve entries, and th
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
 | Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
 | People | Users, Groups, Certificates | Identity |
-| Health | Health, Jobs, Events, Notifications, Hardware, Diagnostics, Live state, Test-lab | Monitoring, Operations, and the new Jobs page (#385) |
+| System | Health, Jobs, Events, Notifications, Hardware, Updates, Certificates, Diagnostics, Live state, Test-lab | Monitoring, Operations, Certificates, Updates, and the new Jobs page (#385). Named Health in the first draft; renamed System in 0.11 (docs/PLAN-navigation.md D2 c) |
 | Backup | Backup, Expiry dates | Protection |
 | Settings | General, Network and DNS, Storage, Backups, Users and access, Updates, Capabilities, Advanced | Settings minus Releases |
 
@@ -115,7 +115,7 @@ Extension pages (`/extensions/<name>`) are placed by a `group` key in the packag
 | Summary | the node root: a click on the server opens Summary |
 | Storage > Pools, bulk, fast | Storage > Pools; the pools are rows of that list and each opens its page, not tree children |
 | Storage > Disks, Shares, Files, Encryption, Vault | unchanged |
-| Storage > Incident | action on Pools and Health |
+| Storage > Incident | action on Pools and Health (the page) |
 | Instances > Instances | Instances > Instances |
 | Instances > ISO images | Instances > ISO images |
 | Instances > Apps | Apps > Installed |
@@ -150,7 +150,7 @@ Decided 2026-11-18:
 
 - **Instances and Apps stay two groups.** Summary and eight groups per node.
 - **Expiry dates stays in Backup.**
-- **Certificates are in People, Services in Network.**
+- **Certificates are in People, Services in Network.** Changed by the owner on 2026-11-20 (PLAN-navigation D2 c): Certificates, Hardware and Updates are in the group System, and the group Health is named **System**.
 - **The Jobs drawer stays and the Jobs page (#385) sits beside it.** How the two relate (what each shows) is for the page templates, section 3.
 - **The Setup banner shows until every check is done.**
 
@@ -166,7 +166,7 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 
 | Template | Used for | Body | Address |
 |---|---|---|---|
-| **Group** | Storage, Instances, Apps, Network, People, Health, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
+| **Group** | Storage, Instances, Apps, Network, People, System, Backup | one line of state for the group, a card per place that shows that place's state (not a description), one or two actions | `/<group>` |
 | **List** | Disks, Shares, Instances, Installed apps, Users, Groups, Certificates, Nodes, Services, Marketplace (card view), Updates | filter tabs (or content tabs where a list has several views: Updates, Releases, What's new), `Table`, create action in the header, empty state with the one action that creates the first row; a row opens the quick look | `/<group>/<kind>`, selected row in `?sel=` (#455) |
 | **Object** | one disk, pool, share, instance, user, package or app | header with status chip and actions; tabs (Overview first, then the object's own); a panel of linked objects; a strip with the running or last job; actions that destroy at the bottom, through a plan | `/<group>/<kind>/<id>[/<tab>]` |
 | **Feed** | Events, Notifications, Jobs, Health problems | time-ordered entries with filters; each entry links to the object it is about; acknowledge where it applies (#619) | `/<group>/<kind>`, filters in the address |
@@ -174,6 +174,35 @@ Top to bottom: `PageFrame` states, `PageHeader` (crumb, name, status, actions), 
 | **Settings** | Settings pages | form built from `layout.gen.json`, grouped by section, saved through a plan | `/settings/<page>` |
 
 Four pages are exempt from a template: **Files** (two-pane file manager, web/design/HANDOFF.md "Files") and the **browser terminal** use only the frame; the **Login** page and the one-time **console-code sign-in** of the first run (ADR 0022) are outside the shell. The first-run wizard (#183) is a Flow at `/setup` after sign-in. Summary is a Group page of its own kind: status lines that each open their owner page, a usage bar per pool, shortcuts that open plans.
+
+### 3.2.1 The Object frame as built (0.11 step 1, the disk page)
+
+`shell/ObjectPage.svelte` is the Object template. Its props are fixed here because the package and app pages of 0.12 (#474, #478) reuse the frame; a change after 0.11 is a change to the 0.12 plan. Pure rules (tab limit, tab from the address, menu greying, the read-only note, the vertical order) are in `shell/objectpage.js` and tested in node (tests/web-object.mjs).
+
+| Prop | Meaning |
+|---|---|
+| `crumb`, `title`, `sub` | the `PageHeader` text (crumb is `Group > List`) |
+| `chip`, `state`, `stateLabel` | the status next to the name (a `Chip` and a `StatusDot` with its word) |
+| `tabs` `[{ id, label }]`, `tab`, `onpick(id)` | at most four (`MAX_TABS`), the first is Overview with id `overview`; `tab` is the id from the address, an unknown one is Overview, not an error; one tab or none draws no tab row |
+| `primary` (snippet) | the visible actions: ONE primary and at most ONE secondary (D4). The page owns them; the frame only places them before the More menu |
+| `menu` | items of `ui/Menu` plus `need`: an item above the session's role stays in the list, greyed, with the refusal sentence |
+| `danger` | items of `ui/DangerZone` (`area`+`args` open a plan, or `onclick` opens a form that asks for the name). Always the last thing on the page |
+| `links` | items of `LinkedObjects`; shown under the Overview tab (all other tabs show only their body) |
+| `jobs`, `jobHref` | `match(record)` of `JobStrip`; leave it out for no strip |
+| `need` | the role that may change the object (default `admin`). Below it the page is read-only with a note, never refused (a viewer opening an object by address sees the page) |
+| `loading`, `error`, `notFound`, `notFoundTitle`, `notFoundText`, `backTo`, `backLabel` | the data states through `PageState`; an address of an object that does not exist is a sentence and a button back to the list, not a blank page |
+| `banners`, `children(tab)` (snippets) | state banners (a running job, a failure, a held state) above the tabs; the body of the active tab |
+
+Order, top to bottom, fixed: header (with status, actions, menu), read-only note, banners, job strip, tabs, body, linked objects (Overview only), danger section.
+
+Findings that changed the design or the inventory:
+- **The quick look has no tabs.** It is Overview facts, state, the one main action and "Open page". The disk's SMART history and self-test results are read by the page only (`detail: true` in `pages/disks/model.svelte.js`), so opening a quick look reads nothing the list does not already read. The list and the page share one data model (`diskModel`): the same reads, the same words. Other objects follow the same split: a `model.svelte.js` next to the page folder.
+- **The tab is a path segment** (`/storage/disks/<name>/<tab>`, D6); Overview has no segment (`diskPath`). A list keeps `?tab=` only where a list has views.
+- **`ui/DangerZone` takes `onclick`** for an action whose form asks for the name itself (Format). `ui/Menu` items get `need` through the frame (`menuFor`); `ui/Drawer` gets a `role` prop (the quick look is `role="dialog"`, not modal).
+- **QuickLook rules** (`ui/quicklook.js`): Escape closes it from anywhere in the page while no modal dialog or menu is open; a press outside closes it, but not on another row (that replaces it) and not inside a dialog it opened; closing returns the focus to the row (`data-k`, the Table key), else to where the focus was. The panel sticks to the top of the scrolling area and is 400 px wide, full screen up to 860 px; the list never moves (measured 1920, 1280 and 390 px: same table width, height and columns with and without it).
+- **A list item with pages needs `prefix: true`** in `nav.js`, or the tree loses its highlight on an object page (done for Disks; the other four objects do the same in their own lane).
+- **A missing disk has no page.** It has no device name; it stays a quick look under the Missing filter (`?sel=<serial>`), as the plan says for objects without a page.
+- Component inventory (5.2): `ObjectPage` (shell) is new; `LinkedObjects`, `JobStrip`, `DangerZone` are now used by it.
 
 ### 3.3 Quick look
 
