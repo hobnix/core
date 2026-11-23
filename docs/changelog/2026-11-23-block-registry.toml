@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Package pages: a registry of blocks"
+body  = """The blocks a package page may use (table, kv, cards, text, empty, gallery) are now a registered list with a schema each and a version. `hs pkg validate` checks the `[web.page]` blocks of a package against it, the Components gallery lists them, and a block that this version does not know shows a note instead of a broken page."""

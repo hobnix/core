@@ -17,16 +17,17 @@ unifi=${HS_UNIFI:-$here/unifi.sh}
 state=${HS_STATE_DIR:-/var/lib/hs}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: net-change.sh plan|start setup --address <url>" >&2; exit 1 ;; esac
-[ "$action" = setup ] || refuse "unknown action (setup)"
+[ "$action" = setup ] || refuse_code action.unknown "unknown action (setup)"
 shift 2 || true
 address=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --address) [ $# -ge 2 ] || refuse "--address needs a value"; address=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 needs=()

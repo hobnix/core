@@ -19,7 +19,9 @@ printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho evapp\
 manifest() {   # manifest <events text>
   printf 'name = "evapp"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Evapp"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n%b\n' "$1" > "$T/package.toml"
 }
-GOOD='[[events]]\nkind = "boom"\nlevel = "error"\nlabel = "Boom"\nmeaning = "it broke"\npayload = ["name", "sub?"]\nnotify = { category = "alarm", priority = "urgent", title = "{name}: {label}", message = "{text}" }\n[[events]]\nkind = "quiet"\nlevel = "info"\nlabel = "Quiet"\nmeaning = "nothing special"'
+GOOD='[[events]]\nkind = "boom"\nlevel = "error"\nlabel = "Boom"\nmeaning = "it broke"
+retention = "audit"\npayload = ["name", "sub?"]\nnotify = { category = "alarm", priority = "urgent", title = "{name}: {label}", message = "{text}" }\n[[events]]\nkind = "quiet"\nlevel = "info"\nlabel = "Quiet"\nmeaning = "nothing special"
+retention = "ephemeral"'
 validate() { HS_PACKAGES_ROOT=$WORK/tree python3 -I "$SCRIPTS/pkg.py" validate 2>&1; }
 manifest "$GOOD"
 check "a manifest with two events validates" bash -c "HS_PACKAGES_ROOT=$WORK/tree python3 -I $SCRIPTS/pkg.py validate"
@@ -37,15 +39,21 @@ bad "notify without a message is a problem" "title and a message" '[[events]]\nk
 bad "an unknown event key is a problem" "unknown key" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\ncolour = "red"'
 bad "a string payload is a problem" "payload is a list" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\npayload = "service"'
 bad "a bad payload key is a problem" "payload key" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\npayload = ["Bad"]'
+bad "a bad retention is a problem" "retention is not one of" '[[events]]
+kind = "x"
+level = "info"
+label = "B"
+meaning = "m"
+retention = "forever"'
 
 echo "-- the readers"
 python3 -I -c '
 import importlib.util, sys
 s = importlib.util.spec_from_file_location("pkg_events", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 m.write("evapp", [
-  {"kind": "boom", "level": "error", "label": "Boom", "meaning": "it broke", "payload": ["name"],
+  {"kind": "boom", "level": "error", "label": "Boom", "meaning": "it broke", "payload": ["name"], "retention": "audit",
    "notify": {"category": "alarm", "priority": "urgent", "title": "{name}: {label}", "message": "{text}"}},
-  {"kind": "quiet", "level": "info", "label": "Quiet", "meaning": "nothing special"}])
+  {"kind": "quiet", "level": "info", "label": "Quiet", "meaning": "nothing special", "retention": "ephemeral"}])
 ' "$SCRIPTS/lib/pkg_events.py"
 check "the installed file exists" test -f "$WORK/pe/evapp.tsv"
 printf 'pkg.other.x\terror\t-\tX\t-\tstolen\t-\t-\t-\t-\n' >> "$WORK/pe/evapp.tsv"

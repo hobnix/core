@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Rust extension SDK: HTTP client and integration listing"
+body  = """The Rust SDK for extensions can now call the JSON API of an integration (plain http, no extra libraries, builds as a static binary) and read the integration list with the key header as typed rows. https is not supported yet."""

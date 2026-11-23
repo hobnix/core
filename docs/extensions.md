@@ -87,6 +87,95 @@ sudo hs event emit pkg.<package>.<what> <subject> "<text>" --pkg <package>
 
 Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"app-manager"` or `"admin"`; none means admin. The web interface applies the higher of that role and the role of the core row the entry calls. See [Web interface](web-interface.md#roles-and-sign-in-of-programs).
 
+### Where a package's page sits
+
+`[web.page]` may say where the page goes and what shape it has. Not tested on hardware yet.
+
+| Key | Meaning |
+| --- | --- |
+| `group` | one of `storage`, `instances`, `apps`, `network`, `people`, `system`, `backup`, `settings`; default `apps`. An unknown name drops the whole declaration of the package |
+| `after` | a place in that group (the last word of its path, e.g. `pools`, or another package's name); the places of the core keep their order, packages follow alphabetically |
+| `[[web.page.tabs]]` | `title` and its own `[[web.page.tabs.blocks]]`: one place with tabs, never a third level in the tree |
+| `template` | `list`, `object` or `feed`; default `list` when the first block is a table |
+| `state` | `{ read, dot, line }`: one declared read; `dot` and `line` are field numbers of its first row (`dot` is ok, warn, bad, info or off); one dot and one line for the card on the group page and the Apps list |
+| `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled, with the reason; the page role is the floor for the page's buttons |
+
+### Blocks
+
+Each `[[web.page.blocks]]` entry has a `type`. `hs pkg validate` checks it against the block list (`web/src/shell/block-registry.json`): a missing required key, a key the block does not have or a value of the wrong type fails. Not tested on hardware yet.
+
+| Block | What it shows | Required keys |
+| --- | --- | --- |
+| `table`, `kv`, `cards`, `text`, `empty`, `gallery` | rows, key and value cells, cards, text, an empty state, pictures | see the Components page in Developer |
+| `chart` | a series over time: field `value` (a field number, default 1) of each row of `read` is one point, oldest first; `max` scales it (default: the highest point), `hot` marks points at or above it, `unit` is written beside the newest value | `read` |
+| `stat` | tiles from the first row of `read`: `items` is a list of `{ label, col, unit, fmt, map }`; `map` (`{ value = ["ok", "running"] }`) adds a state dot with a word | `read`, `items` |
+| `log` | the tail of a log: `stream` is a `/api/logs/stream/...` path, `read` the `/api/sys/...` read that serves while the stream is down; `lines` is how many lines are kept (default 200, at most 2000), `follow` (default true), `every` seconds of the fallback read. It follows the stream, so there is no timer while the stream is up | `stream`, `read` |
+| `progress` | a bar with the percent beside it: `read` with the field numbers `value`, `max`, `labelCol` and `state` of its first row, or `job` (the slug of a job, followed through the job events); `label`, `unit`. A read follows its `topic` (give one, or it is polled every `every` seconds) | `read` or `job` |
+
+A block whose `type` the web interface does not know shows a note instead of the block.
+
+A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
+
+### Slots of a package
+
+A package fills places in the interface with data. The slots are `page`, `tab`, `action`, `health` and `state`; anything else under `[web]` is refused
+by `hs pkg validate` and at install, with the list of known slots. Any slot may say `requires = "<capability or extension>"`: while that part is off
+the slot shows nothing, and the install dialog says "adds a card once X is on". Not tested on hardware yet.
+
+| Slot | Example in `capability.toml` |
+| --- | --- |
+| page | `[web.page]` with `title = "Sync"` and `group = "apps"` |
+| tab | `[[web.page.tabs]]` with `title = "Settings"` and its own blocks; `requires` hides it while the part is off |
+| action | `[[web.actions]]` with `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<package>", "sync"]`, `role = "app-manager"`, `main = true`: a button in the page header and on the Apps > Installed row (one main action, the others under More); the plan may only change the package's own area |
+| health | `[[health]]` with `id = "stale"` and `read = "checks"`: the read (kind `tsv`, no arguments) prints `level<TAB>message` rows with level `ok`, `info`, `warn` or `bad`; a `warn` or `bad` row shows in System > Health with the package named, and can be acknowledged like any problem. `info` (a PC that is simply switched off) and `ok` are never a problem: they are not counted and nothing is sent; they show in `python3 scripts/lib/pkg_slots.py list` only |
+| state | `[web.page.state]` with `read`, `dot` and `line`: one dot and one line on the card |
+
+### The form block
+
+A page block of `type = "form"` asks for values and ends in the plan dialog. It never changes anything by itself. Not tested on hardware yet.
+
+```toml
+[[web.changes]]
+fixed = ["^connect$"]
+stdin = true
+opts = [{ flag = "--host" }, { flag = "--port" }]
+
+[[web.page.blocks]]
+type = "form"
+title = "Connect"
+submit = "Connect"
+plan = ["ext/mypkg", "connect", "--host", "{host}", "--port", "{port}"]
+planTitle = "Connect to {host}"
+stdin = "token"
+
+[[web.page.blocks.fields]]
+key = "host"
+label = "Host"
+type = "text"
+required = true
+pattern = "^[a-z0-9.-]+$"
+
+[[web.page.blocks.fields]]
+key = "token"
+label = "Token"
+type = "secret"
+```
+
+| Key | Meaning |
+| --- | --- |
+| `fields` | 1 to 20 tables. `key` (a-z, 0-9, `_`), `label`, `type`: `text`, `number`, `toggle`, `select` or `secret` |
+| field checks | `required`, `pattern` (text, secret; `invalid` is the message), `min` and `max` (number), `options` (select, 1 to 50 strings), `default`, `hint`, `placeholder` |
+| `plan` | `["ext/<package>", ...]`: the package's own area, with `{key}` where a field's value goes. A toggle gives `on` or `off` |
+| `planTitle` | the title of the plan dialog and of the Tasks entry; `{key}` as in `plan` |
+| `stdin` | the key of the one `secret` field. A secret goes on standard input of the change, one line, never into `plan` |
+
+What a package can and cannot do:
+
+- The form runs the package's own plan, like a page action. The server checks every argument against the package's `[[web.changes]]` again, and the person sees the plan and starts it. A form cannot start a command of the core or of another package.
+- A `secret` field needs `stdin = "<its key>"` and a `[[web.changes]]` entry with `stdin = true`. It may not appear in `plan` or `planTitle`. Only one secret field is allowed.
+- The secret is not stored in the page, not echoed back, not part of any request address and not in the Tasks list. It travels once in the request body to the server, which puts it on standard input.
+- A page with an unknown field type, a plan of another area, a plan without `[[web.changes]]` or a secret field without `stdin` is refused by `hs pkg validate`, and the web interface drops the whole declaration of the package.
+
 ## Check that it worked
 
 - `hs ext list` shows the extension as on, with its permissions.

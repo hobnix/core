@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Packages: [integrations.<name>] to find each other"
+body  = """A recipe, extension or capability can now say in its package.toml what it offers to other packages (a local API address and a key file) in an [integrations.<name>] block, and hs pkg validate checks it. hs pkg integrations lists what is there with the state of each key file. An extension that needs a key declares the permission integration:<name>; the key itself is never printed by the list."""

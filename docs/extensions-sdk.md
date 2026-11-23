@@ -82,6 +82,31 @@ Go has no library on purpose: the protocol is five message types and the example
 The crate `rust/hobnix-ext-sdk` has the same message types, a command runner and a service runner (ADR 0011). Its examples are
 `rust/hobnix-ext-sdk/examples/hello.rs` and `ticker.rs`.
 
+For a service that talks to an integration (Jellyfin, Plex, ...) the crate has three helpers:
+
+- `hobnix_ext_sdk::integrations::parse(text)` turns the output of `hs pkg integrations` (package, integration, source, api_url, key_file, extras, key_header) into typed rows; `-` becomes `None`.
+- `hobnix_ext_sdk::service::credential_for("<name>", "<provider>")` reads the key of one provider, and `row.credential()` does the same for a row (see "Keys of integrations (services)" below). `service::credential("<name>")` is deprecated.
+- `hobnix_ext_sdk::http::Client` is a small blocking client built on the standard library: `Client::new().timeout(..).header(key_header, key).get_json(url)`, also `post_json`. It has no dependencies of its own, so a build for `x86_64-unknown-linux-musl` needs no OpenSSL and no C toolchain. **It speaks plain `http://` only**: `https://` is refused with `HttpError::TlsUnsupported`. A TLS stack (rustls with `ring`) brings C and assembly code and many crates, and the core's Nix build of `rust/` has not been checked with them. Media servers on the same host or LAN are reached over http; for an https-only API put a local proxy in front.
+
+`examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl --example apiprobe` in `rust/`. Not tested on hardware yet.
+
+### Ship the program: `[[binary]]`
+
+Put the built static program in your package folder and declare it in `package.toml`:
+
+```toml
+[[binary]]
+path   = "bin/media-svc"                 # inside the package folder, no "..", no symbolic link
+sha256 = "<64 hex digits>"               # sha256sum bin/media-svc; leave it empty and commit no file until the release preparation
+bin    = "media-svc"                     # default: the file name of path
+target = "x86_64-unknown-linux-musl"     # the only target for now
+```
+
+Point `[service] exec = "@/bin/media-svc"` (or the third column of a `commands.tsv` row) at it, and set the executable bit. `python3 scripts/pkg.py validate`
+and `repo-check` refuse a wrong hash, a path that leaves the folder, a symbolic link, another target, an unknown key and a program that nothing refers to
+(codes `binary.*` in docs/errors.md). `hs pkg install` and `update` check the hash and the executable bit of the installed copy and keep the old version
+when they do not match. An aarch64 server refuses the package with `binary.arch`. Not tested on hardware yet.
+
 ## Events and snapshots (services)
 
 A service (`[service]` in package.toml) gets the events it subscribed to as `event` messages and acknowledges each with `ack` once it has handled it. The core
@@ -92,6 +117,26 @@ A service sends `emit` for an event of its own. The kind must be `pkg.<name>.<wh
 count; the 51st is dropped and one warning goes to the journal. `snapshot` replaces the live topic `ext-<name>-<topic>`; only changed data makes a new
 generation. Not tested on hardware yet.
 
+A confined service cannot write `state.db` or read `/var/lib/hs` (ADR 0014): it asks the bridge. `rollup` adds to the monthly rollup below (`{"v":1,"type":"rollup","kind":"pkg.<name>.<what>","user":"anna","n":1,"sum":0}`); the kind must be one of yours declared with `retention = "metric"`, anything else is dropped with one warning, and it counts against the 50 a minute. `n` and `sum` are numbers of 0 or more; the table stores whole numbers, so a fraction is rounded (90.5 becomes 91). A refused rollup (negative, not stored) is warned in the journal. The Rust crate has `Ctx::rollup`.
+
+## Keys of integrations (services)
+
+A service that declares `permissions = ["integration:<name>"]` gets one key per provider of that integration: the provider `radarr` of `media` is the file `$CREDENTIALS_DIRECTORY/integration-media-radarr` (a systemd credential: not in argv, not in the environment). The provider is the `package` column of the row in `hs pkg integrations` (the `integration` column is `<name>`), so a row names its credential and a service never has to guess whose key it holds: `integration-<integration>-<package>`. A provider that offers the integration without a `key_file` gives no credential and no failure. Only integrations the package declared are handed over, never a key of an integration it did not declare, and never the key of its own provider block. Every key goes through the same strict check (registered provider, key file below that provider's folder, read once on the open descriptor, private 0600 copy). The key files stay hidden from the service. Python: `ext_sdk.credential("<name>", "<provider>")`; Rust: `hobnix_ext_sdk::service::credential_for("<name>", "<provider>")`, or `row.credential()` on a row of `integrations::parse`. They return `None` when there is none (not declared, the provider has no key, the vault is locked, the file is missing). The one-name form (`ext_sdk.credential("<name>")`, Rust `service::credential("<name>")`, the file `integration-<name>`) is deprecated: it was the key of the first provider with a key, without the owner. The core still hands that file over for one release; move to the provider form. Not tested on hardware yet.
+
+## Keep a monthly rollup instead of raw ticks
+
+An event that is only counted (a play, a request, a bandwidth sample) is declared with `retention = "metric"` in `[[events]]`: the core deletes
+its raw rows after 35 days (see docs/events.md "Retention"). To keep the history, add each tick to a monthly rollup. The rollup is one row per
+(month, user, kind) in the table `rollups` of `state.db`, so five years of one user and one kind are 60 rows; it is never pruned.
+
+```
+hs sys state rollup-add <kind> <user> [--n N] [--sum S] [--time T]   # n counts up by N (default 1), sum by S (default 0), month of T (default now, UTC)
+hs sys state rollups [kind] [user]                                    # month TAB user TAB kind TAB n TAB sum, oldest month first
+```
+
+A second add in the same month changes the same row (an upsert). A Python caller inside the core uses `state-db.py` `rollup_add(c, t, user, kind, n, total)`.
+Not tested on hardware yet.
+
 ## Try it without a server
 
 ```bash
@@ -100,6 +145,19 @@ python3 scripts/lib/ext_proto.py call --command greet --arg Ada -- sdk/examples/
 
 The runner starts the program as the core does and prints what it answered. `tests/ext-sdk-examples.sh` does this for the shell, Python and
 Go examples (the Go part prints a skip line where `go` is missing); `tests/ext-sdk-rust.sh` does it for Rust.
+
+## Use the key of an app
+
+An app can offer an API key through `[integrations.<name>]` in its `package.toml`. To read it, declare `permissions = ["integration:<name>"]` and ask for one provider by name, because one integration can have several (jellyfin and radarr under `media`):
+
+    . "$HS_SCRIPTS/lib/integration.sh"
+    integration_key media radarr my-ext > "$keyfile"     # the key of radarr only
+
+- `hs pkg integrations media` lists the providers: `api_url`, the state of the key, and `key_header` as the last column (`-` = not set: send `X-Api-Key`).
+- An unknown provider is refused with `integration.unknown`, a provider without a key file with `integration.nokey`, a missing permission with `integration.denied`.
+- Read the key from stdout into a file or a pipe; never put it in an argument or an environment variable, and never print it.
+- The old form `integration_key <name> <caller>` (the first provider with a key) works for one more release; use the three-argument form.
+- The permission is a declared check, not enforced yet. Not tested on hardware yet.
 
 ## Check that it worked
 

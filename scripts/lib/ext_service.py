@@ -28,10 +28,13 @@ Schema of the messages: docs/api/ext-service-v1.schema.json.
 """
 import argparse
 import fnmatch
+import importlib.util
 import json
+import math
 import os
 import queue
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -53,7 +56,7 @@ MAX_SNAPSHOT = 256 << 10
 WINDOW = 100                    # events sent but not yet acknowledged, at most
 KIND = re.compile(r"^pkg\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 STATES = ("starting", "running", "degraded", "stopping", "stopped", "failed")
-FROM_SERVICE = ("ready", "health", "ack", "log", "emit", "snapshot")
+FROM_SERVICE = ("ready", "health", "ack", "log", "emit", "snapshot", "rollup")
 
 
 def check_message(m):
@@ -76,6 +79,12 @@ def check_message(m):
     if t == "emit" and (m.get("level", "info") not in ("info", "warn", "error") or not isinstance(m.get("payload", {}), dict)
                         or not isinstance(m.get("text", ""), str)):
         return "emit.level is info|warn|error, payload an object, text a string"
+    if t == "rollup" and (not isinstance(m.get("kind"), str) or not KIND.match(m["kind"])
+                          or not isinstance(m.get("user"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}", m["user"])):
+        return "rollup needs kind (pkg.<package>.<what>) and user (letters, digits, _ . @ -, at most 64)"
+    if t == "rollup" and any(k in m and (isinstance(m[k], bool) or not isinstance(m[k], (int, float)) or not math.isfinite(m[k]) or not 0 <= m[k] <= 1e12)
+                             for k in ("n", "sum")):
+        return "rollup.n and rollup.sum are finite numbers of 0 or more"
     if t == "snapshot" and (not isinstance(m.get("topic"), str) or not re.match(r"^[a-z0-9-]{1,60}$", m["topic"]) or "data" not in m):
         return "snapshot needs topic (a-z, 0-9, -) and data"
     if t == "snapshot" and len(json.dumps(m["data"])) > MAX_SNAPSHOT:
@@ -498,7 +507,50 @@ def emit_verdict(name, perms, kind):
     return None
 
 
-def make_handler(name, limit=None, warn=None, perms=None):
+def metric_kinds(pkgdir):
+    """The kinds the package declared with `retention = "metric"` in its [[events]] (package.toml, else capability.toml)."""
+    if tomllib is None or not pkgdir:
+        return set()
+    for f in ("package.toml", "capability.toml"):
+        try:
+            with open(os.path.join(pkgdir, f), "rb") as fh:
+                ev = tomllib.load(fh).get("events")
+        except (OSError, ValueError):
+            continue
+        if isinstance(ev, list):
+            return {e["kind"] for e in ev if isinstance(e, dict) and e.get("retention") == "metric" and isinstance(e.get("kind"), str)}
+    return set()
+
+
+def rollup_verdict(name, pkgdir, kind):
+    """None when `name` may add to the monthly rollup of `kind`, else the reason: only a kind of its own that its [[events]] declare with retention = metric."""
+    if not kind.startswith(f"pkg.{name}."):
+        return f"a package may only roll up pkg.{name}.<what>"
+    if kind not in metric_kinds(pkgdir):
+        return 'not declared in [[events]] with retention = "metric"'
+    return None
+
+
+def _plain(v):
+    """A number as the text rollup-add reads: a whole number without a point, else a plain decimal (no exponent)."""
+    return str(int(v)) if float(v) == int(v) else format(v, "f")
+
+
+def rollup_add(m):
+    """`hs sys state rollup-add <kind> <user> --n N --sum S`, run by the bridge (root, outside the sandbox of the service). None, or why it failed."""
+    scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prog = [os.environ["HS_EXT_ROLLUP"]] if os.environ.get("HS_EXT_ROLLUP") else ["bash", os.path.join(scripts, "state.sh"), "rollup-add"]
+    args = [m["kind"], m["user"], "--n", _plain(m.get("n", 1)), "--sum", _plain(m.get("sum", 0))]
+    try:
+        r = subprocess.run(prog + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        return str(e)
+    if r.returncode:
+        return "rollup-add exited %d: %s" % (r.returncode, r.stderr.decode("utf-8", "replace").strip()[:200])
+    return None
+
+
+def make_handler(name, limit=None, warn=None, perms=None, pkgdir=None):
     """The on_message of svc-run: `log` to the journal, `emit` into the event log under the rate limit, `snapshot` to the snapshot file.
     perms = the declared permissions (None = none declared). A refused kind is warned once per kind, not per call."""
     limit = limit or RateLimit()
@@ -522,12 +574,142 @@ def make_handler(name, limit=None, warn=None, perms=None):
             elif not state["warned"]:     # one warning per burst, not one per dropped event
                 state["warned"] = True
                 warn(f"{name}: more than {limit.limit} emits in {limit.window:g} s, further ones are dropped")
+        elif t == "rollup":
+            why = rollup_verdict(name, pkgdir, m["kind"])
+            if why:
+                if ("rollup", m["kind"]) not in refused:
+                    refused.add(("rollup", m["kind"]))
+                    warn(f"{name}: rollup of {m['kind']} dropped ({why})")
+            elif limit.allow():
+                bad = rollup_add(m)
+                if bad:
+                    warn(f"{name}: rollup of {m['kind']} was not stored ({bad})")
         elif t == "snapshot":
             write_snapshot(name, m["topic"], m["data"])
     return handle
 
 
-def svc_run(name, pkgdir, state_dir):
+def unit_of(name):
+    return f"hs-ext-run-{name}"
+
+
+def stop_unit(name):
+    """Stop the transient unit of the service (a stop of the systemd-run client alone may leave it running)."""
+    try:
+        subprocess.run([os.environ.get("HS_SYSTEMCTL", "systemctl"), "stop", unit_of(name) + ".service"], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _load_lib(mod):
+    spec = importlib.util.spec_from_file_location(mod, os.path.join(os.path.dirname(os.path.abspath(__file__)), mod + ".py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def cred_root():
+    return os.environ.get("HS_CRED_DIR") or "/run/hs-ext-cred"
+
+
+def cred_dir(name):
+    """The private folder (0700, one per service, below a 0700 parent in /run) that holds the copies of the keys of one service for LoadCredential=.
+    The copy lives only until the unit has started (systemd reads it before the service runs; `running` removes it), and the transient unit
+    cannot enter /run/hs-ext-cred (InaccessiblePaths, ext_confine.py). The unit gets its own copy in its private $CREDENTIALS_DIRECTORY."""
+    return os.path.join(cred_root(), name)
+
+
+def make_private_dir(d):
+    old = os.umask(0o077)
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+    finally:
+        os.umask(old)
+    os.chmod(d, 0o700)
+
+
+def drop_creds(name):
+    shutil.rmtree(cred_dir(name), ignore_errors=True)
+
+
+def sweep_creds(name, active=None):
+    """At the start of a bridge: remove the key copies a crash left (its own, and those of units that are not running)."""
+    active = active or (lambda n: subprocess.run([os.environ.get("HS_SYSTEMCTL", "systemctl"), "is-active", "--quiet", f"hs-ext-svc@{n}.service"],
+                                                  stdin=subprocess.DEVNULL, check=False).returncode == 0)
+    make_private_dir(cred_root())    # always there before any unit starts, so InaccessiblePaths=-/run/hs-ext-cred applies to every service
+    drop_creds(name)
+    try:
+        others = os.listdir(cred_root())
+    except OSError:
+        return
+    for n in others:
+        try:
+            if n != name and not active(n):
+                drop_creds(n)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
+def confined_program(name, pkgdir, prog, creds=()):
+    """(argv, None) or (None, problem): PROG as a transient systemd unit confined by the declared permissions (scripts/lib/ext_confine.py, the same
+    mapping as a confined command). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
+    `emit`, `rollup` and `snapshot` need no wider mount. creds = [(credential name, key file)]: systemd LoadCredential= reads the file as root
+    before the sandbox and the service finds it in $CREDENTIALS_DIRECTORY (never argv or environment). Not tested on hardware yet."""
+    spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    props, _, bad = mod.properties(declared_perms(pkgdir), name)
+    if bad:
+        return None, bad
+    if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
+        props.append("BindReadOnlyPaths=-" + os.path.abspath(pkgdir))     # its own folder comes back into the empty /var/lib/hs
+    try:
+        make_private_dir(cred_root())    # a service without credentials needs the folder too: a missing path is skipped by InaccessiblePaths=-
+    except OSError as e:
+        return None, f"cannot prepare {cred_root()} ({e.strerror}): without it the key copies could not be hidden"
+    pi = _load_lib("pkg_integrations")
+    seen = set()
+    for cname, provider, path in creds:    # every name is checked BEFORE any key is read or any copy written: a refusal leaves nothing behind
+        # integration-<name>-<provider>: systemd allows [A-Za-z0-9_.-] up to 255 characters, the names here are [a-z0-9-] (NAME of pkg_integrations.py)
+        if (not re.fullmatch(r"[a-z][a-z0-9-]{0,200}", cname) or not re.fullmatch(r"[a-z][a-z0-9-]*", provider or "")
+                or not path.startswith("/") or ":" in path):
+            return None, f"bad credential {cname!r}"
+        if cname in seen:    # integration "a-b" of provider "c" and integration "a" of provider "b-c" would share a name: never hand over the wrong key silently
+            return None, f"credential {cname} is named twice (an integration and a provider name run together)"
+        seen.add(cname)
+    try:
+        for cname, provider, path in creds:
+            # systemd reads a credential as root. So the bridge reads the key itself ONCE (read_key: only from the folder of the registered providing package,
+            # a regular file, checked on the open descriptor) and writes a private 0600 copy; systemd gets that copy, never a path somebody else can change.
+            key, why = pi.read_key(path, provider, name, root=LIB_DIR)
+            if why:
+                drop_creds(name)    # copies of the credentials before this one
+                return None, f"credential {cname}: {why}"
+            make_private_dir(cred_root())
+            d = cred_dir(name)
+            make_private_dir(d)
+            copy = os.path.join(d, cname)
+            try:
+                os.unlink(copy)
+            except OSError:
+                pass
+            fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0), 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(key)
+            props.append(f"LoadCredential={cname}:{copy}")
+    except OSError as e:
+        drop_creds(name)
+        return None, f"cannot write the key copies ({e.strerror})"
+    # the transient unit has no environment: the PATH of the bridge (no secrets) so `#!/usr/bin/env python3` works; it ends with the bridge unit
+    path_env = os.environ.get("PATH") or "/run/current-system/sw/bin:/usr/bin:/bin"
+    cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
+           f"--description=hs extension service {name}", "--property=KillMode=control-group", "--property=TimeoutStopSec=15", "--property=MountFlags=private",
+           f"--property=BindsTo=hs-ext-svc@{name}.service", f"--property=After=hs-ext-svc@{name}.service", "--setenv=PATH=" + path_env]
+    return cmd + ["--property=" + x for x in props] + ["--"] + prog, None
+
+
+def svc_run(name, pkgdir, state_dir, creds=()):
     table = service_table(pkgdir)
     if not table or not isinstance(table.get("exec"), str):
         print(f"ext_service.py: {name} has no [service] table with exec", file=sys.stderr)
@@ -540,12 +722,26 @@ def svc_run(name, pkgdir, state_dir):
         d = load_state(state_dir, name)
         d.update({"state": s, "reason": why, "since": now()})
         save_state(state_dir, name, d)
+        if s == "running":
+            drop_creds(name)    # systemd read the credential when it started the unit; no copy stays on disk
 
     subscribe = table.get("subscribe", [])
     if subscribe and not os.path.exists(cursor_path(name)):
         write_cursor(cursor_path(name), db_latest())
-    res = supervise(program_of(pkgdir, table["exec"]), name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir)))
+    sweep_creds(name)
+    prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
+    if bad:     # fail closed: a service whose confinement cannot be set up does not run
+        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+        drop_creds(name)    # never a copy left by a refused start
+        record_failure(state_dir, name, "confine_failed", bad)
+        return 69
+    stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
+    try:
+        res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
+                        float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
+    finally:
+        stop_unit(name)
+        drop_creds(name)
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1
@@ -605,11 +801,17 @@ def main_svc(argv):
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--active", default="no")
     ap.add_argument("--stopped", default="no")
+    ap.add_argument("--credential", action="append", default=[], help="NAME=PROVIDER=KEYFILE (the key is copied privately for LoadCredential=)")
     a = ap.parse_args(argv[1:])
     if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
         return 2
     if argv[0] == "svc-run":
-        return svc_run(a.name, a.dir or ".", a.state_dir)
+        creds = []
+        for c in a.credential:    # NAME=PROVIDER=KEYFILE, the provider is the registered package that offers the integration
+            n, _, rest = c.partition("=")
+            prov, _, p = rest.partition("=")
+            creds.append((n, prov, p))
+        return svc_run(a.name, a.dir or ".", a.state_dir, creds)
     if argv[0] == "reset":
         try:
             os.unlink(state_path(a.state_dir, a.name))

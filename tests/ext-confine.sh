@@ -18,7 +18,7 @@ NoNewPrivileges=yes
 CapabilityBoundingSet=
 PrivateDevices=yes
 TemporaryFileSystem=/var/lib/hs:ro
-InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 BindPaths=-/var/lib/hs/ext-svc"
 check_eq "a package without permissions gets the strict defaults" "$nodecl" "$($EC -)"
 check_eq "declared but empty is the same text" "$nodecl" "$($EC)"
@@ -34,7 +34,7 @@ PrivateDevices=no
 DevicePolicy=closed
 DeviceAllow=char-drm rw
 TemporaryFileSystem=/var/lib/hs:ro
-InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 ReadWritePaths=-/srv/media
 BindPaths=-/var/lib/hs/ext-svc -/var/lib/hs/ext/fixsvc
 ReadOnlyPaths=-/etc/hs -/srv/in
@@ -59,7 +59,7 @@ check_eq "a bad package name is refused" 2 "$rc"
 
 echo "-- secrets are hidden and a grant that overlaps them is refused (#947)"
 check_eq "/var/lib/hs is an empty read-only tmpfs, the bridge state is bound back" "2" "$($EC - | grep -c 'TemporaryFileSystem=/var/lib/hs:ro$\|BindPaths=-/var/lib/hs/ext-svc$')"
-check_eq "root, shadow, ssh and nixos are inaccessible" "1" "$($EC - | grep -c '^InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos$')"
+check_eq "root, shadow, ssh and nixos are inaccessible" "1" "$($EC - | grep -c '^InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred$')"
 for g in /var/lib/hs /var/lib/hs/restic-password /var/lib/hs/api-tokens/x /var/lib /root /root/.ssh /etc/shadow /etc/ssh/ssh_host_ed25519_key /etc/nixos/machine.toml /etc; do
   rc=0; $EC "fs.read:$g" >/dev/null 2>&1 || rc=$?
   check_eq "fs.read:$g is refused" "1" "$rc"
@@ -89,40 +89,64 @@ rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" props --name fixsvc -- fs.write:/
 check_eq "props takes the package name too (confined commands)" "0" "$rc"
 check_eq "the refusal names the secret it overlaps" "1" "$($EC fs.read:/var/lib/hs/restic-password 2>&1 | grep -c 'overlaps /var/lib/hs')"
 
-echo "-- the template unit is the floor"
-for l in 'ProtectSystem = "strict"' 'ProtectHome = true' 'PrivateTmp = true' 'PrivateDevices = true' 'NoNewPrivileges = true' 'CapabilityBoundingSet = ""'; do
-  check "configuration.nix: hs-ext-svc@ has $l" grep -q "^      $l;" "$ROOT/configuration.nix"
+echo "-- the template unit is the bridge: it is not sandboxed (#1130), the service is, as a transient unit"
+for l in ProtectSystem ProtectHome PrivateTmp PrivateDevices NoNewPrivileges CapabilityBoundingSet ReadWritePaths; do
+  check_eq "configuration.nix: hs-ext-svc@ does not set $l (the bridge writes state.db)" "0" "$(sed -n '/systemd.services."hs-ext-svc@"/,/^  };/p' "$ROOT/configuration.nix" | grep -c "^      $l ")"
 done
 
-echo "-- hs ext start writes the drop-in, and refuses a bad path"
+echo "-- hs ext start checks the permissions and writes no drop-in (the bridge is not confined, the service is: ext_service.py confined_program)"
 EXT=$WORK/ext; mkdir -p "$EXT/pk/okpkg" "$EXT/pk/nopkg" "$EXT/pk/badpkg" "$EXT/state" "$EXT/dropin"
 mk() {   # mk <name> <permissions line or empty>
-  printf 'name = "%s"\ntitle = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n%s\n[service]\nexec = "@/run.sh"\n' "$1" "$2" > "$EXT/pk/$1/capability.toml"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$EXT/pk/$1/run.sh"
+  printf 'name = "%s"
+title = "t"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
+%s
+[service]
+exec = "@/run.sh"
+' "$1" "$2" > "$EXT/pk/$1/capability.toml"
+  printf '#!/usr/bin/env bash
+exit 0
+' > "$EXT/pk/$1/run.sh"
   mkdir -p "$EXT/root/capabilities/$1"   # where pkg.py perms reads the declaration (HS_PACKAGES_ROOT)
-  printf 'name = "%s"\nversion = "1.0.0"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n%s\n' "$1" "$2" > "$EXT/root/capabilities/$1/package.toml"
+  printf 'name = "%s"
+version = "1.0.0"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
+%s
+' "$1" "$2" > "$EXT/root/capabilities/$1/package.toml"
 }
 mk okpkg 'permissions = ["fs.write:/srv/ok", "fs.read:/etc/hs"]'
 mk nopkg ''
 mk badpkg 'permissions = ["fs.write:/srv/../etc"]'
-printf '#!/usr/bin/env bash\necho "$*" >> "%s"\nexit 0\n' "$EXT/ctl.log" > "$EXT/systemctl"; chmod +x "$EXT/systemctl"
-printf 'hostName = "t"\n' > "$EXT/machine.toml"; printf 'okpkg\nnopkg\nbadpkg\n' > "$EXT/caps"
+printf '#!/usr/bin/env bash
+echo "$*" >> "%s"
+exit 0
+' "$EXT/ctl.log" > "$EXT/systemctl"; chmod +x "$EXT/systemctl"
+printf 'hostName = "t"
+' > "$EXT/machine.toml"; printf 'okpkg
+nopkg
+badpkg
+' > "$EXT/caps"
 xe() { HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$EXT/state HS_PACKAGES_ROOT=$EXT/root HS_PACKAGES_DIR=$EXT/pk HS_CAPABILITIES_FILE=$EXT/caps HS_MACHINE_FILE=$EXT/machine.toml HS_SYSTEMCTL=$EXT/systemctl HS_CONFINE_DIR=$EXT/dropin bash "$SCRIPTS/ext.sh" "$@"; }
+mkdir -p "$EXT/dropin/hs-ext-svc@okpkg.service.d"; : > "$EXT/dropin/hs-ext-svc@okpkg.service.d/10-confine.conf"
 xe start okpkg >/dev/null 2>&1 || true
-f=$EXT/dropin/hs-ext-svc@okpkg.service.d/10-confine.conf
-check "start writes the drop-in under the unit's .d folder" test -f "$f"
-check "the drop-in of a package with permissions" grep -qx 'ReadWritePaths=-/srv/ok' "$f"
-check "it lists fs.read" grep -qx 'ReadOnlyPaths=-/etc/hs' "$f"
-check "systemd is told to reload before the unit starts" grep -q '^daemon-reload' "$EXT/ctl.log"
-check_eq "daemon-reload comes before start" "daemon-reload start" "$(grep -o '^daemon-reload\|^start' "$EXT/ctl.log" | tr '\n' ' ' | sed 's/ $//')"
+check "start writes no drop-in and removes an old one (it would confine the bridge)" test ! -e "$EXT/dropin/hs-ext-svc@okpkg.service.d/10-confine.conf"
+check_eq "and starts the unit" "1" "$(grep -c '^start hs-ext-svc@okpkg.service' "$EXT/ctl.log")"
+check "removing an old drop-in reloads systemd (else the bridge keeps its sandbox until reboot)" grep -q "^daemon-reload" "$EXT/ctl.log"
+check_eq "and the daemon-reload comes before the start" "daemon-reload" "$(grep -o "^daemon-reload\|^start" "$EXT/ctl.log" | head -n1)"
 : > "$EXT/ctl.log"
 out=$(xe start nopkg 2>&1) || true
 check_out "a package without permissions is warned about" "does not declare permissions" printf '%s' "$out"
-check "and gets the strict defaults" grep -qx 'PrivateDevices=yes' "$EXT/dropin/hs-ext-svc@nopkg.service.d/10-confine.conf"
 : > "$EXT/ctl.log"
 rc=0; out=$(xe start badpkg 2>&1) || rc=$?
 check_eq "a package with a bad path is not started" "1 0" "$rc $(grep -c '^start' "$EXT/ctl.log")"
-check "no drop-in is left for it" test ! -e "$EXT/dropin/hs-ext-svc@badpkg.service.d/10-confine.conf"
 
 echo "-- commands: the flag confine runs a row through systemd-run (step 11)"
 CF=$WORK/cf; mkdir -p "$CF/pk/fixconf" "$CF/pk/fixplain" "$CF/root/capabilities/fixconf" "$CF/root/capabilities/fixplain" "$CF/state"
@@ -165,7 +189,7 @@ expect="--pipe
 --property=CapabilityBoundingSet=
 --property=PrivateDevices=yes
 --property=TemporaryFileSystem=/var/lib/hs:ro
---property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+--property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 --property=ReadWritePaths=-/srv/ok
 --property=BindPaths=-/var/lib/hs/ext-svc
 --property=ReadOnlyPaths=-/etc/hs

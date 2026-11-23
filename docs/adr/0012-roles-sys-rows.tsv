@@ -185,6 +185,7 @@ disk power	viewer	read
 health dry-run	viewer	read
 health next	viewer	read
 health list	viewer	read
+health info	viewer	read
 health acks	admin	read
 health plan <action>	admin	plan
 health start <action>	admin	start
@@ -259,6 +260,7 @@ pkg market	admin	read
 pkg show <name>	admin	read
 pkg asset <name> <file>	admin	read
 pkg states	admin	read
+pkg integrations	admin	read
 pkg repos	admin	read
 pkg plan <action>	admin	plan
 pkg start <action>	admin	start

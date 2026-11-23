@@ -9,7 +9,9 @@ import sys
 
 EXT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 EXT_KINDS = ("tsv", "json", "text")
-EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "gallery")
+EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "form", "gallery", "chart", "stat", "log", "progress")
+EXT_GROUPS = ("storage", "instances", "apps", "network", "people", "system", "backup", "settings")      # the groups of the tree (web/src/nav.js EXT_GROUPS); default apps
+EXT_TEMPLATES = ("list", "object", "feed")
 EXT_WORD = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")      # a word of a live read: it becomes part of a topic name (hs:v1:ext-<name>-<words>)
 LIVE_MIN, LIVE_MAX = 10, 3600
 LIVE_LOCKED = ("run", "skip")
@@ -131,9 +133,25 @@ def _perms_module():
     return mod
 
 
+def _blocks_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_blocks", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_blocks.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _roles_module():
     import importlib.util
     spec = importlib.util.spec_from_file_location("pkg_roles", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_roles.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _slots_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_slots", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_slots.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -216,12 +234,53 @@ def ext_read(name, rd, rows, caps=None):
     return words, spec
 
 
-def _ext_page(name, page, words):
+def _ext_page(name, page, words, recipe=False, changes=()):
     """The [web.page] declaration of a package for the generic page of the frontend (web/src/shell/GenericPage.svelte): plain data, checked here so
-    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out."""
+    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out.
+    `recipe`: the page of a recipe (an app, no capability.toml) is the object page /apps/<name> opened from the Installed list: template object, no place
+    in the tree (no group, after or state card), marked `kind = "recipe"` for the frontend (docs/PLAN-package-pages.md, #424)."""
     if not isinstance(page, dict) or len(json.dumps(page)) > 30000:
         raise ValueError("bad page")
     known = {" ".join(w[2:]) for w in words}
+    page = dict(page)
+    if recipe:
+        bad = [k for k in ("group", "after", "state") if k in page]
+        if bad or page.get("template", "object") != "object":
+            raise ValueError("a recipe page is an object page of the app: no %s, template object" % ", ".join(bad or ["other template"]))
+        page["template"] = "object"
+        page["kind"] = "recipe"
+    group = page.get("group", "apps")
+    if group not in EXT_GROUPS:
+        raise ValueError("the page names an unknown group")
+    page["group"] = group
+    after = page.get("after")
+    if after is not None and not (isinstance(after, str) and EXT_WORD.match(after)):
+        raise ValueError("after must be the name of a place in the group")
+    if "role" in page and _roles_module().of(page) is None:
+        raise ValueError("role must be viewer, app-manager or admin")
+    if "template" in page and page["template"] not in EXT_TEMPLATES:
+        raise ValueError("template must be list, object or feed")
+    blocks = page.get("blocks", [])
+    if "template" not in page and blocks and isinstance(blocks[0], dict) and blocks[0].get("type") == "table":
+        page["template"] = "list"
+    st = page.get("state")
+    if st is not None:      # one dot, one line for the card: the columns of one declared read (checked below like any read)
+        if (not isinstance(st, dict) or not isinstance(st.get("read"), str)
+                or any(not isinstance(st.get(k), (int, str)) or isinstance(st.get(k), bool) for k in ("dot", "line"))):
+            raise ValueError("state needs read, dot and line")
+    tabs = page.get("tabs", [])
+    if not isinstance(tabs, list) or len(tabs) > 12:
+        raise ValueError("bad tabs")
+    if any("blocks" in t for t in tabs if isinstance(t, dict)):
+        # [[web.page.tabs]] with a title and their own blocks: flattened to the form the renderer reads (tabs: [{id, label}], block.tab)
+        flat, out_tabs = list(blocks), []
+        for i, t in enumerate(tabs):
+            if not isinstance(t, dict) or not isinstance(t.get("title"), str) or not 1 <= len(t["title"]) <= 40 or not isinstance(t.get("blocks", []), list):
+                raise ValueError("a tab needs a title")
+            tid = "t%d" % i
+            out_tabs.append({"id": tid, "label": t["title"], **({"requires": t["requires"]} if "requires" in t else {})})      # `requires`: scripts/lib/pkg_slots.py gate_page
+            flat += [{**b, "tab": tid} for b in t.get("blocks", []) if isinstance(b, dict)]
+        page["tabs"], page["blocks"] = out_tabs, flat
 
     def walk(node):
         if isinstance(node, dict):
@@ -233,8 +292,14 @@ def _ext_page(name, page, words):
                     raise ValueError("a join reads something that is not a declared read")
             if node.get("type") is not None and node["type"] not in EXT_BLOCKS:
                 raise ValueError("unknown block type")
+            if node.get("type") == "form":     # fields are data; the plan stays in the package's own area; a secret field goes on stdin (lib/pkg_blocks.py)
+                bad = _blocks_module().form_problems(name, node, "form", changes)
+                if bad:
+                    raise ValueError(bad[0])
             for key in ("actions", "rowActions"):
                 for a in node.get(key, []):
+                    if "role" in a and _roles_module().of(a) is None:
+                        raise ValueError("role must be viewer, app-manager or admin")
                     if "plan" in a and (not isinstance(a["plan"], list) or not a["plan"] or a["plan"][0] != "ext/" + name):
                         raise ValueError("a page action may only plan changes of its own area")
                     if "input" in a:    # a text field before the plan: {input} in the plan arguments; the server still checks every argument against the changes
@@ -248,8 +313,9 @@ def _ext_page(name, page, words):
                 pl = c.get("plan")
                 if pl is not None and (not isinstance(pl, list) or not pl or pl[0] != "ext/" + name):
                     raise ValueError("a switch may only plan changes of its own area")
-            for v in node.values():
-                walk(v)
+            for k, v in node.items():
+                if not (node.get("type") == "form" and k == "fields"):     # the fields of a form have a `type` of their own: not blocks (checked above)
+                    walk(v)
         elif isinstance(node, list):
             for v in node:
                 walk(v)
@@ -272,7 +338,13 @@ def ext_declarations(log=None):
             web = ext_manifest(d).get("web", {})
             if not web:
                 continue        # a capability without a [web] declaration (most of them) has nothing to register and no commands.tsv
-            rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            recipe = not os.path.isfile(os.path.join(d, "capability.toml"))      # a recipe package has package.toml only
+            try:
+                rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            except OSError:
+                if not recipe:
+                    raise
+                rows = set()      # a recipe page without reads (text, empty) needs no commands.tsv; a read or change then fails below
             r_new, c_new, p_new = {}, [], None
             for rd in web.get("reads", []):
                 words, spec = ext_read(name, rd, rows, caps)
@@ -302,7 +374,8 @@ def ext_declarations(log=None):
                             raise ValueError("bad flag")
                     c_new.append(ent)
             if "page" in web:
-                p_new = _ext_page(name, web["page"], list(r_new))
+                p_new = _ext_page(name, web["page"], list(r_new), recipe, web.get("changes", []))
+                p_new = _slots_module().gate_page(p_new, set(caps) | applied_recipes())      # a page, tab or state card whose `requires` is off shows nothing
             heads = {w[:3] for w in rows}
             if c_new and not (("ext", name, "plan") in heads and ("ext", name, "start") in heads):
                 raise ValueError("changes need the plan and start rows of the package")
@@ -325,6 +398,25 @@ def ext_load_web():
         if c_new:
             changes["ext/" + name] = c_new
     return reads, changes, pages
+
+
+def ext_slots(log=None):
+    """-> [{name, title, actions}] of the packages that are on and declare [[web.actions]] that are not switched off by their `requires`
+    (the session answer carries them as features.slots: the page header and the Apps > Installed row draw them). A package with a wrong slot adds none.
+    Health checks are not sent to the browser: scripts/health-check.sh runs them (scripts/lib/pkg_slots.py problems)."""
+    slots, on, out = _slots_module(), set(capabilities()) | applied_recipes(), []
+    for name, d in ext_packages():
+        try:
+            s = slots.declared(name, ext_manifest(d), on)
+        except (OSError, KeyError, TypeError, ValueError) as e:
+            if log:
+                log("extension %s: slots ignored (%s)" % (name, e))
+            continue
+        except Exception:
+            continue      # a manifest that is not TOML: ext_declarations says so
+        if s and s["actions"]:
+            out.append({"name": name, "title": s["title"], "actions": s["actions"]})
+    return out
 
 
 def ext_snapshots(on=None):

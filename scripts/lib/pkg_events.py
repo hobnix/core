@@ -4,8 +4,11 @@
 the spool allowlist (event-notify.py) and the catalogue read it. The core keeps a transition copy of the media helper's events in
 scripts/lib/pkg-events/ (same format) until hobnix/recipes declares them; an installed file replaces the copy of the same package completely.
 
-Format: UTF-8 text, tab-separated, exactly 10 columns, "-" = empty. Lines starting with # and blank lines are skipped.
-  kind  level  payload keys  label  icon  meaning  category  priority  title  message
+Format: UTF-8 text, tab-separated, 11 columns, "-" = empty. Lines starting with # and blank lines are skipped.
+  kind  level  payload keys  label  icon  meaning  category  priority  title  message  retention
+Retention class (#927): ephemeral | audit | metric, required in package.toml. A file with 10 columns (the transition copies in
+scripts/lib/pkg-events/, installed files of an older core) is still read: its rows get DEFAULT_RETENTION (audit = the general event-log limit,
+HS_EVENT_KEEP / HS_EVENT_DAYS, so nothing is pruned earlier than before).
 The file name stem is the package name. A row whose kind does not start with pkg.<stem>., whose suffix or level is invalid, or which
 has not 10 columns is dropped quietly. Without notify the last four columns are "-" (no rule).
 
@@ -15,7 +18,10 @@ import glob
 import os
 import re
 
-COLUMNS = ("kind", "level", "payload", "label", "icon", "meaning", "category", "priority", "title", "message")
+COLUMNS = ("kind", "level", "payload", "label", "icon", "meaning", "category", "priority", "title", "message", "retention")
+LEGACY_COLUMNS = len(COLUMNS) - 1
+RETENTIONS = ("ephemeral", "audit", "metric")
+DEFAULT_RETENTION = "audit"
 LEVELS = ("info", "warn", "error")
 CATEGORIES = ("alarm", "lock", "problem", "ok", "start", "stop", "info")
 PRIORITIES = ("min", "low", "default", "high", "urgent")
@@ -23,7 +29,7 @@ SUFFIX = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PAYLOAD_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}\??$")
 ICON = re.compile(r"^[a-z0-9-]{1,40}$")
 PACKAGE = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
-EVENT_KEYS = {"kind", "level", "label", "icon", "meaning", "payload", "notify"}
+EVENT_KEYS = {"kind", "level", "label", "icon", "meaning", "payload", "notify", "retention"}
 NOTIFY_KEYS = {"category", "priority", "title", "message"}
 CORE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pkg-events")
 
@@ -61,6 +67,8 @@ def manifest_problems(package, events):
             out.append("events: %s: label missing or not one short line" % k)
         if "icon" in e and not (isinstance(e["icon"], str) and ICON.match(e["icon"])):
             out.append("events: %s: icon is not an icon name" % k)
+        if "retention" in e and e["retention"] not in RETENTIONS:
+            out.append("events: %s: retention is not one of %s" % (k, " ".join(RETENTIONS)))
         if not _line(e.get("meaning"), 200):
             out.append("events: %s: meaning missing or not one line" % k)
         pl = e.get("payload", [])
@@ -100,7 +108,7 @@ def rows(package, events):
         out.append(["pkg.%s.%s" % (package, e["kind"]), e["level"], ",".join(e.get("payload") or []) or "-",
                     e["label"], e.get("icon") or "-", e["meaning"],
                     n["category"] if n else "-", (n.get("priority") or "-") if n else "-",
-                    n["title"] if n else "-", n["message"] if n else "-"])
+                    n["title"] if n else "-", n["message"] if n else "-", e.get("retention", DEFAULT_RETENTION)])
     return out
 
 
@@ -140,7 +148,9 @@ def read_file(path, package):
                 if not line or line.startswith("#"):
                     continue
                 c = line.split("\t")
-                if len(c) != len(COLUMNS):
+                if len(c) == LEGACY_COLUMNS:
+                    c.append(DEFAULT_RETENTION)
+                if len(c) != len(COLUMNS) or c[-1] not in RETENTIONS:
                     continue
                 r = dict(zip(COLUMNS, c))
                 if not r["kind"].startswith(prefix) or not SUFFIX.match(r["kind"][len(prefix):]) or r["level"] not in LEVELS:
@@ -174,3 +184,18 @@ def find(kind):
         if r["kind"] == kind:
             return r
     return None
+
+
+def retention_of(kind):
+    """The retention class of a declared kind; DEFAULT_RETENTION for a kind without a declaration."""
+    r = find(kind)
+    return r["retention"] if r else DEFAULT_RETENTION
+
+
+def kinds_by_retention():
+    """{class: [kind, ...]} over every declaration (installed files replace the core copy of the same package)."""
+    out = {c: [] for c in RETENTIONS}
+    for recs in declarations().values():
+        for r in recs:
+            out[r["retention"]].append(r["kind"])
+    return out

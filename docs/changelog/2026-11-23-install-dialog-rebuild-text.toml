@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "fix"
+title = "Install dialog: the rebuild sentence only when the server is rebuilt"
+body  = """The review step of the Install dialog said "This takes a few minutes: the server is rebuilt." for every long install, also for an app that does not rebuild the server (ntfy). It now says "This takes a few minutes." and adds "The server is rebuilt." only when the plan has a rebuild."""

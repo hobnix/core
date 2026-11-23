@@ -418,6 +418,7 @@ sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
 sys	sys health next	health.sh	next	problems with their fix command (problem, next)	-
 sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)	-
+sys	sys health info	health-check.sh	--info	the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent	-
 sys	sys health acks	health-ack.sh	list-acks	the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed	-
 sys	sys health plan <action>	health-change.sh	plan {1} {rest}	what acknowledging a problem, taking it back or lifting the pause of the bulk jobs would do, as data: status, plan lines (never asks)	-
 sys	sys health start <action>	health-change.sh	start {1} {rest}	do it (hs sys health start ack <id> | unack <id> | resume), answers status done	-
@@ -541,6 +542,7 @@ sys	sys ext status	ext.sh	--status	the services of the extensions that are on, o
 user	pkg list	pkg.sh	list {rest}	list the packages (recipes and extensions) with their version: hs pkg list [--all] [--kind recipe|extension|capability]	die Pakete (Rezepte und Erweiterungen) mit Version auflisten: hs pkg list [--all] [--kind recipe|extension|capability]	topic:system,reads
 user	pkg updates	pkg.sh	updates	the packages whose version in the tree is newer than the one last applied	die Pakete, deren Version im Baum neuer ist als die zuletzt angewendete	topic:system,reads
 user	pkg validate	pkg.sh	validate	check every package manifest	alle Paket-Manifeste prüfen	topic:system,reads
+user	pkg integrations	pkg.sh	integrations {rest}	what installed packages offer to each other (package.toml [integrations.<name>]): package, integration, source, API, state of the key file	was installierte Pakete einander anbieten (package.toml [integrations.<Name>]): Paket, Integration, Quelle, API, Zustand der Schlüsseldatei	topic:system,reads
 sys	sys pkg list	pkg.sh	--list	every package as data: name, kind, version, applied version (- = never), audience, title	-
 user	pkg fetch	pkg.sh	fetch {rest}	update the package repositories and find the newest verified release	die Paket-Repositories aktualisieren und das neueste geprüfte Release finden	topic:system,changes
 user	pkg available	pkg.sh	available	what the package repositories offer (after hs pkg fetch)	was die Paket-Repositories anbieten (nach hs pkg fetch)	topic:system,reads
@@ -554,9 +556,10 @@ user	pkg repo add <name> <url>	pkg.sh	repo add {1} {2} {rest}	add a package repo
 user	pkg repo remove <name>	pkg.sh	repo remove {1}	remove a repository that was added	ein hinzugefügtes Repository entfernen	topic:system,changes
 sys	sys pkg available	pkg.sh	available	what the repositories offer as data: repo, package, kind, version, applied version (- = not installed)	-
 sys	sys pkg market	pkg.sh	--market	every installable package as data: name, kind, repo, available version, installed version (- = none), state (new|current|update|waits|orphan; waits = the release needs a newer core), core (yes|no), audience, title	-
-sys	sys pkg show <name>	pkg.sh	--show {1} {rest}	what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1	-
+sys	sys pkg show <name>	pkg.sh	--show {1} {rest}	what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step, slot_off: a slot of the package whose `requires` is off here: slot, required name); refused: status and reason, exit 1	-
 sys	sys pkg asset <name> <file>	pkg.sh	--asset {1} {2} {rest}	the bytes of the icon or a screenshot of a package, from its newest verified release (what pkg show lists)	-
 sys	sys pkg states	pkg.sh	--states	the lifecycle stage of every package: name, kind, stage (available|installed|on|running), flags (comma list of update|waits|orphan|pending|failed|unhealthy|stopped, - = none), repo, available version, installed version, instances (comma list, - = none), title	-
+sys	sys pkg integrations	pkg.sh	--integrations {rest}	what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty	-
 sys	sys pkg repos	pkg.sh	--repos	the package repositories as data: name, address, signed|unsigned, default|added	-
 sys	sys pkg plan <action>	pkg-change.sh	plan {1} {rest}	what installing, updating or removing a package, fetching, or adding or removing a repository would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused); check-draft checks a package.toml draft on stdin (finding lines, changes nothing)	-
 sys	sys pkg start <action>	pkg-change.sh	start {1} {rest}	do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name>	-

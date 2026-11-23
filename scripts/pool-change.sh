@@ -23,13 +23,14 @@
 # Test knobs: HS_MANAGE_POOL (stand-in for manage-pool.sh), HS_POOL_IMPORT (stand-in for pool-import.sh), HS_BULK_TYPE_FILE, HS_RUN_DIR, HS_DISCOVER, HS_ZPOOL.
 set -euo pipefail
 here=$(dirname "$0")
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 . "$here/lib/pools.sh"
 manage=${HS_MANAGE_POOL:-$here/manage-pool.sh}
 
 verb=${1:-}; pool=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: pool-change.sh plan|start <pool> <add|adopt|import|replace|remove|convert|close|open> [options]" >&2; exit 1 ;; esac
 [[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || { printf 'status\trefused\nreason\tinvalid pool name\n'; exit 1; }
-case "$action" in add|adopt|import|replace|remove|convert|close|open) ;; *) printf 'status\trefused\nreason\tunknown action (add, adopt, import, replace, remove, convert, close or open)\n'; exit 1 ;; esac
+case "$action" in add|adopt|import|replace|remove|convert|close|open) ;; *) refuse_code action.unknown "unknown action (add, adopt, import, replace, remove, convert, close or open)" ;; esac
 shift 3
 if [ "$action" = import ]; then exec bash "${HS_POOL_IMPORT:-$here/pool-import.sh}" "$verb" "$pool" "$@"; fi
 

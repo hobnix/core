@@ -9,6 +9,8 @@
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import RemoveApp from '../forms/ops/RemoveApp.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
+  import ExtCards from './ExtCards.svelte';
+  import SlotActions from '../shell/SlotActions.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -19,6 +21,8 @@
   import Chip from '../ui/Chip.svelte';
   import { parseStates, parseHealth, stageActions } from './states.js';
   import { link } from './instances/ct.js';
+  import { go } from '../route.svelte.js';
+  import { appPath } from '../paths.js';
   import { appAction } from './apps.js';
 
   const list = poll('/api/sys/recipes/list', 30000);
@@ -39,6 +43,8 @@
   // services app: name, container, ... the containers that have a described service
   const svc = poll('/api/sys/services/app', 30000);
   const withService = $derived(new Set(rows(svc).map((r) => r[1])));
+  // the recipes that declare a [web.page] (ui.features.extensions, kind recipe): only their rows get an Open button
+  const withPage = $derived(new Set((ui.features.extensions ?? []).filter((e) => e.kind === 'recipe').map((e) => e.name)));
   const hasService = (a) => !!a.cts && a.cts.split(',').some((c) => withService.has(c));
 
   // name, description, containers (comma separated, - for none), state: installed | partly | not installed | parked | unknown
@@ -245,13 +251,19 @@
               <Button need="app-manager" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('apps', ['remove', c])} tooltip={`Remove ${c}: keep or delete its data`} aria-label="Remove {c}" onclick={() => removeCt(c)} />
             {/if}
           {/each}
+          {#if on && withPage.has(a.name)}
+            <Button variant="ghost" size="sm" icon="arrow-square-out" tooltip="Open the page of {a.name}" onclick={() => go(appPath(a.name))}>Open</Button>
+          {/if}
           <Button need="admin" variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
+          {#if a.state === 'installed'}<SlotActions name={a.name} />{/if}
           <Button variant="ghost" class="btn-icon" icon={copied === a.name ? 'check' : 'terminal-window'} tooltip={copied === a.name ? 'Copied' : 'Copy the terminal command: hs recipe ' + a.name} aria-label="Copy hs recipe {a.name}" onclick={() => copy(a.name)} />
         {/if}
       {/snippet}
     </Table>
   </div>
 </PageState>
+
+<ExtCards group="apps" />
 
 {#if bulkOpen}
   <Dialog title="Bulk change" panel="dialog" width="460px" onclose={cancelBulk}>

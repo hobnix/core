@@ -17,12 +17,13 @@ ext=${HS_EXT:-$here/ext.sh}
 parts=${HS_PARTS:-$here/parts.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: part-change.sh plan|start enable|disable <part>" >&2; exit 1 ;; esac
-case "$action" in enable|disable) ;; *) refuse "unknown action (enable or disable)" ;; esac
+case "$action" in enable|disable) ;; *) refuse_code action.unknown "unknown action (enable or disable)" ;; esac
 [[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || refuse "not a part name"
-[ $# -eq 3 ] || refuse "unexpected extra arguments"
+[ $# -eq 3 ] || refuse_code args.unexpected "unexpected extra arguments"
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
 

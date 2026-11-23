@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Packages can ship a compiled program that is checked on install"
+body  = """An extension package can declare its program in package.toml with its sha256. Install and update check the hash and refuse a program that does not match, keeping the old version. A server that is not x86_64 says so before installing."""

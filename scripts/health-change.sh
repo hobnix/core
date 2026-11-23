@@ -16,15 +16,16 @@ hc=${HS_HEALTH_CHECK:-$here/health-check.sh}
 ackcmd=${HS_HEALTH_ACK:-$here/health-ack.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: health-change.sh plan|start ack <id> [--for <time>] [--note <text>] | unack <id> | resume" >&2; exit 1 ;; esac
-case "$action" in ack|unack|resume) ;; *) refuse "unknown action (ack, unack or resume)" ;; esac
+case "$action" in ack|unack|resume) ;; *) refuse_code action.unknown "unknown action (ack, unack or resume)" ;; esac
 shift 2
 list=$(bash "$hc" --list 2>/dev/null </dev/null || true)
 id="" text="" state="-"
 if [ "$action" = resume ]; then
-  [ $# -eq 0 ] || refuse "unexpected extra arguments"
+  [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
   [ -e "$bulk_pause" ] || refuse "Nothing is paused."
   cmd=(bash "$ackcmd" resume)
 else
@@ -38,11 +39,11 @@ else
       case "$1" in
         --for) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]{1,4}[mhdw]$ ]] || refuse "--for needs a time such as 90m, 12h, 7d or 2w"; extra+=(--for "$2"); shift 2 ;;
         --note) [ $# -ge 2 ] && [ ${#2} -le 200 ] || refuse "--note needs a text of at most 200 characters"; extra+=(--note "$2"); shift 2 ;;
-        *) refuse "unexpected extra arguments" ;;
+        *) refuse_code args.unexpected "unexpected extra arguments" ;;
       esac
     done
   fi
-  [ $# -eq 0 ] || refuse "unexpected extra arguments"
+  [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
   [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9:._\ ()-]{0,100}$ ]] || refuse "invalid problem id"
   row=$(awk -F'\t' -v k="$id" '$1 == k { print; exit }' <<<"$list")
   [ -n "$row" ] || refuse "$id is not an active problem."

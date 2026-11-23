@@ -29,6 +29,7 @@
 #   trail                         stdin as trailing output: indent 6, dimmed (a journal, a log)
 #   next_step "hs cmd"            a dim "Next: ..." line under a result
 #   fail_fix "text" "hs cmd"      the failure line plus "Fix: hs cmd", then exit 1
+#   refuse_code <code> [<reason>] a refused plan or start with a stable code for the web interface (ADR 0028), then exit 1
 #   elapsed_line                  "Finished in 2:05" (only when the command ran 5 s or more)
 #   danger "text"               the line before something is erased (bold red)
 #   confirm_name <name> "text"    type the name of what is changed; returns 0 only when it matches
@@ -92,6 +93,8 @@ fail() { paint "$c_red"    "  ✗ $(_tr "$*")"; exit 1; }
 next_step() { paint "$c_dim" "    $(t 'Next: %s' "$*")"; }
 # fail_fix <text> <fix command>: the red failure line, the command that fixes it underneath, then exit 1
 fail_fix() { paint "$c_red" "  ✗ $(_tr "$1")" >&2; paint "$c_dim" "    $(t 'Fix: %s' "$2")" >&2; exit 1; }
+# refuse_code <code> [<reason>]: see scripts/lib/refuse-code.sh (sourced here)
+[ ! -r "${BASH_SOURCE[0]%/*}/refuse-code.sh" ] || . "${BASH_SOURCE[0]%/*}/refuse-code.sh"
 # elapsed_line: "  ✓ Finished in 2:05" - how long the command ran (counted from the first time ui.sh was sourced,
 # kept across `exec`). Prints nothing under 5 seconds, so quick runs look as they did.
 HS_T0=${HS_T0:-$(date +%s)}; export HS_T0

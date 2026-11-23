@@ -38,8 +38,7 @@ auth_check() {
   hosts=$(docker_auth_hosts "$@")
   # shellcheck disable=SC2086
   if h=$(docker_auth_locked $hosts); then
-    printf 'status\trefused\nreason\tThe vault is closed: the token for %s is in it.\nfix\ths vault open\n' "$h"
-    exit 1
+    refuse_code vault.locked "The vault is closed: the token for $h is in it."
   fi
 }
 
@@ -70,9 +69,9 @@ current_managed() { app_read "$1" | python3 -c 'import sys,json; print(json.load
 
 write_checks() {
   local app=$1
-  [[ "$app" =~ $APP_RE ]] || refuse "The app name is not valid."
-  docker_on_and_running || refuse "Docker is not on or not running."
-  app_is_child "$app" || refuse "No app called '$app' was found."
+  [[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
+  docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
+  app_is_child "$app" || refuse_code app.unknown "No app called '$app' was found."
   if is_manager "$app"; then refuse "The app '$app' is the Docker manager and cannot be changed here."; fi
   local managed
   managed=$(current_managed "$app") || refuse "The app '$app' cannot be read."
@@ -81,9 +80,9 @@ write_checks() {
 
 base_checks() {
   local app=$1
-  [[ "$app" =~ $APP_RE ]] || refuse "The app name is not valid."
-  docker_on_and_running || refuse "Docker is not on or not running."
-  app_is_child "$app" || refuse "No app called '$app' was found."
+  [[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
+  docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
+  app_is_child "$app" || refuse_code app.unknown "No app called '$app' was found."
   if is_manager "$app"; then refuse "The app '$app' is the Docker manager and cannot be changed here."; fi
 }
 
@@ -345,8 +344,7 @@ auth_check_tmp() {   # the images of the NEW compose file in the temp dir; the t
   # shellcheck disable=SC2086
   if h=$(docker_auth_locked $hosts); then
     remove_tmp "$tmp"
-    printf 'status\trefused\nreason\tThe vault is closed: the token for %s is in it.\nfix\ths vault open\n' "$h"
-    exit 1
+    refuse_code vault.locked "The vault is closed: the token for $h is in it."
   fi
 }
 
@@ -446,7 +444,7 @@ cmd_plan_save() {
     if inc info "$app" >/dev/null 2>&1; then refuse "An instance called '$app' exists already."; fi
   else
     current=$(current_rev "$app") || refuse "The app '$app' cannot be read."
-    [ "$current" = "$rev" ] || refuse "The app changed meanwhile. Reload it before saving."
+    [ "$current" = "$rev" ] || refuse_code plan.changed "The app changed meanwhile. Reload it before saving."
     dir=$(app_dir_for "$app") || refuse "The folder of the app '$app' cannot be found."
   fi
   DOC_COLLECT=1
@@ -527,7 +525,7 @@ cmd_start_save() {
     printf 'status\tdone\n'
   else
     local unit
-    unit=$(hs_job "docker-app-save-$app" "Save $app" -- bash "$0" --apply-save "$app" "$rev" "$tmp" "$is_new" "$up") || refuse "The background job could not be started."
+    unit=$(hs_job "docker-app-save-$app" "Save $app" -- bash "$0" --apply-save "$app" "$rev" "$tmp" "$is_new" "$up") || refuse_code job.start-failed "The background job could not be started."
     printf 'status\tstarted\nunit\t%s\n' "$unit"
   fi
 }
@@ -670,7 +668,7 @@ cmd_start_rebuild() {
     fi
   else
     local unit
-    unit=$(hs_job "docker-app-rebuild-$app" "Rebuild $app" -- bash "$0" --apply-rebuild "$app") || refuse "The background job could not be started."
+    unit=$(hs_job "docker-app-rebuild-$app" "Rebuild $app" -- bash "$0" --apply-rebuild "$app") || refuse_code job.start-failed "The background job could not be started."
     printf 'status\tstarted\nunit\t%s\n' "$unit"
   fi
 }
@@ -733,7 +731,7 @@ cmd_start_recreate() {
   auth_check "$app"
   if [ -z "${HS_DOCKER_NO_JOB:-}" ] && [ -n "$(missing_images "$app")" ]; then
     # images to download or build: this can take longer than the web interface waits for an answer
-    unit=$(hs_job "docker-app-recreate-$app" "Recreate $app" -- bash "$0" --apply-recreate "$app") || refuse "The background job could not be started."
+    unit=$(hs_job "docker-app-recreate-$app" "Recreate $app" -- bash "$0" --apply-recreate "$app") || refuse_code job.start-failed "The background job could not be started."
     printf 'status\tstarted\nunit\t%s\n' "$unit"
     return 0
   fi
@@ -786,7 +784,7 @@ cmd_start_delete() {
     printf 'status\tdone\n'
   else
     local unit
-    unit=$(hs_job "docker-app-delete-$app" "Delete $app" -- bash "$0" --apply-delete "$app" "$data") || refuse "The background job could not be started."
+    unit=$(hs_job "docker-app-delete-$app" "Delete $app" -- bash "$0" --apply-delete "$app" "$data") || refuse_code job.start-failed "The background job could not be started."
     printf 'status\tstarted\nunit\t%s\n' "$unit"
   fi
 }
@@ -882,7 +880,7 @@ cmd_start_old() {
 '
       else
         # a background job with a record: the request returns at once, the row follows the job events, a toast reports the end (#896)
-        unit=$(hs_job "docker-app-$action-$app" "$(t '%s %s' "${action^}" "$app")" -- bash "$0" --apply-action "$app" "$action") || refuse "The background job could not be started."
+        unit=$(hs_job "docker-app-$action-$app" "$(t '%s %s' "${action^}" "$app")" -- bash "$0" --apply-action "$app" "$action") || refuse_code job.start-failed "The background job could not be started."
         printf 'status	started
 unit	%s
 ' "$unit"
@@ -943,8 +941,8 @@ fi
 
 [ $# -ge 3 ] || refuse "Usage: plan|start <app> <action> [--rev new|<rev>]"
 verb=$1; app=$2; action=$3; shift 3
-[[ "$app" =~ $APP_RE ]] || refuse "The app name is not valid."
-[[ "$action" =~ $ACTION_RE ]] || refuse "Action must be start, stop, restart, pull, app-save, app-write, rebuild, recreate or delete."
+[[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
+[[ "$action" =~ $ACTION_RE ]] || refuse_code action.unknown "Action must be start, stop, restart, pull, app-save, app-write, rebuild, recreate or delete."
 case "$action" in
   start|stop|restart|pull|recreate) [ $# -eq 0 ] || refuse "Unexpected arguments." ;;
 esac

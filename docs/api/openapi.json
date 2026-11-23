@@ -5839,6 +5839,69 @@
     }
    }
   },
+  "/health/info": {
+   "get": {
+    "operationId": "health.info",
+    "summary": "the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "health",
+      "info"
+     ],
+     "script": "health-check.sh",
+     "args": "--info",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/health/info",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": []
+    },
+    "description": "The info rows of the [[health]] checks of the packages that are on (title and message are - when empty). An info row is no problem: it is not counted, not sent and not in health list. Empty when no check reports info.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "check"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "message"
+           }
+          ],
+          "minItems": 4,
+          "maxItems": 4
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/health/list": {
    "get": {
     "operationId": "health.list",
@@ -9926,6 +9989,86 @@
     }
    }
   },
+  "/pkg/integrations": {
+   "get": {
+    "operationId": "pkg.integrations",
+    "summary": "what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "integrations"
+     ],
+     "script": "pkg.sh",
+     "args": "--integrations {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "integration"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "source",
+            "enum": [
+             "recipe",
+             "extension",
+             "capability"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "api_url"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_state",
+            "enum": [
+             "ok",
+             "locked",
+             "missing",
+             "-"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "extra"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_header"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/list": {
    "get": {
     "operationId": "pkg.list",
@@ -10115,7 +10258,7 @@
   "/pkg/show/{name}": {
    "get": {
     "operationId": "pkg.show.by_name",
-    "summary": "what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1",
+    "summary": "what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step, slot_off: a slot of the package whose `requires` is off here: slot, required name); refused: status and reason, exit 1",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {
@@ -10592,6 +10735,24 @@
              {
               "$ref": "#/components/schemas/Field",
               "title": "text"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "slot_off"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
              }
             ],
             "minItems": 3,

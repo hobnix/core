@@ -629,6 +629,18 @@ class Changes(Base):
         self.assertEqual((d["status"], d["exit"]), ("refused", 124))
         self.assertIn("stopped waiting after 60 s", d["reason"])
         self.assertNotIn("exit", d["reason"])
+        self.assertEqual(d["code"], "run.timeout")
+
+    def test_the_run_layer_names_a_run_without_status(self):
+        # ADR 0028: no status line -> a run.* code; a script's own code and a plain refusal are left alone
+        for rc, code in ((127, "run.not-found"), (137, "run.killed"), (-9, "run.killed"), (2, "run.no-status")):
+            self.answer = (rc, "")
+            self.assertEqual(self.post("/api/plan", self.RUN)[1]["code"], code)
+        self.answer = (1, "status\trefused\nreason\tThe vault is closed.\nfix\ths vault open\ncode\tvault.locked\n")
+        d = self.post("/api/plan", self.RUN)[1]
+        self.assertEqual((d["code"], d["fixes"]), ("vault.locked", ["hs vault open"]))
+        self.answer = (1, "status\trefused\nreason\tNo.\n")
+        self.assertNotIn("code", self.post("/api/plan", self.RUN)[1])
 
     def test_danger_plan_and_start_with_confirm(self):
         self.answer = (0, "status\tok\nheading\tstop Parity sync\nstep\tstop it\ndanger\tHalf way is bad.\ncommand\tsystemctl stop x\nconfirm_name\tstop\nlong\tno\n")

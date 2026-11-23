@@ -52,6 +52,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-hardware-runbook](PLAN-hardware-runbook.md) | Runbook for four checks only the owner can run: auto-rollback, rebuild rehearsal, drill report, installer ISO (none run yet) |
 | [PLAN-events](PLAN-events.md) | Event sources, consumers and delivery (audit #141 for the event architecture) |
 | [events](events.md) | The event catalogue: kind names, levels, payload rules |
+| [errors](errors.md) | The error code catalogue: stable names a plan or start can give |
 | [notify-rules](notify-rules.md) | Which events become push messages: the rules table, mute a kind, Matrix cards |
 | [PLAN-jobs](PLAN-jobs.md) | Job system audit: which commands run as jobs, what a job record holds |
 | [PLAN-web-cache](PLAN-web-cache.md) | Hot state for the web interface (collector, live updates; the Redis parts are superseded by ADR 0026) |
@@ -75,6 +76,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.9](RELEASE-NOTES-0.9.md) | Draft release notes of 0.9.0, with what is not verified |
 | [RELEASE-NOTES-0.10](RELEASE-NOTES-0.10.md) | Draft release notes of 0.10.0, with what is not verified |
 | [RELEASE-NOTES-0.11](RELEASE-NOTES-0.11.md) | Draft release notes of 0.11.0, with what is not verified |
+| [RELEASE-NOTES-0.12](RELEASE-NOTES-0.12.md) | Draft release notes of 0.12.0, with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

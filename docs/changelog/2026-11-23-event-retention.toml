@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Packages: retention class for declared events"
+body  = """A package now names a retention class (ephemeral, audit or metric) for each event it declares in package.toml, and the core prunes the event log by class. Extensions can keep monthly rollups per user and kind instead of raw ticks. Declarations without a class keep working and count as audit."""

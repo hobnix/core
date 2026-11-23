@@ -17,6 +17,7 @@ An extension that speaks the command protocol (ADR 0010, docs/api/ext-protocol-v
 handle(request, ctx) returns ok(...) or raises Failure(code, message); any other exception is answered as `failed` (traceback on stderr).
 """
 import json
+import os
 import sys
 
 VERSION = 1
@@ -81,6 +82,23 @@ class Ctx:
             if v is not None:
                 m[k] = v
         self._send(**m)
+
+
+def credential(name, provider=None):
+    """The key that the provider package `provider` holds for the integration `name` (permission integration:<name>) of a confined service, from the
+    systemd credential $CREDENTIALS_DIRECTORY/integration-<name>-<provider> that the core hands over, one per provider (the `package` column of
+    `hs pkg integrations` is the provider); None when there is none. Never argv or the environment.
+    Without `provider` (deprecated, goes away after the next release) it reads the old one-name credential integration-<name>: the first provider with a key,
+    the owner is not told."""
+    d = os.environ.get("CREDENTIALS_DIRECTORY")
+    ok = lambda x: bool(x) and all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in x)
+    if not d or not ok(name) or (provider is not None and not ok(provider)):
+        return None
+    try:
+        with open(os.path.join(d, "integration-" + name + ("" if provider is None else "-" + provider))) as f:
+            return f.read().rstrip("\r\n")
+    except OSError:
+        return None
 
 
 def run(handler):

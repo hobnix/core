@@ -13,6 +13,7 @@ A permission is "key" or "key:argument". Keys:
   host:<command>               an hs command or system tool it calls (incus, systemctl, ...)
   secrets:<name>               a secret read through scripts/lib/secret.sh
   devices:gpu                  a device
+  integration:<name>           the key of [integrations.<name>] of another package (pkg_integrations.grant; declared check only, not enforced)
 A manifest without `permissions` is "not declared": it still installs (existing packages), and is shown as such.
 Once `permissions` exists it must cover what the manifest uses: [[events]] needs events.emit, [[web.reads]] web.read, [[web.changes]] web.change.
 """
@@ -28,6 +29,7 @@ KEYS = {
     "host": re.compile(r"^[a-z][a-z0-9._-]{0,40}$"),
     "secrets": re.compile(r"^[a-z][a-z0-9_-]{0,40}$"),
     "devices": re.compile(r"^gpu$"),
+    "integration": re.compile(r"^[a-z][a-z0-9-]*$"),
 }
 
 
@@ -50,6 +52,8 @@ def check_one(name, p):
     """The problem with one permission string, or None."""
     if not isinstance(p, str) or not p:
         return "a permission is a non-empty text"
+    if re.search(r"[\x00-\x1f\x7f]", p):
+        return "a permission has no control characters"
     key, arg = split(p)
     if key not in KEYS:
         return "unknown permission %s (known: %s)" % (key, ", ".join(sorted(KEYS)))
@@ -58,7 +62,7 @@ def check_one(name, p):
         return None if ":" not in p else "%s takes no argument" % key
     if not arg:
         return "%s needs an argument (%s:...)" % (key, key)
-    if not rx.match(arg) or ".." in arg.split("/"):
+    if not rx.fullmatch(arg) or ".." in arg.split("/"):
         return "%s: argument %r is not allowed" % (key, arg)
     if key in ("fs.read", "fs.write"):
         bad = _secret(key, arg, name)

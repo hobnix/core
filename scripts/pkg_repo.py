@@ -54,7 +54,11 @@ REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 
 
 class Refused(Exception):
-    """a reason shown to the person, exit 1"""
+    """a reason shown to the person, exit 1; `code` (scripts/lib/error-codes.tsv) is printed as a machine line after it"""
+
+    def __init__(self, text, code=None):
+        super().__init__(text)
+        self.code = code
 
 
 def git(*args, cwd=None, input=None):
@@ -295,6 +299,10 @@ class Repos:
         if pm:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
+        sl = self.pkg.pkg_slots.manifest_problems(name, self.pkg.pkg_slots.doc_of(self.pkg.capability_toml(tmp), m))
+        if sl:
+            self.rm_quiet(tmp)
+            raise Refused("%s: slots: %s" % (name, sl[0]))
         vendored = m.get("kind") == "capability" and bool(m.get("module"))
         if vendored:
             # Nix code from outside the checkout: default repositories only, never a name of the core, only files of its own folder (docs/PLAN-capabilities-repo.md, Q2/Q3)
@@ -311,6 +319,10 @@ class Repos:
             if problem:
                 self.rm_quiet(tmp)
                 raise Refused("%s: %s" % (name, problem))
+        bp = self.pkg.pkg_binary.install_problems(m, tmp)     # the staged copy, before it replaces the old one (hobnix/core#1138)
+        if bp:
+            self.rm_quiet(tmp)
+            raise Refused("%s: %s" % (name, bp[0][1]), bp[0][0])
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -602,7 +614,22 @@ class Repos:
             out.append("\t".join(["ask"] + [f(a.get(k)) for k in ("key", "label", "type", "choices", "default", "pattern", "when")]))
         for n, t in self.steps(m):
             out.append("\t".join(["step", n, t]))
+        out += self.slot_lines(r_name, entry, commit, m)
         return out
+
+    def slot_lines(self, r_name, entry, commit, m):
+        """`slot_off TAB <slot> TAB <name>` for every slot of the release whose `requires` is off on this server (the install dialog says it adds a
+        card once <name> is on). Best effort: a package without slots, or one that cannot be read, adds no line."""
+        try:
+            try:
+                cap = tomllib.loads(git("show", "%s:%s/capability.toml" % (commit, entry["path"]), cwd=self.clone_dir(r_name)).decode("utf-8"))
+            except (subprocess.SubprocessError, tomllib.TOMLDecodeError):
+                cap = None
+            hs_ext = self.pkg.pkg_slots._hs_ext()
+            on = set(hs_ext.capabilities()) | hs_ext.applied_recipes()
+            return ["\t".join(["slot_off", s, r]) for s, r in self.pkg.pkg_slots.requires_off(self.pkg.pkg_slots.doc_of(cap, m), on)]
+        except Exception:
+            return []
 
     def asset(self, name, file, repo=None):
         """the bytes of the icon or a screenshot of the verified tag; nothing else of the package is served"""
@@ -726,6 +753,8 @@ def run(pkg, cmd, rest):
                 except Refused as e:
                     bad += 1
                     print("%s: %s" % (pname, e), file=sys.stderr)
+                    if e.code:
+                        print("code" + chr(9) + e.code, file=sys.stderr)
             return 1 if bad else 0
         elif cmd == "install":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
@@ -778,7 +807,14 @@ def run(pkg, cmd, rest):
         else:
             return 2
     except Refused as e:
-        print(str(e), file=sys.stderr)
+        rf = os.environ.get("HS_PKG_REFUSAL")
+        if e.code and rf:      # hs pkg: the script shows it through refuse_code (ADR 0028)
+            with open(rf, "w", encoding="utf-8") as f:
+                f.write("%s\t%s\n" % (e.code, " ".join(str(e).split())))
+        else:
+            print(str(e), file=sys.stderr)
+            if e.code:
+                print("code\t" + e.code, file=sys.stderr)
         return 1
     except IndexError:
         print("missing argument", file=sys.stderr)

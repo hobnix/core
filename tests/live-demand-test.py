@@ -37,7 +37,7 @@ TOPICS_TSV = os.path.join(scripts, "lib", "live-topics.tsv")
 
 # What a health check, a notification or a push rule reads is never demand. The first list is the fixed part (the topics the web interface shows as
 # health, status, backup and pool state, the heartbeat, the jobs and the notification channels); the second test finds more in the files.
-HEALTH_TOPICS = ["status", "live", "deck", "health-next", "health-list", "jobs-running", "jobs-list", "backup-state", "pool-state-bulk", "pool-state-fast",
+HEALTH_TOPICS = ["status", "live", "deck", "health-next", "health-list", "health-info", "jobs-running", "jobs-list", "backup-state", "pool-state-bulk", "pool-state-fast",
                  "ups", "expiry", "notify-channels", "notify-providers", "hardware", "disk-marks", "disk-inventory", "encryption", "rebuild-pending",
                  "parts-pending", "system-updates", "dc-state", "gateway-health", "apps-health", "docker-health"]
 CANDIDATES = ["disk-health", "monitor-disks", "shares-overview", "shares-deleted", "vault-usage", "fm-locations", "backup-overview", "backup-shares"]

@@ -8,6 +8,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import { route, go } from '../route.svelte.js';
   import { ui } from '../ui.svelte.js';
+  import { withActions } from '../shell/slots.js';
   import PcForm from '../forms/ops/PcForm.svelte';
   import PosterForm from '../forms/ops/PosterForm.svelte';
   import PassthroughForm from '../forms/ops/PassthroughForm.svelte';
@@ -15,8 +16,10 @@
   // the dialogs a declaration may name (`form = "PcForm"`): a closed list, a package cannot bring its own code
   const forms = { PcForm, PosterForm, PassthroughForm };
 
+  // /extensions/<name> is an extension page; /apps/<name> is the object page of a recipe (kind = "recipe") and shows nothing for any other name
   const name = $derived(route.path.split('/')[2] ?? '');
-  const page = $derived((ui.features.extensions ?? []).find((p) => p.name === name));
+  const recipe = $derived(route.path.startsWith('/apps/'));
+  const page = $derived((ui.features.extensions ?? []).find((p) => p.name === name && (p.kind === 'recipe') === recipe));
 
   const path = (n, words) => `/api/sys/ext/${n}/${String(words).split(' ').map(encodeURIComponent).join('/')}`;
   function resolve(node, n) {
@@ -28,13 +31,19 @@
     }
     return node;
   }
-  const spec = $derived(page ? resolve(page, page.name) : null);
+  const spec = $derived(page ? withActions(resolve(page, page.name), ui.features.slots) : null);      // the [[web.actions]] slot joins the header
 </script>
 
 {#if spec}
   {#key name}<GenericPage {spec} {forms} />{/key}
 {:else}
-  <div class="card"><EmptyState tone="info" icon="power" title="This extension is switched off" text="It is not part of this server's configuration, so there is nothing to show. Switch it on with hs ext enable, or in Settings.">
+  {#if recipe}
+    <div class="card"><EmptyState tone="info" icon="package" title="This app has no page" text="It is not installed on this server, or its recipe declares no page.">
+      {#snippet action()}<Button tooltip={'Back to the installed apps'} onclick={() => go(P.apps)}><i class="ph ph-package"></i>Open Apps</Button>{/snippet}
+    </EmptyState></div>
+  {:else}
+    <div class="card"><EmptyState tone="info" icon="power" title="This extension is switched off" text="It is not part of this server's configuration, so there is nothing to show. Switch it on with hs ext enable, or in Settings.">
     {#snippet action()}<Button tooltip={'Open the settings page'} onclick={() => go(P.settingsExtensions)}><i class="ph ph-sliders"></i>Open Settings</Button>{/snippet}
   </EmptyState></div>
+  {/if}
 {/if}

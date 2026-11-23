@@ -6,9 +6,13 @@
   import GenBlock from './GenBlock.svelte';
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
-  import { areaRole } from '../roles.js';
-  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn } from './generic.js';
+  import { areaRole, maxRole } from '../roles.js';
+  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn, progressOf, chartSeries, statTiles } from './generic.js';
+  import { parseRecord } from '../jobrecords.js';
   import Table from './Table.svelte';
+  import LogBlock from './LogBlock.svelte';
+  import Progress from '../ui/Progress.svelte';
+  import Spark from './Spark.svelte';
   import UsageBar from './UsageBar.svelte';
   import PageState from './PageState.svelte';
   import Drawer from '../ui/Drawer.svelte';
@@ -18,17 +22,23 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import Switch from '../ui/Switch.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import Banner from '../ui/Banner.svelte';
+  import { tr } from '../i18n.js';
+  import { BLOCK_API_LEVEL } from './blocks.js';
+  import GenForm from './GenForm.svelte';
 
   // block: the declaration; row: the object of the selected row (drawer context); forms: { Name: Component }; data: { '/api/sys/..': { rows } } instead of polling
   let { block, row = null, forms = {}, data = null, tab = '' } = $props();
 
   // a read: the given answer (mock / test) or a poll
-  function src(path, ms) {
+  function src(path, ms, topic) {
     if (!path) return null;
     if (data && data[path]) return { data: data[path], error: null, loaded: true };
-    return poll(path, ms);
+    return topic ? poll(path, ms, topic) : poll(path, ms);   // no topic: the timed read with a reason in read-reasons.tsv
   }
-  const main = src(block.read, (block.every ?? 15) * 1000);
+  // a `log` block reads through its own feed (LogBlock); a `progress` block of a job reads the job records and follows their topic, no timer while the stream is up
+  const JOBS = '/api/sys/jobs/records?n=50';
+  const main = src(block.type === 'log' ? '' : block.job ? JOBS : block.read, (block.every ?? 15) * 1000, block.job ? 'reads:jobs-records' : block.topic);
   const joinSrc = (block.joins ?? []).map((j) => src(j.read, (block.every ?? 15) * 1000));
 
   const cols = $derived(block.columns ?? []);
@@ -67,6 +77,17 @@
     return (block.items ?? []).map((it) => ({ k: it.k, v: fmtValue(it.fmt, clean(first[it.col ?? 0])) }));
   });
   const clean = (v) => (v === '-' ? '' : v);
+
+  // progress: the first row of the read, or the newest record of the job named by `job` (its slug)
+  const bar = $derived.by(() => {
+    if (block.type !== 'progress' || !main) return null;
+    const rs = rowsOf(main);
+    if (block.job) return progressOf(block, null, rs.map(parseRecord).find((r) => r.slug === block.job) ?? null);
+    return progressOf(block, rs[0] ?? null, null);
+  });
+  // chart and stat (#473): the points of a read, the tiles of its first row
+  const series = $derived(chartSeries(main ? rowsOf(main) : [], block.value ?? 1, block.max ?? 0, block.hot ?? 0));
+  const tiles = $derived(statTiles(main ? rowsOf(main)[0] : null, block.items ?? []));
 </script>
 
 {#snippet actionRow(list, r)}
@@ -74,7 +95,7 @@
     {#if a.href}
       <a class="btn sm {a.danger ? 'btn-ghost' : 'btn-secondary'}" href={tpl(a.href, r)} download={a.download ? tpl(a.download, r) : undefined} use:tip={a.title ? tpl(a.title, r) : undefined}><i class="ph ph-{a.icon || 'download-simple'}"></i>{a.label}</a>
     {:else}
-      <Button need={areaRole(a.plan?.[0])} variant={a.primary ? 'primary' : a.danger ? 'ghost' : 'secondary'} size="sm" class={a.iconOnly ? 'genblock-icon' : ''} tooltip={a.title ? tpl(a.title, r) : a.label} aria-label={a.iconOnly ? tpl(a.title ?? a.label, r) : undefined}
+      <Button need={maxRole(areaRole(a.plan?.[0]), a.role)} variant={a.primary ? 'primary' : a.danger ? 'ghost' : 'secondary'} size="sm" class={a.iconOnly ? 'genblock-icon' : ''} tooltip={a.title ? tpl(a.title, r) : a.label} aria-label={a.iconOnly ? tpl(a.title ?? a.label, r) : undefined}
               onclick={(e) => { e.stopPropagation(); run(a, r); }}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{#if !a.iconOnly}{a.label}{/if}</Button>
     {/if}
   {/each}
@@ -183,6 +204,55 @@
       {/if}
     {/if}
   </PageState>
+
+{:else if block.type === 'form'}
+  <GenForm {block} />
+
+{:else if block.type === 'log'}
+  <LogBlock {block} />
+
+{:else if block.type === 'progress'}
+  <div class="card gb">
+    {#if block.title || block.actions?.length}
+      <div class="gh"><b>{block.title ?? ''}</b><span class="grow"></span>{#if block.actions?.length}{@render actionRow(block.actions, {})}{/if}</div>
+    {/if}
+    <PageState loading={!main?.loaded} error={main?.error?.message ?? ''} hasData={!!bar} empty={!!main?.loaded && !bar} emptyIcon="hourglass" emptyTitle={tr('Nothing to show yet')} emptyText="">
+      {#if bar}
+        <span class="pbar">
+          {#if bar.label}<span class="plabel">{bar.label}</span>{/if}
+          <Progress value={bar.value} total={bar.total} tone={bar.tone} label={bar.label || tr('Progress')}
+                    text={bar.total && block.unit ? `${bar.value ?? 0} / ${bar.total} ${block.unit}` : undefined} />
+          {#if bar.state}<span class="pstate">{bar.state}</span>{/if}
+        </span>
+      {/if}
+    </PageState>
+  </div>
+
+{:else if block.type === 'chart'}
+  <div class="card gb">
+    {#if block.title}<div class="gh"><b>{block.title}</b></div>{/if}
+    <PageState loading={!main.loaded} error={main.error?.message ?? ''} hasData={main.data != null} empty={main.loaded && series.values.length < 2} emptyIcon="chart-line" emptyTitle={block.empty ?? 'Not enough readings yet'}>
+      <div class="chart-last"><span class="big-num">{series.last}</span>{#if block.unit}<span class="meta">{block.unit}</span>{/if}<span class="grow"></span><span class="meta">{tr('highest')} {series.max}{block.unit ? ' ' + block.unit : ''}</span></div>
+      <Spark values={series.values} hot={series.hot} />
+    </PageState>
+  </div>
+
+{:else if block.type === 'stat'}
+  <PageState loading={!main.loaded} error={main.error?.message ?? ''} hasData={main.data != null} empty={main.loaded && !rowsOf(main).length} emptyIcon="gauge" emptyTitle="Nothing to show yet">
+    <div class="tiles">
+      {#each tiles as t}
+        <div class="card gb tile">
+          <span class="meta">{t.label}</span>
+          <span class="tile-v"><span class="big-num">{t.value || '–'}</span>{#if t.unit}<span class="meta">{t.unit}</span>{/if}</span>
+          {#if t.dot}<StatusDot state={t.dot[0]} label={t.dot[1]} />{/if}
+        </div>
+      {/each}
+    </div>
+  </PageState>
+
+{:else}
+  <!-- a block the registry does not know (a newer package on an older core, or a typo): a note instead of a broken page (#473) -->
+  <Banner tone="info">{tr('This part of the page cannot be shown: the block type is not known here.')} <span class="mono">{block.type ?? '?'}</span> ({tr('block list level')} {BLOCK_API_LEVEL})</Banner>
 {/if}
 
 <style>
@@ -196,6 +266,9 @@
   .mono { font: 12px var(--mono); color: var(--fg-2); }
   .dpad { padding: 14px 16px; }
   .para { margin: 0; color: var(--fg-2); }
+  .pbar { display: flex; flex-direction: column; gap: 6px; }
+  .plabel { font-weight: 500; }
+  .pstate { font-size: 12px; color: var(--fg-3); }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
   .big { width: 100%; max-width: 900px; display: block; border: 1px solid var(--line); }
   .grow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -205,4 +278,9 @@
   .thumb { padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; overflow: hidden; }
   .thumb.on { outline: 2px solid var(--accent); outline-offset: 1px; }
   .thumb img { width: 100%; display: block; }
+  .chart-last { display: flex; align-items: baseline; gap: 6px; }
+  .big-num { font: 600 22px var(--mono); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .tile { gap: 6px; }
+  .tile-v { display: flex; align-items: baseline; gap: 6px; }
 </style>

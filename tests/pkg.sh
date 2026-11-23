@@ -255,5 +255,65 @@ cfcase "confine without protocol is refused" "commands.tsv line 1: confine needs
 cfcase "confine with permissions = [] and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': []}"
 cfcase "confine with fs.write and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': ['fs.write:/srv/x']}"
 protocase "a row without confine needs no permissions" "" '' 'reads'
+echo "-- [integrations.<name>] (hobnix/core#926)"
+igcase() {   # igcase <label> <expected problems joined by " | " or ""> <manifest as a Python dict>
+  check_eq "$1" "$2" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(' | '.join(m.manifest_problems($3)))")"
+}
+ok_ig="{'api_url': 'http://{host}:7878', 'key_file': '/var/lib/hs/radarr/api-key', 'kind': 'movies'}"
+igcase "no integrations is valid" "" "{'kind': 'recipe'}"
+igcase "a block with extra keys is valid for any package kind" "" "{'kind': 'extension', 'integrations': {'media': $ok_ig}}"
+igcase "{port} is a placeholder too, also as the port of the URL" "" "{'integrations': {'x': {'api_url': 'http://{host}:{port}/api'}}}"
+igcase "an unknown placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders (not {ip})" "{'integrations': {'x': {'api_url': 'http://{ip}:{port}'}}}"
+igcase "a half placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders" "{'integrations': {'x': {'api_url': 'http://{host}:80/{'}}}"
+sd=$(mktemp -d); printf 'name = "a"\nport = 8080\n' >"$sd/a.toml"; printf 'name = "b"\n' >"$sd/b.toml"
+check_eq "rows: {port} comes from the service record, a missing port gives - and is reported, {host} stays" "a:http://{host}:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+ig = {'m': {'api_url': 'http://{host}:{port}'}}
+ms = [('', {'name': n, 'kind': 'recipe', 'integrations': ig}) for n in 'abc']
+miss = []
+r = m.rows(ms, {'a', 'b', 'c'}, None, '$sd', miss)
+print('|'.join(x[0] + ':' + x[3] for x in r) + '|unresolved=' + ','.join(miss))")"
+rm -rf "$sd"
+igcase "a bad integration name is refused" "integrations.Media: the name is not a lowercase id" "{'integrations': {'Media': {}}}"
+igcase "a key file with .. is refused" "integrations.x.key_file must be an absolute path without .. or spaces" "{'integrations': {'x': {'key_file': '/var/../x'}}}"
+igcase "an extra value that is not text is refused" "integrations.x.n must be plain text (at most 200 characters, no comma, no control character)" "{'integrations': {'x': {'n': 3}}}"
+check_eq "the permission integration:<name> is known" "None" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_perms.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.check_one('x', 'integration:media'))")"
+check_eq "a bare integration permission is refused" "integration needs an argument (integration:...)" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_perms.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.check_one('x', 'integration'))")"
+check_eq "grant: an extension without the permission is refused, with it gets the key path, a capability needs none" "no|/var/lib/hs/app/k|/var/lib/hs/app/k" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+ig = {'media': {'key_file': '/var/lib/hs/app/k'}}
+ms = [('', {'name': 'app', 'kind': 'recipe', 'integrations': ig}), ('', {'name': 'e1', 'kind': 'extension'}),
+      ('', {'name': 'e2', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'c', 'kind': 'capability'})]
+g = lambda c: m.grant(ms, {'app'}, 'media', c)[0]
+print('|'.join([g('e1') or 'no', g('e2'), g('c')]))")"
+check_eq "grant by provider: the named key, an unknown or keyless provider is refused with a code, the old form takes the first, key_header is listed last" "/var/lib/hs/jelly/k|integration.unknown|integration.nokey|/var/lib/hs/jelly/k|integration.denied|X-Key" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+mk = lambda n, ig: ('', {'name': n, 'kind': 'recipe', 'integrations': {'media': ig}})
+ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k', 'key_header': 'X-Key'}), mk('radarr', {'key_file': '/var/lib/hs/radarr/k'}), mk('plain', {}),
+      ('', {'name': 'e', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'x', 'kind': 'extension'})]
+on = {'jelly', 'radarr', 'plain'}
+g = lambda c, p=None: m.grant(ms, on, 'media', c, p)
+print('|'.join([g('e', 'jelly')[0], g('e', 'nope')[1][0], g('e', 'plain')[1][0], g('e')[0], g('x', 'jelly')[1][0], m.rows(ms, on, 'media')[0][-1]]))")"
+check_eq "grant_all (#1135): one grant per keyed provider (package column = provider), a keyless one gives nothing, an undeclared caller is refused" "jelly,radarr|integration.denied|integration.denied" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+mk = lambda n, ig: ('', {'name': n, 'kind': 'recipe', 'integrations': {'media': ig}})
+ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k'}), mk('radarr', {'key_file': '/var/lib/hs/radarr/k'}), mk('plain', {}),
+      ('', {'name': 'e', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'x', 'kind': 'extension'})]
+on = {'jelly', 'radarr', 'plain'}
+ok, bad, why = m.grant_all(ms, on, 'media', 'e')
+print('|'.join([','.join(p for _, p in ok), m.grant_all(ms, on, 'media', 'x')[2][0], m.grant_all(ms, on, 'media', 'jelly')[2][0]]))")"
 
 finish

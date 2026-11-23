@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Package pages: a declared form block"
+body  = """A package page can now declare a form: fields (text, number, toggle, select, secret) with checks as data. Submitting opens the plan dialog of the package's own area, so nothing changes without the person starting it. A secret field goes on stdin only and is never shown back. `hs pkg validate` refuses an unknown field type, a plan of another area and a secret field without an stdin mapping."""

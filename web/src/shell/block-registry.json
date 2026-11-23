@@ -1,0 +1,105 @@
+{
+  "api-level": 1,
+  "common": { "type": "string", "tab": "string", "title": "string", "actions": "list" },
+  "blocks": {
+    "table": {
+      "component": "GenBlock",
+      "text": "Rows of a declared read, with row actions and an optional drawer.",
+      "schema": {
+        "required": ["read", "key", "columns"],
+        "keys": { "read": "string", "key": "string", "columns": "list", "joins": "list", "rowActions": "list", "empty": "string", "emptyTitle": "string", "emptyIcon": "string", "onrow": "string", "drawer": "dict", "id": "string", "every": "number" },
+        "blocks": ["drawer.blocks"]
+      }
+    },
+    "kv": {
+      "component": "GenBlock",
+      "text": "Key and value cells: from the first row of a read, from pairs, or from the selected row in a drawer.",
+      "schema": {
+        "required": [],
+        "keys": { "read": "string", "items": "list", "pairs": "bool", "cols": "number", "every": "number" },
+        "blocks": []
+      }
+    },
+    "cards": {
+      "component": "GenBlock",
+      "text": "One card per row of a declared read.",
+      "schema": {
+        "required": ["read", "key", "columns"],
+        "keys": { "read": "string", "key": "string", "columns": "list", "cardTitle": "string", "rowActions": "list", "joins": "list", "empty": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "text": {
+      "component": "GenBlock",
+      "text": "One paragraph or several.",
+      "schema": {
+        "required": ["text"],
+        "keys": { "text": "string|list" },
+        "blocks": []
+      }
+    },
+    "empty": {
+      "component": "GenBlock",
+      "text": "An empty state: an icon, a sentence and an action.",
+      "schema": {
+        "required": [],
+        "keys": { "icon": "string", "text": "string", "tone": "string" },
+        "blocks": []
+      }
+    },
+    "form": {
+      "component": "GenForm",
+      "text": "A declared form: fields with checks (text, number, toggle, select, secret) that end in the package's own plan dialog; a secret goes on stdin.",
+      "schema": {
+        "required": ["fields", "plan"],
+        "keys": { "fields": "list", "plan": "list", "planTitle": "string", "submit": "string", "stdin": "string", "text": "string" },
+        "blocks": []
+      }
+    },
+    "gallery": {
+      "component": "GenBlock",
+      "text": "A big picture and thumbnails from a declared read.",
+      "schema": {
+        "required": ["read", "key", "image"],
+        "keys": { "read": "string", "key": "string", "image": "string", "columns": "list", "rowActions": "list", "empty": "string", "emptyTitle": "string", "emptyIcon": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "log": {
+      "component": "LogBlock",
+      "text": "The tail of a log: it follows the log stream of the server, keeps only the last lines and falls back to a timed read while the stream is down.",
+      "schema": {
+        "required": ["stream", "read"],
+        "keys": { "stream": "string", "read": "string", "lines": "number", "follow": "bool", "every": "number", "empty": "string" },
+        "blocks": []
+      }
+    },
+    "progress": {
+      "component": "GenBlock",
+      "text": "A progress bar from the first row of a declared read (value, max, label and state are field numbers) or from a job (its slug).",
+      "schema": {
+        "required": [],
+        "keys": { "read": "string", "job": "string", "value": "number", "max": "number", "label": "string", "labelCol": "number", "state": "number", "unit": "string", "topic": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "chart": {
+      "component": "GenBlock",
+      "text": "A series over time from a declared read: one field of each row is a point, oldest first.",
+      "schema": {
+        "required": ["read"],
+        "keys": { "read": "string", "value": "number", "max": "number", "hot": "number", "unit": "string", "empty": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "stat": {
+      "component": "GenBlock",
+      "text": "Stat tiles from the first row of a declared read: label, value, unit and an optional state dot.",
+      "schema": {
+        "required": ["read", "items"],
+        "keys": { "read": "string", "items": "list", "every": "number" },
+        "blocks": []
+      }
+    }
+  }
+}

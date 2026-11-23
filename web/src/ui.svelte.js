@@ -8,7 +8,7 @@ import { tr } from './i18n.js';
 export const ui = $state({
   dialog: null,                       // { area, args, title } while a plan dialog is open
   create: null,                       // { component, props } while a create dialog (a form with a live plan) is open
-  features: { terminal: false, vps: false, capabilities: null },      // what the server switched on, from the session answer; capabilities = names of the parts that are on (null = not told: show everything)
+  features: { terminal: false, vps: false, capabilities: null, slots: [] },      // what the server switched on, from the session answer; capabilities = names of the parts that are on (null = not told: show everything)
   role: 'viewer',                     // the role of this session (GET /api/session): viewer | app-manager | admin; roles.js decides what it may see
   host: 'homeserver',                 // this node's name (the dialogs name the node they act on)
   panel: { open: true, tab: 'tasks', height: 214 },   // height in px while open; the grip drags it

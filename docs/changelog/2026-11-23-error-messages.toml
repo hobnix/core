@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Errors: a code and a next step"
+body  = """The errors you meet most (a refused plan, a job that did not start, a failed install) now carry a stable code. The web shows the code, what happened, the likely reason, one next step and a link to the guide page docs/errors.md. A code the web does not know still shows the English text. The rule for new messages is in docs/CLI-DESIGN.md."""

@@ -3,8 +3,11 @@
 //! The extension side of two protocols, both JSON Lines with `"v": 1`:
 //! - [`command`]: one process per call, one request on stdin, progress/log/event lines and exactly one result on stdout
 //!   (docs/adr/0010-extension-command-protocol.md, docs/api/ext-protocol-v1.schema.json).
-//! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot` out
+//! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot`/`rollup` out
 //!   (docs/adr/0011-extension-service-lifecycle.md, docs/api/ext-service-v1.schema.json).
+//!
+//! Helpers for a service that talks to an integration: [`http`] (blocking client, plain http only, no TLS), [`integrations`] (the
+//! `hs pkg integrations` listing as typed rows) and [`service::credential`] (the key from `$CREDENTIALS_DIRECTORY`).
 //!
 //! Rules the SDK keeps for you: stdout carries nothing but protocol lines (use `eprintln!` for diagnostics, never `println!`),
 //! every line is under 1 MiB, free text is cut to the schema limits, and event kinds are checked against `pkg.<name>.<kind>`
@@ -13,6 +16,8 @@
 //! Not in the SDK: the core does not call extensions through this protocol from `hs` yet (the ADRs call that a follow-up).
 
 pub mod command;
+pub mod http;
+pub mod integrations;
 mod proto;
 pub mod service;
 

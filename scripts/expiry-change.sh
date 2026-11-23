@@ -15,12 +15,13 @@ here=$(dirname "$0")
 expiry=${HS_EXPIRY:-$here/expiry.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: expiry-change.sh plan|start add <name> --date <YYYY-MM-DD> [--renew <text>] | remove <name>" >&2; exit 1 ;; esac
-case "$action" in add|remove) ;; *) refuse "unknown action (add or remove)" ;; esac
+case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
 [ -n "$name" ] || refuse "a name is needed"
-[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._()-]{0,60}$ ]] || refuse "invalid name (letters, digits, spaces and . _ ( ) -)"
+[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._()-]{0,60}$ ]] || refuse_code name.invalid "invalid name (letters, digits, spaces and . _ ( ) -)"
 shift 3
 date="" renew=""
 if [ "$action" = add ]; then
@@ -28,14 +29,14 @@ if [ "$action" = add ]; then
     case "$1" in
       --date)  date=${2:-}; shift 2 || refuse "--date needs a value" ;;
       --renew) renew=${2:-}; shift 2 || refuse "--renew needs a value" ;;
-      *) refuse "unknown option $1" ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   if [ -z "$date" ]; then printf 'status\tneeds\nneeds\tdate\n'; exit 2; fi
   [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && date -u -d "$date" +%s >/dev/null 2>&1 || refuse "'$date' is not a date. Use YYYY-MM-DD."
   [[ "$renew" != *$'\t'* && "$renew" != *$'\n'* && ${#renew} -le 120 ]] || refuse "the renewal hint is one line of at most 120 characters"
 else
-  [ $# -eq 0 ] || refuse "unexpected extra arguments"
+  [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
 fi
 
 exists=false

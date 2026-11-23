@@ -20,14 +20,14 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; action=${2:-}; new=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: release-change.sh plan|start channel <stable|beta|edge> [--confirm <channel>]" >&2; exit 1 ;; esac
-[ "$action" = channel ] || refuse "unknown action (channel)"
+[ "$action" = channel ] || refuse_code action.unknown "unknown action (channel)"
 case "$new" in stable|beta|edge) ;; *) refuse "unknown channel (stable, beta or edge)" ;; esac
 shift 3
 confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) confirm=${2:-}; shift 2 || refuse "--confirm needs a value" ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) confirm=${2:-}; shift 2 || refuse_code confirm.missing "--confirm needs a value" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -55,7 +55,7 @@ if [ "$(uc_rank "$new")" -gt "$(uc_rank "$old")" ]; then
 fi
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != "$new" ]; then refuse "type the channel name to confirm: $new"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$new" ]; then refuse_code confirm.missing "type the channel name to confirm: $new"; fi
   setting_set updateChannel "$new"
   printf 'status\tdone\n'
   exit 0

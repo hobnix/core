@@ -107,6 +107,8 @@ printf 'name = "fixsvc"\n[service]\nexec = "@/run.sh"\nhealth_interval = 5\n' > 
 printf '#!/usr/bin/env bash\nexec python3 -I "%s" "${FIX_MODE:-crash}"\n' "$SVC" > "$PKG/run.sh"
 printf '#!/usr/bin/env bash\nprintf "%%s\n" "$*" >> "%s"\n' "$WORK/emitted" > "$WORK/emit.sh"; chmod +x "$WORK/emit.sh"
 export HS_EXT_EMIT=$WORK/emit.sh
+# the bridge starts the service through systemd-run (a confined transient unit): a fake that runs what follows `--` and a fake systemctl
+fake_service_systemd
 SR="python3 -I $SCRIPTS/lib/ext_service.py svc-run --name fixsvc --dir $PKG --state-dir $WORK/svcstate"
 check "has-service sees the [service] table" python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$PKG"
 check_eq "a folder without [service] has none" 1 "$(python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$WORK" >/dev/null 2>&1; echo $?)"
@@ -145,6 +147,16 @@ check_eq "without a unit behind it the same file says stopped" stopped "$(python
 kill -TERM "$pid"; wait "$pid"; rc=$?
 check_eq "SIGTERM: exit 0" 0 "$rc"
 check_eq "no event for a requested stop" 0 "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "-- svc-run: a hostile provider name in a credential means no run (fail closed, #1135)"
+rm -f "$WORK/svcstate/fixsvc.json"
+FIX_MODE=good $SR --credential "integration-media-evil=../x=/etc/shadow" --credential "integration-media-jellyfin=jellyfin=/etc/shadow" >/dev/null 2>&1; rc=$?
+check_eq "a provider ../x: exit 69, the service is not started" 69 "$rc"
+check "the failure is counted in the state file" grep -q '"failures"' "$WORK/svcstate/fixsvc.json"
+check_eq "no key copy stays" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
+FIX_MODE=good $SR --credential "integration-media-jellyfin=jellyfin=/etc/shadow" --credential "integration-media-evil=../x=/etc/shadow" >/dev/null 2>&1; rc=$?
+check_eq "the bad credential last: exit 69 as well" 69 "$rc"
+check_eq "and no key copy stays (the copies of the cases with a good first credential are in ext-service-reach.sh)" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "-- hs ext status|start|stop with a fake systemctl"
 EXT=$WORK/ext; mkdir -p "$EXT/pk/svcpkg" "$EXT/state"

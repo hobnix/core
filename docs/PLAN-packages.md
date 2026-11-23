@@ -69,6 +69,25 @@ meaning = "a download failed"
 ...
 ```
 
+### `[[binary]]`: a compiled program (hobnix/core#1138)
+
+An extension written in Rust or Go ships its program inside the package folder. The table says which file it is and what its hash is, so
+`hs pkg install` can check the copy it is about to use:
+
+```toml
+[[binary]]
+path   = "bin/media-svc"                 # a regular file in the package folder: relative, no "..", no symbolic link
+sha256 = "<64 hex digits>"               # the hash of that file (not a secret); empty until the release preparation builds it
+bin    = "media-svc"                     # the program name; default: the file name of path
+target = "x86_64-unknown-linux-musl"     # the only target for now
+```
+
+A `commands.tsv` row with the flag `proto` (third column) or `[service] exec` refers to it as `@/<path>`; a table that nothing refers to is an error, and a row without `proto` (it would start the file with bash) too (`binary.runner`). The other way round, a compiled program (ELF, PE, Mach-O) that a row or `[service] exec` starts without a `[[binary]]` is refused (`binary.undeclared`): no program runs unhashed. Other keys,
+a second table with the same `path` or `bin`, and any other `target` are errors too. `pkg.py validate` and `repo-check` check the shape,
+the path, that the file is there and that its sha256 matches. `hs pkg install` and `update` check the staged copy (hash, executable bit)
+before it replaces the old one: a mismatch refuses with a code (`binary.hash`, `binary.exec`, ...; docs/errors.md) and the old version stays.
+"Not built yet" (empty `sha256` and no file, as in hobnix/extensions on feature branches and develop) passes `validate` and `repo-check` with the shape checks only; a set `sha256` with no file, or a file with an empty or different `sha256`, is an error. `repo-check --release` (the release pull request) and `install` and `update` require a built program and refuse the rest with `binary.unbuilt`. A server that is not x86_64 refuses the package (`binary.arch`) instead of failing at the start of the service.
+
 `kind` (what it is) and `audience` (who it is for) are two fields: the old `# kind: generic|personal` becomes `audience`.
 
 A recipe keeps working as one idempotent bash script built from `_lib.sh`; nothing about how recipes are written changes except where the
@@ -119,6 +138,40 @@ Packages run as root, so installing one is trusting its author.
   new `needs`; it applies silently only for a pure patch release of a package the user already approved at that major version
   (open point below).
 - Nothing downloads or enables a package by itself; `enable` stays a person's action as today.
+
+## Integrations: `[integrations.<name>]` (hobnix/core#926)
+
+A package (recipe, extension or capability) says what it offers to other packages, so they find it and its local API without copy and paste. The core knows
+no integration names: `<name>` is any lowercase id (`[a-z][a-z0-9-]*`), the packages agree on what it means. Example, a recipe that offers `media`:
+
+```toml
+[integrations.media]
+api_url    = "http://{host}:{port}"        # the local API; {host} = address of the instance, {port} = its port
+key_file   = "/var/lib/hs/radarr/api-key"  # absolute path of the API key on the server
+key_header = "X-Api-Key"                   # optional, default X-Api-Key
+kind       = "movies"                      # any other key is passed through as plain text
+```
+
+`api_url` knows two placeholders and refuses any other (`pkg.py validate`). `{host}` stays in the listing: the package that uses the URL fills in the address. `{port}` is filled by `hs pkg integrations` from the service record of the package (`services.d/<package>.toml`, its `port`: the recipe declares 80 in LXC mode and 8080 in docker mode, so one URL fits both). Without a record or a port the field is `-` and the human output warns; the core never guesses a port.
+
+The core validates only the envelope (`api_url`, `key_file`, `key_header`, all optional) in `scripts/lib/pkg_integrations.py`; other keys must be plain text
+(at most 200 characters, no comma, no control character). No API level change: the block is optional.
+
+- **List:** `hs pkg integrations [<name>]` / `hs sys pkg integrations [<name>]`: package, integration, source (recipe|extension|capability), api_url, key
+  state (ok|locked|missing, from `secret_state`, `-` without a key_file), extra keys, key_header (last column, `-` = not set: the consumer then sends
+  `X-Api-Key`). A package is listed when it is there: a recipe installed, an extension
+  or capability on. The key is never read or printed by the list.
+- **Key:** an extension that wants the key of an integration declares `permissions = ["integration:<name>"]`. `integration_key <name> <provider> <caller>` in
+  `scripts/lib/integration.sh` writes the key of that provider on stdout (one integration can have several providers, e.g. jellyfin and radarr under
+  `media`; an unknown provider or one without a `key_file` is refused with `integration.unknown` / `integration.nokey`, a caller without the permission
+  with `integration.denied`; the old form `integration_key <name> <caller>`, first provider with a key, works for one release) (read through `secret.sh`, never in argv or the environment) only when the caller declares it; a
+  capability needs no permission, a recipe is refused. **Enforcement of permissions is not built (#239):** this is a declared check in the helper, an
+  extension that reads the key file itself is not stopped.
+- **Removal (#1118):** removing an app deletes the `key_file` its manifest declares (only under `/var/lib/hs/`, never with `..`; found from the installed
+  package manifest, not from a list). `hs sys apps plan remove <instance>` names it as `item keyfile <path> there remove`; a second instance of a package
+  leaves the file alone, and the file of another app is never touched. The key is not read or printed. Not tested on hardware yet.
+
+Not tested on hardware yet.
 
 ## The core API (what packages may rely on)
 

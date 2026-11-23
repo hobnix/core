@@ -1,0 +1,6 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Packages choose where their page sits"
+body  = """A package can now say in its [web.page] which group its page goes into (group, default apps), add tabs, pick a page shape (template), declare a card (state) and set a role for the page and its buttons. There is no separate Extensions group any more. A declaration that names an unknown group, or reads something the package did not declare, is ignored.
+
+Not tested on hardware yet."""

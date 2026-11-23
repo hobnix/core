@@ -4,7 +4,7 @@
   pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
   pkg.py states --market F --parts F --pending F --recipes F --running F   the lifecycle stage and flags of every package (pkg_states.py, ADR 0027)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
-  pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
+  pkg.py repo-check [--release] [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py validate [--warn]                                 check every manifest (--warn: also print what is only advised, on stderr) (and that a recipe's header agrees); exit 1 on a problem
     return out
 
@@ -93,6 +93,16 @@ def _load_pkg_roles():
 pkg_roles = _load_pkg_roles()
 
 
+def _load_pkg_blocks():
+    spec = importlib.util.spec_from_file_location("pkg_blocks", os.path.join(HERE, "lib", "pkg_blocks.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_blocks = _load_pkg_blocks()
+
+
 def _load_pkg_app():
     spec = importlib.util.spec_from_file_location("pkg_app", os.path.join(HERE, "lib", "pkg_app.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -111,6 +121,36 @@ def _load_pkg_protocol():
 
 
 pkg_protocol = _load_pkg_protocol()
+
+
+def _load_pkg_binary():
+    spec = importlib.util.spec_from_file_location("pkg_binary", os.path.join(HERE, "lib", "pkg_binary.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_binary = _load_pkg_binary()
+
+
+def _load_pkg_integrations():
+    spec = importlib.util.spec_from_file_location("pkg_integrations", os.path.join(HERE, "lib", "pkg_integrations.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_integrations = _load_pkg_integrations()
+
+
+def _load_pkg_slots():
+    spec = importlib.util.spec_from_file_location("pkg_slots", os.path.join(HERE, "lib", "pkg_slots.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_slots = _load_pkg_slots()
 
 
 def capability_toml(folder):
@@ -201,9 +241,9 @@ def state_dir():
     return os.path.join(os.environ.get("HS_STATE_DIR", "/var/lib/hs"), "packages")
 
 
-def manifests():
-    """[(path, dict)] of every package.toml: recipes under packages/, extensions under capabilities/, then the packages installed from repositories."""
-    r, out = root(), []
+def manifests(identity=False):
+    """[(path, dict)] of every package.toml: recipes under packages/, extensions under capabilities/, then the packages installed from repositories. identity=True (what grants, integrations and perms use) drops a package whose name is not its folder name and a duplicate name."""
+    r, out, seen = root(), [], set()
     for d in (os.path.join(r, "packages"), os.path.join(r, "capabilities"), os.path.join(state_dir(), "current")):
         if not os.path.isdir(d):
             continue
@@ -211,7 +251,14 @@ def manifests():
             p = os.path.join(d, n, "package.toml")
             if os.path.isfile(p):
                 with open(p, "rb") as f:
-                    out.append((p, tomllib.load(f)))
+                    m = tomllib.load(f)
+                # the name is the identity of a package (integrations, permissions, key files are looked up by it): it must be the folder name and
+                # unique, the first one wins (the core's own come first), so a package cannot take over the name of another
+                if identity and (m.get("name") != n or n in seen):
+                    print("pkg.py: %s is ignored: %s" % (p, "its name is not its folder name" if m.get("name") != n else "another package has the name %s" % n), file=sys.stderr)
+                    continue
+                seen.add(n)
+                out.append((p, m))
     return out
 
 
@@ -439,7 +486,12 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad("permissions: " + t)
     for t in pkg_roles.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
         bad(t)
+    for t in pkg_blocks.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
+        bad(t)
+    out += pkg_slots.manifest_problems(n, pkg_slots.doc_of(capability_toml(os.path.dirname(path)) if path else None, m))
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
+    out += pkg_binary.manifest_problems(m, os.path.dirname(path) if path else None)
+    out += pkg_integrations.manifest_problems(m)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
     if warnings is not None:
@@ -555,7 +607,7 @@ def repo_unbumped(folder, since):
     return out
 
 
-def repo_check(folder, warnings=None):
+def repo_check(folder, warnings=None, release=False):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
     try:
@@ -597,6 +649,8 @@ def repo_check(folder, warnings=None):
             out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
+        out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path), release)]
+        out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
         warnings += [f"{name}: {t}" for t in warns]
@@ -658,6 +712,35 @@ def main(argv):
         else:
             for r in data:
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
+    elif cmd == "integrations":   # integrations [--only <name>] [--services <dir>] [--unresolved <file>] <available package names...>: package, integration, source, api_url, key_file, extras, key_header
+        only = rest[rest.index("--only") + 1] if "--only" in rest else None
+        sdir = rest[rest.index("--services") + 1] if "--services" in rest else None
+        ufile = rest[rest.index("--unresolved") + 1] if "--unresolved" in rest else None
+        skip = ("--only", "--services", "--unresolved")
+        names = [w for i, w in enumerate(rest) if w not in skip and (i == 0 or rest[i - 1] not in skip)]
+        miss = []
+        for r in pkg_integrations.rows(manifests(True), set(names), only, sdir, miss):
+            print("\t".join(r))
+        if ufile and miss:
+            with open(ufile, "w") as fh:
+                fh.write("\n".join(miss) + "\n")
+    elif cmd == "integration-key":   # integration-key <integration> <caller> <provider|-> <available names...>: the key file path, or code<TAB>reason (exit 1)
+        path, why = pkg_integrations.grant(manifests(True), set(rest[3:]), rest[0], rest[1], None if rest[2] == "-" else rest[2])
+        print(path or "\t".join(why))
+        return 0 if path else 1
+    elif cmd == "integration-grant":   # integration-grant <integration> <caller> <available names...>: key file TAB providing package, or code<TAB>reason (exit 1)
+        path, prov, why = pkg_integrations.grant_full(manifests(True), set(rest[2:]), rest[0], rest[1])
+        print(path + "\t" + prov if path else "\t".join(why))
+        return 0 if path else 1
+    elif cmd == "integration-grants":   # integration-grants <integration> <caller> <available names...>: one "key file TAB providing package" line per keyed provider
+        ok, bad, why = pkg_integrations.grant_all(manifests(True), set(rest[2:]), rest[0], rest[1])
+        for p, prov in ok:
+            print(p + "\t" + prov)
+        for prov, reason in bad:    # a provider that failed the key file check: on stderr, the others still go
+            print(f"integration.denied\t{prov}: {reason}", file=sys.stderr)    # code TAB reason, like the other refusals
+        if why:
+            print("\t".join(why))
+        return 1 if why else 0
     elif cmd == "updates":
         seen = set()
         inst_now = installed()
@@ -734,7 +817,7 @@ def main(argv):
         spec.loader.exec_module(mod)
         return mod.run(MAIN, rest)
     elif cmd == "perms":
-        found = [m for _, m in manifests() if m.get("name") == (rest[0] if rest else "")]
+        found = [m for _, m in manifests(True) if m.get("name") == (rest[0] if rest else "")]
         if not found:
             print("unknown package", file=sys.stderr)
             return 1
@@ -757,7 +840,8 @@ def main(argv):
         return 1 if p else 0
     elif cmd == "repo-check":
         warns = []
-        p = repo_check(rest[0] if rest else ".", warns)
+        args = [a for a in rest if a != "--release"]     # --release: every [[binary]] must be built and match (the release pull request)
+        p = repo_check(args[0] if args else ".", warns, "--release" in rest)
         for t in p:
             print(t)
         for t in warns:

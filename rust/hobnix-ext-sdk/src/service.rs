@@ -81,6 +81,25 @@ impl Ctx {
     pub fn emit(&self, ev: &Event) -> io::Result<()> {
         self.out.event("emit", ev)
     }
+    /// Add to the monthly rollup of (month, `user`, `kind`) (`rollup`). The core does it, only for a `kind` of this package declared in `[[events]]`
+    /// with `retention = "metric"`; others are dropped with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`, the first a letter or digit (never an option).
+    pub fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
+        let user_ok = user
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
+        let first_ok = user
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
+        if !(1..=64).contains(&user.len()) || !user_ok || !first_ok {
+            let why = "user must be 1 to 64 characters of A-Za-z0-9 and _ . @ -, starting with a letter or digit";
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, why));
+        }
+        self.out.typed(
+            "rollup",
+            json!({"kind": kind, "user": user, "n": n, "sum": sum}),
+        )
+    }
     /// Publish the newest state of `topic` (`[a-z0-9-]{1,60}`); replaces the previous one. At most 256 KiB.
     pub fn snapshot(&self, topic: &str, data: Value) -> io::Result<()> {
         let chars_ok = topic
@@ -100,6 +119,37 @@ impl Ctx {
         self.out
             .typed("snapshot", json!({"topic": topic, "data": data}))
     }
+}
+
+fn valid_name(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'))
+}
+
+fn read_credential(file: &str) -> Option<String> {
+    let dir = std::env::var_os("CREDENTIALS_DIRECTORY")?;
+    let text = std::fs::read_to_string(std::path::Path::new(&dir).join(file)).ok()?;
+    Some(text.trim_end().to_string())
+}
+
+/// The key that the provider package `provider` holds for the integration `name` (declared as `integration:<name>` in `permissions`). The
+/// core hands a confined service one systemd credential per provider, `integration-<name>-<provider>`: read from `$CREDENTIALS_DIRECTORY`,
+/// never from argv or the environment. The provider is the `package` column of `hs pkg integrations` (or [`crate::integrations::Integration::credential`]).
+/// Trailing whitespace is cut. `None` when there is no such credential (not declared, the provider has no key, the key is locked or missing).
+pub fn credential_for(name: &str, provider: &str) -> Option<String> {
+    if !valid_name(name) || !valid_name(provider) {
+        return None;
+    }
+    read_credential(&format!("integration-{name}-{provider}"))
+}
+
+/// Deprecated, goes away after the next release: the old one-name form `integration-<name>` (the first provider with a key, owner not told).
+/// Use [`credential_for`], which names the provider. Same rules as there; `None` when there is no such credential.
+#[deprecated(note = "use credential_for(name, provider): the credential is one per provider")]
+pub fn credential(name: &str) -> Option<String> {
+    if !valid_name(name) {
+        return None;
+    }
+    read_credential(&format!("integration-{name}"))
 }
 
 pub trait Service {

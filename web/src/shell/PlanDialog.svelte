@@ -24,6 +24,7 @@
   let confirm = $state('');
   let busy = $state(false);
   let startError = $state('');
+  let startCode = $state('');
   let extra = $state(false);            // the option checkbox
   const args = $derived(extra && dialog.option ? [...dialog.args, ...dialog.option.args] : dialog.args);
   let saved = $state(!!dialog.saved);   // a change was written and waits for a rebuild: say so, offer "Rebuild now" (no plan is asked)
@@ -37,7 +38,7 @@
   let asked = 0;                        // a newer question makes an older answer stale
   function load() {
     const n = ++asked;
-    p = null; loadError = ''; startError = ''; confirm = '';
+    p = null; loadError = ''; startError = ''; startCode = ''; confirm = '';
     askPlan(dialog.area, args, undefined, undefined, undefined, dialog.document)
       .then((r) => { if (n === asked) p = r; }, (e) => { if (n === asked) loadError = e.message; });
   }
@@ -64,7 +65,7 @@
     const tkey = `start:${jobKey(area, startArgs)}`;
     const steps = p.steps ?? [];
     const again = () => openPlan(area, startArgs, dtitle);
-    if (stay) { busy = true; startError = ''; } else { close(); }
+    if (stay) { busy = true; startError = ''; startCode = ''; } else { close(); }
     toast({ key: tkey, kind: 'info', title: `${name}…`, busy: true });
     const pk = jobKey(area, startArgs);
     starting.keys.push(pk);
@@ -79,7 +80,7 @@
         else toast({ key: tkey, kind: 'ok', title: `${name}: ${tr('done')}` });
       } else {
         const why = r.reason || tr('The server did not start it.');
-        if (stay) { startError = why; dismissToast(tkey); }
+        if (stay) { startError = why; startCode = r.code || ''; dismissToast(tkey); }
         else toast({ key: tkey, kind: 'bad', title: `${name} ${tr('was refused')}`, text: why, action: again, actionLabel: tr('Show plan') });
       }
     } catch (e) {
@@ -127,7 +128,8 @@
       {#if dialog.option && !saved && !loadError}
         <Checkbox bind:checked={extra} label={dialog.option.label} onchange={load} />
       {/if}
-      {#if startError}<div class="refused"><i class="ph ph-warning-circle"></i>{startError}</div>{/if}
+      {#if startError && startCode}<ErrorNote code={startCode} what={startError} />
+      {:else if startError}<div class="refused"><i class="ph ph-warning-circle"></i>{startError}</div>{/if}
     </div>
     {#if !saved && allowed && p.confirm_name}
       <div class="confirm">
@@ -145,7 +147,7 @@
     <div class="dfoot">
       <span class="note">{allowed ? 'Nothing has run yet. The result appears under Jobs.' : ''}</span>
       <Button onclick={close}>{allowed ? 'Cancel' : 'Close'}</Button>
-      {#if !allowed && (offersReload(p?.code, p?.reason) || offersReload('', startError)) && dialog.onReload}
+      {#if !allowed && (offersReload(p?.code) || offersReload(startCode)) && dialog.onReload}
         <Button variant="primary" onclick={() => { const cb = dialog.onReload; close(); cb(); }}>Reload</Button>
       {/if}
       {#if allowed}

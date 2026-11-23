@@ -107,6 +107,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# A service now starts through `systemd-run` (a confined transient unit, ext_service.py confined_program): a test that runs `svc-run` uses this shim
+# (it runs what follows `--`), a fake systemctl and a key copy folder of its own. CI has no systemd-run.
+fake_service_systemd() {
+  printf '#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n' > "$WORK/systemd-run"; chmod +x "$WORK/systemd-run"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/systemctl0"; chmod +x "$WORK/systemctl0"
+  export HS_SYSTEMD_RUN=$WORK/systemd-run HS_SYSTEMCTL=$WORK/systemctl0 HS_CRED_DIR=$WORK/cred
+}
+
 finish() {
   echo "  -> $T_PASS ok, $T_FAIL failed, $T_SKIP skipped"
   [ "$T_FAIL" -eq 0 ]

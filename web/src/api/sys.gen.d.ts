@@ -1252,6 +1252,18 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "health.info": {
+    /** the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent */
+    words: ["health", "info"];
+    path: "/health/info";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [package: Field, check: Field, title: Field, message: Field][];
+  };
   "health.list": {
     /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -) */
     words: ["health", "list"];
@@ -2047,6 +2059,18 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
+  "pkg.integrations": {
+    /** what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty */
+    words: ["pkg", "integrations"];
+    path: "/pkg/integrations";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([package: Field, integration: Field, source: "recipe" | "extension" | "capability", api_url: Field, key_state: "ok" | "locked" | "missing" | "-", extra: Field, key_header: Field])[];
+  };
   "pkg.list": {
     /** every package as data: name, kind, version, applied version (- = never), audience, title */
     words: ["pkg", "list"];
@@ -2096,7 +2120,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "pkg.show.by_name": {
-    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1 */
+    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step, slot_off: a slot of the package whose `requires` is off here: slot, required name); refused: status and reason, exit 1 */
     words: ["pkg", "show", "<name>"];
     path: "/pkg/show/{name}";
     method: "get";
@@ -2132,7 +2156,8 @@ export interface SysOperations {
       | [tag: "screenshot", path: Field]
       | [tag: "route", name: Field, port: Field, scheme: Field, exposure: Field, _default: "yes" | "no"]
       | [tag: "ask", key: Field, label: Field, type: Field, choices: Field, _default: "yes" | "no", pattern: Field, when: Field]
-      | [tag: "step", name: Field, text: Field])[];
+      | [tag: "step", name: Field, text: Field]
+      | [tag: "slot_off", text: Field, name: Field])[];
   };
   "pkg.start.by_action": {
     /** do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name> */

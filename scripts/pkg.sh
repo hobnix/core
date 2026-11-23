@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -32,6 +32,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/live.sh"
 py() { python3 -I "$here/pkg.py" "$@"; }
+# A coded refusal of pkg_repo.py (HS_PKG_REFUSAL = a file it writes "code TAB reason" to): shown the ADR 0028 way, through refuse_code
+pkg_refusal_file() { HS_PKG_REFUSAL=$(mktemp); export HS_PKG_REFUSAL; }
+pkg_refused() {
+  local code reason
+  [ -s "${HS_PKG_REFUSAL:-}" ] || { rm -f "${HS_PKG_REFUSAL:-}"; return 0; }
+  IFS=$'	' read -r code reason < "$HS_PKG_REFUSAL"; rm -f "$HS_PKG_REFUSAL"
+  refuse_code "$code" "$reason"
+}
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
 pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:pkg.changed; exit "$rc"' EXIT; }
@@ -51,6 +59,29 @@ case "${1:-list}" in
     bash "$here/recipes-list.sh" --list >"$d/recipes" 2>/dev/null || : >"$d/recipes"
     ${HS_INCUS:-incus} list -f csv -c ns >"$d/running" 2>/dev/null || : >"$d/running"
     py states --market "$d/market" --parts "$d/parts" --pending "$d/pending" --recipes "$d/recipes" --running "$d/running" "$@" ;;
+  --integrations|integrations)
+    # what packages offer to each other ([integrations.<name>] in package.toml) from the packages that are there, with the state of the key file;
+    # the key itself is never read here
+    . "$here/lib/integration.sh"
+    on=$(integration_available)
+    only=(); [ "$#" -lt 2 ] || only=(--only "$2")
+    # shellcheck disable=SC2086
+    miss=$(mktemp); trap 'rm -f "$miss"' EXIT
+    # {port} in an api_url comes from the service record of the package; without one the field is "-" and the human output says so
+    found=$(py integrations "${only[@]}" --services "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}" --unresolved "$miss" $on)
+    out=""
+    while IFS=$'	' read -r n i s u f x h; do
+      [ -n "$n" ] || continue
+      ks=-; [ "$f" = "-" ] || ks=$(secret_state "$f")
+      out+="$n"$'	'"$i"$'	'"$s"$'	'"$u"$'	'"$ks"$'	'"$x"$'	'"$h"$'
+'
+    done <<<"$found"
+    if [ "$1" = "--integrations" ]; then printf '%s' "$out"
+    elif [ -z "$out" ]; then note "No integrations offered."
+    else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More' 'Header'; printf '%s' "$out"; } | table; fi
+    if [ "$1" != "--integrations" ]; then
+      while read -r w; do [ -z "$w" ] || warn "$(t 'The port of %s is not known (no service record with a port): its API address is shown as -.' "$w")"; done <"$miss"
+    fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;
   list)
@@ -183,13 +214,14 @@ case "${1:-list}" in
     ok "$(t 'Package %s removed.' "$name")" ;;
   install)
     cmd=$1; shift
-    pkg_changed
+    pkg_changed; pkg_refusal_file
     if res=$(py "$cmd" "$@"); then
+      rm -f "$HS_PKG_REFUSAL"
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
-    else exit 1; fi ;;
+    else pkg_refused; exit 1; fi ;;
   update)
-    shift; pkg_changed
-    python3 -I "$here/pkg.py" update "$@" ;;
+    shift; pkg_changed; pkg_refusal_file
+    if python3 -I "$here/pkg.py" update "$@"; then rm -f "$HS_PKG_REFUSAL"; else pkg_refused; exit 1; fi ;;
   rollback)
     # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
     shift; name="${1:-}"; [ -n "$name" ] || fail "$(t 'Usage: hs pkg rollback <name>')"

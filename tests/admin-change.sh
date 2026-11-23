@@ -11,7 +11,7 @@ export HS_STATE_DIR=$WORK/state HS_SETTINGS_DIR=$WORK/settings; mkdir -p "$HS_ST
 for n in health mac cache-mover fans; do printf '#!/usr/bin/env bash\necho "%s $*" >> "%s"\n' "$n" "$CALLS" > "$WORK/$n-stub.sh"; done
 export HS_HEALTH=$WORK/health-stub.sh HS_MAC=$WORK/mac-stub.sh HS_CACHE_MOVER=$WORK/cache-mover-stub.sh HS_FANS=$WORK/fans-stub.sh
 # a stand-in for the job runner: the command is written down instead of started
-mkdir -p "$WORK/lib"; cp "$SCRIPTS/lib/setting.sh" "$WORK/lib/"
+mkdir -p "$WORK/lib"; cp "$SCRIPTS/lib/setting.sh" "$SCRIPTS/lib/refuse-code.sh" "$WORK/lib/"
 printf 'hs_job() { shift 3; echo "JOB $*" >> "%s"; echo hs-job-test-1; }\n' "$CALLS" > "$WORK/lib/job.sh"
 cp "$SCRIPTS/admin-change.sh" "$WORK/admin-change.sh"
 run() { rc=0; out=$(timeout 20 bash "$WORK/admin-change.sh" "$@" </dev/null 2>/dev/null) || rc=$?; }

@@ -15,6 +15,7 @@
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/job.sh"   # hs_job_record
+. "$here/lib/ui.sh"    # refuse_code
 jobs=${HS_JOBS:-$here/jobs.sh}
 systemctl=${HS_SYSTEMCTL:-systemctl}
 
@@ -27,7 +28,7 @@ if [ "$action" = answer ]; then   # ADR 0018: the web interface answers a waitin
   [ "$verb" = start ] || { printf 'status\tok\nheading\tanswer the question\nlong\tno\n'; exit 0; }
   exec bash "${HS_JOBS_ANSWER:-$here/jobs-answer.sh}" "$unit" "$@"
 fi
-case "$action" in stop|run) ;; *) refuse "unknown action (stop or run)" ;; esac
+case "$action" in stop|run) ;; *) refuse_code action.unknown "unknown action (stop or run)" ;; esac
 case "$unit" in *.service) ;; *) unit=$unit.service ;; esac
 [[ "$unit" =~ ^hs-[A-Za-z0-9@._-]+\.service$ ]] || refuse "that is not a job of this server (hs-*)"
 shift 3 || true
@@ -35,7 +36,7 @@ confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --confirm) confirm=${2:-}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -58,7 +59,7 @@ case "$action" in
     # job record (docs/adr/0004-job-record.md): a unit without one (a timer service) stops exactly as before
     rec_id=$(hs_job_record find-unit "$unit" 2>/dev/null) || rec_id="" ;;
   run)
-    [ "$state" != running ] || refuse "$desc is running already."
+    [ "$state" != running ] || refuse_code job.busy "$desc is running already."
     [ "$state" != unknown ] || refuse "There is no job called '$unit'."
     # only the jobs of a timer: the list the Jobs tab shows
     bash "$jobs" --list 2>/dev/null | awk -F'\t' -v u="$unit" '$1 == u { f = 1 } END { exit !f }' || refuse "'$unit' is not a scheduled job (only the hs-* timers can be run now)."
@@ -66,7 +67,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != stop ]; then refuse "type the word to confirm: stop"; fi
+  if [ -n "$danger" ] && [ "$confirm" != stop ]; then refuse_code confirm.missing "type the word to confirm: stop"; fi
   # the record says cancelled before the unit (and the wrapper that would write the end) is killed; best effort.
   # If the stop fails the job still runs: the record goes back (uncancel) and no event is written (#135).
   marked=""
