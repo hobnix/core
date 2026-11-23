@@ -64,6 +64,13 @@ gpu = false
 An unknown key in any `[app]` table is an error. A route that is public-ok and marked `admin = true`, or whose container and port are in
 `ADMIN_TARGETS` of `scripts/services.py`, is refused: a manifest cannot make an admin page public.
 
+**How a package protects its own admin page.** A package that has a management page (a Docker manager, a dashboard, a panel) declares
+that route `exposure = "never-public"`, or marks it `admin = true`. `scripts/services.py` then refuses a public route for it, with no
+entry in `ADMIN_TARGETS` needed (tests/services.sh, "never-public gets no route"). `ADMIN_TARGETS` is only the built-in list for the apps
+the core already knows. **What no guard can catch** is a package that declares its own admin page `public-ok` without the mark and is not
+on that list: the core cannot tell an admin page from a public one. The protection there is the signed repository, the diff shown before
+an update (a changed `[app.routes]` is part of it) and the typed confirmation that makes a route public.
+
 ### How strict
 
 | Package | Without the contract / store fields |
