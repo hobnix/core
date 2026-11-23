@@ -82,6 +82,14 @@ Go has no library on purpose: the protocol is five message types and the example
 The crate `rust/hobnix-ext-sdk` has the same message types, a command runner and a service runner (ADR 0011). Its examples are
 `rust/hobnix-ext-sdk/examples/hello.rs` and `ticker.rs`.
 
+For a service that talks to an integration (Jellyfin, Plex, ...) the crate has three helpers:
+
+- `hobnix_ext_sdk::integrations::parse(text)` turns the output of `hs pkg integrations` (package, integration, source, api_url, key_file, extras, key_header) into typed rows; `-` becomes `None`.
+- `hobnix_ext_sdk::service::credential("<name>")` reads the key (see "Events and snapshots" below).
+- `hobnix_ext_sdk::http::Client` is a small blocking client built on the standard library: `Client::new().timeout(..).header(key_header, key).get_json(url)`, also `post_json`. It has no dependencies of its own, so a build for `x86_64-unknown-linux-musl` needs no OpenSSL and no C toolchain. **It speaks plain `http://` only**: `https://` is refused with `HttpError::TlsUnsupported`. A TLS stack (rustls with `ring`) brings C and assembly code and many crates, and the core's Nix build of `rust/` has not been checked with them. Media servers on the same host or LAN are reached over http; for an https-only API put a local proxy in front.
+
+`examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl --example apiprobe` in `rust/`. Not tested on hardware yet.
+
 ## Events and snapshots (services)
 
 A service (`[service]` in package.toml) gets the events it subscribed to as `event` messages and acknowledges each with `ack` once it has handled it. The core
