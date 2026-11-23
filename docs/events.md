@@ -127,7 +127,7 @@ level   = "warn"                   # required; info | warn | error
 label   = "Download failed"        # required; 1..60 chars, one line, no tab, not "-"
 icon    = "warning-octagon"        # optional; ^[a-z0-9-]{1,40}$ (Phosphor icon name)
 meaning = "a download failed (subject: the service)"   # required; 1..200 chars, one line, no tab, not "-"
-retention = "audit"               # required; ephemeral | audit | metric (see "Retention" below)
+retention = "audit"               # optional (default audit); ephemeral | audit | metric (see "Retention" below)
 payload = ["service", "name", "sub?"]   # optional; keys ^[a-z][a-z0-9_]{0,31}\??$, no duplicates
 notify  = { category = "problem", priority = "high", title = "{name}: {label}", message = "{body}" }   # optional default rule
 ```
@@ -148,7 +148,7 @@ If an event has no `label` or `icon` in its payload, the notification fills them
 
 ### Retention
 
-Every declared event has a `retention` class. `python3 scripts/pkg.py validate` and `hs pkg` refuse an event without one. Housekeeping
+Every declared event has a `retention` class (optional in `package.toml`, default `audit`; a value that is not one of the three is refused by `python3 scripts/pkg.py validate` and `hs pkg`). Housekeeping
 (`scripts/state-db.py`, after each write to the log) prunes by class, on top of the general limit (the newest 5000 rows, nothing older than
 90 days; `HS_EVENT_KEEP`, `HS_EVENT_DAYS`):
 
@@ -160,7 +160,7 @@ Every declared event has a `retention` class. `python3 scripts/pkg.py validate` 
 
 Migration rule: a declaration without the column (the transition copies in `scripts/lib/pkg-events/`, a file that an older core installed) is
 still read, and its rows count as `audit`: they follow the general limit exactly as before, so nothing is pruned earlier than it was. An
-unknown class in an installed file drops that row, like any other bad column. New declarations in `package.toml` must name the class.
+unknown class in an installed file drops that row, like any other bad column. Recipes should name the class; an event without one in `package.toml` is written as `audit`.
 Not tested on hardware yet.
 
 Transition: the events of the media helper (`pkg.sabnzbd.*`, `pkg.maintainerr.*`) are kept as a copy in the same format in

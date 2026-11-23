@@ -27,6 +27,14 @@ import importlib.util, sys
 s = importlib.util.spec_from_file_location("pkg_events", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 print(m.retention_of("pkg.sabnzbd.added"))' "$SCRIPTS/lib/pkg_events.py")"
 
+echo "-- a declaration without retention"
+got=$(python3 -I -c '
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("pkg_events", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+e = {"kind": "x", "level": "info", "label": "B", "meaning": "m"}
+print(len(m.manifest_problems("p", [e])), len(m.manifest_problems("p", [dict(e, retention="forever")])), m.rows("p", [e])[0][-1])' "$SCRIPTS/lib/pkg_events.py" | tr -d '\r')
+check_eq "a manifest event without retention validates and reads as audit, a bad class does not" "0 1 audit" "$got"
+
 echo "-- five years of fake data"
 printf 'pkg.rapp.tick\tinfo\t-\tTick\t-\ta tick\t-\t-\t-\t-\tmetric\n' > "$WORK/pe/rapp.tsv"
 printf 'pkg.rapp.flash\tinfo\t-\tFlash\t-\ta flash\t-\t-\t-\t-\tephemeral\n' >> "$WORK/pe/rapp.tsv"
@@ -57,13 +65,17 @@ print(q("SELECT count(*) FROM rollups"), q("SELECT sum(n) FROM rollups"), q("SEL
 print(q("SELECT n FROM rollups WHERE month=\"2020-02\" AND user=\"ben\" AND kind=\"tick\""))
 c.commit(); c.execute("VACUUM")
 print(os.path.getsize(sys.argv[2]) < 1000000)
+r = sys.argv[2] + ".rollups"
+c.execute("ATTACH ? AS r", (r,)); c.execute("CREATE TABLE r.rollups AS SELECT * FROM main.rollups"); c.commit()
+print(os.path.getsize(r) < 50000)
 ' "$SCRIPTS/state-db.py" "$HS_STATE_DB")
 check_eq "ephemeral: one week left" "7 6" "$(sed -n 1p <<<"$out")"
 check_eq "metric: about a month of raw ticks, audit: the whole window" "1680 1825" "$(sed -n 2p <<<"$out")"
 check_eq "an undeclared kind follows the general limit only" "1825" "$(sed -n 3p <<<"$out")"
 check_eq "rollups: 60 months x 2 users, no tick lost" "120 87600 438000" "$(sed -n 4p <<<"$out")"
 check_eq "a month row adds up (Feb 2020: 29 days x 24)" "696" "$(sed -n 5p <<<"$out")"
-check_eq "5 years stay under a megabyte" "True" "$(sed -n 6p <<<"$out")"
+check_eq "5 years stay under a megabyte" "True" "$(sed -n 6p <<<"$out" | tr -d '')"
+check_eq "the rollup table alone is under 50 KB" "True" "$(sed -n 7p <<<"$out" | tr -d '')"
 
 echo "-- the command line"
 rm -f "$HS_STATE_DB"

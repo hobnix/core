@@ -67,8 +67,8 @@ def manifest_problems(package, events):
             out.append("events: %s: label missing or not one short line" % k)
         if "icon" in e and not (isinstance(e["icon"], str) and ICON.match(e["icon"])):
             out.append("events: %s: icon is not an icon name" % k)
-        if e.get("retention") not in RETENTIONS:
-            out.append("events: %s: retention is required: one of %s" % (k, " ".join(RETENTIONS)))
+        if "retention" in e and e["retention"] not in RETENTIONS:
+            out.append("events: %s: retention is not one of %s" % (k, " ".join(RETENTIONS)))
         if not _line(e.get("meaning"), 200):
             out.append("events: %s: meaning missing or not one line" % k)
         pl = e.get("payload", [])
@@ -108,7 +108,7 @@ def rows(package, events):
         out.append(["pkg.%s.%s" % (package, e["kind"]), e["level"], ",".join(e.get("payload") or []) or "-",
                     e["label"], e.get("icon") or "-", e["meaning"],
                     n["category"] if n else "-", (n.get("priority") or "-") if n else "-",
-                    n["title"] if n else "-", n["message"] if n else "-", e["retention"]])
+                    n["title"] if n else "-", n["message"] if n else "-", e.get("retention", DEFAULT_RETENTION)])
     return out
 
 

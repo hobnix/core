@@ -39,12 +39,7 @@ bad "notify without a message is a problem" "title and a message" '[[events]]\nk
 bad "an unknown event key is a problem" "unknown key" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\ncolour = "red"'
 bad "a string payload is a problem" "payload is a list" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\npayload = "service"'
 bad "a bad payload key is a problem" "payload key" '[[events]]\nkind = "x"\nlevel = "info"\nlabel = "B"\nmeaning = "m"\npayload = ["Bad"]'
-bad "a missing retention is a problem" "retention is required" '[[events]]
-kind = "x"
-level = "info"
-label = "B"
-meaning = "m"'
-bad "a bad retention is a problem" "retention is required" '[[events]]
+bad "a bad retention is a problem" "retention is not one of" '[[events]]
 kind = "x"
 level = "info"
 label = "B"
