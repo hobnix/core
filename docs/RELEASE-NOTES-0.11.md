@@ -1,11 +1,12 @@
 # Hobnix 0.11.0 release notes
 
 Draft release notes of the release "0.11 Navigation and pages", built from the changelog entries of `docs/changelog/` that are on `0.11` but not in
-`v0.10.0` and from the plan `docs/PLAN-navigation.md`. Written 2026-11-22 for `v0.11.0-beta.2`.
+`v0.10.0` and from the plan `docs/PLAN-navigation.md`. Written 2026-11-22, updated 2026-11-23 for `v0.11.0` (betas: `v0.11.0-beta.1`, `v0.11.0-beta.2`).
 
-**Read this first.** This is a beta. Nothing in 0.11 has been run on a real server, and the browser passes for accessibility and the phone layout have
-not been run (see "Not tested yet"). Every item below is built and covered by the tests of the repository. Not tested on hardware yet. The tracker
-issue "Hardware test: 0.11" lists the boxes to check on a server. A box that is not ticked is postponed, it never blocks the release.
+**Read this first.** The owner went through beta.2 in the web interface. Nothing in 0.11 has been run on a real server, and the browser passes for
+accessibility and the phone layout have not been run (see "Not tested yet"). Every item below is built and covered by the tests of the repository.
+Not tested on hardware yet. The tracker issue "Hardware test: 0.11" lists the boxes to check on a server. A box that is not ticked is postponed, it
+never blocks the release.
 
 ## What 0.11 is
 A tree a new user understands, one page per object, and a selected row that never moves the list. Web interface only; no command, setting or
@@ -31,7 +32,7 @@ machine-readable output changed.
   [Web interface](web-interface.md)).
 - **Phone:** the quick look and the tree slide-over use touch targets of 44 px.
 
-## Changes since beta.1
+## Changes since beta.1 (in beta.2 and 0.11.0)
 - **Fixed:** the Shares and Instances lists showed "No shares yet" or "No instances yet" although entries existed (#1080). The model values are
   now read through getters; the test `web-model-getters` guards it.
 - **Row actions instead of a quick look** on Disks, Shares, Instances and Users. Each row ends with its actions: Disks **Open disk**; Shares
