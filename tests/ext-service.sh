@@ -115,7 +115,7 @@ exec "$@"
 printf '#!/usr/bin/env bash
 exit 0
 ' > "$WORK/systemctl0"; chmod +x "$WORK/systemctl0"
-export HS_SYSTEMD_RUN=$WORK/systemd-run HS_SYSTEMCTL=$WORK/systemctl0
+export HS_SYSTEMD_RUN=$WORK/systemd-run HS_SYSTEMCTL=$WORK/systemctl0 HS_CRED_DIR=$WORK/cred
 SR="python3 -I $SCRIPTS/lib/ext_service.py svc-run --name fixsvc --dir $PKG --state-dir $WORK/svcstate"
 check "has-service sees the [service] table" python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$PKG"
 check_eq "a folder without [service] has none" 1 "$(python3 -I "$SCRIPTS/lib/ext_service.py" has-service "$WORK" >/dev/null 2>&1; echo $?)"

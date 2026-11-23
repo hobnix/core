@@ -97,6 +97,7 @@ import importlib.util, os, sys
 def load(n):
     s = importlib.util.spec_from_file_location(n, os.path.join(sys.argv[1], "lib", n + ".py")); m = importlib.util.module_from_spec(s); s.loader.exec_module(m); return m
 pi = load("pkg_integrations"); es = load("ext_service")
+os.environ["HS_CRED_DIR"] = os.path.join(sys.argv[2], "cred2")
 root = os.path.join(sys.argv[2], "hs"); os.makedirs(os.path.join(root, "radarr")); os.makedirs(os.path.join(root, "evil"))
 open(os.path.join(root, "radarr", "key"), "w").write("k")
 os.symlink("/etc/passwd", os.path.join(root, "radarr", "leak"))
@@ -209,17 +210,34 @@ check_out "a bridge start removes the copies of a crash and of units that are no
 check_out "the folders are 0700" "MODE=700 700" cat "$WORK/sweep.txt"
 check_eq "a service that reaches running has no copy left (drop_creds in on_state)" "1" "$(grep -c 'if s == "running":' "$SCRIPTS/lib/ext_service.py")"
 
+echo "-- the key copy folder exists before the first unit is built (review 4)"
+python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/first.txt" 2>&1 || true
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("es", os.path.join(sys.argv[1], "lib", "ext_service.py")); es = importlib.util.module_from_spec(s); s.loader.exec_module(es)
+cr = os.path.join(sys.argv[2], "first-cred"); os.environ["HS_CRED_DIR"] = cr
+pk = os.path.join(sys.argv[2], "pk", "plain"); os.makedirs(pk); open(os.path.join(pk, "package.toml"), "w").write('name = "plain"\npermissions = []\n')
+print("BEFORE=%r" % os.path.isdir(cr))
+cmd, bad = es.confined_program("plain", pk, ["x"])
+print("AFTER=%r MODE=%o" % (os.path.isdir(cr), os.stat(cr).st_mode & 0o777)); print("PRIVATE=%r" % ("--property=MountFlags=private" in cmd))
+os.rmdir(cr); es.sweep_creds("plain"); print("SWEEP=%r" % os.path.isdir(cr))
+PY
+check_out "a service without credentials creates the folder (0700) when its unit is built" "BEFORE=False AFTER=True MODE=700" bash -c "tr '\n' ' ' < '$WORK/first.txt'"
+check_out "the bridge start creates it before the sweep" "SWEEP=True" cat "$WORK/first.txt"
+check_out "the transient unit does not take mounts from the host (an unlocked vault cannot appear over the hidden path)" "PRIVATE=True" cat "$WORK/first.txt"
+
 echo "-- core folder names are reserved, scanned from the code (review 3)"
 python3 -I - "$SCRIPTS" "$ROOT" <<'PY' > "$WORK/resv.txt" 2>&1 || true
 import importlib.util, os, re, sys
 s = importlib.util.spec_from_file_location("pi", os.path.join(sys.argv[1], "lib", "pkg_integrations.py")); pi = importlib.util.module_from_spec(s); s.loader.exec_module(pi)
-for n in ("backup-dc", "backup-instances", "remote-x", "node-key-abc", "docker-registry-x", "recipe-x", "disks", "ext", "vault"):
+for n in ("unifi", "backup-dc", "backup-instances", "remote-x", "node-key-abc", "docker-registry-x", "recipe-x", "disks", "ext", "vault"):
     print("R_%s=%r" % (n, pi.is_reserved(n)))
 print("R_radarr=%r" % pi.is_reserved("radarr"))
 # every /var/lib/hs/<dir> or $state/<dir> the core code names must be reserved or a documented example (an app or example folder of a package)
-DOC = {"hs", "radarr", "unifi", "lock", "media", "fixsvc"}
-root = sys.argv[2]; pats = [re.compile(r"/var/lib/hs/([a-z][a-z0-9-]*)"), re.compile(r"\$\{?(?:state|STATE|HS_STATE_DIR(?::-[^}]*)?|state_dir)\}?/([a-z][a-z0-9-]*)")]
+DOC = {"hs", "radarr", "lock", "media", "fixsvc"}
+root = sys.argv[2]; pats = [re.compile(r"/var/lib/hs/([a-z][a-z0-9-]*)"), re.compile(r"join\((?:state_root\(\)|LIB_DIR|STATE|\"/var/lib/hs\")\s*,\s*\"([a-z][a-z0-9-]*)\""), re.compile(r"\$\{?(?:state|STATE|HS_STATE_DIR(?::-[^}]*)?|state_dir)\}?/([a-z][a-z0-9-]*)")]
 files = [os.path.join(root, "configuration.nix")]
+for dp, dn, fn in os.walk(os.path.join(root, "capabilities")):
+    files += [os.path.join(dp, f) for f in fn if f.endswith(".nix")]
 for dp, dn, fn in os.walk(os.path.join(root, "scripts")):
     dn[:] = [x for x in dn if x not in ("__pycache__", "dev")]
     files += [os.path.join(dp, f) for f in fn if f.endswith((".sh", ".py"))]
@@ -232,7 +250,7 @@ for f in files:
                 miss.add(m.group(1))
 print("UNRESERVED=%s" % ",".join(sorted(miss)))
 PY
-for n in backup-dc backup-instances remote-x node-key-abc docker-registry-x recipe-x disks ext vault; do check_out "$n is reserved" "R_$n=True" cat "$WORK/resv.txt"; done
+for n in unifi backup-dc backup-instances remote-x node-key-abc docker-registry-x recipe-x disks ext vault; do check_out "$n is reserved" "R_$n=True" cat "$WORK/resv.txt"; done
 check_out "radarr (an app) is not reserved" "R_radarr=False" cat "$WORK/resv.txt"
 check_out "the code uses no /var/lib/hs folder that is neither reserved nor a documented example (add it to RESERVED in pkg_integrations.py)" "UNRESERVED=$" cat "$WORK/resv.txt"
 

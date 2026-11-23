@@ -28,7 +28,7 @@ STATE_ROOT = "/var/lib/hs"
 # of these names, so a manifest cannot point key_file at them. The ONE list (tests/ext-service-reach.sh scans the code and fails when the core
 # uses a folder that is neither here nor a documented example): add a name here when the core starts to use a new folder. A prefix covers a family.
 RESERVED = frozenset("""adopting apps capabilities detached disks docs-site expiry ext generated golden iso jobs lock metrics nodes packages posters
-recovering removals removed reports runs settings src state matrix-hook media-ntfy dhcp-ranges""".split())
+recovering removals removed reports runs settings src state unifi matrix-hook media-ntfy dhcp-ranges""".split())
 RESERVED_PREFIXES = ("apps-", "backup", "remote", "node-key", "node-known", "docker", "recipe", "capabilities-", "disk", "vault", "notify", "luks", "ports",
                      "dc-ca", "machine", "last-rebuild", "live-measure", "restic", "health", "heartbeat", "migrate", "pkg-", "services", "share-",
                      "snapshots", "scrub", "selftest", "update-", "vps-", "wear-", "zoraxy", "grafana", "testlab", "ext-", "bulk-", "deck-", "event-",
@@ -178,7 +178,7 @@ def service_port(services_dir, package):
 
 
 def rows(manifests, on, only=None, services_dir=None, unresolved=None):
-    """[[package, integration, source, api_url, key_file, extras]] of the valid blocks of the packages whose name is in `on` (recipe installed,
+    """[[package, integration, source, api_url, key_file, extras, key_header]] of the valid blocks of the packages whose name is in `on` (recipe installed,
     extension or capability on), sorted; empty fields are "-"; extras = k=v comma list of the keys beyond the envelope.
     {port} in api_url is filled from the service record of the package; without a record or a port the api_url is "-" (never guessed) and
     "package/integration" is appended to `unresolved`."""
@@ -199,30 +199,45 @@ def rows(manifests, on, only=None, services_dir=None, unresolved=None):
                         unresolved.append(f"{m['name']}/{n}")
                 else:
                     u = u.replace("{port}", str(port))
-            out.append([m["name"], n, m.get("kind", "-"), _dash(u), _dash(b.get("key_file")), _dash(ex)])
+            out.append([m["name"], n, m.get("kind", "-"), _dash(u), _dash(b.get("key_file")), _dash(ex), _dash(b.get("key_header"))])
     return sorted(out)
 
 
-def grant(manifests, on, integration, caller):
-    """(key_file, None) or (None, reason): see grant_full."""
-    path, _, why = grant_full(manifests, on, integration, caller)
+def grant(manifests, on, integration, caller, provider=None):
+    """(key_file, None) or (None, (code, reason)): see grant_full."""
+    path, _, why = grant_full(manifests, on, integration, caller, provider)
     return path, why
 
 
-def grant_full(manifests, on, integration, caller):
-    """(key_file, provider, None) when `caller` may have the key of `integration`, else (None, None, reason). A capability needs no permission; an extension
-    must declare integration:<name> (a declared check only: permissions are not enforced yet, hobnix/server#239); a recipe is refused."""
+def grant_full(manifests, on, integration, caller, provider=None):
+    """(key_file, provider, None) when `caller` may have the key of `integration`, else (None, None, (code, reason)) with a code of scripts/lib/error-codes.tsv.
+    A capability needs no permission; an extension must declare integration:<name> (a declared check only: permissions are not enforced yet,
+    hobnix/server#239); a recipe is refused. `provider` is the package whose key is wanted: it must be there and offer the integration with a
+    key_file. Without a provider (the old two-argument form, kept for one release) the first package with a key_file is taken."""
     me = next((m for _, m in manifests if m.get("name") == caller), None)
     if me is None:
-        return None, None, f"{caller}: no such package"
+        return None, None, ("integration.denied", f"{caller}: no such package")
     if me.get("kind") == "recipe":
-        return None, None, f"{caller} is a recipe: only an extension or a capability may ask for a key"
+        return None, None, ("integration.denied", f"{caller} is a recipe: only an extension or a capability may ask for a key")
     if me.get("kind") == "extension" and f"integration:{integration}" not in (me.get("permissions") or []):
-        return None, None, f"{caller} does not declare permissions = [\"integration:{integration}\"]"
-    hits = [r for r in rows(manifests, on, integration) if r[4] != "-"]
+        return None, None, ("integration.denied", f"{caller} does not declare permissions = [\"integration:{integration}\"]")
+    offers = rows(manifests, on, integration)
+    if provider is not None:
+        mine = [r for r in offers if r[0] == provider]
+        if not mine:
+            return None, None, ("integration.unknown", f"{provider} is not there or does not offer {integration}")
+        if mine[0][4] == "-":
+            return None, None, ("integration.nokey", f"{provider} offers {integration} without a key_file")
+        return _checked(mine[0], caller)
+    hits = [r for r in offers if r[4] != "-"]
     if not hits:
-        return None, None, f"no available package offers {integration} with a key_file"
-    bad = key_file_problem(hits[0][4], hits[0][0], caller, resolve=True)
+        return None, None, ("integration.nokey", f"no available package offers {integration} with a key_file")
+    return _checked(hits[0], caller)
+
+
+def _checked(row, caller):
+    """(key_file, provider, None) after the strict key file check (key_file_problem: below the provider's own folder, a regular file), else (None, None, (code, reason))."""
+    bad = key_file_problem(row[4], row[0], caller, resolve=True)
     if bad:
-        return None, None, f"{hits[0][0]}: {bad}"
-    return hits[0][4], hits[0][0], None
+        return None, None, ("integration.denied", f"{row[0]}: {bad}")
+    return row[4], row[0], None

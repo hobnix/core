@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Extensions ask for the key of one named app"
+body  = """An extension that needs the API key of an app now names the app (integration_key media radarr my-ext), so it gets the right key when several apps offer the same integration. hs pkg integrations also lists the header the key goes in (key_header, the last column). The old two-argument call still works for one release."""

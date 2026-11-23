@@ -121,6 +121,19 @@ python3 scripts/lib/ext_proto.py call --command greet --arg Ada -- sdk/examples/
 The runner starts the program as the core does and prints what it answered. `tests/ext-sdk-examples.sh` does this for the shell, Python and
 Go examples (the Go part prints a skip line where `go` is missing); `tests/ext-sdk-rust.sh` does it for Rust.
 
+## Use the key of an app
+
+An app can offer an API key through `[integrations.<name>]` in its `package.toml`. To read it, declare `permissions = ["integration:<name>"]` and ask for one provider by name, because one integration can have several (jellyfin and radarr under `media`):
+
+    . "$HS_SCRIPTS/lib/integration.sh"
+    integration_key media radarr my-ext > "$keyfile"     # the key of radarr only
+
+- `hs pkg integrations media` lists the providers: `api_url`, the state of the key, and `key_header` as the last column (`-` = not set: send `X-Api-Key`).
+- An unknown provider is refused with `integration.unknown`, a provider without a key file with `integration.nokey`, a missing permission with `integration.denied`.
+- Read the key from stdout into a file or a pipe; never put it in an argument or an environment variable, and never print it.
+- The old form `integration_key <name> <caller>` (the first provider with a key) works for one more release; use the three-argument form.
+- The permission is a declared check, not enforced yet. Not tested on hardware yet.
+
 ## Check that it worked
 
 - `python3 -I scripts/pkg.py repo-check <repository>` passes.

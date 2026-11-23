@@ -637,6 +637,7 @@ def sweep_creds(name, active=None):
     """At the start of a bridge: remove the key copies a crash left (its own, and those of units that are not running)."""
     active = active or (lambda n: subprocess.run([os.environ.get("HS_SYSTEMCTL", "systemctl"), "is-active", "--quiet", f"hs-ext-svc@{n}.service"],
                                                   stdin=subprocess.DEVNULL, check=False).returncode == 0)
+    make_private_dir(cred_root())    # always there before any unit starts, so InaccessiblePaths=-/run/hs-ext-cred applies to every service
     drop_creds(name)
     try:
         others = os.listdir(cred_root())
@@ -663,6 +664,10 @@ def confined_program(name, pkgdir, prog, creds=()):
         return None, bad
     if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
         props.append("BindReadOnlyPaths=-" + os.path.abspath(pkgdir))     # its own folder comes back into the empty /var/lib/hs
+    try:
+        make_private_dir(cred_root())    # a service without credentials needs the folder too: a missing path is skipped by InaccessiblePaths=-
+    except OSError as e:
+        return None, f"cannot prepare {cred_root()} ({e.strerror}): without it the key copies could not be hidden"
     pi = _load_lib("pkg_integrations")
     for cname, provider, path in creds:
         if not re.match(r"^[a-z][a-z0-9-]{0,60}$", cname) or not path.startswith("/") or ":" in path:
@@ -687,7 +692,7 @@ def confined_program(name, pkgdir, prog, creds=()):
     # the transient unit has no environment: the PATH of the bridge (no secrets) so `#!/usr/bin/env python3` works; it ends with the bridge unit
     path_env = os.environ.get("PATH") or "/run/current-system/sw/bin:/usr/bin:/bin"
     cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
-           f"--description=hs extension service {name}", "--property=KillMode=control-group", "--property=TimeoutStopSec=15",
+           f"--description=hs extension service {name}", "--property=KillMode=control-group", "--property=TimeoutStopSec=15", "--property=MountFlags=private",
            f"--property=BindsTo=hs-ext-svc@{name}.service", f"--property=After=hs-ext-svc@{name}.service", "--setenv=PATH=" + path_env]
     return cmd + ["--property=" + x for x in props] + ["--"] + prog, None
 

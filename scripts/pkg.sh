@@ -62,15 +62,15 @@ case "${1:-list}" in
     # {port} in an api_url comes from the service record of the package; without one the field is "-" and the human output says so
     found=$(py integrations "${only[@]}" --services "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}" --unresolved "$miss" $on)
     out=""
-    while IFS=$'	' read -r n i s u f x; do
+    while IFS=$'	' read -r n i s u f x h; do
       [ -n "$n" ] || continue
       ks=-; [ "$f" = "-" ] || ks=$(secret_state "$f")
-      out+="$n"$'	'"$i"$'	'"$s"$'	'"$u"$'	'"$ks"$'	'"$x"$'
+      out+="$n"$'	'"$i"$'	'"$s"$'	'"$u"$'	'"$ks"$'	'"$x"$'	'"$h"$'
 '
     done <<<"$found"
     if [ "$1" = "--integrations" ]; then printf '%s' "$out"
     elif [ -z "$out" ]; then note "No integrations offered."
-    else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More'; printf '%s' "$out"; } | table; fi
+    else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More' 'Header'; printf '%s' "$out"; } | table; fi
     if [ "$1" != "--integrations" ]; then
       while read -r w; do [ -z "$w" ] || warn "$(t 'The port of %s is not known (no service record with a port): its API address is shown as -.' "$w")"; done <"$miss"
     fi ;;

@@ -297,5 +297,14 @@ ms = [('', {'name': 'app', 'kind': 'recipe', 'integrations': ig}), ('', {'name':
       ('', {'name': 'e2', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'c', 'kind': 'capability'})]
 g = lambda c: m.grant(ms, {'app'}, 'media', c)[0]
 print('|'.join([g('e1') or 'no', g('e2'), g('c')]))")"
+check_eq "grant by provider: the named key, an unknown or keyless provider is refused with a code, the old form takes the first, key_header is listed last" "/var/lib/hs/jelly/k|integration.unknown|integration.nokey|/var/lib/hs/jelly/k|integration.denied|X-Key" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+mk = lambda n, ig: ('', {'name': n, 'kind': 'recipe', 'integrations': {'media': ig}})
+ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k', 'key_header': 'X-Key'}), mk('radarr', {'key_file': '/var/lib/hs/radarr/k'}), mk('plain', {}),
+      ('', {'name': 'e', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'x', 'kind': 'extension'})]
+on = {'jelly', 'radarr', 'plain'}
+g = lambda c, p=None: m.grant(ms, on, 'media', c, p)
+print('|'.join([g('e', 'jelly')[0], g('e', 'nope')[1][0], g('e', 'plain')[1][0], g('e')[0], g('x', 'jelly')[1][0], m.rows(ms, on, 'media')[0][-1]]))")"
 
 finish

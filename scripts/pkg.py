@@ -700,7 +700,7 @@ def main(argv):
         else:
             for r in data:
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
-    elif cmd == "integrations":   # integrations [--only <name>] [--services <dir>] [--unresolved <file>] <available package names...>: package, integration, source, api_url, key_file, extras
+    elif cmd == "integrations":   # integrations [--only <name>] [--services <dir>] [--unresolved <file>] <available package names...>: package, integration, source, api_url, key_file, extras, key_header
         only = rest[rest.index("--only") + 1] if "--only" in rest else None
         sdir = rest[rest.index("--services") + 1] if "--services" in rest else None
         ufile = rest[rest.index("--unresolved") + 1] if "--unresolved" in rest else None
@@ -712,13 +712,13 @@ def main(argv):
         if ufile and miss:
             with open(ufile, "w") as fh:
                 fh.write("\n".join(miss) + "\n")
-    elif cmd == "integration-key":   # integration-key <integration> <caller> <available names...>: the key file path, or the reason (exit 1)
-        path, why = pkg_integrations.grant(manifests(True), set(rest[2:]), rest[0], rest[1])
-        print(path or why)
+    elif cmd == "integration-key":   # integration-key <integration> <caller> <provider|-> <available names...>: the key file path, or code<TAB>reason (exit 1)
+        path, why = pkg_integrations.grant(manifests(True), set(rest[3:]), rest[0], rest[1], None if rest[2] == "-" else rest[2])
+        print(path or "\t".join(why))
         return 0 if path else 1
-    elif cmd == "integration-grant":   # integration-grant <integration> <caller> <available names...>: key file TAB providing package, or the reason (exit 1)
+    elif cmd == "integration-grant":   # integration-grant <integration> <caller> <available names...>: key file TAB providing package, or code<TAB>reason (exit 1)
         path, prov, why = pkg_integrations.grant_full(manifests(True), set(rest[2:]), rest[0], rest[1])
-        print(path + "\t" + prov if path else why)
+        print(path + "\t" + prov if path else "\t".join(why))
         return 0 if path else 1
     elif cmd == "updates":
         seen = set()
