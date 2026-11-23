@@ -82,7 +82,6 @@ pages/proxy/ProxyGate.svelte	0	0	0	1	0
 pages/proxy/ProxyHead.svelte	0	0	0	1	0
 settings/Appearance.svelte	0	0	0	1	0
 settings/CapabilitySettings.svelte	0	0	0	1	0
-settings/CapsOverview.svelte	0	0	0	1	0
 settings/Fields.svelte	0	0	0	1	0
 settings/Releases.svelte	0	0	0	1	0
 settings/Sessions.svelte	0	0	0	1	0

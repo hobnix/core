@@ -10,6 +10,8 @@ import sys
 EXT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 EXT_KINDS = ("tsv", "json", "text")
 EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "gallery")
+EXT_GROUPS = ("storage", "instances", "apps", "network", "people", "system", "backup", "settings")      # the groups of the tree (web/src/nav.js EXT_GROUPS); default apps
+EXT_TEMPLATES = ("list", "object", "feed")
 EXT_WORD = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")      # a word of a live read: it becomes part of a topic name (hs:v1:ext-<name>-<words>)
 LIVE_MIN, LIVE_MAX = 10, 3600
 LIVE_LOCKED = ("run", "skip")
@@ -222,6 +224,39 @@ def _ext_page(name, page, words):
     if not isinstance(page, dict) or len(json.dumps(page)) > 30000:
         raise ValueError("bad page")
     known = {" ".join(w[2:]) for w in words}
+    page = dict(page)
+    group = page.get("group", "apps")
+    if group not in EXT_GROUPS:
+        raise ValueError("the page names an unknown group")
+    page["group"] = group
+    after = page.get("after")
+    if after is not None and not (isinstance(after, str) and EXT_WORD.match(after)):
+        raise ValueError("after must be the name of a place in the group")
+    if "role" in page and _roles_module().of(page) is None:
+        raise ValueError("role must be viewer, app-manager or admin")
+    if "template" in page and page["template"] not in EXT_TEMPLATES:
+        raise ValueError("template must be list, object or feed")
+    blocks = page.get("blocks", [])
+    if "template" not in page and blocks and isinstance(blocks[0], dict) and blocks[0].get("type") == "table":
+        page["template"] = "list"
+    st = page.get("state")
+    if st is not None:      # one dot, one line for the card: the columns of one declared read (checked below like any read)
+        if (not isinstance(st, dict) or not isinstance(st.get("read"), str)
+                or any(not isinstance(st.get(k), (int, str)) or isinstance(st.get(k), bool) for k in ("dot", "line"))):
+            raise ValueError("state needs read, dot and line")
+    tabs = page.get("tabs", [])
+    if not isinstance(tabs, list) or len(tabs) > 12:
+        raise ValueError("bad tabs")
+    if any("blocks" in t for t in tabs if isinstance(t, dict)):
+        # [[web.page.tabs]] with a title and their own blocks: flattened to the form the renderer reads (tabs: [{id, label}], block.tab)
+        flat, out_tabs = list(blocks), []
+        for i, t in enumerate(tabs):
+            if not isinstance(t, dict) or not isinstance(t.get("title"), str) or not 1 <= len(t["title"]) <= 40 or not isinstance(t.get("blocks", []), list):
+                raise ValueError("a tab needs a title")
+            tid = "t%d" % i
+            out_tabs.append({"id": tid, "label": t["title"]})
+            flat += [{**b, "tab": tid} for b in t.get("blocks", []) if isinstance(b, dict)]
+        page["tabs"], page["blocks"] = out_tabs, flat
 
     def walk(node):
         if isinstance(node, dict):
@@ -235,6 +270,8 @@ def _ext_page(name, page, words):
                 raise ValueError("unknown block type")
             for key in ("actions", "rowActions"):
                 for a in node.get(key, []):
+                    if "role" in a and _roles_module().of(a) is None:
+                        raise ValueError("role must be viewer, app-manager or admin")
                     if "plan" in a and (not isinstance(a["plan"], list) or not a["plan"] or a["plan"][0] != "ext/" + name):
                         raise ValueError("a page action may only plan changes of its own area")
                     if "input" in a:    # a text field before the plan: {input} in the plan arguments; the server still checks every argument against the changes
