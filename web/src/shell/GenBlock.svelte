@@ -7,8 +7,9 @@
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
   import { areaRole, maxRole } from '../roles.js';
-  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn } from './generic.js';
+  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn, chartSeries, statTiles } from './generic.js';
   import Table from './Table.svelte';
+  import Spark from './Spark.svelte';
   import UsageBar from './UsageBar.svelte';
   import PageState from './PageState.svelte';
   import Drawer from '../ui/Drawer.svelte';
@@ -70,6 +71,10 @@
     return (block.items ?? []).map((it) => ({ k: it.k, v: fmtValue(it.fmt, clean(first[it.col ?? 0])) }));
   });
   const clean = (v) => (v === '-' ? '' : v);
+
+  // chart and stat (#473): the points of a read, the tiles of its first row
+  const series = $derived(chartSeries(main ? rowsOf(main) : [], block.value ?? 1, block.max ?? 0, block.hot ?? 0));
+  const tiles = $derived(statTiles(main ? rowsOf(main)[0] : null, block.items ?? []));
 </script>
 
 {#snippet actionRow(list, r)}
@@ -187,6 +192,28 @@
     {/if}
   </PageState>
 
+{:else if block.type === 'chart'}
+  <div class="card gb">
+    {#if block.title}<div class="gh"><b>{block.title}</b></div>{/if}
+    <PageState loading={!main.loaded} error={main.error?.message ?? ''} hasData={main.data != null} empty={main.loaded && series.values.length < 2} emptyIcon="chart-line" emptyTitle={block.empty ?? 'Not enough readings yet'}>
+      <div class="chart-last"><span class="big-num">{series.last}</span>{#if block.unit}<span class="meta">{block.unit}</span>{/if}<span class="grow"></span><span class="meta">{tr('highest')} {series.max}{block.unit ? ' ' + block.unit : ''}</span></div>
+      <Spark values={series.values} hot={series.hot} />
+    </PageState>
+  </div>
+
+{:else if block.type === 'stat'}
+  <PageState loading={!main.loaded} error={main.error?.message ?? ''} hasData={main.data != null} empty={main.loaded && !rowsOf(main).length} emptyIcon="gauge" emptyTitle="Nothing to show yet">
+    <div class="tiles">
+      {#each tiles as t}
+        <div class="card gb tile">
+          <span class="meta">{t.label}</span>
+          <span class="tile-v"><span class="big-num">{t.value || '–'}</span>{#if t.unit}<span class="meta">{t.unit}</span>{/if}</span>
+          {#if t.dot}<StatusDot state={t.dot[0]} label={t.dot[1]} />{/if}
+        </div>
+      {/each}
+    </div>
+  </PageState>
+
 {:else}
   <!-- a block the registry does not know (a newer package on an older core, or a typo): a note instead of a broken page (#473) -->
   <Banner tone="info">{tr('This part of the page cannot be shown: the block type is not known here.')} <span class="mono">{block.type ?? '?'}</span> ({tr('block list level')} {BLOCK_API_LEVEL})</Banner>
@@ -212,4 +239,9 @@
   .thumb { padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; overflow: hidden; }
   .thumb.on { outline: 2px solid var(--accent); outline-offset: 1px; }
   .thumb img { width: 100%; display: block; }
+  .chart-last { display: flex; align-items: baseline; gap: 6px; }
+  .big-num { font: 600 22px var(--mono); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .tile { gap: 6px; }
+  .tile-v { display: flex; align-items: baseline; gap: 6px; }
 </style>
