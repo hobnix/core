@@ -111,12 +111,12 @@ parse_opts() {   # sets user, confirm from the arguments
 
 common_checks() {   # common_checks <action> <host>
   # a token in the closed vault cannot be deleted: the link would go and the token stay behind
-  if [ "$1" = remove ] && vault_blocks && [[ "$2" =~ $HOST_RE ]]; then refuse "The vault is closed: the token for $2 is in it." "hs vault open"; fi
-  [[ "$2" =~ $HOST_RE ]] || refuse "The registry address is not valid."
-  docker_on_and_running || refuse "Docker is not on or not running."
+  if [ "$1" = remove ] && vault_blocks && [[ "$2" =~ $HOST_RE ]]; then refuse_code vault.locked "The vault is closed: the token for $2 is in it."; fi
+  [[ "$2" =~ $HOST_RE ]] || refuse_code name.invalid "The registry address is not valid."
+  docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
   if [ "$1" = add ]; then
     [[ "$user" =~ $USER_RE ]] || refuse "The user name is not valid."
-    if vault_blocks; then refuse "The vault is closed: the token cannot be stored." "hs vault open"; fi
+    if vault_blocks; then refuse_code vault.locked "The vault is closed: the token cannot be stored."; fi
   else
     known "$2" || refuse "No registry called '$2' is set up."
   fi

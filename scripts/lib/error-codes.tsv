@@ -1,0 +1,14 @@
+# Error codes (ADR 0028). code<TAB>layer<TAB>meaning<TAB>text<TAB>fix; "-" for none. Generated page: docs/errors.md (python3 scripts/errors-doc-gen.py write).
+# layer run = set by the web server when a plan or start gave no status line; script = printed by a change script (refuse_code in scripts/lib/ui.sh).
+# A code never changes meaning; a rename keeps the old name as an alias for one release.
+refused	script	A plain refuse "<text>" without a more exact code	The server did not do this.	-
+run.timeout	run	The time limit of the web server passed before the command ended	The server stopped waiting. A start may still be running or be partly done: check Jobs and the page before you try again.	-
+run.not-found	run	The command could not be started	The server could not run the command.	-
+run.killed	run	The command ended because a signal stopped it	The command was stopped before it finished.	-
+run.no-status	run	The command ended without a status line	The server could not do this.	-
+vault.locked	script	The vault is closed and the step needs a secret in it	The vault is closed: unlock it first.	hs vault open
+docker.off	script	Docker is not on or not running	Docker is not on or not running.	-
+app.unknown	script	No app of that name exists	No such app was found.	-
+name.invalid	script	A name is not in the allowed form	The name is not valid.	-
+plan.changed	script	What the plan saw changed before it was applied	It changed meanwhile. Reload it and try again.	-
+job.busy	script	The same job is running already	This is running already.	-

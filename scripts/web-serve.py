@@ -1806,6 +1806,17 @@ def validate_change(body):
 CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
 
 
+def no_status_code(rc):
+    """ADR 0028, run layer: the code (scripts/lib/error-codes.tsv) of a plan or start that ended without its own status line."""
+    if rc == RC_TIMEOUT:
+        return "run.timeout"
+    if rc in (RC_NOT_RUN, 126):
+        return "run.not-found"
+    if rc < 0 or 128 < rc < 193:       # a signal: Python gives -n, the shell 128+n
+        return "run.killed"
+    return "run.no-status"
+
+
 def no_status_reason(rc):
     """The reason for a plan or start that ended without its own status line."""
     if rc == RC_TIMEOUT:
@@ -1864,10 +1875,13 @@ def parse_change(out, rc):
                 d.setdefault("secret", {})[name] = val
         elif k in ("file", "color", "seed", "size"):
             d[k] = v           # what a poster drawing reports
-    if not d["status"]:
+    no_status = not d["status"]
+    if no_status:
         d["status"] = "ok" if rc == 0 else "refused"
     if d["status"] == "refused" and not d["reason"]:
         d["reason"] = no_status_reason(rc)
+    if no_status and rc != 0:
+        d.setdefault("code", no_status_code(rc))      # the script gave no status line: the run layer names what happened (ADR 0028)
     return d
 
 

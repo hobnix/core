@@ -15,6 +15,7 @@
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/job.sh"   # hs_job_record
+. "$here/lib/ui.sh"    # refuse_code
 jobs=${HS_JOBS:-$here/jobs.sh}
 systemctl=${HS_SYSTEMCTL:-systemctl}
 
@@ -58,7 +59,7 @@ case "$action" in
     # job record (docs/adr/0004-job-record.md): a unit without one (a timer service) stops exactly as before
     rec_id=$(hs_job_record find-unit "$unit" 2>/dev/null) || rec_id="" ;;
   run)
-    [ "$state" != running ] || refuse "$desc is running already."
+    [ "$state" != running ] || refuse_code job.busy "$desc is running already."
     [ "$state" != unknown ] || refuse "There is no job called '$unit'."
     # only the jobs of a timer: the list the Jobs tab shows
     bash "$jobs" --list 2>/dev/null | awk -F'\t' -v u="$unit" '$1 == u { f = 1 } END { exit !f }' || refuse "'$unit' is not a scheduled job (only the hs-* timers can be run now)."
