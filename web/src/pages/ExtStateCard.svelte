@@ -5,9 +5,12 @@
   import { poll, rows } from '../data.svelte.js';
   import { extReadPath, stateOfRow } from '../shell/generic.js';
   import { extensionPath } from '../paths.js';
+  import { live } from '../live.svelte.js';
 
   let { ext } = $props();
-  const st = poll(extReadPath(ext.name, ext.state.read), 15000);
+  const path = extReadPath(ext.name, ext.state.read);
+  // follows the read's live topic when the package declares `live` on it (the session's topic map); a timer only while there is none or the stream is down
+  const st = poll(path, 15000, () => live.topics[path]);
   const now = $derived(st.data ? stateOfRow(ext.state, rows(st)[0]) : { state: 'off', line: st.error ? 'Not available' : '' });
 </script>
 
