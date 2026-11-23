@@ -29,6 +29,9 @@ hs doctor
 `No problems found.` `hs doctor` answers "is everything fine?": health problems, failed and running jobs, pending parity work, locked
 storage. The same three status lines appear when you sign in over SSH (`hs motd`).
 
+A package can report a check as information, for example a gaming PC that is switched off. System > Health lists these under "For your
+information" with the package named (`hs sys health info`). They are not problems: they are not counted, not acknowledged and no message is sent.
+
 Two more checks that change nothing:
 
 - `hs smoke` runs a quick test that the commands work on this server (needed programs installed, read-only commands run).

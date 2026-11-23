@@ -590,7 +590,7 @@ class Groups(unittest.TestCase):
         self.assertGreaterEqual(state["max"], 1)
 
 
-SYSTEM_TOPICS = {'deck': 5, 'jobs-running': 10, 'jobs-list': 30, 'health-next': 30, 'health-list': 60, 'hardware': 15, 'ups': 30, 'system-updates': 60, 'system-config': 300, 'setup-list': 30, 'config-list': 60, 'parts-list': 60, 'node-list': 30, 'ssh-keys': 60, 'expiry': 300, 'notify-channels': 60, 'notify-providers': 3600}
+SYSTEM_TOPICS = {'deck': 5, 'jobs-running': 10, 'jobs-list': 30, 'health-next': 30, 'health-list': 60, 'health-info': 60, 'hardware': 15, 'ups': 30, 'system-updates': 60, 'system-config': 300, 'setup-list': 30, 'config-list': 60, 'parts-list': 60, 'node-list': 30, 'ssh-keys': 60, 'expiry': 300, 'notify-channels': 60, 'notify-providers': 3600}
 
 INSTANCE_TOPICS = {
     'ct-list': (['ct', 'list'], 10, 'skip', 'incus', {'instances', 'shares', 'network'}),
@@ -875,6 +875,7 @@ class Cli(unittest.TestCase):
             ('jobs-list', ['jobs', 'list'], 30, 'run'),
             ('health-next', ['health', 'next'], 30, 'run'),
             ('health-list', ['health', 'list'], 60, 'run'),
+            ('health-info', ['health', 'info'], 60, 'run'),
             ('hardware', ['hardware'], 15, 'run'),
             ('ups', ['ups', 'status'], 30, 'run'),
             ('system-updates', ['system', 'updates'], 60, 'skip'),
@@ -894,7 +895,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 81)
+        self.assertEqual(len(lines), 82)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)

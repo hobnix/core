@@ -4,5 +4,6 @@ rebuild/pending
 logs/show
 health/next
 health/list
+health/info
 disk/marks
 share/parity/refused

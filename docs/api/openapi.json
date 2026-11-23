@@ -5839,6 +5839,69 @@
     }
    }
   },
+  "/health/info": {
+   "get": {
+    "operationId": "health.info",
+    "summary": "the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "health",
+      "info"
+     ],
+     "script": "health-check.sh",
+     "args": "--info",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/health/info",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": []
+    },
+    "description": "The info rows of the [[health]] checks of the packages that are on (title and message are - when empty). An info row is no problem: it is not counted, not sent and not in health list. Empty when no check reports info.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "check"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "message"
+           }
+          ],
+          "minItems": 4,
+          "maxItems": 4
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/health/list": {
    "get": {
     "operationId": "health.list",

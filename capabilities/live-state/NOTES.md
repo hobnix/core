@@ -48,9 +48,9 @@ Refresh base (built, not run on hardware):
   topic argument.
 
 System slice (built, not run on hardware): 17 more topics for the Summary, top bar, Health, Settings and Jobs: `deck`, `jobs-running`, `jobs-list`,
-`health-next`, `health-list`, `hardware`, `ups`, `system-updates` (skip while locked), `system-config`, `setup-list`, `config-list`, `parts-list`,
+`health-next`, `health-list`, `health-info`, `hardware`, `ups`, `system-updates` (skip while locked), `system-config`, `setup-list`, `config-list`, `parts-list`,
 `node-list`, `ssh-keys`, `expiry`, `notify-channels`, `notify-providers` (the last two need the `notifications` capability). Explicit refreshes
-outside the dispatcher: `health-check.sh` (real run: `health-next health-list status deck`), `ups.sh event`
+outside the dispatcher: `health-check.sh` (real run: `health-next health-list health-info status deck`), `ups.sh event`
 (`ups deck status`), `jobs.sh stop` (`@jobs`), `update.sh` and `update-preview.sh` after the fetch (`system-updates`).
 
 Instances slice (built, not run on hardware): 10 more topics, all `skip` while locked: `ct-list` (10 s), `iso-list` (10 s), `ct-pools` (15 s),

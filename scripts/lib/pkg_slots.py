@@ -258,6 +258,10 @@ def main(argv):
     elif cmd == "list":
         for title, name, cid, lv, msg in check_rows():
             sys.stdout.write("%s\t%s\t%s\t%s\n" % (name, cid, lv, msg or "-"))
+    elif cmd == "info":     # the info rows: package, check id, title, message (hs sys health info); never problems
+        for title, name, cid, lv, msg in check_rows():
+            if lv == "info":
+                sys.stdout.write("%s\t%s\t%s\t%s\n" % (name, cid, " ".join(title.split()) or "-", " ".join(msg.split()) or "-"))
     elif cmd == "requires" and len(argv) == 2:
         import tomllib
         ext = _hs_ext()
@@ -270,7 +274,7 @@ def main(argv):
         for slot, r in requires_off(doc, on):
             sys.stdout.write("%s\t%s\n" % (slot, r))
     else:
-        sys.stderr.write("usage: pkg_slots.py problems | list | requires <file>\n")
+        sys.stderr.write("usage: pkg_slots.py problems | list | info | requires <file>\n")
         return 2
     return 0
 

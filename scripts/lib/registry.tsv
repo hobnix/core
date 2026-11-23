@@ -418,6 +418,7 @@ sys	sys disk power	disk-spindown.sh	power	sleep state of the spinning disks (dev
 sys	sys health dry-run	health-check.sh	--dry-run	current problems, nothing is sent	-
 sys	sys health next	health.sh	next	problems with their fix command (problem, next)	-
 sys	sys health list	health-check.sh	--list	every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -)	-
+sys	sys health info	health-check.sh	--info	the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent	-
 sys	sys health acks	health-ack.sh	list-acks	the acknowledgements as id, since (epoch seconds), until (epoch seconds or -), who, note (- when empty); an ended one is not listed	-
 sys	sys health plan <action>	health-change.sh	plan {1} {rest}	what acknowledging a problem, taking it back or lifting the pause of the bulk jobs would do, as data: status, plan lines (never asks)	-
 sys	sys health start <action>	health-change.sh	start {1} {rest}	do it (hs sys health start ack <id> | unack <id> | resume), answers status done	-

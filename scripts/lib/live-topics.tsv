@@ -44,6 +44,7 @@ jobs-running	jobs running	10	run	-	any,jobs	-
 jobs-list	jobs list	30	run	-	jobs,system	-
 health-next	health next	30	run	-	any	-
 health-list	health list	60	run	-	system	-
+health-info	health info	60	run	-	system	-
 hardware	hardware	15	run	-	system	-
 ups	ups status	30	run	-	system	-
 system-updates	system updates	60	skip	-	system	-

@@ -373,7 +373,7 @@ NO_ARG = {
 }
 SYSTEM = {
     ("deck",): "deck", ("jobs", "running"): "jobs-running", ("jobs", "list"): "jobs-list", ("health", "next"): "health-next",
-    ("health", "list"): "health-list", ("hardware",): "hardware", ("ups", "status"): "ups", ("system", "updates"): "system-updates",
+    ("health", "list"): "health-list", ("health", "info"): "health-info", ("hardware",): "hardware", ("ups", "status"): "ups", ("system", "updates"): "system-updates",
     ("system", "config"): "system-config", ("setup", "list"): "setup-list", ("config", "list"): "config-list",
     ("parts", "list"): "parts-list", ("node", "list"): "node-list", ("ssh-key", "list"): "ssh-keys", ("expiry", "list"): "expiry",
     ("notify", "channels"): "notify-channels", ("notify", "providers"): "notify-providers",
@@ -507,7 +507,7 @@ class StorageTopics(DbBase):
             self.assertEqual(ws.READS[words]["topic"], topic, words)
 
     def test_every_system_read_has_its_topic(self):
-        self.assertEqual(len(SYSTEM), 17)
+        self.assertEqual(len(SYSTEM), 18)
         known = {r[0] for r in ws.ls.topics()}
         for words, topic in SYSTEM.items():
             self.assertEqual(ws.READS[words]["topic"], topic, words)
