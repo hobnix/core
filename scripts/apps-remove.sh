@@ -8,6 +8,8 @@
 #         each line checked against the real thing now: item <kind> <id> <state> <action> <text> (state there|gone|unknown, action
 #         remove|forget|keep|skip). An app without a ledger (installed before it existed) gets a READ-ONLY discovered list instead: the instance and
 #         the service description named after it, nothing else (`source discovered`); nothing is guessed beyond that, and --delete-data is refused.
+#         A key file the manifest declares in [integrations.<name>] key_file (only under /var/lib/hs/, no "..") is listed as
+#         item keyfile <path> there remove and deleted with the instance (not for a second instance: the package's file stays); never read or printed.
 #         `keeps <text>` lines are the manifest's [app.remove] keeps (plain English); data yes|no; the data question is separate and kept by default
 #         (`question delete_data ... keep`); confirm_name is the INSTANCE (not the package). With --delete-data the plan also says confirm_data <instance>:
 #         the name is typed a second time. Data inside the instance goes with the instance; what lives in a volume or a share is the data question.
@@ -61,11 +63,12 @@ while :; do
   if [ -f "$st/packages/current/$cand/package.toml" ]; then pkg=$cand; break; fi
   case "$cand" in *-*) cand=${cand%-*} ;; *) break ;; esac
 done
-keeps=() datapaths=()
+keeps=() datapaths=() keyfiles=()
 if [ "$pkg" != - ]; then
+  own=no; [ "$pkg" != "$inst" ] || own=own
   while IFS=$'\t' read -r k v; do
-    case "$k" in keeps) keeps+=("$v") ;; data) datapaths+=("$v") ;; esac
-  done < <(python3 -I - "$st/packages/current/$pkg/package.toml" <<'PY' 2>/dev/null || true
+    case "$k" in keeps) keeps+=("$v") ;; data) datapaths+=("$v") ;; keyfile) keyfiles+=("$(printf '%s' "$v" | tr -d '\r')") ;; esac
+  done < <(python3 -I - "$st/packages/current/$pkg/package.toml" "$own" <<'PY' 2>/dev/null || true
 import sys, tomllib
 try:
     t = tomllib.load(open(sys.argv[1], "rb"))
@@ -75,6 +78,12 @@ r = ((t.get("app") or {}).get("remove") or {})
 for k in ("keeps", "data"):
     for v in r.get(k) or []:
         print("%s\t%s" % (k, str(v).replace("\t", " ").replace("\n", " ")))
+# the key files of [integrations.<name>]: only under /var/lib/hs/, never "..", and only for the instance that is the package itself
+if len(sys.argv) > 2 and sys.argv[2] == "own":
+    for b in (t.get("integrations") or {}).values():
+        f = b.get("key_file") if isinstance(b, dict) else None
+        if isinstance(f, str) and f.startswith("/var/lib/hs/") and ".." not in f.split("/") and not any(c.isspace() for c in f) and not f.endswith("/"):
+            print("keyfile\t" + f)
 PY
 )
 fi
@@ -87,6 +96,14 @@ else   # discovered: read-only, the instance and the description named after it
   if [ -f "$desc" ]; then lines+=$(printf 'service\t%s\t-\tthere\tremove\t%s' "$inst" "$(_cr_text service "$inst")")$'\n'; fi
   lines=${lines%$'\n'}
 fi
+# the key files the manifest declared: a path under /var/lib/hs/ is a path under the state dir here (tests); a link is never followed
+kf=()
+for f in ${keyfiles[@]+"${keyfiles[@]}"}; do
+  real=$st/${f#/var/lib/hs/}
+  if [ -f "$real" ] && [ ! -L "$real" ]; then
+    kf+=("$real"); lines+=${lines:+$'\n'}$(printf 'keyfile\t%s\t-\tthere\tremove\tthe key file %s (the API key the app handed out; deleted, never shown)' "$real" "$f")
+  fi
+done
 [ -n "$lines" ] || refuse "Nothing is listed for $inst: nothing to remove."
 
 if [ "$verb" = run ]; then
@@ -95,10 +112,13 @@ if [ "$verb" = run ]; then
   if [ "$source" = ledger ]; then created_remove_all "$inst" "$delete_data" || rc=$?
   else
     while IFS=$'\t' read -r kind id detail _ act text; do
-      [ "$act" = remove ] || continue
+      { [ "$act" = remove ] && [ "$kind" != keyfile ]; } || continue
       if _cr_one "$kind" "$id" "$detail"; then ok "Removed $text"; else warn "Could not remove $text."; rc=1; fi
     done <<<"$lines"
   fi
+  for f in ${kf[@]+"${kf[@]}"}; do
+    if rm -f -- "$f"; then ok "Removed the key file of $inst"; else warn "Could not remove the key file of $inst."; rc=1; fi
+  done
   if [ "$rc" -eq 0 ]; then
     if [ "$delete_data" = yes ]; then ok "Done: $inst is removed with its data."; else ok "Done: $inst is removed. Its data is kept, a later install finds it again."; fi
   else fail "Some of it could not be removed: run Remove again (it checks each line first)."; fi

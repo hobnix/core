@@ -1,0 +1,6 @@
+date  = "2026-11-23"
+type  = "fix"
+title = "Removing an app deletes the key file it handed out"
+body  = """
+An app that offers an API key to other packages leaves a key file on the server. Remove now lists that file in its plan and deletes it with the app, so a secret no longer outlives its app.
+"""
