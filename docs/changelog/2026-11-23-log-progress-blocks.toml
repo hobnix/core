@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Package pages: log and progress blocks"
+body  = """A package page can now show the tail of a log that follows the server's log stream (the last lines only), and a progress bar fed by a read or by a job. `hs pkg validate` checks both blocks."""

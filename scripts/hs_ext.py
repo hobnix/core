@@ -9,7 +9,7 @@ import sys
 
 EXT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 EXT_KINDS = ("tsv", "json", "text")
-EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "form", "gallery")
+EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "form", "gallery", "chart", "stat", "log", "progress")
 EXT_GROUPS = ("storage", "instances", "apps", "network", "people", "system", "backup", "settings")      # the groups of the tree (web/src/nav.js EXT_GROUPS); default apps
 EXT_TEMPLATES = ("list", "object", "feed")
 EXT_WORD = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")      # a word of a live read: it becomes part of a topic name (hs:v1:ext-<name>-<words>)
@@ -226,13 +226,21 @@ def ext_read(name, rd, rows, caps=None):
     return words, spec
 
 
-def _ext_page(name, page, words, changes=()):
+def _ext_page(name, page, words, recipe=False, changes=()):
     """The [web.page] declaration of a package for the generic page of the frontend (web/src/shell/GenericPage.svelte): plain data, checked here so
-    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out."""
+    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out.
+    `recipe`: the page of a recipe (an app, no capability.toml) is the object page /apps/<name> opened from the Installed list: template object, no place
+    in the tree (no group, after or state card), marked `kind = "recipe"` for the frontend (docs/PLAN-package-pages.md, #424)."""
     if not isinstance(page, dict) or len(json.dumps(page)) > 30000:
         raise ValueError("bad page")
     known = {" ".join(w[2:]) for w in words}
     page = dict(page)
+    if recipe:
+        bad = [k for k in ("group", "after", "state") if k in page]
+        if bad or page.get("template", "object") != "object":
+            raise ValueError("a recipe page is an object page of the app: no %s, template object" % ", ".join(bad or ["other template"]))
+        page["template"] = "object"
+        page["kind"] = "recipe"
     group = page.get("group", "apps")
     if group not in EXT_GROUPS:
         raise ValueError("the page names an unknown group")
@@ -322,7 +330,13 @@ def ext_declarations(log=None):
             web = ext_manifest(d).get("web", {})
             if not web:
                 continue        # a capability without a [web] declaration (most of them) has nothing to register and no commands.tsv
-            rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            recipe = not os.path.isfile(os.path.join(d, "capability.toml"))      # a recipe package has package.toml only
+            try:
+                rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            except OSError:
+                if not recipe:
+                    raise
+                rows = set()      # a recipe page without reads (text, empty) needs no commands.tsv; a read or change then fails below
             r_new, c_new, p_new = {}, [], None
             for rd in web.get("reads", []):
                 words, spec = ext_read(name, rd, rows, caps)
@@ -352,7 +366,7 @@ def ext_declarations(log=None):
                             raise ValueError("bad flag")
                     c_new.append(ent)
             if "page" in web:
-                p_new = _ext_page(name, web["page"], list(r_new), web.get("changes", []))
+                p_new = _ext_page(name, web["page"], list(r_new), recipe, web.get("changes", []))
             heads = {w[:3] for w in rows}
             if c_new and not (("ext", name, "plan") in heads and ("ext", name, "start") in heads):
                 raise ValueError("changes need the plan and start rows of the package")

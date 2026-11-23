@@ -116,6 +116,31 @@ class ExtPages(unittest.TestCase):
         self.assertEqual(self.pages(act % "app-manager")[0]["actions"][0]["role"], "app-manager")
         self.assertEqual(self.pages(act % "root"), [])
 
+    def recipe(self, web, rows=True):
+        """a recipe package (package.toml only, on once hs recipe applied it: installed.toml) with the given [web] text"""
+        write(os.path.join(self.pk, "demo", "package.toml"), 'name = "demo"\nkind = "recipe"\n' + web)
+        if rows:
+            write(os.path.join(self.pk, "demo", "commands.tsv"), TAB.join(["sys", "sys ext demo state", "x.sh", "state", "h", "-"]) + "\n")
+        elif os.path.isfile(os.path.join(self.pk, "demo", "commands.tsv")):
+            os.remove(os.path.join(self.pk, "demo", "commands.tsv"))
+        write(os.path.join(self.tmp, "caps"), "")
+        write(os.path.join(self.tmp, "state", "packages", "installed.toml"), '[package.demo]\nversion = "1"\n')
+        ws.ext_refresh(force=True)
+        return ws.ext_pages()
+
+    def test_a_recipe_page_is_an_object_page(self):
+        reads = '[[web.reads]]\nwords = "state"\nkind = "tsv"\nttl = 10\n'
+        blk = '[web.page]\ntitle = "Demo"\n[[web.page.blocks]]\ntype = "kv"\nread = "state"\n'
+        got = self.recipe(reads + blk)[0]
+        self.assertEqual((got["kind"], got["template"], got["name"]), ("recipe", "object", "demo"))
+        self.assertEqual(self.recipe('[web.page]\ntitle = "Demo"\n[[web.page.blocks]]\ntype = "text"\ntext = "x"\n', rows=False)[0]["kind"], "recipe")   # no reads: no commands.tsv needed
+        self.assertEqual(self.recipe(reads + blk, rows=False), [])                  # a read without commands.tsv: dropped
+        self.assertEqual(self.recipe(reads + blk.replace('title = "Demo"', 'title = "Demo"\ngroup = "network"')), [])     # no place in the tree
+        self.assertEqual(self.recipe(reads + blk.replace('title = "Demo"', 'title = "Demo"\ntemplate = "list"')), [])
+        self.assertEqual(self.recipe(reads + blk.replace('read = "state"', 'read = "secret"')), [])   # only its own reads
+        act = reads + '[web.page]\ntitle = "Demo"\n[[web.page.actions]]\nlabel = "Go"\nplan = ["ct", "a", "stop"]\n'
+        self.assertEqual(self.recipe(act), [])                                      # only plans of its own area
+
     def test_the_four_existing_pages_keep_working(self):
         """games, posters, passthrough, ad-selfservice declare no placement key: each loads, lands in apps and keeps its blocks"""
         names = ("games", "posters", "passthrough", "ad-selfservice")
