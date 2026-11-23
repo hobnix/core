@@ -11,6 +11,7 @@
   import JobStrip from '../shell/JobStrip.svelte';
   import Inbox from '../shell/Inbox.svelte';
   import Entry from './gallery/Entry.svelte';
+  import { BLOCKS, BLOCK_API_LEVEL } from '../shell/blocks.js';
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
@@ -377,5 +378,16 @@
     <Entry from="shell" name="Inbox" text="The bell of the top bar. Live: it reads the problems and notifications of this server.">
       <div class="cell"><small>bell</small><Inbox /></div>
     </Entry>
+
+    <!-- the blocks a package page may use (shell/block-registry.json, #473); not a component, so no Entry (the coverage test counts those) -->
+    <section class="gal-entry" id="blocks" data-blocks>
+      <h2>Page blocks <small>block list level {BLOCK_API_LEVEL}</small></h2>
+      <p class="gal-what">{tr('The blocks a package can use in its [web.page]. hs pkg validate checks a page against this list.')}</p>
+      <div class="gal-states">
+        {#each Object.entries(BLOCKS) as [name, b] (name)}
+          <div class="cell wide"><small>{name} · {b.component}</small>{b.text} {tr('Needs')}: {b.schema.required.join(', ') || '–'}.</div>
+        {/each}
+      </div>
+    </section>
   </div>
 </div>

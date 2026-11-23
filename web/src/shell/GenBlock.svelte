@@ -18,6 +18,9 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import Switch from '../ui/Switch.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import Banner from '../ui/Banner.svelte';
+  import { tr } from '../i18n.js';
+  import { BLOCK_API_LEVEL } from './blocks.js';
 
   // block: the declaration; row: the object of the selected row (drawer context); forms: { Name: Component }; data: { '/api/sys/..': { rows } } instead of polling
   let { block, row = null, forms = {}, data = null, tab = '' } = $props();
@@ -183,6 +186,10 @@
       {/if}
     {/if}
   </PageState>
+
+{:else}
+  <!-- a block the registry does not know (a newer package on an older core, or a typo): a note instead of a broken page (#473) -->
+  <Banner tone="info">{tr('This part of the page cannot be shown: the block type is not known here.')} <span class="mono">{block.type ?? '?'}</span> ({tr('block list level')} {BLOCK_API_LEVEL})</Banner>
 {/if}
 
 <style>

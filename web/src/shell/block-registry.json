@@ -1,0 +1,60 @@
+{
+  "api-level": 1,
+  "common": { "type": "string", "tab": "string", "title": "string", "actions": "list" },
+  "blocks": {
+    "table": {
+      "component": "GenBlock",
+      "text": "Rows of a declared read, with row actions and an optional drawer.",
+      "schema": {
+        "required": ["read", "key", "columns"],
+        "keys": { "read": "string", "key": "string", "columns": "list", "joins": "list", "rowActions": "list", "empty": "string", "emptyTitle": "string", "emptyIcon": "string", "onrow": "string", "drawer": "dict", "id": "string", "every": "number" },
+        "blocks": ["drawer.blocks"]
+      }
+    },
+    "kv": {
+      "component": "GenBlock",
+      "text": "Key and value cells: from the first row of a read, from pairs, or from the selected row in a drawer.",
+      "schema": {
+        "required": [],
+        "keys": { "read": "string", "items": "list", "pairs": "bool", "cols": "number", "every": "number" },
+        "blocks": []
+      }
+    },
+    "cards": {
+      "component": "GenBlock",
+      "text": "One card per row of a declared read.",
+      "schema": {
+        "required": ["read", "key", "columns"],
+        "keys": { "read": "string", "key": "string", "columns": "list", "cardTitle": "string", "rowActions": "list", "joins": "list", "empty": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "text": {
+      "component": "GenBlock",
+      "text": "One paragraph or several.",
+      "schema": {
+        "required": ["text"],
+        "keys": { "text": "string|list" },
+        "blocks": []
+      }
+    },
+    "empty": {
+      "component": "GenBlock",
+      "text": "An empty state: an icon, a sentence and an action.",
+      "schema": {
+        "required": [],
+        "keys": { "icon": "string", "text": "string", "tone": "string" },
+        "blocks": []
+      }
+    },
+    "gallery": {
+      "component": "GenBlock",
+      "text": "A big picture and thumbnails from a declared read.",
+      "schema": {
+        "required": ["read", "key", "image"],
+        "keys": { "read": "string", "key": "string", "image": "string", "columns": "list", "rowActions": "list", "empty": "string", "emptyTitle": "string", "emptyIcon": "string", "every": "number" },
+        "blocks": []
+      }
+    }
+  }
+}
