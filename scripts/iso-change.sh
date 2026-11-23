@@ -95,10 +95,11 @@ if [ "${1:-}" = apply-add ]; then
 fi
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: iso-change.sh plan|start add <file-or-url> [--name <n>] (--checksum <hex> | --no-checksum) | remove <name> [--confirm <n>]" >&2; exit 1 ;; esac
-case "$action" in add|remove) ;; *) refuse "unknown action (add or remove)" ;; esac
+case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
 [ $# -ge 3 ] || refuse "$([ "$action" = add ] && echo 'a file or URL is needed' || echo 'a name is needed')"
 arg=$3
 shift 3
@@ -108,8 +109,8 @@ while [ $# -gt 0 ]; do
     --name) name=${2:-}; shift 2 || refuse "--name needs a value" ;;
     --checksum) checksum=${2:-}; shift 2 || refuse "--checksum needs a value" ;;
     --no-checksum) nochecksum=true; shift ;;
-    --confirm) confirm=${2:-}; shift 2 || refuse "--confirm needs a value" ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) confirm=${2:-}; shift 2 || refuse_code confirm.missing "--confirm needs a value" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 dir=$(iso_dir)
@@ -120,7 +121,7 @@ if [ "$action" = remove ]; then
   used=$(iso_used_by "$arg")
   [ "$used" = - ] || refuse "'$arg' is attached to $used. Detach it there first."
   if [ "$verb" = start ]; then
-    [ "$confirm" = "$arg" ] || refuse "type the name to confirm: $arg"
+    [ "$confirm" = "$arg" ] || refuse_code confirm.missing "type the name to confirm: $arg"
     rm -f -- "${dir:?}/${arg:?}" "${dir:?}/${arg:?}.meta"
     printf 'status\tdone\n'
     exit 0
@@ -187,7 +188,7 @@ if [ -n "$algo" ]; then jargs+=(--algo "$algo" --expect "$want"); else jargs+=(-
 
 if [ "$verb" = start ]; then
   . "$here/lib/job.sh"
-  unit=$(hs_job "iso-add-$name" "hs iso add $name" -- bash "$(cd "$here" && pwd)/iso-change.sh" apply-add "${jargs[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "iso-add-$name" "hs iso add $name" -- bash "$(cd "$here" && pwd)/iso-change.sh" apply-add "${jargs[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

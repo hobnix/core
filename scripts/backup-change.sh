@@ -33,10 +33,11 @@ here=$(dirname "$0")
 backup=${HS_BACKUP:-$here/backup.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: backup-change.sh plan|start <toggle|now|verify|drill|browse> [options]" >&2; exit 1 ;; esac
-case "$action" in toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-config|offsite-now|offsite-off|init) ;; *) refuse "unknown action (toggle, now, verify, drill, browse, offsite-set|config|now|off or init)" ;; esac
+case "$action" in toggle|now|verify|prune|drill|browse|rules|offsite-set|offsite-config|offsite-now|offsite-off|init) ;; *) refuse_code action.unknown "unknown action (toggle, now, verify, drill, browse, offsite-set|config|now|off or init)" ;; esac
 shift 2
 sets=()
 name="" kind="" to="" count=5 repo="" disk="" confirm="" endpoint="" bucket="" prefix="" url="" user="" host="" port="" path=""
@@ -58,7 +59,7 @@ while [ $# -gt 0 ]; do
     --port)    port=${2:-}; shift 2 ;;
     --path)    path=${2:-}; shift 2 ;;
     --confirm) confirm=${2:-}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -86,12 +87,12 @@ if [ ${#needs[@]} -gt 0 ]; then
 fi
 case "$action" in
   toggle)
-    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid name"
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse_code name.invalid "invalid name"
     case "$kind" in shares|sensitive|ct) ;; *) refuse "--kind is shares, sensitive or ct" ;; esac
     [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
   browse) [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
   rules)
-    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid name"
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse_code name.invalid "invalid name"
     . "$here/lib/backup-rules.sh"
     for s in "${sets[@]}"; do
       case "$s" in
@@ -148,7 +149,7 @@ case "$action" in
     # a disk labelled backup is plugged in: formatting another one would leave two, and init would not touch the first
     [ "$(st disk)" != present ] || refuse "A backup disk is plugged in already (label 'backup'). Unplug it first if you really want to replace it."
     dev=${HS_DISK_BYID:-/dev/disk/by-id}/$disk
-    [ -e "$dev" ] || refuse "There is no disk '$disk' (see hs sys pool disks)."
+    [ -e "$dev" ] || refuse_code disk.unknown "There is no disk '$disk' (see hs sys pool disks)."
     diskname=$(basename "$(readlink -f "$dev")")
     rc=0
     dry=$(bash "$backup" init "$dev" --dry-run </dev/null 2>&1) || rc=$?
@@ -198,9 +199,9 @@ if [ "$verb" = start ] && [ "$action" = offsite-config ]; then
   exit 0
 fi
 if [ "$verb" = start ]; then
-  if [ "$action" = init ] && [ "$confirm" != "$diskname" ]; then refuse "type the name of the disk to confirm: $diskname"; fi
+  if [ "$action" = init ] && [ "$confirm" != "$diskname" ]; then refuse_code confirm.missing "type the name of the disk to confirm: $diskname"; fi
   . "$here/lib/job.sh"
-  unit=$(hs_job "backup-$action" "hs backup $action" -- "${cmd[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "backup-$action" "hs backup $action" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

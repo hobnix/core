@@ -26,8 +26,8 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: vps-change.sh plan|start update|watch" >&2; exit 1 ;; esac
-case "$action" in update|watch) ;; *) refuse "unknown action (update or watch)" ;; esac
-[ $# -eq 2 ] || refuse "unexpected extra arguments"
+case "$action" in update|watch) ;; *) refuse_code action.unknown "unknown action (update or watch)" ;; esac
+[ $# -eq 2 ] || refuse_code args.unexpected "unexpected extra arguments"
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
@@ -55,7 +55,7 @@ cmd=("$ssh_bin" -i "$key" -T -p 2222
 
 if [ "$verb" = start ]; then
   . "$here/lib/job.sh"
-  unit=$(hs_job "vps-$action" "vps $action" -- "${cmd[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "vps-$action" "vps $action" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

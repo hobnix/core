@@ -237,7 +237,7 @@
       editors?.env.setFindings(m.env);
       const all = [...m.compose, ...m.env, ...m.banner];
       banner = m.banner;
-      if (r.status !== 'ok' && !all.length && String(r.reason).includes('changed meanwhile')) changedDisk = true;
+      if (r.status !== 'ok' && !all.length && r.code === 'plan.changed') changedDisk = true;
       else if (r.status !== 'ok' && !all.length) banner = [{ level: 'error', text: r.reason || 'The test could not be done.' }];
       result = { errors: all.filter((f) => f.level === 'error').length, warns: all.filter((f) => f.level !== 'error').length, ok: r.status === 'ok' };
       return r;

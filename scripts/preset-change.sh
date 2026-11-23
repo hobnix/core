@@ -14,10 +14,11 @@ py=${HS_PYTHON:-python3}
 pre() { PYTHONUTF8=1 "$py" "$here/preset.py" "$@"; }
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: preset-change.sh plan|start apply <name>" >&2; exit 1 ;; esac
-[ "$action" = apply ] || refuse "unknown action (apply)"
+[ "$action" = apply ] || refuse_code action.unknown "unknown action (apply)"
 [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "No preset called '$name'."
 meta=$(pre meta "$name" 2>/dev/null) || refuse "No preset called '$name'."
 title=$(awk -F'\t' '$1 == "title" { print $2 }' <<<"$meta")

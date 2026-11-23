@@ -4,6 +4,7 @@
   // failed_step, reason, tail (written by scripts/apps-change.sh). The dialog (step 8b) renders this where it shows the job's end.
   import Banner from '../../ui/Banner.svelte';
   import Button from '../../ui/Button.svelte';
+  import ErrorNote from '../../ui/ErrorNote.svelte';
   import { openPlan, openCreate } from '../../ui.svelte.js';
   import { tr } from '../../i18n.js';
   import RemoveCreated from './RemoveCreated.svelte';
@@ -17,10 +18,14 @@
   const remove = () => { onclose(); openCreate(RemoveCreated, { job: job.id, app: r.instance ?? '' }); };
 </script>
 
+{#if r.code}
+  <ErrorNote code={r.code} what={`${tr('The install stopped')}${step ? `: ${tr('failed at')} ${step}` : ''}. ${r.reason ?? ''}`} />
+{:else}
 <Banner tone="bad">
   {tr('The install stopped')}{#if step}: {tr('failed at')} <code>{step}</code>{/if}.
   {r.reason ?? ''}
 </Banner>
+{/if}
 {#if lines.length}
   <pre style="font:12px var(--mono);color:var(--fg-2);background:var(--bg-2);padding:8px 10px;border-radius:6px;white-space:pre-wrap">{lines.join('\n')}</pre>
 {/if}
