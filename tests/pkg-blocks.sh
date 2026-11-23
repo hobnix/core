@@ -20,10 +20,10 @@ bad() {   # bad <what> <word> <capability tables>
 }
 PG='[web.page]\ntitle = "P"\n'
 good "no page is fine" ''
-good "known blocks pass" "$PG[[web.page.blocks]]\ntype = \"text\"\ntext = \"hi\"\n[[web.page.blocks]]\ntype = \"empty\"\ntitle = \"x\"\n[[web.page.blocks]]\ntype = \"kv\"\nitems = []"
-bad "an unknown block is named" "unknown block 'chart'" "$PG[[web.page.blocks]]\ntype = \"chart\""
-bad "a block without a type is named" "unknown block None" "$PG[[web.page.blocks]]\ntext = \"x\""
-bad "a missing required key is named" "needs key" "$PG[[web.page.blocks]]\ntype = \"table\"\nread = \"/api/sys/x\"\ncolumns = []"
-bad "an unknown key is named" "has no key colour" "$PG[[web.page.blocks]]\ntype = \"text\"\ntext = \"x\"\ncolour = \"red\""
-bad "a wrong type is named" "must be a list" "$PG[[web.page.blocks]]\ntype = \"table\"\nread = \"/r\"\nkey = \"k\"\ncolumns = \"x\""
+good "known blocks pass" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"hi\"\n[[web.page.blocks]]\ntype = \"empty\"\ntitle = \"x\"\n[[web.page.blocks]]\ntype = \"kv\"\nitems = []"
+bad "an unknown block is named" "unknown block 'chart'" "${PG}[[web.page.blocks]]\ntype = \"chart\""
+bad "a block without a type is named" "unknown block None" "${PG}[[web.page.blocks]]\ntext = \"x\""
+bad "a missing required key is named" "needs key" "${PG}[[web.page.blocks]]\ntype = \"table\"\nread = \"/api/sys/x\"\ncolumns = []"
+bad "an unknown key is named" "has no key colour" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"x\"\ncolour = \"red\""
+bad "a wrong type is named" "must be a list" "${PG}[[web.page.blocks]]\ntype = \"table\"\nread = \"/r\"\nkey = \"k\"\ncolumns = \"x\""
 finish
