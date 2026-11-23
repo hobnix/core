@@ -217,9 +217,9 @@ note = "The lifecycle stage of every package (ADR 0027). flags is a comma list o
 ["pkg integrations"]
 role = "admin"
 kind = "tsv"
-columns = ["package", "integration", "source", "api_url", "key_state", "extra"]
+columns = ["package", "integration", "source", "api_url", "key_state", "extra", "key_header"]
 enums = { source = ["recipe", "extension", "capability"], key_state = ["ok", "locked", "missing", "-"] }
-note = "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. An optional name keeps one integration."
+note = "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration."
 
 ["apps list"]
 role = "viewer"

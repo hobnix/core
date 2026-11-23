@@ -77,7 +77,7 @@ def service_port(services_dir, package):
 
 
 def rows(manifests, on, only=None, services_dir=None, unresolved=None):
-    """[[package, integration, source, api_url, key_file, extras]] of the valid blocks of the packages whose name is in `on` (recipe installed,
+    """[[package, integration, source, api_url, key_file, extras, key_header]] of the valid blocks of the packages whose name is in `on` (recipe installed,
     extension or capability on), sorted; empty fields are "-"; extras = k=v comma list of the keys beyond the envelope.
     {port} in api_url is filled from the service record of the package; without a record or a port the api_url is "-" (never guessed) and
     "package/integration" is appended to `unresolved`."""
@@ -98,21 +98,31 @@ def rows(manifests, on, only=None, services_dir=None, unresolved=None):
                         unresolved.append(f"{m['name']}/{n}")
                 else:
                     u = u.replace("{port}", str(port))
-            out.append([m["name"], n, m.get("kind", "-"), _dash(u), _dash(b.get("key_file")), _dash(ex)])
+            out.append([m["name"], n, m.get("kind", "-"), _dash(u), _dash(b.get("key_file")), _dash(ex), _dash(b.get("key_header"))])
     return sorted(out)
 
 
-def grant(manifests, on, integration, caller):
-    """(key_file, None) when `caller` may have the key of `integration`, else (None, reason). A capability needs no permission; an extension
-    must declare integration:<name> (a declared check only: permissions are not enforced yet, hobnix/server#239); a recipe is refused."""
+def grant(manifests, on, integration, caller, provider=None):
+    """(key_file, None) when `caller` may have the key of `integration`, else (None, (code, reason)) with a code of scripts/lib/error-codes.tsv.
+    A capability needs no permission; an extension must declare integration:<name> (a declared check only: permissions are not enforced yet,
+    hobnix/server#239); a recipe is refused. `provider` is the package whose key is wanted: it must be there and offer the integration with a
+    key_file. Without a provider (the old two-argument form, kept for one release) the first package with a key_file is taken."""
     me = next((m for _, m in manifests if m.get("name") == caller), None)
     if me is None:
-        return None, f"{caller}: no such package"
+        return None, ("integration.denied", f"{caller}: no such package")
     if me.get("kind") == "recipe":
-        return None, f"{caller} is a recipe: only an extension or a capability may ask for a key"
+        return None, ("integration.denied", f"{caller} is a recipe: only an extension or a capability may ask for a key")
     if me.get("kind") == "extension" and f"integration:{integration}" not in (me.get("permissions") or []):
-        return None, f"{caller} does not declare permissions = [\"integration:{integration}\"]"
-    hits = [r for r in rows(manifests, on, integration) if r[4] != "-"]
+        return None, ("integration.denied", f"{caller} does not declare permissions = [\"integration:{integration}\"]")
+    offers = rows(manifests, on, integration)
+    if provider is not None:
+        mine = [r for r in offers if r[0] == provider]
+        if not mine:
+            return None, ("integration.unknown", f"{provider} is not there or does not offer {integration}")
+        if mine[0][4] == "-":
+            return None, ("integration.nokey", f"{provider} offers {integration} without a key_file")
+        return mine[0][4], None
+    hits = [r for r in offers if r[4] != "-"]
     if not hits:
-        return None, f"no available package offers {integration} with a key_file"
+        return None, ("integration.nokey", f"no available package offers {integration} with a key_file")
     return hits[0][4], None

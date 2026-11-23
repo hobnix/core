@@ -9992,7 +9992,7 @@
   "/pkg/integrations": {
    "get": {
     "operationId": "pkg.integrations",
-    "summary": "what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none); - = empty",
+    "summary": "what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {
@@ -10005,7 +10005,7 @@
      "class": "read",
      "rest": true
     },
-    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. An optional name keeps one integration.",
+    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration.",
     "responses": {
      "0": {
       "description": "ok",
@@ -10050,10 +10050,14 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "extra"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_header"
            }
           ],
-          "minItems": 6,
-          "maxItems": 6
+          "minItems": 7,
+          "maxItems": 7
          }
         }
        }
