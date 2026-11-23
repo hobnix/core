@@ -13,7 +13,6 @@
   import Entry from './gallery/Entry.svelte';
   import GenBlock from '../shell/GenBlock.svelte';
   import { BLOCKS, BLOCK_API_LEVEL } from '../shell/blocks.js';
-  import GenBlock from '../shell/GenBlock.svelte';
   // answers for the block samples below (GenBlock takes `data` instead of polling)
   const BLOCK_DATA = { '/api/sys/sample/copy': { rows: [['420', '1000', 'Copying photos', 'running']] }, '/api/sys/sample/done': { rows: [['10', '10', 'Backup', 'ok']] } };
   import Logo from '../ui/Logo.svelte';
