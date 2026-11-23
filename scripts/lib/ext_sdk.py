@@ -17,6 +17,7 @@ An extension that speaks the command protocol (ADR 0010, docs/api/ext-protocol-v
 handle(request, ctx) returns ok(...) or raises Failure(code, message); any other exception is answered as `failed` (traceback on stderr).
 """
 import json
+import os
 import sys
 
 VERSION = 1
@@ -81,6 +82,19 @@ class Ctx:
             if v is not None:
                 m[k] = v
         self._send(**m)
+
+
+def credential(name):
+    """The key of the integration `name` (permission integration:<name>) of a confined service, from the systemd credential
+    $CREDENTIALS_DIRECTORY/integration-<name> that the core hands over; None when there is none. Never argv or the environment."""
+    d = os.environ.get("CREDENTIALS_DIRECTORY")
+    if not d or not name or not all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in name):
+        return None
+    try:
+        with open(os.path.join(d, "integration-" + name)) as f:
+            return f.read().rstrip("\r\n")
+    except OSError:
+        return None
 
 
 def run(handler):

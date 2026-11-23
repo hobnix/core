@@ -3,7 +3,7 @@
 //! The extension side of two protocols, both JSON Lines with `"v": 1`:
 //! - [`command`]: one process per call, one request on stdin, progress/log/event lines and exactly one result on stdout
 //!   (docs/adr/0010-extension-command-protocol.md, docs/api/ext-protocol-v1.schema.json).
-//! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot` out
+//! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot`/`rollup` out
 //!   (docs/adr/0011-extension-service-lifecycle.md, docs/api/ext-service-v1.schema.json).
 //!
 //! Rules the SDK keeps for you: stdout carries nothing but protocol lines (use `eprintln!` for diagnostics, never `println!`),

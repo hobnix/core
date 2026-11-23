@@ -268,3 +268,28 @@ fn service_degraded_health_and_topic_checks() {
         json!({"v":1,"type":"health","ok":false,"text":"device gone"})
     );
 }
+
+#[test]
+fn service_rollup_message_and_credential() {
+    struct Roll;
+    impl Service for Roll {
+        fn tick(&mut self, ctx: &Ctx) -> Health {
+            ctx.rollup("pkg.t.watch", "anna", 2.0, 90.5).unwrap();
+            assert!(ctx.rollup("pkg.t.watch", "a b", 1.0, 0.0).is_err());
+            Health::ok()
+        }
+    }
+    let buf = Buf::default();
+    service::run_with(svc_input(&[init()]), buf.clone(), Roll);
+    let lines = buf.lines();
+    let m = lines
+        .iter()
+        .find(|m| m["type"] == "rollup")
+        .expect("a rollup line");
+    assert_eq!(m["kind"], "pkg.t.watch");
+    assert_eq!(m["user"], "anna");
+    assert_eq!(m["n"], 2.0);
+    assert_eq!(m["sum"], 90.5);
+    assert_eq!(m["v"], 1);
+    assert!(service::credential("Bad Name").is_none());
+}

@@ -28,6 +28,7 @@ Schema of the messages: docs/api/ext-service-v1.schema.json.
 """
 import argparse
 import fnmatch
+import importlib.util
 import json
 import os
 import queue
@@ -53,7 +54,7 @@ MAX_SNAPSHOT = 256 << 10
 WINDOW = 100                    # events sent but not yet acknowledged, at most
 KIND = re.compile(r"^pkg\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 STATES = ("starting", "running", "degraded", "stopping", "stopped", "failed")
-FROM_SERVICE = ("ready", "health", "ack", "log", "emit", "snapshot")
+FROM_SERVICE = ("ready", "health", "ack", "log", "emit", "snapshot", "rollup")
 
 
 def check_message(m):
@@ -76,6 +77,11 @@ def check_message(m):
     if t == "emit" and (m.get("level", "info") not in ("info", "warn", "error") or not isinstance(m.get("payload", {}), dict)
                         or not isinstance(m.get("text", ""), str)):
         return "emit.level is info|warn|error, payload an object, text a string"
+    if t == "rollup" and (not isinstance(m.get("kind"), str) or not KIND.match(m["kind"])
+                          or not isinstance(m.get("user"), str) or not re.match(r"^[A-Za-z0-9_.@-]{1,64}$", m["user"])):
+        return "rollup needs kind (pkg.<package>.<what>) and user (letters, digits, _ . @ -, at most 64)"
+    if t == "rollup" and any(k in m and (isinstance(m[k], bool) or not isinstance(m[k], (int, float)) or abs(m[k]) > 1e12) for k in ("n", "sum")):
+        return "rollup.n and rollup.sum are numbers"
     if t == "snapshot" and (not isinstance(m.get("topic"), str) or not re.match(r"^[a-z0-9-]{1,60}$", m["topic"]) or "data" not in m):
         return "snapshot needs topic (a-z, 0-9, -) and data"
     if t == "snapshot" and len(json.dumps(m["data"])) > MAX_SNAPSHOT:
@@ -498,7 +504,42 @@ def emit_verdict(name, perms, kind):
     return None
 
 
-def make_handler(name, limit=None, warn=None, perms=None):
+def metric_kinds(pkgdir):
+    """The kinds the package declared with `retention = "metric"` in its [[events]] (package.toml, else capability.toml)."""
+    if tomllib is None or not pkgdir:
+        return set()
+    for f in ("package.toml", "capability.toml"):
+        try:
+            with open(os.path.join(pkgdir, f), "rb") as fh:
+                ev = tomllib.load(fh).get("events")
+        except (OSError, ValueError):
+            continue
+        if isinstance(ev, list):
+            return {e["kind"] for e in ev if isinstance(e, dict) and e.get("retention") == "metric" and isinstance(e.get("kind"), str)}
+    return set()
+
+
+def rollup_verdict(name, pkgdir, kind):
+    """None when `name` may add to the monthly rollup of `kind`, else the reason: only a kind of its own that its [[events]] declare with retention = metric."""
+    if not kind.startswith(f"pkg.{name}."):
+        return f"a package may only roll up pkg.{name}.<what>"
+    if kind not in metric_kinds(pkgdir):
+        return 'not declared in [[events]] with retention = "metric"'
+    return None
+
+
+def rollup_add(m):
+    """`hs sys state rollup-add <kind> <user> --n N --sum S`, run by the bridge (root, outside the sandbox of the service)."""
+    scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prog = [os.environ["HS_EXT_ROLLUP"]] if os.environ.get("HS_EXT_ROLLUP") else ["bash", os.path.join(scripts, "state.sh"), "rollup-add"]
+    args = [m["kind"], m["user"], "--n", str(m.get("n", 1)), "--sum", str(m.get("sum", 0))]
+    try:
+        subprocess.run(prog + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def make_handler(name, limit=None, warn=None, perms=None, pkgdir=None):
     """The on_message of svc-run: `log` to the journal, `emit` into the event log under the rate limit, `snapshot` to the snapshot file.
     perms = the declared permissions (None = none declared). A refused kind is warned once per kind, not per call."""
     limit = limit or RateLimit()
@@ -522,12 +563,55 @@ def make_handler(name, limit=None, warn=None, perms=None):
             elif not state["warned"]:     # one warning per burst, not one per dropped event
                 state["warned"] = True
                 warn(f"{name}: more than {limit.limit} emits in {limit.window:g} s, further ones are dropped")
+        elif t == "rollup":
+            why = rollup_verdict(name, pkgdir, m["kind"])
+            if why:
+                if ("rollup", m["kind"]) not in refused:
+                    refused.add(("rollup", m["kind"]))
+                    warn(f"{name}: rollup of {m['kind']} dropped ({why})")
+            elif limit.allow():
+                rollup_add(m)
         elif t == "snapshot":
             write_snapshot(name, m["topic"], m["data"])
     return handle
 
 
-def svc_run(name, pkgdir, state_dir):
+def unit_of(name):
+    return f"hs-ext-run-{name}"
+
+
+def stop_unit(name):
+    """Stop the transient unit of the service (a stop of the systemd-run client alone may leave it running)."""
+    try:
+        subprocess.run([os.environ.get("HS_SYSTEMCTL", "systemctl"), "stop", unit_of(name) + ".service"], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def confined_program(name, pkgdir, prog, creds=()):
+    """(argv, None) or (None, problem): PROG as a transient systemd unit confined by the declared permissions (scripts/lib/ext_confine.py, the same
+    mapping as a confined command). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
+    `emit`, `rollup` and `snapshot` need no wider mount. creds = [(credential name, key file)]: systemd LoadCredential= reads the file as root
+    before the sandbox and the service finds it in $CREDENTIALS_DIRECTORY (never argv or environment). Not tested on hardware yet."""
+    spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    props, _, bad = mod.properties(declared_perms(pkgdir), name)
+    if bad:
+        return None, bad
+    if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
+        props.append("BindReadOnlyPaths=-" + os.path.abspath(pkgdir))     # its own folder comes back into the empty /var/lib/hs
+    for cname, path in creds:
+        if not re.match(r"^[a-z][a-z0-9-]{0,60}$", cname) or not path.startswith("/") or ":" in path:
+            return None, f"bad credential {cname!r}"
+        props.append(f"LoadCredential={cname}:{path}")
+    cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
+           f"--description=hs extension service {name}", "--property=KillMode=control-group"]
+    return cmd + ["--property=" + x for x in props] + ["--"] + prog, None
+
+
+def svc_run(name, pkgdir, state_dir, creds=()):
     table = service_table(pkgdir)
     if not table or not isinstance(table.get("exec"), str):
         print(f"ext_service.py: {name} has no [service] table with exec", file=sys.stderr)
@@ -544,8 +628,14 @@ def svc_run(name, pkgdir, state_dir):
     subscribe = table.get("subscribe", [])
     if subscribe and not os.path.exists(cursor_path(name)):
         write_cursor(cursor_path(name), db_latest())
-    res = supervise(program_of(pkgdir, table["exec"]), name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir)))
+    prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
+    if bad:     # fail closed: a service whose confinement cannot be set up does not run
+        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+        record_failure(state_dir, name, "confine_failed", bad)
+        return 69
+    res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
+                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
+    stop_unit(name)
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1
@@ -605,11 +695,16 @@ def main_svc(argv):
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--active", default="no")
     ap.add_argument("--stopped", default="no")
+    ap.add_argument("--credential", action="append", default=[], help="NAME=KEYFILE for systemd LoadCredential=")
     a = ap.parse_args(argv[1:])
     if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
         return 2
     if argv[0] == "svc-run":
-        return svc_run(a.name, a.dir or ".", a.state_dir)
+        creds = []
+        for c in a.credential:
+            n, _, p = c.partition("=")
+            creds.append((n, p))
+        return svc_run(a.name, a.dir or ".", a.state_dir, creds)
     if argv[0] == "reset":
         try:
             os.unlink(state_path(a.state_dir, a.name))

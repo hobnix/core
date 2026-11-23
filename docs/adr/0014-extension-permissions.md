@@ -71,13 +71,23 @@ Do not claim enforcement for commands until step 3: root commands can read any f
 3. May a package ever run as non-root (needs the broker)?
 
 ## Step 2 as built: confinement of services (2026-11-18, docs/PLAN-extensions-access.md step 10, #239 c)
-`hs ext start|enable` writes `/run/systemd/system/hs-ext-svc@<name>.service.d/10-confine.conf` (scripts/ext.sh `svc_confine`, text made by
-scripts/lib/ext_confine.py) and runs `daemon-reload`; the template unit in configuration.nix carries the same strict floor, so a unit started
-without its drop-in is still strict. A path that is relative, has `..`, `.` or `//`, or is `/` is refused and the service is not started.
+Update 2026-11-23 (#1130, found by reading the code, not run): the first build put the whole unit `hs-ext-svc@<name>` in the sandbox. That unit is the
+bridge (scripts/lib/ext_service.py), which writes `state.db` (emit), the snapshots and the cursors under `/var/lib/hs` and reads the package folder, so a
+service could not emit, roll up, read an integration key or even start under the empty `/var/lib/hs`. Now the unit `hs-ext-svc@<name>` is NOT sandboxed
+(configuration.nix) and the bridge starts the service as the transient unit `hs-ext-run-<name>` with `systemd-run --pipe --wait`, with the properties below
+(the same mapping as a confined command, `ext_service.py confined_program`). `hs ext start|enable` only checks the permissions (a path that is relative, has
+`..`, `.` or `//`, or is `/` is refused and the service is not started) and removes a drop-in of an older version. What reaches the confined service:
+
+- its own package folder when it lies below `/var/lib/hs` (`BindReadOnlyPaths`); a package folder below `/etc/nixos` is hidden by `InaccessiblePaths` (open point);
+- the key of every `integration:<name>` it declared, as the systemd credential `integration-<name>` (`LoadCredential=`, read by systemd as root, so it needs no
+  mount): in `$CREDENTIALS_DIRECTORY`, never argv or environment, `/var/lib/hs` stays hidden. `hs ext svc-run` names the files through `integration_credentials`
+  (scripts/lib/integration.sh: the declared check of `pkg.py integration-key` and `secret_state`; a locked or missing key is skipped with a warning);
+- `state.db` writes only through service messages handled by the bridge: `emit` (kind covered by `events.emit`) and `rollup` (ADR 0011: only a kind of the
+  package that its `[[events]]` declare with `retention = "metric"`); no mount of `/var/lib/hs`. Reading `state.db` or `hs sys state ...` from the service is not possible.
 
 | From the package | systemd property |
 | --- | --- |
-| always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` (the bridge's own state) |
+| always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` |
 | `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
@@ -87,8 +97,7 @@ without its drop-in is still strict. A path that is relative, has `..`, `.` or `
 What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the file system stays readable except the secret locations
 (since #947: `/var/lib/hs` is an empty tmpfs apart from the granted `ext`, `ext-svc` and own-name (`/var/lib/hs/<package>`) state, `/root`, `/etc/shadow`, `/etc/gshadow`, `/etc/ssh` and `/etc/nixos` are inaccessible, and an `fs.read` or `fs.write` that overlaps them, or an `fs.write` below `/etc`, `/boot` or `/nix`, is refused; everything else is only read only); the network is open whatever `net` says; `host`, `secrets`
 and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
-event is written by the bridge (scripts/lib/ext_service.py) into /var/lib/hs/state.db, which a confined unit may not write, so that event
-needs a follow-up (an unconfined `ExecStopPost=+`). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the unit is only evaluated in CI,
+event is written by the bridge, which is no longer confined (#1130). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the units are only evaluated in CI (#1130: the transient unit, `LoadCredential` and the stop of the transient unit by the bridge were not run),
 the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
 
 ## Step 3 as built: opt-in confinement of commands (2026-11-18, docs/PLAN-extensions-access.md step 11, #239 d)

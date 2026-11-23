@@ -25,6 +25,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/machine.sh"
 . "$here/lib/registry-load.sh"
 . "$here/lib/effect.sh"
+. "$here/lib/integration.sh"
 state=${HS_STATE_DIR:-/var/lib/hs}
 lang=${HS_LANG:-$(setting_get language 2>/dev/null || echo en)}
 
@@ -119,17 +120,16 @@ svc_rows() {   # name, state, reason, since of every package that is on and has 
   done < <(ext_package_names)
 }
 confine_dir=${HS_CONFINE_DIR:-/run/systemd/system}   # where the drop-ins of hs-ext-svc@<name>.service go (runtime only: gone at reboot, rewritten at every start)
-svc_confine() {   # svc_confine <name>: write the drop-in with the confinement of the package (scripts/lib/ext_confine.py); refuses a path that is not allowed
-  local perms=() dir text
+svc_confine() {   # svc_confine <name>: check the permissions of the package (scripts/lib/ext_confine.py); refuses a path that is not allowed.
+  # The unit itself is NOT confined (the bridge writes state.db, snapshots and cursors): the bridge runs the service as a transient confined unit.
+  local perms=() dir
   mapfile -t perms < <(python3 "$here/pkg.py" perms "$1" 2>/dev/null || echo -)
   dir=$confine_dir/hs-ext-svc@$1.service.d
-  text=$(python3 -I "$here/lib/ext_confine.py" dropin --name "$1" -- "${perms[@]}") || { rm -f "$dir/10-confine.conf"; return 1; }
+  rm -f "$dir/10-confine.conf"   # a drop-in of an older version would confine the bridge too
+  python3 -I "$here/lib/ext_confine.py" dropin --name "$1" -- "${perms[@]}" >/dev/null || return 1
   if [ "${perms[0]:-}" = "-" ]; then
     warn "$(t "'%s' does not declare permissions: its service gets the strict defaults and may write nothing but its own state." "$1")"
   fi
-  mkdir -p "$dir" && printf '%s
-' "$text" > "$dir/10-confine.conf.tmp" && mv "$dir/10-confine.conf.tmp" "$dir/10-confine.conf" || return 1
-  ctl daemon-reload >/dev/null 2>&1 || true
 }
 svc_start() {   # svc_start <name> [--no-block]: confine, forget an old failure and start the unit
   svc_confine "$1" || { warn "$(t "The confinement of '%s' could not be written, so its service is not started." "$1")"; return 1; }
@@ -159,11 +159,13 @@ cmd_stop() {
   ok "$(t "The service of '%s' is stopped. It stays stopped until: hs ext start %s" "$1" "$1")"
 }
 cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the supervisor
-  local n=${1:-} d
+  local n=${1:-} d name path cred=()
   exists "$n" && ext_package_on "$n" && has_service "$n" || { printf '%s
 ' "hs ext svc-run: '$n' is not a service extension that is on" >&2; exit 1; }
   d=$(ext_package_dir "$n")
-  exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state"
+  # the keys of the declared integration:<name> permissions go to the service as systemd credentials (never argv or environment)
+  while IFS=$'	' read -r name path; do cred+=(--credential "integration-$name=$path"); done < <(integration_credentials "$n")
+  exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state" ${cred[@]+"${cred[@]}"}
 }
 
 overlay_add() { mkdir -p "$state"; grep -qxF -- "$2" "$state/capabilities-$1" 2>/dev/null || printf '%s\n' "$2" >> "$state/capabilities-$1"; }

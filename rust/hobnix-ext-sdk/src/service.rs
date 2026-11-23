@@ -81,6 +81,21 @@ impl Ctx {
     pub fn emit(&self, ev: &Event) -> io::Result<()> {
         self.out.event("emit", ev)
     }
+    /// Add to the monthly rollup of (month, `user`, `kind`) (`rollup`). The core does it, only for a `kind` of this package declared in `[[events]]`
+    /// with `retention = "metric"`; others are dropped with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`.
+    pub fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
+        let user_ok = user
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
+        if !(1..=64).contains(&user.len()) || !user_ok {
+            let why = "user must be 1 to 64 characters of A-Za-z0-9 and _ . @ -";
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, why));
+        }
+        self.out.typed(
+            "rollup",
+            json!({"kind": kind, "user": user, "n": n, "sum": sum}),
+        )
+    }
     /// Publish the newest state of `topic` (`[a-z0-9-]{1,60}`); replaces the previous one. At most 256 KiB.
     pub fn snapshot(&self, topic: &str, data: Value) -> io::Result<()> {
         let chars_ok = topic
@@ -100,6 +115,24 @@ impl Ctx {
         self.out
             .typed("snapshot", json!({"topic": topic, "data": data}))
     }
+}
+
+/// The key of the integration `name` (declared as `integration:<name>` in `permissions`), which the core hands to a confined service as the
+/// systemd credential `integration-<name>`: read from `$CREDENTIALS_DIRECTORY`, never from argv or the environment. Trailing whitespace is cut.
+/// `None` when there is no such credential (not declared, the key is locked or missing).
+pub fn credential(name: &str) -> Option<String> {
+    let ok = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'));
+    let dir = std::env::var_os("CREDENTIALS_DIRECTORY")?;
+    if !ok {
+        return None;
+    }
+    let text =
+        std::fs::read_to_string(std::path::Path::new(&dir).join(format!("integration-{name}")))
+            .ok()?;
+    Some(text.trim_end().to_string())
 }
 
 pub trait Service {

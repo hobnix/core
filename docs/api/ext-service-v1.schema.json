@@ -61,7 +61,8 @@
         { "$ref": "#/$defs/ack" },
         { "$ref": "#/$defs/log" },
         { "$ref": "#/$defs/emit" },
-        { "$ref": "#/$defs/snapshot" }
+        { "$ref": "#/$defs/snapshot" },
+        { "$ref": "#/$defs/rollup" }
       ]
     },
     "ready": {
@@ -107,6 +108,19 @@
         "text": { "type": "string" },
         "level": { "enum": ["info", "warn", "error"] },
         "payload": { "type": "object" }
+      }
+    },
+    "rollup": {
+      "type": "object",
+      "description": "Asks the core to add to the monthly rollup of (month, user, kind), like `hs sys state rollup-add`. Done by the core (outside the sandbox of the service); only for a kind of the package that its [[events]] declare with retention = \"metric\". Counts against the emit limit.",
+      "required": ["v", "type", "kind", "user"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "rollup" },
+        "kind": { "type": "string", "pattern": "^pkg\\.[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$" },
+        "user": { "type": "string", "pattern": "^[A-Za-z0-9_.@-]{1,64}$" },
+        "n": { "type": "number", "default": 1 },
+        "sum": { "type": "number", "default": 0 }
       }
     },
     "snapshot": {
