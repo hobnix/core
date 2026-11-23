@@ -43,14 +43,14 @@ def table(path):
 
 
 def pkg_table(d):
-    rows = ["| Kind | Level | Payload keys | Meaning | Push message |", "| --- | --- | --- | --- | --- |"]
+    rows = ["| Kind | Level | Payload keys | Meaning | Push message | Retention |", "| --- | --- | --- | --- | --- | --- |"]
     for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
         if not name.endswith(".tsv"):
             continue
         for r in pkg_events.read_file(os.path.join(d, name), name[:-4]):
             keys = "none" if r["payload"] == "-" else ", ".join("`%s`" % k for k in r["payload"].split(","))
             push = "none" if r["category"] == "-" else "%s, %s" % (r["category"], "default" if r["priority"] == "-" else r["priority"])
-            rows.append("| `%s` | %s | %s | %s | %s |" % (r["kind"], r["level"], keys, r["meaning"].replace("|", "\\|"), push))
+            rows.append("| `%s` | %s | %s | %s | %s | %s |" % (r["kind"], r["level"], keys, r["meaning"].replace("|", "\\|"), push, r["retention"]))
     return "\n".join(rows)
 
 

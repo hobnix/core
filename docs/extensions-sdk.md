@@ -92,6 +92,20 @@ A service sends `emit` for an event of its own. The kind must be `pkg.<name>.<wh
 count; the 51st is dropped and one warning goes to the journal. `snapshot` replaces the live topic `ext-<name>-<topic>`; only changed data makes a new
 generation. Not tested on hardware yet.
 
+## Keep a monthly rollup instead of raw ticks
+
+An event that is only counted (a play, a request, a bandwidth sample) is declared with `retention = "metric"` in `[[events]]`: the core deletes
+its raw rows after 35 days (see docs/events.md "Retention"). To keep the history, add each tick to a monthly rollup. The rollup is one row per
+(month, user, kind) in the table `rollups` of `state.db`, so five years of one user and one kind are 60 rows; it is never pruned.
+
+```
+hs sys state rollup-add <kind> <user> [--n N] [--sum S] [--time T]   # n counts up by N (default 1), sum by S (default 0), month of T (default now, UTC)
+hs sys state rollups [kind] [user]                                    # month TAB user TAB kind TAB n TAB sum, oldest month first
+```
+
+A second add in the same month changes the same row (an upsert). A Python caller inside the core uses `state-db.py` `rollup_add(c, t, user, kind, n, total)`.
+Not tested on hardware yet.
+
 ## Try it without a server
 
 ```bash

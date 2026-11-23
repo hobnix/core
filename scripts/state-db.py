@@ -20,6 +20,8 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   inventory-json             {"known":N,"missing":[...],"worse":[...]} for the status document
   forget <serial|dev> [--yes]  remove a MISSING disk from the list for good
   read-put <key> [--ms N] [--rc N]  keep the output of a read (stdin): the table `reads`; nothing writes it since ADR 0026 (the live topics replaced it), kept for old callers
+  rollup-add <kind> <user> [--n N] [--sum S] [--time T]  add to the monthly rollup of (month, user, kind): the table `rollups` (#927; docs/extensions-sdk.md)
+  rollups [kind] [user]      month TAB user TAB kind TAB n TAB sum, oldest month first
   usage-record <key> <used> <size>  one reading of a pool / filesystem fill level (bytes; backup: percent and 100), at most one per hour and key
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
   read-get <key>             the kept output (nothing and exit 1 when there is none)
@@ -37,7 +39,8 @@ Environment (tests): HS_STATE_DB, HS_STATE_DIR, HS_MONITOR (command), HS_LSBLK, 
 HS_STATE_SMART_EVERY (seconds, default 900), HS_STATE_WORSE_DAYS (default 14), HS_DISK_HEALTH (the reading command),
 HS_SMART_FAIL_REALLOC (10), HS_SMART_FAIL_MEDIA (10), HS_SMART_WEAR_JUMP (3), HS_SMART_HOLD_DAYS (7), HS_SMART_WAKE_DAYS (6),
 HS_SMART_STALE (seconds, default 2*86400+3600),
-HS_EVENT_KEEP (rows kept in the event log, default 5000), HS_EVENT_DAYS (age limit in days, default 90).
+HS_EVENT_KEEP (rows kept in the event log, default 5000), HS_EVENT_DAYS (age limit in days, default 90),
+HS_EVENT_EPHEMERAL_DAYS (pkg events of the class ephemeral, default 7), HS_EVENT_METRIC_DAYS (class metric, default 35; keep a monthly rollup instead).
 """
 import json
 import os
@@ -56,6 +59,8 @@ WORSE_DAYS = int(os.environ.get("HS_STATE_WORSE_DAYS", "14"))
 STALE_S = int(os.environ.get("HS_STATE_STALE", "1800"))
 KEEP_EVENTS = int(os.environ.get("HS_EVENT_KEEP", "5000"))
 EVENT_DAYS = int(os.environ.get("HS_EVENT_DAYS", "90"))
+EPHEMERAL_DAYS = int(os.environ.get("HS_EVENT_EPHEMERAL_DAYS", "7"))
+METRIC_DAYS = int(os.environ.get("HS_EVENT_METRIC_DAYS", "35"))
 WARN_KINDS = ("worse", "missing")
 SMART_KEEP_DAYS = 400
 SMART_THIN_DAYS = 30
@@ -126,6 +131,10 @@ CREATE TABLE IF NOT EXISTS reads (
 CREATE TABLE IF NOT EXISTS usage (
   time INTEGER NOT NULL, key TEXT NOT NULL, used INTEGER NOT NULL, size INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS usage_key ON usage (key, time);
+-- monthly rollups for extensions (#927): one row per (month, user, kind) instead of raw ticks; never pruned, a few rows per user and month
+CREATE TABLE IF NOT EXISTS rollups (
+  month TEXT NOT NULL, user TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, sum INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (month, user, kind));
 CREATE TABLE IF NOT EXISTS hours (
   hour INTEGER PRIMARY KEY, cpu REAL, mem REAL, gpu REAL, rx REAL, tx REAL, up REAL, boot INTEGER NOT NULL DEFAULT 0);
 """
@@ -386,10 +395,38 @@ def cmd_event_kinds(args):
     return 0
 
 
+def _pkg_events():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_events", os.path.join(HERE, "lib", "pkg_events.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def trim_events(c, t):
-    """Retention in one place: the newest KEEP_EVENTS rows, nothing older than EVENT_DAYS (whichever removes more)."""
+    """Retention in one place. General: the newest KEEP_EVENTS rows, nothing older than EVENT_DAYS (whichever removes more). Then by the
+    class a package declared (#927): its `ephemeral` kinds go after EPHEMERAL_DAYS, its `metric` kinds after METRIC_DAYS (the extension keeps
+    a rollup, see rollup_add); `audit` and kinds without a declaration only follow the general rule."""
     c.execute("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT ?)", (KEEP_EVENTS,))
     c.execute("DELETE FROM events WHERE time < ?", (t - EVENT_DAYS * 86400,))
+    if not c.execute("SELECT 1 FROM events WHERE source='pkg' LIMIT 1").fetchone():
+        return
+    try:
+        by = _pkg_events().kinds_by_retention()
+    except Exception:
+        return
+    for cls, days in (("ephemeral", EPHEMERAL_DAYS), ("metric", METRIC_DAYS)):
+        for kind in by.get(cls, []):
+            # the log stores source and kind apart: "pkg.x.y" is source "pkg", kind "x.y"
+            c.execute("DELETE FROM events WHERE source='pkg' AND kind=? AND time < ?", (kind[len("pkg."):], t - days * 86400))
+
+
+def rollup_add(c, t, user, kind, n=1, total=0):
+    """Add to the monthly rollup of (month of t in UTC, user, kind): upsert, so a month is one row however many ticks it had."""
+    month = time.strftime("%Y-%m", time.gmtime(t))
+    c.execute("INSERT INTO rollups (month, user, kind, n, sum) VALUES (?,?,?,?,?) "
+              "ON CONFLICT(month, user, kind) DO UPDATE SET n = n + excluded.n, sum = sum + excluded.sum",
+              (month, user, kind, n, total))
 
 
 def label(model, serial):
@@ -1080,6 +1117,40 @@ def cmd_usage_record(args):
     return 0
 
 
+def cmd_rollup_add(args):
+    """rollup-add KIND USER [--n N] [--sum S] [--time T]: add to the monthly rollup (default n 1, sum 0, time now)."""
+    if len(args) < 2 or not re.fullmatch(r"[A-Za-z0-9:_.-]{1,80}", args[0]) or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,64}", args[1]):
+        return 1
+    opt = {"--n": 1, "--sum": 0, "--time": now()}
+    rest = args[2:]
+    while rest:
+        if len(rest) < 2 or rest[0] not in opt or num(rest[1]) is None:
+            return 1
+        opt[rest[0]] = num(rest[1])
+        rest = rest[2:]
+    c = open_rw()
+    with c:
+        rollup_add(c, opt["--time"], args[1], args[0], opt["--n"], opt["--sum"])
+    return 0
+
+
+def cmd_rollups(args):
+    """rollups [KIND [USER]]: nothing (and exit 0) when there is no database or no row."""
+    c = open_ro()
+    if c is None:
+        return 0
+    q, a = "SELECT month, user, kind, n, sum FROM rollups", []
+    for col, v in zip(("kind", "user"), args[:2]):
+        q += (" AND " if a else " WHERE ") + col + "=?"
+        a.append(v)
+    try:
+        for r in c.execute(q + " ORDER BY month, user, kind", a):
+            print("%s\t%s\t%s\t%d\t%d" % r)
+    except sqlite3.Error:
+        pass
+    return 0
+
+
 def cmd_usage(args):
     """usage KEY [DAYS]: nothing (and exit 0) when there is no database or no reading."""
     if not args:
@@ -1467,6 +1538,10 @@ def main(argv):
         return cmd_usage_record(args)
     if cmd == "usage":
         return cmd_usage(args)
+    if cmd == "rollup-add":
+        return cmd_rollup_add(args)
+    if cmd == "rollups":
+        return cmd_rollups(args)
     if cmd == "read-put":
         return cmd_read_put(args)
     if cmd == "topic-bump":

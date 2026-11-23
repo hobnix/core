@@ -127,6 +127,7 @@ level   = "warn"                   # required; info | warn | error
 label   = "Download failed"        # required; 1..60 chars, one line, no tab, not "-"
 icon    = "warning-octagon"        # optional; ^[a-z0-9-]{1,40}$ (Phosphor icon name)
 meaning = "a download failed (subject: the service)"   # required; 1..200 chars, one line, no tab, not "-"
+retention = "audit"               # required; ephemeral | audit | metric (see "Retention" below)
 payload = ["service", "name", "sub?"]   # optional; keys ^[a-z][a-z0-9_]{0,31}\??$, no duplicates
 notify  = { category = "problem", priority = "high", title = "{name}: {label}", message = "{body}" }   # optional default rule
 ```
@@ -135,7 +136,7 @@ notify  = { category = "problem", priority = "high", title = "{name}: {label}", 
 and `message` are required (1..300 chars, one line; write a line break as the two characters `\n`). Unknown keys, a kind twice and a bad value
 are problems: `hs pkg` refuses to install such a package, and `python3 scripts/pkg.py validate` and `repo-check` report them.
 
-`hs pkg` writes the declaration to `/var/lib/hs/pkg-events/<package>.tsv` (10 tab-separated columns, `-` = empty; see
+`hs pkg` writes the declaration to `/var/lib/hs/pkg-events/<package>.tsv` (11 tab-separated columns, `-` = empty; see
 `scripts/lib/pkg_events.py`) and deletes it when the package is removed or a version declares no events. Four readers use it:
 
 - the level of an event (`scripts/state-db.py`),
@@ -144,6 +145,23 @@ are problems: `hs pkg` refuses to install such a package, and `python3 scripts/p
 - the catalogue below (core copy only).
 
 If an event has no `label` or `icon` in its payload, the notification fills them in from the declaration.
+
+### Retention
+
+Every declared event has a `retention` class. `python3 scripts/pkg.py validate` and `hs pkg` refuse an event without one. Housekeeping
+(`scripts/state-db.py`, after each write to the log) prunes by class, on top of the general limit (the newest 5000 rows, nothing older than
+90 days; `HS_EVENT_KEEP`, `HS_EVENT_DAYS`):
+
+| Class | Meant for | Raw rows are kept | Knob |
+| --- | --- | --- | --- |
+| `ephemeral` | a status flash that is only interesting now | 7 days | `HS_EVENT_EPHEMERAL_DAYS` |
+| `audit` | something a person may need to look up (who did what) | the general limit | `HS_EVENT_KEEP`, `HS_EVENT_DAYS` |
+| `metric` | a tick that is counted, not read | 35 days: keep a monthly rollup instead | `HS_EVENT_METRIC_DAYS` |
+
+Migration rule: a declaration without the column (the transition copies in `scripts/lib/pkg-events/`, a file that an older core installed) is
+still read, and its rows count as `audit`: they follow the general limit exactly as before, so nothing is pruned earlier than it was. An
+unknown class in an installed file drops that row, like any other bad column. New declarations in `package.toml` must name the class.
+Not tested on hardware yet.
 
 Transition: the events of the media helper (`pkg.sabnzbd.*`, `pkg.maintainerr.*`) are kept as a copy in the same format in
 `scripts/lib/pkg-events/` until hobnix/recipes declares them. An installed file of the same package replaces the copy completely.
@@ -156,20 +174,20 @@ The table is generated from that folder:
 
 <!-- BEGIN package events generated from scripts/lib/pkg-events (python3 scripts/events-doc-gen.py write) -->
 
-| Kind | Level | Payload keys | Meaning | Push message |
-| --- | --- | --- | --- | --- |
-| `pkg.maintainerr.planned` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a lower version of a film was found and is announced (media helper; subject: the service) | info, default |
-| `pkg.maintainerr.deleted` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a lower version of a film was deleted (media helper; subject: the service) | info, default |
-| `pkg.maintainerr.test` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the test message of Maintainerr (Script) (media helper; subject: the service) | info, low |
-| `pkg.sabnzbd.added` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download was queued (media helper; subject: the service) | info, low |
-| `pkg.sabnzbd.unpacking` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download is being unpacked (media helper; subject: the service) | info, min |
-| `pkg.sabnzbd.finished` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download finished (media helper; subject: the service) | ok, default |
-| `pkg.sabnzbd.failed` | warn | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download failed (media helper; subject: the service) | problem, high |
-| `pkg.sabnzbd.queue-done` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the download queue is empty (media helper; subject: the service) | info, low |
-| `pkg.sabnzbd.disk-full` | error | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports a full disk (media helper; subject: the service) | alarm, urgent |
-| `pkg.sabnzbd.error` | warn | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports an error (media helper; subject: the service) | problem, high |
-| `pkg.sabnzbd.warning` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports a warning (media helper; subject: the service) | problem, default |
-| `pkg.sabnzbd.test` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the test message of SABnzbd (media helper; subject: the service) | info, low |
+| Kind | Level | Payload keys | Meaning | Push message | Retention |
+| --- | --- | --- | --- | --- | --- |
+| `pkg.maintainerr.planned` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a lower version of a film was found and is announced (media helper; subject: the service) | info, default | audit |
+| `pkg.maintainerr.deleted` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a lower version of a film was deleted (media helper; subject: the service) | info, default | audit |
+| `pkg.maintainerr.test` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the test message of Maintainerr (Script) (media helper; subject: the service) | info, low | audit |
+| `pkg.sabnzbd.added` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download was queued (media helper; subject: the service) | info, low | audit |
+| `pkg.sabnzbd.unpacking` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download is being unpacked (media helper; subject: the service) | info, min | audit |
+| `pkg.sabnzbd.finished` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download finished (media helper; subject: the service) | ok, default | audit |
+| `pkg.sabnzbd.failed` | warn | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | a download failed (media helper; subject: the service) | problem, high | audit |
+| `pkg.sabnzbd.queue-done` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the download queue is empty (media helper; subject: the service) | info, low | audit |
+| `pkg.sabnzbd.disk-full` | error | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports a full disk (media helper; subject: the service) | alarm, urgent | audit |
+| `pkg.sabnzbd.error` | warn | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports an error (media helper; subject: the service) | problem, high | audit |
+| `pkg.sabnzbd.warning` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | SABnzbd reports a warning (media helper; subject: the service) | problem, default | audit |
+| `pkg.sabnzbd.test` | info | `service`, `name`, `label`, `icon`, `title`, `sub?`, `body`, `fields?`, `footer?`, `poster_url?` | the test message of SABnzbd (media helper; subject: the service) | info, low | audit |
 
 <!-- END generated -->
 

@@ -24,7 +24,8 @@ release() {   # release <tag> <version> <key> [requires_core] [path] [extra]: pa
   git add -A && git commit -q -m "demo $2"
   if [ "$3" = none ]; then git tag -a "$1" -m "unsigned $2"; else git -c user.signingkey="$3.pub" tag -s "$1" -m "release $2"; fi
 }
-EV='[[events]]\nkind = "done"\nlevel = "warn"\nlabel = "Done"\nmeaning = "the demo finished"\nnotify = { category = "ok", title = "{kind}", message = "{text}" }'
+EV='[[events]]\nkind = "done"\nlevel = "warn"\nlabel = "Done"\nmeaning = "the demo finished"
+retention = "audit"\nnotify = { category = "ok", title = "{kind}", message = "{text}" }'
 release v1.0.0 1.0.0 "$WORK/good"
 cd "$ROOT"
 
