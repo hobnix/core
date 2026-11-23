@@ -11,6 +11,7 @@
   import JobStrip from '../shell/JobStrip.svelte';
   import Inbox from '../shell/Inbox.svelte';
   import Entry from './gallery/Entry.svelte';
+  import GenForm from '../shell/GenForm.svelte';
   import { BLOCKS, BLOCK_API_LEVEL } from '../shell/blocks.js';
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
@@ -387,6 +388,10 @@
         {#each Object.entries(BLOCKS) as [name, b] (name)}
           <div class="cell wide"><small>{name} · {b.component}</small>{b.text} {tr('Needs')}: {b.schema.required.join(', ') || '–'}.</div>
         {/each}
+        <div class="cell wide"><small>form (the button opens the fields and the plan; the plan area here is the sample's own)</small>
+          <GenForm block={{ type: 'form', title: 'Connect', text: 'Fields with checks, a secret on stdin; the plan dialog comes last.', submit: 'Connect', plan: ['ext/sample', 'connect', '--host', '{host}'], stdin: 'token',
+            fields: [{ key: 'host', label: 'Host', type: 'text', required: true }, { key: 'token', label: 'Token', type: 'secret' }] }} />
+        </div>
       </div>
     </section>
   </div>

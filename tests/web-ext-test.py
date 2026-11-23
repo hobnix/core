@@ -65,6 +65,19 @@ class ExtPages(unittest.TestCase):
         got = self.pages('[web.page]\ntitle = "Demo"\n[[web.page.actions]]\nlabel = "x"\nplan = ["ct", "a", "stop"]\n')
         self.assertEqual(got, [])
 
+    def test_a_form_block_keeps_its_secret_on_stdin(self):
+        rows = [["sys", "sys ext demo list", "x.sh", "list", "h", "-"], ["sys", "sys ext demo plan", "x.sh", "plan", "h", "-"], ["sys", "sys ext demo start", "x.sh", "start", "h", "-"]]
+        base = '[[web.reads]]\nwords = "list"\nkind = "tsv"\nttl = 10\n[[web.changes]]\nfixed = ["^go$"]\nstdin = true\n[web.page]\ntitle = "Demo"\n[[web.page.blocks]]\ntype = "form"\nplan = ["ext/demo", "go"]\n'
+        secret = '[[web.page.blocks.fields]]\nkey = "token"\nlabel = "Token"\ntype = "secret"\n'
+
+        def run(text):
+            package(self.pk, "demo", rows, text)
+            ws.ext_refresh(force=True)
+            return ws.ext_pages()
+        self.assertEqual(run(base + 'stdin = "token"\n' + secret)[0]["name"], "demo")      # a secret with its stdin mapping
+        self.assertEqual(run(base + secret), [])                                           # no stdin mapping: the package is dropped
+        self.assertEqual(run(base + 'stdin = "token"\n[[web.page.blocks.fields]]\nkey = "a"\nlabel = "A"\ntype = "blob"\n'), [])   # an unknown field type
+
     def test_an_input_action_needs_a_label_and_the_input_in_its_plan(self):
         act = '[web.page]\ntitle = "Demo"\n[[web.page.actions]]\nlabel = "Go"\nplan = ["ext/demo", "go", "{input}"]\n'
         self.assertEqual(self.pages(act + 'input = { label = "Name", pattern = "^[a-z]+$", suggest = { read = "list" } }\n')[0]["name"], "demo")

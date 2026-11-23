@@ -21,6 +21,7 @@
   import Banner from '../ui/Banner.svelte';
   import { tr } from '../i18n.js';
   import { BLOCK_API_LEVEL } from './blocks.js';
+  import GenForm from './GenForm.svelte';
 
   // block: the declaration; row: the object of the selected row (drawer context); forms: { Name: Component }; data: { '/api/sys/..': { rows } } instead of polling
   let { block, row = null, forms = {}, data = null, tab = '' } = $props();
@@ -186,6 +187,9 @@
       {/if}
     {/if}
   </PageState>
+
+{:else if block.type === 'form'}
+  <GenForm {block} />
 
 {:else}
   <!-- a block the registry does not know (a newer package on an older core, or a typo): a note instead of a broken page (#473) -->
