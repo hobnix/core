@@ -10,3 +10,8 @@
   goes down (`python3 scripts/dev/web-actions.py --update` after you lower one).
 - Colours, spacing and fonts come from the tokens in `src/tokens.css`, never a hex value in a page.
 - `python3 scripts/dev/web-inventory.py` counts shared components vs raw markup per folder (`--tsv`, `--classes [N]`, `--files` per file).
+- A form field that names something that exists on the server (a share, disk, pool, instance, user) is the matching field from `web/src/ui`
+  (`ShareField`, `DiskField`, `PoolField`, `InstanceField`, `UserField`), never a `TextInput`: it lists what exists, is searchable, reads the
+  live state (no own polling) and says loading, error and empty. The submitted value stays the name. A name that is not on the server yet
+  (the New share form, a deleted share in a restore) uses the field with `free`. `ShareField groups={['local','remote']}` gives
+  `{ scope, peer, share }`. Parsers and filters are `ui/serverfields.js` (tests/web-serverfields.sh).

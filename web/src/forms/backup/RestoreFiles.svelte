@@ -4,14 +4,14 @@
   // nothing but the restored subtree changes owner. A share that was deleted can still be typed in: that is what a restore is for.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
-  import { Field, TextInput, Select, Muted } from '../../ui';
+  import { Field, TextInput, Select, Muted, ShareField } from '../../ui';
 
   let { share: first = '', onclose, ondone = () => {} } = $props();
 
   const ov = poll('/api/sys/backup/overview', 60000);
-  const snaps = poll('/api/sys/backup/snapshots?tag=shares', 60000);
-  // kind, name, on|off, bytes
+  // kind, name, on|off, bytes: the shares the backup knows, among them deleted ones (that is what a restore is for)
   const names = $derived(rows(ov).filter((r) => r[0] === 'shares' || r[0] === 'sensitive').map((r) => r[1]));
+  const snaps = poll('/api/sys/backup/snapshots?tag=shares', 60000);
   // id, time, tags; newest first
   const list = $derived(rows(snaps).map((r) => ({ id: r[0], time: r[1] })).reverse());
 
@@ -31,8 +31,7 @@
 <CreateDialog title="Restore files from the backup" kicker="Restore" area="shares" {args} {onclose} {ondone}>
   {#snippet form()}
     <Field label="Share" error={share && !shareOk ? 'A share name: lower-case letters, digits and hyphens.' : ''}>
-      <TextInput bind:value={share} list="rf-shares" placeholder="photos" autocomplete="off" spellcheck={false} />
-      <datalist id="rf-shares">{#each names as n}<option value={n}></option>{/each}</datalist>
+      <ShareField bind:value={share} free more={names} placeholder="Choose or type a share" />
     </Field>
     <Field label="Restore point">
       <Select bind:value={snapshot}>
