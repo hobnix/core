@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -51,6 +51,24 @@ case "${1:-list}" in
     bash "$here/recipes-list.sh" --list >"$d/recipes" 2>/dev/null || : >"$d/recipes"
     ${HS_INCUS:-incus} list -f csv -c ns >"$d/running" 2>/dev/null || : >"$d/running"
     py states --market "$d/market" --parts "$d/parts" --pending "$d/pending" --recipes "$d/recipes" --running "$d/running" "$@" ;;
+  --integrations|integrations)
+    # what packages offer to each other ([integrations.<name>] in package.toml) from the packages that are there, with the state of the key file;
+    # the key itself is never read here
+    . "$here/lib/integration.sh"
+    on=$(integration_available)
+    only=(); [ "$#" -lt 2 ] || only=(--only "$2")
+    # shellcheck disable=SC2086
+    found=$(py integrations "${only[@]}" $on)
+    out=""
+    while IFS=$'	' read -r n i s u f x; do
+      [ -n "$n" ] || continue
+      ks=-; [ "$f" = "-" ] || ks=$(secret_state "$f")
+      out+="$n"$'	'"$i"$'	'"$s"$'	'"$u"$'	'"$ks"$'	'"$x"$'
+'
+    done <<<"$found"
+    if [ "$1" = "--integrations" ]; then printf '%s' "$out"
+    elif [ -z "$out" ]; then note "No integrations offered."
+    else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More'; printf '%s' "$out"; } | table; fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;
   list)

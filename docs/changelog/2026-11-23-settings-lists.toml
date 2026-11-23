@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Settings: Capabilities and Extensions are two pages with a list each"
+body  = """The cards of Settings > Capabilities are replaced by two lists in the same style as Instances and Shares: Settings > Capabilities for the optional parts and the new Settings > Extensions for the extensions. Each row shows the name, the state, what it is and the switch, which still opens the plan first. The old address /settings/capabilities#extensions goes to the new page."""

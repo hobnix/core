@@ -11,7 +11,7 @@
   const state = $derived(backupState({ backup: st.data ? rows(st) : null, expiry: ex.data ? rows(ex) : null }));
 </script>
 
-<GroupPage title="Backup" {state} sub="The last backup and the dates that are about to run out.">
+<GroupPage title="Backup" group="backup" {state} sub="The last backup and the dates that are about to run out.">
   {#snippet actions()}
     <Button need="admin" variant="primary" icon="cloud-arrow-up" busy={jobRunning('backup', ['now'])} busyLabel="Backing up…" tooltip={'Shows the plan first'} onclick={() => openPlan('backup', ['now'], 'Back up now')}>Back up now</Button>
   {/snippet}

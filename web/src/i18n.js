@@ -147,6 +147,8 @@ const de = {
   Yes: 'Ja', Container: 'Container', ready: 'bereit', missing: 'fehlt', 'is set up with it': 'wird mit eingerichtet',
   'The plan could not be read.': 'Der Plan konnte nicht gelesen werden.', 'The plan was refused.': 'Der Plan wurde abgelehnt.', 'This cannot be installed now.': 'Das lässt sich jetzt nicht installieren.',
   'This creates': 'Das legt an', 'It needs': 'Es braucht', 'The steps': 'Die Schritte',
+  'This takes a few minutes.': 'Das dauert einige Minuten.',
+  'The server is rebuilt.': 'Der Server wird neu gebaut.',
   'This takes a few minutes: the server is rebuilt.': 'Das dauert einige Minuten: Der Server wird neu gebaut.',
   'Ask every preference again': 'Jede Einstellung noch einmal fragen',
   'Memory, port, share and so on: the setup asks them while it runs, also for an app that exists.': 'Speicher, Port, Freigabe und so weiter: Die Einrichtung fragt sie während des Laufs, auch bei einer vorhandenen App.',

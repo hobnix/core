@@ -27,7 +27,7 @@
   const bars = $derived(locked ? [] : poolStore.rows.filter((p) => sizes[p.name]?.size > 0));
 </script>
 
-<GroupPage title="Storage" {state} sub="Pools, disks, shares and the encryption of this server.">
+<GroupPage title="Storage" group="storage" {state} sub="Pools, disks, shares and the encryption of this server.">
   {#if bars.length}
     <Grid>
       {#each bars as p (p.name)}

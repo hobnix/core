@@ -96,6 +96,7 @@ default_probes() {
     $'hs sys incident state\tsys incident state\t0 1' \
     $'hs sys parts pending\tsys parts pending\t0' \
     $'hs sys pkg states\tsys pkg states\t0' \
+    $'hs sys pkg integrations\tsys pkg integrations\t0' \
     $'hs sys pkg show\tsys pkg show hs-smoke-none\t0 1' \
     $'hs sys pkg asset\tsys pkg asset hs-smoke-none x.svg\t0 1' \
     $'hs sys apps list\tsys apps list\t0' \
@@ -172,6 +173,7 @@ default_probes() {
     $'hs changes\tchanges\t0' \
     $'hs ups\tups\t0 1' \
     $'hs pkg list\tpkg list\t0' \
+    $'hs pkg integrations\tpkg integrations\t0' \
     $'hs pkg updates\tpkg updates\t0 1'
   if [ -n "$first_share" ]; then
     printf '%s\t%s\t%s\n' "hs share $first_share show" "share $first_share show" "0" "hs share $first_share snapshots" "share $first_share snapshots" "0 1"

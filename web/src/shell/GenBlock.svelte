@@ -6,7 +6,7 @@
   import GenBlock from './GenBlock.svelte';
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
-  import { areaRole } from '../roles.js';
+  import { areaRole, maxRole } from '../roles.js';
   import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn } from './generic.js';
   import Table from './Table.svelte';
   import UsageBar from './UsageBar.svelte';
@@ -77,7 +77,7 @@
     {#if a.href}
       <a class="btn sm {a.danger ? 'btn-ghost' : 'btn-secondary'}" href={tpl(a.href, r)} download={a.download ? tpl(a.download, r) : undefined} use:tip={a.title ? tpl(a.title, r) : undefined}><i class="ph ph-{a.icon || 'download-simple'}"></i>{a.label}</a>
     {:else}
-      <Button need={areaRole(a.plan?.[0])} variant={a.primary ? 'primary' : a.danger ? 'ghost' : 'secondary'} size="sm" class={a.iconOnly ? 'genblock-icon' : ''} tooltip={a.title ? tpl(a.title, r) : a.label} aria-label={a.iconOnly ? tpl(a.title ?? a.label, r) : undefined}
+      <Button need={maxRole(areaRole(a.plan?.[0]), a.role)} variant={a.primary ? 'primary' : a.danger ? 'ghost' : 'secondary'} size="sm" class={a.iconOnly ? 'genblock-icon' : ''} tooltip={a.title ? tpl(a.title, r) : a.label} aria-label={a.iconOnly ? tpl(a.title ?? a.label, r) : undefined}
               onclick={(e) => { e.stopPropagation(); run(a, r); }}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{#if !a.iconOnly}{a.label}{/if}</Button>
     {/if}
   {/each}
