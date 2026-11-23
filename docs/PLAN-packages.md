@@ -127,11 +127,13 @@ no integration names: `<name>` is any lowercase id (`[a-z][a-z0-9-]*`), the pack
 
 ```toml
 [integrations.media]
-api_url    = "http://{host}:7878"          # the local API; {host} = address of the instance
+api_url    = "http://{host}:{port}"        # the local API; {host} = address of the instance, {port} = its port
 key_file   = "/var/lib/hs/radarr/api-key"  # absolute path of the API key on the server
 key_header = "X-Api-Key"                   # optional, default X-Api-Key
 kind       = "movies"                      # any other key is passed through as plain text
 ```
+
+`api_url` knows two placeholders and refuses any other (`pkg.py validate`). `{host}` stays in the listing: the package that uses the URL fills in the address. `{port}` is filled by `hs pkg integrations` from the service record of the package (`services.d/<package>.toml`, its `port`: the recipe declares 80 in LXC mode and 8080 in docker mode, so one URL fits both). Without a record or a port the field is `-` and the human output warns; the core never guesses a port.
 
 The core validates only the envelope (`api_url`, `key_file`, `key_header`, all optional) in `scripts/lib/pkg_integrations.py`; other keys must be plain text
 (at most 200 characters, no comma, no control character). No API level change: the block is optional.

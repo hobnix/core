@@ -265,6 +265,19 @@ print(' | '.join(m.manifest_problems($3)))")"
 ok_ig="{'api_url': 'http://{host}:7878', 'key_file': '/var/lib/hs/radarr/api-key', 'kind': 'movies'}"
 igcase "no integrations is valid" "" "{'kind': 'recipe'}"
 igcase "a block with extra keys is valid for any package kind" "" "{'kind': 'extension', 'integrations': {'media': $ok_ig}}"
+igcase "{port} is a placeholder too, also as the port of the URL" "" "{'integrations': {'x': {'api_url': 'http://{host}:{port}/api'}}}"
+igcase "an unknown placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders (not {ip})" "{'integrations': {'x': {'api_url': 'http://{ip}:{port}'}}}"
+igcase "a half placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders" "{'integrations': {'x': {'api_url': 'http://{host}:80/{'}}}"
+sd=$(mktemp -d); printf 'name = "a"\nport = 8080\n' >"$sd/a.toml"; printf 'name = "b"\n' >"$sd/b.toml"
+check_eq "rows: {port} comes from the service record, a missing port gives - and is reported, {host} stays" "a:http://{host}:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+ig = {'m': {'api_url': 'http://{host}:{port}'}}
+ms = [('', {'name': n, 'kind': 'recipe', 'integrations': ig}) for n in 'abc']
+miss = []
+r = m.rows(ms, {'a', 'b', 'c'}, None, '$sd', miss)
+print('|'.join(x[0] + ':' + x[3] for x in r) + '|unresolved=' + ','.join(miss))")"
+rm -rf "$sd"
 igcase "a bad integration name is refused" "integrations.Media: the name is not a lowercase id" "{'integrations': {'Media': {}}}"
 igcase "a key file with .. is refused" "integrations.x.key_file must be an absolute path without .. or spaces" "{'integrations': {'x': {'key_file': '/var/../x'}}}"
 igcase "an extra value that is not text is refused" "integrations.x.n must be plain text (at most 200 characters, no comma, no control character)" "{'integrations': {'x': {'n': 3}}}"
