@@ -34,6 +34,7 @@ import math
 import os
 import queue
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -608,6 +609,15 @@ def _load_lib(mod):
     return m
 
 
+def cred_dir(name):
+    """The private folder (0700, below /run) that holds the copies of the keys of one service for LoadCredential=."""
+    return os.path.join(os.environ.get("HS_CRED_DIR") or "/run/hs-ext-cred", name)
+
+
+def drop_creds(name):
+    shutil.rmtree(cred_dir(name), ignore_errors=True)
+
+
 def confined_program(name, pkgdir, prog, creds=()):
     """(argv, None) or (None, problem): PROG as a transient systemd unit confined by the declared permissions (scripts/lib/ext_confine.py, the same
     mapping as a confined command). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
@@ -622,15 +632,26 @@ def confined_program(name, pkgdir, prog, creds=()):
     if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
         props.append("BindReadOnlyPaths=-" + os.path.abspath(pkgdir))     # its own folder comes back into the empty /var/lib/hs
     pi = _load_lib("pkg_integrations")
-    for cname, path in creds:
+    for cname, provider, path in creds:
         if not re.match(r"^[a-z][a-z0-9-]{0,60}$", cname) or not path.startswith("/") or ":" in path:
             return None, f"bad credential {cname!r}"
-        # defence in depth: systemd reads the file as root, so only a key file in the folder of the providing package may get here
-        seg = path[len(LIB_DIR) + 1:].split("/")[0] if path.startswith(LIB_DIR + "/") else ""
-        why = pi.key_file_problem(path, seg, name, root=LIB_DIR, resolve=True)
+        # systemd reads a credential as root. So the bridge reads the key itself ONCE (read_key: only from the folder of the registered providing package,
+        # a regular file, checked on the open descriptor) and writes a private 0600 copy; systemd gets that copy, never a path somebody else can change.
+        key, why = pi.read_key(path, provider, name, root=LIB_DIR)
         if why:
             return None, f"credential {cname}: {why}"
-        props.append(f"LoadCredential={cname}:{path}")
+        d = cred_dir(name)
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        os.chmod(d, 0o700)
+        copy = os.path.join(d, cname)
+        try:
+            os.unlink(copy)
+        except OSError:
+            pass
+        fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0), 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(key)
+        props.append(f"LoadCredential={cname}:{copy}")
     # the transient unit has no environment: the PATH of the bridge (no secrets) so `#!/usr/bin/env python3` works; it ends with the bridge unit
     path_env = os.environ.get("PATH") or "/run/current-system/sw/bin:/usr/bin:/bin"
     cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
@@ -667,6 +688,7 @@ def svc_run(name, pkgdir, state_dir, creds=()):
                         float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
     finally:
         stop_unit(name)
+        drop_creds(name)
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1
@@ -726,15 +748,16 @@ def main_svc(argv):
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--active", default="no")
     ap.add_argument("--stopped", default="no")
-    ap.add_argument("--credential", action="append", default=[], help="NAME=KEYFILE for systemd LoadCredential=")
+    ap.add_argument("--credential", action="append", default=[], help="NAME=PROVIDER=KEYFILE (the key is copied privately for LoadCredential=)")
     a = ap.parse_args(argv[1:])
     if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
         return 2
     if argv[0] == "svc-run":
         creds = []
-        for c in a.credential:
-            n, _, p = c.partition("=")
-            creds.append((n, p))
+        for c in a.credential:    # NAME=PROVIDER=KEYFILE, the provider is the registered package that offers the integration
+            n, _, rest = c.partition("=")
+            prov, _, p = rest.partition("=")
+            creds.append((n, prov, p))
         return svc_run(a.name, a.dir or ".", a.state_dir, creds)
     if argv[0] == "reset":
         try:

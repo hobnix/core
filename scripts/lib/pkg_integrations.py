@@ -24,16 +24,32 @@ KNOWN = ("host", "port")
 
 
 STATE_ROOT = "/var/lib/hs"
+# Folders below /var/lib/hs that the core itself uses (state files, secrets, other packages' state). No package may offer an integration under one
+# of these names, so a manifest cannot point key_file at them. The ONE list: add a name here when the core starts to use a new folder.
+RESERVED = frozenset("""adopting apps backup backup-dump backup-offsite backup-rules bulk-closed capabilities-on dc-ca deck-history detached disk-key disks
+docs-site ext ext-cursors ext-emit ext-snapshots ext-svc generated golden heartbeat iso iso-cache jobs live-measure luks-headers luks-uuids
+metrics node-key nodes notify-channels notify-held notify-rules.d packages pkg-events ports-admin ports-expected posters recovering remote
+remote-mounts remote-offers removals removed reports runs services.d settings share-sizes snapshots-off src state testlab token vault
+vault-binds vault-header vault-uuid wear-cache api-tokens grafana-admin zoraxy-admin restic-password tailscale-authkey vps-key""".split())
+MAX_KEY = 64 << 10
+
+
+def _within(p, d):
+    return p == d or p.startswith(d.rstrip("/") + "/")
 
 
 def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False):
-    """The ONE check of a key file before it is handed out (integration_key, `grant`, the validator, LoadCredential of the service bridge): None or the
-    reason. The file must lie below <root>/<provider>/ (the folder of the package that offers the integration), without ".." or control characters,
-    and the caller must not be the provider. resolve=True also looks at the disk: the folder must not be a link out of <root>/<provider>, and a link
-    as the file itself may only lead into that folder or the vault (HS_VAULT_DIR, default /var/lib/hs-vault). systemd reads a credential as root, so
-    a path like /etc/shadow must never get here."""
+    """The ONE check of a key file before it is handed out (integration_key, `grant`, the validator, the bridge before it copies the key for
+    LoadCredential): None or the reason. The file must lie below <root>/<provider>/ (the folder of the package that offers the integration; the
+    provider is the REGISTERED package, never read from the path), without ".." or control characters, the provider must not be a core folder
+    (RESERVED) and the caller must not be the provider. resolve=True also looks at the disk: the folder must not be a link out of
+    <root>/<provider>, and the file must be a regular file, not a link: the one exception is a link into the vault (HS_VAULT_DIR, default
+    /var/lib/hs-vault) that ends at a regular file there (how secret.sh keeps secrets); a dangling link is "locked" and left to the caller. A missing
+    file is no problem here either (the caller says "missing"). The check is for early refusal; the bytes are read by `read_key`."""
     if not isinstance(path, str) or not isinstance(provider, str) or not NAME.match(provider):
         return "the key file or the provider is not valid"
+    if provider in RESERVED:
+        return "%s is a folder the core uses: a package of that name cannot offer a key" % provider
     if caller is not None and caller == provider:
         return "a package does not get its own key through an integration"
     if re.search(r"[\x00-\x20\x7f]", path) or not path.startswith("/") or ".." in path.split("/"):
@@ -42,15 +58,54 @@ def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False
     if not path.startswith(base) or len(path) == len(base) or path.endswith("/") or "//" in path:
         return "the key file must lie below %s" % base
     if resolve:
+        import stat
         top = os.path.realpath(base)
-        within = lambda p, d: p == d or p.startswith(d.rstrip("/") + "/")
-        if not within(os.path.realpath(os.path.dirname(path)), top):
+        if not _within(os.path.realpath(os.path.dirname(path)), top):
             return "the folder of the key file leads out of %s" % base
-        vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
-        real = os.path.realpath(path)
-        if not (within(real, top) or within(real, vault)):
-            return "the key file is a link that leaves %s" % base
+        try:
+            st = os.lstat(path)
+        except OSError:
+            return None
+        if stat.S_ISLNK(st.st_mode):
+            vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
+            real = os.path.realpath(path)
+            if not os.path.exists(real):
+                return None
+            if not _within(real, vault) or not stat.S_ISREG(os.stat(real).st_mode):
+                return "the key file is a link that does not end at a regular file in the vault"
+        elif not stat.S_ISREG(st.st_mode):
+            return "the key file is not a regular file"
     return None
+
+
+def read_key(path, provider, caller=None, root=STATE_ROOT):
+    """(bytes, None) or (None, reason): the key, read ONCE from a file that was checked after it was opened (no time between check and use for
+    a link swap): the file is opened without following a link (the real path was resolved first), must be a regular file that is not world
+    writable and at most 64 KiB, and the path the open descriptor stands for (/proc/self/fd) must still lie in the provider's folder or the vault.
+    The bridge writes these bytes to its own 0600 file and hands THAT copy to systemd, which therefore never opens a path somebody else can change."""
+    import stat
+    why = key_file_problem(path, provider, caller, root, resolve=True)
+    if why:
+        return None, why
+    real = os.path.realpath(path)
+    try:
+        fd = os.open(real, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+    except OSError as e:
+        return None, "the key file cannot be opened (%s)" % e.strerror
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_mode & 0o002 or st.st_size > MAX_KEY:
+            return None, "the key file is not a plain file (regular, not world writable, at most 64 KiB)"
+        try:
+            now = os.readlink("/proc/self/fd/%d" % fd)
+        except OSError:
+            return None, "cannot verify the opened key file"
+        vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
+        if not (_within(now, os.path.realpath(root.rstrip("/") + "/" + provider)) or _within(now, vault)):
+            return None, "the opened key file lies outside the provider's folder"
+        return os.read(fd, MAX_KEY + 1)[:MAX_KEY], None
+    finally:
+        os.close(fd)
 
 
 def manifest_problems(m):
@@ -135,19 +190,25 @@ def rows(manifests, on, only=None, services_dir=None, unresolved=None):
 
 
 def grant(manifests, on, integration, caller):
-    """(key_file, None) when `caller` may have the key of `integration`, else (None, reason). A capability needs no permission; an extension
+    """(key_file, None) or (None, reason): see grant_full."""
+    path, _, why = grant_full(manifests, on, integration, caller)
+    return path, why
+
+
+def grant_full(manifests, on, integration, caller):
+    """(key_file, provider, None) when `caller` may have the key of `integration`, else (None, None, reason). A capability needs no permission; an extension
     must declare integration:<name> (a declared check only: permissions are not enforced yet, hobnix/server#239); a recipe is refused."""
     me = next((m for _, m in manifests if m.get("name") == caller), None)
     if me is None:
-        return None, f"{caller}: no such package"
+        return None, None, f"{caller}: no such package"
     if me.get("kind") == "recipe":
-        return None, f"{caller} is a recipe: only an extension or a capability may ask for a key"
+        return None, None, f"{caller} is a recipe: only an extension or a capability may ask for a key"
     if me.get("kind") == "extension" and f"integration:{integration}" not in (me.get("permissions") or []):
-        return None, f"{caller} does not declare permissions = [\"integration:{integration}\"]"
+        return None, None, f"{caller} does not declare permissions = [\"integration:{integration}\"]"
     hits = [r for r in rows(manifests, on, integration) if r[4] != "-"]
     if not hits:
-        return None, f"no available package offers {integration} with a key_file"
+        return None, None, f"no available package offers {integration} with a key_file"
     bad = key_file_problem(hits[0][4], hits[0][0], caller, resolve=True)
     if bad:
-        return None, f"{hits[0][0]}: {bad}"
-    return hits[0][4], None
+        return None, None, f"{hits[0][0]}: {bad}"
+    return hits[0][4], hits[0][0], None

@@ -125,7 +125,14 @@ svc_confine() {   # svc_confine <name>: check the permissions of the package (sc
   local perms=() dir
   mapfile -t perms < <(python3 "$here/pkg.py" perms "$1" 2>/dev/null || echo -)
   dir=$confine_dir/hs-ext-svc@$1.service.d
-  rm -f "$dir/10-confine.conf"   # a drop-in of an older version would confine the bridge too
+  if [ -e "$dir/10-confine.conf" ]; then   # a drop-in of an older version would confine the bridge too: remove it, reload, restart a running bridge
+    rm -f "$dir/10-confine.conf"
+    ctl daemon-reload >/dev/null 2>&1 || true
+    if ctl is-active --quiet "hs-ext-svc@$1.service" 2>/dev/null; then
+      ctl restart --no-block "hs-ext-svc@$1.service" >/dev/null 2>&1 || true
+      note "$(t "The service of '%s' restarts once: an older version of the core had confined its supervisor." "$1")"
+    fi
+  fi
   python3 -I "$here/lib/ext_confine.py" dropin --name "$1" -- "${perms[@]}" >/dev/null || return 1
   if [ "${perms[0]:-}" = "-" ]; then
     warn "$(t "'%s' does not declare permissions: its service gets the strict defaults and may write nothing but its own state." "$1")"
@@ -159,12 +166,12 @@ cmd_stop() {
   ok "$(t "The service of '%s' is stopped. It stays stopped until: hs ext start %s" "$1" "$1")"
 }
 cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the supervisor
-  local n=${1:-} d name path cred=()
+  local n=${1:-} d name path prov cred=()
   exists "$n" && ext_package_on "$n" && has_service "$n" || { printf '%s
 ' "hs ext svc-run: '$n' is not a service extension that is on" >&2; exit 1; }
   d=$(ext_package_dir "$n")
   # the keys of the declared integration:<name> permissions go to the service as systemd credentials (never argv or environment)
-  while IFS=$'	' read -r name path; do cred+=(--credential "integration-$name=$path"); done < <(integration_credentials "$n")
+  while IFS=$'	' read -r name path prov; do cred+=(--credential "integration-$name=$prov=$path"); done < <(integration_credentials "$n")
   exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state" ${cred[@]+"${cred[@]}"}
 }
 

@@ -139,6 +139,8 @@ mkdir -p "$EXT/dropin/hs-ext-svc@okpkg.service.d"; : > "$EXT/dropin/hs-ext-svc@o
 xe start okpkg >/dev/null 2>&1 || true
 check "start writes no drop-in and removes an old one (it would confine the bridge)" test ! -e "$EXT/dropin/hs-ext-svc@okpkg.service.d/10-confine.conf"
 check_eq "and starts the unit" "1" "$(grep -c '^start hs-ext-svc@okpkg.service' "$EXT/ctl.log")"
+check "removing an old drop-in reloads systemd (else the bridge keeps its sandbox until reboot)" grep -q "^daemon-reload" "$EXT/ctl.log"
+check_eq "and the daemon-reload comes before the start" "daemon-reload" "$(grep -o "^daemon-reload\|^start" "$EXT/ctl.log" | head -n1)"
 : > "$EXT/ctl.log"
 out=$(xe start nopkg 2>&1) || true
 check_out "a package without permissions is warned about" "does not declare permissions" printf '%s' "$out"

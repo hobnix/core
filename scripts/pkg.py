@@ -709,6 +709,10 @@ def main(argv):
         path, why = pkg_integrations.grant(manifests(), set(rest[2:]), rest[0], rest[1])
         print(path or why)
         return 0 if path else 1
+    elif cmd == "integration-grant":   # integration-grant <integration> <caller> <available names...>: key file TAB providing package, or the reason (exit 1)
+        path, prov, why = pkg_integrations.grant_full(manifests(), set(rest[2:]), rest[0], rest[1])
+        print(path + "\t" + prov if path else why)
+        return 0 if path else 1
     elif cmd == "updates":
         seen = set()
         inst_now = installed()

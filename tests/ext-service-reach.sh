@@ -22,19 +22,29 @@ python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/unit.txt" 2>&1 || true
 import importlib.util, os, sys
 s = importlib.util.spec_from_file_location("es", os.path.join(sys.argv[1], "lib", "ext_service.py")); es = importlib.util.module_from_spec(s); s.loader.exec_module(es)
 pk = os.path.join(sys.argv[2], "pk", "media"); os.makedirs(pk)
+root = os.path.join(sys.argv[2], "lib"); os.makedirs(os.path.join(root, "radarr")); es.LIB_DIR = root   # the state root of the test
+os.environ["HS_CRED_DIR"] = os.path.join(sys.argv[2], "cred")
+key = os.path.join(root, "radarr", "api-key"); open(key, "w").write("SECRET-KEY\n")
 open(os.path.join(pk, "package.toml"), "w").write('name = "media"\npermissions = ["integration:media", "fs.write:/var/lib/hs/media"]\n')
-cmd, bad = es.confined_program("media", pk, ["python3", "svc.py"], [("integration-media", "/var/lib/hs/radarr/api-key")])
+cmd, bad = es.confined_program("media", pk, ["python3", "svc.py"], [("integration-media", "radarr", key)])
 print("CMD=" + " ".join(cmd)); print("BAD=%r" % bad)
-cmd, bad = es.confined_program("media", "/var/lib/hs/packages/current/media", ["x"], [("integration-media", "/var/lib/hs/radarr/k")])
+cp = os.path.join(sys.argv[2], "cred", "media", "integration-media")
+print("COPY=%r MODE=%o DIR=%o" % (open(cp).read(), os.stat(cp).st_mode & 0o777, os.stat(os.path.dirname(cp)).st_mode & 0o777))
+print("NOKEYINARGV=%r" % ("SECRET-KEY" not in " ".join(cmd)))
+es.drop_creds("media"); print("DROPPED=%r" % (not os.path.exists(cp)))
+cmd, bad = es.confined_program("media", root + "/packages/current/media", ["x"], [("integration-media", "radarr", key)])
 print("INS=" + " ".join(cmd))
-cmd, bad = es.confined_program("media", pk, ["x"], [("Bad Name", "/k")]); print("BADCRED=%r" % bad)
+cmd, bad = es.confined_program("media", pk, ["x"], [("Bad Name", "radarr", "/k")]); print("BADCRED=%r" % bad)
 open(os.path.join(pk, "package.toml"), "w").write('name = "media"\npermissions = ["fs.write:/etc/hs"]\n')
 cmd, bad = es.confined_program("media", pk, ["x"]); print("BADPERM=%r" % (bad is not None))
 PY
 check_out "it runs under systemd-run with a name of its own" "CMD=systemd-run --pipe --wait --collect --quiet --unit=hs-ext-run-media " cat "$WORK/unit.txt"
-check_out "the key goes as LoadCredential (a file name, never the key)" "property=LoadCredential=integration-media:/var/lib/hs/radarr/api-key" cat "$WORK/unit.txt"
+check_out "the key goes as LoadCredential (a file name, never the key)" "property=LoadCredential=integration-media:.*/cred/media/integration-media" cat "$WORK/unit.txt"
+check_out "systemd gets a private 0600 copy in a 0700 folder, not the original path" "COPY='SECRET-KEY\\\\n' MODE=600 DIR=700" cat "$WORK/unit.txt"
+check_out "the key text is never in the arguments" "NOKEYINARGV=True" cat "$WORK/unit.txt"
+check_out "the copy is removed when the service ends" "DROPPED=True" cat "$WORK/unit.txt"
 check_out "the sandbox properties come from the declared permissions" "property=TemporaryFileSystem=/var/lib/hs:ro .*property=BindPaths=-/var/lib/hs/ext-svc -/var/lib/hs/media" cat "$WORK/unit.txt"
-check_out "a package folder below /var/lib/hs is bound back read only" "INS=.*property=BindReadOnlyPaths=-/var/lib/hs/packages/current/media" cat "$WORK/unit.txt"
+check_out "a package folder below /var/lib/hs is bound back read only" "INS=.*property=BindReadOnlyPaths=-.*/lib/packages/current/media" cat "$WORK/unit.txt"
 check_out "a bad credential name is refused" "BADCRED=.bad credential" cat "$WORK/unit.txt"
 check_out "a bad permission path means no run (fail closed)" "BADPERM=True" cat "$WORK/unit.txt"
 
@@ -46,14 +56,14 @@ open(sys.argv[1], "w", newline="\n").write('''import sys
 a = sys.argv[1:]
 if a[0] == "perms":
     print("integration:media"); print("integration:gone"); print("fs.read:/etc/hs")
-elif a[0] == "integration-key":
-    if a[1] == "media": print(%r)
+elif a[0] == "integration-grant":
+    if a[1] == "media": print(%r + "\\tradarr")
     else: print("no such integration"); sys.exit(1)
 ''' % sys.argv[2])
 PY
 : > "$H/recipes-list.sh"; : > "$H/parts.sh"
 out=$(bash -c ". '$SCRIPTS/lib/ui.sh'; here='$H'; . '$SCRIPTS/lib/integration.sh'; integration_credentials media" 2>/dev/null) || true
-check_eq "a declared integration with a key file is listed (name, path)" "media	$WORK/keys/api-key" "$out"
+check_eq "a declared integration with a key file is listed (name, path, providing package)" "media	$WORK/keys/api-key	radarr" "$out"
 check_eq "a declared one that is refused is skipped, an fs permission is ignored" "1" "$(printf '%s\n' "$out" | grep -c .)"
 check_out "the bridge gets them as --credential, not as the key" "credential \"integration-" grep -n 'credential "integration-' "$SCRIPTS/ext.sh"
 
@@ -103,10 +113,31 @@ print("NL=%r" % (f(root + "/radarr/key\n") is not None))
 print("VALIDATOR=%r" % pi.manifest_problems({"name": "evil", "integrations": {"x": {"key_file": "/etc/shadow"}}}))
 ms = [("", {"name": "evil", "kind": "recipe", "integrations": {"x": {"key_file": "/etc/shadow"}}}), ("", {"name": "e", "kind": "extension", "permissions": ["integration:x"]})]
 print("GRANT=%r" % (pi.grant(ms, {"evil"}, "x", "e")[0],))
-cmd, bad = es.confined_program("media", "/tmp/nopkg", ["x"], [("integration-x", "/etc/shadow")]); print("BRIDGE=%r" % (bad is not None))
+es.LIB_DIR = root
+cmd, bad = es.confined_program("media", "/tmp/nopkg", ["x"], [("integration-x", "radarr", "/etc/shadow")]); print("BRIDGE=%r" % (bad is not None))
+cmd, bad = es.confined_program("media", "/tmp/nopkg", ["x"], [("integration-x", "radarr", root + "/evil/k")]); print("BRIDGEPROV=%r" % (bad is not None))
+os.makedirs(os.path.join(root, "disks")); open(os.path.join(root, "disks", "k"), "w").write("x")
+print("RESERVED=%r" % (f(root + "/disks/k", "disks") is not None))
+print("RESERVED2=%r" % (pi.read_key(root + "/disks/k", "disks", "media", root=root)[1] is not None))
+print("LEAK=%r" % (pi.read_key(root + "/radarr/leak", "radarr", "media", root=root)[1] is not None))
+# a link swap after the check: the check is made to pass as if the file had been fine a moment ago, then the file is a link to /etc/passwd
+os.symlink("/etc/passwd", os.path.join(root, "radarr", "swapped"))
+real_check = pi.key_file_problem; pi.key_file_problem = lambda *a, **k: None
+print("SWAP=%r" % (pi.read_key(root + "/radarr/swapped", "radarr", "media", root=root)[1] is not None))
+pi.key_file_problem = real_check
+# the vault: a link that ends at a regular file in the vault is fine, one that ends at a directory or outside is not
+vault = os.path.join(sys.argv[2], "vault"); os.makedirs(vault); os.environ["HS_VAULT_DIR"] = vault
+open(os.path.join(vault, "k"), "w").write("vk"); os.symlink(os.path.join(vault, "k"), os.path.join(root, "radarr", "vk"))
+os.symlink(vault, os.path.join(root, "radarr", "vdir"))
+print("VAULTOK=%r" % (pi.read_key(root + "/radarr/vk", "radarr", "media", root=root),))
+print("VAULTDIR=%r" % (pi.read_key(root + "/radarr/vdir", "radarr", "media", root=root)[1] is not None))
+print("DIRKEY=%r" % (pi.read_key(root + "/radarr", "radarr", "media", root=root)[1] is not None))
+print("GRANTFULL=%r" % (pi.grant_full([("", {"name": "radarr", "kind": "recipe", "integrations": {"m": {"key_file": "/var/lib/hs/radarr/key"}}}), ("", {"name": "e", "kind": "capability"})], {"radarr"}, "m", "e"),))
 PY
 check_out "a good key file in the provider's folder passes" "OK=None" cat "$WORK/host.txt"
-for k in SHADOW OTHER DOTS SELF LINKFILE LINKDIR NL BRIDGE; do check_out "key file check refuses: $k" "^$k=True" cat "$WORK/host.txt"; done
+for k in SHADOW OTHER DOTS SELF LINKFILE LINKDIR NL BRIDGE BRIDGEPROV RESERVED RESERVED2 LEAK SWAP VAULTDIR DIRKEY; do check_out "key file check refuses: $k" "^$k=True" cat "$WORK/host.txt"; done
+check_out "a link into the vault that ends at a regular file there is read" "VAULTOK=\\(b'vk', None\\)" cat "$WORK/host.txt"
+check_out "grant_full names the registered providing package" "GRANTFULL=.*radarr" cat "$WORK/host.txt"
 check_out "the validator refuses key_file=/etc/shadow" "VALIDATOR=.*key_file" cat "$WORK/host.txt"
 check_out "grant hands out no key for it (integration_key and LoadCredential are built on grant)" "GRANT=None" cat "$WORK/host.txt"
 

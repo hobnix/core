@@ -82,8 +82,12 @@ service could not emit, roll up, read an integration key or even start under the
 - the key of every `integration:<name>` it declared, as the systemd credential `integration-<name>` (`LoadCredential=`, read by systemd as root, so it needs no
   mount): in `$CREDENTIALS_DIRECTORY`, never argv or environment, `/var/lib/hs` stays hidden. `hs ext svc-run` names the files through `integration_credentials`
   (scripts/lib/integration.sh: the declared check of `pkg.py integration-key` and `secret_state`; a locked or missing key is skipped with a warning);
-- only a key file below `/var/lib/hs/<providing package>/` (no `..`, no link out of that folder, the caller is not the provider): one function,
-  `pkg_integrations.key_file_problem`, used by the validator, `grant` (so `integration_key`) and the bridge before it builds `LoadCredential=`, because systemd reads the file as root;
+- only a key file below `/var/lib/hs/<providing package>/` (no `..`, no link out of that folder, the caller is not the provider, the provider name is not a core folder: `RESERVED` in
+  `pkg_integrations.py`, the one list): `pkg_integrations.key_file_problem` is used by the validator, `grant` (so `integration_key`) and the bridge. The providing package is the registered one
+  (`pkg.py integration-grant`), not read from the path. The file must be a regular file; the only link allowed is one that ends at a regular file in the vault (`secret.sh` keeps keys there).
+  systemd reads a credential as root, and a check before `systemd-run` could be raced by a link swap, so the bridge does not give systemd the original path: `read_key` opens it ONCE without following a link,
+  checks the open descriptor (regular, not world writable, at most 64 KiB, `/proc/self/fd` still inside the provider's folder or the vault) and the bridge writes a private 0600 copy in a 0700
+  folder below `/run/hs-ext-cred/<name>`; `LoadCredential=` reads that copy and the folder is removed when the service ends. (An fd path `/proc/self/fd/N` was not chosen: it would not survive into the transient unit.)
 - the transient unit is bound to the bridge unit (`BindsTo=`), stopped before a start and at the end, has a `TimeoutStopSec` and the PATH of the bridge (`--setenv`);
 - `state.db` writes only through service messages handled by the bridge: `emit` (kind covered by `events.emit`) and `rollup` (ADR 0011: only a kind of the
   package that its `[[events]]` declare with `retention = "metric"`); no mount of `/var/lib/hs`. Reading `state.db` or `hs sys state ...` from the service is not possible.
