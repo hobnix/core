@@ -143,6 +143,9 @@ The core validates only the envelope (`api_url`, `key_file`, `key_header`, all o
   `scripts/lib/integration.sh` writes the key on stdout (read through `secret.sh`, never in argv or the environment) only when the caller declares it; a
   capability needs no permission, a recipe is refused. **Enforcement of permissions is not built (#239):** this is a declared check in the helper, an
   extension that reads the key file itself is not stopped.
+- **Removal (#1118):** removing an app deletes the `key_file` its manifest declares (only under `/var/lib/hs/`, never with `..`; found from the installed
+  package manifest, not from a list). `hs sys apps plan remove <instance>` names it as `item keyfile <path> there remove`; a second instance of a package
+  leaves the file alone, and the file of another app is never touched. The key is not read or printed. Not tested on hardware yet.
 
 Not tested on hardware yet.
 

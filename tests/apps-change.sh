@@ -340,13 +340,21 @@ kind = "recipe"
 [app.remove]
 keeps = ["the photo share"]
 data = ["/var/lib/keepapp"]
+[integrations.media]
+key_file = "/var/lib/hs/stat-keepapp"
+[integrations.evil]
+key_file = "/var/lib/hs/../etc/shadow-keepapp"
 TOML
 mkapp() {   # an installed app with a ledger: instance, service description, UniFi address, a share with a file in it
   touch "$WORK/ct-keepapp" "$WORK/resv"; : > "$HS_SERVICES_DIR/keepapp.toml"; mkdir -p "$WORK/keepshare"; echo photo > "$WORK/keepshare/photo.jpg"
   CREATED_APP=keepapp bash -c ". $SCRIPTS/lib/created.sh; created container keepapp container; created reservation 10.0.0.9 aa:bb:cc:dd:ee:09; created service keepapp; created share photos $WORK/keepshare"
 }
 mkapp
+printf 'secret-key
+' > "$HS_STATE_DIR/stat-keepapp"; printf 'other-key
+' > "$HS_STATE_DIR/stat-otherapp"
 run plan remove keepapp
+if has "^item${tab}keyfile${tab}.*stat-keepapp${tab}there${tab}remove${tab}the key file /var/lib/hs/stat-keepapp" && ! has "secret-key" && ! has "shadow"; then pass "remove plan: names the key file of the manifest, no key, no path with .."; else fail "keyfile plan: $out"; fi
 if [ "$rc" = 0 ] && has "^source${tab}ledger" && has "^keeps${tab}the photo share" && has "^data${tab}yes" && has "^question${tab}delete_data.*${tab}keep" && has "^confirm_name${tab}keepapp"; then pass "remove plan: the ledger, what stays, the data question (default keep), the typed name"; else fail "remove plan: $out"; fi
 if has "^item${tab}share${tab}photos${tab}there${tab}keep" && has "^item${tab}container${tab}keepapp${tab}there${tab}remove" && ! has "^confirm_data"; then pass "keep: the share is kept, the instance goes, no second name"; else fail "keep items: $out"; fi
 run start remove keepapp;                         if [ "$rc" = 1 ] && has "type the name (keepapp)"; then pass "remove without the typed name is refused"; else fail "no name: $out"; fi
@@ -356,6 +364,7 @@ if [ "$rc" = 0 ] && has "^status${tab}started" && grep -q "apps-remove.sh run re
 rc=0; out=$(bash "$SCRIPTS/apps-remove.sh" run remove keepapp 2>&1 </dev/null) || rc=$?
 check_eq "the remove job ends well" 0 "$rc"
 check "the instance, the description and the address are gone" test ! -e "$WORK/ct-keepapp" -a ! -e "$HS_SERVICES_DIR/keepapp.toml" -a ! -e "$WORK/resv"
+check "the key file of the app is gone, the key file of another app stays" test ! -e "$HS_STATE_DIR/stat-keepapp" -a -f "$HS_STATE_DIR/stat-otherapp"
 check "keep: the share and the data in it are still there" test -f "$WORK/keepshare/photo.jpg"
 check "the ledger is empty, so a later install finds the share as one that was there before" test ! -e "$(CREATED_APP=keepapp bash -c ". $SCRIPTS/lib/created.sh; created_file")"
 check "what was not on the list is untouched" test -e "$WORK/ct-other" -a -e "$HS_SERVICES_DIR/other.toml"
