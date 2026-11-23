@@ -12,10 +12,11 @@ here=$(dirname "$0")
 py=${HS_PYTHON:-python3}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: setup-change.sh plan|start wizard-done" >&2; exit 1 ;; esac
-[ "$action" = wizard-done ] || refuse "unknown action (wizard-done)"
+[ "$action" = wizard-done ] || refuse_code action.unknown "unknown action (wizard-done)"
 
 state=$("$py" "$here/first_run.py" wizard 2>/dev/null || true)
 [ "$state" = open ] || refuse "The first-run wizard is not open."

@@ -36,10 +36,11 @@ zpool=${HS_ZPOOL:-zpool}
 bulk_type=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: system-change.sh plan|start <sync|scrub|update|rebuild|rollback|gc|reboot|shutdown> [options]" >&2; exit 1 ;; esac
-case "$action" in sync|scrub|update|rebuild|rollback|gc|reboot|shutdown) ;; *) refuse "unknown action (sync, scrub, update, rebuild, rollback, gc, reboot or shutdown)" ;; esac
+case "$action" in sync|scrub|update|rebuild|rollback|gc|reboot|shutdown) ;; *) refuse_code action.unknown "unknown action (sync, scrub, update, rebuild, rollback, gc, reboot or shutdown)" ;; esac
 shift 2
 pool="" days=30 force=no
 while [ $# -gt 0 ]; do
@@ -48,7 +49,7 @@ while [ $# -gt 0 ]; do
     --days)    days=${2:-}; shift 2 ;;
     --confirm) confirm=${2:-}; shift 2 ;;
     --force)   force=yes; shift ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -113,7 +114,7 @@ esac
 
 if [ "$verb" = start ]; then
   confirm_word=rollback; case "$action" in reboot|shutdown) confirm_word=$action ;; esac
-  if [ -n "$danger" ] && [ "$confirm" != "$confirm_word" ]; then refuse "type the word to confirm: $confirm_word"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$confirm_word" ]; then refuse_code confirm.missing "type the word to confirm: $confirm_word"; fi
   case "$action" in
     reboot|shutdown)
       # not a job that runs now: a timer starts power.sh a few seconds later, the caller still gets this answer
@@ -125,7 +126,7 @@ if [ "$verb" = start ]; then
   esac
   . "$here/lib/job.sh"
   desc="hs pool ${pool:-bulk} $action"; case "$action" in update) desc="hs system update" ;; rebuild) desc="hs rebuild" ;; rollback) desc="hs system rollback" ;; gc) desc="hs system gc $days" ;; esac
-  unit=$(hs_job "system-$action-${pool:-all}" "$desc" -- "${cmd[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "system-$action-${pool:-all}" "$desc" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

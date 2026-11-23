@@ -28,7 +28,7 @@ if [ "$action" = answer ]; then   # ADR 0018: the web interface answers a waitin
   [ "$verb" = start ] || { printf 'status\tok\nheading\tanswer the question\nlong\tno\n'; exit 0; }
   exec bash "${HS_JOBS_ANSWER:-$here/jobs-answer.sh}" "$unit" "$@"
 fi
-case "$action" in stop|run) ;; *) refuse "unknown action (stop or run)" ;; esac
+case "$action" in stop|run) ;; *) refuse_code action.unknown "unknown action (stop or run)" ;; esac
 case "$unit" in *.service) ;; *) unit=$unit.service ;; esac
 [[ "$unit" =~ ^hs-[A-Za-z0-9@._-]+\.service$ ]] || refuse "that is not a job of this server (hs-*)"
 shift 3 || true
@@ -36,7 +36,7 @@ confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --confirm) confirm=${2:-}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -67,7 +67,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != stop ]; then refuse "type the word to confirm: stop"; fi
+  if [ -n "$danger" ] && [ "$confirm" != stop ]; then refuse_code confirm.missing "type the word to confirm: stop"; fi
   # the record says cancelled before the unit (and the wrapper that would write the end) is killed; best effort.
   # If the stop fails the job still runs: the record goes back (uncancel) and no event is written (#135).
   marked=""

@@ -35,12 +35,13 @@ adm="$(admin_user)"
 config_keys_extend
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; key=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: config-change.sh plan|start set <key> <value>" >&2; exit 1 ;; esac
 case "$action" in
   sync|migrate)
-    [ $# -eq 2 ] || refuse "unexpected extra arguments"
+    [ $# -eq 2 ] || refuse_code args.unexpected "unexpected extra arguments"
     sync_sh=${HS_MACHINE_SYNC:-$here/machine-sync.sh}
     export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
     unset HS_GUIDED_TTY
@@ -75,7 +76,7 @@ case "$action" in
     printf 'command\ths config migrate\nlong\tno\n'
     exit 0 ;;
 esac
-[ "$action" = set ] || [ "$action" = apply ] || refuse "unknown action (set, apply, sync or migrate)"
+[ "$action" = set ] || [ "$action" = apply ] || refuse_code action.unknown "unknown action (set, apply, sync or migrate)"
 machine=$(machine_file)
 py=${HS_PYTHON:-python3}; command -v "$py" >/dev/null 2>&1 || py=python
 list=""
@@ -93,7 +94,7 @@ shq() {
 # need_confirm <key> <value>: start must carry --confirm <new card name> for nic (plans are not checked)
 need_confirm() {
   [ "$verb" = start ] && [ "$1" = nic ] || return 0
-  [ "$confirm" = "$2" ] || refuse "type the name of the network card to confirm: $2"
+  [ "$confirm" = "$2" ] || refuse_code confirm.missing "type the name of the network card to confirm: $2"
 }
 
 # dhcp_norm <value>: sets norm to "from to" (removes [ ] , and turns - into a space); "?" when it is not two words
@@ -248,7 +249,7 @@ if [ "$action" = apply ]; then
   keys=(); offs=(); tomls=(); stores=(); vals=(); steps=(); seen=" "; n_machine=0; cmd=""
   while [ $# -gt 0 ]; do
     if [ "$1" = --confirm ]; then
-      [ $# -ge 2 ] || refuse "--confirm needs a value"
+      [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"
       confirm=$2; shift 2; continue
     fi
     { [ "$1" = --set ] && [ $# -ge 2 ]; } || refuse "apply takes only --set key=value and --confirm <name>"
@@ -317,8 +318,8 @@ value=$4
 shift 4
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 check_key "$key" "$value"

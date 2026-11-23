@@ -85,7 +85,7 @@ check_eq "and fails" "1" "$($HS help nothing >/dev/null 2>&1; echo $?)"
 
 echo "-- dispatch"
 fake=$WORK/fake; mkdir -p "$fake/lib"
-cp -r "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$fake/lib/"
+cp -r "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$SCRIPTS"/lib/refuse-code.sh "$fake/lib/"
 printf 'echo "args:$*"\n' > "$fake/x.sh"
 printf '# kind\n# comment\nuser\tpool bulk add\tx.sh\t-\tadd\t-\t-\nuser\tslow thing\tx.sh\tgo\tslow\t-\tlong\nsys\tsys pool info\tx.sh\t--info\tinfo\t-\t-\nuser\tshare <share> rename\tx.sh\tren\trename\t-\t-\n' > "$fake/lib/registry.tsv"
 printf 'sys\tsys demo rs\trust:demo\tplan {rest}\tdemo\t-\tfallback:x.sh\nsys\tsys demo bare\trust:demo\tplan {rest}\tdemo\t-\t-\n' >> "$fake/lib/registry.tsv"
@@ -114,7 +114,7 @@ if HS_LANG=de $F help --all 2>&1 >/dev/null | grep -q "rust:"; then fail "help -
 
 echo "-- the REAL registry reaches the scripts with the right arguments (a wrong fixed-args field once sent "backup now" to backup.sh instead of "now")"
 real=$WORK/real; mkdir -p "$real/lib"
-cp -r "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$SCRIPTS"/lib/registry.tsv "$real/lib/"
+cp -r "$SCRIPTS"/lib/job.sh "$SCRIPTS"/lib/hs.sh "$SCRIPTS"/lib/capability.sh "$SCRIPTS"/lib/registry-load.sh "$SCRIPTS"/lib/ui.sh "$SCRIPTS"/lib/i18n.sh "$SCRIPTS"/lib/setting.sh "$SCRIPTS"/lib/refuse-code.sh "$SCRIPTS"/lib/registry.tsv "$real/lib/"
 for s in backup unlock services; do printf 'echo "args:$*"
 ' > "$real/$s.sh"; done
 R="bash $real/lib/hs.sh"

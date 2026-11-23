@@ -72,6 +72,24 @@ time. Everything comes from `scripts/lib/ui.sh`; a script never prints its own c
    values through `$(t 'Copied %s files' "$n")`.
 6. **Long steps show where they are** (progress lines, `SPIN_STREAM`), never a silent minute.
 
+## Error messages (ADR 0028, #488)
+
+An error says four things: **what happened**, **the likely reason**, **one next step** (a command or a page) and **a stable code**. The code
+(`area.what`, in `scripts/lib/error-codes.tsv`, explained in docs/errors.md) is for programs and for the guide link; the English text is what
+a terminal shows. A change script refuses with `refuse_code <code> "<what and why>"`; the catalogue row carries the fix command. The web
+interface acts on the code, never on the text, and shows the English text for a code it does not know. No sweep: a refusal gets a code when
+the web shows it often or acts on it.
+
+1. Refused plan, a vault that is closed:
+
+        status  refused
+        reason  The vault is closed: the token for ghcr.io is in it.
+        fix     hs vault open
+        code    vault.locked
+
+2. A name that is not allowed: `reason  The app name is not valid.` with `code  name.invalid`; next step: "use letters, digits and - only".
+3. A job that did not start: `reason  The background job could not be started.` with `code  job.start-failed`; next step: look in Jobs, then try again.
+
 ## Where it is applied
 
 - Done: `update`, `rebuild`, recipes, `backup`, `manage-ct`, `manage-users`, `manage-shares`, `create-share`, `recipe`, `mac`, `jobs`,

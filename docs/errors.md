@@ -16,19 +16,149 @@ The one list is `scripts/lib/error-codes.tsv`: one line per code with the column
 
 <!-- BEGIN generated from scripts/lib/error-codes.tsv (python3 scripts/errors-doc-gen.py write) -->
 
-| Code | Layer | Meaning | Text | Fix |
-| --- | --- | --- | --- | --- |
-| `refused` | script | A plain refuse "<text>" without a more exact code | The server did not do this. | none |
-| `run.timeout` | run | The time limit of the web server passed before the command ended | The server stopped waiting. A start may still be running or be partly done: check Jobs and the page before you try again. | none |
-| `run.not-found` | run | The command could not be started | The server could not run the command. | none |
-| `run.killed` | run | The command ended because a signal stopped it | The command was stopped before it finished. | none |
-| `run.no-status` | run | The command ended without a status line | The server could not do this. | none |
-| `vault.locked` | script | The vault is closed and the step needs a secret in it | The vault is closed: unlock it first. | `hs vault open` |
-| `docker.off` | script | Docker is not on or not running | Docker is not on or not running. | none |
-| `app.unknown` | script | No app of that name exists | No such app was found. | none |
-| `name.invalid` | script | A name is not in the allowed form | The name is not valid. | none |
-| `plan.changed` | script | What the plan saw changed before it was applied | It changed meanwhile. Reload it and try again. | none |
-| `job.busy` | script | The same job is running already | This is running already. | none |
+### refused
+
+A plain refuse "<text>" without a more exact code.
+
+- Layer: script
+- Text: The server did not do this.
+- Fix: none
+
+### run.timeout
+
+The time limit of the web server passed before the command ended.
+
+- Layer: run
+- Text: The server stopped waiting. A start may still be running or be partly done: check Jobs and the page before you try again.
+- Fix: none
+
+### run.not-found
+
+The command could not be started.
+
+- Layer: run
+- Text: The server could not run the command.
+- Fix: none
+
+### run.killed
+
+The command ended because a signal stopped it.
+
+- Layer: run
+- Text: The command was stopped before it finished.
+- Fix: none
+
+### run.no-status
+
+The command ended without a status line.
+
+- Layer: run
+- Text: The server could not do this.
+- Fix: none
+
+### vault.locked
+
+The vault is closed and the step needs a secret in it.
+
+- Layer: script
+- Text: The vault is closed: unlock it first.
+- Fix: `hs vault open`
+
+### docker.off
+
+Docker is not on or not running.
+
+- Layer: script
+- Text: Docker is not on or not running.
+- Fix: none
+
+### app.unknown
+
+No app of that name exists.
+
+- Layer: script
+- Text: No such app was found.
+- Fix: none
+
+### name.invalid
+
+A name is not in the allowed form.
+
+- Layer: script
+- Text: The name is not valid.
+- Fix: none
+
+### plan.changed
+
+What the plan saw changed before it was applied.
+
+- Layer: script
+- Text: It changed meanwhile. Reload it and try again.
+- Fix: none
+
+### job.busy
+
+The same job is running already.
+
+- Layer: script
+- Text: This is running already.
+- Fix: none
+
+### job.start-failed
+
+The background job could not be started.
+
+- Layer: script
+- Text: The background job could not be started.
+- Fix: none
+
+### option.unknown
+
+The command got an option it does not know.
+
+- Layer: script
+- Text: The command does not know this option.
+- Fix: none
+
+### args.unexpected
+
+The command got more arguments than it takes.
+
+- Layer: script
+- Text: The command got more arguments than it takes.
+- Fix: none
+
+### confirm.missing
+
+The typed name that confirms a destructive step is missing or wrong.
+
+- Layer: script
+- Text: Type the name of the thing to confirm.
+- Fix: none
+
+### disk.unknown
+
+No disk of that name exists.
+
+- Layer: script
+- Text: No such disk was found.
+- Fix: `hs sys pool disks`
+
+### install.failed
+
+An install job stopped at a step.
+
+- Layer: script
+- Text: The install stopped.
+- Fix: none
+
+### action.unknown
+
+The command does not know the action it was given.
+
+- Layer: script
+- Text: The command does not know this action.
+- Fix: none
 
 <!-- END generated -->
 

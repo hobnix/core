@@ -40,6 +40,7 @@ alist=${HS_APPS_LIST:-$here/apps-list.sh}
 incus=${HS_INCUS:-incus}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 word='^[a-z0-9][a-z0-9-]{0,40}$'
 a_fqdn='([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}'
 steps_all=(read needs ask run check done on rebuild)
@@ -49,7 +50,7 @@ case "$verb" in plan|start|run) ;; *) echo "usage: apps-change.sh plan|start ins
 case "$action" in retry|cleanup) exec bash "${HS_APPS_RECOVER:-$here/apps-recover.sh}" "$verb" "$action" "${@:3}" ;; esac   # a failed install (step 9, #466)
 case "$action" in update) exec bash "${HS_APPS_VERSION:-$here/apps-version.sh}" "$verb" update "${@:3}" ;; esac   # the update plan (step 12, #470)
 case "$action" in remove) exec bash "${HS_APPS_REMOVE:-$here/apps-remove.sh}" "$verb" remove "${@:3}" ;; esac   # Remove with keep/delete data (step 11, #466)
-[ "$action" = install ] || refuse "unknown action (install, retry, cleanup, remove, update)"
+[ "$action" = install ] || refuse_code action.unknown "unknown action (install, retry, cleanup, remove, update)"
 [[ "$name" =~ $word ]] || refuse "not a package name (lower case letters, digits and dashes)"
 shift 3 || true
 
@@ -67,10 +68,10 @@ while [ $# -gt 0 ]; do
                shift 2 ;;
     --by)      [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse "--by needs a user name"; by=$2; shift 2 ;;
     --role)    [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse "--role needs a role"; role=$2; shift 2 ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     --set)     [ $# -ge 2 ] && [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse "--set needs KEY=value"
                given[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 [ "$verb" = plan ] || [ -n "$tag" ] || refuse "start needs --tag <the tag of the plan>: the job installs the release the plan showed, not whatever is newest"
@@ -225,7 +226,7 @@ print(t if t.startswith("run:") else "run")' "$rec" 2>/dev/null || echo run)
     json=$(python3 -c 'import json,sys
 k=["status","failed_step","reason","tail","package","repo","tag","instance","kind","version"]
 v=[x[:900] for x in sys.argv[1:]]
-print(json.dumps(dict(zip(k,["failed"]+v))))' "$1" "$2" "$tail" "$name" "$repo" "$tag" "${ct:-$name}" "$kind" "$version")
+print(json.dumps(dict(zip(k,["failed"]+v),code="install.failed")))   # ADR 0028: the web shows the code' "$1" "$2" "$tail" "$name" "$repo" "$tag" "${ct:-$name}" "$kind" "$version")
     hs_job_record result "$HS_JOB_ID" --json "$json" >/dev/null 2>&1 || true
   }
   failed_tail() {   # the last lines of the log of the failed phase's sub-job (its unit's journal), best effort
@@ -340,7 +341,7 @@ fi
 
 # ── plan and start: the checks are done, now the answer ──
 if [ "$verb" = start ]; then
-  if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse "type the name ($red) to confirm"; fi
+  if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse_code confirm.missing "type the name ($red) to confirm"; fi
   . "${HS_JOB_LIB:-$here/lib/job.sh}"
   env_lines=""
   for i in "${!ak[@]}"; do
@@ -364,7 +365,7 @@ if [ "$verb" = start ]; then
   [ -z "$ct" ] || rargs+=(--name "$ct")
   [ -z "$from" ] || rargs+=(--from "$from${from_phase:+:$from_phase}")
   unit=$(hs_job "app-install-$name${ct:+-$ct}" "hs apps install $name${ct:+ --name $ct}" -- bash -c 'd=$1; shift; "$@"; rc=$?; [ -z "$d" ] || rm -rf "$d"; exit $rc' _ "$sdir" \
-          bash "$here/apps-change.sh" "${rargs[@]}") || { [ -z "$sdir" ] || rm -rf "$sdir"; refuse "the job could not be started"; }
+          bash "$here/apps-change.sh" "${rargs[@]}") || { [ -z "$sdir" ] || rm -rf "$sdir"; refuse_code job.start-failed "the job could not be started"; }
   jid=$(hs_job_record find-unit "$unit" 2>/dev/null) || jid=""
   printf 'status\tstarted\nunit\t%s\njob\t%s\n' "$unit" "${jid:--}"
   exit 0

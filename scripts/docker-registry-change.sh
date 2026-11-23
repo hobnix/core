@@ -221,7 +221,7 @@ case "${1:-list}" in
   plan|start)
     [ $# -ge 3 ] || refuse "Usage: plan|start add|remove <host>"
     verb=$1; action=$2; host=$3; shift 3
-    case "$action" in add|remove) ;; *) refuse "Action must be add or remove." ;; esac
+    case "$action" in add|remove) ;; *) refuse_code action.unknown "Action must be add or remove." ;; esac
     if [ "$verb" = plan ]; then cmd_plan "$action" "$host" "$@"; else cmd_start "$action" "$host" "$@"; fi ;;
   *) fail "$(t 'usage: hs docker registry list | add <host> --user <user> | remove <host>')" ;;
 esac

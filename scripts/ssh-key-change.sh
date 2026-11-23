@@ -23,10 +23,11 @@ adm="$(admin_user)"
 export HS_PLAIN=1
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: ssh-key-change.sh plan|start <add <key>|remove <id>> [--confirm remove]" >&2; exit 1 ;; esac
-case "$action" in add|remove) ;; *) refuse "unknown action (add or remove)" ;; esac
+case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
 [ $# -ge 3 ] || refuse "give the public key or the id of the key as one argument"
 arg=$3
 shift 3
@@ -34,7 +35,7 @@ confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --confirm) confirm=${2:-}; shift 2 ;;
-    *) refuse "unknown option" ;;
+    *) refuse_code option.unknown "unknown option" ;;
   esac
 done
 
@@ -72,7 +73,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != remove ]; then refuse "type the word to confirm: remove"; fi
+  if [ -n "$danger" ] && [ "$confirm" != remove ]; then refuse_code confirm.missing "type the word to confirm: remove"; fi
   if ! out=$(HS_CALLER=${HS_CALLER:-ui} bash "$sshkey" "$action" "$arg" --yes 2>&1); then refuse "$(lastline <<<"$out")"; fi
   printf 'status\tdone\nnote\tIt is in machine.toml. %s\n' "$(effect_rebuild)"
   exit 0

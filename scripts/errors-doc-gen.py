@@ -35,12 +35,18 @@ def rows(path):
     return out
 
 
+def anchor(code):
+    """The heading id of a code in docs/errors.md: lower case, the dot dropped (plan.changed -> planchanged), as a docs site makes it from the heading. The web links to it (web/src/ui/errornote.js)."""
+    return code.replace(".", "")
+
+
 def table(path):
-    lines = ["| Code | Layer | Meaning | Text | Fix |", "| --- | --- | --- | --- | --- |"]
+    """One short section per code, so the web can link to errors#<anchor>."""
+    out = []
     for code, layer, meaning, text, fix in rows(path):
-        lines.append("| `%s` | %s | %s | %s | %s |" % (code, layer, meaning.replace("|", "\\|"), text.replace("|", "\\|"),
-                                                        "none" if fix == "-" else "`%s`" % fix))
-    return "\n".join(lines)
+        out.append("### %s\n\n%s.\n\n- Layer: %s\n- Text: %s\n- Fix: %s\n" % (
+            code, meaning.rstrip("."), layer, text, "none" if fix == "-" else "`%s`" % fix))
+    return "\n".join(out).rstrip("\n")
 
 
 def main(argv):
