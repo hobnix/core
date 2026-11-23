@@ -214,6 +214,13 @@ columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The lifecycle stage of every package (ADR 0027). flags is a comma list of update, waits, orphan, pending, failed, unhealthy, stopped, or -. repo, available and installed are - for a package that is only in this tree; instances (recipes) is a comma list or -."
 
+["pkg media"]
+role = "admin"
+kind = "tsv"
+columns = ["name", "kind", "api_url", "key_header", "key_file", "key_state", "title"]
+enums = { kind = ["movies", "series", "player", "downloader"], key_state = ["ok", "locked", "missing"] }
+note = "The installed media apps that declare [integrations.media] (hobnix/core#926). api_url may contain {host}, the address of the instance. key_file is the path of the API key; it is never read here, key_state says whether it can be (locked = the vault is closed)."
+
 ["apps list"]
 role = "viewer"
 kind = "tsv"

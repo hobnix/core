@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Packages: [integrations.media] for media apps"
+body  = """A media app can now say in its package.toml what it exposes (kind, local API address, key file) in an [integrations.media] block, and hs pkg validate checks it. hs pkg media lists the installed media apps with the state of their key file, so an extension finds them without copy and paste. The key itself is never printed."""

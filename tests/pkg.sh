@@ -255,5 +255,18 @@ cfcase "confine without protocol is refused" "commands.tsv line 1: confine needs
 cfcase "confine with permissions = [] and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': []}"
 cfcase "confine with fs.write and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': ['fs.write:/srv/x']}"
 protocase "a row without confine needs no permissions" "" '' 'reads'
+echo "-- [integrations.media] (hobnix/core#926)"
+igcase() {   # igcase <label> <expected problems joined by " | " or ""> <manifest as a Python dict>
+  check_eq "$1" "$2" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(' | '.join(m.manifest_problems($3)))")"
+}
+ok_media="{'kind': 'movies', 'api_url': 'http://{host}:7878', 'key_file': '/var/lib/hs/radarr/api-key'}"
+igcase "no integrations is valid" "" "{'kind': 'recipe'}"
+igcase "a full media block is valid" "" "{'kind': 'recipe', 'integrations': {'media': $ok_media}}"
+igcase "an unknown media kind is refused" "integrations.media.kind is not movies, series, player, downloader" "{'kind': 'recipe', 'integrations': {'media': {**$ok_media, 'kind': 'music'}}}"
+igcase "a key file with .. is refused" "integrations.media.key_file must be an absolute path without .. or spaces" "{'kind': 'recipe', 'integrations': {'media': {**$ok_media, 'key_file': '/var/../etc/x'}}}"
+igcase "an extension may not declare it" "integrations.media is for a recipe" "{'kind': 'extension', 'integrations': {'media': $ok_media}}"
 
 finish

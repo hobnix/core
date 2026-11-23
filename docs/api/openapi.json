@@ -10000,6 +10000,86 @@
     }
    }
   },
+  "/pkg/media": {
+   "get": {
+    "operationId": "pkg.media",
+    "summary": "the installed media apps as data: name, kind (movies|series|player|downloader), api_url, key_header, key_file, key_state (ok|locked|missing), title",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "media"
+     ],
+     "script": "pkg.sh",
+     "args": "--media",
+     "class": "read",
+     "rest": false
+    },
+    "description": "The installed media apps that declare [integrations.media] (hobnix/core#926). api_url may contain {host}, the address of the instance. key_file is the path of the API key; it is never read here, key_state says whether it can be (locked = the vault is closed).",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "kind",
+            "enum": [
+             "movies",
+             "series",
+             "player",
+             "downloader"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "api_url"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_header"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_file"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_state",
+            "enum": [
+             "ok",
+             "locked",
+             "missing"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/plan/{action}": {
    "post": {
     "operationId": "pkg.plan.by_action",

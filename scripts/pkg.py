@@ -113,6 +113,16 @@ def _load_pkg_protocol():
 pkg_protocol = _load_pkg_protocol()
 
 
+def _load_pkg_integrations():
+    spec = importlib.util.spec_from_file_location("pkg_integrations", os.path.join(HERE, "lib", "pkg_integrations.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_integrations = _load_pkg_integrations()
+
+
 def capability_toml(folder):
     """The parsed capability.toml beside a package.toml (an extension's [[web.*]] live there), {} when absent or invalid."""
     try:
@@ -440,6 +450,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
     for t in pkg_roles.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
         bad(t)
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
+    out += pkg_integrations.manifest_problems(m)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
     if warnings is not None:
@@ -658,6 +669,9 @@ def main(argv):
         else:
             for r in data:
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
+    elif cmd == "media":     # media <installed names...>: name, kind, api_url, key_file, key_header, title of the installed media apps
+        for r in pkg_integrations.media_rows(manifests(), set(rest)):
+            print("\t".join(r))
     elif cmd == "updates":
         seen = set()
         inst_now = installed()

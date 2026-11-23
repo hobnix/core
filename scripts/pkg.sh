@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: --media | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | media | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -51,6 +51,20 @@ case "${1:-list}" in
     bash "$here/recipes-list.sh" --list >"$d/recipes" 2>/dev/null || : >"$d/recipes"
     ${HS_INCUS:-incus} list -f csv -c ns >"$d/running" 2>/dev/null || : >"$d/running"
     py states --market "$d/market" --parts "$d/parts" --pending "$d/pending" --recipes "$d/recipes" --running "$d/running" "$@" ;;
+  --media|media)
+    # the installed media apps (package.toml [integrations.media]) with the state of their key file; the key itself is never read here
+    . "$here/lib/secret.sh"
+    on=$(bash "$here/recipes-list.sh" --list 2>/dev/null | awk -F'\t' '$4=="installed"{print $1}' || true)
+    # shellcheck disable=SC2086
+    found=$(py media $on)
+    out=""
+    while IFS=$'\t' read -r n k u f h t; do
+      [ -n "$n" ] || continue
+      out+="$n"$'\t'"$k"$'\t'"$u"$'\t'"$h"$'\t'"$f"$'\t'"$(secret_state "$f")"$'\t'"$t"$'\n'
+    done <<<"$found"
+    if [ "$1" = "--media" ]; then printf '%s' "$out"
+    elif [ -z "$out" ]; then note "No media apps installed."
+    else { thead 'App' 'Kind' 'API' 'Header' 'Key file' 'Key' 'What it is'; printf '%s' "$out"; } | table; fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;
   list)

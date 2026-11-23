@@ -120,6 +120,22 @@ Packages run as root, so installing one is trusting its author.
   (open point below).
 - Nothing downloads or enables a package by itself; `enable` stays a person's action as today.
 
+## Integrations: `[integrations.media]` (hobnix/core#926)
+
+A media recipe (radarr, sonarr, jellyfin, sabnzbd) says what it exposes, so an extension finds installed apps and their local API without copy and paste:
+
+```toml
+[integrations.media]
+kind       = "movies"                      # movies | series | player | downloader
+api_url    = "http://{host}:7878"          # the local API; {host} = address of the instance
+key_file   = "/var/lib/hs/radarr/api-key"  # absolute path of the API key on the server
+key_header = "X-Api-Key"                   # optional, default X-Api-Key
+```
+
+`hs pkg validate` checks it (`scripts/lib/pkg_integrations.py`): only a recipe, known keys, an http(s) URL, an absolute key path without `..`. No API level
+change: the block is optional. `hs pkg media` / `hs sys pkg media` list the installed media apps with `key_state` (ok | locked | missing, from `secret_state`);
+the key is never read or printed there. Open: how an extension gets a scoped credential (see the pull request of #926). Not tested on hardware yet.
+
 ## The core API (what packages may rely on)
 
 Moving recipes out of the repository turns `scripts/recipes/_lib.sh`, `scripts/lib/ui.sh`, `i18n.sh`, `secret.sh`, `setting.sh`, `state.sh`,

@@ -2071,6 +2071,18 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "pkg.media": {
+    /** the installed media apps as data: name, kind (movies|series|player|downloader), api_url, key_header, key_file, key_state (ok|locked|missing), title */
+    words: ["pkg", "media"];
+    path: "/pkg/media";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, kind: "movies" | "series" | "player" | "downloader", api_url: Field, key_header: Field, key_file: Field, key_state: "ok" | "locked" | "missing", title: Field])[];
+  };
   "pkg.plan.by_action": {
     /** what installing, updating or removing a package, fetching, or adding or removing a repository would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused); check-draft checks a package.toml draft on stdin (finding lines, changes nothing) */
     words: ["pkg", "plan", "<action>"];

@@ -259,6 +259,7 @@ pkg market	admin	read
 pkg show <name>	admin	read
 pkg asset <name> <file>	admin	read
 pkg states	admin	read
+pkg media	admin	read
 pkg repos	admin	read
 pkg plan <action>	admin	plan
 pkg start <action>	admin	start
