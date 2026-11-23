@@ -1,0 +1,6 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Apps: a recipe can have its own page"
+body  = """
+A recipe that declares a page in its manifest gets an Open button in Apps > Installed. The page shows the status blocks and the few actions the recipe declares. Nothing changes for apps without a page.
+"""

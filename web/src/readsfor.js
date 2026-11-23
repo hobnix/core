@@ -30,6 +30,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
   path = innerPath(path);
   let m;
   if ((m = path.match(/^\/extensions\/([a-z][a-z0-9-]*)$/))) return extReads(m[1], extPages);
+  if ((m = path.match(/^\/apps\/([a-z][a-z0-9-]*)$/)) && (extPages || []).some((p) => p.name === m[1] && p.kind === 'recipe')) return extReads(m[1], extPages);   // the page of a recipe
   if ((m = path.match(/^\/storage\/pools\/([a-z0-9-]+)$/))) return pool(m[1]);
   if (/^\/storage\/disks\/[^/]+/.test(path)) return DISKS;   // the page of one disk reads what the list reads (its SMART history and tests are read by the page itself)
   if (path.startsWith('/settings/capabilities') || path === P.settingsExtensions) return [`${A}config/list`, `${A}parts/list`, `${A}parts/pending`];

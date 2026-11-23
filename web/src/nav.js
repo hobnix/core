@@ -191,7 +191,7 @@ export function placeExt(children, exts) {
 export function withExtItems(items, exts) {
   if (!Array.isArray(exts) || !exts.length) return items;
   return items.map((it) => {
-    const mine = exts.filter((e) => extGroup(e) === it.path);
+    const mine = exts.filter((e) => e.kind !== 'recipe' && extGroup(e) === it.path);      // a recipe's page is opened from its row, it has no place in the tree
     return mine.length ? { ...it, children: placeExt(it.children ?? [], mine) } : it;
   });
 }
