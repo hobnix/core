@@ -26,7 +26,7 @@ SLOTS = ("page", "tab", "action", "health", "state")
 WEB_KEYS = ("reads", "changes", "page", "actions")      # the tables a package may write under [web]; `page` carries tab and state
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
 NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
-LEVELS = ("ok", "warn", "bad")
+LEVELS = ("ok", "info", "warn", "bad")      # the health system has no info level: ok and info rows are never problems (see problems())
 ACTION_KEYS = ("id", "label", "plan", "role", "main", "danger", "icon", "requires")
 HEALTH_KEYS = ("id", "read", "title", "requires")
 MAX_ACTIONS, MAX_HEALTH = 8, 8
@@ -135,7 +135,7 @@ def manifest_problems(name, doc):
         if rd is None:
             out.append("%s: read %r is not a [[web.reads]] of this package" % (w, h.get("read")))
         elif rd.get("kind") != "tsv" or rd.get("args"):
-            out.append("%s: the read must be kind tsv without args (rows: level, message; level is ok, warn or bad)" % w)
+            out.append("%s: the read must be kind tsv without args (rows: level, message; level is ok, info, warn or bad)" % w)
         if "title" in h and (not isinstance(h["title"], str) or not 1 <= len(h["title"]) <= 60):
             out.append("%s: title is 1 to 60 characters" % w)
         out += _requires_problem(w, h, name)
@@ -240,10 +240,10 @@ def check_rows():
 
 
 def problems():
-    """[(key, text)]: one per check that reports warn or bad; text names the package ("Title: message"), key is ext:<package>:<id>."""
+    """[(key, text)]: one per check that reports warn or bad (ok and info rows, e.g. a PC that is simply switched off, are no problem: not counted, not sent); text names the package ("Title: message"), key is ext:<package>:<id>."""
     seen = {}
     for title, name, cid, lv, msg in check_rows():
-        if lv == "ok":
+        if lv in ("ok", "info"):
             continue
         k = "ext:%s:%s" % (name, cid)
         seen.setdefault(k, [title, []])[1].append(msg or "needs attention")

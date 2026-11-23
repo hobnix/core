@@ -25,10 +25,11 @@ here=$(dirname "$0")
 health=${HS_DISK_HEALTH:-$here/disk-health.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; disk=${3:-}; kind=${4:-}
 case "$verb" in plan|start) ;; *) echo "usage: disk-change.sh plan|start test <disk> short|long" >&2; exit 1 ;; esac
-case "$action" in test|wipe|forget|recover|recover-finish|move|detach|attach|temp-mount|temp-eject|temp-copy) ;; *) refuse "unknown action (test, wipe, forget, recover, recover-finish, move, detach, attach, temp-mount, temp-eject or temp-copy)" ;; esac
+case "$action" in test|wipe|forget|recover|recover-finish|move|detach|attach|temp-mount|temp-eject|temp-copy) ;; *) refuse_code action.unknown "unknown action (test, wipe, forget, recover, recover-finish, move, detach, attach, temp-mount, temp-eject or temp-copy)" ;; esac
 # a plain device or by-id name: no path, no dots-dots, no options
 { [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}$ ]] && [[ "$disk" != *..* ]]; } || refuse "that is not a disk name"
 
@@ -73,16 +74,16 @@ if [ "$action" = forget ]; then
   confirm=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-      *) refuse "unknown option $1" ;;
+      --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   state=${HS_STATE_SH:-$here/state.sh}
   row=$(bash "$state" disks 2>/dev/null | awk -F'	' -v s="$disk" '$1 == s { print; exit }' || true)
-  [ -n "$row" ] || refuse "There is no disk with the serial '$disk' in the inventory."
+  [ -n "$row" ] || refuse_code disk.unknown "There is no disk with the serial '$disk' in the inventory."
   [ "$(cut -f5 <<<"$row")" = missing ] || refuse "$disk is in the machine: only a missing disk can be forgotten."
   if [ "$verb" = start ]; then
-    [ "$confirm" = "$disk" ] || refuse "type the serial to confirm: $disk"
+    [ "$confirm" = "$disk" ] || refuse_code confirm.missing "type the serial to confirm: $disk"
     bash "$state" forget "$disk" --yes >/dev/null 2>&1 || refuse "the disk could not be forgotten"
     printf 'status	done
 '
@@ -110,17 +111,17 @@ if [ "$action" = wipe ]; then
   confirm="" now=no
   while [ $# -gt 0 ]; do
     case "$1" in
-      --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+      --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
       --now)     now=yes; shift ;;   # the job started by `start` runs it this way
-      *) refuse "unknown option $1" ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   devdir=${HS_DEV_DIR:-/dev}
   dev=$(readlink -f "$devdir/disk/by-id/$disk" 2>/dev/null || true)
   [ -n "$dev" ] && [ -e "$dev" ] || dev=$devdir/$disk
-  [ -e "$dev" ] || refuse "There is no disk '$disk'."
+  [ -e "$dev" ] || refuse_code disk.unknown "There is no disk '$disk'."
   tree=$(lsblk -nP -o NAME,PATH,TYPE,FSTYPE,LABEL,MOUNTPOINTS,SIZE "$dev" 2>/dev/null || true)
-  [ -n "$tree" ] || refuse "There is no disk '$disk'."
+  [ -n "$tree" ] || refuse_code disk.unknown "There is no disk '$disk'."
   field() { sed -n "s/.*[ ]$1=\"\([^\"]*\)\".*/\1/p" <<<" $2"; }   # field <KEY> <lsblk -P line>
   first=$(sed -n 1p <<<"$tree")
   [ "$(field TYPE "$first")" = disk ] || refuse "$disk is not a whole disk."
@@ -142,11 +143,11 @@ if [ "$action" = wipe ]; then
     own|ambiguous) [ ${#cryptmaps[@]} -gt 0 ] || refuse "$disk is one of this server's encrypted disks and it is closed. Open it first (hs unlock) so that the array label can be checked." ;;
   esac
   if [ "$verb" = start ]; then
-    [ "$confirm" = "$disk" ] || refuse "type the name to confirm: $disk"
+    [ "$confirm" = "$disk" ] || refuse_code confirm.missing "type the name to confirm: $disk"
     if [ "$now" != yes ]; then
       # the erase is a job: it shows under Tasks and says when it is done (it repeats every check above, with --now, and does the work)
       . "$here/lib/job.sh"
-      unit=$(hs_job "disk-wipe-$disk" "format (erase) $disk" -- bash "$here/disk-change.sh" start wipe "$disk" --confirm "$confirm" --now) || refuse "the job could not be started"
+      unit=$(hs_job "disk-wipe-$disk" "format (erase) $disk" -- bash "$here/disk-change.sh" start wipe "$disk" --confirm "$confirm" --now) || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"
       exit 0
     fi
@@ -207,7 +208,7 @@ if [ "$action" != test ]; then
     case "$1:$action" in
       --name:temp-mount) [ $# -ge 2 ] || refuse "--name needs a value"; name=$2; shift 2 ;;
       --to:temp-copy)    [ $# -ge 2 ] || refuse "--to needs a value"; to=$2; shift 2 ;;
-      *) refuse "unknown option $1" ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   [[ "$disk" =~ ^[a-z0-9][a-z0-9-]*$ ]] || refuse "that is not a partition or temp disk name"
@@ -241,7 +242,7 @@ if [ "$action" != test ]; then
   if [ "$verb" = start ]; then
     if [ "$action" = temp-copy ]; then
       . "$here/lib/job.sh"
-      unit=$(hs_job "temp-copy-$disk" "hs disk temp copy $disk" -- "${cmd[@]}") || refuse "the job could not be started"
+      unit=$(hs_job "temp-copy-$disk" "hs disk temp copy $disk" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"
       exit 0
     fi
@@ -276,7 +277,7 @@ if [ "$action" != test ]; then
 fi
 
 case "$kind" in short|long) ;; *) refuse "the test is short or long" ;; esac
-[ $# -le 4 ] || refuse "unknown option $5"
+[ $# -le 4 ] || refuse_code option.unknown "unknown option $5"
 
 # the dry run knows whether the disk exists and which command would run; the results say whether a test is running now
 rc=0

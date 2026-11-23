@@ -18,10 +18,11 @@ here=$(dirname "$0")
 node=${HS_NODE:-$here/node.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: node-change.sh plan|start add <name> <host> [--kind K] [--port N] | remove <name> | key <name> [--new]" >&2; exit 1 ;; esac
-case "$action" in add|remove|key) ;; *) refuse "unknown action (add, remove or key)" ;; esac
+case "$action" in add|remove|key) ;; *) refuse_code action.unknown "unknown action (add, remove or key)" ;; esac
 if [ -z "$name" ]; then
   if [ "$action" = add ]; then printf 'status\tneeds\nneeds\tname\n'; exit 2; fi
   refuse "a node name is needed"
@@ -33,7 +34,7 @@ shift 3
 confirm="" rest=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     *) rest+=("$1"); shift ;;
   esac
 done
@@ -55,7 +56,7 @@ case "$action" in
       case "$1" in
         --kind) kind=${2:-}; shift 2 || refuse "--kind needs a value" ;;
         --port) port=${2:-}; shift 2 || refuse "--port needs a value" ;;
-        *) refuse "unknown option $1" ;;
+        *) refuse_code option.unknown "unknown option $1" ;;
       esac
     done
     case "$kind" in peer|vps|edge) ;; *) refuse "the kind is peer, vps or edge" ;; esac
@@ -63,7 +64,7 @@ case "$action" in
     $exists && refuse "There is already a node called $name."
     cmd=(bash "$node" add "$name" "$host" --kind "$kind"); [ -z "$port" ] || cmd+=(--port "$port") ;;
   remove)
-    [ $# -eq 0 ] || refuse "unexpected extra arguments"
+    [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
     $exists || refuse "There is no node called $name."
     # only a row of the list can go; the implicit proxyserver of the setting vpsHost goes away with the setting
     bash "$node" --list 2>/dev/null | awk -F'\t' -v n="$name" '$1 == n && $5 == "file" { f = 1 } END { exit !f }' \
@@ -77,7 +78,7 @@ esac
 
 if [ "$verb" = start ]; then
   if [ "$action" = remove ] || { [ "$action" = key ] && $new; }; then
-    [ "$confirm" = "$name" ] || refuse "type the name of the node ($name) to confirm"
+    [ "$confirm" = "$name" ] || refuse_code confirm.missing "type the name of the node ($name) to confirm"
   fi
   rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then

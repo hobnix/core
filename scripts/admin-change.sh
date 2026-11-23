@@ -17,16 +17,17 @@ set -euo pipefail
 here=$(dirname "$0")
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: admin-change.sh plan|start test-push|pin-macs|cache-mover|fans-clean [--seconds N]" >&2; exit 1 ;; esac
-case "$action" in test-push|pin-macs|cache-mover|fans-clean) ;; *) refuse "unknown action (test-push, pin-macs, cache-mover or fans-clean)" ;; esac
+case "$action" in test-push|pin-macs|cache-mover|fans-clean) ;; *) refuse_code action.unknown "unknown action (test-push, pin-macs, cache-mover or fans-clean)" ;; esac
 shift 2 || true
 secs=8
 while [ $# -gt 0 ]; do
   case "$1" in
     --seconds) [ "$action" = fans-clean ] || refuse "--seconds is for fans-clean"; [ $# -ge 2 ] || refuse "--seconds needs a value"; secs=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -37,7 +38,7 @@ unset HS_GUIDED_TTY
 job() {   # job <slug> <description> <command...>
   . "$here/lib/job.sh"
   local unit
-  unit=$(hs_job "$1" "$2" -- "${@:3}") || refuse "the job could not be started"
+  unit=$(hs_job "$1" "$2" -- "${@:3}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
 }
 

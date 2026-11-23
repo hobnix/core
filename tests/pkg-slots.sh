@@ -99,11 +99,14 @@ cat > "$WORK/fakehs" <<'EOF'
 #!/usr/bin/env bash
 # fake hs: `hs sys ext hx checks`
 [ "$*" = "sys ext hx checks" ] || exit 2
-printf 'ok\tfine\nwarn\tsync is 3 days old\nbad\t-\n'
+printf 'ok\tfine\ninfo\tpc is off\nwarn\tsync is 3 days old\nbad\t-\n'
 EOF
 env_h="HS_PACKAGES_DIR=$WORK/pk HS_CAPABILITIES_FILE=$WORK/caps2 HS_STATE_DIR=$WORK/state HS_BIN=$WORK/fakehs"
 out=$(env $env_h $SL problems 2>&1)
 check_eq "a warn and a bad row make one problem that names the package" "ext:hx:stale	Hx tool: sync is 3 days old; needs attention" "$out"
+check_eq "list shows an info row" "hx	stale	info	pc is off" "$(env $env_h $SL list 2>&1 | grep info)"
+printf '#!/usr/bin/env bash\nprintf "info\\tpc is off\\nok\\tfine\\n"\n' > "$WORK/fakehs"
+check_eq "an info row alone is no problem" "" "$(env $env_h $SL problems 2>&1)"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/fakehs"
 out=$(env $env_h $SL problems 2>&1)
 check_eq "a read that fails is a problem, not silence" "ext:hx:stale	Hx tool: the health check stale could not be read" "$out"

@@ -90,10 +90,11 @@ if [ "${1:-}" = apply-secret ]; then
 fi
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; name=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: user-change.sh plan|start <name> <action> [options]" >&2; exit 1 ;; esac
-case "$action" in lock|unlock|group-add|membership|flush|password|user-add|user-delete|group-delete|user-edit|group-edit) ;; *) refuse "unknown action" ;; esac
+case "$action" in lock|unlock|group-add|membership|flush|password|user-add|user-delete|group-delete|user-edit|group-edit) ;; *) refuse_code action.unknown "unknown action" ;; esac
 shift 3
 changes=() full="" confirm="" groups=() grant=() mail="" descr="" edits=()
 while [ $# -gt 0 ]; do
@@ -105,11 +106,11 @@ while [ $# -gt 0 ]; do
     --description) descr=${2:-}; edits+=(--description "$descr"); shift 2 ;;
     --group)   groups+=("${2:-}"); shift 2 ;;
     --access)  grant+=("${2:-}"); shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 [ "$action" = flush ] || [ -n "$name" ] || refuse "no name"
-[[ "$name" != *$'\t'* && "$name" != *$'\n'* ]] || refuse "invalid name"
+[[ "$name" != *$'\t'* && "$name" != *$'\n'* ]] || refuse_code name.invalid "invalid name"
 
 [ ${#groups[@]} -eq 0 ] || [ "$action" = user-add ] || refuse "--group belongs to user-add"
 [ ${#grant[@]} -eq 0 ] || [ "$action" = group-add ] || refuse "--access belongs to group-add"
@@ -204,7 +205,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != "$name" ]; then refuse "type the name to confirm: $name"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the name to confirm: $name"; fi
   . "$here/lib/job.sh"
   passfile=""
   case "$action" in
@@ -218,7 +219,7 @@ if [ "$verb" = start ]; then
       cmd+=("$passfile")
       [ "$action" != user-add ] || cmd+=("$full" ${groups[@]+"${groups[@]}"}) ;;
   esac
-  unit=$(hs_job "user-$action-${name:-all}" "hs user $action ${name:-}" -- "${cmd[@]}") || { [ -z "$passfile" ] || rm -f "$passfile"; refuse "the job could not be started"; }
+  unit=$(hs_job "user-$action-${name:-all}" "hs user $action ${name:-}" -- "${cmd[@]}") || { [ -z "$passfile" ] || rm -f "$passfile"; refuse_code job.start-failed "the job could not be started"; }
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

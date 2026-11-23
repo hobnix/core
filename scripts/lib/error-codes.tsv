@@ -12,3 +12,10 @@ app.unknown	script	No app of that name exists	No such app was found.	-
 name.invalid	script	A name is not in the allowed form	The name is not valid.	-
 plan.changed	script	What the plan saw changed before it was applied	It changed meanwhile. Reload it and try again.	-
 job.busy	script	The same job is running already	This is running already.	-
+job.start-failed	script	The background job could not be started	The background job could not be started.	-
+option.unknown	script	The command got an option it does not know	The command does not know this option.	-
+args.unexpected	script	The command got more arguments than it takes	The command got more arguments than it takes.	-
+confirm.missing	script	The typed name that confirms a destructive step is missing or wrong	Type the name of the thing to confirm.	-
+disk.unknown	script	No disk of that name exists	No such disk was found.	hs sys pool disks
+install.failed	script	An install job stopped at a step	The install stopped.	-
+action.unknown	script	The command does not know the action it was given	The command does not know this action.	-

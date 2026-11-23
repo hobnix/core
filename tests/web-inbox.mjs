@@ -18,10 +18,10 @@ eq('an https guide is kept', guideHref('https://example.org/x'), 'https://exampl
 
 // PlanDialog (#488): the reload offer follows the code; the English match is the fallback; an unknown code keeps the plan's own text.
 eq('reload offered by code', offersReload('plan.changed', 'x'), true);
-eq('reload offered by the old text', offersReload('', 'The disk changed meanwhile'), true);
+eq('no reload from the old text', offersReload(''), false);
 eq('no reload for another refusal', offersReload('vault.locked', 'The vault is closed'), false);
-const pl = resolveError({ code: 'vault.locked', what: 'The vault is closed.' });
-eq('a plan code that is not catalogued shows its reason as sent', [pl.known, pl.what, pl.code], [false, 'The vault is closed.', 'vault.locked']);
+const pl = resolveError({ code: 'zz.never-catalogued', what: 'The vault is closed.' });
+eq('a plan code that is not catalogued shows its reason as sent', [pl.known, pl.what, pl.code], [false, 'The vault is closed.', 'zz.never-catalogued']);
 
 const rows = [['p1', 'SMART of sdb is failing. Details: x', '-', '100', '-'], ['p2', 'last successful backup is 30 hours old', 'acked', '90', '-'], ['mitigation:paused', 'paused', '-', '1', '-'], ['p3', 'a unit failed', '-', '80', '-']];
 const ps = problemItems(rows);

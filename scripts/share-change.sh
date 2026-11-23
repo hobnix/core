@@ -46,11 +46,12 @@ restorer=${HS_SHARE_RESTORE:-$here/share-restore.sh}
 parity=${HS_SHARE_PARITY:-$here/share-parity.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; share=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: share-change.sh plan|start <share> <action> [options]" >&2; exit 1 ;; esac
 [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid share name"
-case "$action" in backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore|parity-skip|parity-keep|parity-limit) ;; *) refuse "unknown action" ;; esac
+case "$action" in backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore|parity-skip|parity-keep|parity-limit) ;; *) refuse_code action.unknown "unknown action" ;; esac
 shift 3
 
 tier=bulk
@@ -68,11 +69,11 @@ while [ $# -gt 0 ]; do
     --ct)       ct=${2:-}; shift 2 ;;
     --path)     ctpath=${2:-}; inside=${2:-}; shift 2 ;;
     --as)       as=${2:-}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 word='^[A-Za-z0-9][A-Za-z0-9._-]*$'
-for v in "$label" "$snapname"; do [ -z "$v" ] || [[ "$v" =~ $word ]] || refuse "invalid name '$v'"; done
+for v in "$label" "$snapname"; do [ -z "$v" ] || [[ "$v" =~ $word ]] || refuse_code name.invalid "invalid name '$v'"; done
 
 needs=()
 case "$action" in
@@ -225,9 +226,9 @@ long=no
 case "$action" in repair|restore|purge|undelete) long=yes ;; esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != "$cname" ]; then refuse "type the name to confirm: $cname"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$cname" ]; then refuse_code confirm.missing "type the name to confirm: $cname"; fi
   . "$here/lib/job.sh"
-  unit=$(hs_job "share-$action-$share" "hs share $share $action" -- "${cmd[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "share-$action-$share" "hs share $share $action" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

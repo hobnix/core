@@ -3,8 +3,23 @@
 // `guide`; a code it does not know shows the English text as it came and nothing else. Nothing here is HTML: the parts are shown as plain text.
 
 // code -> { why, next, guide } for the codes the web knows. Add a code here when its guide section exists. `next` is one command or one page.
+// `guide` is the section of docs/errors.md (generated from scripts/lib/error-codes.tsv): the code without its dot (scripts/errors-doc-gen.py anchor()).
+const E = (why, next = '', code = '') => ({ why, next, guide: 'errors' + (code ? '#' + code.replace(/\./g, '') : '') });
 export const KNOWN = {
   'disk.full': { why: 'The disk has no free space left.', next: 'hs disk <disk> health', guide: 'storage#free-up-space' },
+  'vault.locked': E('The step needs a secret that is in the closed vault.', 'hs vault open', 'vault.locked'),
+  'docker.off': E('Docker is switched off or is not running.', 'hs docker enable', 'docker.off'),
+  'app.unknown': E('No app of this name exists any more.', 'Reload the page', 'app.unknown'),
+  'name.invalid': E('A name may use letters, digits and - . _ only.', 'Change the name', 'name.invalid'),
+  'plan.changed': E('Something changed after the plan was made.', 'Reload the plan', 'plan.changed'),
+  'job.busy': E('The same job is running already.', 'Wait for it in Jobs', 'job.busy'),
+  'job.start-failed': E('The system could not start the background job.', 'Look in Jobs, then try again', 'job.start-failed'),
+  'option.unknown': E('This page and the server do not match.', 'Reload the page', 'option.unknown'),
+  'args.unexpected': E('This page and the server do not match.', 'Reload the page', 'args.unexpected'),
+  'confirm.missing': E('A destructive step needs the typed name.', 'Type the name as shown', 'confirm.missing'),
+  'disk.unknown': E('No disk of this name is connected.', 'hs sys pool disks', 'disk.unknown'),
+  'install.failed': E('One step of the install did not finish.', 'Read the last lines, then Retry', 'install.failed'),
+  'run.timeout': E('The server stopped waiting for the command.', 'Check Jobs', 'run.timeout'),
 };
 
 const clean = (v) => (v == null || v === '-' ? '' : String(v).trim());
@@ -32,7 +47,6 @@ export function resolveError(e = {}) {
   };
 }
 
-// The "reload" offer of a plan that changed meanwhile (ADR 0028 point 6: act on the code, not the text). The code name is not in a catalogue yet
-// (scripts/lib/error-codes.tsv comes with the scripts half of #488, 0.12); until a script prints it, the old English match stays as the fallback.
+// The "reload" offer of a plan that changed meanwhile (ADR 0028 point 6: act on the code, never on the text).
 export const RELOAD_CODES = ['plan.changed'];
-export const offersReload = (code, text = '') => RELOAD_CODES.includes(clean(code)) || String(text ?? '').includes('changed meanwhile');
+export const offersReload = (code) => RELOAD_CODES.includes(clean(code));

@@ -79,7 +79,7 @@ hs_job() {
   echo hs-job-test-1
 }
 JOB
-cp "$SCRIPTS/recipe-change.sh" "$WORK/recipe-change.sh"; cp "$SCRIPTS/lib/recipe-path.sh" "$SCRIPTS/lib/recipe-runs.sh" "$WORK/lib/"; mkdir -p "$WORK/run"
+cp "$SCRIPTS/recipe-change.sh" "$WORK/recipe-change.sh"; cp "$SCRIPTS/lib/recipe-path.sh" "$SCRIPTS/lib/recipe-runs.sh" "$SCRIPTS/lib/refuse-code.sh" "$WORK/lib/"; mkdir -p "$WORK/run"
 : > "$WORK/jobs"; : > "$WORK/secretseen"
 rc=0; out=$(printf 's3cret\n' | HS_RUN_DIR="$WORK/run" timeout 20 bash "$WORK/recipe-change.sh" start vpn run --name vpn2 --set ADDR=10.2.0.2/32 --set COUNTRIES=AT 2>/dev/null) || rc=$?
 check_eq "start: exit 0" 0 "$rc"

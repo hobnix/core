@@ -17,10 +17,11 @@ py=${HS_PYTHON:-python3}
 export HS_PLAIN=1
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: token-change.sh plan|start <create <name>|revoke <name>> --by <user> --cap <role>" >&2; exit 1 ;; esac
-case "$action" in create|revoke) ;; *) refuse "unknown action (create or revoke)" ;; esac
+case "$action" in create|revoke) ;; *) refuse_code action.unknown "unknown action (create or revoke)" ;; esac
 [ $# -ge 3 ] || refuse "give the name of the token"
 shift 3
 role=viewer; days=90; by=""; cap=""; confirm=""
@@ -31,7 +32,7 @@ while [ $# -gt 0 ]; do
     --by) by=${2:-}; shift 2 || refuse "an option needs a value" ;;
     --cap) cap=${2:-}; shift 2 || refuse "an option needs a value" ;;
     --confirm) confirm=${2:-}; shift 2 || refuse "an option needs a value" ;;
-    *) refuse "unknown option" ;;
+    *) refuse_code option.unknown "unknown option" ;;
   esac
 done
 [ -n "$by" ] && [ -n "$cap" ] || refuse "who asks is missing"
@@ -59,7 +60,7 @@ if [ "$verb" = start ]; then
       IFS=$'\t' read -r _ token tid exp <<<"$out"
       printf 'status\tdone\nsecret\ttoken\t%s\nid\t%s\nnote\tCopy the token now: it is shown only once and only its hash is kept. It ends on %s.\n' "$token" "$tid" "$(date -d "@$exp" +%F 2>/dev/null || echo "$exp")" ;;
     revoke)
-      [ "$confirm" = "$name" ] || refuse "type the name of the token to confirm: $name"
+      [ "$confirm" = "$name" ] || refuse_code confirm.missing "type the name of the token to confirm: $name"
       if [ "$cap" = admin ]; then "${store[@]}" revoke "$name" >/dev/null || refuse "there is no token with this name"
       else "${store[@]}" revoke "$name" --owner "$by" >/dev/null || refuse "there is no token with this name"; fi
       printf 'status\tdone\nnote\tThe token %s no longer works.\n' "$name" ;;

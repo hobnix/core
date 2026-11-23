@@ -20,17 +20,18 @@ state=${HS_STATE_DIR:-/var/lib/hs}
 inc=${HS_INCUS:-incus}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: dc-change.sh plan|start ca | renew [--dc <instance>]" >&2; exit 1 ;; esac
-case "$action" in ca|renew|renew-job) ;; *) refuse "unknown action (ca or renew)" ;; esac
+case "$action" in ca|renew|renew-job) ;; *) refuse_code action.unknown "unknown action (ca or renew)" ;; esac
 shift 2 || true
 dc="" confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dc)      [ "$action" != ca ] || refuse "--dc is for renew"; [ $# -ge 2 ] || refuse "--dc needs a value"; dc=$2; shift 2 ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 [ -z "$dc" ] || [[ "$dc" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || refuse "'$dc' is not an instance name"
@@ -69,9 +70,9 @@ case "$action" in
     fi
     "$inc" info "$name" >/dev/null 2>&1 || refuse "The domain controller '$name' does not run on this server: renew its certificate in the terminal there (hs dc cert request / sign / install)."
     if [ "$verb" = start ]; then
-      [ "$confirm" = "$name" ] || refuse "type the name of the controller to confirm: $name"
+      [ "$confirm" = "$name" ] || refuse_code confirm.missing "type the name of the controller to confirm: $name"
       . "$here/lib/job.sh"
-      unit=$(hs_job "dc-renew-$name" "renew the certificate of $name" -- bash "$here/dc-change.sh" start renew-job --dc "$name") || refuse "the job could not be started"
+      unit=$(hs_job "dc-renew-$name" "renew the certificate of $name" -- bash "$here/dc-change.sh" start renew-job --dc "$name") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"
       exit 0
     fi

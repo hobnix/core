@@ -157,7 +157,7 @@ install with "unknown slot ... (known slots: page, tab, action, health, state)".
 | page | `[web.page]` | `title = "Game lobbies"`, `group = "apps"`, `requires = "docker"` |
 | tab | `[[web.page.tabs]]` | `title = "Settings"`, `requires = "tailscale"` (a tab whose requirement is off is dropped with its blocks) |
 | action | `[[web.actions]]` | `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<name>", "sync"]`, `role = "app-manager"`, `main = true`; shown in the page header and on the Apps > Installed row: the `main` action (else the first) as a button, the rest under More; the plan names only the package's own area |
-| health check | `[[health]]` | `id = "stale"`, `read = "checks"`: a declared `[[web.reads]]` of kind tsv without arguments whose rows are `level<TAB>message` (`ok`, `warn`, `bad`); a `warn` or `bad` row is a problem in System > Health, named `<Title>: <message>`, with the usual notification and acknowledge |
+| health check | `[[health]]` | `id = "stale"`, `read = "checks"`: a declared `[[web.reads]]` of kind tsv without arguments whose rows are `level<TAB>message` (`ok`, `info`, `warn`, `bad`; `ok` and `info` are no problem); a `warn` or `bad` row is a problem in System > Health, named `<Title>: <message>`, with the usual notification and acknowledge |
 | state card | `[web.page.state]` | `read = "checks"`, `dot = 0`, `line = 1`, `requires = "docker"` |
 
 The session answer carries the actions as `features.slots`; health checks are run by `scripts/health-check.sh` (`python3 scripts/lib/pkg_slots.py

@@ -48,11 +48,12 @@ if [ "${1:-}" = apply-create ]; then
 fi
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; ct=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: ct-change.sh plan|start <instance> <action> [options]" >&2; exit 1 ;; esac
 [[ "$ct" =~ ^[a-z][a-z0-9-]*$ ]] || refuse "invalid instance name"
-case "$action" in start|stop|restart|snapshot|restore|delete-snapshot|add-storage|remove-storage|set|ip|update|update-all|delete|create) ;; *) refuse "unknown action" ;; esac
+case "$action" in start|stop|restart|snapshot|restore|delete-snapshot|add-storage|remove-storage|set|ip|update|update-all|delete|create) ;; *) refuse_code action.unknown "unknown action" ;; esac
 [ "$action" != update-all ] || [ "$ct" = all ] || refuse "update-all is for all instances: use 'all' as the instance"
 [ "$ct" != all ] || [ "$action" = update-all ] || refuse "'all' is only for update-all"
 shift 3
@@ -81,12 +82,12 @@ while [ $# -gt 0 ]; do
     --pool)      pool=${2:-}; shift 2 ;;
     --iso)       iso=${2:-}; shift 2 ;;
     --bind)      binds+=("${2:-}"); shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 word='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 for v in "$snap" "$label" "$device" "$sname" "$profile" "$pool"; do
-  [ -z "$v" ] || [[ "$v" =~ $word ]] || refuse "invalid name '$v'"
+  [ -z "$v" ] || [[ "$v" =~ $word ]] || refuse_code name.invalid "invalid name '$v'"
 done
 
 needs=()
@@ -202,16 +203,16 @@ if [ "$action" = update-all ]; then
 fi
 
 if [ "$verb" = start ]; then
-  if [ -n "$danger" ] && [ "$confirm" != "$ct" ]; then refuse "type the name to confirm: $ct"; fi
+  if [ -n "$danger" ] && [ "$confirm" != "$ct" ]; then refuse_code confirm.missing "type the name to confirm: $ct"; fi
   . "$here/lib/job.sh"
   jargs=("${margs[@]}")
   [ "$action" != update-all ] || jargs=(--yes "${targets[@]}")   # exactly the list of the plan
   [ "$action" != delete ] || jargs+=(--yes)   # the name was typed in the interface; a job cannot ask
   if [ "$action" = create ] && [ ${#binds[@]} -gt 0 ]; then
     for b in "${binds[@]}"; do jargs+=(--bind "$b"); done
-    unit=$(hs_job "ct-$action-$ct" "hs ct $ct $action" -- bash "$(cd "$here" && pwd)/ct-change.sh" apply-create "${jargs[@]}") || refuse "the job could not be started"
+    unit=$(hs_job "ct-$action-$ct" "hs ct $ct $action" -- bash "$(cd "$here" && pwd)/ct-change.sh" apply-create "${jargs[@]}") || refuse_code job.start-failed "the job could not be started"
   else
-    unit=$(hs_job "ct-$action-$ct" "hs ct $ct $action" -- bash "$runner" "${jargs[@]}") || refuse "the job could not be started"
+    unit=$(hs_job "ct-$action-$ct" "hs ct $ct $action" -- bash "$runner" "${jargs[@]}") || refuse_code job.start-failed "the job could not be started"
   fi
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0

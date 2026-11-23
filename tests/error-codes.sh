@@ -42,4 +42,18 @@ out=$(bash -c '. "$1/lib/ui.sh"; refuse_code docker.off "Docker is off."' _ "$SC
 check_match "a given reason wins" 'reason.Docker is off\.' "$out"
 if grep -q '^fix' <<<"$out"; then fail "a code without a fix printed a fix line"; else pass "no fix line without a fix"; fi
 
+echo "-- a failing command of each core area ends with a coded error"
+# every change script: an action it does not know is refused with the code action.unknown (the two docker scripts take the app or host first)
+for f in "$SCRIPTS"/*-change.sh; do
+  n=$(basename "$f" -change.sh)
+  [ "$n" != vault ] || continue   # hs sys secrets is the Rust binary (rust:secrets); it keeps its own plain refusals until ported
+  case "$n" in docker-app) a=(plan app1 nosuchaction) ;; docker-registry) a=(plan nosuchaction ghcr.io) ;; *) a=(plan nosuchaction) ;; esac
+  out=$(HS_PLAIN=1 timeout 20 bash "$f" "${a[@]}" </dev/null 2>/dev/null)
+  if grep -q $'^status	refused' <<<"$out" && grep -q $'^code	[a-z][a-z0-9.-]*$' <<<"$out"; then pass "$n: refused with a code"; else fail "$n: no code line in: $out"; fi
+done
+# the catalogue knows every code a core area can answer with
+for c in action.unknown option.unknown job.start-failed confirm.missing disk.unknown install.failed plan.changed; do
+  grep -qxF "$c" <<<"$known" && pass "catalogue has $c" || fail "catalogue lacks $c"
+done
+
 finish

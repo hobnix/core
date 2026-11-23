@@ -21,10 +21,11 @@ here=$(dirname "$0")
 remote=${HS_REMOTE:-$here/remote.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: peer-change.sh plan|start add|remove|revoke|attach|detach ..." >&2; exit 1 ;; esac
-case "$action" in offer|add|remove|revoke|attach|detach) ;; *) refuse "unknown action (offer, add, remove, revoke, attach or detach)" ;; esac
+case "$action" in offer|add|remove|revoke|attach|detach) ;; *) refuse_code action.unknown "unknown action (offer, add, remove, revoke, attach or detach)" ;; esac
 shift 2 || true
 
 valid() { [[ "$2" =~ $3 ]] || refuse "that is not a valid $1"; }
@@ -44,8 +45,8 @@ while [ $# -gt 0 ]; do
     --domain)  [ $# -ge 2 ] || refuse "--domain needs a value"; domain=$2; shift 2 ;;
     --path)    [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
     --new-password) newpw=true; shift ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 if [ "$action" = add ]; then
@@ -81,7 +82,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$red" ] && [ "$confirm" != "$red" ]; then refuse "type the peer name to confirm: $red"; fi
+  if [ -n "$red" ] && [ "$confirm" != "$red" ]; then refuse_code confirm.missing "type the peer name to confirm: $red"; fi
   rc=0
   if [ "$action" = offer ]; then
     out=$(bash "$remote" "${args[@]}" </dev/null 2>&1) || rc=$?

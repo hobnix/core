@@ -35,4 +35,23 @@ bad "a block without a type is named" "unknown block None" "${PG}[[web.page.bloc
 bad "a missing required key is named" "needs key" "${PG}[[web.page.blocks]]\ntype = \"table\"\nread = \"/api/sys/x\"\ncolumns = []"
 bad "an unknown key is named" "has no key colour" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"x\"\ncolour = \"red\""
 bad "a wrong type is named" "must be a list" "${PG}[[web.page.blocks]]\ntype = \"table\"\nread = \"/r\"\nkey = \"k\"\ncolumns = \"x\""
+# the form block (#473): fields as data, the plan in the package's own area, a secret only on stdin
+CH='[[web.reads]]\nargs = ["x"]\n[[web.changes]]\nfixed = ["^go$"]\nstdin = true\n'
+FB='[[web.page.blocks]]\ntype = "form"\nplan = ["ext/blkext", "go", "{host}"]\n'
+FH='[[web.page.blocks.fields]]\nkey = "host"\nlabel = "Host"\ntype = "text"\nrequired = true\npattern = "^[a-z]+$"\n'
+FS='[[web.page.blocks.fields]]\nkey = "token"\nlabel = "Token"\ntype = "secret"\n'
+good "a form with a secret on stdin passes" "${CH}${PG}${FB%\\n}\nstdin = \"token\"\n${FH}${FS}"
+good "a form with number, select and toggle passes" "${CH}${PG}${FB}${FH}[[web.page.blocks.fields]]\nkey = \"n\"\nlabel = \"N\"\ntype = \"number\"\nmin = 1\nmax = 9\n[[web.page.blocks.fields]]\nkey = \"s\"\nlabel = \"S\"\ntype = \"select\"\noptions = [\"a\", \"b\"]\n[[web.page.blocks.fields]]\nkey = \"t\"\nlabel = \"T\"\ntype = \"toggle\"\ndefault = true"
+bad "an unknown field type is named" "unknown field type 'color'" "${CH}${PG}${FB}[[web.page.blocks.fields]]\nkey = \"host\"\nlabel = \"H\"\ntype = \"color\""
+bad "a plan of another area is refused" "own area" "${CH}${PG}[[web.page.blocks]]\ntype = \"form\"\nplan = [\"ext/other\", \"go\"]\n${FH}"
+bad "a plan the package does not declare is refused" "not allowlisted" "${PG}${FB}${FH}"
+bad "a secret field without stdin is refused" "needs stdin" "${CH}${PG}${FB}${FH}${FS}"
+bad "stdin that names no secret field is refused" "stdin must name the secret" "${CH}${PG}${FB%\\n}\nstdin = \"host\"\n${FH}"
+bad "a secret in the plan arguments is refused" "may not use the secret" "${CH}${PG}[[web.page.blocks]]\ntype = \"form\"\nplan = [\"ext/blkext\", \"go\", \"{token}\"]\nstdin = \"token\"\n${FS}"
+bad "a secret needs a change that takes stdin" "stdin = true" "[[web.reads]]\nargs = [\"x\"]\n[[web.changes]]\nfixed = [\"^go\$\"]\n${PG}${FB%\\n}\nstdin = \"token\"\n${FH}${FS}"
+bad "two secret fields are refused" "at most one secret" "${CH}${PG}${FB%\\n}\nstdin = \"token\"\n${FH}${FS}[[web.page.blocks.fields]]\nkey = \"t2\"\nlabel = \"T2\"\ntype = \"secret\""
+bad "a select without options is refused" "needs options" "${CH}${PG}${FB}${FH}[[web.page.blocks.fields]]\nkey = \"s\"\nlabel = \"S\"\ntype = \"select\""
+bad "a bad pattern is refused" "not a valid regular" "${CH}${PG}${FB}[[web.page.blocks.fields]]\nkey = \"host\"\nlabel = \"H\"\ntype = \"text\"\npattern = \"(\""
+bad "a plan placeholder that is no field is refused" "not a field" "${CH}${PG}${FB}[[web.page.blocks.fields]]\nkey = \"x\"\nlabel = \"X\"\ntype = \"text\""
+bad "a form inside a tab is checked too" "unknown field type" "${CH}${PG}[[web.page.tabs]]\ntitle = \"T\"\n[[web.page.tabs.blocks]]\ntype = \"form\"\nplan = [\"ext/blkext\", \"go\"]\n[[web.page.tabs.blocks.fields]]\nkey = \"a\"\nlabel = \"A\"\ntype = \"blob\""
 finish

@@ -25,6 +25,7 @@ here=$(dirname "$0")
 svc=${HS_SERVICES:-$here/services.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: services-change.sh plan|start apply|adopt|import|remove <service>" >&2; exit 1 ;; esac
@@ -37,19 +38,19 @@ case "$action" in
   add) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "A service name is lower case letters, digits and - (at most 41)." ;;
   edit) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "That is not a service name." ;;
   set) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "A service name is lower case letters, digits and - (at most 41)." ;;
-  *) refuse "unknown action (apply, adopt, import, add, edit, set or remove)" ;;
+  *) refuse_code action.unknown "unknown action (apply, adopt, import, add, edit, set or remove)" ;;
 esac
 pargs=() addargs=() exposure=private-ok port="" container="" host="" title="" setargs=() set_public="" set_pname="" set_local=""
 [ "$action" != edit ] || exposure=   # an edit changes the exposure only when it is given
 while [ $# -gt 0 ]; do
   case "$1" in
     --proxy) [ $# -ge 2 ] || refuse "--proxy needs a value"
-      case "$action" in apply|import|adopt) ;; *) refuse "unknown option $1" ;; esac
+      case "$action" in apply|import|adopt) ;; *) refuse_code option.unknown "unknown option $1" ;; esac
       case "$2" in public) ;; local) pargs=(--proxy local) ;; *) refuse "--proxy is public or local" ;; esac
       shift 2 ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     --local|--public|--public-name)
-      [ "$action" = set ] || refuse "unknown option $1"
+      [ "$action" = set ] || refuse_code option.unknown "unknown option $1"
       [ $# -ge 2 ] || refuse "$1 needs a value"
       case "$1" in
         --local|--public) case "$2" in yes|no) ;; *) refuse "$1 is yes or no" ;; esac ;;
@@ -58,12 +59,12 @@ while [ $# -gt 0 ]; do
       case "$1" in --local) set_local=$2 ;; --public) set_public=$2 ;; --public-name) set_pname=$2 ;; esac
       setargs+=("$1" "$2"); shift 2 ;;
     --port|--container|--host|--title|--names|--exposure|--public-path|--blocked-path|--auth|--auth-skip|--request-header|--response-header|--want|--group|--icon|--description|--clear)
-      case "$action" in add|edit) ;; *) refuse "unknown option $1" ;; esac
-      [ "$1" != --clear ] || [ "$action" = edit ] || refuse "unknown option $1"
+      case "$action" in add|edit) ;; *) refuse_code option.unknown "unknown option $1" ;; esac
+      [ "$1" != --clear ] || [ "$action" = edit ] || refuse_code option.unknown "unknown option $1"
       [ $# -ge 2 ] || refuse "$1 needs a value"
       case "$1" in --port) port=$2 ;; --container) container=$2 ;; --host) host=$2 ;; --exposure) exposure=$2 ;; --title) title=$2 ;; esac
       addargs+=("$1" "$2"); shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -87,7 +88,7 @@ case "$action" in
     if [ -z "$container" ] && [ -z "$host" ]; then refuse "Give the container or the host the service runs on."; fi
     case "$exposure" in never-public|private-ok|public-ok) ;; *) refuse "The exposure is never-public, private-ok or public-ok." ;; esac
     if [ "$verb" = start ]; then
-      if [ "$exposure" = public-ok ] && [ "$confirm" != "$name" ]; then refuse "type the word to confirm: $name"; fi
+      if [ "$exposure" = public-ok ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
       err=$(bash "$svc" add "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
@@ -111,7 +112,7 @@ case "$action" in
     going_public=""
     if [ "$exposure" = public-ok ] && [ "$was" != public-ok ]; then going_public=yes; fi
     if [ "$verb" = start ]; then
-      if [ -n "$going_public" ] && [ "$confirm" != "$name" ]; then refuse "type the word to confirm: $name"; fi
+      if [ -n "$going_public" ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
       err=$(bash "$svc" edit "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
@@ -134,7 +135,7 @@ case "$action" in
     [ ${#setargs[@]} -gt 0 ] || refuse "Nothing to change: give --local, --public or --public-name."
     if [ "$set_public" = yes ] && [ -z "$set_pname" ]; then refuse "A public service needs its public name."; fi
     if [ "$verb" = start ]; then
-      if [ "$set_public" = yes ] && [ "$confirm" != "$name" ]; then refuse "type the word to confirm: $name"; fi
+      if [ "$set_public" = yes ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
       err=$(bash "$svc" set "$name" "${setargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
@@ -208,13 +209,13 @@ case "$action" in
     red=$(awk -F'\t' '$1 == "confirm" || $1 == "change" || $1 == "remove"' <<<"$todo")
     hosts=$(awk -F'\t' '$1 == "confirm" || $1 == "change" || $1 == "remove" { print $2 }' <<<"$todo" | sort -u)
     if [ "$verb" = start ]; then
-      if [ -n "$red" ] && [ "$confirm" != apply ]; then refuse "type the word to confirm: apply"; fi
+      if [ -n "$red" ] && [ "$confirm" != apply ]; then refuse_code confirm.missing "type the word to confirm: apply"; fi
       args=(apply --yes ${pargs[@]+"${pargs[@]}"})
       while IFS= read -r h; do
         [ -z "$h" ] || args+=(--confirm "$h")
       done <<<"$hosts"
       . "$here/lib/job.sh"
-      unit=$(hs_job services-apply "hs services apply" -- bash "$svc" "${args[@]}") || refuse "the job could not be started"
+      unit=$(hs_job services-apply "hs services apply" -- bash "$svc" "${args[@]}") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"
       exit 0
     fi

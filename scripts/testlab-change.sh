@@ -11,17 +11,18 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: testlab-change.sh plan|start run [--ref <ref>] [--stage 1|2|3|4|5|6|<name>|all]" >&2; exit 1 ;; esac
-[ "$action" = run ] || refuse "unknown action (run)"
+[ "$action" = run ] || refuse_code action.unknown "unknown action (run)"
 shift 2 || true
 ref=develop; stage=all
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) [ $# -ge 2 ] || refuse "--ref needs a value"; ref=$2; shift 2 ;;
     --stage) [ $# -ge 2 ] || refuse "--stage needs a value"; stage=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 case "$stage" in [1-6]|install|smoke|rollback|backup|pool|browser|all) ;; *) refuse "stage must be 1 to 6, a stage name or all" ;; esac
@@ -35,7 +36,7 @@ bash "${HS_TESTLAB:-$here/testlab.sh}" run --ref "$ref" --stage "$stage" --dry-r
 
 if [ "$verb" = start ]; then
   . "$here/lib/job.sh"
-  unit=$(hs_job testlab "hs testlab run $ref" -- bash "${HS_TESTLAB:-$here/testlab.sh}" run --ref "$ref" --stage "$stage" --yes --foreground) || refuse "the job could not be started"
+  unit=$(hs_job testlab "hs testlab run $ref" -- bash "${HS_TESTLAB:-$here/testlab.sh}" run --ref "$ref" --stage "$stage" --yes --foreground) || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

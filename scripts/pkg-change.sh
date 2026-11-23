@@ -28,14 +28,15 @@ pkg=${HS_PKG:-$here/pkg.sh}
 pkgpy="python3 -I $here/pkg.py"
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: pkg-change.sh plan|start install|update|remove <name> | fetch [<repo>] | repo-add <name> <url> | repo-remove <name>" >&2; exit 1 ;; esac
-case "$action" in install|update|remove|fetch|repo-add|repo-remove|check-draft) ;; *) refuse "unknown action (install, update, remove, fetch, repo-add or repo-remove)" ;; esac
+case "$action" in install|update|remove|fetch|repo-add|repo-remove|check-draft) ;; *) refuse_code action.unknown "unknown action (install, update, remove, fetch, repo-add or repo-remove)" ;; esac
 shift 2 || true
 if [ "$action" = check-draft ]; then
   [ "$verb" = plan ] || refuse "a draft is only checked (plan); nothing is started"
-  [ $# -eq 0 ] || refuse "unexpected extra arguments"
+  [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
   rc=0; out=$(head -c 262144 | python3 -I "$here/pkg.py" check-draft 2>/dev/null) || rc=$?
   errs=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "error"' | wc -l)
   if [ "$rc" -ne 0 ] && [ "$errs" -eq 0 ]; then refuse "the draft could not be checked"; fi
@@ -52,7 +53,7 @@ name=${1:-}; [ $# -eq 0 ] || shift
 confirm="" rest=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     *) rest+=("$1"); shift ;;
   esac
 done
@@ -82,18 +83,18 @@ case "$action" in
         while [ $# -gt 0 ]; do
           case "$1" in
             --repo) repo=${2:-}; [ -n "$repo" ] || refuse "--repo needs a name"; shift 2 ;;
-            *) refuse "unknown option $1" ;;
+            *) refuse_code option.unknown "unknown option $1" ;;
           esac
         done
         [ "$state" = new ] || refuse "$name is installed already (version $inst); use update."
         cmd=(bash "$pkg" install "$name" --repo "$repo") ;;
       update)
-        [ $# -eq 0 ] || refuse "unexpected extra arguments"
+        [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
         [ "$inst" != - ] || refuse "$name is not installed from a repository; install it first."
         [ "$state" = update ] || refuse "$name is up to date (version $inst)."
         cmd=(bash "$pkg" update "$name" --yes) ;;
       remove)
-        [ $# -eq 0 ] || refuse "unexpected extra arguments"
+        [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
         [ "$inst" != - ] || refuse "$name is not installed from a repository."
         [ "$core" != yes ] || refuse "$name is a core package: other parts of the server refer to it by name, so it stays."
         red=""
@@ -102,13 +103,13 @@ case "$action" in
     esac ;;
   fetch)
     repo=$name; name=""
-    [ $# -eq 0 ] || refuse "unexpected extra arguments"
+    [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
     if [ -n "$repo" ]; then [[ "$repo" =~ $word ]] && [ -n "$(repo_row "$repo")" ] || refuse "There is no repository $repo."; fi
     long=yes
     cmd=(bash "$pkg" fetch); [ -z "$repo" ] || cmd+=("$repo") ;;
   repo-add)
     url=${1:-}; [ $# -eq 0 ] || shift
-    [ $# -eq 0 ] || refuse "unexpected extra arguments"
+    [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
     [[ "$name" =~ $word ]] || refuse "the repository name is a lower case word (letters, digits and dashes)"
     [ -z "$(repo_row "$name")" ] || refuse "There is a repository called $name already."
     [ -n "$url" ] || refuse "the address of the repository is needed"
@@ -123,7 +124,7 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse "type the name ($red) to confirm"; fi
+  if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse_code confirm.missing "type the name ($red) to confirm"; fi
   case "$action" in
     repo-add)
       # the signing key: one line on standard input, rebuilt as an allowed-signers line (principal, git namespace, type, key)
@@ -148,7 +149,7 @@ if [ "$verb" = start ]; then
       rc=0; out=$(bash "$pkg" repo remove "$name" </dev/null 2>&1) || rc=$? ;;
     fetch)
       . "${HS_JOB_LIB:-$here/lib/job.sh}"
-      unit=$(hs_job "pkg-fetch${repo:+-$repo}" "hs pkg fetch${repo:+ $repo}" -- bash -c '"$@" </dev/null' _ "${cmd[@]}") || refuse "the job could not be started"
+      unit=$(hs_job "pkg-fetch${repo:+-$repo}" "hs pkg fetch${repo:+ $repo}" -- bash -c '"$@" </dev/null' _ "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"; exit 0 ;;
     *)
       rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$? ;;

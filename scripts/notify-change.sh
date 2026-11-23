@@ -17,6 +17,7 @@ here=$(dirname "$0")
 channel=${HS_NOTIFY_CHANNEL:-$here/notify-channel.sh}
 
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 needs() { printf 'status\tneeds\nneeds\t%s\n' "$1"; exit 2; }
 
 verb=${1:-}; action=${2:-}; name=${3:-}
@@ -24,10 +25,10 @@ case "$verb" in plan|start) ;; *) echo "usage: notify-change.sh plan|start add|s
 case "$action" in
   add|set|remove|test) [ -n "$name" ] || refuse "a channel name is needed"; shift 3 ;;
   migrate) shift 2 ;;
-  *) refuse "unknown action (add, set, remove, test or migrate)" ;;
+  *) refuse_code action.unknown "unknown action (add, set, remove, test or migrate)" ;;
 esac
 if [ "$action" != migrate ]; then
-  [[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || refuse "invalid name (lower case letters, digits and dashes, at most 31)"
+  [[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || refuse_code name.invalid "invalid name (lower case letters, digits and dashes, at most 31)"
 fi
 
 provider="" minp="" quiet="" enabled="" cats="" confirm=""
@@ -41,8 +42,8 @@ while [ $# -gt 0 ]; do
     --categories)   cats=${2:-}; shift 2 || refuse "--categories needs a value" ;;
     --set)          [[ "${2:-}" == *=* ]] || refuse "--set needs key=value"; sets+=("$2"); shift 2 ;;
     --secret)       [ -n "${2:-}" ] || refuse "--secret needs a setting name"; secrets+=("$2"); shift 2 ;;
-    --confirm)      confirm=${2:-}; shift 2 || refuse "--confirm needs a value" ;;
-    *) refuse "unknown option $1" ;;
+    --confirm)      confirm=${2:-}; shift 2 || refuse_code confirm.missing "--confirm needs a value" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 case "$action" in add|set) ;; *) [ ${#sets[@]} -eq 0 ] && [ ${#secrets[@]} -eq 0 ] && [ -z "$minp$quiet$enabled$cats$provider" ] || refuse "this action takes no options" ;; esac
@@ -136,7 +137,7 @@ for k in ${secrets[@]+"${secrets[@]}"}; do cmd+=(--secret "$k"); done
 [ "$action" != remove ] || cmd+=(--yes)
 
 if [ "$verb" = start ]; then
-  if [ "$action" = remove ] && [ "$confirm" != "$name" ]; then refuse "type the name of the channel to confirm: $name"; fi
+  if [ "$action" = remove ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the name of the channel to confirm: $name"; fi
   run=(bash "$channel" "$action")
   [ "$action" = migrate ] || run+=("$name")
   [ -z "$provider" ] || [ "$action" != add ] || run+=(--provider "$provider")

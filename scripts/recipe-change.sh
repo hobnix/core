@@ -28,11 +28,12 @@ recipe=${HS_RECIPE:-$here/recipe.sh}
 
 a_fqdn='([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}'
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; name=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: recipe-change.sh plan|start <recipe> run [--name <container>] [--set KEY=value]..." >&2; exit 1 ;; esac
 [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "invalid recipe name"
-[ "$action" = run ] || refuse "unknown action (run)"
+[ "$action" = run ] || refuse_code action.unknown "unknown action (run)"
 shift 3 || true
 ct=""; interactive=false; by=""; role=""
 declare -A given=()
@@ -45,7 +46,7 @@ while [ $# -gt 0 ]; do
     --set)  [ $# -ge 2 ] || refuse "--set needs KEY=value"
             [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse "--set needs KEY=value"
             given[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 [ -z "$ct" ] || [[ "$ct" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "'$ct' is not a container name (lower-case letters, digits and dashes)"
@@ -154,7 +155,7 @@ if [ "$verb" = start ]; then
     export HS_JOB_ENV=$env_lines HS_JOB_KIND=orchestration HS_JOB_INITIATOR=${by:-${SUDO_USER:-${USER:-}}}
     unit=$(hs_job "$slug" "hs recipe $name${ct:+ --name $ct}" -- bash -c 'd=$1; shift; "$@"; rc=$?; [ -z "$d" ] || rm -rf "$d"; exit $rc' _ "$sdir" \
             bash "${HS_ORCHESTRATE:-$here/recipe-orchestrate.sh}" "$name" ${ct:+--name "$ct"}) ||
-      { [ -z "$sdir" ] || rm -rf "$sdir"; refuse "the job could not be started"; }
+      { [ -z "$sdir" ] || rm -rf "$sdir"; refuse_code job.start-failed "the job could not be started"; }
     jid=$(hs_job_record find-unit "$unit" 2>/dev/null) || jid=""
     printf 'status\tstarted\nunit\t%s\njob\t%s\n' "$unit" "${jid:--}"
     exit 0
@@ -170,10 +171,10 @@ if [ "$verb" = start ]; then
     env_lines+="HS_SECRETS_DIR=$sdir"$'\n'
     export HS_JOB_ENV=$env_lines
     unit=$(hs_job "$slug" "hs recipe $name${ct:+ --name $ct}" -- bash -c 'd=$1; shift; "$@"; rc=$?; rm -rf "$d"; exit $rc' _ "$sdir" "${cmd[@]}") ||
-      { rm -rf "$sdir"; refuse "the job could not be started"; }
+      { rm -rf "$sdir"; refuse_code job.start-failed "the job could not be started"; }
   else
     export HS_JOB_ENV=$env_lines
-    unit=$(hs_job "$slug" "hs recipe $name${ct:+ --name $ct}" -- "${cmd[@]}") || refuse "the job could not be started"
+    unit=$(hs_job "$slug" "hs recipe $name${ct:+ --name $ct}" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   fi
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
