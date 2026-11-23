@@ -41,6 +41,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-registry](PLAN-registry.md) | Milestone 0.13: a signed package index with one version per package, core as framework, names, blueprints (plan, nothing built) |
 | [PLAN-package-names](PLAN-package-names.md) | Every capability, extension and recipe with its proposed name, for the retouch pass (draft) |
+| [PLAN-remote-shares](PLAN-remote-shares.md) | Remote shares move to Shares (Local, Remote views); pairing two servers with a short-lived code (plan, nothing built) |
 | [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
 | [Package-API](Package-API.md) | What package.toml may say: the app contract and store fields, by API level |
 | [PLAN-capabilities-on-machine](PLAN-capabilities-on-machine.md) | Derived files of an installed capability package |
