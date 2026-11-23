@@ -10,6 +10,7 @@
   import RemoveApp from '../forms/ops/RemoveApp.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
   import ExtCards from './ExtCards.svelte';
+  import SlotActions from '../shell/SlotActions.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -254,6 +255,7 @@
             <Button variant="ghost" size="sm" icon="arrow-square-out" tooltip="Open the page of {a.name}" onclick={() => go(appPath(a.name))}>Open</Button>
           {/if}
           <Button need="admin" variant="ghost" class="btn-icon" disabled={!hasService(a)} tooltip={hasService(a) ? 'Services: local and public access' : a.cts ? 'No service is described yet: Update the app to describe it' : 'Install the app first'} aria-label="Services of {a.name}" onclick={() => services(a)}><i class="ph ph-globe-hemisphere-west"></i></Button>
+          {#if a.state === 'installed'}<SlotActions name={a.name} />{/if}
           <Button variant="ghost" class="btn-icon" icon={copied === a.name ? 'check' : 'terminal-window'} tooltip={copied === a.name ? 'Copied' : 'Copy the terminal command: hs recipe ' + a.name} aria-label="Copy hs recipe {a.name}" onclick={() => copy(a.name)} />
         {/if}
       {/snippet}

@@ -145,6 +145,13 @@ if capability_on live-state; then
     problem "$key" "$text"
   done < <(bash "$here/live.sh" check 2>/dev/null || true)
 fi
+# the [[health]] checks of the packages that are on: warn or bad rows of a declared read, each named by its package (scripts/lib/pkg_slots.py)
+if command -v python3 >/dev/null 2>&1 && [ -f "$here/lib/pkg_slots.py" ]; then
+  while IFS=$'\t' read -r key text; do
+    [ -n "$key" ] || continue
+    problem "$key" "$text"
+  done < <(python3 "$here/lib/pkg_slots.py" problems 2>/dev/null || true)
+fi
 # the self-test schedule must keep running (state is written by hs disk selftest)
 selftest_state=${HS_SELFTEST_STATE:-/var/lib/hs/selftest.state}
 if [ -f "$selftest_state" ]; then

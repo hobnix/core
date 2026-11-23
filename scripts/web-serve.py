@@ -72,7 +72,7 @@ import live_state as ls        # live state: the topic list, the read side of th
 import token_store as tk      # API tokens: the store, the per token rate limit, the hourly owner re-check (ADR 0012, step 17)
 import first_run as fr         # first-run flag and the one-time console token (docs/adr/0022-first-run-console-token.md)
 from hs_ext import (env, runtime_setting, capabilities, applied_recipes, ext_roots, ext_sys_rows, ext_packages, ext_manifest,  # noqa: F401,E402
-                    ext_read, ext_load_web, EXT_NAME, EXT_KINDS, EXT_BLOCKS)
+                    ext_read, ext_load_web, ext_slots, EXT_NAME, EXT_KINDS, EXT_BLOCKS)
 
 # ─────────────────────────── CONFIG ───────────────────────────
 DEFAULT_ACCENT = "#9184d9"
@@ -219,7 +219,7 @@ def docs_search(query, lang=""):
 
 def features(cfg, first_run=None):
     """what the server switched on, for the session answer; setup_wizard = the first-run wizard is still to be shown (never token or expiry)"""
-    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": True, "topics": live_topic_map()}   # host: the local node's name = the first part of every address (/node/<host>/...)
+    return {"setup_wizard": bool(first_run) and first_run.wizard() == "open", "terminal": cfg.terminal, "vps": cfg.vps, "capabilities": capabilities(), "extensions": ext_pages(), "slots": ext_slot_list(), "host": socket.gethostname(), "language": runtime_setting("language") or "", "dashboard": runtime_setting("dashboard") or "", "live": True, "topics": live_topic_map()}   # host: the local node's name = the first part of every address (/node/<host>/...)
 
 
 def live_topic_map():
@@ -1630,13 +1630,19 @@ CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,64}$")
 #   [[web.changes]]  patterns = ['^a$', '^b$']                                    (an exact shape)   or
 #                    fixed = ['^a$'] opts = [{ flag = "--x", pattern = '^..$', repeats = false }]  stdin = false
 #                    -> POST /api/plan|start with area "ext/<name>"; the plan and start rows `sys ext <name> plan|start ...` must exist
-_ext = {"at": 0.0, "lock": threading.Lock(), "pages": []}
+_ext = {"at": 0.0, "lock": threading.Lock(), "pages": [], "slots": []}
 
 
 def ext_pages():
     """the page declarations of the packages that are on (the session answer carries them as features.extensions)"""
     ext_refresh()
     return list(_ext["pages"])
+
+
+def ext_slot_list():
+    """the [[web.actions]] of the packages that are on (the session answer carries them as features.slots; scripts/lib/pkg_slots.py)"""
+    ext_refresh()
+    return list(_ext["slots"])
 
 
 def ext_refresh(force=False):
@@ -1649,6 +1655,7 @@ def ext_refresh(force=False):
         _ext["at"] = time.time()
         reads, changes, pages = ext_load_web()
         _ext["pages"] = pages
+        _ext["slots"] = ext_slots(lambda m: print(m, flush=True))
         for k in [k for k in READS if k[0] == "ext"]:
             del READS[k]
         for k in [k for k in CHANGES if k.startswith("ext/")]:

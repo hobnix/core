@@ -295,6 +295,10 @@ class Repos:
         if pm:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
+        sl = self.pkg.pkg_slots.manifest_problems(name, self.pkg.pkg_slots.doc_of(self.pkg.capability_toml(tmp), m))
+        if sl:
+            self.rm_quiet(tmp)
+            raise Refused("%s: slots: %s" % (name, sl[0]))
         vendored = m.get("kind") == "capability" and bool(m.get("module"))
         if vendored:
             # Nix code from outside the checkout: default repositories only, never a name of the core, only files of its own folder (docs/PLAN-capabilities-repo.md, Q2/Q3)
@@ -602,7 +606,22 @@ class Repos:
             out.append("\t".join(["ask"] + [f(a.get(k)) for k in ("key", "label", "type", "choices", "default", "pattern", "when")]))
         for n, t in self.steps(m):
             out.append("\t".join(["step", n, t]))
+        out += self.slot_lines(r_name, entry, commit, m)
         return out
+
+    def slot_lines(self, r_name, entry, commit, m):
+        """`slot_off TAB <slot> TAB <name>` for every slot of the release whose `requires` is off on this server (the install dialog says it adds a
+        card once <name> is on). Best effort: a package without slots, or one that cannot be read, adds no line."""
+        try:
+            try:
+                cap = tomllib.loads(git("show", "%s:%s/capability.toml" % (commit, entry["path"]), cwd=self.clone_dir(r_name)).decode("utf-8"))
+            except (subprocess.SubprocessError, tomllib.TOMLDecodeError):
+                cap = None
+            hs_ext = self.pkg.pkg_slots._hs_ext()
+            on = set(hs_ext.capabilities()) | hs_ext.applied_recipes()
+            return ["\t".join(["slot_off", s, r]) for s, r in self.pkg.pkg_slots.requires_off(self.pkg.pkg_slots.doc_of(cap, m), on)]
+        except Exception:
+            return []
 
     def asset(self, name, file, repo=None):
         """the bytes of the icon or a screenshot of the verified tag; nothing else of the package is served"""

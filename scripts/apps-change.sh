@@ -384,6 +384,7 @@ printf 'step\tfetch the signed release %s of %s (the one shown here, never anoth
 [ "$kind" != recipe ] || printf 'step\tset the app up: it runs the recipe, which asks what is left while it runs\n'
 [ "$kind" = recipe ] || printf 'step\tswitch it on\n'
 [ "$open_q" -eq 0 ] || printf 'note\t%s question(s) are asked in the dialog while it runs.\n' "$open_q"
+awk -F'\t' '$1=="slot_off" { printf "note\tThe %s of this package adds a card once %s is on.\n", $2, $3 }' <<<"$show"
 [ -z "$secret_key" ] || printf 'note\t%s is kept secret: it goes only into the container, never into the log.\n' "$secret_label"
 if $rebuild_need; then
   . "$here/lib/effect.sh"
