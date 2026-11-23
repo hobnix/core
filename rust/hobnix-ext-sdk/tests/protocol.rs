@@ -292,5 +292,11 @@ fn service_rollup_message_and_credential() {
     assert_eq!(m["n"], 2.0);
     assert_eq!(m["sum"], 90.5);
     assert_eq!(m["v"], 1);
-    assert!(service::credential("Bad Name").is_none());
+    assert!(service::credential_for("Bad Name", "jellyfin").is_none());
+    assert!(service::credential_for("media", "../x").is_none());
+    assert!(service::credential_for("media", "").is_none());
+    #[allow(deprecated)]
+    {
+        assert!(service::credential("Bad Name").is_none());
+    }
 }

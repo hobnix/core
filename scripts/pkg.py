@@ -720,6 +720,15 @@ def main(argv):
         path, prov, why = pkg_integrations.grant_full(manifests(True), set(rest[2:]), rest[0], rest[1])
         print(path + "\t" + prov if path else "\t".join(why))
         return 0 if path else 1
+    elif cmd == "integration-grants":   # integration-grants <integration> <caller> <available names...>: one "key file TAB providing package" line per keyed provider
+        ok, bad, why = pkg_integrations.grant_all(manifests(True), set(rest[2:]), rest[0], rest[1])
+        for p, prov in ok:
+            print(p + "\t" + prov)
+        for prov, reason in bad:    # a provider that failed the key file check: on stderr, the others still go
+            print(f"{prov}: {reason}", file=sys.stderr)
+        if why:
+            print("\t".join(why))
+        return 1 if why else 0
     elif cmd == "updates":
         seen = set()
         inst_now = installed()

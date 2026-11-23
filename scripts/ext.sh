@@ -166,12 +166,16 @@ cmd_stop() {
   ok "$(t "The service of '%s' is stopped. It stays stopped until: hs ext start %s" "$1" "$1")"
 }
 cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the supervisor
-  local n=${1:-} d name path prov cred=()
+  local n=${1:-} d name path prov first= cred=()
   exists "$n" && ext_package_on "$n" && has_service "$n" || { printf '%s
 ' "hs ext svc-run: '$n' is not a service extension that is on" >&2; exit 1; }
   d=$(ext_package_dir "$n")
   # the keys of the declared integration:<name> permissions go to the service as systemd credentials (never argv or environment)
-  while IFS=$'	' read -r name path prov; do cred+=(--credential "integration-$name=$prov=$path"); done < <(integration_credentials "$n")
+  # one per keyed provider: integration-<name>-<provider> (hobnix/core#1135). The old integration-<name> (the first provider) stays for one release (deprecated).
+  while IFS=$'	' read -r name path prov; do
+    cred+=(--credential "integration-$name-$prov=$prov=$path")
+    case " $first " in *" $name "*) ;; *) first="$first $name"; cred+=(--credential "integration-$name=$prov=$path") ;; esac
+  done < <(integration_credentials "$n")
   exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state" ${cred[@]+"${cred[@]}"}
 }
 

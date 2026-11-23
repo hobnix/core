@@ -84,14 +84,18 @@ class Ctx:
         self._send(**m)
 
 
-def credential(name):
-    """The key of the integration `name` (permission integration:<name>) of a confined service, from the systemd credential
-    $CREDENTIALS_DIRECTORY/integration-<name> that the core hands over; None when there is none. Never argv or the environment."""
+def credential(name, provider=None):
+    """The key that the provider package `provider` holds for the integration `name` (permission integration:<name>) of a confined service, from the
+    systemd credential $CREDENTIALS_DIRECTORY/integration-<name>-<provider> that the core hands over, one per provider (the `package` column of
+    `hs pkg integrations` is the provider); None when there is none. Never argv or the environment.
+    Without `provider` (deprecated, goes away after the next release) it reads the old one-name credential integration-<name>: the first provider with a key,
+    the owner is not told."""
     d = os.environ.get("CREDENTIALS_DIRECTORY")
-    if not d or not name or not all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in name):
+    ok = lambda x: bool(x) and all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in x)
+    if not d or not ok(name) or (provider is not None and not ok(provider)):
         return None
     try:
-        with open(os.path.join(d, "integration-" + name)) as f:
+        with open(os.path.join(d, "integration-" + name + ("" if provider is None else "-" + provider))) as f:
             return f.read().rstrip("\r\n")
     except OSError:
         return None

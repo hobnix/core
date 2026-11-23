@@ -306,5 +306,14 @@ ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k', 'key_header': 'X-Key'}), m
 on = {'jelly', 'radarr', 'plain'}
 g = lambda c, p=None: m.grant(ms, on, 'media', c, p)
 print('|'.join([g('e', 'jelly')[0], g('e', 'nope')[1][0], g('e', 'plain')[1][0], g('e')[0], g('x', 'jelly')[1][0], m.rows(ms, on, 'media')[0][-1]]))")"
+check_eq "grant_all (#1135): one grant per keyed provider (package column = provider), a keyless one gives nothing, an undeclared caller is refused" "jelly,radarr|integration.denied|integration.denied" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+mk = lambda n, ig: ('', {'name': n, 'kind': 'recipe', 'integrations': {'media': ig}})
+ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k'}), mk('radarr', {'key_file': '/var/lib/hs/radarr/k'}), mk('plain', {}),
+      ('', {'name': 'e', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'x', 'kind': 'extension'})]
+on = {'jelly', 'radarr', 'plain'}
+ok, bad, why = m.grant_all(ms, on, 'media', 'e')
+print('|'.join([','.join(p for _, p in ok), m.grant_all(ms, on, 'media', 'x')[2][0], m.grant_all(ms, on, 'media', 'jelly')[2][0]]))")"
 
 finish

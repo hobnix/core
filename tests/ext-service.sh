@@ -148,6 +148,13 @@ kill -TERM "$pid"; wait "$pid"; rc=$?
 check_eq "SIGTERM: exit 0" 0 "$rc"
 check_eq "no event for a requested stop" 0 "$(cat "$WORK/emitted" 2>/dev/null | wc -l | tr -d ' ')"
 
+echo "-- svc-run: a hostile provider name in a credential means no run (fail closed, #1135)"
+rm -f "$WORK/svcstate/fixsvc.json"
+FIX_MODE=good $SR --credential "integration-media-evil=../x=/etc/shadow" --credential "integration-media-jellyfin=jellyfin=/etc/shadow" >/dev/null 2>&1; rc=$?
+check_eq "a provider ../x: exit 69, the service is not started" 69 "$rc"
+check "the failure is counted in the state file" grep -q '"failures"' "$WORK/svcstate/fixsvc.json"
+check_eq "no key copy stays" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
+
 echo "-- hs ext status|start|stop with a fake systemctl"
 EXT=$WORK/ext; mkdir -p "$EXT/pk/svcpkg" "$EXT/state"
 printf 'name = "svcpkg"\ntitle = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n[service]\nexec = "@/run.sh"\n' > "$EXT/pk/svcpkg/capability.toml"

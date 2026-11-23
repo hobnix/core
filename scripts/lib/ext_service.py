@@ -669,9 +669,15 @@ def confined_program(name, pkgdir, prog, creds=()):
     except OSError as e:
         return None, f"cannot prepare {cred_root()} ({e.strerror}): without it the key copies could not be hidden"
     pi = _load_lib("pkg_integrations")
+    seen = set()
     for cname, provider, path in creds:
-        if not re.match(r"^[a-z][a-z0-9-]{0,60}$", cname) or not path.startswith("/") or ":" in path:
+        # integration-<name>-<provider>: systemd allows [A-Za-z0-9_.-] up to 255 characters, the names here are [a-z0-9-] (NAME of pkg_integrations.py)
+        if (not re.fullmatch(r"[a-z][a-z0-9-]{0,200}", cname) or not re.fullmatch(r"[a-z][a-z0-9-]*", provider or "")
+                or not path.startswith("/") or ":" in path):
             return None, f"bad credential {cname!r}"
+        if cname in seen:    # integration "a-b" of provider "c" and integration "a" of provider "b-c" would share a name: never hand over the wrong key silently
+            return None, f"credential {cname} is named twice (an integration and a provider name run together)"
+        seen.add(cname)
         # systemd reads a credential as root. So the bridge reads the key itself ONCE (read_key: only from the folder of the registered providing package,
         # a regular file, checked on the open descriptor) and writes a private 0600 copy; systemd gets that copy, never a path somebody else can change.
         key, why = pi.read_key(path, provider, name, root=LIB_DIR)

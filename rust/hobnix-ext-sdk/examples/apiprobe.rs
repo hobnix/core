@@ -1,13 +1,13 @@
 //! Example: call the JSON API of an integration the way media-hub does. `apiprobe get <listing-file> <integration> <path>` takes the
 //! row of the integration from a file with the output of `hs pkg integrations`, reads its key from `$CREDENTIALS_DIRECTORY`
-//! (`integration-<name>`), sends it in the row's key header and answers with the JSON of the API. Plain http only (see
+//! (`integration-<name>-<provider>`, the row's package), sends it in the row's key header and answers with the JSON of the API. Plain http only (see
 //! `hobnix_ext_sdk::http`).
 //!
 //!   cargo build --example apiprobe
 //!   cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
 use hobnix_ext_sdk::command::{run, Ctx, Failure, Request, Success};
 use hobnix_ext_sdk::http::Client;
-use hobnix_ext_sdk::{integrations, service};
+use hobnix_ext_sdk::integrations;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -28,11 +28,12 @@ fn handle(req: &Request, _ctx: &Ctx) -> Result<Success, Failure> {
         .into_iter()
         .find(|r| r.integration == *name)
         .ok_or_else(|| Failure::bad_request(format!("no integration {name} in the listing")))?;
+    let key = row.credential();
     let base = row
         .api_url
         .ok_or_else(|| Failure::bad_request("the integration has no api_url"))?;
     let mut client = Client::new().timeout(Duration::from_secs(5));
-    if let (Some(h), Some(key)) = (row.key_header, service::credential(name)) {
+    if let (Some(h), Some(key)) = (row.key_header, key) {
         client = client.header(h, key);
     }
     let data = client

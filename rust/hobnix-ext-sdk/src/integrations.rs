@@ -18,6 +18,19 @@ pub struct Integration {
     pub key_header: Option<String>,
 }
 
+impl Integration {
+    /// Name of the systemd credential that holds the key of this row: `integration-<integration>-<package>`.
+    pub fn credential_name(&self) -> String {
+        format!("integration-{}-{}", self.integration, self.package)
+    }
+
+    /// The key of this row from `$CREDENTIALS_DIRECTORY` (see [`crate::service::credential_for`]); `None` when the service did not get
+    /// one (not declared, the provider has no key, the vault is locked).
+    pub fn credential(&self) -> Option<String> {
+        crate::service::credential_for(&self.integration, &self.package)
+    }
+}
+
 /// Rows of `hs pkg integrations`. Lines with fewer than 6 fields are skipped (the listing had 6 columns before key_header was added,
 /// so a 6-field line is accepted with `key_header` `None`); blank lines too.
 pub fn parse(text: &str) -> Vec<Integration> {
