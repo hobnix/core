@@ -12679,6 +12679,157 @@
     }
    }
   },
+  "/remote/accept": {
+   "get": {
+    "operationId": "remote.accept",
+    "summary": "the receiving side of the reverse pairing (hs sys remote accept [--source <address>]): the push on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/push)",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "remote",
+      "accept"
+     ],
+     "script": "rust:remote-accept",
+     "args": "{rest}",
+     "class": "read",
+     "rest": true
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "the bytes on stdin"
+    },
+    "x-hs-described": false,
+    "description": "The receiving side of the reverse pairing: the push ({v, id, nonce, box}) on stdin, {v, ok} on stdout (exit 0) or the refusal shape (exit 1). Option --source <address>. Called by hs-web (POST /api/remote/push, no session).",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/remote/claim": {
+   "get": {
+    "operationId": "remote.claim",
+    "summary": "the giving side of a code pairing (hs sys remote claim [--source <address>]): the claim request on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/claim) and by the node word pair",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "remote",
+      "claim"
+     ],
+     "script": "rust:remote-claim",
+     "args": "{rest}",
+     "class": "read",
+     "rest": true
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "the bytes on stdin"
+    },
+    "x-hs-described": false,
+    "description": "The giving side of a pairing: the claim request ({v, id, name, hostkey}) on stdin, the answer body on stdout ({v, nonce, box}, exit 0) or the one refusal shape ({v, error}, exit 1; error is code.unknown, code.rate or code.unavailable). Option --source <address> names the caller for the rate limit. Called by hs-web (POST /api/remote/claim, no session) and by the node word pair.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/remote/codes": {
+   "get": {
+    "operationId": "remote.codes",
+    "summary": "the codes open on this server, tab separated: share, server (or -), seconds left (never the code)",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "remote",
+      "codes"
+     ],
+     "script": "rust:remote-codes",
+     "args": "{rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/remote/codes",
+     "kind": "tsv",
+     "ttl": 5,
+     "query": []
+    },
+    "description": "The pairing codes open on this server (docs/PLAN-remote-shares.md): the share (- for a code that waits for any share), the server name the code is bound to (- when none) and the seconds left. Never the code, its id or its key.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "share"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "server"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "expires_in"
+           }
+          ],
+          "minItems": 3,
+          "maxItems": 3
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/remote/list": {
    "get": {
     "operationId": "remote.list",

@@ -69,3 +69,7 @@ testlab.ok	info	ref,stage	a test-lab run passed (subject: the run id)
 testlab.failed	error	ref,stage	a test-lab run failed or hit an error (subject: the run id; payload: the stage that failed)
 testlab.skipped	warn	ref,stage	a test-lab run could not run on this machine (no KVM, no nested virtualization or no incus; subject: the run id)
 ext.service-failed	error	package,code	a service extension failed 5 times in 10 minutes and the unit gave up (subject: the package; payload: its name and the last failure code)
+remote.code.made	info	share,server	a pairing code for a remote share was made (subject: the share; never the code)
+remote.claimed	info	server,share,fingerprint	a server used a code and got (or gave) a remote share (subject: the server; never the code or the password)
+remote.claim.refused	warn	why	a pairing request was refused: unknown, used or expired code, rate limit, bad request (subject: the source address or the server)
+remote.codes.burned	warn	-	20 wrong pairing requests in 10 minutes ended every open code

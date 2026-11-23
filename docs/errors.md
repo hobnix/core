@@ -280,6 +280,30 @@ A compiled program, or a non-script service exec, is started from a package with
 - Text: This package starts a program that has no declared hash.
 - Fix: none
 
+### code.unknown
+
+A pairing code is not known: wrong, already used, expired, or the server name is taken by another server (one answer for all of them, POST /api/remote/claim).
+
+- Layer: script
+- Text: The other server does not know that code: wrong, already used or expired.
+- Fix: none
+
+### code.rate
+
+Too many wrong pairing codes from one address within a minute.
+
+- Layer: script
+- Text: Too many wrong codes from here. Wait a minute and try again.
+- Fix: none
+
+### code.unavailable
+
+The server cannot make the access now (no domain controller, storage locked).
+
+- Layer: script
+- Text: The other server cannot make the access now (is its storage unlocked?).
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

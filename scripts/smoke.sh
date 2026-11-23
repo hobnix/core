@@ -167,6 +167,7 @@ default_probes() {
     $'hs ext passthrough list\text passthrough list\t0 1' \
     $'hs ext passthrough status\text passthrough status\t0 1' \
     $'hs remote list\tremote list\t0 1' \
+    $'hs remote codes\tremote codes\t0 1 2' \
     $'hs cheatsheet\tcheatsheet\t0' \
     $'hs expiry\texpiry\t0' \
     $'hs iso\tiso\t0 1' \

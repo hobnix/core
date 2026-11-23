@@ -2518,6 +2518,42 @@ export interface SysOperations {
     exit: 0 | 1 | 2;
     lines: ChangeLines;
   };
+  "remote.accept": {
+    /** the receiving side of the reverse pairing (hs sys remote accept [--source <address>]): the push on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/push) */
+    words: ["remote", "accept"];
+    path: "/remote/accept";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "yes";
+    exit: number;
+    lines: unknown;
+  };
+  "remote.claim": {
+    /** the giving side of a code pairing (hs sys remote claim [--source <address>]): the claim request on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/claim) and by the node word pair */
+    words: ["remote", "claim"];
+    path: "/remote/claim";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "yes";
+    exit: number;
+    lines: unknown;
+  };
+  "remote.codes": {
+    /** the codes open on this server, tab separated: share, server (or -), seconds left (never the code) */
+    words: ["remote", "codes"];
+    path: "/remote/codes";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [share: Field, server: Field, expires_in: Field][];
+  };
   "remote.list": {
     /** offers and mounts, tab separated: kind, peer, share, host or login, state */
     words: ["remote", "list"];

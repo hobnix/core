@@ -1,6 +1,6 @@
 # Plan: remote shares in Shares, pairing by code (2026-11-24)
 
-Status: plan; nothing built. Issue hobnix/core#1149, milestone 0.13 "Package Registry". Child issues: Shares views #1151, pairing backend #1152,
+Status: plan; the pairing backend (#1152) is built in Rust (see "Decisions of the owner"), not run on hardware; the views and forms are not built. Issue hobnix/core#1149, milestone 0.13 "Package Registry". Child issues: Shares views #1151, pairing backend #1152,
 forms #1153, guide #1154, tests #1155; the share picker comes from #1148.
 
 A remote share is a share of another homeserver that this server mounts read-only, or a share of this server that another homeserver may
@@ -199,7 +199,23 @@ Pairing backend #1152 ──► Tests #1155 ───────┼──► Fo
 ShareField #1148 ────────────────────────────┘
 ```
 
-## Open questions
+## Decisions of the owner (2026-11-24)
+
+Answers to the open questions below (comment on #1152):
+
+- **Q1 (cipher):** no Python `cryptography` dependency. The pairing core is Rust in `hobnix-core` (ADR 0001): `rust/hobnix-core/src/pair.rs` (code
+  store, alphabet, HKDF-SHA256, ChaCha20-Poly1305, rate limit; clock and random source are parameters) with the crates `chacha20poly1305`, `hkdf`
+  and `sha2` (locked in `rust/Cargo.lock`, built offline by `pkgs/hobnix.nix`). It replaces `scripts/remote_pair.py`, which is not written. The
+  registry rows are `rust:` rows without a `fallback:` (there is no old implementation): `sys remote codes`, `sys remote claim`, `sys remote accept`.
+  `remote.sh`, `peer-change.sh`, `node-remote.sh`, `node.sh` and `web-serve.py` stay thin glue.
+- **Q2:** yes, the node link (`node.sh --pair`, word `pair`) is enough for a server without the web service.
+- **Q3:** yes, the reverse direction is built: `hs remote receive` (this server shows a code), `hs remote send <share> --peer <name> --code`
+  (the other one types it, makes the login and pushes the box to `POST /api/remote/push`). HTTP only; the push needs no key of the giving side.
+- **Q4:** yes, a server name that is already taken is refused (`code.unknown`); a code bound to a name by the owner (`--peer`) may reuse a name that has
+  no stored host key (older offers).
+- **Q5:** yes, the address always shows the port (`alpha.local:8480`).
+
+## Open questions (answered above)
 
 - **Q1. The cipher library.** ChaCha20-Poly1305 and HKDF are not in the Python standard library. Recommended: add `ps.cryptography` to the
   system Python in `configuration.nix` (it is a NixOS package with a good record). Alternative: no encryption, and the code flow is offered
