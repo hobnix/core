@@ -31,6 +31,21 @@ Moved into 0.12 from earlier milestones because a 0.12 issue needs them:
 Left where they are: #434 (built, only ADR status and test list open, stays 0.8), #450 (pages to shared components, 0.9, runs alongside),
 #239 (no scope written), #613 (interactive recipe form).
 
+## Slots (#472, decided 2026-11-23)
+
+| Slot | What it adds |
+| --- | --- |
+| page | a recipe: an object page opened from its row in Apps > Installed (`/apps/<name>`, `template = "object"`, no link for an app without a page); an extension: a place in an existing group (#790) |
+| tab | a tab on the package's own page; Settings is one of them (declared form block, #473) |
+| action | an allowlisted plan with a role, in the page header and on the Installed row (one main action plus More), e.g. "Start sync" |
+| health check | `[[health]]`: a declared read that returns a level and a message; shown in System > Health with the package named, with notifications and acknowledge (#887) |
+| state card | one `state` declaration (id, size, one dot, one line) for the card on lists and group pages, later an Overview tile |
+
+- `requires = "<capability or extension>"` on any slot: while it is off the slot shows nothing and the install dialog says so.
+- **Settings follow one rule for every kind of package:** a Settings tab on its own page; the gear on Apps > Installed links to it. There is no
+  Settings > Recipes. Settings > Capabilities and Settings > Extensions become two lists on the shared table (#1098).
+- Not in 0.12: tabs on core object pages, extensions that offer slots to other packages, the dashboard builder (#1099).
+
 ## Work items and order
 
 Four lanes that touch different files, so they can run in parallel. A wave starts when its dependencies are merged into `develop`.
@@ -44,6 +59,7 @@ Four lanes that touch different files, so they can run in parallel. A wave start
 | C. Errors | #900, then #488 | `scripts/lib/error-codes.tsv`, `errors-doc-gen.py`, docs/errors.md, run layer sets `code` in `web-serve.py`; then the rule in docs/CLI-DESIGN.md, codes on the most shown failures, web shows code, text and guide link | `scripts/lib/`, `scripts/web-serve.py`, `web/src/shell/PlanDialog.svelte` |
 | D. Events | #313 | `[[events]]` in `package.toml`, installed by `hs pkg`, core table no longer holds app kinds | `scripts/pkg.py`, `scripts/lib/event-kinds.tsv`, docs/events.md |
 | E. Recipe flow | #899, #850 | what is left of the exit 127 case; the banner says "rebuilt" only when a rebuild is planned | `scripts/apps-change.sh`, `web/src/forms/ops/InstallDialog.svelte` |
+| G. Settings lists | #1098 | Capabilities and Extensions as two pages on the shared table | `web/src/settings/CapsOverview.svelte`, `web/src/nav.js` |
 | F. Media manifest | #926 | `[integrations.media]` defined, validated by `pkg validate`; four recipes declare it (hobnix/recipes) | `scripts/pkg.py`, hobnix/recipes |
 
 ### Wave 2: needs wave 1
@@ -74,8 +90,8 @@ tracker issue #1063, not as a release gate. #924 needs #472 and #790; #928 needs
 
 ## Risks and open points
 
-- **Slot list (#472) is a design decision.** Needs the owner's yes before code: which slots, and whether a health check slot belongs here or in
-  the health work of 0.10. Wave 2 starts with a design note, not code.
+- **Slot list (#472) is decided** (section Slots). Open for the build: the manifest shape of `[[health]]` and `requires`, written in the first
+  pull request of #472.
 - **The declared form block** touches secrets and plans. It follows the secret rules (scripts/lib/secret.sh, never argv) and is reviewed
   separately.
 - **#927 depends on the store decision #481** (0.10, ADR 0026 decides one store). If #481 is not merged, #927 waits.
