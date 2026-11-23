@@ -1127,7 +1127,7 @@ def cmd_usage_record(args):
 
 def cmd_rollup_add(args):
     """rollup-add KIND USER [--n N] [--sum S] [--time T]: add to the monthly rollup (default n 1, sum 0, time now)."""
-    if len(args) < 2 or not re.fullmatch(r"[A-Za-z0-9:_.-]{1,80}", args[0]) or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,64}", args[1]):
+    if len(args) < 2 or not re.fullmatch(r"[A-Za-z0-9:_.-]{1,80}", args[0]) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}", args[1]):
         return 1
     opt = {"--n": 1, "--sum": 0, "--time": now()}
     rest = args[2:]

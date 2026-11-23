@@ -118,7 +118,7 @@
         "v": { "const": 1 },
         "type": { "const": "rollup" },
         "kind": { "type": "string", "pattern": "^pkg\\.[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$" },
-        "user": { "type": "string", "pattern": "^[A-Za-z0-9_.@-]{1,64}$" },
+        "user": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$" },
         "n": { "type": "number", "default": 1 },
         "sum": { "type": "number", "default": 0 }
       }

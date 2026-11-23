@@ -82,13 +82,13 @@ ok = {"v": 1, "type": "rollup", "kind": "pkg.rl.watch", "user": "anna", "n": 2, 
 print("VALID=%r" % es.check_message(ok))
 h(ok); h(dict(ok, kind="pkg.rl.other")); h(dict(ok, kind="pkg.zz.watch")); h(dict(ok, kind="pkg.rl.other"))
 print("LOG=" + open(log).read().strip().replace("\n", "|")); print("WARNS=%d" % len(warns))
-for bad in (dict(ok, user="a b"), dict(ok, kind="x"), dict(ok, n="2"), dict(ok, sum=True)):
+for bad in (dict(ok, user="a b"), dict(ok, kind="x"), dict(ok, n="2"), dict(ok, sum=True), dict(ok, user="--time"), dict(ok, user="anna" + chr(10)), dict(ok, kind="pkg.x.-y")):
     print("BAD=%r" % (es.check_message(bad) is not None))
 PY
 check_out "a valid rollup message passes the check" "VALID=None" cat "$WORK/roll.txt"
 check_out "a declared metric kind reaches rollup-add with kind user n sum" "LOG=pkg.rl.watch anna --n 2 --sum 90.500000$" cat "$WORK/roll.txt"
 check_out "a kind without retention = metric, or of another package, is dropped and warned once each" "WARNS=2" cat "$WORK/roll.txt"
-check_eq "bad messages are refused (user, kind, n as text, sum as boolean)" "4" "$(grep -c 'BAD=True' "$WORK/roll.txt")"
+check_eq "bad messages are refused (user, kind, n as text, sum as boolean, a user that is an option, a user with a newline, kind pkg.x.-y)" "7" "$(grep -c 'BAD=True' "$WORK/roll.txt")"
 
 
 echo "-- a hostile manifest cannot get a root-read of another file (review of #1133)"
@@ -165,6 +165,8 @@ PY
 echo "-- rollup-add itself takes a float sum (the real path, not a fake)"
 SD=$WORK/sdb; mkdir -p "$SD"
 rs() { HS_PLAIN=1 HS_LANG=en HS_CALLER=test HS_STATE_DIR=$SD bash "$SCRIPTS/state.sh" "$@"; }
+rc=0; rs rollup-add pkg.rl.watch --time --n 1 >/dev/null 2>&1 || rc=$?
+check_eq "rollup-add refuses a user that starts with a dash (it would be an option)" "1" "$rc"
 rc=0; rs rollup-add pkg.rl.watch anna --n 2.0 --sum 90.5 >/dev/null 2>&1 || rc=$?
 check_eq "n 2.0 and sum 90.5 are stored (exit 0)" "0" "$rc"
 check_eq "the fraction is rounded to the whole-number column" "pkg.rl.watch	2	91" "$(rs rollups pkg.rl.watch anna | cut -f3-5)"

@@ -276,6 +276,7 @@ fn service_rollup_message_and_credential() {
         fn tick(&mut self, ctx: &Ctx) -> Health {
             ctx.rollup("pkg.t.watch", "anna", 2.0, 90.5).unwrap();
             assert!(ctx.rollup("pkg.t.watch", "a b", 1.0, 0.0).is_err());
+            assert!(ctx.rollup("pkg.t.watch", "-time", 1.0, 0.0).is_err());
             Health::ok()
         }
     }

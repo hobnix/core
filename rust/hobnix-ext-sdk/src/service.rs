@@ -82,13 +82,17 @@ impl Ctx {
         self.out.event("emit", ev)
     }
     /// Add to the monthly rollup of (month, `user`, `kind`) (`rollup`). The core does it, only for a `kind` of this package declared in `[[events]]`
-    /// with `retention = "metric"`; others are dropped with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`.
+    /// with `retention = "metric"`; others are dropped with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`, the first a letter or digit (never an option).
     pub fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
         let user_ok = user
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
-        if !(1..=64).contains(&user.len()) || !user_ok {
-            let why = "user must be 1 to 64 characters of A-Za-z0-9 and _ . @ -";
+        let first_ok = user
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
+        if !(1..=64).contains(&user.len()) || !user_ok || !first_ok {
+            let why = "user must be 1 to 64 characters of A-Za-z0-9 and _ . @ -, starting with a letter or digit";
             return Err(io::Error::new(io::ErrorKind::InvalidInput, why));
         }
         self.out.typed(

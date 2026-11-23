@@ -80,7 +80,7 @@ def check_message(m):
                         or not isinstance(m.get("text", ""), str)):
         return "emit.level is info|warn|error, payload an object, text a string"
     if t == "rollup" and (not isinstance(m.get("kind"), str) or not KIND.match(m["kind"])
-                          or not isinstance(m.get("user"), str) or not re.match(r"^[A-Za-z0-9_.@-]{1,64}$", m["user"])):
+                          or not isinstance(m.get("user"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}", m["user"])):
         return "rollup needs kind (pkg.<package>.<what>) and user (letters, digits, _ . @ -, at most 64)"
     if t == "rollup" and any(k in m and (isinstance(m[k], bool) or not isinstance(m[k], (int, float)) or not math.isfinite(m[k]) or not 0 <= m[k] <= 1e12)
                              for k in ("n", "sum")):
