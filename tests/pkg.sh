@@ -255,5 +255,34 @@ cfcase "confine without protocol is refused" "commands.tsv line 1: confine needs
 cfcase "confine with permissions = [] and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': []}"
 cfcase "confine with fs.write and protocol is valid" "" "{'requires_core': '>=10', 'protocol': [1], 'permissions': ['fs.write:/srv/x']}"
 protocase "a row without confine needs no permissions" "" '' 'reads'
+echo "-- [integrations.<name>] (hobnix/core#926)"
+igcase() {   # igcase <label> <expected problems joined by " | " or ""> <manifest as a Python dict>
+  check_eq "$1" "$2" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(' | '.join(m.manifest_problems($3)))")"
+}
+ok_ig="{'api_url': 'http://{host}:7878', 'key_file': '/var/lib/hs/radarr/api-key', 'kind': 'movies'}"
+igcase "no integrations is valid" "" "{'kind': 'recipe'}"
+igcase "a block with extra keys is valid for any package kind" "" "{'kind': 'extension', 'integrations': {'media': $ok_ig}}"
+igcase "a bad integration name is refused" "integrations.Media: the name is not a lowercase id" "{'integrations': {'Media': {}}}"
+igcase "a key file with .. is refused" "integrations.x.key_file must be an absolute path without .. or spaces" "{'integrations': {'x': {'key_file': '/var/../x'}}}"
+igcase "an extra value that is not text is refused" "integrations.x.n must be plain text (at most 200 characters, no comma, no control character)" "{'integrations': {'x': {'n': 3}}}"
+check_eq "the permission integration:<name> is known" "None" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_perms.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.check_one('x', 'integration:media'))")"
+check_eq "a bare integration permission is refused" "integration needs an argument (integration:...)" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_perms.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(m.check_one('x', 'integration'))")"
+check_eq "grant: an extension without the permission is refused, with it gets the key path, a capability needs none" "no|/k|/k" "$(python3 -I -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+ig = {'media': {'key_file': '/k'}}
+ms = [('', {'name': 'app', 'kind': 'recipe', 'integrations': ig}), ('', {'name': 'e1', 'kind': 'extension'}),
+      ('', {'name': 'e2', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'c', 'kind': 'capability'})]
+g = lambda c: m.grant(ms, {'app'}, 'media', c)[0]
+print('|'.join([g('e1') or 'no', g('e2'), g('c')]))")"
 
 finish
