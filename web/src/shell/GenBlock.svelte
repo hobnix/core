@@ -7,8 +7,11 @@
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
   import { areaRole, maxRole } from '../roles.js';
-  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn } from './generic.js';
+  import { tpl, planArgs, buildRows, fmtValue, dotOf, isOn, progressOf } from './generic.js';
+  import { parseRecord } from '../jobrecords.js';
   import Table from './Table.svelte';
+  import LogBlock from './LogBlock.svelte';
+  import Progress from '../ui/Progress.svelte';
   import UsageBar from './UsageBar.svelte';
   import PageState from './PageState.svelte';
   import Drawer from '../ui/Drawer.svelte';
@@ -26,12 +29,14 @@
   let { block, row = null, forms = {}, data = null, tab = '' } = $props();
 
   // a read: the given answer (mock / test) or a poll
-  function src(path, ms) {
+  function src(path, ms, topic) {
     if (!path) return null;
     if (data && data[path]) return { data: data[path], error: null, loaded: true };
-    return poll(path, ms);
+    return topic ? poll(path, ms, topic) : poll(path, ms);   // no topic: the timed read with a reason in read-reasons.tsv
   }
-  const main = src(block.read, (block.every ?? 15) * 1000);
+  // a `log` block reads through its own feed (LogBlock); a `progress` block of a job reads the job records and follows their topic, no timer while the stream is up
+  const JOBS = '/api/sys/jobs/records?n=50';
+  const main = src(block.type === 'log' ? '' : block.job ? JOBS : block.read, (block.every ?? 15) * 1000, block.job ? 'reads:jobs-records' : block.topic);
   const joinSrc = (block.joins ?? []).map((j) => src(j.read, (block.every ?? 15) * 1000));
 
   const cols = $derived(block.columns ?? []);
@@ -70,6 +75,14 @@
     return (block.items ?? []).map((it) => ({ k: it.k, v: fmtValue(it.fmt, clean(first[it.col ?? 0])) }));
   });
   const clean = (v) => (v === '-' ? '' : v);
+
+  // progress: the first row of the read, or the newest record of the job named by `job` (its slug)
+  const bar = $derived.by(() => {
+    if (block.type !== 'progress' || !main) return null;
+    const rs = rowsOf(main);
+    if (block.job) return progressOf(block, null, rs.map(parseRecord).find((r) => r.slug === block.job) ?? null);
+    return progressOf(block, rs[0] ?? null, null);
+  });
 </script>
 
 {#snippet actionRow(list, r)}
@@ -187,6 +200,26 @@
     {/if}
   </PageState>
 
+{:else if block.type === 'log'}
+  <LogBlock {block} />
+
+{:else if block.type === 'progress'}
+  <div class="card gb">
+    {#if block.title || block.actions?.length}
+      <div class="gh"><b>{block.title ?? ''}</b><span class="grow"></span>{#if block.actions?.length}{@render actionRow(block.actions, {})}{/if}</div>
+    {/if}
+    <PageState loading={!main?.loaded} error={main?.error?.message ?? ''} hasData={!!bar} empty={!!main?.loaded && !bar} emptyIcon="hourglass" emptyTitle={tr('Nothing to show yet')} emptyText="">
+      {#if bar}
+        <span class="pbar">
+          {#if bar.label}<span class="plabel">{bar.label}</span>{/if}
+          <Progress value={bar.value} total={bar.total} tone={bar.tone} label={bar.label || tr('Progress')}
+                    text={bar.total && block.unit ? `${bar.value ?? 0} / ${bar.total} ${block.unit}` : undefined} />
+          {#if bar.state}<span class="pstate">{bar.state}</span>{/if}
+        </span>
+      {/if}
+    </PageState>
+  </div>
+
 {:else}
   <!-- a block the registry does not know (a newer package on an older core, or a typo): a note instead of a broken page (#473) -->
   <Banner tone="info">{tr('This part of the page cannot be shown: the block type is not known here.')} <span class="mono">{block.type ?? '?'}</span> ({tr('block list level')} {BLOCK_API_LEVEL})</Banner>
@@ -203,6 +236,9 @@
   .mono { font: 12px var(--mono); color: var(--fg-2); }
   .dpad { padding: 14px 16px; }
   .para { margin: 0; color: var(--fg-2); }
+  .pbar { display: flex; flex-direction: column; gap: 6px; }
+  .plabel { font-weight: 500; }
+  .pstate { font-size: 12px; color: var(--fg-3); }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
   .big { width: 100%; max-width: 900px; display: block; border: 1px solid var(--line); }
   .grow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

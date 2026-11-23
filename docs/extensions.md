@@ -100,6 +100,15 @@ Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"ap
 | `state` | `{ read, dot, line }`: one declared read; `dot` and `line` are field numbers of its first row (`dot` is ok, warn, bad, info or off); one dot and one line for the card on the group page and the Apps list |
 | `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled, with the reason; the page role is the floor for the page's buttons |
 
+### Blocks of a page
+
+The blocks are listed in `web/src/shell/block-registry.json` and in the component gallery under "Page blocks"; `hs pkg validate` checks each `[[web.page.blocks]]` against that list. Not tested on hardware yet.
+
+| `type` | Keys | What it shows |
+| --- | --- | --- |
+| `log` | `stream` and `read` (both required: a `/api/logs/stream/...` path and the `/api/sys/...` read that serves while the stream is down), `lines` (kept, default 200, at most 2000), `follow` (default true), `every` (seconds of the fallback read), `empty`, `title` | the tail of a log; it follows the stream, so there is no timer while the stream is up, and it keeps only the last lines |
+| `progress` | `read` with the field numbers `value`, `max`, `labelCol`, `state` of its first row, or `job` (the slug of a job); `label`, `unit`, `topic`, `every`, `title` | a bar with the percent beside it; a job is followed through the job events, a read through its `topic` (give one, or it is polled) |
+
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 
 ## Check that it worked
