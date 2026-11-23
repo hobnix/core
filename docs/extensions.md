@@ -116,6 +116,52 @@ A block whose `type` the web interface does not know shows a note instead of the
 
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 
+### The form block
+
+A page block of `type = "form"` asks for values and ends in the plan dialog. It never changes anything by itself. Not tested on hardware yet.
+
+```toml
+[[web.changes]]
+fixed = ["^connect$"]
+stdin = true
+opts = [{ flag = "--host" }, { flag = "--port" }]
+
+[[web.page.blocks]]
+type = "form"
+title = "Connect"
+submit = "Connect"
+plan = ["ext/mypkg", "connect", "--host", "{host}", "--port", "{port}"]
+planTitle = "Connect to {host}"
+stdin = "token"
+
+[[web.page.blocks.fields]]
+key = "host"
+label = "Host"
+type = "text"
+required = true
+pattern = "^[a-z0-9.-]+$"
+
+[[web.page.blocks.fields]]
+key = "token"
+label = "Token"
+type = "secret"
+```
+
+| Key | Meaning |
+| --- | --- |
+| `fields` | 1 to 20 tables. `key` (a-z, 0-9, `_`), `label`, `type`: `text`, `number`, `toggle`, `select` or `secret` |
+| field checks | `required`, `pattern` (text, secret; `invalid` is the message), `min` and `max` (number), `options` (select, 1 to 50 strings), `default`, `hint`, `placeholder` |
+| `plan` | `["ext/<package>", ...]`: the package's own area, with `{key}` where a field's value goes. A toggle gives `on` or `off` |
+| `planTitle` | the title of the plan dialog and of the Tasks entry; `{key}` as in `plan` |
+| `stdin` | the key of the one `secret` field. A secret goes on standard input of the change, one line, never into `plan` |
+
+What a package can and cannot do:
+
+- The form runs the package's own plan, like a page action. The server checks every argument against the package's `[[web.changes]]` again, and the person sees the plan and starts it. A form cannot start a command of the core or of another package.
+- A `secret` field needs `stdin = "<its key>"` and a `[[web.changes]]` entry with `stdin = true`. It may not appear in `plan` or `planTitle`. Only one secret field is allowed.
+- The secret is not stored in the page, not echoed back, not part of any request address and not in the Tasks list. It travels once in the request body to the server, which puts it on standard input.
+- A page with an unknown field type, a plan of another area, a plan without `[[web.changes]]` or a secret field without `stdin` is refused by `hs pkg validate`, and the web interface drops the whole declaration of the package.
+
 ## Check that it worked
 
 - `hs ext list` shows the extension as on, with its permissions.

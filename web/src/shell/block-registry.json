@@ -47,6 +47,15 @@
         "blocks": []
       }
     },
+    "form": {
+      "component": "GenForm",
+      "text": "A declared form: fields with checks (text, number, toggle, select, secret) that end in the package's own plan dialog; a secret goes on stdin.",
+      "schema": {
+        "required": ["fields", "plan"],
+        "keys": { "fields": "list", "plan": "list", "planTitle": "string", "submit": "string", "stdin": "string", "text": "string" },
+        "blocks": []
+      }
+    },
     "gallery": {
       "component": "GenBlock",
       "text": "A big picture and thumbnails from a declared read.",

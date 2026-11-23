@@ -9,7 +9,7 @@ import sys
 
 EXT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 EXT_KINDS = ("tsv", "json", "text")
-EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "gallery")
+EXT_BLOCKS = ("table", "kv", "cards", "text", "empty", "form", "gallery", "chart", "stat", "log", "progress")
 EXT_GROUPS = ("storage", "instances", "apps", "network", "people", "system", "backup", "settings")      # the groups of the tree (web/src/nav.js EXT_GROUPS); default apps
 EXT_TEMPLATES = ("list", "object", "feed")
 EXT_WORD = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")      # a word of a live read: it becomes part of a topic name (hs:v1:ext-<name>-<words>)
@@ -133,6 +133,14 @@ def _perms_module():
     return mod
 
 
+def _blocks_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_blocks", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_blocks.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _roles_module():
     import importlib.util
     spec = importlib.util.spec_from_file_location("pkg_roles", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_roles.py"))
@@ -218,7 +226,7 @@ def ext_read(name, rd, rows, caps=None):
     return words, spec
 
 
-def _ext_page(name, page, words, recipe=False):
+def _ext_page(name, page, words, recipe=False, changes=()):
     """The [web.page] declaration of a package for the generic page of the frontend (web/src/shell/GenericPage.svelte): plain data, checked here so
     that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out.
     `recipe`: the page of a recipe (an app, no capability.toml) is the object page /apps/<name> opened from the Installed list: template object, no place
@@ -276,6 +284,10 @@ def _ext_page(name, page, words, recipe=False):
                     raise ValueError("a join reads something that is not a declared read")
             if node.get("type") is not None and node["type"] not in EXT_BLOCKS:
                 raise ValueError("unknown block type")
+            if node.get("type") == "form":     # fields are data; the plan stays in the package's own area; a secret field goes on stdin (lib/pkg_blocks.py)
+                bad = _blocks_module().form_problems(name, node, "form", changes)
+                if bad:
+                    raise ValueError(bad[0])
             for key in ("actions", "rowActions"):
                 for a in node.get(key, []):
                     if "role" in a and _roles_module().of(a) is None:
@@ -293,8 +305,9 @@ def _ext_page(name, page, words, recipe=False):
                 pl = c.get("plan")
                 if pl is not None and (not isinstance(pl, list) or not pl or pl[0] != "ext/" + name):
                     raise ValueError("a switch may only plan changes of its own area")
-            for v in node.values():
-                walk(v)
+            for k, v in node.items():
+                if not (node.get("type") == "form" and k == "fields"):     # the fields of a form have a `type` of their own: not blocks (checked above)
+                    walk(v)
         elif isinstance(node, list):
             for v in node:
                 walk(v)
@@ -353,7 +366,7 @@ def ext_declarations(log=None):
                             raise ValueError("bad flag")
                     c_new.append(ent)
             if "page" in web:
-                p_new = _ext_page(name, web["page"], list(r_new), recipe)
+                p_new = _ext_page(name, web["page"], list(r_new), recipe, web.get("changes", []))
             heads = {w[:3] for w in rows}
             if c_new and not (("ext", name, "plan") in heads and ("ext", name, "start") in heads):
                 raise ValueError("changes need the plan and start rows of the package")
