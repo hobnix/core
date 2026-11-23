@@ -6,6 +6,7 @@ logs an error, or the page stays empty.
 UNVERIFIED: written without Incus, a browser or the playwright package. Not tested on hardware yet.
 
   testlab-browser.py run --url http://<vm>:8480 --nav <nav.js> --out <result-browser.json> [--user adminuser] [--timeout 120]
+            [--axe-js <axe.min.js> --axe-baseline <axe-baseline.tsv>]   #487: also run axe-core on every page; fails on NEW findings only
   testlab-browser.py pages <nav.js>          the paths it would open (no browser needed)
   testlab-browser.py live --url ... --scenarios <testlab-live.tsv> --out <result-live.json> [--limit SECONDS] [--ssh adminuser@vm]
                                              #485: open a page, start a change from a second channel (ssh), the OPEN page must show the new state
@@ -36,6 +37,39 @@ def pages(nav_js):
     return out
 
 
+def axe_key(path, v, node):
+    """One finding as a baseline row: page path, axe rule id, the first CSS selector of the node (tab separated)."""
+    target = node.get("target") or ["-"]
+    return "\t".join((path, v["id"], target[0] if isinstance(target[0], str) else "-"))
+
+def load_axe_baseline(path):
+    """The accepted findings (rows of scripts/dev/axe-baseline.tsv). A missing file or one with only comments means none are accepted."""
+    rows = set()
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip() and not line.startswith("#"):
+                    rows.add(line.rstrip("\r\n"))
+    return rows
+
+
+def axe_new(path, violations, baseline):
+    """The findings of one page that are not in the baseline: list of (key, rule id, impact, selector). Fails the stage when not empty."""
+    out = []
+    for v in violations:
+        for node in v.get("nodes", []):
+            k = axe_key(path, v, node)
+            if k not in baseline:
+                out.append((k, v["id"], v.get("impact") or "-", k.split("\t")[2]))
+    return out
+
+
+def axe_run(page, axe_src):
+    """Inject axe-core and return its violations of the open page (needs a browser: not run by the tests)."""
+    page.evaluate(axe_src)
+    return page.evaluate("axe.run(document, {resultTypes: ['violations']}).then(r => r.violations)")
+
+
 def wait_up(url, seconds):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -62,6 +96,12 @@ def run(a):
         print("the web interface at %s did not answer within %ss" % (a.url, a.timeout), file=sys.stderr)
         return 4
     results = []
+    axe_src, baseline = None, load_axe_baseline(a.axe_baseline)
+    if a.axe_js and os.path.exists(a.axe_js):
+        with open(a.axe_js, encoding="utf-8") as f:
+            axe_src = f.read()
+    elif a.axe_js:
+        print("axe-core not found at %s: the axe check is skipped" % a.axe_js, file=sys.stderr)
     with sync_playwright() as pwr:
         try:
             browser = pwr.chromium.launch(headless=True)
@@ -88,6 +128,10 @@ def run(a):
                         errors.append("the page is empty")
                     if "/login" in page.url and p != "/login":
                         errors.append("sent back to the sign-in page")
+                    if axe_src and not errors:
+                        new = axe_new(p, axe_run(page, axe_src), baseline)
+                        if new:
+                            errors.append("axe: %d new finding(s): %s" % (len(new), ", ".join("%s %s" % (n[1], n[3]) for n in new[:3])))
                 except Exception as e:
                     errors.append(str(e)[:200])
                 rec["ok"] = not errors
@@ -197,6 +241,8 @@ def main(argv):
     p.add_argument("--out", required=True)
     p.add_argument("--user", default="adminuser")
     p.add_argument("--timeout", type=int, default=120)
+    p.add_argument("--axe-js", default=None)
+    p.add_argument("--axe-baseline", default=None)
     p = sub.add_parser("live")
     p.add_argument("--url", required=True)
     p.add_argument("--scenarios", required=True)

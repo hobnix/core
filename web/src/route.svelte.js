@@ -7,6 +7,7 @@
 //   route.query the search part as an object               { pool: 'tank' }
 // go('/instances') on a page means "this page of the CURRENT node"; go('/node/other/health') names a node. url(path) gives the address for an <a href>.
 import { redirect } from './redirects.js';
+import { mergeQuery, toSearch } from './query.js';
 
 const state = { local: '' };          // the local node's name, set once by the shell (setLocalNode)
 
@@ -37,7 +38,18 @@ export function go(path) {
   fix();
 }
 
-// An address without a node (redirects.js) is replaced by the one with the local node; Back keeps working because it is replaceState.
+// Change the query and leave the path alone: setQuery({ sel: 'sda' }) adds, a null or '' value removes. By default one history entry is added;
+// { replace: true } replaces the current one; { state } is the history state of the new entry (selection.svelte.js marks the entry a quick look added).
+export function setQuery(patch, { replace = false, state } = {}) {
+  const query = mergeQuery(route.query, patch);
+  const to = route.full + toSearch(query);
+  if (to === location.pathname + location.search) return;
+  if (replace) history.replaceState(state ?? history.state ?? {}, '', to);   // a replaced entry keeps its state (the quick look mark)
+  else history.pushState(state ?? {}, '', to);
+  set(parse(route.full, toSearch(query)));
+}
+
+// An address without a node, or an old inner path that moved (redirects.js: the node is added, MOVED rows are followed), is replaced by the new one; Back keeps working because it is replaceState (never pushState).
 function fix() {
   if (!state.local || new URLSearchParams(location.search).has('terminal')) return;   // a popped-out terminal keeps its address
   const cur = route.full + (location.search || '');

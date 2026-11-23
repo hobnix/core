@@ -49,7 +49,6 @@ pages/Expiry.svelte	0	0	0	1	0
 pages/Files.svelte	0	0	0	1	0
 pages/Hardware.svelte	0	0	0	1	0
 pages/Health.svelte	0	0	0	1	0
-pages/Instances.svelte	0	0	0	1	0
 pages/IsoLibrary.svelte	0	0	0	1	0
 pages/LiveState.svelte	0	0	0	1	0
 pages/Marketplace.svelte	0	0	0	1	0
@@ -64,7 +63,6 @@ pages/ProxyTailscale.svelte	0	0	0	1	0
 pages/Section.svelte	0	0	0	1	0
 pages/Services.svelte	0	0	0	1	0
 pages/Setup.svelte	0	0	0	1	0
-pages/Shares.svelte	0	0	0	1	0
 pages/Summary.svelte	0	0	0	1	0
 pages/TestLab.svelte	0	0	0	1	0
 pages/Vault.svelte	0	0	0	1	0
@@ -84,7 +82,6 @@ pages/proxy/ProxyGate.svelte	0	0	0	1	0
 pages/proxy/ProxyHead.svelte	0	0	0	1	0
 settings/Appearance.svelte	0	0	0	1	0
 settings/CapabilitySettings.svelte	0	0	0	1	0
-settings/CapsOverview.svelte	0	0	0	1	0
 settings/Fields.svelte	0	0	0	1	0
 settings/Releases.svelte	0	0	0	1	0
 settings/Sessions.svelte	0	0	0	1	0

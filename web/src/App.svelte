@@ -1,4 +1,5 @@
 <script>
+  import { P } from './paths.js';
   import { onMount } from 'svelte';
   import { session, logout, setAuthLostHandler } from './api.js';
   import { initLang } from './lang.svelte.js';
@@ -33,7 +34,7 @@
     ui.features = user?.features ?? { terminal: false, vps: false };
     ui.role = user?.role ?? 'viewer';
     initLang(ui.features.language);
-    if (ui.features.setup_wizard) go('/setup/first-run');
+    if (ui.features.setup_wizard) go(P.firstRun);
     ready = true;
   });
 
@@ -51,7 +52,7 @@
 {:else if !ready}
   <div style="flex:1"></div>
 {:else if !user}
-  <Login onsignedin={(s) => { ui.features = s?.features ?? { terminal: false, vps: false }; ui.role = s?.role ?? 'viewer'; initLang(ui.features.language); user = s; if (ui.features.setup_wizard) go('/setup/first-run'); }} />
+  <Login onsignedin={(s) => { ui.features = s?.features ?? { terminal: false, vps: false }; ui.role = s?.role ?? 'viewer'; initLang(ui.features.language); user = s; if (ui.features.setup_wizard) go(P.firstRun); }} />
 {:else if pop && ui.features.terminal}
   <Terminal target={pop} title={popTitle} page />
 {:else}

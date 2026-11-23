@@ -1,69 +1,37 @@
 <script>
-  // /settings/capabilities: every optional part and extension of this server with its switch (the Parts and Extensions cards of the old Settings
-  // page). A row with a settings page of its own links to it.
-  import { go } from '../route.svelte.js';
+  import { onMount } from 'svelte';
+  import { P, capabilityPath } from '../paths.js';
+  // Settings > Capabilities (/settings/capabilities): every optional part of this server with its switch, on the shared list. A part with a
+  // settings page of its own links to it. The extensions have their own page (Settings > Extensions).
+  import { Stack } from '../ui/index.js';
   import PageHeader from '../shell/PageHeader.svelte';
-  import PartTag from './PartTag.svelte';
+  import PartsTable from './PartsTable.svelte';
   import { useLayout } from './layoutstate.svelte.js';
   import Fields from './Fields.svelte';
   import { fieldsFor } from './layout.js';
   import { useConfig } from './config.svelte.js';
-  import { useParts, flip } from './parts.svelte.js';
-  import { jobRunning } from '../ui.svelte.js';
-  import Button from '../ui/Button.svelte';
+  import { useParts } from './parts.svelte.js';
+  import { url } from '../route.svelte.js';
+
+  // the old address of the extensions card, /settings/capabilities#extensions, is replaced by the new page (Back keeps working)
+  onMount(() => {
+    if (location.hash === '#extensions') {
+      history.replaceState({}, '', url(P.settingsExtensions));
+      dispatchEvent(new PopStateEvent('popstate'));
+    }
+  });
 
   const { partList, parts: getParts } = useParts();
-  const parts = $derived(getParts());
-  const extensions = $derived(parts.filter((p) => p.kind === 'extension'));
-  const plainParts = $derived(parts.filter((p) => p.kind !== 'extension' && !p.name.startsWith('edge-')));
+  const plainParts = $derived(getParts().filter((p) => p.kind !== 'extension' && !p.name.startsWith('edge-')));
   const getLayout = useLayout();
   const layout = $derived(getLayout());
   const { opts: getOpts } = useConfig();
   const fields = $derived(fieldsFor(layout, 'capabilities', getOpts()));
-  const hasPage = (p) => !!layout.caps[p.name]?.entry;
+  const pathOf = (p) => (layout.caps[p.name]?.entry ? capabilityPath(p.name) : '');
 </script>
 
-<div class="page">
-  <PageHeader title="Capabilities" crumb="Settings" sub="The optional parts of this server and the extensions, with their switches." />
-  <div class="cols">
-    <div class="card sec" id="parts">
-      <div class="st">Parts</div>
-      <p class="hp2">Optional parts of this server. Off means its pages and commands are not there. A part with a NixOS module changes at the next <code>hs rebuild</code>.</p>
-      {#each plainParts as p (p.name)}
-        <div class="prow">
-          <PartTag part={p} />
-          <div class="pt"><code>{p.name}</code><span class="hp">{p.title}</span></div>
-          {#if hasPage(p)}<Button size="sm" tooltip={'Open the settings of this part'} onclick={() => go(`/settings/capabilities/${p.name}`)}><i class="ph ph-sliders"></i>Settings</Button>{/if}
-          <Button size="sm" busy={(jobRunning('parts', ['disable', p.name]) || jobRunning('parts', ['enable', p.name]))} busyLabel="Switching…" disabled={!p.canSwitch} tooltip={!p.canSwitch ? 'This part cannot be switched here' : p.on || p.pending ? 'Switch this part off (shows the plan)' : 'Switch this part on (shows the plan)'} onclick={() => flip(p)}>{p.on || p.pending ? 'Switch off…' : 'Switch on…'}</Button>
-        </div>
-      {:else}
-        <div class="hp2">{partList.loaded ? (partList.error ? 'The parts could not be read.' : 'No optional parts.') : 'Loading…'}</div>
-      {/each}
-    </div>
-    <div class="card sec" id="extensions">
-      <div class="st">Extensions</div>
-      <p class="hp2">Packages that add pages and commands (<code>hs ext</code>). Off by default; one without a NixOS module is on at once.</p>
-      {#each extensions as p (p.name)}
-        <div class="prow">
-          <PartTag part={p} />
-          <div class="pt"><code>{p.name}</code><span class="hp">{p.title}</span></div>
-          <Button size="sm" busy={(jobRunning('parts', ['disable', p.name]) || jobRunning('parts', ['enable', p.name]))} busyLabel="Switching…" disabled={!p.canSwitch} tooltip={!p.canSwitch ? 'This part cannot be switched here' : p.on || p.pending ? 'Switch this part off (shows the plan)' : 'Switch this part on (shows the plan)'} onclick={() => flip(p)}>{p.on || p.pending ? 'Switch off…' : 'Switch on…'}</Button>
-        </div>
-      {:else}
-        <div class="hp2">{partList.loaded ? 'No extensions on this server.' : 'Loading…'}</div>
-      {/each}
-    </div>
-  </div>
+<Stack gap="4">
+  <PageHeader title="Capabilities" crumb="Settings" sub="Optional parts of this server. Off means its pages and commands are not there. A part with a NixOS module changes at the next hs rebuild." />
+  <PartsTable id="capabilities" items={plainParts} loaded={partList.loaded} error={!!partList.error} empty="No optional parts." {pathOf} />
   {#if fields.length}<Fields opts={fields} />{/if}
-</div>
-
-<style>
-  .page { display: flex; flex-direction: column; gap: 14px; }
-  .prow { display: flex; align-items: center; gap: 10px; }
-  .pt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .hp2 { margin: 0; font-size: 12.5px; color: var(--color-neutral-500); }
-  .hp { font-size: 11.5px; color: var(--color-neutral-500); }
-  .cols { column-width: 400px; column-gap: 14px; }
-  .sec { padding: 14px 16px; gap: 10px; break-inside: avoid; margin-bottom: 14px; }
-  .st { font-size: 14px; font-weight: 500; }
-</style>
+</Stack>

@@ -32,7 +32,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 state=${HS_TESTLAB_DIR:-${HS_STATE_DIR:-/var/lib/hs}/testlab}
 git=${HS_TESTLAB_GIT:-git}
 incus=${HS_NESTED_INCUS:-incus}
-repo_url=${HS_TESTLAB_REPO:-https://github.com/hobnix/server.git}
+repo_url=${HS_TESTLAB_REPO:-https://github.com/hobnix/core.git}
 
 # The stages. Adding one (#435 does the upgrade test): a case line in stage_name, its number in STAGES_ALL, a function stage_<name> in the run part.
 stage_name() { case "$1" in 1) echo install ;; 2) echo smoke ;; 3) echo rollback ;; 4) echo backup ;; 5) echo pool ;; 6) echo browser ;; 7) echo upgrade ;; *) return 1 ;; esac; }
@@ -482,7 +482,7 @@ for s in json.load(open(sys.argv[1])).get("steps", []):
   [ -f "$src/scripts/dev/testlab-browser.py" ] || { warn "this ref has no scripts/dev/testlab-browser.py"; res[6]=error; return; }
   mkdir -p "$rundir/harness-browser"
   HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" run --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}" \
-    --nav "$src/web/src/nav.js" --out "$rundir/harness-browser/result-browser.json" || rc=$?
+    --nav "$src/web/src/nav.js" --out "$rundir/harness-browser/result-browser.json" \n    ${HS_TESTLAB_AXE_JS:+--axe-js "$HS_TESTLAB_AXE_JS" --axe-baseline "$src/scripts/dev/axe-baseline.tsv"} || rc=$?
   # #485: the live scenarios (an open page follows a change made over ssh); only with HS_TESTLAB_LIVE_SSH=<user@host> (a key the VM accepts), limit 0 must fail
   if [ "$rc" = 0 ] && [ -n "${HS_TESTLAB_LIVE_SSH:-}" ]; then
     HS_NESTED_PASSWORD=$(cat "$pwfile") python3 -I "$src/scripts/dev/testlab-browser.py" live --url "http://$ip:${HS_TESTLAB_WEB_PORT:-8480}"       --scenarios "$src/scripts/dev/testlab-live.tsv" --limits "$src/scripts/lib/live-limits.tsv" --ssh "$HS_TESTLAB_LIVE_SSH"       ${HS_TESTLAB_LIVE_LIMIT:+--limit "$HS_TESTLAB_LIVE_LIMIT"} --out "$rundir/harness-browser/result-live.json" || rc=$?

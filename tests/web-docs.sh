@@ -10,5 +10,5 @@ if out=$(python3 -I "$ROOT/tests/web-docs-test.py" 2>&1); then pass "docs API te
 echo "-- the capability"
 check "the manifest is there" test -s "$ROOT/capabilities/docs/capability.toml"
 check "configuration.nix switches it on with the web interface" grep -q 'optional (webUi && machine.webDocs) "docs"' "$ROOT/configuration.nix"
-check "the nav node of the page is gated by it" grep -q "path: '/docs', prefix: true, capability: 'docs'" "$ROOT/web/src/nav.js"
+check "the nav node of the page is gated by it" grep -q "path: P.docs, prefix: true, capability: 'docs'" "$ROOT/web/src/nav.js"
 finish

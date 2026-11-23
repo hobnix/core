@@ -20,7 +20,8 @@ Status: written without Incus, KVM or nix. Not tested on hardware yet.
 - A stage is a number or a name (`stage_name` in scripts/testlab.sh). Stage 2 and stages 3 to 6 need the installed system of stage 1, so asking for
   one runs 1 and 2 first. Stages 3 to 5 are console scenarios (scripts/dev/nested_stages.py, run by nested.sh like `smoke`); 4 also installs a second
   VM and moves the virtual backup disk to it; 5 and 4 use Incus block volumes as virtual disks (storage pool `HS_TESTLAB_STORAGE`, default
-  `default`), deleted at the end. Stage 6 runs on the server itself (scripts/dev/testlab-browser.py, playwright) against the VM's web port.
+  `default`), deleted at the end. Stage 6 runs on the server itself (scripts/dev/testlab-browser.py, playwright) against the VM's web port. With `HS_TESTLAB_AXE_JS=<path to axe.min.js>` it also runs axe-core on every page and fails on findings that are not in
+  scripts/dev/axe-baseline.tsv (#487, new findings only; without the variable the axe check is off). Not tested on hardware yet.
   **Adding a stage** (#435 does): a `stage_name` case and the number in `STAGES_ALL` in testlab.sh, a `stage_<name>` function there, and a scenario in
   `SCENARIOS` of nested_stages.py if it needs the VM console.
 - One stage failing does not stop the later ones; the exit code names the first stage that is not ok. A stage 3 to 6 that is `skipped` (stage 6

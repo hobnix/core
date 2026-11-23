@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Nodes: the quick look no longer narrows the list"
+body  = """On the Nodes page, selecting a server opens a quick look over the list instead of a side panel next to it. The list keeps its width and columns, and the address carries the server (?sel=), so a reload, a pasted link and Back/Forward work."""

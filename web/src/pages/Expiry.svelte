@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
@@ -63,7 +64,7 @@
 
   {#if certs.length}
     <Card title="Certificates">
-      {#snippet actions()}<Button variant="ghost" size="sm" tooltip={'Open the certificates page'} onclick={() => go('/identity/certificates')}>Manage<i class="ph ph-arrow-right"></i></Button>{/snippet}
+      {#snippet actions()}<Button variant="ghost" size="sm" tooltip={'Open the certificates page'} onclick={() => go(P.certificates)}>Manage<i class="ph ph-arrow-right"></i></Button>{/snippet}
       {#each certs as k}
         <Row gap="3" justify="between"><span>{k.what}</span>
           <Row gap="3"><Muted style="white-space:nowrap">{k.until}</Muted>{#if k.days !== null}<Muted style="white-space:nowrap">{k.days < 0 ? `${-k.days} d ago` : `${k.days} d`}</Muted>{/if}</Row></Row>

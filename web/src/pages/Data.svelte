@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import { Banner, Card, Stack, Muted } from '../ui/index.js';
   import { poll, rows } from '../data.svelte.js';
@@ -55,7 +56,7 @@
     {/if}
 
     {#if problemRows.length}
-      <Banner tone="bad">{problemRows.length} topic(s) are stale, never read, or failing. See <button class="link-btn" onclick={() => go('/operations/health')}>Health</button> and <code>hs-live</code> for details.</Banner>
+      <Banner tone="bad">{problemRows.length} topic(s) are stale, never read, or failing. See <button class="link-btn" onclick={() => go(P.health)}>Health</button> and <code>hs-live</code> for details.</Banner>
     {:else if liveRows.length}
       <Banner tone="ok">All live topics are fresh.</Banner>
     {/if}
@@ -75,7 +76,7 @@
         {/snippet}
       </Table>
     </Card>
-    <Muted as="p">These are the live-state topics in the state database. The <code>live</code> row describes the previous collection by design. <code>hs sys live status</code> shows the same on the command line. <button class="link-btn" onclick={() => go('/monitoring/live-state')}>Live state</button> has the details per topic.</Muted>
+    <Muted as="p">These are the live-state topics in the state database. The <code>live</code> row describes the previous collection by design. <code>hs sys live status</code> shows the same on the command line. <button class="link-btn" onclick={() => go(P.liveState)}>Live state</button> has the details per topic.</Muted>
 </Stack>
 
 <style>

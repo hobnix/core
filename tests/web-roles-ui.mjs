@@ -19,22 +19,22 @@ eq('an unknown role on either side is refused (as the server)', [roleOk('root', 
 // the pages: every role sees every page; the ones above the role are greyed (lockedWhy), never left out
 const all = tree();
 const greyed = (role) => all.filter((p) => lockedWhy(role, p));
-eq('every role sees every page of the tree (no page is hidden)', ROLES.map(() => all.includes('/identity') && all.includes('/storage/vault') && all.includes('/instances')), [true, true, true]);
+eq('every role sees every page of the tree (no page is hidden)', ROLES.map(() => all.includes('/people') && all.includes('/storage/vault') && all.includes('/instances')), [true, true, true]);
 eq('the tree does not depend on the role (nodeItems takes none)', nodeItems.length <= 5, true);
 eq('an admin has no greyed page', greyed('admin'), []);
 for (const r of ['viewer', 'app-manager'])
-  eq(`${r}: the greyed pages are exactly the admin ones`, greyed(r).every((p) => p === '/storage/vault' || p === '/storage/files' || p.startsWith('/identity')) && ['/identity', '/identity/users', '/storage/vault', '/storage/files'].every((p) => greyed(r).includes(p)), true);
-for (const p of ['/instances', '/instances/apps', '/storage/pools', '/storage/disks', '/storage/shares', '/protection/backup', '/operations/health', '/settings/access', '/settings/general', '/nodes', '/marketplace', '/extensions/demo'])
+  eq(`${r}: the greyed pages are exactly the admin ones`, greyed(r).every((p) => p === '/storage/vault' || p === '/storage/files' || p === '/system/certificates' || p.startsWith('/people')) && ['/people', '/people/users', '/system/certificates', '/storage/vault', '/storage/files'].every((p) => greyed(r).includes(p)), true);
+for (const p of ['/instances', '/apps/installed', '/storage/pools', '/storage/disks', '/storage/shares', '/backup/overview', '/system/health', '/settings/access', '/settings/general', '/nodes', '/apps/marketplace', '/extensions/demo'])
   eq(`${p}: open to every role (a viewer without plans, buttons disabled)`, ROLES.map((r) => lockedWhy(r, p)), ['', '', '']);
-eq('the reason names the role, as tooltip and accessible name', [lockedWhy('viewer', '/storage/vault'), lockedWhy('app-manager', '/identity/users'), lockedWhy('admin', '/identity')], ['Needs the admin role', 'Needs the admin role', '']);
+eq('the reason names the role, as tooltip and accessible name', [lockedWhy('viewer', '/storage/vault'), lockedWhy('app-manager', '/people/users'), lockedWhy('admin', '/people')], ['Needs the admin role', 'Needs the admin role', '']);
 eq('the pool pages are in the tree', paths(nodeItems('main', null, [], [], [{ name: 'tank', role: 'data' }])).includes('/storage/pools/tank'), true);
 eq('a remote node keeps its pages (they only read)', nodeItems('peer', ['storage'], null, [], []).length, 2);
 
 // the guard of a page opened by its address
-eq('a page opened by address: admin pages refuse a viewer', [canSee('viewer', '/identity/users'), canSee('app-manager', '/storage/vault'), canSee('viewer', '/settings/access'), canSee('viewer', '/settings/general'), canSee('admin', '/identity')], [false, false, true, true, true]);
+eq('a page opened by address: admin pages refuse a viewer', [canSee('viewer', '/people/users'), canSee('app-manager', '/storage/vault'), canSee('viewer', '/settings/access'), canSee('viewer', '/settings/general'), canSee('admin', '/people')], [false, false, true, true, true]);
 eq('an unlisted page needs no more than a viewer', pageRole('/something/new'), 'viewer');
 eq('the longest prefix wins', [pageRole('/settings/general'), pageRole('/settings/access'), pageRole('/settings/access/x'), pageRole('/settings/capabilities/vps')], ['viewer', 'viewer', 'viewer', 'viewer']);
-eq('the secret pages need admin, with their sub-pages', [pageRole('/identity'), pageRole('/identity/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults'), pageRole('/storage/files')], ['admin', 'admin', 'admin', 'admin', 'viewer', 'admin']);
+eq('the secret pages need admin, with their sub-pages', [pageRole('/people'), pageRole('/people/users'), pageRole('/storage/vault'), pageRole('/storage/vault/x'), pageRole('/storage/vaults'), pageRole('/storage/files')], ['admin', 'admin', 'admin', 'admin', 'viewer', 'admin']);
 
 // the changes
 eq('the app areas are an app manager\'s', ['apps', 'ct', 'recipes', 'docker', 'docker-app', 'docker-registry', 'token'].map(areaRole), Array(7).fill('app-manager'));

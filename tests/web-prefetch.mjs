@@ -18,9 +18,9 @@ for (const name of readdirSync(capDir)) {
 }
 check('the allowlist was read', known.size > 50 && known.has('ct/list') && known.has('status'), String(known.size));
 
-const routes = ['/', '/instances', '/network', '/identity/users', '/identity/groups', '/identity/certificates', '/monitoring/hardware', '/protection/backup', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
-  '/protection/expiry', '/operations/health', '/instances/apps', '/marketplace', '/instances/services', '/storage/encryption', '/storage/vault',
-  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/monitoring/diagnostics'];
+const routes = ['/', '/instances', '/network', '/people/users', '/people/groups', '/system/certificates', '/system/hardware', '/backup/overview', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
+  '/backup/expiry', '/system/health', '/apps/installed', '/apps/marketplace', '/network/services', '/storage/encryption', '/storage/vault',
+  '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/system/diagnostics', '/system/updates', '/network/map', '/storage', '/backup', '/system'];
 const missing = [];
 let total = 0;
 for (const r of routes) {
@@ -41,6 +41,7 @@ const tank = readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data'
 check('the pools page reads the list, not the fixed pools', tank.includes('/api/sys/pool/list') && !tank.some((p) => p.includes('pool=bulk')) && !tank.some((p) => p.includes('pool=tank')));
 check('a SnapRAID pool is read for its facts', readsFor('/storage/pools', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/info?pool=tank'));
 check('the disks page reads the members of the SnapRAID pool by name', readsFor('/storage/disks', [], false, [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }]).includes('/api/sys/pool/members?pool=tank') && !readsFor('/storage/disks', [], false, []).some((p) => p.includes('pool=bulk')));
+check('the page of one disk prefetches what the list reads (a tab and an encoded name too)', JSON.stringify(readsFor('/storage/disks/sda')) === JSON.stringify(readsFor('/storage/disks', [], false, [])) && readsFor('/node/x/storage/disks/a%20b/smart').length === 4);
 const parsed = parsePoolRows([['tank', 'data', 'zfs', 'online'], ['Bad', 'data', 'zfs', 'x'], ['a1234567890123', 'data', 'zfs', 'x'], ['x', 'other', 'zfs', 'x'], ['y', 'apps', 'ext4', 'x'], ['ssd', 'apps', 'snapraid']]);
 check('parsePoolRows drops bad rows', parsed.length === 2 && parsed[0].name === 'tank' && parsed[1].state === '-');
 check('ofRole lists the names of a role', JSON.stringify(ofRole(parsed, 'apps')) === JSON.stringify(['ssd']));
@@ -50,7 +51,13 @@ const storagePages = ['/storage/pools', '/storage/pools/bulk', '/storage/pools/f
 check('storage prefetch lists are identical with live mode off and on', storagePages.every((r) => JSON.stringify(readsFor(r)) === JSON.stringify(readsFor(r, [], true))));
 check('storage pages still prefetch URLs, none named like a topic', storagePages.every((r) => readsFor(r).length > 0 && readsFor(r).every((p) => p.startsWith('/api/sys/') && !/\/(pool-(info|members|state)-|shares-overview|monitor-disks)/.test(p))));
 check('storage prefetch is unchanged by live mode', JSON.stringify(readsFor('/storage/pools/bulk')) === JSON.stringify(readsFor('/storage/pools/bulk', [], true)));
-check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/monitoring/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/monitoring/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
+check('Diagnostics reads the live status, with live mode off or on', JSON.stringify(readsFor('/system/diagnostics', [], true)) === JSON.stringify(['/api/sys/live/status']) && JSON.stringify(readsFor('/system/diagnostics')) === JSON.stringify(['/api/sys/live/status']));
+
+// a group page reads only reads its places already use (pages/groups/): every path is in the reads of some page below the group
+const group = (g, places) => { const own = new Set(places.flatMap((r) => readsFor(r))); return readsFor(g).length > 0 && readsFor(g).every((p) => own.has(p)); };
+check('the Storage group page reads only what its places read', group('/storage', ['/storage/pools', '/storage/disks', '/storage/shares', '/storage/encryption']));
+check('the Backup group page reads only what its places read', group('/backup', ['/backup/overview', '/backup/expiry']));
+check('the System group page reads only what its places read', group('/system', ['/system/health', '/system/certificates', '/system/hardware', '/system/events', '/system/updates']));
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

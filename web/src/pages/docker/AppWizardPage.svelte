@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../../paths.js';
   // The guided way to a new Docker app: image, ports, folders, variables, one question per screen (ui/Wizard.svelte, the frame the capability
   // wizards use). The last screen shows the compose file and the .env text it will hand over, as plain text, and "Open in editor" opens
   // /instances/docker/new on exactly that text. The wizard saves and applies nothing: the editor's Test, Save and Apply do (editor/wizard.js has the logic).
@@ -45,7 +46,7 @@
   function onimage() { if (!nameTouched) d.name = suggestName(d.image); }
   function next() {
     if (errs.length) return;
-    if (step === 'review') { setHandoff({ name: out.name, compose: out.compose, env: out.env }); go('/instances/docker/new'); return; }
+    if (step === 'review') { setHandoff({ name: out.name, compose: out.compose, env: out.env }); go(P.dockerNew); return; }
     at += 1;
   }
   const addPort = () => d.ports.push({ host: '', container: '', proto: 'tcp' });

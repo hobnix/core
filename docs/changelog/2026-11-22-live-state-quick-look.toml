@@ -1,0 +1,4 @@
+date  = "2026-11-22"
+type  = "change"
+title = "Live state: the stored output opens over the list"
+body  = """On Monitoring > Live state, Raw opens the stored output of a topic over the list instead of a side panel next to it. The table keeps its width and columns, and the address carries the topic (?sel=), so a reload, a pasted link and Back/Forward work."""

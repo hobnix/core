@@ -189,7 +189,7 @@ nixos-generate-config --root /mnt
 On your own computer, get this repository and copy what the base system needs to the server:
 
 ```bash
-git clone https://github.com/hobnix/server.git
+git clone https://github.com/hobnix/core.git
 ```
 
 ```bash
@@ -351,7 +351,7 @@ Add `--dry-run` to see only the plan. `hs preset list` shows the others; `exampl
 
 ## Keep the configuration updatable
 
-The installer makes `/etc/nixos` a git checkout of the public repository (`origin` is https://github.com/hobnix/server.git) at the exact
+The installer makes `/etc/nixos` a git checkout of the public repository (`origin` is https://github.com/hobnix/core.git) at the exact
 revision the stick was built from: a stick from release `v0.1.0` gives a checkout at `v0.1.0`, and `hs update`, the update channels and
 the version shown work from the first boot. The files are not changed by this, so `git -C /etc/nixos status` is clean; your `machine.toml`
 and `hardware-configuration.nix` are not in the repository and stay yours. The installer says in its plan ("Git checkout") what it will do.
@@ -361,7 +361,7 @@ installer still finishes, says "No git checkout was made" and leaves no `.git` i
 hand; your `machine.toml` and `hardware-configuration.nix` stay:
 
 ```bash
-git clone https://github.com/hobnix/server.git ~/hobnix
+git clone https://github.com/hobnix/core.git ~/hobnix
 ```
 
 ```bash

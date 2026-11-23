@@ -2,7 +2,7 @@
   // The marked section at the bottom of an Object page: actions that destroy or cannot be undone. Each action opens a plan (the plan asks for the NAME of the
   // thing that changes, CLAUDE.md "Destructive commands"); this component never runs anything itself.
   //   <DangerZone actions={[{ label: 'Remove pool…', text: 'Frees the disks. The data on them is lost.', area: 'pool', args: ['destroy', name], title: 'Remove pool ' + name, need: 'admin' }]} />
-  // An action: { label, text, area, args, title?, need?, disabled?, reason? } (`reason` is why it is off, shown as its tooltip).
+  // An action: { label, text, area, args, title?, need?, disabled?, reason?, onclick? } (`reason` is why it is off, shown as its tooltip). `onclick` replaces the plan: a form that asks for the name itself.
   import Button from './Button.svelte';
   import { openPlan } from '../ui.svelte.js';
   let { actions = [], title = 'Danger zone' } = $props();
@@ -14,7 +14,7 @@
     {#each actions as a (a.label)}
       <div class="item">
         <p>{a.text}</p>
-        <Button variant="danger" need={a.need ?? ''} disabled={a.disabled} tooltip={a.disabled ? (a.reason ?? '') : ''} onclick={() => openPlan(a.area, a.args, a.title ?? a.label)}>{a.label}</Button>
+        <Button variant="danger" need={a.need ?? ''} disabled={a.disabled} tooltip={a.disabled ? (a.reason ?? '') : ''} onclick={() => (a.onclick ? a.onclick() : openPlan(a.area, a.args, a.title ?? a.label))}>{a.label}</Button>
       </div>
     {/each}
   </section>

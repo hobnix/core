@@ -1,4 +1,5 @@
 <script>
+  import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
   import { bytes, sizeToBytes } from '../format.js';
@@ -62,7 +63,7 @@
   <Card title="Encrypted storage">
     <div style="overflow-x:auto"><Table id="encryption" {columns} rows={vols} key="name" compact loading={!(status.loaded || deck?.loaded)} empty="No encrypted volumes.">
       {#snippet cell(v, col)}
-        {#if col.key === 'name'}<Row gap="2"><i class="ph {v.icon}"></i>{#if diskOf(v)}<button class="link-btn" use:tip={'Open this disk'} onclick={() => go('/storage/disks')}>{v.name}</button>{:else}{v.name}{/if}</Row>
+        {#if col.key === 'name'}<Row gap="2"><i class="ph {v.icon}"></i>{#if diskOf(v)}<button class="link-btn" use:tip={'Open this disk'} onclick={() => go(P.disks)}>{v.name}</button>{:else}{v.name}{/if}</Row>
         {:else if col.key === 'kind'}<Muted>{v.kind}</Muted>
         {:else if col.key === 'on'}<code>{v.on}</code>
         {:else if col.key === 'size'}<Muted>{v.size}</Muted>
@@ -70,6 +71,6 @@
       {/snippet}
     </Table></div>
     <Muted as="p">{list.error ? 'The list could not be read.' : 'Only the encrypted disks of this server are listed; a LUKS disk it does not know is never opened or shown.'}</Muted>
-    <Muted as="p">The secrets of the server's own services are in the <button class="link-btn" onclick={() => go('/storage/vault')}>Vault</button>.</Muted>
+    <Muted as="p">The secrets of the server's own services are in the <button class="link-btn" onclick={() => go(P.vault)}>Vault</button>.</Muted>
   </Card>
 </Stack>

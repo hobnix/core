@@ -18,7 +18,11 @@ en	Contributing	GUIDE-TEMPLATE
 en	Contributing	PLAN-modular-core
 en	Contributing	PLAN-extensions
 en	Contributing	PLAN-live-interface
+en	Contributing	PLAN-navigation
+en	Contributing	PLAN-package-pages
 en	Contributing	PLAN-packages
+en	Contributing	PLAN-registry
+en	Contributing	PLAN-package-names
 en	Contributing	PLAN-network-map
 en	Contributing	Package-API
 en	Contributing	extensions-sdk
@@ -53,6 +57,7 @@ en	Contributing	RELEASE-NOTES-0.7
 en	Contributing	RELEASE-NOTES-0.8
 en	Contributing	RELEASE-NOTES-0.9
 en	Contributing	RELEASE-NOTES-0.10
+en	Contributing	RELEASE-NOTES-0.11
 en	Contributing	PLAN-docker-instances
 en	Contributing	PLAN-web-design
 en	Contributing	PLAN-selfservice

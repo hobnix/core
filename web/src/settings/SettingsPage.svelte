@@ -1,4 +1,5 @@
 <script>
+  import { P, withQuery } from '../paths.js';
   // One subpage of Settings, chosen by the address (/settings/<page>): General, Network and DNS, Storage, Backups, Users and access, Updates,
   // Advanced. The fields come from layout.gen.json (generated from `page` in config/schema.toml); Advanced lists every key. General also holds
   // Appearance and the Nodes card, Updates the version and the update actions, Advanced the Check button.
@@ -81,7 +82,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title={title[0]} crumb="Settings" sub={title[1]}>
+  <PageHeader title={title[0]} crumb={page === 'updates' ? 'System' : 'Settings'} sub={title[1]}>
     {#snippet actions()}
       {#if page === 'updates' && utag}<StatusDot state={utag.state} label={utag.label} />{/if}
       {#if core}<Button tooltip={advanced ? 'Back to the guided questions' : 'Every key of this page as plain fields'} onclick={() => (advanced = !advanced)}>{advanced ? 'Back' : 'Advanced'}</Button>{/if}
@@ -118,8 +119,8 @@
         <p class="hp2">{updates.loaded ? (behind > 0 ? `${behind} new change${behind === 1 ? '' : 's'} upstream.` : 'Up to date as of the last look.') : 'Loading…'}</p>
         <div class="acts">
           <Button need="admin" variant="primary" class="settingspage-b13" icon="arrow-circle-up" busy={jobRunning('system', ['update'])} busyLabel="Updating…" tooltip={'Update the server (snapshots first; shows the plan)'} disabled={!!deck?.data?.locked} onpointerenter={() => prefetchPlan('system', ['update'])} onfocus={() => prefetchPlan('system', ['update'])} onclick={() => openPlan('system', ['update'], 'Update')}>Update…</Button>
-          <Button class="settingspage-b13" tooltip={tr('Choose which version this server follows')} onclick={() => go('/settings/releases')}><i class="ph ph-git-branch"></i>{tr('Update channel')}…</Button>
-          <Button class="settingspage-b13" tooltip={'Read what is new, change by change'} onclick={() => go('/operations/whats-new')}><i class="ph ph-sparkle"></i>What's new</Button>
+          <Button class="settingspage-b13" tooltip={tr('Choose which version this server follows')} onclick={() => go(withQuery(P.updates, { tab: 'releases' }))}><i class="ph ph-git-branch"></i>{tr('Update channel')}…</Button>
+          <Button class="settingspage-b13" tooltip={'Read what is new, change by change'} onclick={() => go(P.whatsNew)}><i class="ph ph-sparkle"></i>What's new</Button>
         </div>
       </div>
       <div class="card sec">
@@ -146,7 +147,7 @@
       <div class="card sec" id="nodes">
         <div class="st">Nodes</div>
         <p class="hp2">The other servers this one looks at: {rows(nodeList).length} on the list. Adding, removing and the keys are on the Nodes page.</p>
-        <Button size="sm" tooltip={'Open the list of servers'} style="align-self:flex-start" onclick={() => go('/nodes')}><i class="ph ph-hard-drives"></i>Open Nodes</Button>
+        <Button size="sm" tooltip={'Open the list of servers'} style="align-self:flex-start" onclick={() => go(P.nodes)}><i class="ph ph-hard-drives"></i>Open Nodes</Button>
       </div>
     </div>
   {/if}

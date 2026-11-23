@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Users: row buttons instead of a quick look"
+body  = """Selecting a user in the Users list no longer opens a panel over the table. Each row now ends with Edit, Change password and Open user buttons (the user name is still a link to the user page). Built-in accounts have no Edit or password button."""

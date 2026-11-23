@@ -31,10 +31,11 @@ assert.match(channelCard({ channel: 'beta', ref: 'v1.1.0-beta.1' }).warn, /secon
 assert.match(channelCard({ channel: 'edge', ref: 'x' }).warn, /data may be lost/);
 assert.match(src('settings/SettingsPage.svelte'), /\/api\/sys\/release\/show/);
 
-// the page is in the tree under Settings and has a route
-const settings = mainTree.find((i) => i.path === '/settings');
-assert.ok(settings.children.some((c) => c.path === '/settings/releases' && c.label === 'Releases'));
-assert.match(src('routes.js'), /'\/settings\/releases': Releases,/);
+// Releases is a tab of System > Updates (step 8): the Updates page has a route and shows the Releases component
+const system = mainTree.find((i) => i.path === '/system');
+assert.ok(system.children.some((c) => c.path === '/system/updates' && c.label === 'Updates'));
+assert.match(src('routes.js'), /\[P\.updates\]: Updates,/);
+assert.match(src('pages/system/Updates.svelte'), /Releases/);
 
 // German: every sentence of the page is in the dictionary of i18n.js
 const i18n = src('i18n.js');

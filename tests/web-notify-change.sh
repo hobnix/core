@@ -93,8 +93,8 @@ fi
 
 echo "-- the page is wired in"
 for f in web/src/pages/Notifications.svelte web/src/forms/ops/ChannelForm.svelte; do check "$f exists" test -f "$ROOT/$f"; done
-check "route" grep -q "'/operations/notifications': Notifications" "$ROOT/web/src/routes.js"
-check "tree node with the capability" grep -q "path: '/operations/notifications', capability: 'notifications'" "$ROOT/web/src/nav.js"
-check "prefetch" grep -q "operations/notifications" "$ROOT/web/src/readsfor.js"
+check "route" grep -q '\[P.notifications\]: Notifications' "$ROOT/web/src/routes.js"
+check "tree node with the capability" grep -q "path: P.notifications, capability: 'notifications'" "$ROOT/web/src/nav.js"
+check "prefetch" grep -q "P.notifications" "$ROOT/web/src/readsfor.js"
 
 finish

@@ -1,4 +1,5 @@
 <script>
+  import { P, poolPath, withQuery } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   // The node's home: "is it fine, and what needs me?". A node card with the Halftone, the meters, one line per fact that
   // opens the page that OWNS it, one UsageBar per pool, and two shortcuts that open plans (Back up now, Update). No tables of disks, shares or problems.
@@ -71,14 +72,14 @@
 
   // the four meters (the node card); the UPS meter opens Hardware, the owner of the sensors
   const meters = $derived([
-    { icon: 'ph-cpu', label: 'CPU', sub: '', value: cpu == null ? '–' : `${pct(cpu)} %`, of: d?.load ? `load ${d.load[0]}` : '', hist: cpuHist, to: '/monitoring/hardware' },
-    { icon: 'ph-memory', label: 'Memory', sub: '', value: memUsed == null ? '–' : (memUsed / 1073741824).toFixed(1), of: d?.mem ? `/ ${(d.mem.total / 1073741824).toFixed(0)} GiB` : '', hist: memHist, to: '/monitoring/hardware' },
+    { icon: 'ph-cpu', label: 'CPU', sub: '', value: cpu == null ? '–' : `${pct(cpu)} %`, of: d?.load ? `load ${d.load[0]}` : '', hist: cpuHist, to: P.hardware },
+    { icon: 'ph-memory', label: 'Memory', sub: '', value: memUsed == null ? '–' : (memUsed / 1073741824).toFixed(1), of: d?.mem ? `/ ${(d.mem.total / 1073741824).toFixed(0)} GiB` : '', hist: memHist, to: P.hardware },
     d?.gpu
-      ? { icon: 'ph-graphics-card', label: 'GPU', sub: `${d.gpu.name}${d.gpu.temp != null ? ` · ${d.gpu.temp} °C` : ''}`, value: `${pct(d.gpu.util)} %`, of: `VRAM ${(d.gpu.mem_used / 1e9).toFixed(1)} / ${(d.gpu.mem_total / 1e9).toFixed(0)} GB`, hist: gpuHist, to: '/monitoring/hardware' }
-      : { icon: 'ph-graphics-card', label: 'GPU', sub: '', value: '–', of: 'No graphics card found', hist: [], to: '/monitoring/hardware' },
+      ? { icon: 'ph-graphics-card', label: 'GPU', sub: `${d.gpu.name}${d.gpu.temp != null ? ` · ${d.gpu.temp} °C` : ''}`, value: `${pct(d.gpu.util)} %`, of: `VRAM ${(d.gpu.mem_used / 1e9).toFixed(1)} / ${(d.gpu.mem_total / 1e9).toFixed(0)} GB`, hist: gpuHist, to: P.hardware }
+      : { icon: 'ph-graphics-card', label: 'GPU', sub: '', value: '–', of: 'No graphics card found', hist: [], to: P.hardware },
     upsConfigured
-      ? { icon: 'ph-battery-charging', label: 'UPS', sub: upsMap.state || '', value: upsMap.charge ? `${upsMap.charge} %` : '–', of: [upsMap.load ? `load ${upsMap.load} %` : '', upsMap.runtime ? `${Math.round(Number(upsMap.runtime) / 60)} min` : ''].filter(Boolean).join(' · '), hist: upsHist, to: '/monitoring/hardware' }
-      : { icon: 'ph-battery-charging', label: 'UPS', sub: '', value: '–', of: upsMap.configured === 'yes' ? 'Not reachable' : 'Not set up (ups in machine.toml)', hist: [], to: '/monitoring/hardware' },
+      ? { icon: 'ph-battery-charging', label: 'UPS', sub: upsMap.state || '', value: upsMap.charge ? `${upsMap.charge} %` : '–', of: [upsMap.load ? `load ${upsMap.load} %` : '', upsMap.runtime ? `${Math.round(Number(upsMap.runtime) / 60)} min` : ''].filter(Boolean).join(' · '), hist: upsHist, to: P.hardware }
+      : { icon: 'ph-battery-charging', label: 'UPS', sub: '', value: '–', of: upsMap.configured === 'yes' ? 'Not reachable' : 'Not set up (ups in machine.toml)', hist: [], to: P.hardware },
   ]);
 
   // --- one UsageBar per pool (the numbers are in the status document)
@@ -86,14 +87,14 @@
 
   // --- one line per fact: icon, label, value, a note, the dot, and the page that owns it (a click opens it)
   const dataPage = $derived(poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools');
-  const OWNER = $derived({ Backup: '/protection/backup', Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': '/monitoring/hardware' });
+  const OWNER = $derived({ Backup: P.backup, Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': P.hardware });
   const facts = $derived.by(() => {
     const m = {};
     const jobs = [];
     for (const r of rows(status)) { if (r[0] === 'job') jobs.push(r.slice(1)); else m[r[0]] ??= r.slice(1); }
     const out = [];
     const problems = d?.problems ?? 0;
-    out.push({ icon: 'ph-heartbeat', k: 'Health', t: problems ? `${problems} problem${problems === 1 ? '' : 's'}` : 'no problems', meta: '', dot: problems ? 'warn' : 'ok', to: '/operations/health' });
+    out.push({ icon: 'ph-heartbeat', k: 'Health', t: problems ? `${problems} problem${problems === 1 ? '' : 's'}` : 'no problems', meta: '', dot: problems ? 'warn' : 'ok', to: P.health });
     if (m.backup) {
       const [st, age] = m.backup;
       const h = Number(age) / 3600;
@@ -103,7 +104,7 @@
         : { icon: 'ph-cloud', k: 'Backup', t: 'no backup yet', meta: '', dot: 'warn' });
     }
     if (behind > 0) out.push({ icon: 'ph-arrow-circle-up', k: 'Updates', t: `${behind} new change${behind === 1 ? '' : 's'} upstream`, meta: '', dot: 'info', plan: ['system', ['update'], 'Update'] });
-    if (m.version && m.version[0] && m.version[0] !== '-') out.push({ icon: 'ph-tag', k: 'Version', t: `Hobnix ${m.version[0]}`, meta: '', dot: 'off', to: '/settings/releases' });
+    if (m.version && m.version[0] && m.version[0] !== '-') out.push({ icon: 'ph-tag', k: 'Version', t: `Hobnix ${m.version[0]}`, meta: '', dot: 'off', to: withQuery(P.updates, { tab: 'releases' }) });
     if (m.encryption) {
       const e = m.encryption[0];
       out.push({ icon: e === 'locked' ? 'ph-lock' : 'ph-lock-open', k: 'Encryption', t: { open: 'open', locked: 'locked', none: 'not encrypted' }[e] ?? e, meta: '', dot: e === 'locked' ? 'warn' : 'ok' });
@@ -119,7 +120,7 @@
     }
     if (m.smart) out.push({ icon: 'ph-heartbeat', k: 'Disk health', t: m.smart[1] ? m.smart[1] : 'all fine', meta: `${m.smart[0]} disks`, dot: m.smart[1] ? 'warn' : 'ok' });
     if (m.hottest) out.push({ icon: 'ph-thermometer', k: 'Hottest disk', t: m.hottest[0], meta: `${m.hottest[1]} °C`, dot: Number(m.hottest[1]) >= 55 ? 'warn' : 'ok' });
-    if (m.event) out.push({ icon: 'ph-plug', k: 'Last event', t: m.event[1], meta: m.event[0], dot: 'off', to: '/operations/health' });
+    if (m.event) out.push({ icon: 'ph-plug', k: 'Last event', t: m.event[1], meta: m.event[0], dot: 'off', to: P.health });
     return out.map((f) => ({ to: OWNER[f.k] ?? null, ...f }));
   });
 
@@ -138,12 +139,12 @@
 
   {#if !locked && setupOpen}
     <Banner tone="warn" icon="list-checks">Finish the setup: {setupOpen} item{setupOpen === 1 ? '' : 's'} still open{setupLabels ? ` (${setupLabels})` : ''}.
-      {#snippet action()}<Button size="sm" tooltip={'Open the first-run checklist'} onclick={() => go('/setup')}>Open Setup<i class="ph ph-arrow-right"></i></Button>{/snippet}
+      {#snippet action()}<Button size="sm" tooltip={'Open the first-run checklist'} onclick={() => go(P.setup)}>Open Setup<i class="ph ph-arrow-right"></i></Button>{/snippet}
     </Banner>
   {/if}
   {#if changes.count}
     <Banner tone="info" icon="sparkle">{changes.count} change{changes.count === 1 ? '' : 's'} since your last visit.
-      {#snippet action()}<Button size="sm" tooltip={'See what the last update brought'} onclick={() => go('/operations/whats-new')}>Show<i class="ph ph-arrow-right"></i></Button>{/snippet}
+      {#snippet action()}<Button size="sm" tooltip={'See what the last update brought'} onclick={() => go(P.whatsNew)}>Show<i class="ph ph-arrow-right"></i></Button>{/snippet}
     </Banner>
   {/if}
   {#if ui.features.live && !live.open}
@@ -187,7 +188,7 @@
       <div class="card">
         <div class="ctitle">Pools</div>
         {#each pools as p}
-          <button class="prow" onclick={() => go(`/storage/pools/${p.name}`)}>
+          <button class="prow" onclick={() => go(poolPath(p.name))}>
             <span class="pn"><i class="ph ph-{poolIcon(p.role)}"></i>{p.name}</span>
             <StatusDot state={p.health && p.health !== 'ONLINE' ? 'warn' : 'ok'} label={p.health && p.health !== 'ONLINE' ? p.health.toLowerCase() : 'online'} />
             <UsageBar used={p.used} size={p.size} width={180} />

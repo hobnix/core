@@ -1,9 +1,10 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
-  // Groups of the domain: list on the left, drawer on the right (members, the shares the group is entered on). The share access is READ ONLY here:
+  // Groups of the domain: the list, and the quick look over it (?sel=<group>; there is no page of a group, so the quick look is the whole view) (members, the shares the group is entered on). The share access is READ ONLY here:
   // permissions are edited on the share itself (decision 4 of ); a row links to the share.
   import { poll, rows } from '../data.svelte.js';
   import { go } from '../route.svelte.js';
+  import { selected, select, close } from '../selection.svelte.js';
   import { sharesPath } from '../pools.svelte.js';
   import { takeSelection, setSelection } from '../select.svelte.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
@@ -18,16 +19,16 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Button from '../ui/Button.svelte';
-  import Split from '../ui/Split.svelte';
-  import Drawer from '../ui/Drawer.svelte';
+  import QuickLook from '../ui/QuickLook.svelte';
   import Kv from '../ui/Kv.svelte';
   import Chip from '../ui/Chip.svelte';
   import { Card, Muted, StatusDot, Row } from '../ui/index.js';
 
   const list = poll('/api/sys/users/groups', 30000);
-  let selName = $state('');
+  const selName = $derived(selected());
   let tab = $state('info');
-  $effect(() => { const n = takeSelection('groups'); if (n) selName = n; });
+  // a search result asks for a group with setSelection (select.svelte.js): it becomes ?sel= here
+  $effect(() => { const n = takeSelection('groups'); if (n) select(n); });
 
   const ulist = poll('/api/sys/users/list', 30000);
   const userNames = $derived(rows(ulist).map((r) => r[0]));
@@ -63,10 +64,9 @@
 <PageState loading={!list.loaded} error={list.error?.message} hasData={list.data != null} empty={list.loaded && !groups.length}
            emptyIcon="users-four" emptyTitle="No groups" emptyText="The domain controller (dc1) may be down, or the storage is locked. Otherwise add the first group.">
   {#snippet emptyAction()}<Button variant="primary" tooltip={'Create a group of users'} onclick={() => openCreate(NewGroup, { existing: [] })}><i class="ph ph-plus"></i>New group</Button>{/snippet}
-  <Split open={!!sel}>
-    {#snippet list()}
+  <div style="position:relative">
       <Card style="padding:0">
-        <Table id="groups" {columns} rows={groups} key="name" selected={sel?.name} onrow={(g) => { selName = g.name; tab = 'info'; }}>
+        <Table id="groups" {columns} rows={groups} key="name" selected={sel?.name} onrow={(g) => { tab = 'info'; select(g.name); }}>
           {#snippet cell(g, col)}
             {#if col.key === 'name'}<b>{g.name}</b>{#if doing(g)} <Muted><i class="ph ph-circle-notch spin"></i> {doing(g)}…</Muted>{:else if failure(g)} <Chip tone="bad">failed</Chip>{/if}
             {:else if col.key === 'count'}{g.members.length}
@@ -75,10 +75,8 @@
           {/snippet}
         </Table>
       </Card>
-    {/snippet}
-    {#snippet side()}
       {#if sel}
-        <Drawer title={sel.name} chip={builtin(sel.name) ? 'built in' : ''} bind:tab onclose={() => (selName = '')} tabs={[{ id: 'info', label: 'Members' }, { id: 'access', label: 'Shares' }]}>
+        <QuickLook title={sel.name} chip={builtin(sel.name) ? 'built in' : ''} rowKey={sel.name} bind:tab onclose={close} tabs={[{ id: 'info', label: 'Members' }, { id: 'access', label: 'Shares' }]}>
           {#snippet children(t)}
             {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
             {#if t === 'access'}
@@ -100,8 +98,9 @@
             <Button variant="danger" icon="trash" disabled={builtin(sel.name)} busy={rowstate.pending('users', [sel.name, 'group-delete'])} busyLabel="Deleting…" tooltip={builtin(sel.name) ? 'A built-in group cannot be deleted' : 'Delete the group (cannot be undone; you type the name)'}
               onclick={() => openPlan('users', [sel.name, 'group-delete'], `Delete ${sel.name}`)}>Delete</Button>
           {/snippet}
-        </Drawer>
+        </QuickLook>
+      {:else if selName && list.loaded}
+        <QuickLook title={selName} onclose={close}><Muted as="p" style="padding:12px 16px;margin:0">No group called “{selName}” exists. It may have been deleted or renamed.</Muted></QuickLook>
       {/if}
-    {/snippet}
-  </Split>
+  </div>
 </PageState>

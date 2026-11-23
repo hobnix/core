@@ -1,4 +1,5 @@
 <script>
+  import { P, nodePath } from '../paths.js';
   // Top bar: logo, node switcher, search, data age with refresh, storage state, theme toggle, power/update actions, user.
   // host = this node's name; node = the node the page on screen belongs to (the buttons act on it, and only on this server);
   // nodes = [{ name, kind, local, dot }] for the switcher; onmenu opens the tree as a slide-over on a phone.
@@ -32,7 +33,7 @@
   <button class="ib menu" aria-label="Open the resource tree" aria-expanded={menuOpen} use:tip={{ text: 'Resources', side: 'bottom' }} onclick={(e) => { e.stopPropagation(); onmenu(); }}>
     <i class="ph ph-list" style="font-size:18px"></i>
   </button>
-  <a class="brand" href="/" onclick={(e) => { e.preventDefault(); go(`/node/${encodeURIComponent(host)}`); }} aria-label="Home">
+  <a class="brand" href="/" onclick={(e) => { e.preventDefault(); go(nodePath(host)); }} aria-label="Home">
     <Logo size={28} /><span class="bn">hobnix</span>
   </a>
   <span class="vr hide-s"></span>
@@ -46,7 +47,7 @@
       <div class="pop" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
         <div class="pht">Servers</div>
         {#each nodes as n (n.name)}
-          <a href="/node/{encodeURIComponent(n.name)}" class:cur={n.name === node} role="menuitem" onclick={(e) => { e.preventDefault(); menu = ''; go(`/node/${encodeURIComponent(n.name)}`); }}>
+          <a href="/node/{encodeURIComponent(n.name)}" class:cur={n.name === node} role="menuitem" onclick={(e) => { e.preventDefault(); menu = ''; go(nodePath(n.name)); }}>
             <StatusDot bare state={n.dot?.state ?? 'off'} label={n.dot?.title ?? 'no data'} />
             <span class="nm">{n.name}</span>
             <span class="chip">{n.local ? 'this server' : n.kind}</span>
@@ -63,6 +64,10 @@
     <i class="ph ph-{locked ? 'lock-simple' : 'lock-simple-open'}"></i><span class="lbl">{locked ? 'Storage locked' : 'Storage open'}</span>
   </span>
   <span class="vr hide-s"></span>
+  {#if (ui.features.capabilities ?? ['docs']).includes('docs')}
+  <button class="ib" aria-label="Docs" use:tip={{ text: 'Docs', side: 'bottom' }} onclick={() => go(P.docs)}><i class="ph ph-book-open" style="font-size:16px"></i></button>
+  {/if}
+  <button class="ib" aria-label="What's new" use:tip={{ text: "What's new", side: 'bottom' }} onclick={() => go(P.whatsNew)}><i class="ph ph-sparkle" style="font-size:16px"></i></button>
   <Inbox />
   <button class="ib" aria-label={theme.dark ? 'Switch to the light look' : 'Switch to the dark look'} use:tip={{ text: theme.dark ? 'Light look' : 'Dark look', side: 'bottom' }} onclick={toggleTheme}>
     <i class="ph ph-{theme.dark ? 'sun' : 'moon'}" style="font-size:16px"></i>

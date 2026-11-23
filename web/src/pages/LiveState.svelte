@@ -5,13 +5,13 @@
   import PageHeader from '../shell/PageHeader.svelte';
   import Table from '../shell/Table.svelte';
   import Button from '../ui/Button.svelte';
-  import Drawer from '../ui/Drawer.svelte';
+  import QuickLook from '../ui/QuickLook.svelte';
   import Banner from '../ui/Banner.svelte';
-  import Split from '../ui/Split.svelte';
   import Kv from '../ui/Kv.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import { poll } from '../data.svelte.js';
+  import { selected, select, close } from '../selection.svelte.js';
   import { ui } from '../ui.svelte.js';
   import { live, wantAllTopics } from '../live.svelte.js';
   import { tr } from '../i18n.js';
@@ -64,17 +64,16 @@
     { key: 'actions', label: '', sort: false },
   ]);
 
-  // the Raw drawer
-  let rawTopic = $state('');
+  // the Raw quick look (?sel=<topic>): a topic has no page, so the quick look is the whole view
+  const rawTopic = $derived(selected());
   let raw = $state(null);
   let rawErr = $state(false);
-  async function openRaw(topic) {
-    rawTopic = topic; raw = null; rawErr = false;
-    try {
-      const d = await get('/api/sys/live/raw/' + encodeURIComponent(topic), true);
-      if (rawTopic === topic) raw = d;
-    } catch { if (rawTopic === topic) rawErr = true; }
-  }
+  $effect(() => {
+    const topic = rawTopic;
+    raw = null; rawErr = false;
+    if (!topic) return;
+    get('/api/sys/live/raw/' + encodeURIComponent(topic), true).then((d) => { if (selected() === topic) raw = d; }, () => { if (selected() === topic) rawErr = true; });
+  });
   // Refresh: a refused request (409 capability off, 400, 401) is shown above the table, not dropped
   let refreshErr = $state('');
   async function refresh(topic) {
@@ -108,8 +107,7 @@
       <div class="note bad"><i class="ph ph-warning-circle"></i><span>{tr('The refresh was refused:')} {refreshErr}</span></div>
     {/if}
 
-    <Split open={!!rawTopic}>
-      {#snippet list()}
+    <div style="position:relative">
     <div class="card elev-sm" style="padding:12px 14px">
       <Table id="live-inspect" {columns} rows={parsed.rows} key="topic" compact loading={!st.loaded}
              empty={tr(st.error ? 'The live topics could not be read.' : 'No live topics are configured.')}>
@@ -134,15 +132,14 @@
           {:else if col.key === 'actions'}
             <span class="acts">
               <Button size="sm" icon="arrow-clockwise" disabled={r.cap_on === false} onclick={() => refresh(r.topic)}>{tr('Refresh')}</Button>
-              <Button size="sm" onclick={() => openRaw(r.topic)}>{tr('Raw')}</Button>
+              <Button size="sm" onclick={() => select(r.topic)}>{tr('Raw')}</Button>
             </span>
           {/if}
         {/snippet}
       </Table>
     </div>
-      {/snippet}
-      {#snippet side()}
-      <Drawer title={rawTopic} onclose={() => { rawTopic = ''; raw = null; }}>
+      {#if rawTopic}
+      <QuickLook title={rawTopic} rowKey={rawTopic} onclose={close}>
         {#if rawErr}
           <div class="note bad"><i class="ph ph-warning-circle"></i><span>{tr('The stored output could not be read.')}</span></div>
         {:else if !raw}
@@ -154,9 +151,9 @@
           {#if raw.truncated}<div class="muted">{tr('Shows the first 64 KiB of {n} bytes.').replace('{n}', String(raw.bytes))}</div>{/if}
           <pre class="raw">{raw.out}</pre>
         {/if}
-      </Drawer>
-      {/snippet}
-    </Split>
+      </QuickLook>
+      {/if}
+    </div>
 
     <div class="muted"><code>hs sys live inspect</code> {tr('shows the same on the command line.')}</div>
   {/if}
