@@ -2108,7 +2108,7 @@ export interface SysOperations {
     lines: string[][];
   };
   "pkg.show.by_name": {
-    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1 */
+    /** what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step, slot_off: a slot of the package whose `requires` is off here: slot, required name); refused: status and reason, exit 1 */
     words: ["pkg", "show", "<name>"];
     path: "/pkg/show/{name}";
     method: "get";
@@ -2144,7 +2144,8 @@ export interface SysOperations {
       | [tag: "screenshot", path: Field]
       | [tag: "route", name: Field, port: Field, scheme: Field, exposure: Field, _default: "yes" | "no"]
       | [tag: "ask", key: Field, label: Field, type: Field, choices: Field, _default: "yes" | "no", pattern: Field, when: Field]
-      | [tag: "step", name: Field, text: Field])[];
+      | [tag: "step", name: Field, text: Field]
+      | [tag: "slot_off", text: Field, name: Field])[];
   };
   "pkg.start.by_action": {
     /** do it (hs sys pkg start install <name> [--repo R] | update <name> | remove <name> | fetch [<repo>] | repo-add <name> <url> (key line on stdin) | repo-remove <name>); red changes need --confirm <name> */

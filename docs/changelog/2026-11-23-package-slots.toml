@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Packages can add actions and health checks"
+body  = """An extension or app can now add an action (a button in its page header and on the Apps list, one main action and the others under More) and a health check that shows in System > Health with the package named. A part of a package that needs something that is switched off shows nothing until it is on, and the install dialog says so. An unknown slot name in a package is refused with the list of known ones."""

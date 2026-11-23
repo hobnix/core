@@ -139,6 +139,25 @@ package declaration when a block reads something the package did not declare as 
 unknown. The page can therefore ask for nothing the manifest's reads and changes did not already allow; tests/web-ext-test.py checks that every
 plan of the shipped pages is accepted by the changes.
 
+### Slots (#472, scripts/lib/pkg_slots.py)
+
+A slot is a place in the interface that a package fills with data. Five exist: **page**, **tab**, **action**, **health check**, **state card**. Any
+slot may say `requires = "<capability or extension>"`: while that is off the slot shows nothing, and the install dialog says "The <slot> of this
+package adds a card once <name> is on" (a `slot_off` line of `hs sys pkg show`). Anything else under `[web]` is refused by `hs pkg validate` and at
+install with "unknown slot ... (known slots: page, tab, action, health, state)". Slots live in `capability.toml` (an extension) or `package.toml`
+(a recipe).
+
+| Slot | Written as | Example |
+| --- | --- | --- |
+| page | `[web.page]` | `title = "Game lobbies"`, `group = "apps"`, `requires = "docker"` |
+| tab | `[[web.page.tabs]]` | `title = "Settings"`, `requires = "tailscale"` (a tab whose requirement is off is dropped with its blocks) |
+| action | `[[web.actions]]` | `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<name>", "sync"]`, `role = "app-manager"`, `main = true`; shown in the page header and on the Apps > Installed row: the `main` action (else the first) as a button, the rest under More; the plan names only the package's own area |
+| health check | `[[health]]` | `id = "stale"`, `read = "checks"`: a declared `[[web.reads]]` of kind tsv without arguments whose rows are `level<TAB>message` (`ok`, `warn`, `bad`); a `warn` or `bad` row is a problem in System > Health, named `<Title>: <message>`, with the usual notification and acknowledge |
+| state card | `[web.page.state]` | `read = "checks"`, `dot = 0`, `line = 1`, `requires = "docker"` |
+
+The session answer carries the actions as `features.slots`; health checks are run by `scripts/health-check.sh` (`python3 scripts/lib/pkg_slots.py
+problems`), so they add no polled read to the browser. Not in 0.12: tabs on core object pages, slots that one package offers to another.
+
 ## Switching on and off
 
 `hs ext enable <name>` writes the name into machine.toml `capabilities` (through scripts/lib/machine.sh, comments stay). For a package

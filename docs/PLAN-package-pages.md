@@ -1,6 +1,6 @@
 # Plan: package pages (0.12, 2026-11-23)
 
-Status: plan; nothing built. Milestone 0.12 "Package Pages", epic hobnix/server#195 (Declarative WebUI). Read from the issues, ADR 0012, 0016
+Status: plan; slots (#472) are built, the rest is not. Milestone 0.12 "Package Pages", epic hobnix/server#195 (Declarative WebUI). Read from the issues, ADR 0012, 0016
 and 0028, docs/PLAN-web-design.md section 7 and the code on `develop` after 0.11; not run.
 
 A package adds to the interface as data: a place in the tree, tabs, blocks drawn from a registry, a status card. No code from a package reaches

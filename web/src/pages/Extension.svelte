@@ -8,6 +8,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import { route, go } from '../route.svelte.js';
   import { ui } from '../ui.svelte.js';
+  import { withActions } from '../shell/slots.js';
   import PcForm from '../forms/ops/PcForm.svelte';
   import PosterForm from '../forms/ops/PosterForm.svelte';
   import PassthroughForm from '../forms/ops/PassthroughForm.svelte';
@@ -28,7 +29,7 @@
     }
     return node;
   }
-  const spec = $derived(page ? resolve(page, page.name) : null);
+  const spec = $derived(page ? withActions(resolve(page, page.name), ui.features.slots) : null);      // the [[web.actions]] slot joins the header
 </script>
 
 {#if spec}

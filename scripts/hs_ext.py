@@ -141,6 +141,14 @@ def _roles_module():
     return mod
 
 
+def _slots_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pkg_slots", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg_slots.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def ext_manifest(d):
     """the parsed capability.toml of a package folder (a recipe package: package.toml); OSError / TOMLDecodeError when it is missing or wrong"""
     import tomllib
@@ -254,7 +262,7 @@ def _ext_page(name, page, words):
             if not isinstance(t, dict) or not isinstance(t.get("title"), str) or not 1 <= len(t["title"]) <= 40 or not isinstance(t.get("blocks", []), list):
                 raise ValueError("a tab needs a title")
             tid = "t%d" % i
-            out_tabs.append({"id": tid, "label": t["title"]})
+            out_tabs.append({"id": tid, "label": t["title"], **({"requires": t["requires"]} if "requires" in t else {})})      # `requires`: scripts/lib/pkg_slots.py gate_page
             flat += [{**b, "tab": tid} for b in t.get("blocks", []) if isinstance(b, dict)]
         page["tabs"], page["blocks"] = out_tabs, flat
 
@@ -340,6 +348,7 @@ def ext_declarations(log=None):
                     c_new.append(ent)
             if "page" in web:
                 p_new = _ext_page(name, web["page"], list(r_new))
+                p_new = _slots_module().gate_page(p_new, set(caps) | applied_recipes())      # a page, tab or state card whose `requires` is off shows nothing
             heads = {w[:3] for w in rows}
             if c_new and not (("ext", name, "plan") in heads and ("ext", name, "start") in heads):
                 raise ValueError("changes need the plan and start rows of the package")
@@ -362,6 +371,25 @@ def ext_load_web():
         if c_new:
             changes["ext/" + name] = c_new
     return reads, changes, pages
+
+
+def ext_slots(log=None):
+    """-> [{name, title, actions}] of the packages that are on and declare [[web.actions]] that are not switched off by their `requires`
+    (the session answer carries them as features.slots: the page header and the Apps > Installed row draw them). A package with a wrong slot adds none.
+    Health checks are not sent to the browser: scripts/health-check.sh runs them (scripts/lib/pkg_slots.py problems)."""
+    slots, on, out = _slots_module(), set(capabilities()) | applied_recipes(), []
+    for name, d in ext_packages():
+        try:
+            s = slots.declared(name, ext_manifest(d), on)
+        except (OSError, KeyError, TypeError, ValueError) as e:
+            if log:
+                log("extension %s: slots ignored (%s)" % (name, e))
+            continue
+        except Exception:
+            continue      # a manifest that is not TOML: ext_declarations says so
+        if s and s["actions"]:
+            out.append({"name": name, "title": s["title"], "actions": s["actions"]})
+    return out
 
 
 def ext_snapshots(on=None):

@@ -10191,7 +10191,7 @@
   "/pkg/show/{name}": {
    "get": {
     "operationId": "pkg.show.by_name",
-    "summary": "what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step); refused: status and reason, exit 1",
+    "summary": "what a package is and would ask, read from its newest verified release without installing anything, as data: key TAB value lines (status, name, kind, repo, version, tag, commit, ..., screenshot, route, ask, step, slot_off: a slot of the package whose `requires` is off here: slot, required name); refused: status and reason, exit 1",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {
@@ -10668,6 +10668,24 @@
              {
               "$ref": "#/components/schemas/Field",
               "title": "text"
+             }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "slot_off"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
              }
             ],
             "minItems": 3,

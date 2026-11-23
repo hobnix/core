@@ -102,6 +102,20 @@ Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"ap
 
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 
+### Slots of a package
+
+A package fills places in the interface with data. The slots are `page`, `tab`, `action`, `health` and `state`; anything else under `[web]` is refused
+by `hs pkg validate` and at install, with the list of known slots. Any slot may say `requires = "<capability or extension>"`: while that part is off
+the slot shows nothing, and the install dialog says "adds a card once X is on". Not tested on hardware yet.
+
+| Slot | Example in `capability.toml` |
+| --- | --- |
+| page | `[web.page]` with `title = "Sync"` and `group = "apps"` |
+| tab | `[[web.page.tabs]]` with `title = "Settings"` and its own blocks; `requires` hides it while the part is off |
+| action | `[[web.actions]]` with `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<package>", "sync"]`, `role = "app-manager"`, `main = true`: a button in the page header and on the Apps > Installed row (one main action, the others under More); the plan may only change the package's own area |
+| health | `[[health]]` with `id = "stale"` and `read = "checks"`: the read (kind `tsv`, no arguments) prints `level<TAB>message` rows with level `ok`, `warn` or `bad`; a `warn` or `bad` row shows in System > Health with the package named, and can be acknowledged like any problem |
+| state | `[web.page.state]` with `read`, `dot` and `line`: one dot and one line on the card |
+
 ## Check that it worked
 
 - `hs ext list` shows the extension as on, with its permissions.
