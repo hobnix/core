@@ -9926,6 +9926,82 @@
     }
    }
   },
+  "/pkg/integrations": {
+   "get": {
+    "operationId": "pkg.integrations",
+    "summary": "what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none); - = empty",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "integrations"
+     ],
+     "script": "pkg.sh",
+     "args": "--integrations {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. An optional name keeps one integration.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "integration"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "source",
+            "enum": [
+             "recipe",
+             "extension",
+             "capability"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "api_url"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_state",
+            "enum": [
+             "ok",
+             "locked",
+             "missing",
+             "-"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "extra"
+           }
+          ],
+          "minItems": 6,
+          "maxItems": 6
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/list": {
    "get": {
     "operationId": "pkg.list",
@@ -9990,86 +10066,6 @@
        "text/tab-separated-values": {
         "schema": {
          "type": "string"
-        }
-       }
-      }
-     },
-     "default": {
-      "description": "failed; stderr says why, stdout may be empty"
-     }
-    }
-   }
-  },
-  "/pkg/media": {
-   "get": {
-    "operationId": "pkg.media",
-    "summary": "the installed media apps as data: name, kind (movies|series|player|downloader), api_url, key_header, key_file, key_state (ok|locked|missing), title",
-    "x-hs-exit": true,
-    "x-hs-role": "admin",
-    "x-hs-sys": {
-     "words": [
-      "pkg",
-      "media"
-     ],
-     "script": "pkg.sh",
-     "args": "--media",
-     "class": "read",
-     "rest": false
-    },
-    "description": "The installed media apps that declare [integrations.media] (hobnix/core#926). api_url may contain {host}, the address of the instance. key_file is the path of the API key; it is never read here, key_state says whether it can be (locked = the vault is closed).",
-    "responses": {
-     "0": {
-      "description": "ok",
-      "content": {
-       "text/tab-separated-values": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "array",
-          "prefixItems": [
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "name"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "kind",
-            "enum": [
-             "movies",
-             "series",
-             "player",
-             "downloader"
-            ]
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "api_url"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "key_header"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "key_file"
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "key_state",
-            "enum": [
-             "ok",
-             "locked",
-             "missing"
-            ]
-           },
-           {
-            "$ref": "#/components/schemas/Field",
-            "title": "title"
-           }
-          ],
-          "minItems": 7,
-          "maxItems": 7
-         }
         }
        }
       }

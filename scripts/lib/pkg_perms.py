@@ -13,6 +13,7 @@ A permission is "key" or "key:argument". Keys:
   host:<command>               an hs command or system tool it calls (incus, systemctl, ...)
   secrets:<name>               a secret read through scripts/lib/secret.sh
   devices:gpu                  a device
+  integration:<name>           the key of [integrations.<name>] of another package (pkg_integrations.grant; declared check only, not enforced)
 A manifest without `permissions` is "not declared": it still installs (existing packages), and is shown as such.
 Once `permissions` exists it must cover what the manifest uses: [[events]] needs events.emit, [[web.reads]] web.read, [[web.changes]] web.change.
 """
@@ -28,6 +29,7 @@ KEYS = {
     "host": re.compile(r"^[a-z][a-z0-9._-]{0,40}$"),
     "secrets": re.compile(r"^[a-z][a-z0-9_-]{0,40}$"),
     "devices": re.compile(r"^gpu$"),
+    "integration": re.compile(r"^[a-z][a-z0-9-]*$"),
 }
 
 

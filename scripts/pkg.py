@@ -669,9 +669,15 @@ def main(argv):
         else:
             for r in data:
                 print("\t".join([r["name"], r["kind"], r["version"], r["installed"], r["audience"], r["title"]]))
-    elif cmd == "media":     # media <installed names...>: name, kind, api_url, key_file, key_header, title of the installed media apps
-        for r in pkg_integrations.media_rows(manifests(), set(rest)):
+    elif cmd == "integrations":   # integrations [--only <name>] <available package names...>: package, integration, source, api_url, key_file, extras
+        only = rest[rest.index("--only") + 1] if "--only" in rest else None
+        names = [w for i, w in enumerate(rest) if w != "--only" and (i == 0 or rest[i - 1] != "--only")]
+        for r in pkg_integrations.rows(manifests(), set(names), only):
             print("\t".join(r))
+    elif cmd == "integration-key":   # integration-key <integration> <caller> <available names...>: the key file path, or the reason (exit 1)
+        path, why = pkg_integrations.grant(manifests(), set(rest[2:]), rest[0], rest[1])
+        print(path or why)
+        return 0 if path else 1
     elif cmd == "updates":
         seen = set()
         inst_now = installed()

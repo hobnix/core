@@ -120,21 +120,31 @@ Packages run as root, so installing one is trusting its author.
   (open point below).
 - Nothing downloads or enables a package by itself; `enable` stays a person's action as today.
 
-## Integrations: `[integrations.media]` (hobnix/core#926)
+## Integrations: `[integrations.<name>]` (hobnix/core#926)
 
-A media recipe (radarr, sonarr, jellyfin, sabnzbd) says what it exposes, so an extension finds installed apps and their local API without copy and paste:
+A package (recipe, extension or capability) says what it offers to other packages, so they find it and its local API without copy and paste. The core knows
+no integration names: `<name>` is any lowercase id (`[a-z][a-z0-9-]*`), the packages agree on what it means. Example, a recipe that offers `media`:
 
 ```toml
 [integrations.media]
-kind       = "movies"                      # movies | series | player | downloader
 api_url    = "http://{host}:7878"          # the local API; {host} = address of the instance
 key_file   = "/var/lib/hs/radarr/api-key"  # absolute path of the API key on the server
 key_header = "X-Api-Key"                   # optional, default X-Api-Key
+kind       = "movies"                      # any other key is passed through as plain text
 ```
 
-`hs pkg validate` checks it (`scripts/lib/pkg_integrations.py`): only a recipe, known keys, an http(s) URL, an absolute key path without `..`. No API level
-change: the block is optional. `hs pkg media` / `hs sys pkg media` list the installed media apps with `key_state` (ok | locked | missing, from `secret_state`);
-the key is never read or printed there. Open: how an extension gets a scoped credential (see the pull request of #926). Not tested on hardware yet.
+The core validates only the envelope (`api_url`, `key_file`, `key_header`, all optional) in `scripts/lib/pkg_integrations.py`; other keys must be plain text
+(at most 200 characters, no comma, no control character). No API level change: the block is optional.
+
+- **List:** `hs pkg integrations [<name>]` / `hs sys pkg integrations [<name>]`: package, integration, source (recipe|extension|capability), api_url, key
+  state (ok|locked|missing, from `secret_state`, `-` without a key_file), extra keys. A package is listed when it is there: a recipe installed, an extension
+  or capability on. The key is never read or printed by the list.
+- **Key:** an extension that wants the key of an integration declares `permissions = ["integration:<name>"]`. `integration_key <name> <caller>` in
+  `scripts/lib/integration.sh` writes the key on stdout (read through `secret.sh`, never in argv or the environment) only when the caller declares it; a
+  capability needs no permission, a recipe is refused. **Enforcement of permissions is not built (#239):** this is a declared check in the helper, an
+  extension that reads the key file itself is not stopped.
+
+Not tested on hardware yet.
 
 ## The core API (what packages may rely on)
 
