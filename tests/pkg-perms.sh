@@ -39,7 +39,8 @@ bad "but not another package's folder" "overlaps /var/lib/hs" 'permissions = ["f
 bad "web.read takes no argument" "takes no argument" 'permissions = ["web.read:x"]'
 bad "the same permission twice" "twice" 'permissions = ["host:incus", "host:incus"]'
 bad "events.emit must lie below the package's kinds" "events.emit must lie below" 'permissions = ["events.emit:pkg.other.x"]'
-EV='[[events]]\nkind = "done"\nlevel = "info"\nlabel = "Done"\nmeaning = "it ended"'
+EV='[[events]]\nkind = "done"\nlevel = "info"\nlabel = "Done"\nmeaning = "it ended"
+retention = "audit"'
 bad "[[events]] without events.emit is refused" "not events.emit" "permissions = [\"host:incus\"]\n$EV"
 good "[[events]] covered by events.emit" "permissions = [\"events.emit:pkg.permext.*\"]\n$EV"
 bad "an event outside the declared glob is refused" "not covered" "permissions = [\"events.emit:pkg.permext.other\"]\n$EV"
