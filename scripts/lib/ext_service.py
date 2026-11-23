@@ -609,13 +609,45 @@ def _load_lib(mod):
     return m
 
 
+def cred_root():
+    return os.environ.get("HS_CRED_DIR") or "/run/hs-ext-cred"
+
+
 def cred_dir(name):
-    """The private folder (0700, below /run) that holds the copies of the keys of one service for LoadCredential=."""
-    return os.path.join(os.environ.get("HS_CRED_DIR") or "/run/hs-ext-cred", name)
+    """The private folder (0700, one per service, below a 0700 parent in /run) that holds the copies of the keys of one service for LoadCredential=.
+    The copy lives only until the unit has started (systemd reads it before the service runs; `running` removes it), and the transient unit
+    cannot enter /run/hs-ext-cred (InaccessiblePaths, ext_confine.py). The unit gets its own copy in its private $CREDENTIALS_DIRECTORY."""
+    return os.path.join(cred_root(), name)
+
+
+def make_private_dir(d):
+    old = os.umask(0o077)
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+    finally:
+        os.umask(old)
+    os.chmod(d, 0o700)
 
 
 def drop_creds(name):
     shutil.rmtree(cred_dir(name), ignore_errors=True)
+
+
+def sweep_creds(name, active=None):
+    """At the start of a bridge: remove the key copies a crash left (its own, and those of units that are not running)."""
+    active = active or (lambda n: subprocess.run([os.environ.get("HS_SYSTEMCTL", "systemctl"), "is-active", "--quiet", f"hs-ext-svc@{n}.service"],
+                                                  stdin=subprocess.DEVNULL, check=False).returncode == 0)
+    drop_creds(name)
+    try:
+        others = os.listdir(cred_root())
+    except OSError:
+        return
+    for n in others:
+        try:
+            if n != name and not active(n):
+                drop_creds(n)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
 
 def confined_program(name, pkgdir, prog, creds=()):
@@ -640,9 +672,9 @@ def confined_program(name, pkgdir, prog, creds=()):
         key, why = pi.read_key(path, provider, name, root=LIB_DIR)
         if why:
             return None, f"credential {cname}: {why}"
+        make_private_dir(cred_root())
         d = cred_dir(name)
-        os.makedirs(d, mode=0o700, exist_ok=True)
-        os.chmod(d, 0o700)
+        make_private_dir(d)
         copy = os.path.join(d, cname)
         try:
             os.unlink(copy)
@@ -673,10 +705,13 @@ def svc_run(name, pkgdir, state_dir, creds=()):
         d = load_state(state_dir, name)
         d.update({"state": s, "reason": why, "since": now()})
         save_state(state_dir, name, d)
+        if s == "running":
+            drop_creds(name)    # systemd read the credential when it started the unit; no copy stays on disk
 
     subscribe = table.get("subscribe", [])
     if subscribe and not os.path.exists(cursor_path(name)):
         write_cursor(cursor_path(name), db_latest())
+    sweep_creds(name)
     prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
     if bad:     # fail closed: a service whose confinement cannot be set up does not run
         print(f"ext_service.py: {name}: {bad}", file=sys.stderr)

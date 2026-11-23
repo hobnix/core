@@ -231,9 +231,9 @@ def state_dir():
     return os.path.join(os.environ.get("HS_STATE_DIR", "/var/lib/hs"), "packages")
 
 
-def manifests():
-    """[(path, dict)] of every package.toml: recipes under packages/, extensions under capabilities/, then the packages installed from repositories."""
-    r, out = root(), []
+def manifests(identity=False):
+    """[(path, dict)] of every package.toml: recipes under packages/, extensions under capabilities/, then the packages installed from repositories. identity=True (what grants, integrations and perms use) drops a package whose name is not its folder name and a duplicate name."""
+    r, out, seen = root(), [], set()
     for d in (os.path.join(r, "packages"), os.path.join(r, "capabilities"), os.path.join(state_dir(), "current")):
         if not os.path.isdir(d):
             continue
@@ -241,7 +241,14 @@ def manifests():
             p = os.path.join(d, n, "package.toml")
             if os.path.isfile(p):
                 with open(p, "rb") as f:
-                    out.append((p, tomllib.load(f)))
+                    m = tomllib.load(f)
+                # the name is the identity of a package (integrations, permissions, key files are looked up by it): it must be the folder name and
+                # unique, the first one wins (the core's own come first), so a package cannot take over the name of another
+                if identity and (m.get("name") != n or n in seen):
+                    print("pkg.py: %s is ignored: %s" % (p, "its name is not its folder name" if m.get("name") != n else "another package has the name %s" % n), file=sys.stderr)
+                    continue
+                seen.add(n)
+                out.append((p, m))
     return out
 
 
@@ -700,17 +707,17 @@ def main(argv):
         skip = ("--only", "--services", "--unresolved")
         names = [w for i, w in enumerate(rest) if w not in skip and (i == 0 or rest[i - 1] not in skip)]
         miss = []
-        for r in pkg_integrations.rows(manifests(), set(names), only, sdir, miss):
+        for r in pkg_integrations.rows(manifests(True), set(names), only, sdir, miss):
             print("\t".join(r))
         if ufile and miss:
             with open(ufile, "w") as fh:
                 fh.write("\n".join(miss) + "\n")
     elif cmd == "integration-key":   # integration-key <integration> <caller> <available names...>: the key file path, or the reason (exit 1)
-        path, why = pkg_integrations.grant(manifests(), set(rest[2:]), rest[0], rest[1])
+        path, why = pkg_integrations.grant(manifests(True), set(rest[2:]), rest[0], rest[1])
         print(path or why)
         return 0 if path else 1
     elif cmd == "integration-grant":   # integration-grant <integration> <caller> <available names...>: key file TAB providing package, or the reason (exit 1)
-        path, prov, why = pkg_integrations.grant_full(manifests(), set(rest[2:]), rest[0], rest[1])
+        path, prov, why = pkg_integrations.grant_full(manifests(True), set(rest[2:]), rest[0], rest[1])
         print(path + "\t" + prov if path else why)
         return 0 if path else 1
     elif cmd == "updates":
@@ -789,7 +796,7 @@ def main(argv):
         spec.loader.exec_module(mod)
         return mod.run(MAIN, rest)
     elif cmd == "perms":
-        found = [m for _, m in manifests() if m.get("name") == (rest[0] if rest else "")]
+        found = [m for _, m in manifests(True) if m.get("name") == (rest[0] if rest else "")]
         if not found:
             print("unknown package", file=sys.stderr)
             return 1

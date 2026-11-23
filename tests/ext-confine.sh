@@ -18,7 +18,7 @@ NoNewPrivileges=yes
 CapabilityBoundingSet=
 PrivateDevices=yes
 TemporaryFileSystem=/var/lib/hs:ro
-InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 BindPaths=-/var/lib/hs/ext-svc"
 check_eq "a package without permissions gets the strict defaults" "$nodecl" "$($EC -)"
 check_eq "declared but empty is the same text" "$nodecl" "$($EC)"
@@ -34,7 +34,7 @@ PrivateDevices=no
 DevicePolicy=closed
 DeviceAllow=char-drm rw
 TemporaryFileSystem=/var/lib/hs:ro
-InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 ReadWritePaths=-/srv/media
 BindPaths=-/var/lib/hs/ext-svc -/var/lib/hs/ext/fixsvc
 ReadOnlyPaths=-/etc/hs -/srv/in
@@ -59,7 +59,7 @@ check_eq "a bad package name is refused" 2 "$rc"
 
 echo "-- secrets are hidden and a grant that overlaps them is refused (#947)"
 check_eq "/var/lib/hs is an empty read-only tmpfs, the bridge state is bound back" "2" "$($EC - | grep -c 'TemporaryFileSystem=/var/lib/hs:ro$\|BindPaths=-/var/lib/hs/ext-svc$')"
-check_eq "root, shadow, ssh and nixos are inaccessible" "1" "$($EC - | grep -c '^InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos$')"
+check_eq "root, shadow, ssh and nixos are inaccessible" "1" "$($EC - | grep -c '^InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred$')"
 for g in /var/lib/hs /var/lib/hs/restic-password /var/lib/hs/api-tokens/x /var/lib /root /root/.ssh /etc/shadow /etc/ssh/ssh_host_ed25519_key /etc/nixos/machine.toml /etc; do
   rc=0; $EC "fs.read:$g" >/dev/null 2>&1 || rc=$?
   check_eq "fs.read:$g is refused" "1" "$rc"
@@ -189,7 +189,7 @@ expect="--pipe
 --property=CapabilityBoundingSet=
 --property=PrivateDevices=yes
 --property=TemporaryFileSystem=/var/lib/hs:ro
---property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos
+--property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
 --property=ReadWritePaths=-/srv/ok
 --property=BindPaths=-/var/lib/hs/ext-svc
 --property=ReadOnlyPaths=-/etc/hs

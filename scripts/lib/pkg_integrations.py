@@ -25,12 +25,21 @@ KNOWN = ("host", "port")
 
 STATE_ROOT = "/var/lib/hs"
 # Folders below /var/lib/hs that the core itself uses (state files, secrets, other packages' state). No package may offer an integration under one
-# of these names, so a manifest cannot point key_file at them. The ONE list: add a name here when the core starts to use a new folder.
-RESERVED = frozenset("""adopting apps backup backup-dump backup-offsite backup-rules bulk-closed capabilities-on dc-ca deck-history detached disk-key disks
-docs-site ext ext-cursors ext-emit ext-snapshots ext-svc generated golden heartbeat iso iso-cache jobs live-measure luks-headers luks-uuids
-metrics node-key nodes notify-channels notify-held notify-rules.d packages pkg-events ports-admin ports-expected posters recovering remote
-remote-mounts remote-offers removals removed reports runs services.d settings share-sizes snapshots-off src state testlab token vault
-vault-binds vault-header vault-uuid wear-cache api-tokens grafana-admin zoraxy-admin restic-password tailscale-authkey vps-key""".split())
+# of these names, so a manifest cannot point key_file at them. The ONE list (tests/ext-service-reach.sh scans the code and fails when the core
+# uses a folder that is neither here nor a documented example): add a name here when the core starts to use a new folder. A prefix covers a family.
+RESERVED = frozenset("""adopting apps capabilities detached disks docs-site expiry ext generated golden iso jobs lock metrics nodes packages posters
+recovering removals removed reports runs settings src state matrix-hook media-ntfy dhcp-ranges""".split())
+RESERVED_PREFIXES = ("apps-", "backup", "remote", "node-key", "node-known", "docker", "recipe", "capabilities-", "disk", "vault", "notify", "luks", "ports",
+                     "dc-ca", "machine", "last-rebuild", "live-measure", "restic", "health", "heartbeat", "migrate", "pkg-", "services", "share-",
+                     "snapshots", "scrub", "selftest", "update-", "vps-", "wear-", "zoraxy", "grafana", "testlab", "ext-", "bulk-", "deck-", "event-",
+                     "first-run", "gateway", "homepage", "incident", "parity-", "pci-", "spindown", "sync-", "cf-", "api-tokens", "tailscale", "unifi-",
+                     "iso-", "src-", "state", "hs-")
+
+
+def is_reserved(name):
+    return name in RESERVED or any(name.startswith(x) for x in RESERVED_PREFIXES)
+
+
 MAX_KEY = 64 << 10
 
 
@@ -38,17 +47,24 @@ def _within(p, d):
     return p == d or p.startswith(d.rstrip("/") + "/")
 
 
+def designated(path, root=STATE_ROOT):
+    """The ONE vault file secret.sh designates for the state file `path` (secret_prepare: <vault>/secrets/<name relative to the state dir>), resolved.
+    A key file may be a link only to exactly this file: no other file of the vault (other packages' keys, the vault's own) can be reached by a link."""
+    vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
+    return os.path.join(vault, "secrets", path[len(root.rstrip("/")) + 1:])
+
+
 def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False):
     """The ONE check of a key file before it is handed out (integration_key, `grant`, the validator, the bridge before it copies the key for
     LoadCredential): None or the reason. The file must lie below <root>/<provider>/ (the folder of the package that offers the integration; the
     provider is the REGISTERED package, never read from the path), without ".." or control characters, the provider must not be a core folder
     (RESERVED) and the caller must not be the provider. resolve=True also looks at the disk: the folder must not be a link out of
-    <root>/<provider>, and the file must be a regular file, not a link: the one exception is a link into the vault (HS_VAULT_DIR, default
-    /var/lib/hs-vault) that ends at a regular file there (how secret.sh keeps secrets); a dangling link is "locked" and left to the caller. A missing
+    <root>/<provider>, and the file must be a regular file, not a link: the one exception is a link to the vault file that secret.sh designates for this very path (`designated`: how it keeps
+    secrets, HS_VAULT_DIR, default /var/lib/hs-vault), never to another file of the vault; a dangling link is "locked" and left to the caller. A missing
     file is no problem here either (the caller says "missing"). The check is for early refusal; the bytes are read by `read_key`."""
     if not isinstance(path, str) or not isinstance(provider, str) or not NAME.match(provider):
         return "the key file or the provider is not valid"
-    if provider in RESERVED:
+    if is_reserved(provider):
         return "%s is a folder the core uses: a package of that name cannot offer a key" % provider
     if caller is not None and caller == provider:
         return "a package does not get its own key through an integration"
@@ -67,12 +83,11 @@ def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False
         except OSError:
             return None
         if stat.S_ISLNK(st.st_mode):
-            vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
             real = os.path.realpath(path)
             if not os.path.exists(real):
                 return None
-            if not _within(real, vault) or not stat.S_ISREG(os.stat(real).st_mode):
-                return "the key file is a link that does not end at a regular file in the vault"
+            if real != designated(path, root) or not stat.S_ISREG(os.stat(real).st_mode):
+                return "the key file is a link, and not to the vault file that secret.sh designates for it"
         elif not stat.S_ISREG(st.st_mode):
             return "the key file is not a regular file"
     return None
@@ -100,8 +115,7 @@ def read_key(path, provider, caller=None, root=STATE_ROOT):
             now = os.readlink("/proc/self/fd/%d" % fd)
         except OSError:
             return None, "cannot verify the opened key file"
-        vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
-        if not (_within(now, os.path.realpath(root.rstrip("/") + "/" + provider)) or _within(now, vault)):
+        if not (_within(now, os.path.realpath(root.rstrip("/") + "/" + provider)) or now == designated(path, root)):
             return None, "the opened key file lies outside the provider's folder"
         return os.read(fd, MAX_KEY + 1)[:MAX_KEY], None
     finally:

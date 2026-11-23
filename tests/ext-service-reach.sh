@@ -127,7 +127,9 @@ print("SWAP=%r" % (pi.read_key(root + "/radarr/swapped", "radarr", "media", root
 pi.key_file_problem = real_check
 # the vault: a link that ends at a regular file in the vault is fine, one that ends at a directory or outside is not
 vault = os.path.join(sys.argv[2], "vault"); os.makedirs(vault); os.environ["HS_VAULT_DIR"] = vault
-open(os.path.join(vault, "k"), "w").write("vk"); os.symlink(os.path.join(vault, "k"), os.path.join(root, "radarr", "vk"))
+dz = pi.designated(root + "/radarr/vk", root); os.makedirs(os.path.dirname(dz)); open(dz, "w").write("vk"); os.symlink(dz, os.path.join(root, "radarr", "vk"))
+open(os.path.join(vault, "k"), "w").write("other"); os.symlink(os.path.join(vault, "k"), os.path.join(root, "radarr", "vother"))
+print("VAULTOTHER=%r" % (pi.read_key(root + "/radarr/vother", "radarr", "media", root=root)[1] is not None))
 os.symlink(vault, os.path.join(root, "radarr", "vdir"))
 print("VAULTOK=%r" % (pi.read_key(root + "/radarr/vk", "radarr", "media", root=root),))
 print("VAULTDIR=%r" % (pi.read_key(root + "/radarr/vdir", "radarr", "media", root=root)[1] is not None))
@@ -135,8 +137,8 @@ print("DIRKEY=%r" % (pi.read_key(root + "/radarr", "radarr", "media", root=root)
 print("GRANTFULL=%r" % (pi.grant_full([("", {"name": "radarr", "kind": "recipe", "integrations": {"m": {"key_file": "/var/lib/hs/radarr/key"}}}), ("", {"name": "e", "kind": "capability"})], {"radarr"}, "m", "e"),))
 PY
 check_out "a good key file in the provider's folder passes" "OK=None" cat "$WORK/host.txt"
-for k in SHADOW OTHER DOTS SELF LINKFILE LINKDIR NL BRIDGE BRIDGEPROV RESERVED RESERVED2 LEAK SWAP VAULTDIR DIRKEY; do check_out "key file check refuses: $k" "^$k=True" cat "$WORK/host.txt"; done
-check_out "a link into the vault that ends at a regular file there is read" "VAULTOK=\\(b'vk', None\\)" cat "$WORK/host.txt"
+for k in VAULTOTHER SHADOW OTHER DOTS SELF LINKFILE LINKDIR NL BRIDGE BRIDGEPROV RESERVED RESERVED2 LEAK SWAP VAULTDIR DIRKEY; do check_out "key file check refuses: $k" "^$k=True" cat "$WORK/host.txt"; done
+check_out "a link to exactly the vault file designated for it is read; a link to another vault file is refused (VAULTOTHER above)" "VAULTOK=\\(b'vk', None\\)" cat "$WORK/host.txt"
 check_out "grant_full names the registered providing package" "GRANTFULL=.*radarr" cat "$WORK/host.txt"
 check_out "the validator refuses key_file=/etc/shadow" "VALIDATOR=.*key_file" cat "$WORK/host.txt"
 check_out "grant hands out no key for it (integration_key and LoadCredential are built on grant)" "GRANT=None" cat "$WORK/host.txt"
@@ -188,5 +190,65 @@ echo "-- the transient unit: no orphan, PATH set"
 check_out "it is bound to the bridge unit and has a stop timeout" "property=BindsTo=hs-ext-svc@media.service .*property=TimeoutStopSec=15|property=TimeoutStopSec=15 .*property=BindsTo=hs-ext-svc@media.service" cat "$WORK/unit.txt"
 check_out "it gets an explicit PATH" "setenv=PATH=" cat "$WORK/unit.txt"
 check_eq "the bridge stops the unit before it starts and in a finally" "2" "$(grep -c "^ *stop_unit(name)" "$SCRIPTS/lib/ext_service.py")"
+
+echo "-- other services cannot reach the key copies or the vault (review 3)"
+check_eq "the transient unit hides the vault and the key copies" "2" "$(grep -c 'property=InaccessiblePaths=.*-/var/lib/hs-vault -/run/hs-ext-cred' "$WORK/unit.txt")"
+check_eq "fs.read of the vault or the copies cannot be granted" "1 1" "$($EC fs.read:/var/lib/hs-vault >/dev/null 2>&1; echo -n $?) $($EC fs.read:/run/hs-ext-cred/x >/dev/null 2>&1; echo $?)"
+python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/sweep.txt" 2>&1 || true
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("es", os.path.join(sys.argv[1], "lib", "ext_service.py")); es = importlib.util.module_from_spec(s); s.loader.exec_module(es)
+cr = os.path.join(sys.argv[2], "credroot"); os.environ["HS_CRED_DIR"] = cr
+for n in ("mine", "running", "crashed"):
+    os.makedirs(os.path.join(cr, n)); open(os.path.join(cr, n, "integration-x"), "w").write("k")
+es.sweep_creds("mine", active=lambda n: n == "running")
+print("LEFT=%s" % ",".join(sorted(os.listdir(cr))))
+es.make_private_dir(cr); es.make_private_dir(os.path.join(cr, "new"))
+print("MODE=%o %o" % (os.stat(cr).st_mode & 0o777, os.stat(os.path.join(cr, "new")).st_mode & 0o777))
+PY
+check_out "a bridge start removes the copies of a crash and of units that are not running" "LEFT=running" cat "$WORK/sweep.txt"
+check_out "the folders are 0700" "MODE=700 700" cat "$WORK/sweep.txt"
+check_eq "a service that reaches running has no copy left (drop_creds in on_state)" "1" "$(grep -c 'if s == "running":' "$SCRIPTS/lib/ext_service.py")"
+
+echo "-- core folder names are reserved, scanned from the code (review 3)"
+python3 -I - "$SCRIPTS" "$ROOT" <<'PY' > "$WORK/resv.txt" 2>&1 || true
+import importlib.util, os, re, sys
+s = importlib.util.spec_from_file_location("pi", os.path.join(sys.argv[1], "lib", "pkg_integrations.py")); pi = importlib.util.module_from_spec(s); s.loader.exec_module(pi)
+for n in ("backup-dc", "backup-instances", "remote-x", "node-key-abc", "docker-registry-x", "recipe-x", "disks", "ext", "vault"):
+    print("R_%s=%r" % (n, pi.is_reserved(n)))
+print("R_radarr=%r" % pi.is_reserved("radarr"))
+# every /var/lib/hs/<dir> or $state/<dir> the core code names must be reserved or a documented example (an app or example folder of a package)
+DOC = {"hs", "radarr", "unifi", "lock", "media", "fixsvc"}
+root = sys.argv[2]; pats = [re.compile(r"/var/lib/hs/([a-z][a-z0-9-]*)"), re.compile(r"\$\{?(?:state|STATE|HS_STATE_DIR(?::-[^}]*)?|state_dir)\}?/([a-z][a-z0-9-]*)")]
+files = [os.path.join(root, "configuration.nix")]
+for dp, dn, fn in os.walk(os.path.join(root, "scripts")):
+    dn[:] = [x for x in dn if x not in ("__pycache__", "dev")]
+    files += [os.path.join(dp, f) for f in fn if f.endswith((".sh", ".py"))]
+miss = set()
+for f in files:
+    t = open(f, encoding="utf-8", errors="ignore").read()
+    for p in pats:
+        for m in p.finditer(t):
+            if not pi.is_reserved(m.group(1)) and m.group(1) not in DOC:
+                miss.add(m.group(1))
+print("UNRESERVED=%s" % ",".join(sorted(miss)))
+PY
+for n in backup-dc backup-instances remote-x node-key-abc docker-registry-x recipe-x disks ext vault; do check_out "$n is reserved" "R_$n=True" cat "$WORK/resv.txt"; done
+check_out "radarr (an app) is not reserved" "R_radarr=False" cat "$WORK/resv.txt"
+check_out "the code uses no /var/lib/hs folder that is neither reserved nor a documented example (add it to RESERVED in pkg_integrations.py)" "UNRESERVED=$" cat "$WORK/resv.txt"
+
+echo "-- a manifest whose name is not its folder, or a duplicate name, is ignored (review 3)"
+PR=$WORK/pkgroot; mkdir -p "$PR/packages/aaa" "$PR/capabilities/bbb" "$PR/capabilities/aaa"
+printf 'name = "aaa"\nkind = "recipe"\n' > "$PR/packages/aaa/package.toml"
+printf 'name = "aaa"\nkind = "extension"\n' > "$PR/capabilities/aaa/package.toml"
+printf 'name = "radarr"\nkind = "extension"\n' > "$PR/capabilities/bbb/package.toml"
+out=$(HS_PACKAGES_ROOT=$PR HS_STATE_DIR=$WORK/nostate python3 -I - "$SCRIPTS" 2>"$WORK/mf.err" <<'PY'
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("pkgmod", os.path.join(sys.argv[1], "pkg.py")); m = importlib.util.module_from_spec(s); sys.modules["pkgmod"] = m; s.loader.exec_module(m)
+print(",".join("%s:%s" % (os.path.basename(os.path.dirname(p)), d["kind"]) for p, d in m.manifests(True)))
+PY
+) || true
+check_eq "the first package of a name wins, a name that is not the folder is dropped" "aaa:recipe" "$out"
+check_out "and both are said on stderr" "name is not its folder name" cat "$WORK/mf.err"
+check_out "the duplicate too" "another package has the name aaa" cat "$WORK/mf.err"
 
 finish
