@@ -63,6 +63,7 @@ export const tree = [
         { label: 'Users and access', icon: 'users-three', path: P.settingsAccess },
         // one child per capability that is on and has a settings page of its own is added at render time (nodeItems capItems)
         { label: 'Capabilities', icon: 'puzzle-piece', path: P.capabilities, prefix: true },
+        { label: 'Extensions', icon: 'plug', path: P.settingsExtensions },
         { label: 'Advanced', icon: 'wrench', path: P.settingsAdvanced },
       ] },
       // Developer is not a group of the design: it shows at the bottom only while its capability is on (the test-lab capability is the developer one)
