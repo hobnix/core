@@ -160,6 +160,30 @@ The command does not know the action it was given.
 - Text: The command does not know this action.
 - Fix: none
 
+### integration.denied
+
+The caller may not have the key of an integration.
+
+- Layer: script
+- Text: This package may not ask for that key.
+- Fix: none
+
+### integration.unknown
+
+The named provider is not there or does not offer the integration.
+
+- Layer: script
+- Text: No such provider for this integration.
+- Fix: `hs pkg integrations`
+
+### integration.nokey
+
+The provider has no key file to give.
+
+- Layer: script
+- Text: This provider has no key.
+- Fix: `hs pkg integrations`
+
 <!-- END generated -->
 
 Not tested on hardware yet.

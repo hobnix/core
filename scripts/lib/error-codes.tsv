@@ -19,3 +19,6 @@ confirm.missing	script	The typed name that confirms a destructive step is missin
 disk.unknown	script	No disk of that name exists	No such disk was found.	hs sys pool disks
 install.failed	script	An install job stopped at a step	The install stopped.	-
 action.unknown	script	The command does not know the action it was given	The command does not know this action.	-
+integration.denied	script	The caller may not have the key of an integration	This package may not ask for that key.	-
+integration.unknown	script	The named provider is not there or does not offer the integration	No such provider for this integration.	hs pkg integrations
+integration.nokey	script	The provider has no key file to give	This provider has no key.	hs pkg integrations

@@ -139,10 +139,13 @@ The core validates only the envelope (`api_url`, `key_file`, `key_header`, all o
 (at most 200 characters, no comma, no control character). No API level change: the block is optional.
 
 - **List:** `hs pkg integrations [<name>]` / `hs sys pkg integrations [<name>]`: package, integration, source (recipe|extension|capability), api_url, key
-  state (ok|locked|missing, from `secret_state`, `-` without a key_file), extra keys. A package is listed when it is there: a recipe installed, an extension
+  state (ok|locked|missing, from `secret_state`, `-` without a key_file), extra keys, key_header (last column, `-` = not set: the consumer then sends
+  `X-Api-Key`). A package is listed when it is there: a recipe installed, an extension
   or capability on. The key is never read or printed by the list.
-- **Key:** an extension that wants the key of an integration declares `permissions = ["integration:<name>"]`. `integration_key <name> <caller>` in
-  `scripts/lib/integration.sh` writes the key on stdout (read through `secret.sh`, never in argv or the environment) only when the caller declares it; a
+- **Key:** an extension that wants the key of an integration declares `permissions = ["integration:<name>"]`. `integration_key <name> <provider> <caller>` in
+  `scripts/lib/integration.sh` writes the key of that provider on stdout (one integration can have several providers, e.g. jellyfin and radarr under
+  `media`; an unknown provider or one without a `key_file` is refused with `integration.unknown` / `integration.nokey`, a caller without the permission
+  with `integration.denied`; the old form `integration_key <name> <caller>`, first provider with a key, works for one release) (read through `secret.sh`, never in argv or the environment) only when the caller declares it; a
   capability needs no permission, a recipe is refused. **Enforcement of permissions is not built (#239):** this is a declared check in the helper, an
   extension that reads the key file itself is not stopped.
 - **Removal (#1118):** removing an app deletes the `key_file` its manifest declares (only under `/var/lib/hs/`, never with `..`; found from the installed

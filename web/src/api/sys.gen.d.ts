@@ -2060,7 +2060,7 @@ export interface SysOperations {
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
   "pkg.integrations": {
-    /** what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none); - = empty */
+    /** what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty */
     words: ["pkg", "integrations"];
     path: "/pkg/integrations";
     method: "get";
@@ -2069,7 +2069,7 @@ export interface SysOperations {
     params: { };
     stdin: "none";
     exit: number;
-    lines: ([package: Field, integration: Field, source: "recipe" | "extension" | "capability", api_url: Field, key_state: "ok" | "locked" | "missing" | "-", extra: Field])[];
+    lines: ([package: Field, integration: Field, source: "recipe" | "extension" | "capability", api_url: Field, key_state: "ok" | "locked" | "missing" | "-", extra: Field, key_header: Field])[];
   };
   "pkg.list": {
     /** every package as data: name, kind, version, applied version (- = never), audience, title */
