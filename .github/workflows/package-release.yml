@@ -1,4 +1,4 @@
-# Release of a package repository from GitHub (hobnix/server#522; hobnix/recipes, hobnix/extensions and hobnix/capabilities each carry a short
+# Release of a package repository from GitHub (hobnix/core#522; hobnix/recipes, hobnix/extensions and hobnix/capabilities each carry a short
 # caller with `workflow_dispatch`). Reusable: the same steps as `bash scripts/dev/release.sh`, which this workflow calls, so the local way and
 # CI cannot drift. UNVERIFIED: this workflow has never run (see docs/RELEASE-PROCESS.md, "Package repositories").
 #

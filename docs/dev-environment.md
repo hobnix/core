@@ -135,7 +135,7 @@ Pick the data with `?fixture=<name>` on any page (the choice is kept in a cookie
 
 ## Branches and releases
 
-The same model in hobnix/server, hobnix/recipes and hobnix/extensions.
+The same model in hobnix/core, hobnix/recipes and hobnix/extensions.
 
 | Branch | Holds | Who writes to it |
 |---|---|---|
