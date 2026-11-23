@@ -1,26 +1,20 @@
 <script>
-  import Chip from '../ui/Chip.svelte';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
   import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
   import { route, go } from '../route.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
+  import Chip from '../ui/Chip.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
   import { ctOf, link } from './instances/ct.js';
-  import PeerMount from '../forms/ops/PeerMount.svelte';
-  import PeerAttach from '../forms/ops/PeerAttach.svelte';
-  import PeerOffer from '../forms/ops/PeerOffer.svelte';
-  import PeerOffered from '../forms/ops/PeerOffered.svelte';
   import RouterSetup from '../forms/ops/RouterSetup.svelte';
   import Table from '../shell/Table.svelte';
 
   let { deck } = $props();
-  let offered = $state(null);   // the answer of "Give access": holds the new password once; dropped when the dialog is closed
   const list = poll('/api/sys/ct/list', 15000);
-  const remote = poll('/api/sys/remote/list', 30000);
   const config = poll('/api/sys/system/config', 60000);
   // the router (UniFi) is optional: without a key on the server these reads fail and the page says so
   const nets = poll('/api/sys/unifi/networks', 60000);
@@ -31,8 +25,8 @@
   const d = $derived(deck?.data);
   const cts = $derived(rows(list).map(ctOf));
 
-  // tabs: Overview, DNS, Ports, Router, Remote shares (the address keeps the tab: ?tab=dns)
-  const tabs = [{ id: 'overview', label: 'Overview' }, { id: 'dns', label: 'DNS' }, { id: 'ports', label: 'Ports' }, { id: 'router', label: 'Router' }, { id: 'remote', label: 'Remote shares' }];
+  // tabs: Overview, DNS, Ports, Router (the address keeps the tab: ?tab=dns)
+  const tabs = [{ id: 'overview', label: 'Overview' }, { id: 'dns', label: 'DNS' }, { id: 'ports', label: 'Ports' }, { id: 'router', label: 'Router' }];
   const tab = $derived(tabs.some((t) => t.id === route.query.tab) ? route.query.tab : 'overview');
   const pick = (id) => go(id === 'overview' ? '/network' : `/network?tab=${id}`);
 
@@ -96,18 +90,12 @@
   const VLAN = /(\w[\w-]*)\s*=\s*(\d+)/;
   const vlan = $derived.by(() => { const m = VLAN.exec(cfg.vlans ?? ''); return m ? { name: m[1], id: m[2] } : null; });
 
-  // kind, peer, share, host or login, state
-  const rem = $derived(rows(remote).map((r) => ({ kind: r[0], peer: r[1], share: r[2], state: r[4] })));
-  const remDot = (s) => (s === 'mounted' || s === 'given' || s === 'attached' ? 'ok' : 'warn');
-  const kindWord = (k) => (k === 'mount' ? 'attach' : k);
-
   // addresses of the router's clients that the map above cannot show (other ranges, other networks)
   const elsewhere = $derived(Object.keys(byIp).filter((ip) => !(ip.startsWith(prefix + '.') && Number(ip.split('.')[3]) >= 10 && Number(ip.split('.')[3]) < 50)).length);
 
   const chain = [['Internet', ''], ['Cloudflare Tunnel', ''], ['cloudflared', ''], ['Zoraxy', 'accent'], ['instance', '']];
 
   const columns = [{ key: 'host', label: 'Name' }, { key: 'where', label: 'Goes to', value: (r) => `${r.where}:${r.port}` }];
-  const remoteCols = [{ key: 'kind', label: 'Kind', value: (r) => kindWord(r.kind) }, { key: 'peer', label: 'Peer' }, { key: 'share', label: 'Share' }, { key: 'state', label: 'State' }, { key: 'actions', label: '', sort: false, align: 'right' }];
   const netCols = [{ key: 'name', label: 'Network' }, { key: 'subnet', label: 'Subnet' }, { key: 'dhcp', label: 'DHCP', value: (n) => (n.dhcp && n.from !== '-' ? `${n.from} – ${n.to}` : 'off') }];
   const portCols = [{ key: 'where', label: 'Where' }, { key: 'port', label: 'Port', value: (l) => Number(l.port) , sort: 'num' }, { key: 'proc', label: 'Process' }, { key: 'status', label: 'Status' }];
   const dnsCols = [{ key: 'name', label: 'Name' }, { key: 'type', label: 'Type' }, { key: 'value', label: 'Value' }];
@@ -221,30 +209,7 @@
     {#if routerOk}<div class="note">{Object.keys(byIp).length} address(es) reserved or online. Fixed addresses for instances are shown on the Overview tab; the instances are on the Instances page.</div>{/if}
   </div>
 
-{:else}
-  <div class="card" style="padding:12px 14px;gap:8px">
-    <div class="ch"><b>Remote shares</b><span class="sub">between homeservers: a peer connection, not a share of this server</span>
-      <Button need="admin" variant="ghost" size="sm" style="margin-left:auto" tooltip={'Mount a share of another homeserver, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Mount a share…</Button>
-      <Button need="admin" variant="ghost" size="sm" tooltip={'Let another homeserver read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access…</Button></div>
-    <Table id="remote-shares" columns={remoteCols} rows={rem} compact loading={!remote.loaded} empty={remote.error ? 'Remote shares could not be read.' : 'No shares with other servers.'}>
-      {#snippet cell(r, col)}
-        {#if col.key === 'kind'}<Chip>{kindWord(r.kind)}</Chip>
-        {:else if col.key === 'peer'}{r.peer}
-        {:else if col.key === 'share'}<span class="kd">{r.share}</span>
-        {:else if col.key === 'state'}<StatusDot state={remDot(r.state)} label={r.state} />
-        {:else}<span style="white-space:nowrap">{#if r.kind === 'mount'}
-                <Button need="admin" variant="ghost" size="sm" tooltip={`Give an instance the shares of ${r.peer}, or take them away`} onclick={() => openCreate(PeerAttach, { peer: r.peer, instances: cts.map((c) => c.name) })}>Instance…</Button>
-                <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['remove', r.peer, r.share])} tooltip={`Stop using ${r.share} of ${r.peer}`} onclick={() => openPlan('peers', ['remove', r.peer, r.share], 'Stop using ' + r.peer + ' / ' + r.share)}>Remove…</Button>
-              {:else}
-                <Button need="admin" variant="ghost" size="sm" tooltip={`Make a new password for ${r.peer}`} onclick={() => openCreate(PeerOffer, { peer: r.peer, share: r.share, newpw: true, ondone: (o) => (offered = o) })}>New password…</Button>
-                <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['revoke', r.peer, r.share])} tooltip={`Take the access to ${r.share} away from ${r.peer}`} onclick={() => openPlan('peers', ['revoke', r.peer, r.share], 'Take back the access of ' + r.peer)}>Revoke…</Button>
-              {/if}</span>{/if}
-      {/snippet}
-    </Table>
-  </div>
 {/if}
-
-{#if offered}<PeerOffered offer={offered} onclose={() => (offered = null)} />{/if}
 
 <style>
   .sub { font-size: 12px; color: var(--fg-3); }

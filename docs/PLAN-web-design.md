@@ -100,7 +100,7 @@ Per node. Summary and eight groups instead of Summary and twelve entries, and th
 | Storage | Pools, Disks, Shares, Files, Encryption, Vault | Storage minus Incident |
 | Instances | Instances, ISO images | Instances group, Docker list for instances |
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
-| Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
+| Network | Network (tabs: Overview, DNS, Ports, Router), Services | Network, Services |
 | People | Users, Groups, Certificates | Identity |
 | System | Health, Jobs, Events, Notifications, Hardware, Updates, Certificates, Diagnostics, Live state, Test-lab | Monitoring, Operations, Certificates, Updates, and the new Jobs page (#385). Named Health in the first draft; renamed System in 0.11 (docs/PLAN-navigation.md D2 c) |
 | Backup | Backup, Expiry dates | Protection |

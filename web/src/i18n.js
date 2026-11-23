@@ -13,7 +13,7 @@ const de = {
   Certificates: 'Zertifikate', Monitoring: 'Überwachung', Hardware: 'Hardware', Diagnostics: 'Diagnose', Protection: 'Schutz', Backup: 'Datensicherung',
   'Expiry dates': 'Ablaufdaten', Operations: 'Betrieb', Health: 'Zustand', Notifications: 'Benachrichtigungen', Docs: 'Anleitungen', Settings: 'Einstellungen',
   Setup: 'Einrichtung', Summary: 'Übersicht', Servers: 'Server', Data: 'Daten', Snapshots: 'Wiederherstellungspunkte', Logs: 'Protokolle', Route: 'Route',
-  Overview: 'Überblick', Info: 'Info', Members: 'Mitglieder', Router: 'Router', 'Remote shares': 'Freigaben anderer Server', Permissions: 'Berechtigungen',
+  Overview: 'Überblick', Info: 'Info', Members: 'Mitglieder', Router: 'Router', Local: 'Lokal', 'Remote shares': 'Freigaben anderer Server', Permissions: 'Berechtigungen',
   Name: 'Name', Type: 'Typ', State: 'Status', Address: 'Adresse', Kind: 'Art', Size: 'Größe', Usage: 'Belegung', Layout: 'Aufbau', Level: 'Stufe', Share: 'Freigabe',
   Through: 'Über', Volume: 'Volumen', Item: 'Eintrag', 'Used by': 'Verwendet von', Server: 'Server', Host: 'Rechner', Problems: 'Probleme', Parts: 'Teile',
   'Last snapshot': 'Letzter Wiederherstellungspunkt', 'Last sync': 'Letzte Synchronisierung', 'Last answer': 'Letzte Antwort', Read: 'Abfrage', Every: 'Alle', Kept: 'Gehalten', Takes: 'Dauer',
