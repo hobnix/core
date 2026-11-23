@@ -82,7 +82,7 @@ grep -q "password=$pw" "$B/state/remote-alpha.cred" && pass "the password is in 
 echo "-- one use, wrong code, rate limit"
 out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin 2>&1) && fail "a used code worked again" || pass "a used code is refused"
 echo "$out" | grep -q "does not know that code" && pass "one answer: unknown" || fail "text: $out"
-out=$(srv "$A" alpha offer media --code --plain --yes) && code2=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code2=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 for i in 1 2 3 4 5; do printf 'AAAA-BBBB-CCCC-DDDD@%s\n' "$addr" | srv "$B" beta add --code --stdin >/dev/null 2>&1; done
 out=$(printf '%s\n' "$code2@$addr" | srv "$B" beta add --code --stdin 2>&1) && fail "rate limit did not hold" || pass "6th try from one source is refused"
 echo "$out" | grep -q "Too many" && pass "the refusal is code.rate" || fail "rate text: $out"
@@ -106,6 +106,32 @@ out=$(printf '%s\n' "$rcode@beta.local:8480" | srv "$A" alpha send docs --peer g
 grep -q "^alpha${T}alpha.local${T}docs${T}remote-gamma" "$B/state/remote-mounts" && pass "B mounts docs of alpha" || fail "B mounts: $(cat "$B/state/remote-mounts")"
 out=$(printf '%s\n' "$rcode@beta.local:8480" | srv "$A" alpha send docs --peer gamma --code --stdin --yes 2>&1) && fail "a used receive code worked" || pass "a used receive code is refused"
 
+echo "-- an existing server's login cannot be taken over with a free code and its public host key"
+export FAKE_SRC=10.0.0.55
+cp "$B/hostkey.pub" "$WORK/c/hostkey.pub"   # the host key is public (ssh-keyscan): a server that shows beta's key and calls itself beta
+pwbefore=$(cat "$A/last-pw")
+out=$(srv "$A" alpha offer secret --code --plain --yes) && code4=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code4@$addr" | srv "$WORK/c" beta add --code --stdin 2>&1) && fail "a free code took over remote-beta" || pass "a free code refuses a taken name, even with the right host key"
+check_eq "the password of remote-beta was not reset" "$pwbefore" "$(cat "$A/last-pw")"
+if grep -q "^beta${T}secret${T}" "$A/state/remote-offers"; then fail "beta got read access to the other share"; else pass "no access to the other share"; fi
+echo "-- Reconnect: a code bound to the name works for the same host key only"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code5=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code5@$addr" | srv "$WORK/c" beta add --code --stdin 2>&1) && pass "a bound code is claimed by the stored key" || fail "reconnect: $out"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code6=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ x\n' > "$WORK/c/hostkey.pub"
+out=$(printf '%s\n' "$code6@$addr" | srv "$WORK/c" beta add --code --stdin 2>&1) && fail "a bound code was given to another key" || pass "a bound code refuses another host key"
+echo "-- send never resets an existing login (mistyped name)"
+out=$(srv "$B" beta receive --plain --yes) && rcode2=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+pwbefore=$(cat "$A/last-pw")
+out=$(printf '%s\n' "$rcode2@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send reset the login of beta" || pass "send refuses a name that exists"
+check_eq "the password of beta was not reset by send" "$pwbefore" "$(cat "$A/last-pw")"
+echo "-- B: the credentials file of a name is not overwritten by another server"
+credbefore=$(cat "$B/state/remote-alpha.cred")
+out=$(printf 'evilpw\n' | srv "$B" beta accept-mount alpha evil.local docs2 remote-x HOME - 2>&1); rc=$?
+check_eq "accept-mount without the stored key is refused (exit 1)" 1 "$rc"
+out=$(printf 'evilpw\n' | srv "$B" beta accept-mount alpha evil.local docs2 remote-x HOME SHA256:otherkey 2>&1); rc=$?
+check_eq "accept-mount with another key is refused (exit 1)" 1 "$rc"
+check_eq "the credentials file is unchanged" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
 echo "-- no secret in argv of the programs (the code goes on stdin)"
 grep -n 'pair request\|pair open\|pair push\|pair check' "$SCRIPTS/remote.sh" | grep -v '|' | grep -q . && fail "a pair call without stdin pipe" || pass "every pair call reads the code from a pipe"
 

@@ -425,7 +425,14 @@ impl<'a> Store<'a> {
             if mine >= RATE_FAILS {
                 return Taken::RateLimited;
             }
-            if let Some(i) = st.codes.iter().position(|c| c.id == id && c.kind == kind) {
+            // every code is compared, in constant time: the time says nothing about which id is close
+            let mut hit = None;
+            for (i, c) in st.codes.iter().enumerate() {
+                if ct_eq(c.id.as_bytes(), id.as_bytes()) && c.kind == kind {
+                    hit = Some(i);
+                }
+            }
+            if let Some(i) = hit {
                 return Taken::Found(st.codes.remove(i));
             }
             st.fails.push(Fail {
@@ -579,6 +586,15 @@ fn take_or_refuse(
         }
         Err(_) => Err(refuse(Refusal::Unavailable)),
     }
+}
+
+/// Equal without stopping at the first difference.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut d = (a.len() ^ b.len()) as u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        d |= x ^ y;
+    }
+    d == 0
 }
 
 fn is_id(s: &str) -> bool {
@@ -1143,6 +1159,13 @@ mod tests {
             accept(&st, &host, body.as_bytes(), "10.0.0.7").error,
             Some(Refusal::Unknown)
         );
+    }
+
+    #[test]
+    fn constant_time_compare() {
+        assert!(ct_eq(b"abc", b"abc"));
+        assert!(!ct_eq(b"abc", b"abd"));
+        assert!(!ct_eq(b"abc", b"abcd"));
     }
 
     #[test]

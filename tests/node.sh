@@ -175,5 +175,9 @@ P 0
 check_eq "pair: runs the claim row with the node as source, request on stdin" "0:args: sys remote claim --source node"$'\n''{"v":1}' "$rc:$out"
 P 1
 check_eq "pair: a refusal keeps exit 1" "1" "$rc"
+printf '#!/usr/bin/env bash\necho "sudo: a terminal is required" >&2\nexit 1\n' > "$WORK/fake-hs-sudo"
+chmod +x "$WORK/fake-hs-sudo"
+rc=0; out=$(printf '{"v":1}' | SSH_ORIGINAL_COMMAND=pair HS_BIN=$WORK/fake-hs-sudo timeout 20 bash "$SCRIPTS/node-remote.sh" 2>/dev/null) || rc=$?
+check_eq "pair: hs without passwordless sudo is 'not reachable' (exit 3), not a refusal" "3:" "$rc:$out"
 
 finish

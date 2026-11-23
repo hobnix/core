@@ -3113,8 +3113,10 @@ def make_handler(app):
                 return False
             if a.version == 6 and a.ipv4_mapped:
                 a = a.ipv4_mapped
-            nets = ("100.64.0.0/10", "fd7a:115c:a1e0::/48")
-            return a.is_loopback or a.is_private or a.is_link_local or any(a in ipaddress.ip_network(n) for n in nets)
+            # an explicit list: Python's is_private also takes Teredo, 64:ff9b:1::/48 and other ranges that are no home network
+            nets = ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fe80::/10", "fc00::/7",
+                    "100.64.0.0/10", "fd7a:115c:a1e0::/48")
+            return any(a in ipaddress.ip_network(n) for n in nets)
 
         def _pair_door(self, path, raw):
             """POST /api/remote/claim and /api/remote/push: no session (the code is the credential), a source check, one refusal shape

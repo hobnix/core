@@ -87,6 +87,7 @@ impl Host for SystemHost {
     }
 
     fn mount(&self, inner: &Inner) -> std::result::Result<(), Refusal> {
+        let fp = crate::pair::fingerprint(&inner.hostkey).unwrap_or_else(|| "-".to_string());
         let args = [
             "accept-mount",
             &inner.server,
@@ -94,6 +95,7 @@ impl Host for SystemHost {
             &inner.share,
             &inner.login,
             &inner.domain,
+            &fp,
         ];
         // the password goes on stdin, never into the arguments
         match self.run(&args, Some(&format!("{}\n", inner.password.expose()))) {

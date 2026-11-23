@@ -17,7 +17,7 @@
 # --status <name> (hs sys node status): the status document of the node, ONE JSON object on stdout (exit 1 and a message on stderr when the node
 #   does not answer, the key is missing or the vault is closed). Only the word `status` is ever sent.
 # --pair <name>: the one other word, `pair` (remote shares by code, docs/PLAN-remote-shares.md): the claim request on standard input goes to the node, its answer
-#   (the box, or the refusal) comes back on stdout, the exit code is the node's (0 answered, 1 refused, 2 and more: no answer). No code is in it, only the derived id.
+#   (the box, or the refusal) comes back on stdout, the exit code is the node's (0 answered, 1 refused, 3 the node cannot reach its pairing service, 2 and more: no answer). No code is in it, only the derived id.
 # Test knobs: HS_STATE_DIR, HS_MACHINE_FILE, HS_SETTINGS_DIR, HS_SSH (stand-in for ssh), HS_NOW, HS_VAULT_DIR.
 set -euo pipefail
 here=$(dirname "$0")
@@ -245,7 +245,7 @@ cmd_status_json() {   # the raw document, for the interface
   printf '%s\n' "$out"
 }
 
-cmd_pair() {   # the claim request on stdin, the answer of the node on stdout; exit 0 answered, 1 refused, 2 no answer
+cmd_pair() {   # the claim request on stdin, the answer of the node on stdout; exit 0 answered, 1 refused, 3 node cannot reach its pairing service, 2 no answer
   load_node "$1"
   [ "$n_kind" = peer ] || { echo "Node $1 is not another home server." >&2; exit 2; }
   [ "$(key_state "$n_key")" = ok ] || { echo "There is no usable key for node $1." >&2; exit 2; }
@@ -253,7 +253,7 @@ cmd_pair() {   # the claim request on stdin, the answer of the node on stdout; e
   local out rc=0
   out=$("${cmd[@]}" 2>/dev/null | head -c 65536; exit "${PIPESTATUS[0]}") || rc=$?
   printf '%s\n' "$out"
-  case "$rc" in 0|1) exit "$rc" ;; *) exit 2 ;; esac
+  case "$rc" in 0|1|3) exit "$rc" ;; *) exit 2 ;; esac
 }
 
 cmd_status_people() {

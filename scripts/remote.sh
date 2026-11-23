@@ -141,10 +141,12 @@ read_code() {   # read_code <what>: one line from stdin (--stdin) or asked; the 
 }
 
 setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerprint|->; the password on stdin. 1 = another host key than the stored one
-  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} old=""
-  old=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" -v s="$s" '$1 == p && $3 == s { print ($6 == "" ? "-" : $6); exit }')
-  if [ -n "$old" ] && [ "$old" != "-" ] && [ "$old" != "$fp" ]; then cat >/dev/null; return 1; fi
-  [ "$fp" != "-" ] || fp=${old:--}
+  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} old="" n
+  # The name is taken (Q4) when this server has any mount from it: the credentials file is ONE per name, so the check is per name, not per share.
+  # Only the same server (the same host key, known on both sides) may add a share or reconnect; a legacy row without a key, or no key, is refused.
+  n=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" '$1 == p { c++ } END { print c + 0 }')
+  old=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" '$1 == p && $6 != "" && $6 != "-" { print $6; exit }')
+  if [ "$n" -gt 0 ] && { [ -z "$old" ] || [ "$fp" = "-" ] || [ "$old" != "$fp" ]; }; then cat >/dev/null; return 1; fi
   write_cred "$p" "$l" "$d"
   mkdir -p "$state"; touch "$MOUNTS"
   awk -F'\t' -v p="$p" -v s="$s" '!($1 == p && $3 == s)' "$MOUNTS" > "$MOUNTS.new" || true
@@ -153,16 +155,19 @@ setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerpr
   mount_one "$p" "$h" "$s" "$l" "$d" || true
 }
 
-grant_login() {   # grant_login <peer> <share> <fingerprint|-> <bound|free>: sets g_login g_dsh g_pw. 1 = the name belongs to another server, 3 = not possible now
+grant_login() {   # grant_login <peer> <share> <fingerprint|-> <bound|free|new>: sets g_login g_dsh g_pw. 1 = the name belongs to another server, 3 = not possible now
   local p=$1 s=$2 fp=$3 mode=$4 stored exists=false rowsn
   g_login=$(user_of "$p"); g_dsh=$(domain_short)
   [ -n "$g_dsh" ] || return 3
   has_user "$g_login" && exists=true
   rowsn=$(rows "$OFFERS" | awk -F'\t' -v p="$p" '$1 == p { n++ } END { print n + 0 }')
   stored=$(fp_of_peer "$p")
-  if $exists || [ "$rowsn" -gt 0 ]; then   # the name is taken (Q4): fine for the same server (the same host key) or a code the owner bound to this name
-    if [ -n "$stored" ]; then [ "$fp" = "-" ] || [ "$fp" = "$stored" ] || return 1
-    else [ "$mode" = bound ] || return 1; fi
+  # A name that is taken (Q4) is given again only for a code the owner BOUND to it (a new code for that server, "Reconnect"), and then only to the server
+  # with the stored host key (a legacy offer without a key: the owner's word). A free code (the other server chose the name) and a new name typed by the
+  # owner (`send`) never touch an existing login: its password would be reset and boxed to whoever holds the code.
+  if $exists || [ "$rowsn" -gt 0 ]; then
+    [ "$mode" = bound ] || return 1
+    if [ -n "$stored" ]; then [ "$fp" != "-" ] && [ "$fp" = "$stored" ] || return 1; fi
   fi
   g_pw=$(gen_password)
   if $exists; then printf '%s\n' "$g_pw" | bash "$mu" --password "$g_login" --stdin >/dev/null 2>&1 || return 3
@@ -197,7 +202,8 @@ refusal_text() {   # refusal_text <status> <body>: why a server said no (never m
     *code.rate*) t "Too many wrong codes from here. Wait a minute and try again." ;;
     *code.unavailable*) t "The other server cannot make the access now (is its storage unlocked?)." ;;
     *code.unknown*) t "The other server does not know that code: wrong, already used or expired." ;;
-    *) if [ "$1" = 000 ]; then t "The other server did not answer."; else t "The other server answered with an error (%s)." "$1"; fi ;;
+    *) if [ "$1" = nodelink ]; then t "The node link cannot reach the pairing service of the other server (it needs no password for hs there). Use its address: --server <host>."; else
+       if [ "$1" = 000 ]; then t "The other server did not answer."; else t "The other server answered with an error (%s)." "$1"; fi; fi ;;
   esac
 }
 
@@ -270,7 +276,7 @@ add_code() {   # add --code [--server <name|host>] [--stdin]: type the code anot
   req=$(printf 'code\t%s\nname\t%s\nhostkey\t%s\n' "$c" "$hostn" "$hk" | pair request 2>&1) || fail "${req#hobnix: }"
   if is_node "$srv"; then   # the node link: SSH with the node key, the host key is pinned already
     p_body=$(printf '%s' "$req" | bash "$node_sh" --pair "$srv" 2>/dev/null) || rc=$?
-    case "$rc" in 0) p_status=200 ;; 1) p_status=404 ;; *) p_status=000; p_body="" ;; esac
+    case "$rc" in 0) p_status=200 ;; 1) p_status=404 ;; 3) p_status=nodelink; p_body="" ;; *) p_status=000; p_body="" ;; esac
   else
     split_server "$srv"
     post_json "$s_url_base/api/remote/claim" "$req"
@@ -303,7 +309,7 @@ send_code() {   # send <share> --peer <name> --code [--server <host>] [--stdin]:
   split_server "$srv"
   step "$(t 'Give %s read access to %s' "$peer" "$share")"
   sure "$yes" "Go ahead?"
-  grant_login "$peer" "$share" "-" bound || rc=$?
+  grant_login "$peer" "$share" "-" new || rc=$?
   [ "$rc" -ne 1 ] || fail "$(t "'%s' belongs to another server." "$peer")"
   [ "$rc" -eq 0 ] || fail "The access could not be made (is the storage unlocked and the domain up?)."
   body=$(printf 'code\t%s\nserver\t%s\nhost\t%s\nshare\t%s\nlogin\t%s\ndomain\t%s\npassword\t%s\nhostkey\t%s\n' \
@@ -532,12 +538,12 @@ EOF
     [ "$rc" -eq 0 ] || exit "$rc"
     printf 'server\t%s\nhost\t%s\nlogin\t%s\ndomain\t%s\npassword\t%s\nhostkey\t%s\n' "$(own_name)" "$(own_name).local" "$g_login" "$g_dsh" "$g_pw" "$(own_hostkey || true)" ;;
 
-  accept-mount)   # internal (hobnix remote-accept): accept-mount <server> <host> <share> <login> <domain>, the password on stdin; exit 1 = another host key, 3 = not possible
-    [ $# -eq 5 ] || exit 3
+  accept-mount)   # internal (hobnix remote-accept): accept-mount <server> <host> <share> <login> <domain> <fingerprint|->, the password on stdin; exit 1 = the name is taken, 3 = not possible
+    [ $# -eq 6 ] || exit 3
     v_peer "$1"; v_host "$2"; v_share "$3"; v_login "$4"; [ -z "$5" ] || v_login "$5"
     need_root
     if vault_configured && ! vault_is_open; then exit 3; fi
-    rc=0; setup_mount "$1" "$2" "$3" "$4" "$5" - || rc=$?
+    rc=0; setup_mount "$1" "$2" "$3" "$4" "$5" "$6" || rc=$?
     exit "$rc" ;;
 
   mount-all)   # the timer: mount what is configured and not mounted; never fails the unit because a peer is off
