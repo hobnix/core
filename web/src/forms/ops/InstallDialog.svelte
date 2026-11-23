@@ -231,7 +231,7 @@
           {/each}
           {#if askAgain}<dt>{tr('Ask every preference again')}</dt><dd>{tr('Yes')}</dd>{/if}
         </dl>
-        {#if plan.long}<Banner tone="warn">{tr('This takes a few minutes: the server is rebuilt.')}</Banner>{/if}
+        {#if plan.long}<Banner tone="warn">{tr('This takes a few minutes.')}{#if plan.rebuild} {tr('The server is rebuilt.')}{/if}</Banner>{/if}
         {#if startError}<Banner tone="bad">{startError}</Banner>{/if}
         <div class="nav"><Button onclick={() => { screen = hasForm(plan) ? 'form' : 'plan'; }}><i class="ph ph-arrow-left"></i>{tr('Back')}</Button><Button variant="primary" onclick={begin}>{tr('Start')}</Button></div>
 
