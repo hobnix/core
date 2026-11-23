@@ -87,6 +87,21 @@ sudo hs event emit pkg.<package>.<what> <subject> "<text>" --pkg <package>
 
 Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"app-manager"` or `"admin"`; none means admin. The web interface applies the higher of that role and the role of the core row the entry calls. See [Web interface](web-interface.md#roles-and-sign-in-of-programs).
 
+### Where a package's page sits
+
+`[web.page]` may say where the page goes and what shape it has. Not tested on hardware yet.
+
+| Key | Meaning |
+| --- | --- |
+| `group` | one of `storage`, `instances`, `apps`, `network`, `people`, `system`, `backup`, `settings`; default `apps`. An unknown name drops the whole declaration of the package |
+| `after` | a place in that group; the places of the core keep their order, packages follow alphabetically |
+| `[[web.page.tabs]]` | `title` and its own `[[web.page.tabs.blocks]]`: one place with tabs, never a third level in the tree |
+| `template` | `list`, `object` or `feed`; default `list` when the first block is a table |
+| `state` | `{ read, dot, line }`: one declared read, one dot and one line for the card on the group page and the Apps list |
+| `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled |
+
+A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
+
 ## Check that it worked
 
 - `hs ext list` shows the extension as on, with its permissions.
