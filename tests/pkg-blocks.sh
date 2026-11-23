@@ -21,6 +21,10 @@ bad() {   # bad <what> <word> <capability tables>
 PG='[web.page]\ntitle = "P"\n'
 good "no page is fine" ''
 good "known blocks pass" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"hi\"\n[[web.page.blocks]]\ntype = \"empty\"\ntitle = \"x\"\n[[web.page.blocks]]\ntype = \"kv\"\nitems = []"
+good "log and progress blocks pass" "${PG}[[web.page.blocks]]\ntype = \"log\"\nstream = \"/api/logs/stream/ct?target=web\"\nread = \"/api/sys/ct/logs/web\"\nlines = 100\nfollow = true\n[[web.page.blocks]]\ntype = \"progress\"\njob = \"backup\"\n[[web.page.blocks]]\ntype = \"progress\"\nread = \"/api/sys/x\"\nvalue = 0\nmax = 1\nstate = 3\ntopic = \"x\""
+bad "a log block needs its stream" "needs stream" "${PG}[[web.page.blocks]]\ntype = \"log\"\nread = \"/api/sys/ct/logs/web\""
+bad "log lines must be a number" "lines of block log must be a number" "${PG}[[web.page.blocks]]\ntype = \"log\"\nstream = \"/s\"\nread = \"/r\"\nlines = \"many\""
+bad "a progress value must be a number" "value of block progress must be a number" "${PG}[[web.page.blocks]]\ntype = \"progress\"\nread = \"/r\"\nvalue = \"x\""
 good "chart and stat pass" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nread = \"/api/sys/x\"\nvalue = 2\nmax = 100\nunit = \"%\"\n[[web.page.blocks]]\ntype = \"stat\"\nread = \"/api/sys/x\"\nitems = [{ label = \"Up\", col = 0 }]"
 bad "a chart without a read is named" "block chart needs read" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nvalue = 1"
 bad "a chart value must be a number" "value of block chart must be a number" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nread = \"/r\"\nvalue = \"1\""

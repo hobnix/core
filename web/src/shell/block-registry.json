@@ -56,6 +56,24 @@
         "blocks": []
       }
     },
+    "log": {
+      "component": "LogBlock",
+      "text": "The tail of a log: it follows the log stream of the server, keeps only the last lines and falls back to a timed read while the stream is down.",
+      "schema": {
+        "required": ["stream", "read"],
+        "keys": { "stream": "string", "read": "string", "lines": "number", "follow": "bool", "every": "number", "empty": "string" },
+        "blocks": []
+      }
+    },
+    "progress": {
+      "component": "GenBlock",
+      "text": "A progress bar from the first row of a declared read (value, max, label and state are field numbers) or from a job (its slug).",
+      "schema": {
+        "required": [],
+        "keys": { "read": "string", "job": "string", "value": "number", "max": "number", "label": "string", "labelCol": "number", "state": "number", "unit": "string", "topic": "string", "every": "number" },
+        "blocks": []
+      }
+    },
     "chart": {
       "component": "GenBlock",
       "text": "A series over time from a declared read: one field of each row is a point, oldest first.",

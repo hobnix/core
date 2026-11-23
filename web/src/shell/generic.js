@@ -55,6 +55,38 @@ export function stateOfRow(st, row) {
   return { state: ['ok', 'warn', 'bad', 'info', 'off'].includes(dot) ? dot : 'off', line: String(at(st?.line) ?? '') };
 }
 
+// ---- blocks `log` and `progress` (#473) ----
+
+// The last `max` lines of a log: a bounded view however long the stream runs (default 200, at least 1, at most 2000 like logfeed).
+export const tailLines = (lines, max = 200) => {
+  const n = Math.max(1, Math.min(2000, Math.floor(Number(max)) || 200));
+  return lines.length > n ? lines.slice(-n) : lines;
+};
+
+// a declared address must be a path of this server's API, never another site
+export const apiPath = (p) => (typeof p === 'string' && /^\/api\/[^\s]*$/.test(p) && !p.includes('..') ? p : '');
+
+// the class of a log line (the colour is never the only signal: the line keeps its words)
+export const logClass = (l) => (/\b(error|err|fail|failed|crit|alert|emerg)\b/i.test(l) ? 'bad' : /\bwarn(ing)?\b/i.test(l) ? 'warn' : '');
+
+// the tone of a Progress bar for a state word (a job state or a read's own word); an unknown word is the running tone
+const TONES = { ok: 'ok', done: 'ok', failed: 'bad', bad: 'bad', error: 'bad', warn: 'warn', waiting: 'warn', interrupted: 'warn' };
+export const progressTone = (state) => TONES[String(state ?? '').toLowerCase()] ?? 'info';
+
+// The bar of a `progress` block. From a read: `row` is the first row, value/max/state/labelCol are field numbers. From a job: `rec` is the parsed job
+// record (jobrecords.js parseRecord). Returns { value, total, label, state, tone }; total is null when it is not known (a moving bar); null when nothing is there yet.
+export function progressOf(block, row, rec) {
+  if (block.job) {
+    if (!rec) return null;
+    return { value: rec.progress?.done ?? null, total: rec.progress?.total ?? null, label: block.label ?? rec.description, state: rec.state, tone: progressTone(rec.state) };
+  }
+  if (!row) return null;
+  const at = (i) => (i === undefined ? '' : clean(row[i]) ?? '');
+  const num = (i) => { const v = at(i); const n = v === '' ? NaN : Number(v); return Number.isFinite(n) ? n : null; };
+  const state = at(block.state);
+  return { value: num(block.value), total: num(block.max), label: at(block.labelCol) || block.label || '', state, tone: progressTone(state) };
+}
+
 // The `chart` block (#473): one field of every row of a read is a point, oldest first. Spark draws 0 to 100, so the points are scaled to `max` (default:
 // the highest point, or 100 when all are 0) and `hot` (same unit as the points) becomes a percentage too. A field that is empty or `-` is skipped.
 export function chartSeries(answerRows, col = 1, max = 0, hot = 0) {
