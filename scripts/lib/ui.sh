@@ -29,6 +29,7 @@
 #   trail                         stdin as trailing output: indent 6, dimmed (a journal, a log)
 #   next_step "hs cmd"            a dim "Next: ..." line under a result
 #   fail_fix "text" "hs cmd"      the failure line plus "Fix: hs cmd", then exit 1
+#   refuse_code <code> [<reason>] a refused plan or start with a stable code for the web interface (ADR 0028), then exit 1
 #   elapsed_line                  "Finished in 2:05" (only when the command ran 5 s or more)
 #   danger "text"               the line before something is erased (bold red)
 #   confirm_name <name> "text"    type the name of what is changed; returns 0 only when it matches
@@ -92,6 +93,20 @@ fail() { paint "$c_red"    "  ✗ $(_tr "$*")"; exit 1; }
 next_step() { paint "$c_dim" "    $(t 'Next: %s' "$*")"; }
 # fail_fix <text> <fix command>: the red failure line, the command that fixes it underneath, then exit 1
 fail_fix() { paint "$c_red" "  ✗ $(_tr "$1")" >&2; paint "$c_dim" "    $(t 'Fix: %s' "$2")" >&2; exit 1; }
+# refuse_code <code> [<reason>]: a refused plan or start for the web interface (ADR 0028), then exit 1. Prints the lines status, reason (the
+# given text, else the text of the catalogue), fix (only when the catalogue has one) and code. The code must be in scripts/lib/error-codes.tsv
+# (tests/error-codes.sh). Plain machine lines, not terminal output: no colour, no translation.
+_ERROR_CODES=${BASH_SOURCE[0]%/*}/error-codes.tsv
+refuse_code() {
+  local code=$1 text=${2:-} fix=- row cat_text
+  row=$(awk -F'\t' -v c="$code" '$1 == c { print $4 "\t" $5; exit }' "$_ERROR_CODES" 2>/dev/null) || row=
+  cat_text=${row%%$'\t'*}
+  [ -z "$row" ] || fix=${row#*$'\t'}
+  printf 'status\trefused\nreason\t%s\n' "${text:-${cat_text:-The server did not do this.}}"
+  [ "$fix" = - ] || printf 'fix\t%s\n' "$fix"
+  printf 'code\t%s\n' "$code"
+  exit 1
+}
 # elapsed_line: "  ✓ Finished in 2:05" - how long the command ran (counted from the first time ui.sh was sourced,
 # kept across `exec`). Prints nothing under 5 seconds, so quick runs look as they did.
 HS_T0=${HS_T0:-$(date +%s)}; export HS_T0

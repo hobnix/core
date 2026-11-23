@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Refused and failed changes carry a stable error code"
+body  = """A plan or start that is refused or breaks now names what went wrong with a short code (for example vault.locked or run.timeout), next to the English text. The web interface can act on the code, and the list of codes is in docs/errors.md."""
