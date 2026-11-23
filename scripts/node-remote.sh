@@ -4,8 +4,10 @@
 # Receiving side of `hs node status`. It reads $SSH_ORIGINAL_COMMAND and accepts EXACTLY the words below, nothing else
 # (no arguments, no shell, no pattern). A word runs one fixed command and prints plain data. Anything else: exit 2 and a line in the journal.
 #   status   the status document of this server (JSON, the same as `hs sys deck`; on an edge node `hs sys edge status`)
+#   pair     remote shares by code (docs/PLAN-remote-shares.md): the claim request on standard input, the answer (the box, or the one refusal shape) on
+#            standard output; exit 0 answered, 1 refused. It runs `hs sys remote claim --source node`; the code itself is never in the request, only its derived id.
 # To allow more, add a word here AND to NODE_WORDS in scripts/node.sh, each with a test; never a pattern.
-# Test knobs: HS_DECK_FILE (default /run/hs-deck/deck.json), HS_DECK_STATUS (the script that makes the document).
+# Test knobs: HS_DECK_FILE (default /run/hs-deck/deck.json), HS_DECK_STATUS (the script that makes the document), HS_BIN (the hs program).
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/capability.sh"
@@ -17,8 +19,12 @@ case "$word" in
     # an edge node (capability edge-status) keeps the same file; without it the document is made on the spot by ITS script
     fresh=deck-status.sh; if capability_on edge-status; then fresh=edge-status.sh; fi
     if [ -s "$f" ]; then cat "$f"; else bash "${HS_DECK_STATUS:-$here/$fresh}"; fi ;;
+  pair)
+    rc=0
+    "${HS_BIN:-hs}" sys remote claim --source node || rc=$?
+    exit "$rc" ;;
   *)
     log "refused: $(printf '%s' "$word" | head -c 60 | tr -c '[:alnum:] ._-' '?')"
-    echo "node-remote: not allowed (only: status)" >&2
+    echo "node-remote: not allowed (only: status, pair)" >&2
     exit 2 ;;
 esac

@@ -3,6 +3,8 @@
 pub mod error;
 pub mod jobs;
 pub mod log;
+pub mod pair;
+pub mod pair_host;
 pub mod secret;
 pub mod secrets;
 
