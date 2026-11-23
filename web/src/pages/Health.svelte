@@ -8,6 +8,7 @@
   import { go } from '../route.svelte.js';
   import { pools, poolOfRole } from '../pools.svelte.js';
   import { agoShort } from '../format.js';
+  import { infoRows } from './healthinfo.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
   import Banner from '../ui/Banner.svelte';
@@ -17,6 +18,7 @@
 
   const health = poll('/api/sys/health/next', 15000);
   const hlist = poll('/api/sys/health/list', 15000);
+  const hinfo = poll('/api/sys/health/info', 60000, 'health-info');
   const jobs = poll('/api/sys/jobs/list', 30000);
   const status = poll('/api/sys/status', 30000);
 
@@ -79,6 +81,8 @@
   const problems = $derived(withAck
     ? rows(hlist).map((r) => ({ ...describe(r[1], nextOf[r[1]] ?? '', r[3], r[4]), id: r[0], acked: r[2] === 'acked', until: /^\d+$/.test(r[5] ?? '') ? Number(r[5]) : 0, who: r[6] && r[6] !== '-' ? r[6] : '' }))
     : rows(health).map((r) => ({ ...describe(r[0], r[1]), id: '', acked: false })));
+  // package, check id, title, message (- when empty): what a package health check reports as `info` (a PC that is switched off): shown, never a problem, never counted or sent
+  const infos = $derived(infoRows(rows(hinfo)));
   const answered = $derived(health.loaded && !health.error);
   const paused = $derived(rows(hlist).some((r) => r[0] === 'mitigation:paused'));
 
@@ -153,6 +157,21 @@
       </div>
     {/each}
   </PageState>
+
+  {#if infos.length}
+    <div class="card grp">
+      <div class="gh"><i class="ph ph-info"></i><b>For your information</b><span class="cnt">{infos.length}</span></div>
+      {#each infos as i (i.key)}
+        <div class="problem">
+          <StatusDot state="info" bare label="information" />
+          <div class="tx">
+            <div class="ti">{i.title}{#if i.text}: {i.text}{/if}</div>
+            <div class="how">Reported by the package {i.pkg}. This is not a problem: it is not counted and sends no message.</div>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   <div class="card">
     <div class="gh"><i class="ph ph-check-circle"></i><b>Passing checks</b></div>

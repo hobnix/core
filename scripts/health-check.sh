@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # help: check pools, disks, free space and scheduled jobs; push a message when something changes (also runs every 15 minutes)
 # help.de: prüft Pools, Platten, freien Platz und geplante Aufgaben; schickt eine Nachricht, wenn sich etwas ändert (läuft auch alle 15 Minuten)
-# args: [--test] [--dry-run]
-# --keys (used by `hs update` to compare before and after a switch): only the key of every problem, one per line; sends and writes nothing. --list (used by `hs health ack` and the web Health page): key, text, acked or -, since (epoch seconds: the first run that saw the key, file health-since next to health-ack), channels that took the last message (notify.sh keeps them in the channel folder; comma separated or -), tab-separated, then until (epoch seconds when an acknowledgement ends by itself, else -) and who acknowledged (- when none). Columns are only ever added at the end.
+# args: [--test] [--dry-run] [--info]
+# --keys (used by `hs update` to compare before and after a switch): only the key of every problem, one per line; sends and writes nothing. --list (used by `hs health ack` and the web Health page): key, text, acked or -, since (epoch seconds: the first run that saw the key, file health-since next to health-ack), channels that took the last message (notify.sh keeps them in the channel folder; comma separated or -), tab-separated, then until (epoch seconds when an acknowledgement ends by itself, else -) and who acknowledged (- when none). Columns are only ever added at the end. --info (hs sys health info): the info rows of the package health checks (package, check id, title, message), which are no problems; nothing is sent or written.
 set -euo pipefail
 
 max_temp=55      # °C, at or above this a disk is reported
@@ -36,6 +36,7 @@ while [ $# -gt 0 ]; do
     --test)    test_msg=true; shift ;;
     --dry-run) dry=true; shift ;;
     --keys)    keys_only=true; dry=true; shift ;;   # the key of every problem, one per line (hs update); sends nothing
+    --info)    command -v python3 >/dev/null 2>&1 && python3 "$here/lib/pkg_slots.py" info 2>/dev/null || true; exit 0 ;;   # info rows of package checks: package, check, title, message (never problems)
     --list)    list_only=true; dry=true; shift ;;   # key TAB text TAB acked|- per problem (hs health ack); sends nothing
     *) echo "usage: hs health [test]"; exit 1 ;;
   esac

@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Health: information from package checks"
+body  = """A health check of a package can now report information that is not a problem, for example that a gaming PC is switched off. System > Health shows these lines under "For your information" with the name of the package. They are not counted in the badge and send no message."""

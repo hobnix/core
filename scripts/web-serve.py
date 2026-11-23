@@ -1153,6 +1153,7 @@ READS = {
         "since": (r"^(1h|today|boot)$", "--since"), "lines": (r"^[0-9]{1,4}$", "--lines")}},
     ("health", "next"): {"kind": "tsv", "ttl": 15, "topic": "health-next"},
     ("health", "list"): {"kind": "tsv", "ttl": 15, "topic": "health-list"},
+    ("health", "info"): {"kind": "tsv", "ttl": 60, "topic": "health-info"},        # info rows of package health checks (the Health page; never a problem)
     ("backup", "state"): {"kind": "tsv", "ttl": 15, "topic": "backup-state"},
     ("backup", "overview"): {"kind": "tsv", "ttl": 30, "topic": "backup-overview"},
     ("backup", "shares"): {"kind": "tsv", "ttl": 30, "topic": "backup-shares"},

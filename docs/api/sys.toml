@@ -746,6 +746,12 @@ role = "viewer"
 ["health list"]
 role = "viewer"
 
+["health info"]
+role = "viewer"
+kind = "tsv"
+columns = ["package", "check", "title", "message"]
+note = "The info rows of the [[health]] checks of the packages that are on (title and message are - when empty). An info row is no problem: it is not counted, not sent and not in health list. Empty when no check reports info."
+
 ["health acks"]
 role = "admin"
 

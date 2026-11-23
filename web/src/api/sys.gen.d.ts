@@ -1252,6 +1252,18 @@ export interface SysOperations {
     exit: number;
     lines: string;
   };
+  "health.info": {
+    /** the info rows of the health checks of packages that are on (for example a PC that is switched off): package, check id, title, message; no problems, never counted or sent */
+    words: ["health", "info"];
+    path: "/health/info";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [package: Field, check: Field, title: Field, message: Field][];
+  };
   "health.list": {
     /** every problem as id, text, acked or - (acknowledged: hs health ack), since (epoch seconds), channels that took the last message (comma separated or -), until (epoch seconds the acknowledgement ends by itself, or -), who acknowledged (or -) */
     words: ["health", "list"];

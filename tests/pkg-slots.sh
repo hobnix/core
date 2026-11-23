@@ -105,6 +105,8 @@ env_h="HS_PACKAGES_DIR=$WORK/pk HS_CAPABILITIES_FILE=$WORK/caps2 HS_STATE_DIR=$W
 out=$(env $env_h $SL problems 2>&1)
 check_eq "a warn and a bad row make one problem that names the package" "ext:hx:stale	Hx tool: sync is 3 days old; needs attention" "$out"
 check_eq "list shows an info row" "hx	stale	info	pc is off" "$(env $env_h $SL list 2>&1 | grep info)"
+check_eq "info lists the info rows with the package named" "hx	stale	Hx tool	pc is off" "$(env $env_h $SL info 2>&1)"
+check_eq "hs sys health info runs it" "hx	stale	Hx tool	pc is off" "$(env $env_h bash $SCRIPTS/health-check.sh --info 2>&1)"
 printf '#!/usr/bin/env bash\nprintf "info\\tpc is off\\nok\\tfine\\n"\n' > "$WORK/fakehs"
 check_eq "an info row alone is no problem" "" "$(env $env_h $SL problems 2>&1)"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/fakehs"

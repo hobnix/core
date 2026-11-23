@@ -425,6 +425,7 @@
   "logs/show": "",
   "health/next": [],
   "health/list": [],
+  "health/info": [],
   "backup/state": [],
   "backup/overview": [],
   "backup/shares": [],
