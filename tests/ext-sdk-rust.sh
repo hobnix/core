@@ -35,7 +35,7 @@ check_out "it publishes snapshots" '"topic":"ticks"' printf '%s' "$out"
 check_out "it ends in the state stopped" '"final","state":"stopped"' printf '%s' "$out"
 
 echo "-- API example (http client, integration listing, credential)"
-mkdir -p "$WORK/cred"; printf 's3cret\n' > "$WORK/cred/integration-jf"
+mkdir -p "$WORK/cred"; printf 's3cret\n' > "$WORK/cred/integration-jf-media-hub"
 cat > "$WORK/srv.py" <<'PY'
 import http.server, json, sys
 class H(http.server.BaseHTTPRequestHandler):

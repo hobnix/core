@@ -193,6 +193,14 @@ es.drop_creds("hub"); print("DROPPED=%r" % (not os.path.exists(cd)))
 for i, (c, p) in enumerate([("integration-media-../x", "../x"), ("integration-media-x y", "x y"), ("integration-media-", ""), ("integration-media-Evil", "Evil"),
                             ("integration-media-" + "a" * 300, "a" * 300), ("integration-media-x\n", "x\n")]):
     print("HOSTILE%d=%r" % (i, es.confined_program("hub", pk, ["x"], [(c, p, root + "/jellyfin/key")])[1] is not None))
+good = ("integration-media-jellyfin", "jellyfin", root + "/jellyfin/key")
+leftover = lambda: os.path.isdir(cd) and bool(os.listdir(cd))
+for label, lst in (("LAST", [good, ("integration-media-evil", "../x", root + "/radarr/key")]),
+                   ("MIDDLE", [good, ("integration-media-evil", "../x", root + "/radarr/key"), ("integration-media-radarr", "radarr", root + "/radarr/key")]),
+                   ("DUPLAST", [good, ("integration-media-jellyfin", "jellyfin", root + "/jellyfin/key")]),
+                   ("READFAIL", [good, ("integration-media-radarr", "radarr", root + "/nokey")])):
+    es.drop_creds("hub"); r = es.confined_program("hub", pk, ["x"], lst)
+    print("LEFT%s=%r REFUSED=%r" % (label, leftover(), r[1] is not None))
 # two grants that would share one credential file name (integration "a-b" of provider "c" and "a" of "b-c") are refused
 r = es.confined_program("hub", pk, ["x"], [("integration-x-radarr", "jellyfin", root + "/jellyfin/key"), ("integration-x-radarr", "radarr", root + "/radarr/key")])
 print("DUP=%r" % (r[1],))
@@ -209,6 +217,7 @@ check_out "no key text in the arguments" "NOKEYINARGV=True" cat "$WORK/prov.txt"
 check_out "the key file of another provider is refused for a credential" "CROSS=True" cat "$WORK/prov.txt"
 check_out "all copies are removed together" "DROPPED=True" cat "$WORK/prov.txt"
 for i in 0 1 2 3 4 5; do check_out "a hostile provider or credential name is refused (case $i)" "HOSTILE$i=True" cat "$WORK/prov.txt"; done
+for c in LAST MIDDLE DUPLAST READFAIL; do check_out "a refusal after a good credential leaves no key copy ($c)" "LEFT$c=False REFUSED=True" cat "$WORK/prov.txt"; done
 check_out "two credentials of one name are refused" "DUP='credential integration-x-radarr is named twice" cat "$WORK/prov.txt"
 
 echo "-- a newline or control character in a permission is refused"

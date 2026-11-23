@@ -27,7 +27,7 @@ integration_credentials() {   # integration_credentials <caller>: "<name><TAB><k
     case "$perm" in integration:*) name=${perm#integration:} ;; *) continue ;; esac
     # one line per provider that offers the integration with a key file; one without a key file gives nothing (no failure)
     # shellcheck disable=SC2086
-    grants=$(python3 -I "$here/pkg.py" integration-grants "$name" "$caller" $on) || { warn "${grants#*$'\t'}" >&2; continue; }
+    grants=$(python3 -I "$here/pkg.py" integration-grants "$name" "$caller" $on 2> >(while IFS=$'\t' read -r _ msg; do warn "$msg" >&2; done)) || { warn "${grants#*$'\t'}" >&2; continue; }
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       prov=${line#*$'\t'}; path=${line%%$'\t'*}

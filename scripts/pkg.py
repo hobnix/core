@@ -725,7 +725,7 @@ def main(argv):
         for p, prov in ok:
             print(p + "\t" + prov)
         for prov, reason in bad:    # a provider that failed the key file check: on stderr, the others still go
-            print(f"{prov}: {reason}", file=sys.stderr)
+            print(f"integration.denied\t{prov}: {reason}", file=sys.stderr)    # code TAB reason, like the other refusals
         if why:
             print("\t".join(why))
         return 1 if why else 0

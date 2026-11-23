@@ -154,6 +154,9 @@ FIX_MODE=good $SR --credential "integration-media-evil=../x=/etc/shadow" --crede
 check_eq "a provider ../x: exit 69, the service is not started" 69 "$rc"
 check "the failure is counted in the state file" grep -q '"failures"' "$WORK/svcstate/fixsvc.json"
 check_eq "no key copy stays" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
+FIX_MODE=good $SR --credential "integration-media-jellyfin=jellyfin=/etc/shadow" --credential "integration-media-evil=../x=/etc/shadow" >/dev/null 2>&1; rc=$?
+check_eq "the bad credential last: exit 69 as well" 69 "$rc"
+check_eq "and no key copy stays (the copies of the cases with a good first credential are in ext-service-reach.sh)" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "-- hs ext status|start|stop with a fake systemctl"
 EXT=$WORK/ext; mkdir -p "$EXT/pk/svcpkg" "$EXT/state"

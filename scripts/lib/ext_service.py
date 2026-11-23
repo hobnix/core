@@ -670,7 +670,7 @@ def confined_program(name, pkgdir, prog, creds=()):
         return None, f"cannot prepare {cred_root()} ({e.strerror}): without it the key copies could not be hidden"
     pi = _load_lib("pkg_integrations")
     seen = set()
-    for cname, provider, path in creds:
+    for cname, provider, path in creds:    # every name is checked BEFORE any key is read or any copy written: a refusal leaves nothing behind
         # integration-<name>-<provider>: systemd allows [A-Za-z0-9_.-] up to 255 characters, the names here are [a-z0-9-] (NAME of pkg_integrations.py)
         if (not re.fullmatch(r"[a-z][a-z0-9-]{0,200}", cname) or not re.fullmatch(r"[a-z][a-z0-9-]*", provider or "")
                 or not path.startswith("/") or ":" in path):
@@ -678,23 +678,29 @@ def confined_program(name, pkgdir, prog, creds=()):
         if cname in seen:    # integration "a-b" of provider "c" and integration "a" of provider "b-c" would share a name: never hand over the wrong key silently
             return None, f"credential {cname} is named twice (an integration and a provider name run together)"
         seen.add(cname)
-        # systemd reads a credential as root. So the bridge reads the key itself ONCE (read_key: only from the folder of the registered providing package,
-        # a regular file, checked on the open descriptor) and writes a private 0600 copy; systemd gets that copy, never a path somebody else can change.
-        key, why = pi.read_key(path, provider, name, root=LIB_DIR)
-        if why:
-            return None, f"credential {cname}: {why}"
-        make_private_dir(cred_root())
-        d = cred_dir(name)
-        make_private_dir(d)
-        copy = os.path.join(d, cname)
-        try:
-            os.unlink(copy)
-        except OSError:
-            pass
-        fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0), 0o600)
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(key)
-        props.append(f"LoadCredential={cname}:{copy}")
+    try:
+        for cname, provider, path in creds:
+            # systemd reads a credential as root. So the bridge reads the key itself ONCE (read_key: only from the folder of the registered providing package,
+            # a regular file, checked on the open descriptor) and writes a private 0600 copy; systemd gets that copy, never a path somebody else can change.
+            key, why = pi.read_key(path, provider, name, root=LIB_DIR)
+            if why:
+                drop_creds(name)    # copies of the credentials before this one
+                return None, f"credential {cname}: {why}"
+            make_private_dir(cred_root())
+            d = cred_dir(name)
+            make_private_dir(d)
+            copy = os.path.join(d, cname)
+            try:
+                os.unlink(copy)
+            except OSError:
+                pass
+            fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0), 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(key)
+            props.append(f"LoadCredential={cname}:{copy}")
+    except OSError as e:
+        drop_creds(name)
+        return None, f"cannot write the key copies ({e.strerror})"
     # the transient unit has no environment: the PATH of the bridge (no secrets) so `#!/usr/bin/env python3` works; it ends with the bridge unit
     path_env = os.environ.get("PATH") or "/run/current-system/sw/bin:/usr/bin:/bin"
     cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
@@ -726,6 +732,7 @@ def svc_run(name, pkgdir, state_dir, creds=()):
     prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
     if bad:     # fail closed: a service whose confinement cannot be set up does not run
         print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+        drop_creds(name)    # never a copy left by a refused start
         record_failure(state_dir, name, "confine_failed", bad)
         return 69
     stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
