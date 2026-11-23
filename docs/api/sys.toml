@@ -214,6 +214,13 @@ columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The lifecycle stage of every package (ADR 0027). flags is a comma list of update, waits, orphan, pending, failed, unhealthy, stopped, or -. repo, available and installed are - for a package that is only in this tree; instances (recipes) is a comma list or -."
 
+["pkg integrations"]
+role = "admin"
+kind = "tsv"
+columns = ["package", "integration", "source", "api_url", "key_state", "extra"]
+enums = { source = ["recipe", "extension", "capability"], key_state = ["ok", "locked", "missing", "-"] }
+note = "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. An optional name keeps one integration."
+
 ["apps list"]
 role = "viewer"
 kind = "tsv"
