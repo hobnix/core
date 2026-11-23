@@ -97,7 +97,7 @@ Put the built static program in your package folder and declare it in `package.t
 ```toml
 [[binary]]
 path   = "bin/media-svc"                 # inside the package folder, no "..", no symbolic link
-sha256 = "<64 hex digits>"               # sha256sum bin/media-svc
+sha256 = "<64 hex digits>"               # sha256sum bin/media-svc; leave it empty and commit no file until the release preparation
 bin    = "media-svc"                     # default: the file name of path
 target = "x86_64-unknown-linux-musl"     # the only target for now
 ```

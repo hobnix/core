@@ -77,16 +77,16 @@ An extension written in Rust or Go ships its program inside the package folder. 
 ```toml
 [[binary]]
 path   = "bin/media-svc"                 # a regular file in the package folder: relative, no "..", no symbolic link
-sha256 = "<64 hex digits>"               # the hash of that file (not a secret)
+sha256 = "<64 hex digits>"               # the hash of that file (not a secret); empty until the release preparation builds it
 bin    = "media-svc"                     # the program name; default: the file name of path
 target = "x86_64-unknown-linux-musl"     # the only target for now
 ```
 
-A `commands.tsv` row (third column) or `[service] exec` refers to it as `@/<path>`; a table that nothing refers to is an error. Other keys,
+A `commands.tsv` row with the flag `proto` (third column) or `[service] exec` refers to it as `@/<path>`; a table that nothing refers to is an error, and a row without `proto` (it would start the file with bash) too (`binary.runner`). The other way round, a compiled program (ELF, PE, Mach-O) that a row or `[service] exec` starts without a `[[binary]]` is refused (`binary.undeclared`): no program runs unhashed. Other keys,
 a second table with the same `path` or `bin`, and any other `target` are errors too. `pkg.py validate` and `repo-check` check the shape,
 the path, that the file is there and that its sha256 matches. `hs pkg install` and `update` check the staged copy (hash, executable bit)
 before it replaces the old one: a mismatch refuses with a code (`binary.hash`, `binary.exec`, ...; docs/errors.md) and the old version stays.
-A server that is not x86_64 refuses the package (`binary.arch`) instead of failing at the start of the service.
+"Not built yet" (empty `sha256` and no file, as in hobnix/extensions on feature branches and develop) passes `validate` and `repo-check` with the shape checks only; a set `sha256` with no file, or a file with an empty or different `sha256`, is an error. `repo-check --release` (the release pull request) and `install` and `update` require a built program and refuse the rest with `binary.unbuilt`. A server that is not x86_64 refuses the package (`binary.arch`) instead of failing at the start of the service.
 
 `kind` (what it is) and `audience` (who it is for) are two fields: the old `# kind: generic|personal` becomes `audience`.
 

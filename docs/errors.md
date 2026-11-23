@@ -256,6 +256,30 @@ The package ships a compiled program for x86_64 and the server is another archit
 - Text: This package needs an x86_64 server; it was not installed.
 - Fix: none
 
+### binary.unbuilt
+
+The package declares a program that is not built yet (empty sha256, no file).
+
+- Layer: script
+- Text: This package has no built program yet; it cannot be installed.
+- Fix: none
+
+### binary.runner
+
+A commands.tsv row without the flag proto names a [[binary]] program.
+
+- Layer: script
+- Text: This package starts its program the wrong way; it cannot be installed.
+- Fix: none
+
+### binary.undeclared
+
+A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it.
+
+- Layer: script
+- Text: This package starts a program that has no declared hash.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

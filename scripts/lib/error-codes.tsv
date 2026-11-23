@@ -31,3 +31,6 @@ binary.unreferenced	script	No commands.tsv row and no [service] exec refers to a
 binary.hash	script	The sha256 of a program differs from the one in package.toml	The program of this package is not the one it declares; it was not installed and the old version stays.	hs pkg fetch
 binary.exec	script	The program of a package lacks the executable bit	The program of this package is not executable; it was not installed and the old version stays.	-
 binary.arch	script	The package ships a compiled program for x86_64 and the server is another architecture	This package needs an x86_64 server; it was not installed.	-
+binary.unbuilt	script	The package declares a program that is not built yet (empty sha256, no file)	This package has no built program yet; it cannot be installed.	-
+binary.runner	script	A commands.tsv row without the flag proto names a [[binary]] program	This package starts its program the wrong way; it cannot be installed.	-
+binary.undeclared	script	A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it	This package starts a program that has no declared hash.	-

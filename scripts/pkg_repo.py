@@ -805,9 +805,14 @@ def run(pkg, cmd, rest):
         else:
             return 2
     except Refused as e:
-        print(str(e), file=sys.stderr)
-        if e.code:
-            print("code\t" + e.code, file=sys.stderr)
+        rf = os.environ.get("HS_PKG_REFUSAL")
+        if e.code and rf:      # hs pkg: the script shows it through refuse_code (ADR 0028)
+            with open(rf, "w", encoding="utf-8") as f:
+                f.write("%s\t%s\n" % (e.code, " ".join(str(e).split())))
+        else:
+            print(str(e), file=sys.stderr)
+            if e.code:
+                print("code\t" + e.code, file=sys.stderr)
         return 1
     except IndexError:
         print("missing argument", file=sys.stderr)
