@@ -23,6 +23,36 @@ PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 KNOWN = ("host", "port")
 
 
+STATE_ROOT = "/var/lib/hs"
+
+
+def key_file_problem(path, provider, caller=None, root=STATE_ROOT, resolve=False):
+    """The ONE check of a key file before it is handed out (integration_key, `grant`, the validator, LoadCredential of the service bridge): None or the
+    reason. The file must lie below <root>/<provider>/ (the folder of the package that offers the integration), without ".." or control characters,
+    and the caller must not be the provider. resolve=True also looks at the disk: the folder must not be a link out of <root>/<provider>, and a link
+    as the file itself may only lead into that folder or the vault (HS_VAULT_DIR, default /var/lib/hs-vault). systemd reads a credential as root, so
+    a path like /etc/shadow must never get here."""
+    if not isinstance(path, str) or not isinstance(provider, str) or not NAME.match(provider):
+        return "the key file or the provider is not valid"
+    if caller is not None and caller == provider:
+        return "a package does not get its own key through an integration"
+    if re.search(r"[\x00-\x20\x7f]", path) or not path.startswith("/") or ".." in path.split("/"):
+        return "the key file path is not valid"
+    base = root.rstrip("/") + "/" + provider + "/"
+    if not path.startswith(base) or len(path) == len(base) or path.endswith("/") or "//" in path:
+        return "the key file must lie below %s" % base
+    if resolve:
+        top = os.path.realpath(base)
+        within = lambda p, d: p == d or p.startswith(d.rstrip("/") + "/")
+        if not within(os.path.realpath(os.path.dirname(path)), top):
+            return "the folder of the key file leads out of %s" % base
+        vault = os.path.realpath(os.environ.get("HS_VAULT_DIR") or "/var/lib/hs-vault")
+        real = os.path.realpath(path)
+        if not (within(real, top) or within(real, vault)):
+            return "the key file is a link that leaves %s" % base
+    return None
+
+
 def manifest_problems(m):
     """[text] for the integrations table of one package.toml dict."""
     ig = m.get("integrations")
@@ -48,6 +78,8 @@ def manifest_problems(m):
         f = b.get("key_file")
         if f is not None and (not isinstance(f, str) or not f.startswith("/") or ".." in f.split("/") or re.search(r"\s", f)):
             out.append(f"{p}.key_file must be an absolute path without .. or spaces")
+        elif f is not None and m.get("name") and key_file_problem(f, str(m["name"])):
+            out.append(f"{p}.key_file: " + key_file_problem(f, str(m["name"])))
         h = b.get("key_header")
         if h is not None and (not isinstance(h, str) or not HEADER.match(h)):
             out.append(f"{p}.key_header must be a header name")
@@ -115,4 +147,7 @@ def grant(manifests, on, integration, caller):
     hits = [r for r in rows(manifests, on, integration) if r[4] != "-"]
     if not hits:
         return None, f"no available package offers {integration} with a key_file"
+    bad = key_file_problem(hits[0][4], hits[0][0], caller, resolve=True)
+    if bad:
+        return None, f"{hits[0][0]}: {bad}"
     return hits[0][4], None

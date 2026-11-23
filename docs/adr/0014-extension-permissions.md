@@ -82,6 +82,9 @@ service could not emit, roll up, read an integration key or even start under the
 - the key of every `integration:<name>` it declared, as the systemd credential `integration-<name>` (`LoadCredential=`, read by systemd as root, so it needs no
   mount): in `$CREDENTIALS_DIRECTORY`, never argv or environment, `/var/lib/hs` stays hidden. `hs ext svc-run` names the files through `integration_credentials`
   (scripts/lib/integration.sh: the declared check of `pkg.py integration-key` and `secret_state`; a locked or missing key is skipped with a warning);
+- only a key file below `/var/lib/hs/<providing package>/` (no `..`, no link out of that folder, the caller is not the provider): one function,
+  `pkg_integrations.key_file_problem`, used by the validator, `grant` (so `integration_key`) and the bridge before it builds `LoadCredential=`, because systemd reads the file as root;
+- the transient unit is bound to the bridge unit (`BindsTo=`), stopped before a start and at the end, has a `TimeoutStopSec` and the PATH of the bridge (`--setenv`);
 - `state.db` writes only through service messages handled by the bridge: `emit` (kind covered by `events.emit`) and `rollup` (ADR 0011: only a kind of the
   package that its `[[events]]` declare with `retention = "metric"`); no mount of `/var/lib/hs`. Reading `state.db` or `hs sys state ...` from the service is not possible.
 

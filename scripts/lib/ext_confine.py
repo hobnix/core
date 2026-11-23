@@ -38,7 +38,7 @@ def check_path(p):
     """The problem with a path, or None."""
     if isinstance(p, str) and p.strip("/") == "" and p:
         return "path %r is not allowed: it would open the whole file system" % p
-    if not isinstance(p, str) or not PATH.match(p):
+    if not isinstance(p, str) or not PATH.fullmatch(p):
         return "path %r is not allowed (absolute, letters, digits and . _ - / only)" % (p,)
     parts = p.split("/")[1:]
     if parts[-1] == "":
@@ -73,6 +73,8 @@ def properties(perms, name=None):
     The one mapping: the drop-in of a service and `systemd-run -p` of a confined command (ext_proto.py) both use it."""
     write, read, devs, net = [], [], [], None
     for p in perms or []:
+        if re.search(r"[\x00-\x1f\x7f]", str(p)):
+            return None, None, "a permission has no control characters: %r" % (p,)
         key, _, arg = str(p).partition(":")
         if key in ("fs.write", "fs.read"):
             bad = check_path(arg)

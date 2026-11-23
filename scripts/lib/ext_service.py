@@ -30,6 +30,7 @@ import argparse
 import fnmatch
 import importlib.util
 import json
+import math
 import os
 import queue
 import re
@@ -80,8 +81,9 @@ def check_message(m):
     if t == "rollup" and (not isinstance(m.get("kind"), str) or not KIND.match(m["kind"])
                           or not isinstance(m.get("user"), str) or not re.match(r"^[A-Za-z0-9_.@-]{1,64}$", m["user"])):
         return "rollup needs kind (pkg.<package>.<what>) and user (letters, digits, _ . @ -, at most 64)"
-    if t == "rollup" and any(k in m and (isinstance(m[k], bool) or not isinstance(m[k], (int, float)) or abs(m[k]) > 1e12) for k in ("n", "sum")):
-        return "rollup.n and rollup.sum are numbers"
+    if t == "rollup" and any(k in m and (isinstance(m[k], bool) or not isinstance(m[k], (int, float)) or not math.isfinite(m[k]) or not 0 <= m[k] <= 1e12)
+                             for k in ("n", "sum")):
+        return "rollup.n and rollup.sum are finite numbers of 0 or more"
     if t == "snapshot" and (not isinstance(m.get("topic"), str) or not re.match(r"^[a-z0-9-]{1,60}$", m["topic"]) or "data" not in m):
         return "snapshot needs topic (a-z, 0-9, -) and data"
     if t == "snapshot" and len(json.dumps(m["data"])) > MAX_SNAPSHOT:
@@ -528,15 +530,23 @@ def rollup_verdict(name, pkgdir, kind):
     return None
 
 
+def _plain(v):
+    """A number as the text rollup-add reads: a whole number without a point, else a plain decimal (no exponent)."""
+    return str(int(v)) if float(v) == int(v) else format(v, "f")
+
+
 def rollup_add(m):
-    """`hs sys state rollup-add <kind> <user> --n N --sum S`, run by the bridge (root, outside the sandbox of the service)."""
+    """`hs sys state rollup-add <kind> <user> --n N --sum S`, run by the bridge (root, outside the sandbox of the service). None, or why it failed."""
     scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     prog = [os.environ["HS_EXT_ROLLUP"]] if os.environ.get("HS_EXT_ROLLUP") else ["bash", os.path.join(scripts, "state.sh"), "rollup-add"]
-    args = [m["kind"], m["user"], "--n", str(m.get("n", 1)), "--sum", str(m.get("sum", 0))]
+    args = [m["kind"], m["user"], "--n", _plain(m.get("n", 1)), "--sum", _plain(m.get("sum", 0))]
     try:
-        subprocess.run(prog + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError):
-        pass
+        r = subprocess.run(prog + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        return str(e)
+    if r.returncode:
+        return "rollup-add exited %d: %s" % (r.returncode, r.stderr.decode("utf-8", "replace").strip()[:200])
+    return None
 
 
 def make_handler(name, limit=None, warn=None, perms=None, pkgdir=None):
@@ -570,7 +580,9 @@ def make_handler(name, limit=None, warn=None, perms=None, pkgdir=None):
                     refused.add(("rollup", m["kind"]))
                     warn(f"{name}: rollup of {m['kind']} dropped ({why})")
             elif limit.allow():
-                rollup_add(m)
+                bad = rollup_add(m)
+                if bad:
+                    warn(f"{name}: rollup of {m['kind']} was not stored ({bad})")
         elif t == "snapshot":
             write_snapshot(name, m["topic"], m["data"])
     return handle
@@ -589,6 +601,13 @@ def stop_unit(name):
         pass
 
 
+def _load_lib(mod):
+    spec = importlib.util.spec_from_file_location(mod, os.path.join(os.path.dirname(os.path.abspath(__file__)), mod + ".py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
 def confined_program(name, pkgdir, prog, creds=()):
     """(argv, None) or (None, problem): PROG as a transient systemd unit confined by the declared permissions (scripts/lib/ext_confine.py, the same
     mapping as a confined command). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
@@ -602,12 +621,21 @@ def confined_program(name, pkgdir, prog, creds=()):
         return None, bad
     if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
         props.append("BindReadOnlyPaths=-" + os.path.abspath(pkgdir))     # its own folder comes back into the empty /var/lib/hs
+    pi = _load_lib("pkg_integrations")
     for cname, path in creds:
         if not re.match(r"^[a-z][a-z0-9-]{0,60}$", cname) or not path.startswith("/") or ":" in path:
             return None, f"bad credential {cname!r}"
+        # defence in depth: systemd reads the file as root, so only a key file in the folder of the providing package may get here
+        seg = path[len(LIB_DIR) + 1:].split("/")[0] if path.startswith(LIB_DIR + "/") else ""
+        why = pi.key_file_problem(path, seg, name, root=LIB_DIR, resolve=True)
+        if why:
+            return None, f"credential {cname}: {why}"
         props.append(f"LoadCredential={cname}:{path}")
+    # the transient unit has no environment: the PATH of the bridge (no secrets) so `#!/usr/bin/env python3` works; it ends with the bridge unit
+    path_env = os.environ.get("PATH") or "/run/current-system/sw/bin:/usr/bin:/bin"
     cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet", "--unit=" + unit_of(name),
-           f"--description=hs extension service {name}", "--property=KillMode=control-group"]
+           f"--description=hs extension service {name}", "--property=KillMode=control-group", "--property=TimeoutStopSec=15",
+           f"--property=BindsTo=hs-ext-svc@{name}.service", f"--property=After=hs-ext-svc@{name}.service", "--setenv=PATH=" + path_env]
     return cmd + ["--property=" + x for x in props] + ["--"] + prog, None
 
 
@@ -633,9 +661,12 @@ def svc_run(name, pkgdir, state_dir, creds=()):
         print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
         record_failure(state_dir, name, "confine_failed", bad)
         return 69
-    res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                    float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
-    stop_unit(name)
+    stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
+    try:
+        res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
+                        float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
+    finally:
+        stop_unit(name)
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1
