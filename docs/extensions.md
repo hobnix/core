@@ -109,6 +109,8 @@ Each `[[web.page.blocks]]` entry has a `type`. `hs pkg validate` checks it again
 | `table`, `kv`, `cards`, `text`, `empty`, `gallery` | rows, key and value cells, cards, text, an empty state, pictures | see the Components page in Developer |
 | `chart` | a series over time: field `value` (a field number, default 1) of each row of `read` is one point, oldest first; `max` scales it (default: the highest point), `hot` marks points at or above it, `unit` is written beside the newest value | `read` |
 | `stat` | tiles from the first row of `read`: `items` is a list of `{ label, col, unit, fmt, map }`; `map` (`{ value = ["ok", "running"] }`) adds a state dot with a word | `read`, `items` |
+| `log` | the tail of a log: `stream` is a `/api/logs/stream/...` path, `read` the `/api/sys/...` read that serves while the stream is down; `lines` is how many lines are kept (default 200, at most 2000), `follow` (default true), `every` seconds of the fallback read. It follows the stream, so there is no timer while the stream is up | `stream`, `read` |
+| `progress` | a bar with the percent beside it: `read` with the field numbers `value`, `max`, `labelCol` and `state` of its first row, or `job` (the slug of a job, followed through the job events); `label`, `unit`. A read follows its `topic` (give one, or it is polled every `every` seconds) | `read` or `job` |
 
 A block whose `type` the web interface does not know shows a note instead of the block.
 

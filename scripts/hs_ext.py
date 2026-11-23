@@ -226,13 +226,21 @@ def ext_read(name, rd, rows, caps=None):
     return words, spec
 
 
-def _ext_page(name, page, words):
+def _ext_page(name, page, words, recipe=False):
     """The [web.page] declaration of a package for the generic page of the frontend (web/src/shell/GenericPage.svelte): plain data, checked here so
-    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out."""
+    that it names only reads the package declared and changes of its own area. Raises ValueError. -> the declaration as it goes out.
+    `recipe`: the page of a recipe (an app, no capability.toml) is the object page /apps/<name> opened from the Installed list: template object, no place
+    in the tree (no group, after or state card), marked `kind = "recipe"` for the frontend (docs/PLAN-package-pages.md, #424)."""
     if not isinstance(page, dict) or len(json.dumps(page)) > 30000:
         raise ValueError("bad page")
     known = {" ".join(w[2:]) for w in words}
     page = dict(page)
+    if recipe:
+        bad = [k for k in ("group", "after", "state") if k in page]
+        if bad or page.get("template", "object") != "object":
+            raise ValueError("a recipe page is an object page of the app: no %s, template object" % ", ".join(bad or ["other template"]))
+        page["template"] = "object"
+        page["kind"] = "recipe"
     group = page.get("group", "apps")
     if group not in EXT_GROUPS:
         raise ValueError("the page names an unknown group")
@@ -317,7 +325,13 @@ def ext_declarations(log=None):
             web = ext_manifest(d).get("web", {})
             if not web:
                 continue        # a capability without a [web] declaration (most of them) has nothing to register and no commands.tsv
-            rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            recipe = not os.path.isfile(os.path.join(d, "capability.toml"))      # a recipe package has package.toml only
+            try:
+                rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
+            except OSError:
+                if not recipe:
+                    raise
+                rows = set()      # a recipe page without reads (text, empty) needs no commands.tsv; a read or change then fails below
             r_new, c_new, p_new = {}, [], None
             for rd in web.get("reads", []):
                 words, spec = ext_read(name, rd, rows, caps)
@@ -347,7 +361,7 @@ def ext_declarations(log=None):
                             raise ValueError("bad flag")
                     c_new.append(ent)
             if "page" in web:
-                p_new = _ext_page(name, web["page"], list(r_new))
+                p_new = _ext_page(name, web["page"], list(r_new), recipe)
                 p_new = _slots_module().gate_page(p_new, set(caps) | applied_recipes())      # a page, tab or state card whose `requires` is off shows nothing
             heads = {w[:3] for w in rows}
             if c_new and not (("ext", name, "plan") in heads and ("ext", name, "start") in heads):

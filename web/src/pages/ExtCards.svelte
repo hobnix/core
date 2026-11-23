@@ -7,7 +7,7 @@
   import { extGroup, EXT_GROUPS } from '../nav.js';
 
   let { group } = $props();
-  const mine = $derived((ui.features.extensions ?? []).filter((e) => e.state && extGroup(e) === EXT_GROUPS[group]).sort((a, b) => String(a.title).localeCompare(String(b.title))));
+  const mine = $derived((ui.features.extensions ?? []).filter((e) => e.kind !== 'recipe' && e.state && extGroup(e) === EXT_GROUPS[group]).sort((a, b) => String(a.title).localeCompare(String(b.title))));
 </script>
 
 {#if mine.length}

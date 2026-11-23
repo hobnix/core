@@ -38,6 +38,8 @@ export const diskPath = (name, tab = '') => `${P.disks}/${encodeURIComponent(nam
 export const dockerAppPath = (name) => `${P.docker}/app/${encodeURIComponent(name)}`;
 export const capabilityPath = (name) => `${P.capabilities}/${name}`;
 export const extensionPath = (name) => `/extensions/${name}`;
+// the object page of a recipe that declares [web.page] (Apps > Installed > Open)
+export const appPath = (name) => `/apps/${encodeURIComponent(name)}`;
 export const nodePath = (name) => `/node/${encodeURIComponent(name)}`;
 // a list address with its filter (`?pool=`)
 export const withQuery = (path, query) => {
