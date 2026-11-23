@@ -3,6 +3,8 @@
 Status: built 2026-11-22 on `0.11`, steps 0 to 14 merged (step 14 is the docs PR). Written 2026-11-19 on branch `0.11` (cut from `0.10`, head `a6d0e8c1`).
 Epic #451 ("Navigation and page structure") with #452, #453, #454, #455, #457, #776, and #488, #487, #427. The owner decided D1 to D12 on 2026-11-20 (see "Decisions for the owner"; D2 and D3 differ from the recommendation). **Nothing was run on a server**; the release is the beta `v0.11.0-beta.1` (docs/RELEASE-NOTES-0.11.md).
 
+v0.11.0-beta.2: row actions on Disks, Shares, Instances and Users, empty-list fix (see docs/RELEASE-NOTES-0.11.md)
+
 **Deviations from this plan, as built**
 - The group Health is named **System** (D2 c); docs/PLAN-web-design.md 2.2 and 2.5 say so.
 - **Incident is a button** on Pools and on Health, not a tree entry.
