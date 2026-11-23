@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { P } from '../web/src/paths.js';
 import { tree, offTree, nodeItems, visible, withExtItems, itemOf, titleOf, DEVELOPER_CAP } from '../web/src/nav.js';
 import { redirect } from '../web/src/redirects.js';
-import { lockedWhy, ROLES } from '../web/src/roles.js';
+import { lockedWhy, ROLES, maxRole } from '../web/src/roles.js';
+import { stateOfRow, templateOf, extReadPath } from '../web/src/shell/generic.js';
 
 let ok = 0, bad = 0;
 const eq = (name, got, want) => { if (JSON.stringify(got) === JSON.stringify(want)) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); } };
@@ -60,6 +61,26 @@ eq('an extension without a group goes into Apps', where([ext('a')]), ['Apps']);
 eq('an extension names its group', where([ext('a', 'network'), ext('b', 'backup')]), ['Network', 'Backup']);
 eq('an unknown group falls back to Apps', where([ext('a', 'nowhere')]), ['Apps']);
 eq('no extension, no change', withExtItems(groups, []) === groups, true);
+
+// 6b. order inside a group: core places keep their order, package places follow alphabetically, `after` puts one behind a place
+const placed = (exts, group = 'apps') => withExtItems(groups, exts.map((e) => ({ ...ext(e.name, group), ...e }))).find((g) => g.label === 'Apps').children.map((c) => c.path.split('/').pop());
+const coreApps = groups.find((g) => g.label === 'Apps').children.map((c) => c.path.split('/').pop());
+eq('package places follow the core places, alphabetically', placed([{ name: 'zeta' }, { name: 'alpha' }]), [...coreApps, 'alpha', 'zeta']);
+eq('the core places keep their order', placed([{ name: 'alpha' }]).slice(0, coreApps.length), coreApps);
+eq('after puts a package right behind a place of the core', placed([{ name: 'alpha' }, { name: 'zeta', after: coreApps[0] }]), [coreApps[0], 'zeta', ...coreApps.slice(1), 'alpha']);
+eq('after names another package', placed([{ name: 'alpha' }, { name: 'zeta', after: 'alpha' }]), [...coreApps, 'alpha', 'zeta']);
+eq('an after that matches nothing is ignored', placed([{ name: 'alpha', after: 'nowhere' }]), [...coreApps, 'alpha']);
+eq('a package that names itself is placed once', placed([{ name: 'alpha', after: 'alpha' }]), [...coreApps, 'alpha']);
+eq('two packages in a cycle are still placed once each', placed([{ name: 'a', after: 'b' }, { name: 'b', after: 'a' }]).slice(coreApps.length).sort(), ['a', 'b']);
+eq('tabs are no third level: a package place has no children', withExtItems(groups, [ext('a')]).find((g) => g.label === 'Apps').children.find((c) => c.path === '/extensions/a').children, undefined);
+
+// 6c. role of an action, template and the card state
+eq('the higher role wins', [maxRole('viewer', 'admin'), maxRole('app-manager', undefined, 'viewer'), maxRole(), maxRole('nonsense', 'app-manager')], ['admin', 'app-manager', 'viewer', 'app-manager']);
+eq('template: declared, else list', [templateOf({ template: 'feed' }), templateOf({ template: 'odd' }), templateOf({})], ['feed', 'list', 'list']);
+eq('state: one dot, one line from the first row', stateOfRow({ read: 's', dot: 0, line: 1 }, ['warn', '3 files waiting']), { state: 'warn', line: '3 files waiting' });
+eq('state: an unknown dot is off, "-" is nothing', stateOfRow({ read: 's', dot: 0, line: 1 }, ['fine', '-']), { state: 'off', line: '' });
+eq('state: a string that is no number is the text itself', stateOfRow({ read: 's', dot: 'ok', line: 'Running' }, []), { state: 'ok', line: 'Running' });
+eq('the generic read path', extReadPath('demo', 'state show'), '/api/sys/ext/demo/state/show');
 
 // 7. a remote node keeps its tree (D8 a): the names that match are the new ones
 eq('a peer keeps Storage, Instances and Backup', nodeItems('peer', ['storage', 'incus', 'backup']).map((i) => i.label), ['System', 'Storage', 'Instances', 'Backup']);

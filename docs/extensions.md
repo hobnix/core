@@ -94,11 +94,11 @@ Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"ap
 | Key | Meaning |
 | --- | --- |
 | `group` | one of `storage`, `instances`, `apps`, `network`, `people`, `system`, `backup`, `settings`; default `apps`. An unknown name drops the whole declaration of the package |
-| `after` | a place in that group; the places of the core keep their order, packages follow alphabetically |
+| `after` | a place in that group (the last word of its path, e.g. `pools`, or another package's name); the places of the core keep their order, packages follow alphabetically |
 | `[[web.page.tabs]]` | `title` and its own `[[web.page.tabs.blocks]]`: one place with tabs, never a third level in the tree |
 | `template` | `list`, `object` or `feed`; default `list` when the first block is a table |
-| `state` | `{ read, dot, line }`: one declared read, one dot and one line for the card on the group page and the Apps list |
-| `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled |
+| `state` | `{ read, dot, line }`: one declared read; `dot` and `line` are field numbers of its first row (`dot` is ok, warn, bad, info or off); one dot and one line for the card on the group page and the Apps list |
+| `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled, with the reason; the page role is the floor for the page's buttons |
 
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 

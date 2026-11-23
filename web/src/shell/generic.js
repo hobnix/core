@@ -38,3 +38,19 @@ export const dotOf = (col, v) => col.map?.[v] ?? ['off', v === undefined || v ==
 
 // the switch columns read these as "on"
 export const isOn = (v) => /^(1|yes|true|on|enabled)$/i.test(String(v ?? ''));
+
+// The generic read path of an extension package: the words of a declared read ("list" or "state show") -> /api/sys/ext/<name>/list
+export const extReadPath = (name, words) => `/api/sys/ext/${name}/${String(words).split(' ').map(encodeURIComponent).join('/')}`;
+
+// The templates of a page (the page frame): list is the default
+export const TEMPLATES = ['list', 'object', 'feed'];
+export const templateOf = (spec) => (TEMPLATES.includes(spec?.template) ? spec.template : 'list');
+
+// The `state` of a package page ({ read, dot, line }) and the first row of its read -> { state, line } for one dot and one line.
+// dot and line are the number of a field of the row (a number, or a string of digits); any other string is the text itself. A dot that is not
+// ok | warn | bad | info | off draws as off.
+export function stateOfRow(st, row) {
+  const at = (k) => (typeof k === 'number' || /^\d+$/.test(String(k)) ? clean((row ?? [])[Number(k)]) : String(k ?? ''));
+  const dot = String(at(st?.dot) ?? '').toLowerCase();
+  return { state: ['ok', 'warn', 'bad', 'info', 'off'].includes(dot) ? dot : 'off', line: String(at(st?.line) ?? '') };
+}

@@ -9,6 +9,7 @@
   import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import RemoveApp from '../forms/ops/RemoveApp.svelte';
   import AppServices from '../forms/ops/AppServices.svelte';
+  import ExtCards from './ExtCards.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -252,6 +253,8 @@
     </Table>
   </div>
 </PageState>
+
+<ExtCards group="apps" />
 
 {#if bulkOpen}
   <Dialog title="Bulk change" panel="dialog" width="460px" onclose={cancelBulk}>

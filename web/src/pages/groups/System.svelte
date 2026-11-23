@@ -16,7 +16,7 @@
   const state = $derived(systemState({ problems: answer(hlist), updates: answer(updates), certs: answer(dc), ups: answer(ups), events: answer(ev) }));
 </script>
 
-<GroupPage title="System" {state} sub="Problems, updates, certificates, hardware and events of this server.">
+<GroupPage title="System" group="system" {state} sub="Problems, updates, certificates, hardware and events of this server.">
   {#snippet actions()}
     <Button need="admin" variant="primary" icon="shield-check" busy={jobRunning('jobs', ['run', 'hs-health-check.service'])} busyLabel="Checking…" tooltip={'Check everything now and list the problems'} onclick={() => openPlan('jobs', ['run', 'hs-health-check.service'], 'Health check')}>Run health check</Button>
   {/snippet}

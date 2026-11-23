@@ -10,6 +10,9 @@ const rank = (r) => ROLES.indexOf(r);
 // true when `have` may do what `need` asks; an unknown role on either side is refused (the server's role_ok)
 export const roleOk = (have, need) => rank(have) >= 0 && rank(need) >= 0 && rank(have) >= rank(need);
 
+// the higher of the roles that are given (an empty or unknown one counts for nothing): a page role and an action role together
+export const maxRole = (...rs) => rs.filter((r) => rank(r) >= 0).reduce((a, b) => (rank(b) > rank(a) ? b : a), 'viewer');
+
 // The page table (design behaviour 4.9, docs/PLAN-web-design.md): EVERY page is listed for EVERY role, nothing is hidden. A page above the role is drawn
 // greyed with a lock and the reason (`lockedWhy`), stays clickable, and opens "Not for your role" without reading anything. The pages that need admin are
 // the ones whose whole content is admin secrets: the Vault, the user / token / identity pages and the file manager (it lists file names of every share, `fm` rows are admin, #946). The server decides; this only explains.

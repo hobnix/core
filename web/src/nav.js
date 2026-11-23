@@ -166,11 +166,33 @@ function withCapItems(items, capItems) {
 // too), after the places of the core. Nothing is added while there is no such package. The pages are /extensions/<name> (pages/Extension.svelte).
 export const EXT_GROUPS = Object.freeze({ storage: P.storage, instances: P.instances, apps: P.appsGroup, network: P.network, people: P.people, system: P.system, backup: P.backupGroup, settings: P.settings });
 export const extGroup = (e) => EXT_GROUPS[e?.group] ?? P.appsGroup;
+// Order inside a group: the places of the core keep their order; package places follow, alphabetically by title. A package that says `after`
+// (the last word of a place's path, its label in lower case, or another package's name) sits right behind that place instead; an `after` that
+// matches nothing is ignored. Never a third level: a package with several views is one place with tabs.
+const placeKey = (c) => String(c.path ?? '').split('/').pop();
+export function placeExt(children, exts) {
+  const byTitle = [...exts].sort((a, b) => String(a.title).localeCompare(String(b.title)) || String(a.name).localeCompare(String(b.name)));
+  const item = (e) => ({ label: e.title, icon: e.icon || 'puzzle-piece', path: extensionPath(e.name), ...(e.state ? { state: true } : {}) });
+  const anchors = (c, e) => c.path === extensionPath(e.name) ? [] : [placeKey(c), String(c.label).toLowerCase()];
+  const names = new Set(byTitle.map((e) => e.name));
+  const behind = (key) => byTitle.filter((e) => e.after === key && e.after !== e.name);
+  const out = [];
+  const put = (e, seen) => { if (seen.has(e.name)) return; seen.add(e.name); out.push(item(e)); behind(e.name).forEach((x) => put(x, seen)); };
+  const seen = new Set();
+  for (const c of children) {
+    out.push(c);
+    for (const e of byTitle) if (!seen.has(e.name) && e.after && !names.has(e.after) && anchors(c, e).includes(e.after)) put(e, seen);
+  }
+  // the rest: no `after`, or one that matches no place; those that hang behind another package follow it
+  for (const e of byTitle) if (!seen.has(e.name) && !(e.after && names.has(e.after) && e.after !== e.name)) put(e, seen);
+  for (const e of byTitle) put(e, seen);
+  return out;
+}
 export function withExtItems(items, exts) {
   if (!Array.isArray(exts) || !exts.length) return items;
   return items.map((it) => {
     const mine = exts.filter((e) => extGroup(e) === it.path);
-    return mine.length ? { ...it, children: [...(it.children ?? []), ...mine.map((e) => ({ label: e.title, icon: e.icon || 'puzzle-piece', path: extensionPath(e.name) }))] } : it;
+    return mine.length ? { ...it, children: placeExt(it.children ?? [], mine) } : it;
   });
 }
 
