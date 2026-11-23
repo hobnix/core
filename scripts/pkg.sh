@@ -32,6 +32,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/live.sh"
 py() { python3 -I "$here/pkg.py" "$@"; }
+# A coded refusal of pkg_repo.py (HS_PKG_REFUSAL = a file it writes "code TAB reason" to): shown the ADR 0028 way, through refuse_code
+pkg_refusal_file() { HS_PKG_REFUSAL=$(mktemp); export HS_PKG_REFUSAL; }
+pkg_refused() {
+  local code reason
+  [ -s "${HS_PKG_REFUSAL:-}" ] || { rm -f "${HS_PKG_REFUSAL:-}"; return 0; }
+  IFS=$'	' read -r code reason < "$HS_PKG_REFUSAL"; rm -f "$HS_PKG_REFUSAL"
+  refuse_code "$code" "$reason"
+}
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
 pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:pkg.changed; exit "$rc"' EXIT; }
@@ -206,13 +214,14 @@ case "${1:-list}" in
     ok "$(t 'Package %s removed.' "$name")" ;;
   install)
     cmd=$1; shift
-    pkg_changed
+    pkg_changed; pkg_refusal_file
     if res=$(py "$cmd" "$@"); then
+      rm -f "$HS_PKG_REFUSAL"
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
-    else exit 1; fi ;;
+    else pkg_refused; exit 1; fi ;;
   update)
-    shift; pkg_changed
-    python3 -I "$here/pkg.py" update "$@" ;;
+    shift; pkg_changed; pkg_refusal_file
+    if python3 -I "$here/pkg.py" update "$@"; then rm -f "$HS_PKG_REFUSAL"; else pkg_refused; exit 1; fi ;;
   rollback)
     # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
     shift; name="${1:-}"; [ -n "$name" ] || fail "$(t 'Usage: hs pkg rollback <name>')"

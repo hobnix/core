@@ -184,6 +184,102 @@ The provider has no key file to give.
 - Text: This provider has no key.
 - Fix: `hs pkg integrations`
 
+### binary.shape
+
+A [[binary]] table of package.toml has a missing, unknown or malformed key.
+
+- Layer: script
+- Text: The program entry of this package is malformed.
+- Fix: none
+
+### binary.path
+
+The path of a [[binary]] is absolute, has .., goes through a symbolic link or is not a file.
+
+- Layer: script
+- Text: The program of this package has a path that is not allowed.
+- Fix: none
+
+### binary.target
+
+The target of a [[binary]] is not x86_64-unknown-linux-musl.
+
+- Layer: script
+- Text: This package ships a program for a platform this server does not support.
+- Fix: none
+
+### binary.duplicate
+
+Two [[binary]] tables use the same path or bin name.
+
+- Layer: script
+- Text: This package lists a program twice.
+- Fix: none
+
+### binary.missing
+
+The file named by a [[binary]] path is not in the package.
+
+- Layer: script
+- Text: The program this package names is not in it.
+- Fix: none
+
+### binary.unreferenced
+
+No commands.tsv row and no [service] exec refers to a [[binary]] as @/<path>.
+
+- Layer: script
+- Text: This package carries a program that nothing starts.
+- Fix: none
+
+### binary.hash
+
+The sha256 of a program differs from the one in package.toml.
+
+- Layer: script
+- Text: The program of this package is not the one it declares; it was not installed and the old version stays.
+- Fix: `hs pkg fetch`
+
+### binary.exec
+
+The program of a package lacks the executable bit.
+
+- Layer: script
+- Text: The program of this package is not executable; it was not installed and the old version stays.
+- Fix: none
+
+### binary.arch
+
+The package ships a compiled program for x86_64 and the server is another architecture.
+
+- Layer: script
+- Text: This package needs an x86_64 server; it was not installed.
+- Fix: none
+
+### binary.unbuilt
+
+The package declares a program that is not built yet (empty sha256, no file).
+
+- Layer: script
+- Text: This package has no built program yet; it cannot be installed.
+- Fix: none
+
+### binary.runner
+
+A commands.tsv row without the flag proto names a [[binary]] program.
+
+- Layer: script
+- Text: This package starts its program the wrong way; it cannot be installed.
+- Fix: none
+
+### binary.undeclared
+
+A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it.
+
+- Layer: script
+- Text: This package starts a program that has no declared hash.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

@@ -4,7 +4,7 @@
   pkg.py list [--kind recipe|extension|capability] [--all] [--json]   name, kind, version, audience, title (personal ones only with --all)
   pkg.py states --market F --parts F --pending F --recipes F --running F   the lifecycle stage and flags of every package (pkg_states.py, ADR 0027)
   pkg.py updates                                           packages whose tree version is newer than the recorded one
-  pkg.py repo-check [<folder>]                             check a package repository checkout: index.toml against its folders
+  pkg.py repo-check [--release] [<folder>]                             check a package repository checkout: index.toml against its folders
   pkg.py validate [--warn]                                 check every manifest (--warn: also print what is only advised, on stderr) (and that a recipe's header agrees); exit 1 on a problem
     return out
 
@@ -121,6 +121,16 @@ def _load_pkg_protocol():
 
 
 pkg_protocol = _load_pkg_protocol()
+
+
+def _load_pkg_binary():
+    spec = importlib.util.spec_from_file_location("pkg_binary", os.path.join(HERE, "lib", "pkg_binary.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_binary = _load_pkg_binary()
 
 
 def _load_pkg_integrations():
@@ -480,6 +490,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad(t)
     out += pkg_slots.manifest_problems(n, pkg_slots.doc_of(capability_toml(os.path.dirname(path)) if path else None, m))
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
+    out += pkg_binary.manifest_problems(m, os.path.dirname(path) if path else None)
     out += pkg_integrations.manifest_problems(m)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
@@ -596,7 +607,7 @@ def repo_unbumped(folder, since):
     return out
 
 
-def repo_check(folder, warnings=None):
+def repo_check(folder, warnings=None, release=False):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
     try:
@@ -638,6 +649,7 @@ def repo_check(folder, warnings=None):
             out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
+        out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path), release)]
         out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
@@ -828,7 +840,8 @@ def main(argv):
         return 1 if p else 0
     elif cmd == "repo-check":
         warns = []
-        p = repo_check(rest[0] if rest else ".", warns)
+        args = [a for a in rest if a != "--release"]     # --release: every [[binary]] must be built and match (the release pull request)
+        p = repo_check(args[0] if args else ".", warns, "--release" in rest)
         for t in p:
             print(t)
         for t in warns:
