@@ -32,6 +32,8 @@ export function parsePlan(p) {
     notes: of('note'), warns: of('warn'), dangers: of('danger'), infos: of('step'),
     confirmName: p?.confirm_name ?? '',
     long: !!p?.long || (p?.needl ?? []).some((n) => n[3] === 'yes'),
+    // the server is rebuilt: a need that rebuilds (long yes) or a rebuild step of the job; `long` alone is only a long job
+    rebuild: (p?.needl ?? []).some((n) => n[3] === 'yes') || (p?.jobsteps ?? []).some((s) => s[0] === 'rebuild'),
   };
 }
 
