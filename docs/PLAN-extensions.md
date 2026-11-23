@@ -110,6 +110,11 @@ same bytes as before the move (the rows run the same scripts).
 A package gets a page without shipping code: `[web.page]` is DATA that the one generic renderer (web/src/shell/GenericPage.svelte, the format is
 the comment at the top of that file) draws at `/extensions/<name>`. There is no Extensions group: the page sits in the group its `group` key names (default `apps`).
 
+A recipe (an app: `package.toml` only) declares the same `[web.page]` in its `package.toml`; the page is the object page `/apps/<name>`, opened from
+the Open button on its row in Apps > Installed (#424). `template` is `object` (the default; another value drops the page), there is no `group`, `after`
+or `state` (the page has no place in the tree), and the server marks it `kind = "recipe"`. Its reads and changes are `ext <name>` rows of a
+`commands.tsv` in the recipe, checked like those of an extension. An app without a page has no Open button.
+
 Placement keys (#790, docs/PLAN-package-pages.md): `group` (one of storage, instances, apps, network, people, system, backup, settings; unknown drops the
 package), `after` (a place in the group; core places keep their order, packages follow alphabetically), `[[web.page.tabs]]` (`title` + own
 `[[web.page.tabs.blocks]]`; `_ext_page` flattens them to `tabs: [{id, label}]` and `block.tab`), `template` (`list` | `object` | `feed`, default

@@ -142,5 +142,5 @@ export function pageFor(path, kind = 'main') {
   if (kind !== 'main') return (nodeRoutes[kind] ?? peerRoutes)[path];
   const obj = objectOf(path);
   if (obj) return objectPages[obj.kind];
-  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : path.startsWith(`${P.docker}/app/`) ? AppEditPage : undefined);
+  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') || /^\/apps\/[a-z][a-z0-9-]*$/.test(path) ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : path.startsWith(`${P.docker}/app/`) ? AppEditPage : undefined);
 }
