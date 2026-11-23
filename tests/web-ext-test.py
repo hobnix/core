@@ -76,6 +76,48 @@ class ExtPages(unittest.TestCase):
     def test_an_unknown_block_type_is_refused(self):
         self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\n[[web.page.blocks]]\ntype = "script"\n'), [])
 
+    def test_the_group_defaults_to_apps_and_an_unknown_group_drops_the_package(self):
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\n')[0]["group"], "apps")
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\ngroup = "network"\nafter = "services"\n')[0]["group"], "network")
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\ngroup = "extensions"\n'), [])
+        self.assertNotIn(("ext", "demo", "list"), ws.READS)
+
+    def test_a_state_that_reads_more_than_declared_drops_the_package(self):
+        ok = self.pages('[web.page]\ntitle = "Demo"\nstate = { read = "list", dot = 1, line = 2 }\n')
+        self.assertEqual(ok[0]["state"]["read"], "list")
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\nstate = { read = "secret", dot = 1, line = 2 }\n'), [])
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\nstate = { read = "list" }\n'), [])
+
+    def test_a_tab_that_reads_more_than_declared_drops_the_package(self):
+        tab = '[web.page]\ntitle = "Demo"\n[[web.page.tabs]]\ntitle = "One"\n[[web.page.tabs.blocks]]\ntype = "table"\nread = "%s"\n'
+        got = self.pages(tab % "list")[0]
+        self.assertEqual((got["tabs"], got["blocks"][0]["tab"]), ([{"id": "t0", "label": "One"}], "t0"))
+        self.assertEqual(self.pages(tab % "secret"), [])
+
+    def test_template_role_and_the_default_template(self):
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\n[[web.page.blocks]]\ntype = "table"\nread = "list"\n')[0]["template"], "list")
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\ntemplate = "feed"\nrole = "viewer"\n')[0]["template"], "feed")
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\ntemplate = "grid"\n'), [])
+        self.assertEqual(self.pages('[web.page]\ntitle = "Demo"\nrole = "root"\n'), [])
+        act = '[web.page]\ntitle = "Demo"\n[[web.page.actions]]\nlabel = "Go"\nplan = ["ext/demo", "go"]\nrole = "%s"\n'
+        self.assertEqual(self.pages(act % "app-manager")[0]["actions"][0]["role"], "app-manager")
+        self.assertEqual(self.pages(act % "root"), [])
+
+    def test_the_four_existing_pages_keep_working(self):
+        """games, posters, passthrough, ad-selfservice declare no placement key: each loads, lands in apps and keeps its blocks"""
+        names = ("games", "posters", "passthrough", "ad-selfservice")
+        for name in names:
+            package(self.pk, name, [["sys", "sys ext %s list" % name, "x.sh", "list", "h", "-"]],
+                    '[[web.reads]]\nwords = "list"\nkind = "tsv"\nttl = 10\n[web.page]\ntitle = "%s"\nicon = "x"\n'
+                    '[[web.page.actions]]\nlabel = "Go"\nplan = ["ext/%s", "go"]\n'
+                    '[[web.page.blocks]]\ntype = "table"\nread = "list"\nkey = "n"\ncolumns = [ { key = "n", label = "N" } ]\n' % (name, name))
+        write(os.path.join(self.tmp, "caps"), "\n".join(names) + "\n")
+        ws.ext_refresh(force=True)
+        got = {p["name"]: p for p in ws.ext_pages()}
+        self.assertEqual(sorted(got), sorted(names))
+        for p in got.values():
+            self.assertEqual((p["group"], p["blocks"][0]["type"], len(p["actions"])), ("apps", "table", 1))
+
 
 class ExtWeb(unittest.TestCase):
     def setUp(self):
