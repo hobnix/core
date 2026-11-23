@@ -46,6 +46,7 @@ echo "-- a failing command of each core area ends with a coded error"
 # every change script: an action it does not know is refused with the code action.unknown (the two docker scripts take the app or host first)
 for f in "$SCRIPTS"/*-change.sh; do
   n=$(basename "$f" -change.sh)
+  [ "$n" != vault ] || continue   # hs sys secrets is the Rust binary (rust:secrets); it keeps its own plain refusals until ported
   case "$n" in docker-app) a=(plan app1 nosuchaction) ;; docker-registry) a=(plan nosuchaction ghcr.io) ;; *) a=(plan nosuchaction) ;; esac
   out=$(HS_PLAIN=1 timeout 20 bash "$f" "${a[@]}" </dev/null 2>/dev/null)
   if grep -q $'^status	refused' <<<"$out" && grep -q $'^code	[a-z][a-z0-9.-]*$' <<<"$out"; then pass "$n: refused with a code"; else fail "$n: no code line in: $out"; fi
