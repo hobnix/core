@@ -135,4 +135,15 @@ rm -rf "$HS_STATE_DIR/packages/current" "$HS_STATE_DIR/packages/previous" "$HS_S
 check_out "an aarch64 server refuses a package with a program" "binary.arch" bash -c "HS_UNAME_M=aarch64 $PKG install svc 2>&1; true"
 check "and installs nothing" test ! -e "$HS_STATE_DIR/packages/current/svc"
 
+cd "$G" || exit 1
+mkdir -p extensions/svc/bin
+release v1.4.0 1.4.0 "$BODY" ""
+sed -i '/^\[\[binary\]\]/,$d' extensions/svc/package.toml
+printf '\177ELF\002\001' > extensions/svc/bin/svc
+git add -A && git commit -q -m "elf without a table" && git -c user.signingkey="$WORK/good.pub" tag -sf v1.4.0 -m "release 1.4.0"
+cd "$ROOT" || exit 1
+$PKG fetch test >/dev/null 2>&1
+check_out "a program with no [[binary]] is refused at install" "binary.undeclared" bash -c "$PKG install svc 2>&1; true"
+check "and installs nothing" test ! -e "$HS_STATE_DIR/packages/current/svc"
+
 finish

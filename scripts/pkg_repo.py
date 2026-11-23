@@ -753,6 +753,8 @@ def run(pkg, cmd, rest):
                 except Refused as e:
                     bad += 1
                     print("%s: %s" % (pname, e), file=sys.stderr)
+                    if e.code:
+                        print("code" + chr(9) + e.code, file=sys.stderr)
             return 1 if bad else 0
         elif cmd == "install":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None

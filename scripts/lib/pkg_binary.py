@@ -179,11 +179,9 @@ def manifest_problems(m, folder=None, built=False):
 
 def install_problems(m, folder):
     """[(code, text)] for the staged copy of an install or update: the server architecture first, then shape, path and hash of every program,
-    then the executable bit. Empty for a package without [[binary]]."""
-    if "binary" not in m:
-        return []
+    then the executable bit. A package without [[binary]] still gets the `undeclared` check: no program runs unhashed."""
     arch = host_arch()
-    if arch not in HOST_ARCHS:
+    if "binary" in m and arch not in HOST_ARCHS:
         return [("binary.arch", "this package ships a compiled program for x86_64 and this server is %s; it was not installed" % arch)]
     out = problems(m, folder, True)
     if out:
