@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# [[binary]] of a package.toml (scripts/lib/pkg_binary.py, hobnix/core#1138): repo-check accepts a good program and refuses the hostile ones
+# (path with .., absolute path, symlink, wrong hash, wrong target, missing file, program nothing refers to, unknown key, duplicate), and
+# hs pkg install and update verify the INSTALLED copy: a wrong hash, a missing executable bit or a server that is not x86_64 refuses with a
+# code and the old version stays. No root.
+# shellcheck source=tests/lib.sh
+. "$(dirname "$0")/lib.sh"
+have git || { skip "needs git"; finish; exit 0; }
+have ssh-keygen || { skip "needs ssh-keygen"; finish; exit 0; }
+export HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$WORK/state
+mkdir -p "$HS_STATE_DIR"
+PKG="python3 -I $SCRIPTS/pkg.py"
+BODY=$'#!/bin/sh\necho hi\n'
+SUM=$(printf '%s' "$BODY" | sha256sum | cut -d' ' -f1)
+ZERO=$(printf '0%.0s' $(seq 64))
+
+echo "-- repo-check"
+base() {   # base <dir> [path] [sha256] [target]: a repository with one extension "svc" that has a program and a row that runs it
+  rm -rf "$1"; mkdir -p "$1/extensions"
+  printf '# index\n' > "$1/index.toml"
+  bash "$SCRIPTS/pkg.sh" new svc --template extension --dir "$1" >/dev/null
+  P=$1/extensions/svc
+  mkdir -p "$P/bin"; printf '%s' "$BODY" > "$P/bin/svc"; chmod 755 "$P/bin/svc"
+  printf 'user\text svc run\t@/bin/svc\trun\tRun the program\tDas Programm starten\treads\n' >> "$P/commands.tsv"
+  printf '\n[[binary]]\npath = "%s"\nsha256 = "%s"\nbin = "svc"\ntarget = "%s"\n' "${2:-bin/svc}" "${3:-$SUM}" "${4:-x86_64-unknown-linux-musl}" >> "$P/package.toml"
+}
+rc() { python3 -I "$SCRIPTS/pkg.py" repo-check "$1" 2>&1; true; }
+R=$WORK/r1; base "$R"
+check "a good [[binary]] passes repo-check" $PKG repo-check "$R"
+B=$WORK/rb
+bad() {   # bad "what" regex <path> <sha> <target>
+  local what=$1 re=$2; shift 2
+  base "$B" "$@"
+  check_out "$what" "$re" rc "$B"
+}
+bad "a path with .. is refused" "binary.path" "../x" "$SUM"
+bad "an absolute path is refused" "binary.path" "/bin/sh" "$SUM"
+bad "a wrong hash is refused" "binary.hash" bin/svc "$ZERO"
+bad "a short hash is a shape error" "binary.shape" bin/svc "abc"
+bad "a wrong target is refused" "binary.target" bin/svc "$SUM" aarch64-unknown-linux-musl
+bad "a missing file is refused" "binary.missing" bin/none "$SUM"
+base "$B"; sed -i 's#^bin = "svc"#bin = "svc"\ncolor = "red"#' "$B/extensions/svc/package.toml"
+check_out "an unknown key is refused" "unknown key color" rc "$B"
+base "$B"; printf '\n[[binary]]\npath = "bin/svc"\nsha256 = "%s"\ntarget = "x86_64-unknown-linux-musl"\n' "$SUM" >> "$B/extensions/svc/package.toml"
+check_out "the same program twice is refused" "binary.duplicate" rc "$B"
+base "$B"; rm "$B/extensions/svc/bin/svc"
+if ln -s /bin/sh "$B/extensions/svc/bin/svc" 2>/dev/null && [ -L "$B/extensions/svc/bin/svc" ]; then
+  check_out "a symbolic link as the program is refused" "binary.path" rc "$B"
+else skip "symbolic links are not available here"; fi
+base "$B"; mv "$B/extensions/svc/bin" "$B/real"
+if ln -s ../../real "$B/extensions/svc/bin" 2>/dev/null && [ -L "$B/extensions/svc/bin" ]; then
+  check_out "a symbolic link in front of the program is refused" "binary.path" rc "$B"
+else skip "symbolic links are not available here"; fi
+base "$B"; sed -i 's#@/bin/svc#@/bin/nothing#' "$B/extensions/svc/commands.tsv"
+check_out "a program that no row refers to is refused" "binary.unreferenced" rc "$B"
+base "$B"; sed -i 's#^\[\[binary\]\]#binary = 5\n[x]#' "$B/extensions/svc/package.toml"
+check_out "a binary that is not a list of tables is a shape error" "binary.shape" rc "$B"
+
+echo "-- install and update"
+ssh-keygen -q -t ed25519 -N '' -f "$WORK/good" -C test >/dev/null
+printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/signers"
+G=$WORK/repo; mkdir -p "$G/extensions/svc/bin"; cd "$G" || exit 1
+git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
+release() {   # release <tag> <version> <body> <sha> [+x|-x]: one extension with a program, committed and tagged with a signature
+  printf 'name = "svc"\nversion = "%s"\nkind = "extension"\ntitle = "Svc"\nrequires_core = ">=1"\npermissions = []\n\n[[binary]]\npath = "bin/svc"\nsha256 = "%s"\ntarget = "x86_64-unknown-linux-musl"\n' "$2" "$4" > extensions/svc/package.toml
+  printf '%s' "$3" > extensions/svc/bin/svc
+  printf 'user\text svc run\t@/bin/svc\trun\tRun\tStart\treads\n' > extensions/svc/commands.tsv
+  printf '[package.svc]\nversion = "%s"\nkind = "extension"\npath = "extensions/svc"\nrequires_core = ">=1"\n' "$2" > index.toml
+  git add -A && git update-index --chmod="${5:-+x}" extensions/svc/bin/svc && git commit -q -m "svc $2"
+  git -c user.signingkey="$WORK/good.pub" tag -s "$1" -m "release $2"
+}
+release v1.0.0 1.0.0 "$BODY" "$SUM"
+cd "$ROOT" || exit 1
+check "the repository is added" $PKG repo add test "$G" --key "$WORK/signers"
+$PKG fetch test >/dev/null 2>&1
+export HS_UNAME_M=x86_64
+check_out "a good program installs" "svc 1[.]0[.]0 from test" $PKG install svc
+CUR=$HS_STATE_DIR/packages/current/svc
+check_eq "the installed program is the one that was hashed" "$SUM" "$(sha256sum "$CUR/bin/svc" | cut -d' ' -f1)"
+check "and it is executable" test -x "$CUR/bin/svc"
+
+cd "$G" || exit 1
+release v1.1.0 1.1.0 "${BODY}changed" "$SUM"
+cd "$ROOT" || exit 1
+$PKG fetch test >/dev/null 2>&1
+check_out "a wrong hash is refused with its code" "binary.hash" bash -c "$PKG install svc 2>&1; true"
+check_out "and the old version stays installed" 'version = "1[.]0[.]0"' cat "$HS_STATE_DIR/packages/installed.toml"
+check_out "with its files in place" 'name = "svc"' cat "$CUR/package.toml"
+check "and no half copy is left" test ! -e "$HS_STATE_DIR/packages/current/.new-svc"
+
+cd "$G" || exit 1
+release v1.2.0 1.2.0 "$BODY" "$SUM" -x
+cd "$ROOT" || exit 1
+$PKG fetch test >/dev/null 2>&1
+check_out "a program without the executable bit is refused" "binary.exec" bash -c "$PKG install svc 2>&1; true"
+check_out "an update refuses too and the old version stays" 'version = "1[.]0[.]0"' bash -c "$PKG update svc --yes >/dev/null 2>&1; cat '$HS_STATE_DIR/packages/installed.toml'"
+
+echo "-- another architecture"
+rm -rf "$HS_STATE_DIR/packages/current" "$HS_STATE_DIR/packages/previous" "$HS_STATE_DIR/packages/installed.toml"
+check_out "an aarch64 server refuses a package with a program" "binary.arch" bash -c "HS_UNAME_M=aarch64 $PKG install svc 2>&1; true"
+check "and installs nothing" test ! -e "$HS_STATE_DIR/packages/current/svc"
+
+finish

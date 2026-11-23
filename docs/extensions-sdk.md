@@ -90,6 +90,23 @@ For a service that talks to an integration (Jellyfin, Plex, ...) the crate has t
 
 `examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl --example apiprobe` in `rust/`. Not tested on hardware yet.
 
+### Ship the program: `[[binary]]`
+
+Put the built static program in your package folder and declare it in `package.toml`:
+
+```toml
+[[binary]]
+path   = "bin/media-svc"                 # inside the package folder, no "..", no symbolic link
+sha256 = "<64 hex digits>"               # sha256sum bin/media-svc
+bin    = "media-svc"                     # default: the file name of path
+target = "x86_64-unknown-linux-musl"     # the only target for now
+```
+
+Point `[service] exec = "@/bin/media-svc"` (or the third column of a `commands.tsv` row) at it, and set the executable bit. `python3 scripts/pkg.py validate`
+and `repo-check` refuse a wrong hash, a path that leaves the folder, a symbolic link, another target, an unknown key and a program that nothing refers to
+(codes `binary.*` in docs/errors.md). `hs pkg install` and `update` check the hash and the executable bit of the installed copy and keep the old version
+when they do not match. An aarch64 server refuses the package with `binary.arch`. Not tested on hardware yet.
+
 ## Events and snapshots (services)
 
 A service (`[service]` in package.toml) gets the events it subscribed to as `event` messages and acknowledges each with `ack` once it has handled it. The core

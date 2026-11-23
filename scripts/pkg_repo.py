@@ -54,7 +54,11 @@ REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 
 
 class Refused(Exception):
-    """a reason shown to the person, exit 1"""
+    """a reason shown to the person, exit 1; `code` (scripts/lib/error-codes.tsv) is printed as a machine line after it"""
+
+    def __init__(self, text, code=None):
+        super().__init__(text)
+        self.code = code
 
 
 def git(*args, cwd=None, input=None):
@@ -315,6 +319,10 @@ class Repos:
             if problem:
                 self.rm_quiet(tmp)
                 raise Refused("%s: %s" % (name, problem))
+        bp = self.pkg.pkg_binary.install_problems(m, tmp)     # the staged copy, before it replaces the old one (hobnix/core#1138)
+        if bp:
+            self.rm_quiet(tmp)
+            raise Refused("%s: %s" % (name, bp[0][1]), bp[0][0])
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -798,6 +806,8 @@ def run(pkg, cmd, rest):
             return 2
     except Refused as e:
         print(str(e), file=sys.stderr)
+        if e.code:
+            print("code\t" + e.code, file=sys.stderr)
         return 1
     except IndexError:
         print("missing argument", file=sys.stderr)

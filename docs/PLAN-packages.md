@@ -69,6 +69,25 @@ meaning = "a download failed"
 ...
 ```
 
+### `[[binary]]`: a compiled program (hobnix/core#1138)
+
+An extension written in Rust or Go ships its program inside the package folder. The table says which file it is and what its hash is, so
+`hs pkg install` can check the copy it is about to use:
+
+```toml
+[[binary]]
+path   = "bin/media-svc"                 # a regular file in the package folder: relative, no "..", no symbolic link
+sha256 = "<64 hex digits>"               # the hash of that file (not a secret)
+bin    = "media-svc"                     # the program name; default: the file name of path
+target = "x86_64-unknown-linux-musl"     # the only target for now
+```
+
+A `commands.tsv` row (third column) or `[service] exec` refers to it as `@/<path>`; a table that nothing refers to is an error. Other keys,
+a second table with the same `path` or `bin`, and any other `target` are errors too. `pkg.py validate` and `repo-check` check the shape,
+the path, that the file is there and that its sha256 matches. `hs pkg install` and `update` check the staged copy (hash, executable bit)
+before it replaces the old one: a mismatch refuses with a code (`binary.hash`, `binary.exec`, ...; docs/errors.md) and the old version stays.
+A server that is not x86_64 refuses the package (`binary.arch`) instead of failing at the start of the service.
+
 `kind` (what it is) and `audience` (who it is for) are two fields: the old `# kind: generic|personal` becomes `audience`.
 
 A recipe keeps working as one idempotent bash script built from `_lib.sh`; nothing about how recipes are written changes except where the

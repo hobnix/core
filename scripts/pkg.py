@@ -123,6 +123,16 @@ def _load_pkg_protocol():
 pkg_protocol = _load_pkg_protocol()
 
 
+def _load_pkg_binary():
+    spec = importlib.util.spec_from_file_location("pkg_binary", os.path.join(HERE, "lib", "pkg_binary.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_binary = _load_pkg_binary()
+
+
 def _load_pkg_integrations():
     spec = importlib.util.spec_from_file_location("pkg_integrations", os.path.join(HERE, "lib", "pkg_integrations.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -480,6 +490,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad(t)
     out += pkg_slots.manifest_problems(n, pkg_slots.doc_of(capability_toml(os.path.dirname(path)) if path else None, m))
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
+    out += pkg_binary.manifest_problems(m, os.path.dirname(path) if path else None)
     out += pkg_integrations.manifest_problems(m)
     errs, warns = pkg_app.check(m, os.path.dirname(path) if path else None, core)
     out += errs
@@ -638,6 +649,7 @@ def repo_check(folder, warnings=None):
             out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
+        out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]

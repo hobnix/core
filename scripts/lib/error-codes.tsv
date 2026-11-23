@@ -22,3 +22,12 @@ action.unknown	script	The command does not know the action it was given	The comm
 integration.denied	script	The caller may not have the key of an integration	This package may not ask for that key.	-
 integration.unknown	script	The named provider is not there or does not offer the integration	No such provider for this integration.	hs pkg integrations
 integration.nokey	script	The provider has no key file to give	This provider has no key.	hs pkg integrations
+binary.shape	script	A [[binary]] table of package.toml has a missing, unknown or malformed key	The program entry of this package is malformed.	-
+binary.path	script	The path of a [[binary]] is absolute, has .., goes through a symbolic link or is not a file	The program of this package has a path that is not allowed.	-
+binary.target	script	The target of a [[binary]] is not x86_64-unknown-linux-musl	This package ships a program for a platform this server does not support.	-
+binary.duplicate	script	Two [[binary]] tables use the same path or bin name	This package lists a program twice.	-
+binary.missing	script	The file named by a [[binary]] path is not in the package	The program this package names is not in it.	-
+binary.unreferenced	script	No commands.tsv row and no [service] exec refers to a [[binary]] as @/<path>	This package carries a program that nothing starts.	-
+binary.hash	script	The sha256 of a program differs from the one in package.toml	The program of this package is not the one it declares; it was not installed and the old version stays.	hs pkg fetch
+binary.exec	script	The program of a package lacks the executable bit	The program of this package is not executable; it was not installed and the old version stays.	-
+binary.arch	script	The package ships a compiled program for x86_64 and the server is another architecture	This package needs an x86_64 server; it was not installed.	-
