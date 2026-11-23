@@ -10,9 +10,9 @@ trap 'rm -rf "$T"' EXIT
 
 cat >"$T/board.json" <<'JSON'
 {"items":[
- {"title":"Epic: One","status":"In Progress","priority":"P0","milestone":{"title":"0.1 — First"},"content":{"number":1,"repository":"hobnix/server","url":"https://github.com/hobnix/server/issues/1"}},
- {"title":"Done thing | with pipe","status":"Done","milestone":{"title":"0.1 — First"},"content":{"number":2,"repository":"hobnix/server","url":"https://github.com/hobnix/server/issues/2"}},
- {"title":"Unplanned","status":"Backlog","content":{"number":3,"repository":"hobnix/server","url":"https://github.com/hobnix/server/issues/3"}}
+ {"title":"Epic: One","status":"In Progress","priority":"P0","milestone":{"title":"0.1 — First"},"content":{"number":1,"repository":"hobnix/core","url":"https://github.com/hobnix/core/issues/1"}},
+ {"title":"Done thing | with pipe","status":"Done","milestone":{"title":"0.1 — First"},"content":{"number":2,"repository":"hobnix/core","url":"https://github.com/hobnix/core/issues/2"}},
+ {"title":"Unplanned","status":"Backlog","content":{"number":3,"repository":"hobnix/core","url":"https://github.com/hobnix/core/issues/3"}}
 ]}
 JSON
 
@@ -34,7 +34,7 @@ p = sys.argv[1]
 d = json.load(open(p, encoding="utf-8"))
 for n, ms in ((7, "0.10 — Tenth"), (8, "0.2 — Second")):
     d["items"].append({"title": "T%d" % n, "status": "Backlog", "milestone": {"title": ms},
-                       "content": {"number": n, "repository": "hobnix/server", "url": "https://github.com/hobnix/server/issues/%d" % n}})
+                       "content": {"number": n, "repository": "hobnix/core", "url": "https://github.com/hobnix/core/issues/%d" % n}})
 json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False)
 PY
 $GEN write --board "$T/board.json" --doc "$T/roadmap.md" >/dev/null
