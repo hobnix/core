@@ -1,6 +1,6 @@
 # Package registry: a signed index over git, a core that is only the framework
 
-Status: design, decided with the owner on 2026-11-22; milestone 0.13 "Package Registry" (before the marketplace, 0.14). Nothing is built yet.
+Status: design, decided with the owner on 2026-11-22; milestone 0.13 "Package Registry" (before the marketplace, 0.14). Step 2, the index format and its CI build and signing, is built (hobnix/core#1069, see "Built: the index format"); nothing else is.
 It replaces "What stays in the core", the repository list and the tag-based version rule in docs/PLAN-packages.md, and part of the plan of
 the closed milestone 0.5 (docs/PLAN-capabilities-repo.md and ADR 0017, accepted 2026-11-10 and 2026-11-16): the repository
 `hobnix/capabilities` and the optional-only move. **Kept from that plan:** vendoring of Nix modules with a lock and a pure evaluation
@@ -55,6 +55,38 @@ One `index.json` per repository, built and signed by CI on every merge to the ma
 - `meta` is built from `package.toml` and `assets/` in the package folder, reviewed and versioned with the package. CI resizes images and
   names them by content hash, so the marketplace reads only the index and the assets and the server can cache them for offline use.
 - Format changes bump `format`; a client reads every format it knows and ignores unknown fields.
+
+### Built: the index format (hobnix/core#1069)
+
+`scripts/lib/pkg_index.py`, reached as `python3 scripts/pkg.py index ...` or `hs pkg index ...`: `build`, `validate`, `sign`, `verify`, `tree`.
+Not tested on hardware yet; the signing workflow has never run on GitHub.
+
+- **Entry fields** beyond the example above: `path` (the package folder in the repository, so a server can fetch it), `yanked_reason`
+  (optional), `renamed_from` (optional list). `meta.icon` and `meta.background` are `null` when the package has none.
+- **Source:** the entries come from `index.toml` (paths, `core`) when the repository has one, else from `package.toml` files under `packages/`,
+  `recipes/`, `extensions/`, `capabilities/`, `blueprints/`. `meta` is the `[meta]` table of package.toml (`author`, `license`, `homepage`,
+  `tags`, `changes`) plus `title` and `title_de`. `needs` is `needs` of a recipe plus `requires` of a capability.
+- **Yanked:** `yanked.toml` in the repository: `[[yanked]]` with `name`, `version`, `reason`. Only the current version is listed; keeping
+  the versions a rollback needs is not built yet.
+- **Tree hash** (decided here): `sha256:` over the listing `<mode> <size> <sha256 of the content> <path>
+`, files sorted by path, mode 755
+  for an executable file else 644, symlinks refused. It does not depend on git, so a server computes the same hash from an archive of the commit.
+- **Assets** (`assets/icon.*`, `assets/background.*`, `assets/screenshots/*`; png, jpg, webp, at most 5 MB each, 8 screenshots): resized
+  (icon 256x256, background 1280x720, screenshot 1280x1280, proportions kept), written as WebP, named `assets/<first 16 hex of the sha256>.webp`.
+  The builder needs Pillow; `--skip-assets` leaves the images out.
+- **Serial:** `--serial N`, or `--prev <index.json>` for the previous index plus 1. `verify --prev` refuses a lower serial, and the same
+  serial with different content. `expires` is `generated` plus 14 days (`--ttl-days`); an expired index only warns.
+- **Signature** (decided here; the plan named none): an SSH signature, as for release tags, made with `ssh-keygen -Y sign` over the exact
+  bytes of `index.json`, namespace `hobnix-index`, stored beside it as `index.json.sig`. The trusted keys are an `allowed_signers` file
+  (`config/trusted-keys/<repo>.allowed_signers`) whose line carries `namespaces="hobnix-index"`, so a key that signs git tags does not sign
+  indexes. `verify` checks the signature first and reads nothing from the file before that.
+- **The key** is never in the repository, in argv or in a build step's environment: `sign` takes the name of a key FILE. In CI only the
+  `sign` job of `.github/workflows/package-index.yml` (reusable, environment `index-signing`, main branch only) has the secret; the step
+  that receives it writes it to a file with mode 600 and the job removes the file at the end. The `build` job needs no secret, and the tests
+  sign with a key made on the spot. The workflow has never run.
+- **Not decided here:** the key itself (nobody has made it; its public half goes into `config/trusted-keys/` with the namespace above), the
+  channels (the index has no `channel` field yet; a client ignores unknown fields, so adding one later is a compatible change), the offline
+  root key.
 
 ## Hosting
 
