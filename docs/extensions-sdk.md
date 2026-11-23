@@ -92,6 +92,12 @@ A service sends `emit` for an event of its own. The kind must be `pkg.<name>.<wh
 count; the 51st is dropped and one warning goes to the journal. `snapshot` replaces the live topic `ext-<name>-<topic>`; only changed data makes a new
 generation. Not tested on hardware yet.
 
+A confined service cannot write `state.db` or read `/var/lib/hs` (ADR 0014): it asks the bridge. `rollup` adds to the monthly rollup below (`{"v":1,"type":"rollup","kind":"pkg.<name>.<what>","user":"anna","n":1,"sum":0}`); the kind must be one of yours declared with `retention = "metric"`, anything else is dropped with one warning, and it counts against the 50 a minute. `n` and `sum` are numbers of 0 or more; the table stores whole numbers, so a fraction is rounded (90.5 becomes 91). A refused rollup (negative, not stored) is warned in the journal. The Rust crate has `Ctx::rollup`.
+
+## Keys of integrations (services)
+
+A service that declares `permissions = ["integration:<name>"]` finds the key of that integration in the file `$CREDENTIALS_DIRECTORY/integration-<name>` (a systemd credential: not in argv, not in the environment). The key file stays hidden from the service. Python: `ext_sdk.credential("<name>")`; Rust: `hobnix_ext_sdk::service::credential("<name>")`. They return `None` when there is none (not declared, the vault is locked, the file is missing). Not tested on hardware yet.
+
 ## Keep a monthly rollup instead of raw ticks
 
 An event that is only counted (a play, a request, a bandwidth sample) is declared with `retention = "metric"` in `[[events]]`: the core deletes

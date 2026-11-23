@@ -289,19 +289,19 @@ check_eq "a bare integration permission is refused" "integration needs an argume
 import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_perms.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 print(m.check_one('x', 'integration'))")"
-check_eq "grant: an extension without the permission is refused, with it gets the key path, a capability needs none" "no|/k|/k" "$(python3 -I -c "
+check_eq "grant: an extension without the permission is refused, with it gets the key path, a capability needs none" "no|/var/lib/hs/app/k|/var/lib/hs/app/k" "$(python3 -I -c "
 import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
-ig = {'media': {'key_file': '/k'}}
+ig = {'media': {'key_file': '/var/lib/hs/app/k'}}
 ms = [('', {'name': 'app', 'kind': 'recipe', 'integrations': ig}), ('', {'name': 'e1', 'kind': 'extension'}),
       ('', {'name': 'e2', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'c', 'kind': 'capability'})]
 g = lambda c: m.grant(ms, {'app'}, 'media', c)[0]
 print('|'.join([g('e1') or 'no', g('e2'), g('c')]))")"
-check_eq "grant by provider: the named key, an unknown or keyless provider is refused with a code, the old form takes the first, key_header is listed last" "/kj|integration.unknown|integration.nokey|/kj|integration.denied|X-Key" "$(python3 -I -c "
+check_eq "grant by provider: the named key, an unknown or keyless provider is refused with a code, the old form takes the first, key_header is listed last" "/var/lib/hs/jelly/k|integration.unknown|integration.nokey|/var/lib/hs/jelly/k|integration.denied|X-Key" "$(python3 -I -c "
 import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 mk = lambda n, ig: ('', {'name': n, 'kind': 'recipe', 'integrations': {'media': ig}})
-ms = [mk('jelly', {'key_file': '/kj', 'key_header': 'X-Key'}), mk('radarr', {'key_file': '/kr'}), mk('plain', {}),
+ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k', 'key_header': 'X-Key'}), mk('radarr', {'key_file': '/var/lib/hs/radarr/k'}), mk('plain', {}),
       ('', {'name': 'e', 'kind': 'extension', 'permissions': ['integration:media']}), ('', {'name': 'x', 'kind': 'extension'})]
 on = {'jelly', 'radarr', 'plain'}
 g = lambda c, p=None: m.grant(ms, on, 'media', c, p)

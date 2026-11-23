@@ -12,7 +12,7 @@ The mapping (what systemd gives, nothing more):
   always                 ProtectSystem=strict, ProtectHome=yes, PrivateTmp=yes, NoNewPrivileges=yes, CapabilityBoundingSet= (none),
                          PrivateDevices=yes, ReadWritePaths=-<state dir of the bridge>
   secrets (#947)         TemporaryFileSystem=/var/lib/hs:ro (granted paths below it come back through BindPaths/BindReadOnlyPaths) and
-                         InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos. A grant that overlaps these is refused
+                         InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred. A grant that overlaps these is refused
                          (fs.write also /etc, /boot, /nix); /var/lib/hs/ext, /var/lib/hs/ext-svc and /var/lib/hs/<package name> stay grantable Not limited: the network.
   fs.write:<path>        ReadWritePaths=-<path>
   fs.read:<path>         ReadOnlyPaths=-<path>     (the file system is read only under ProtectSystem=strict; this lists what is meant to be read)
@@ -29,7 +29,9 @@ STATE = "/var/lib/hs/ext-svc"      # the bridge (scripts/lib/ext_service.py) kee
 PATH = re.compile(r"^/[A-Za-z0-9._/-]+$")
 DEVICES = {"gpu": ["char-drm rw"]}
 # Secrets: a grant (fs.read or fs.write) that is, lies below or contains one of these is refused (#947). The unit hides them too (properties()).
-SECRET = ["/var/lib/hs", "/root", "/etc/shadow", "/etc/gshadow", "/etc/ssh", "/etc/nixos"]
+# /var/lib/hs-vault is the vault (unlocked keys); /run/hs-ext-cred holds the short-lived key copies of the other services (ext_service.py): a service runs as
+# root, so only InaccessiblePaths keeps it out of them
+SECRET = ["/var/lib/hs", "/root", "/etc/shadow", "/etc/gshadow", "/etc/ssh", "/etc/nixos", "/var/lib/hs-vault", "/run/hs-ext-cred"]
 SECRET_OPEN = ["/var/lib/hs/ext", "/var/lib/hs/ext-svc"]       # state of extensions: may be granted although /var/lib/hs is secret
 NO_WRITE = ["/etc", "/boot", "/nix"]                           # fs.write only: system files (reading /etc/hs and the like stays possible)
 
@@ -38,7 +40,7 @@ def check_path(p):
     """The problem with a path, or None."""
     if isinstance(p, str) and p.strip("/") == "" and p:
         return "path %r is not allowed: it would open the whole file system" % p
-    if not isinstance(p, str) or not PATH.match(p):
+    if not isinstance(p, str) or not PATH.fullmatch(p):
         return "path %r is not allowed (absolute, letters, digits and . _ - / only)" % (p,)
     parts = p.split("/")[1:]
     if parts[-1] == "":
@@ -73,6 +75,8 @@ def properties(perms, name=None):
     The one mapping: the drop-in of a service and `systemd-run -p` of a confined command (ext_proto.py) both use it."""
     write, read, devs, net = [], [], [], None
     for p in perms or []:
+        if re.search(r"[\x00-\x1f\x7f]", str(p)):
+            return None, None, "a permission has no control characters: %r" % (p,)
         key, _, arg = str(p).partition(":")
         if key in ("fs.write", "fs.read"):
             bad = check_path(arg)

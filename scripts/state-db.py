@@ -20,7 +20,7 @@ Commands (machine readable output; scripts/state.sh makes the pretty version for
   inventory-json             {"known":N,"missing":[...],"worse":[...]} for the status document
   forget <serial|dev> [--yes]  remove a MISSING disk from the list for good
   read-put <key> [--ms N] [--rc N]  keep the output of a read (stdin): the table `reads`; nothing writes it since ADR 0026 (the live topics replaced it), kept for old callers
-  rollup-add <kind> <user> [--n N] [--sum S] [--time T]  add to the monthly rollup of (month, user, kind): the table `rollups` (#927; docs/extensions-sdk.md)
+  rollup-add <kind> <user> [--n N] [--sum S] [--time T]  (numbers of 0 or more, a fraction is rounded: the columns are whole numbers) add to the monthly rollup of (month, user, kind): the table `rollups` (#927; docs/extensions-sdk.md)
   rollups [kind] [user]      month TAB user TAB kind TAB n TAB sum, oldest month first
   usage-record <key> <used> <size>  one reading of a pool / filesystem fill level (bytes; backup: percent and 100), at most one per hour and key
   usage <key> [days]         the readings of the last N days (default 60): time TAB used TAB size, oldest first (scripts/forecast.py reads them)
@@ -289,6 +289,14 @@ def run(cmd, timeout=60):
 def num(s):
     s = (s or "").strip()
     return int(s) if re.fullmatch(r"\d+", s) else None
+
+
+def fnum(s):
+    """A finite number as int or float (not negative, no exponent), else None; for rollup-add --n/--sum."""
+    s = (s or "").strip()
+    if re.fullmatch(r"\d+", s):
+        return int(s)
+    return float(s) if re.fullmatch(r"\d+\.\d+", s) else None
 
 
 def unescape(s):
@@ -1119,18 +1127,19 @@ def cmd_usage_record(args):
 
 def cmd_rollup_add(args):
     """rollup-add KIND USER [--n N] [--sum S] [--time T]: add to the monthly rollup (default n 1, sum 0, time now)."""
-    if len(args) < 2 or not re.fullmatch(r"[A-Za-z0-9:_.-]{1,80}", args[0]) or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,64}", args[1]):
+    if len(args) < 2 or not re.fullmatch(r"[A-Za-z0-9:_.-]{1,80}", args[0]) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}", args[1]):
         return 1
     opt = {"--n": 1, "--sum": 0, "--time": now()}
     rest = args[2:]
     while rest:
-        if len(rest) < 2 or rest[0] not in opt or num(rest[1]) is None:
+        if len(rest) < 2 or rest[0] not in opt or fnum(rest[1]) is None:
+            print("rollup-add: %s needs a number of 0 or more (like 2 or 90.5), got %r" % (rest[0], rest[1] if len(rest) > 1 else ""), file=sys.stderr)
             return 1
-        opt[rest[0]] = num(rest[1])
+        opt[rest[0]] = fnum(rest[1])
         rest = rest[2:]
     c = open_rw()
     with c:
-        rollup_add(c, opt["--time"], args[1], args[0], opt["--n"], opt["--sum"])
+        rollup_add(c, int(opt["--time"]), args[1], args[0], int(opt["--n"] + 0.5), int(opt["--sum"] + 0.5))
     return 0
 
 

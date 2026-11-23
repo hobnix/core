@@ -52,6 +52,8 @@ def check_one(name, p):
     """The problem with one permission string, or None."""
     if not isinstance(p, str) or not p:
         return "a permission is a non-empty text"
+    if re.search(r"[\x00-\x1f\x7f]", p):
+        return "a permission has no control characters"
     key, arg = split(p)
     if key not in KEYS:
         return "unknown permission %s (known: %s)" % (key, ", ".join(sorted(KEYS)))
@@ -60,7 +62,7 @@ def check_one(name, p):
         return None if ":" not in p else "%s takes no argument" % key
     if not arg:
         return "%s needs an argument (%s:...)" % (key, key)
-    if not rx.match(arg) or ".." in arg.split("/"):
+    if not rx.fullmatch(arg) or ".." in arg.split("/"):
         return "%s: argument %r is not allowed" % (key, arg)
     if key in ("fs.read", "fs.write"):
         bad = _secret(key, arg, name)

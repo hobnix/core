@@ -31,7 +31,7 @@ Issue: hobnix/server#238 (epic #197). Command extensions are ADR 0010 (#237), pe
    of the process. Schema: docs/api/ext-service-v1.schema.json. Framing, line limit (1 MiB) and the rule that stdout carries nothing else
    are those of ADR 0010; stderr goes to the journal.
    - core to service: `init` (`name`, `lang`, `subscribe`, `health_interval`), `event` (one log row), `shutdown` (`grace_ms`).
-   - service to core: `ready`, `health` (`ok`, `text`), `ack` (`id`), `log`, `emit` (an event for the log), `snapshot` (`topic`, `data`).
+   - service to core: `ready`, `health` (`ok`, `text`), `ack` (`id`), `log`, `emit` (an event for the log), `snapshot` (`topic`, `data`), `rollup` (`kind`, `user`, optional `n`, `sum`: add to the monthly rollup of a `retention = "metric"` kind of the package, done by the core; added 2026-11-23, #1130, backward compatible: still `v: 1`, an older core drops it as an unknown type).
 5. **States** (decided by the core, shown by `hs ext status` and the web interface, never sent by a service):
    `starting` (process started, `init` sent), `running` (`ready` seen and the heartbeat is fine), `degraded` (`health` with `ok: false`, or no
    `health` for 3 times `health_interval`; it goes back to `running` with the next good `health`), `stopping`, `stopped`, `failed`.
