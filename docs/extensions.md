@@ -100,6 +100,18 @@ Each `[[web.reads]]` and `[[web.changes]]` entry may say `role = "viewer"`, `"ap
 | `state` | `{ read, dot, line }`: one declared read; `dot` and `line` are field numbers of its first row (`dot` is ok, warn, bad, info or off); one dot and one line for the card on the group page and the Apps list |
 | `role` | on the page and on each action: `viewer`, `app-manager` or `admin` (same as for reads); the server checks and passes it on, the web interface shows a button above the person's role disabled, with the reason; the page role is the floor for the page's buttons |
 
+### Blocks
+
+Each `[[web.page.blocks]]` entry has a `type`. `hs pkg validate` checks it against the block list (`web/src/shell/block-registry.json`): a missing required key, a key the block does not have or a value of the wrong type fails. Not tested on hardware yet.
+
+| Block | What it shows | Required keys |
+| --- | --- | --- |
+| `table`, `kv`, `cards`, `text`, `empty`, `gallery` | rows, key and value cells, cards, text, an empty state, pictures | see the Components page in Developer |
+| `chart` | a series over time: field `value` (a field number, default 1) of each row of `read` is one point, oldest first; `max` scales it (default: the highest point), `hot` marks points at or above it, `unit` is written beside the newest value | `read` |
+| `stat` | tiles from the first row of `read`: `items` is a list of `{ label, col, unit, fmt, map }`; `map` (`{ value = ["ok", "running"] }`) adds a state dot with a word | `read`, `items` |
+
+A block whose `type` the web interface does not know shows a note instead of the block.
+
 A page, a tab or a `state` that reads something the package did not declare is dropped with the whole package declaration, like any other page.
 
 ### The form block

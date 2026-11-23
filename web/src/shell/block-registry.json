@@ -64,6 +64,24 @@
         "keys": { "read": "string", "key": "string", "image": "string", "columns": "list", "rowActions": "list", "empty": "string", "emptyTitle": "string", "emptyIcon": "string", "every": "number" },
         "blocks": []
       }
+    },
+    "chart": {
+      "component": "GenBlock",
+      "text": "A series over time from a declared read: one field of each row is a point, oldest first.",
+      "schema": {
+        "required": ["read"],
+        "keys": { "read": "string", "value": "number", "max": "number", "hot": "number", "unit": "string", "empty": "string", "every": "number" },
+        "blocks": []
+      }
+    },
+    "stat": {
+      "component": "GenBlock",
+      "text": "Stat tiles from the first row of a declared read: label, value, unit and an optional state dot.",
+      "schema": {
+        "required": ["read", "items"],
+        "keys": { "read": "string", "items": "list", "every": "number" },
+        "blocks": []
+      }
     }
   }
 }
