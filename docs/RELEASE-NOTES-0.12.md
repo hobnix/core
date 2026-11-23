@@ -1,7 +1,7 @@
 # Hobnix 0.12.0 release notes
 
-Draft release notes of the release "0.12 Package Pages", built from the changelog entries of `docs/changelog/` that are on `develop` but not in
-`v0.11.0`, from the plan `docs/PLAN-package-pages.md`, from `docs/errors.md`, `docs/extensions-sdk.md` and ADR 0028, and from the closed issues of
+Draft release notes of the release "0.12 Package Pages", built from the 21 changelog entries of `docs/changelog/` added since
+`v0.11.0` (issues #1131 and #1138 are filed under milestone 0.13 but are on `develop`, so they are in this beta), from the plan `docs/PLAN-package-pages.md`, from `docs/errors.md`, `docs/extensions-sdk.md` and ADR 0028, and from the closed issues of
 milestone 0.12. Written 2026-11-23 for the beta `v0.12.0-beta.1`.
 
 **Read this first.** Nothing in 0.12 has run on a real server. The Svelte frontend was only compiled by CI and was never viewed in a browser. The
@@ -12,6 +12,8 @@ beta exists to test it. Every item below is built and covered by the tests of th
 Packages (recipes and extensions) place their own pages in the interface. A package says in its manifest where its page sits, which blocks it
 shows, which actions and health checks it adds and which other packages it talks to. Refused and failed changes carry a stable error code. The
 event log is pruned by class. Confined extension services get their keys and rollups through systemd credentials and a service message.
+
+The Settings > Capabilities and Settings > Extensions lists (#1098) are in v0.11.0 already; the 0.11 notes do not mention them.
 
 ## Package pages
 - **Placement:** `[web.page]` names the group (default Apps), tabs, a page shape (`template`: list, object or feed), a card (`state`) and a `role`
@@ -37,12 +39,6 @@ known ones.
 - **Health check:** shows in System > Health with the package named. A check may report **information** that is not a problem (a gaming PC that is
   switched off): these lines sit under "For your information", are not counted in the badge and send no message.
 - **requires:** a part of a package that needs something switched off shows nothing until it is on; the install dialog says so.
-
-## Settings
-Settings > Capabilities (optional parts) and the new Settings > Extensions are two lists in the style of Instances and Shares: name, state, what it
-is, and the switch, which still opens the plan first. The old address `/settings/capabilities#extensions` goes to the new page.
-The Instances, Shares and Users lists have row buttons instead of a quick look (Open instance, Browse files and Open share, Edit, Change password
-and Open user).
 
 ## Error codes
 A plan or start that is refused or breaks names what went wrong with a short stable code (for example `vault.locked`, `run.timeout`) next to the
