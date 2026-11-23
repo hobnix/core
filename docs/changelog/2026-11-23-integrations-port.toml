@@ -1,0 +1,4 @@
+date  = "2026-11-23"
+type  = "change"
+title = "Integrations: {port} in api_url"
+body  = """The api_url of an [integrations.<name>] block may contain {port}. hs pkg integrations fills it from the service record of the app (its port in LXC mode or in docker mode), so one recipe fits both. Without a known port the address is shown as - and a warning says so; nothing is guessed. hs pkg validate accepts {host} and {port} and refuses any other placeholder."""
