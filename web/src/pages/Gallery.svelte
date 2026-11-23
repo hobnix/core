@@ -46,7 +46,7 @@
   // rows as the live reads give them (shares overview, pool disks, pool list, ct list, users list, shares principals)
   const GAL_SHARES = [['media', 'shares', '/srv/media', 'off', '1200000000000'], ['photos', 'sensitive', '/srv/photos', 'off', '340000000000']];
   const GAL_DISKS = [['ata-ST4000_WX1', '4000787030016', 'HDD', ''], ['ata-ST4000_WX2', '4000787030016', 'HDD', '[has ext4 files]']];
-  const GAL_POOLS = [{ name: 'bulk', role: 'data', kind: 'snapraid', state: 'online' }, { name: 'fast', role: 'apps', kind: 'zfs', state: 'online' }];
+  const GAL_POOLS = [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }, { name: 'scratch', role: 'apps', kind: 'zfs', state: 'online' }];
   const GAL_CTS = [['jellyfin', 'container', 'RUNNING', '10.10.95.20 (eth0)'], ['immich', 'container', 'STOPPED', '-']];
   const GAL_USERS = [['anna', 'Anna Example', 'enabled', 'Domain Admins'], ['ben', '-', 'disabled', '-']];
   const GAL_PRINCIPALS = [['S-1-5-21-1-2-3-1105', 'anna', 'user'], ['S-1-5-21-1-2-3-1106', 'family', 'group']];
