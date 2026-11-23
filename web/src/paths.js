@@ -26,7 +26,7 @@ export const P = Object.freeze({
   components: '/developer/components', docs: '/docs', setup: '/setup', firstRun: '/setup/first-run', nodes: '/nodes',
   // settings
   settingsGeneral: '/settings/general', settingsNetwork: '/settings/network', settingsStorage: '/settings/storage', settingsBackups: '/settings/backups',
-  settingsAccess: '/settings/access', capabilities: '/settings/capabilities', settingsAdvanced: '/settings/advanced',
+  settingsAccess: '/settings/access', capabilities: '/settings/capabilities', settingsExtensions: '/settings/extensions', settingsAdvanced: '/settings/advanced',
   // pages of a remote node (edge, vps: the proxy pages; every remote kind: its health)
   nodeHealth: '/health', mail: '/mail', ports: '/ports', watcher: '/watcher', certificate: '/certificate', tailscale: '/tailscale',
 });
