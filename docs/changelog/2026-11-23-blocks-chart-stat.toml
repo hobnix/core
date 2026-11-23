@@ -1,0 +1,6 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Package pages: chart and stat tile blocks"
+body  = """
+A package page can show a series over time (`chart`) and tiles with a value, a unit and a state dot (`stat`), both from a read the package declares. `hs pkg validate` checks them.
+"""

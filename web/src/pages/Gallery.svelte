@@ -11,6 +11,7 @@
   import JobStrip from '../shell/JobStrip.svelte';
   import Inbox from '../shell/Inbox.svelte';
   import Entry from './gallery/Entry.svelte';
+  import GenBlock from '../shell/GenBlock.svelte';
   import { BLOCKS, BLOCK_API_LEVEL } from '../shell/blocks.js';
   import Logo from '../ui/Logo.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
@@ -387,6 +388,15 @@
         {#each Object.entries(BLOCKS) as [name, b] (name)}
           <div class="cell wide"><small>{name} · {b.component}</small>{b.text} {tr('Needs')}: {b.schema.required.join(', ') || '–'}.</div>
         {/each}
+        <!-- chart: the points of a read (#473) -->
+        <div class="cell wide"><small>chart · points of a read, newest right, hot over 80</small>
+          <GenBlock block={{ type: 'chart', title: 'Load', read: '/gallery/chart', value: 1, unit: '%', max: 100, hot: 80 }} data={{ '/gallery/chart': { rows: hist.map((v, i) => [String(i), String(v)]) } }} /></div>
+        <div class="cell wide"><small>chart · too few readings</small>
+          <GenBlock block={{ type: 'chart', title: 'Load', read: '/gallery/chart1', value: 1 }} data={{ '/gallery/chart1': { rows: [['0', '5']] } }} /></div>
+        <!-- stat: the tiles of the first row (#473) -->
+        <div class="cell wide"><small>stat · value, unit, optional dot</small>
+          <GenBlock block={{ type: 'stat', read: '/gallery/stat', items: [{ label: 'Uptime', col: 0, unit: 'days' }, { label: 'Disk used', col: 1, unit: 'GB', fmt: 'bytes' }, { label: 'Service', col: 2, map: { up: ['ok', 'running'], down: ['bad', 'stopped'] } }, { label: 'Queue', col: 3 }] }}
+                    data={{ '/gallery/stat': { rows: [['12', '2147483648', 'up', '-']] } }} /></div>
       </div>
     </section>
   </div>
