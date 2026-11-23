@@ -2,15 +2,12 @@
   // New share: `hs sys shares plan|start <name> add --kind shares|sensitive --pool <pool> [--ct <instance> --path <inside> [--as <uid>:<gid>]]`.
   // The command has no switches for backup, cache or snapshots at creation: those are separate changes on the share afterwards.
   import CreateDialog from '../../shell/CreateDialog.svelte';
-  import { poll, rows } from '../../data.svelte.js';
-  import { Field, TextInput, Select, Checkbox, Banner, Segmented, Row } from '../../ui';
+  import { Field, TextInput, Checkbox, Banner, Segmented, Row, InstanceField } from '../../ui';
   import { onMount } from 'svelte';
   import { pools, loadPools, poolsOfRole, poolOfRole, poolRow } from '../../pools.svelte.js';
 
   let { onclose, ondone = () => {} } = $props();
 
-  const cts = poll('/api/sys/ct/list', 15000);
-  const instances = $derived(rows(cts).map((r) => r[0]));
 
   let name = $state('');
   let kind = $state('shares');
@@ -65,10 +62,7 @@
 
     {#if bind}
       <Field label="Instance">
-        <Select bind:value={ct}>
-          <option value="">Choose…</option>
-          {#each instances as i}<option value={i}>{i}</option>{/each}
-        </Select>
+        <InstanceField bind:value={ct} />
       </Field>
       <Field label="Path inside the instance">
         <TextInput bind:value={path} placeholder="/mnt/photos" autocomplete="off" spellcheck={false} />

@@ -1,5 +1,5 @@
 <script>
-  import { Field, TextInput, Select, Segmented, Muted } from '../../ui/index.js';
+  import { Field, TextInput, Select, Segmented, Muted, ShareField } from '../../ui/index.js';
   // Another disk (USB, hot-plug) with data on it: `hs sys disk plan|start <partition> temp-mount [--name <n>]` mounts it read-only and shares it
   // (only Domain Admins at first), `<name> temp-copy --to <share>` copies everything on it into a share (a background job), `<name> temp-eject`
   // removes the share and unmounts. The disk itself is never formatted or written. The list is `hs sys temp-disk raw`:
@@ -11,8 +11,6 @@
   let { onclose, ondone = () => {} } = $props();
 
   const raw = poll('/api/sys/temp-disk/raw', 10000, 'temp-disks');
-  const sharesRead = poll('/api/sys/shares/overview', 60000, 'shares-overview');
-  const shares = $derived(rows(sharesRead).map((r) => r[0]).filter((n) => /^[a-z0-9][a-z0-9-]{0,40}$/.test(n ?? '')));
 
   const TEMP = /^\/mnt\/temp\/([a-z0-9][a-z0-9-]{0,31})$/;
   // the list has one cell per row (fields joined by |)
@@ -58,7 +56,7 @@
       </Field>
       {#if act === 'copy'}
         <Field label="Copy everything into the share" help="Runs as a background job; it checks first that there is room.">
-          <Select bind:value={to}><option value="">Choose a share…</option>{#each shares as s}<option value={s}>{s}</option>{/each}</Select>
+          <ShareField bind:value={to} />
         </Field>
       {:else}
         <Muted as="p">The share is removed and the disk unmounted. Afterwards it is safe to unplug.</Muted>
