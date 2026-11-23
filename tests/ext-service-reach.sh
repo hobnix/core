@@ -50,21 +50,25 @@ check_out "a bad permission path means no run (fail closed)" "BADPERM=True" cat 
 
 echo "-- keys: only declared integration:<name> permissions are granted (integration.sh)"
 H=$WORK/here; mkdir -p "$H" "$WORK/keys"; : > "$WORK/keys/api-key"
-python3 -I - "$H/pkg.py" "$WORK/keys/api-key" <<'PY'
+: > "$WORK/keys/jelly-key"
+python3 -I - "$H/pkg.py" "$WORK/keys/api-key" "$WORK/keys/jelly-key" <<'PY'
 import sys
 open(sys.argv[1], "w", newline="\n").write('''import sys
 a = sys.argv[1:]
 if a[0] == "perms":
     print("integration:media"); print("integration:gone"); print("fs.read:/etc/hs")
-elif a[0] == "integration-grant":
-    if a[1] == "media": print(%r + "\\tradarr")
-    else: print("no such integration"); sys.exit(1)
-''' % sys.argv[2])
+elif a[0] == "integration-grants":
+    if a[1] == "media": print(%r + "\\tradarr"); print(%r + "\\tjellyfin")
+    else: print("integration.denied\\tno such integration"); sys.exit(1)
+''' % (sys.argv[2], sys.argv[3]))
 PY
 : > "$H/recipes-list.sh"; : > "$H/parts.sh"
 out=$(bash -c ". '$SCRIPTS/lib/ui.sh'; here='$H'; . '$SCRIPTS/lib/integration.sh'; integration_credentials media" 2>/dev/null) || true
-check_eq "a declared integration with a key file is listed (name, path, providing package)" "media	$WORK/keys/api-key	radarr" "$out"
-check_eq "a declared one that is refused is skipped, an fs permission is ignored" "1" "$(printf '%s\n' "$out" | grep -c .)"
+check_eq "a declared integration lists one line per keyed provider (name, path, providing package)" "media	$WORK/keys/api-key	radarr
+media	$WORK/keys/jelly-key	jellyfin" "$out"
+check_eq "a declared one that is refused is skipped, an fs permission is ignored" "2" "$(printf '%s\n' "$out" | grep -c .)"
+check_out "the bridge gets one credential per provider, integration-<name>-<provider>" 'credential "integration-\$name-\$prov=' grep -n 'credential "integration-' "$SCRIPTS/ext.sh"
+check_out "and the old one-name form for the first one (deprecated, one release)" 'credential "integration-\$name=' grep -n 'credential "integration-' "$SCRIPTS/ext.sh"
 check_out "the bridge gets them as --credential, not as the key" "credential \"integration-" grep -n 'credential "integration-' "$SCRIPTS/ext.sh"
 
 echo "-- rollup: a message of the service channel, only for a declared metric kind"
@@ -143,6 +147,78 @@ check_out "a link to exactly the vault file designated for it is read; a link to
 check_out "grant_full names the registered providing package" "GRANTFULL=.*radarr" cat "$WORK/host.txt"
 check_out "the validator refuses key_file=/etc/shadow" "VALIDATOR=.*key_file" cat "$WORK/host.txt"
 check_out "grant hands out no key for it (integration_key and LoadCredential are built on grant)" "GRANT=None" cat "$WORK/host.txt"
+
+echo "-- one credential per provider (#1135): jellyfin and radarr each reach only their own key"
+python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/prov.txt" 2>&1 || true
+import importlib.util, os, sys
+def load(n):
+    s = importlib.util.spec_from_file_location(n, os.path.join(sys.argv[1], "lib", n + ".py")); m = importlib.util.module_from_spec(s); s.loader.exec_module(m); return m
+pi = load("pkg_integrations"); es = load("ext_service")
+W = sys.argv[2]
+os.environ["HS_CRED_DIR"] = os.path.join(W, "cred3")
+root = os.path.join(W, "hs3"); es.LIB_DIR = root
+for p in ("jellyfin", "radarr", "sonarr"): os.makedirs(os.path.join(root, p))
+open(os.path.join(root, "jellyfin", "key"), "w").write("JELLY-KEY\n")
+open(os.path.join(root, "radarr", "key"), "w").write("RADARR-KEY\n")
+pk = os.path.join(W, "pk3", "hub"); os.makedirs(pk)
+open(os.path.join(pk, "package.toml"), "w").write('name = "hub"\npermissions = ["integration:media"]\n')
+rows = lambda *a: [("", dict(name=n, kind="recipe", integrations={"media": b})) for n, b in a]
+ms = rows(("jellyfin", {"key_file": "/var/lib/hs/jellyfin/key"}), ("radarr", {"key_file": "/var/lib/hs/radarr/key"}), ("sonarr", {"api_url": "http://x"}))
+hub = ("", {"name": "hub", "kind": "extension", "permissions": ["integration:media"]})
+ok, bad, why = pi.grant_all(ms + [hub], {"jellyfin", "radarr", "sonarr"}, "media", "hub")
+print("GRANTS=%r BAD=%r WHY=%r" % ([p for _, p in ok], bad, why))
+# only a declared integration; a recipe and an extension without the permission get nothing; a third provider without key gives none and no failure
+undecl = ("", {"name": "other", "kind": "extension", "permissions": ["integration:else"]})
+print("UNDECLARED=%r" % (pi.grant_all(ms + [undecl], {"jellyfin"}, "media", "other")[2][0],))
+print("RECIPE=%r" % (pi.grant_all(ms, {"jellyfin"}, "media", "jellyfin")[2][0],))
+# the caller is a provider of the integration itself: its own block is refused, the others are not
+me = ("", {"name": "hub2", "kind": "extension", "permissions": ["integration:media"], "integrations": {"media": {"key_file": "/var/lib/hs/hub2/key"}}})
+ok2, bad2, why2 = pi.grant_all(ms + [me], {"jellyfin", "hub2"}, "media", "hub2")
+print("SELF=%r %r" % ([p for _, p in ok2], [p for p, _ in bad2]))
+# the bridge: one private copy per provider, named integration-<name>-<provider>, each with its own key
+cmd, why = es.confined_program("hub", pk, ["x"], [("integration-media-jellyfin", "jellyfin", root + "/jellyfin/key"), ("integration-media-radarr", "radarr", root + "/radarr/key")])
+print("WHYBRIDGE=%r" % why)
+lc = [x for x in cmd if x.startswith("--property=LoadCredential=")]
+print("LC=%r" % sorted(x.split("=", 2)[2].split(":")[0] for x in lc))
+cd = os.path.join(W, "cred3", "hub")
+print("FILES=%r" % sorted(os.listdir(cd)))
+print("JELLY=%r RADARR=%r MODES=%r" % (open(cd + "/integration-media-jellyfin").read().strip(), open(cd + "/integration-media-radarr").read().strip(),
+      sorted(oct(os.stat(os.path.join(cd, f)).st_mode & 0o777) for f in os.listdir(cd))))
+print("NOKEYINARGV=%r" % ("KEY" not in " ".join(cmd)))
+# a provider cannot read the other one's key through its own credential
+r = es.confined_program("hub", pk, ["x"], [("integration-media-radarr", "radarr", root + "/jellyfin/key")])
+print("CROSS=%r" % (r[1] is not None))
+es.drop_creds("hub"); print("DROPPED=%r" % (not os.path.exists(cd)))
+# hostile provider or credential names are refused before anything is read
+for i, (c, p) in enumerate([("integration-media-../x", "../x"), ("integration-media-x y", "x y"), ("integration-media-", ""), ("integration-media-Evil", "Evil"),
+                            ("integration-media-" + "a" * 300, "a" * 300), ("integration-media-x\n", "x\n")]):
+    print("HOSTILE%d=%r" % (i, es.confined_program("hub", pk, ["x"], [(c, p, root + "/jellyfin/key")])[1] is not None))
+good = ("integration-media-jellyfin", "jellyfin", root + "/jellyfin/key")
+leftover = lambda: os.path.isdir(cd) and bool(os.listdir(cd))
+for label, lst in (("LAST", [good, ("integration-media-evil", "../x", root + "/radarr/key")]),
+                   ("MIDDLE", [good, ("integration-media-evil", "../x", root + "/radarr/key"), ("integration-media-radarr", "radarr", root + "/radarr/key")]),
+                   ("DUPLAST", [good, ("integration-media-jellyfin", "jellyfin", root + "/jellyfin/key")]),
+                   ("READFAIL", [good, ("integration-media-radarr", "radarr", root + "/nokey")])):
+    es.drop_creds("hub"); r = es.confined_program("hub", pk, ["x"], lst)
+    print("LEFT%s=%r REFUSED=%r" % (label, leftover(), r[1] is not None))
+# two grants that would share one credential file name (integration "a-b" of provider "c" and "a" of "b-c") are refused
+r = es.confined_program("hub", pk, ["x"], [("integration-x-radarr", "jellyfin", root + "/jellyfin/key"), ("integration-x-radarr", "radarr", root + "/radarr/key")])
+print("DUP=%r" % (r[1],))
+PY
+check_out "two keyed providers are granted, the third without key gives none and no failure" "GRANTS=\\['jellyfin', 'radarr'\\] BAD=\\[\\] WHY=None" cat "$WORK/prov.txt"
+check_out "an integration the package did not declare gives nothing" "UNDECLARED='integration.denied'" cat "$WORK/prov.txt"
+check_out "a recipe gets nothing" "RECIPE='integration.denied'" cat "$WORK/prov.txt"
+check_out "a package never gets the key of its own provider block (the others still go)" "SELF=\\['jellyfin'\\] \\['hub2'\\]" cat "$WORK/prov.txt"
+check_out "the bridge builds no unit problem for two providers" "WHYBRIDGE=None" cat "$WORK/prov.txt"
+check_out "one LoadCredential per provider, named integration-<name>-<provider>" "LC=\\['integration-media-jellyfin', 'integration-media-radarr'\\]" cat "$WORK/prov.txt"
+check_out "one private copy per provider, nothing else in the folder" "FILES=\\['integration-media-jellyfin', 'integration-media-radarr'\\]" cat "$WORK/prov.txt"
+check_out "each credential file holds only its own key, mode 0600" "JELLY='JELLY-KEY' RADARR='RADARR-KEY' MODES=\\['0o600', '0o600'\\]" cat "$WORK/prov.txt"
+check_out "no key text in the arguments" "NOKEYINARGV=True" cat "$WORK/prov.txt"
+check_out "the key file of another provider is refused for a credential" "CROSS=True" cat "$WORK/prov.txt"
+check_out "all copies are removed together" "DROPPED=True" cat "$WORK/prov.txt"
+for i in 0 1 2 3 4 5; do check_out "a hostile provider or credential name is refused (case $i)" "HOSTILE$i=True" cat "$WORK/prov.txt"; done
+for c in LAST MIDDLE DUPLAST READFAIL; do check_out "a refusal after a good credential leaves no key copy ($c)" "LEFT$c=False REFUSED=True" cat "$WORK/prov.txt"; done
+check_out "two credentials of one name are refused" "DUP='credential integration-x-radarr is named twice" cat "$WORK/prov.txt"
 
 echo "-- a newline or control character in a permission is refused"
 rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name media -- $'fs.write:/etc\n' >/dev/null 2>&1 || rc=$?

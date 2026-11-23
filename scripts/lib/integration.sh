@@ -20,19 +20,23 @@ integration_available() {
 
 integration_credentials() {   # integration_credentials <caller>: "<name><TAB><key file><TAB><providing package>" for each declared integration:<name> whose key is readable
   # The file is only named here, never read. The bridge (ext_service.py) reads it once, checks it and hands a private copy to systemd LoadCredential=
-  # ($CREDENTIALS_DIRECTORY/integration-<name> in the service). The providing package comes from its registered manifest, never from the path.
-  local caller=$1 perm name on path prov
+  # ($CREDENTIALS_DIRECTORY/integration-<name>-<provider> in the service, one per keyed provider, hobnix/core#1135). The providing package comes from its registered manifest, never from the path.
+  local caller=$1 perm name on path prov grants line
   on=$(integration_available)
   while IFS= read -r perm; do
     case "$perm" in integration:*) name=${perm#integration:} ;; *) continue ;; esac
+    # one line per provider that offers the integration with a key file; one without a key file gives nothing (no failure)
     # shellcheck disable=SC2086
-    path=$(python3 -I "$here/pkg.py" integration-grant "$name" "$caller" $on) || { warn "${path#*$'	'}" >&2; continue; }
-    prov=${path#*$'\t'}; path=${path%%$'\t'*}
-    case "$(secret_state "$path")" in
-      ok) printf '%s\t%s\t%s\n' "$name" "$path" "$prov" ;;
-      locked) warn "The key of $name is locked: unlock the vault first." >&2 ;;
-      *) warn "The key file of $name is missing." >&2 ;;
-    esac
+    grants=$(python3 -I "$here/pkg.py" integration-grants "$name" "$caller" $on 2> >(while IFS=$'\t' read -r _ msg; do warn "$msg" >&2; done)) || { warn "${grants#*$'\t'}" >&2; continue; }
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      prov=${line#*$'\t'}; path=${line%%$'\t'*}
+      case "$(secret_state "$path")" in
+        ok) printf '%s\t%s\t%s\n' "$name" "$path" "$prov" ;;
+        locked) warn "The key of $name ($prov) is locked: unlock the vault first." >&2 ;;
+        *) warn "The key file of $name ($prov) is missing." >&2 ;;
+      esac
+    done <<< "$grants"
   done < <(python3 "$here/pkg.py" perms "$caller" 2>/dev/null)
 }
 

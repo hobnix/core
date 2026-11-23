@@ -224,18 +224,26 @@ def grant(manifests, on, integration, caller, provider=None):
     return path, why
 
 
+def _permitted(manifests, integration, caller):
+    """None when `caller` may ask for keys of `integration`, else (code, reason)."""
+    me = next((m for _, m in manifests if m.get("name") == caller), None)
+    if me is None:
+        return ("integration.denied", f"{caller}: no such package")
+    if me.get("kind") == "recipe":
+        return ("integration.denied", f"{caller} is a recipe: only an extension or a capability may ask for a key")
+    if me.get("kind") == "extension" and f"integration:{integration}" not in (me.get("permissions") or []):
+        return ("integration.denied", f"{caller} does not declare permissions = [\"integration:{integration}\"]")
+    return None
+
+
 def grant_full(manifests, on, integration, caller, provider=None):
     """(key_file, provider, None) when `caller` may have the key of `integration`, else (None, None, (code, reason)) with a code of scripts/lib/error-codes.tsv.
     A capability needs no permission; an extension must declare integration:<name> (a declared check only: permissions are not enforced yet,
     hobnix/server#239); a recipe is refused. `provider` is the package whose key is wanted: it must be there and offer the integration with a
     key_file. Without a provider (the old two-argument form, kept for one release) the first package with a key_file is taken."""
-    me = next((m for _, m in manifests if m.get("name") == caller), None)
-    if me is None:
-        return None, None, ("integration.denied", f"{caller}: no such package")
-    if me.get("kind") == "recipe":
-        return None, None, ("integration.denied", f"{caller} is a recipe: only an extension or a capability may ask for a key")
-    if me.get("kind") == "extension" and f"integration:{integration}" not in (me.get("permissions") or []):
-        return None, None, ("integration.denied", f"{caller} does not declare permissions = [\"integration:{integration}\"]")
+    why = _permitted(manifests, integration, caller)
+    if why:
+        return None, None, why
     offers = rows(manifests, on, integration)
     if provider is not None:
         mine = [r for r in offers if r[0] == provider]
@@ -248,6 +256,26 @@ def grant_full(manifests, on, integration, caller, provider=None):
     if not hits:
         return None, None, ("integration.nokey", f"no available package offers {integration} with a key_file")
     return _checked(hits[0], caller)
+
+
+def grant_all(manifests, on, integration, caller):
+    """([(key_file, provider)], [(provider, reason)], None) or ([], [], (code, reason)): one grant per provider that offers `integration` with a key_file
+    (a service gets one credential per provider, named integration-<integration>-<provider>, hobnix/core#1135). The permission rules are those of grant_full
+    (a recipe is refused, an extension must declare integration:<name>, else the third item says why); a provider without a key_file gives nothing and no
+    failure; one that fails the strict key file check (or is the caller itself) is listed with its reason in the second list."""
+    why = _permitted(manifests, integration, caller)
+    if why:
+        return [], [], why
+    ok, bad = [], []
+    for r in rows(manifests, on, integration):
+        if r[4] == "-":
+            continue
+        p, prov, why = _checked(r, caller)
+        if why:
+            bad.append((r[0], why[1]))
+        elif (p, prov) not in ok:
+            ok.append((p, prov))
+    return ok, bad, None
 
 
 def _checked(row, caller):

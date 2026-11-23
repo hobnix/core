@@ -121,22 +121,35 @@ impl Ctx {
     }
 }
 
-/// The key of the integration `name` (declared as `integration:<name>` in `permissions`), which the core hands to a confined service as the
-/// systemd credential `integration-<name>`: read from `$CREDENTIALS_DIRECTORY`, never from argv or the environment. Trailing whitespace is cut.
-/// `None` when there is no such credential (not declared, the key is locked or missing).
-pub fn credential(name: &str) -> Option<String> {
-    let ok = !name.is_empty()
-        && name
-            .chars()
-            .all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'));
+fn valid_name(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'))
+}
+
+fn read_credential(file: &str) -> Option<String> {
     let dir = std::env::var_os("CREDENTIALS_DIRECTORY")?;
-    if !ok {
+    let text = std::fs::read_to_string(std::path::Path::new(&dir).join(file)).ok()?;
+    Some(text.trim_end().to_string())
+}
+
+/// The key that the provider package `provider` holds for the integration `name` (declared as `integration:<name>` in `permissions`). The
+/// core hands a confined service one systemd credential per provider, `integration-<name>-<provider>`: read from `$CREDENTIALS_DIRECTORY`,
+/// never from argv or the environment. The provider is the `package` column of `hs pkg integrations` (or [`crate::integrations::Integration::credential`]).
+/// Trailing whitespace is cut. `None` when there is no such credential (not declared, the provider has no key, the key is locked or missing).
+pub fn credential_for(name: &str, provider: &str) -> Option<String> {
+    if !valid_name(name) || !valid_name(provider) {
         return None;
     }
-    let text =
-        std::fs::read_to_string(std::path::Path::new(&dir).join(format!("integration-{name}")))
-            .ok()?;
-    Some(text.trim_end().to_string())
+    read_credential(&format!("integration-{name}-{provider}"))
+}
+
+/// Deprecated, goes away after the next release: the old one-name form `integration-<name>` (the first provider with a key, owner not told).
+/// Use [`credential_for`], which names the provider. Same rules as there; `None` when there is no such credential.
+#[deprecated(note = "use credential_for(name, provider): the credential is one per provider")]
+pub fn credential(name: &str) -> Option<String> {
+    if !valid_name(name) {
+        return None;
+    }
+    read_credential(&format!("integration-{name}"))
 }
 
 pub trait Service {
