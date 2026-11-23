@@ -1,5 +1,5 @@
 <script>
-  // The tab row of a page (not of a drawer: that is Drawer.svelte's own): Network uses it for Overview, DNS, Ports, Router, Remote shares.
+  // The tab row of a page (not of a drawer: that is Drawer.svelte's own): Network uses it for Overview, DNS, Ports, Router.
   //   <PageTabs tabs={[{ id: 'dns', label: 'DNS' }]} {tab} onpick={(id) => go('/network?tab=' + id)} />  (or bind:tab)
   import { tr } from "../i18n.js";
   let { tabs = [], tab = $bindable(''), onpick = null } = $props();

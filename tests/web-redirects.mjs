@@ -66,6 +66,12 @@ eq('a docker app address is not encoded twice', moved('/instances/docker/app/web
 eq('an address that is not old is left alone', moved('/somewhere/else'), ['/somewhere/else', {}]);
 eq('a bare prefix is not a family member', moved('/docs/')[0], '/docs/');
 
+// 4b. the Network tab Remote shares moved to Shares, view Remote (docs/PLAN-remote-shares.md D1; issue #1151)
+eq('the old Remote tab address opens the Remote view', probe('/network?tab=remote'), `/node/${L}${P.shares}?view=remote`);
+eq('the Remote tab redirect keeps a node and other query', probe(`/node/${L}/network?tab=remote&x=1`), `/node/${L}${P.shares}?x=1&view=remote`);
+eq('another Network tab is not redirected to Shares', probe(`/node/${L}/network?tab=dns`), null);
+eq('the Network overview is not redirected', probe(`/node/${L}/network`), null);
+
 // 5. D7: the table has a removal release, and docs/PLAN-navigation.md says so
 eq('the removal release is set', /^\d+\.\d+$/.test(REMOVE_IN), true);
 eq('the plan names the removal release', readFileSync(here('../docs/PLAN-navigation.md'), 'utf8').includes(`remove in ${REMOVE_IN}`), true);
