@@ -21,7 +21,12 @@ bad() {   # bad <what> <word> <capability tables>
 PG='[web.page]\ntitle = "P"\n'
 good "no page is fine" ''
 good "known blocks pass" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"hi\"\n[[web.page.blocks]]\ntype = \"empty\"\ntitle = \"x\"\n[[web.page.blocks]]\ntype = \"kv\"\nitems = []"
-bad "an unknown block is named" "unknown block 'chart'" "${PG}[[web.page.blocks]]\ntype = \"chart\""
+good "chart and stat pass" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nread = \"/api/sys/x\"\nvalue = 2\nmax = 100\nunit = \"%\"\n[[web.page.blocks]]\ntype = \"stat\"\nread = \"/api/sys/x\"\nitems = [{ label = \"Up\", col = 0 }]"
+bad "a chart without a read is named" "block chart needs read" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nvalue = 1"
+bad "a chart value must be a number" "value of block chart must be a number" "${PG}[[web.page.blocks]]\ntype = \"chart\"\nread = \"/r\"\nvalue = \"1\""
+bad "a stat without items is named" "block stat needs items" "${PG}[[web.page.blocks]]\ntype = \"stat\"\nread = \"/r\""
+bad "a stat has no unit key of its own" "has no key unit" "${PG}[[web.page.blocks]]\ntype = \"stat\"\nread = \"/r\"\nitems = []\nunit = \"x\""
+bad "an unknown block is named" "unknown block 'sparkle'" "${PG}[[web.page.blocks]]\ntype = \"sparkle\""
 bad "a block without a type is named" "unknown block None" "${PG}[[web.page.blocks]]\ntext = \"x\""
 bad "a missing required key is named" "needs key" "${PG}[[web.page.blocks]]\ntype = \"table\"\nread = \"/api/sys/x\"\ncolumns = []"
 bad "an unknown key is named" "has no key colour" "${PG}[[web.page.blocks]]\ntype = \"text\"\ntext = \"x\"\ncolour = \"red\""
