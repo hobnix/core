@@ -1,0 +1,6 @@
+date  = "2026-11-23"
+type  = "feature"
+title = "Package pages in the tree, with tabs, a shape and a card"
+body  = """A package page now sits in the group its manifest names: the places of the core keep their order, package places follow alphabetically, and `after` puts one behind a place. Tabs stay one place. `template` (list, object or feed) shapes the page frame. A package that declares `state` gets a card with one dot and one line on the group page and on Apps. A button whose `role` is above yours is disabled, with the reason.
+
+Not tested on hardware yet. Not seen in a browser yet."""

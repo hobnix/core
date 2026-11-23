@@ -37,6 +37,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
 | [PLAN-live-interface](PLAN-live-interface.md) | Milestone 0.10: the interface follows events, pending rows, delay measured, acknowledge |
 | [PLAN-navigation](PLAN-navigation.md) | Milestone 0.11: navigation and pages, decisions D1 to D12 |
+| [PLAN-package-pages](PLAN-package-pages.md) | Milestone 0.12 Package Pages: declarative web pages for packages (plan, nothing built) |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-registry](PLAN-registry.md) | Milestone 0.13: a signed package index with one version per package, core as framework, names, blueprints (plan, nothing built) |
 | [PLAN-package-names](PLAN-package-names.md) | Every capability, extension and recipe with its proposed name, for the retouch pass (draft) |

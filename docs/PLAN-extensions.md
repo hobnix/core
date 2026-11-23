@@ -108,7 +108,13 @@ same bytes as before the move (the rows run the same scripts).
 ### The page declaration (`[web.page]`)
 
 A package gets a page without shipping code: `[web.page]` is DATA that the one generic renderer (web/src/shell/GenericPage.svelte, the format is
-the comment at the top of that file) draws at `/extensions/<name>`. The tree shows an Extensions group only while a package with a page is on.
+the comment at the top of that file) draws at `/extensions/<name>`. There is no Extensions group: the page sits in the group its `group` key names (default `apps`).
+
+Placement keys (#790, docs/PLAN-package-pages.md): `group` (one of storage, instances, apps, network, people, system, backup, settings; unknown drops the
+package), `after` (a place in the group; core places keep their order, packages follow alphabetically), `[[web.page.tabs]]` (`title` + own
+`[[web.page.tabs.blocks]]`; `_ext_page` flattens them to `tabs: [{id, label}]` and `block.tab`), `template` (`list` | `object` | `feed`, default
+`list` when the first block is a table), `state = { read, dot, line }` (the card; `read` must be a declared read) and `role` on the page and on each
+action (the package roles of ADR 0012, same values as for reads).
 
 ```toml
 [web.page]

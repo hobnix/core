@@ -18,6 +18,7 @@ import SettingsPage from './settings/SettingsPage.svelte';
 import AccessPage from './settings/AccessPage.svelte';
 import Updates from './pages/system/Updates.svelte';
 import CapsOverview from './settings/CapsOverview.svelte';
+import ExtensionsList from './settings/ExtensionsList.svelte';
 import CapabilitySettings from './settings/CapabilitySettings.svelte';
 import Setup from './pages/Setup.svelte';
 import FirstRun from './pages/FirstRun.svelte';
@@ -118,6 +119,7 @@ export const routes = {
   [P.settingsAccess]: AccessPage,
   [P.updates]: Updates,
   [P.capabilities]: CapsOverview,
+  [P.settingsExtensions]: ExtensionsList,
   [P.settingsAdvanced]: SettingsPage,
   [P.nodes]: Nodes,
 };

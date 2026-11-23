@@ -20,6 +20,7 @@ const plan = f.parsePlan(raw);
 check('plan: ok, fields', plan.ok && plan.pkg === 'vpn' && plan.tag === 'v1.4.0' && plan.version === '1.4.0' && plan.repo === 'recipes' && plan.title === 'VPN gateway');
 eq('plan: creates and needs', [plan.creates, plan.needs.map((n) => [n.name, n.state, n.long])], [['a container vpn', 'a share'], [['docker', 'present', false], ['tailscale', 'missing', true]]]);
 check('plan: a long need makes the plan long', plan.long === true && f.parsePlan({ ...raw, long: false }).long === true && f.parsePlan({ ...raw, long: false, needl: [] }).long === false);
+check('plan: rebuild is separate from long', plan.rebuild === true && f.parsePlan({ ...raw, needl: [] }).rebuild === false && f.parsePlan({ ...raw, needl: [], jobsteps: [['rebuild', 'Rebuild']] }).rebuild === true && f.parsePlan({ ...raw, needl: [] }).long === true);
 eq('plan: notes, warns, dangers', [plan.notes, plan.warns, plan.dangers], [['a note'], ['careful'], ['really careful']]);
 eq('plan: asks map to the ask shape', plan.asks.map((a) => [a.key, a.kind, a.def, a.pattern, a.when]),
    [['PROVIDER', 'text', 'proton', '', ''], ['KIND', 'choice:wg,ovpn', 'wg', '', ''], ['KEY', 'secret', '', '', 'KIND=wg'], ['ADDR', 'text', '', '[0-9./]+', '']]);

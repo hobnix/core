@@ -9926,6 +9926,82 @@
     }
    }
   },
+  "/pkg/integrations": {
+   "get": {
+    "operationId": "pkg.integrations",
+    "summary": "what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none); - = empty",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "integrations"
+     ],
+     "script": "pkg.sh",
+     "args": "--integrations {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. An optional name keeps one integration.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "package"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "integration"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "source",
+            "enum": [
+             "recipe",
+             "extension",
+             "capability"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "api_url"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "key_state",
+            "enum": [
+             "ok",
+             "locked",
+             "missing",
+             "-"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "extra"
+           }
+          ],
+          "minItems": 6,
+          "maxItems": 6
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/list": {
    "get": {
     "operationId": "pkg.list",

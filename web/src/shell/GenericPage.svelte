@@ -11,6 +11,8 @@
   //   actions?: [{ label, icon?, primary?, danger?, plan: [area, arg, ...], planTitle? }   // opens the plan dialog (openPlan): the ONLY way a page changes anything
   //            | { label, form: 'Name' }],                                                  // opens a form of `forms` (a CreateDialog component)
   //            | { label, plan: [area, ..., '{input}'], input: { label, placeholder?, hint?, pattern?, invalid?, suggest?: { read } } }],   // asks for one value first (InputForm); {input} is it; suggest = a declared read whose first field prefills the field
+  //   template?: 'list' | 'object' | 'feed',                                                 // the shape of the page frame (default list)
+  //   role?: 'viewer' | 'app-manager' | 'admin'                                              // on the page and on an action: a button above the person's role is disabled with the reason
   //   tabs?: [{ id, label }],                                                               // page tabs; a block with `tab` shows only on that tab
   //   blocks: [block, ...] }
   //
@@ -38,8 +40,8 @@
   import GenBlock from './GenBlock.svelte';
   import { tr } from '../i18n.js';
   import { openPlan, openCreate } from '../ui.svelte.js';
-  import { areaRole } from '../roles.js';
-  import { tpl, planArgs } from './generic.js';
+  import { areaRole, maxRole } from '../roles.js';
+  import { tpl, planArgs, templateOf } from './generic.js';
   import { poll, rows as rowsOf } from '../data.svelte.js';
   import InputForm from '../forms/ops/InputForm.svelte';
 
@@ -64,11 +66,11 @@
   }
 </script>
 
-<div class="gp">
+<div class="gp" data-template={templateOf(spec)}>
   <PageHeader title={spec.title} crumb={spec.crumb} sub={spec.sub}>
     {#snippet actions()}
       {#each spec.actions ?? [] as a, i}
-        <Button need={areaRole(a.plan?.[0])} variant={a.primary ? 'primary' : a.danger ? 'danger' : 'secondary'} tooltip={a.form && !forms[a.form] ? 'This change has no form in the web interface yet' : ''} disabled={a.form && !forms[a.form]} onclick={() => run(a, i)}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{a.label}</Button>
+        <Button need={maxRole(areaRole(a.plan?.[0]), spec.role, a.role)} variant={a.primary ? 'primary' : a.danger ? 'danger' : 'secondary'} tooltip={a.form && !forms[a.form] ? 'This change has no form in the web interface yet' : ''} disabled={a.form && !forms[a.form]} onclick={() => run(a, i)}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{a.label}</Button>
       {/each}
     {/snippet}
   </PageHeader>
@@ -86,6 +88,9 @@
 
 <style>
   .gp { display: flex; flex-direction: column; gap: 14px; }
+  /* templates: list fills the page; an object page is one column of facts; a feed is a narrower stream */
+  .gp[data-template='object'] { max-width: 960px; }
+  .gp[data-template='feed'] { max-width: 720px; }
   .ptabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
   .ptab { position: relative; flex: none; height: 38px; padding: 0 14px; border: 0; background: none; color: var(--fg-2); font-weight: 500; cursor: pointer; }
   .ptab:hover, .ptab.on { color: var(--fg); }
