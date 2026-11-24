@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "hs pkg install refuses a package whose commands clash"
+body  = """A package whose commands use a word of the core or of another package, whose app route points at an admin page, or that has a start command without its plan command is not installed: the previous copy comes back or the new one goes, nothing stays half installed. hs pkg validate lists such rows. hs pkg remove names every package that needs the one you remove, also through an interface only it provides."""

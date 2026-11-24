@@ -31,6 +31,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/live.sh"
+. "$here/lib/pkg-deps.sh"
+export HS_BASH=${BASH:-bash}   # the bash that runs pkg-stage-check.sh for pkg_repo.py
 py() { python3 -I "$here/pkg.py" "$@"; }
 # A coded refusal of pkg_repo.py (HS_PKG_REFUSAL = a file it writes "code TAB reason" to): shown the ADR 0028 way, through refuse_code
 pkg_refusal_file() { HS_PKG_REFUSAL=$(mktemp); export HS_PKG_REFUSAL; }
@@ -123,10 +125,11 @@ case "${1:-list}" in
     done <<<"$waits"
     [ -z "$rows" ] || next_step "hs recipe <name>" ;;
   validate)
-    if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
-      while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
-      exit 1
-    fi ;;
+    rc=0; out=$(py validate) || rc=1
+    while IFS=$'\t' read -r n p; do [ -z "$n" ] || warn "$n: $p"; done <<<"$out"
+    # the rows a package may not carry (scripts/lib/registry-load.sh) are findings too: package TAB line TAB words TAB reason
+    while IFS=$'\t' read -r n l w r; do [ -z "$n" ] || { warn "$n: row $w (line $l): $r"; rc=1; }; done < <(registry_refused)
+    if [ "$rc" = 0 ]; then ok "$(t 'Every manifest is valid.')"; else exit 1; fi ;;
   index)    # the signed package index of a repository: what CI builds (pkg.py index, lib/pkg_index.py); build|validate|sign|verify|tree
     shift
     sub=${1:-}
@@ -202,15 +205,8 @@ case "${1:-list}" in
     if [ "$kind" != recipe ] && capability_on "$name"; then
       fail "$(t "'%s' is switched on: switch it off first." "$name")"; next_step "hs ext disable $name"; exit 1
     fi
-    for d in "$st"/packages/current/*/ "${HS_PACKAGES_ROOT:-$(dirname "$here")}"/capabilities/*/; do
-      [ -d "$d" ] || continue
-      n=$(basename "$d")
-      [ "$n" != "$name" ] || continue
-      f=$d/capability.toml; [ -f "$f" ] || f=$d/package.toml
-      [ -f "$f" ] || continue
-      sed -n 's/^requires[[:space:]]*=[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/p' "$f" | head -n1 | tr ',' '\n' | tr -d ' "' | grep -qxF -- "$name" || continue
-      ! capability_on "$n" || deps+="${deps:+ }$n"
-    done
+    # names it directly or through an interface only it provides (scripts/lib/pkg-deps.sh); a second provider that is on lets it go, and is refused later
+    deps=$(pkg_dependents "$name" | paste -sd' ' -)
     if [ -n "$deps" ]; then
       fail "$(t "'%s' cannot be removed: %s needs it." "$name" "$deps")"; next_step "hs ext disable ${deps%% *}"; exit 1
     fi

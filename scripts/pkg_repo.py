@@ -82,11 +82,18 @@ GRACE_DAYS = 7          # an expired index keeps working; the warning starts thi
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
+def clean_text(s, keep_ws=False):
+    """The one place a text that may come from a package is made safe to print: C0 (tab and newline kept with keep_ws), DEL, C1 (U+0085)
+    and the line and paragraph separators U+2028/U+2029 become ?. Every refusal passes through it (Refused), so install, update and
+    install --core show the same text."""
+    return re.sub("[\\x00-\\x08\\x0b-\\x1f\\x7f-\\x9f\\u2028\\u2029" + ("" if keep_ws else "\\t\\n") + "]", "?", str(s))
+
+
 class Refused(Exception):
     """a reason shown to the person, exit 1; `code` (scripts/lib/error-codes.tsv) is printed as a machine line after it"""
 
     def __init__(self, text, code=None):
-        super().__init__(text)
+        super().__init__(clean_text(text, True))
         self.code = code
 
 
@@ -892,6 +899,10 @@ class Repos:
         if bp:
             self.rm_quiet(tmp)
             raise Refused("%s: %s" % (name, bp[0][1]), bp[0][0])
+        why = self.stage_problems(name, tmp, r_name, m)
+        if why:
+            self.rm_quiet(tmp)
+            raise Refused("%s: %s" % (name, why), "pkg.rows")
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -919,6 +930,25 @@ class Repos:
             print("%s: its events were not installed: %s" % (name, e), file=sys.stderr)
         self.last_permissions = self.pkg.pkg_perms.of(m)
         return entry["version"], r_name, tag
+
+    def stage_problems(self, name, tmp, r_name, m):
+        """The staged copy before it replaces anything (#1072): manifest findings (an app route to an admin page ...) and the rows the loader
+        refuses (scripts/lib/pkg-stage-check.sh, the one place that knows the row rules). -> "" or one line; fails closed when the check cannot run.
+        Nothing is vendored, no event is written and the old copy stays where it is until this is empty."""
+        # only the trust rule here (an admin page is never public); the rest of the app contract is `hs pkg validate`, as before
+        found = [str(x) for x in self.pkg.pkg_app.check(m, tmp, False)[0] if "an admin page is never public" in str(x)]
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg-stage-check.sh").replace("\\", "/")
+        try:
+            res = subprocess.run([os.environ.get("HS_BASH") or "bash", script, name, tmp, r_name], capture_output=True, timeout=120)
+            lines = [ln.replace("\t", ": ", 1) for ln in res.stdout.decode("utf-8", "replace").splitlines() if ln]
+            if res.returncode not in (0, 1) or (res.returncode == 1 and not lines):
+                found.append("the check of its commands could not run")
+            else:
+                found += lines
+        except (OSError, subprocess.SubprocessError):
+            found.append("the check of its commands could not run")
+        clean = [clean_text(x)[:200] for x in found]   # a hostile package text never reaches the terminal as it is
+        return "; ".join(clean[:5]) + ("; and %d more" % (len(clean) - 5) if len(clean) > 5 else "") if clean else ""
 
     def keep_previous(self, name, old, vendored):
         """An update replaced the copy: keep what a rollback needs besides previous/<name>@<commit>: the installed.toml entry, and for a
