@@ -24,6 +24,9 @@
 #   - a CAPABILITY package (package.toml kind = "capability", docs/PLAN-capabilities-repo.md, decision O4) that was installed from a DEFAULT
 #     repository may also own its name as the first word: user rows `<name> <command...>`, sys rows `sys <name> <command...>`. A row whose
 #     first word is also the first word of a core row is refused (no shadowing). Packages from an added repository keep `ext <name>` only.
+#   - `words = ["edge"]` in capability.toml / package.toml: extra first words the package owns (rows `edge <command...>`, `sys edge <command...>`),
+#     so a command keeps its name when it moves into the package. Allowed for an in-tree capability.toml folder and for a capability package of
+#     a default repository; refused when a core row or another package uses the word (docs/PLAN-packages.md, #1072).
 # Test knobs: HS_REGISTRY (core file), HS_PACKAGES_DIR (the folder that holds the packages; only that one is read).
 . "${BASH_SOURCE[0]%/*}/capability.sh"
 
@@ -82,6 +85,36 @@ _ext_owns_name() {
   [ -n "$r" ] && _ext_repo_is_default "$r"
 }
 
+# The extra first words a package declares: `words = ["a", "b"]` in capability.toml or package.toml, one per line (valid words only).
+_ext_declared_words() {   # _ext_declared_words <dir>
+  local f
+  for f in "$1/capability.toml" "$1/package.toml"; do
+    [ -f "$f" ] || continue
+    grep -aE '^words[[:space:]]*=' "$f" | grep -oE '"[a-z][a-z0-9-]*"' | tr -d '"' | grep -vxE 'ext|sys' || true
+    return 0
+  done
+}
+
+# The first words package <name> in <dir> owns beyond `ext <name>`, one per line: its own name (see _ext_owns_name) and its `words`.
+# `words` count for an in-tree folder (capability.toml) and for a capability package of a default repository.
+_ext_owned_words() {   # _ext_owned_words <name> <dir>
+  if _ext_owns_name "$1" "$2"; then echo "$1"; fi
+  if [ -f "$2/capability.toml" ] || _ext_owns_name "$1" "$2"; then _ext_declared_words "$2"; fi
+  return 0
+}
+
+# Which package (other than <name>) uses <word> as its name or as an owned word? Prints the package, empty when nobody.
+_ext_word_taken_by() {   # _ext_word_taken_by <name> <word>
+  local n d
+  while IFS= read -r n; do
+    [ "$n" != "$1" ] || continue
+    if [ "$n" = "$2" ]; then echo "$n"; return 0; fi
+    d=$(ext_package_dir "$n") || continue
+    if _ext_owned_words "$n" "$d" | grep -qxF "$2"; then echo "$n"; return 0; fi
+  done < <(ext_package_names)
+  return 0
+}
+
 ext_package_dir() {   # ext_package_dir <name>
   local r
   [[ "${1:-}" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || return 1
@@ -114,11 +147,20 @@ ext_package_on() {
 # Reads one commands.tsv. Valid rows go to stdout, or with report=1 the refused ones as REFUSED TAB line TAB path TAB reason.
 _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   [ -f "$2/commands.tsv" ] || return 0
-  local own=0 proto=0
-  ! _ext_owns_name "$1" "$2" || own=1
+  local proto=0 words w t taken=""
+  words=$(_ext_owned_words "$1" "$2" | sort -u | paste -sd' ' -)
+  for w in $words; do
+    t=$(_ext_word_taken_by "$1" "$w")
+    [ -z "$t" ] || taken="$taken $w:$t"
+  done
   # a package that says `protocol = [1]` has its rows run through scripts/lib/ext_proto.py: the row gets the flag `proto` (hs.sh)
   ! grep -qE '^protocol[[:space:]]*=' "$2/package.toml" 2>/dev/null || proto=1
-  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v own="$own" -v proto="$proto" '
+  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" '
+    BEGIN {
+      now = split(words, ow, " "); for (i = 1; i <= now; i++) owned[ow[i]] = 1
+      nt = split(taken, tk, " "); for (i = 1; i <= nt; i++) { split(tk[i], kv, ":"); takenby[kv[1]] = kv[2] }
+      alt = ""; for (i = 1; i <= now; i++) alt = alt (i > 1 ? " or " : "") ow[i]
+    }
     NR == FNR {   # the core registry: which first words it uses
       if ($0 ~ /^#/ || $0 ~ /^[ \t\r]*$/) next
       n = split($2, cw, " ")
@@ -133,12 +175,12 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       nw = split(path, w, " ")
       if (name == "list" || name == "enable" || name == "disable" || name == "status" || name == "start" || name == "stop" || name == "svc-run") reason = "the name " name " is reserved (hs ext " name ")"
       else if (kind == "user") {
-        if (own == 1 && w[1] == name && nw >= 2) { if (("user " name) in corefirst) reason = "the word " name " is also a core command" }
-        else if (w[1] != "ext" || w[2] != name || nw < 3) reason = "a user row must be: ext " name " <command>" (own == 1 ? " or " name " <command>" : "")
+        if (w[1] in owned && nw >= 2) { if (("user " w[1]) in corefirst) reason = "the word " w[1] " is also a core command"; else if (w[1] in takenby) reason = "the word " w[1] " is also used by the package " takenby[w[1]] }
+        else if (w[1] != "ext" || w[2] != name || nw < 3) reason = "a user row must be: ext " name " <command>" (now > 0 ? " or " alt " <command>" : "")
       }
       else if (kind == "sys")  {
-        if (own == 1 && w[1] == "sys" && w[2] == name && nw >= 3) { if (("sys " name) in corefirst) reason = "the word " name " is also a core command" }
-        else if (w[1] != "sys" || w[2] != "ext" || w[3] != name || nw < 4) reason = "a sys row must be: sys ext " name " <command>" (own == 1 ? " or sys " name " <command>" : "")
+        if (w[1] == "sys" && (w[2] in owned) && nw >= 3) { if (("sys " w[2]) in corefirst) reason = "the word " w[2] " is also a core command"; else if (w[2] in takenby) reason = "the word " w[2] " is also used by the package " takenby[w[2]] }
+        else if (w[1] != "sys" || w[2] != "ext" || w[3] != name || nw < 4) reason = "a sys row must be: sys ext " name " <command>" (now > 0 ? " or sys " alt " <command>" : "")
       }
       else reason = "the kind must be user or sys"
       if (reason == "" && NF < 6) reason = "a row has at least 6 columns (kind path script args help help.de)"

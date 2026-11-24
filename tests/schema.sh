@@ -181,6 +181,65 @@ EOF
 )
 check_eq "web-serve.py CONFIG_KEYS" "$settable" "$web"
 
+echo "-- include anchors (kind = \"include\": the options of capabilities/<name>/options.toml stand where the anchor is)"
+inc=$(mktemp -d); mkdir -p "$inc/config" "$inc/capabilities/ca" "$inc/capabilities/cb"
+opt() {   # opt <key> <capability>
+  printf '[[item]]
+kind = "option"
+key = "%s"
+type = "bool"
+required = false
+settable = false
+secret = false
+capability = "%s"
+default = %s
+doc = "# d"
+value = "%s = true"
+
+' "$1" "$2" "'false'" "$1"
+}
+{ opt ca1 ca; opt ca2 ca; } > "$inc/capabilities/ca/options.toml"
+opt cb1 cb > "$inc/capabilities/cb/options.toml"
+head='[[item]]
+kind = "header"
+text = "# h"
+
+[[item]]
+kind = "section"
+title = "S"
+
+'
+printf "$head"'[[item]]
+kind = "include"
+capability = "ca"
+keys = ["ca2"]
+
+[[item]]
+kind = "include"
+capability = "cb"
+
+[[item]]
+kind = "include"
+capability = "ca"
+
+[[item]]
+kind = "include"
+capability = "gone"
+' > "$inc/config/schema.toml"
+check_eq "an include puts the options in anchor order; a keyed anchor takes only its keys; a missing folder is skipped" "ca2,cb1,ca1" "$(HS_SCHEMA="$inc/config/schema.toml" $GEN list | cut -f1 | paste -sd, -)"
+check_out "a capability option also written in schema.toml is refused" "option key missing or twice" bash -c 'printf "[[item]]
+kind = \"option\"
+key = \"ca1\"
+type = \"bool\"
+required = false
+settable = false
+secret = false
+default = \"false\"
+doc = \"# d\"
+value = \"ca1 = true\"
+" >> "$1/config/schema.toml"; HS_SCHEMA="$1/config/schema.toml" python3 "$2/schema-gen.py" list 2>&1' _ "$inc" "$SCRIPTS"
+rm -rf "$inc"
+
 echo "-- the scripts run from a copy without capabilities/ (as /nix/store on a server): hs sys config list still works"
 copy=$(mktemp -d)
 cp -r "$SCRIPTS" "$copy/scripts"

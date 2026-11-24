@@ -1,0 +1,58 @@
+# The config options of this capability (kind = "include" anchors in config/schema.toml put them back in file order).
+
+[[item]]
+kind = "option"
+key = "edgeDomain"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-mail"
+default = '""'
+doc = '''
+# The mail domain this node is the MX for (the capability edge-mail). Mail for it is relayed to the mail server (edgeStalwartIp).'''
+value = '''
+edgeDomain = "example.org"'''
+
+[[item]]
+kind = "option"
+key = "edgeMxHost"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-mail"
+default = '""'
+doc = '''
+# The name of the MX record and of the certificate (an A record for it must exist before the first rebuild, and the reverse DNS
+# of the VPS must match it). Not the name of the mail server behind it.'''
+value = '''
+edgeMxHost = "mx.example.org"'''
+
+[[item]]
+kind = "option"
+key = "edgeAcmeEmail"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-mail"
+default = '""'
+doc = '''
+# Contact address for Let's Encrypt (the certificate of edgeMxHost is checked over port 80).'''
+value = '''
+edgeAcmeEmail = "you@example.org"'''
+
+[[item]]
+kind = "option"
+key = "edgeStalwartIp"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-mail"
+default = '""'
+doc = '''
+# Tailscale address of the mail server that receives the relayed mail and answers "does this recipient exist" (port 25).'''
+value = '''
+edgeStalwartIp = "100.64.0.10"'''
