@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # help: Docker as part of hobnix: turn it on (a locked container with Docker inside), turn it off, list the apps that run in it
 # help.de: Docker als Teil von hobnix: einschalten (ein gesperrter Container mit Docker darin), ausschalten, die Apps darin auflisten
-# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | gpu [on|off] [--pci <address>] [--yes] [--dry-run] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines] | --follow-logs <app> [lines]
+# args: status | list | enable [--manager webui|arcane|portainer|none] [--size s|m|l] [--yes] [--job] [--dry-run] | migrate [--undo] | disable [--yes --confirm docker] [--no-backup] [--job] [--dry-run] | mount <share|remote:peer> <path> [--as uid:gid] [--yes] [--job] [--dry-run] | move-apps [--yes --confirm docker] [--job] [--dry-run] [--finish] | gpu [on|off] [--pci <address>] [--yes] [--dry-run] | --status | --health | --list | --apps | --containers | --app <app> | --rev <app> | --logs <app> [lines] | --follow-logs <app> [lines]
 # The capability docker (docs/PLAN-docker-instances.md, Decisions 12 to 14): the container `docker` is owned by it (user.hs.managed_by=docker),
 # so only this script deletes it (HS_OWNER=docker on the manage-ct.sh call, scripts/lib/instance.sh).
 #   hs docker status       key/value lines: on or off, the container, the manager, the size, the number of apps, the address
 #   hs docker list         the apps (compose projects) that run in Docker: name, state, ports
 #   hs docker enable       plan, then: create the container, install Docker, start the manager (arcane, portainer; webui and none start
 #                          nothing: the page of hobnix itself is built later), lock it, add it to the backup, write dockerManager
-#   hs docker disable      plan, a backup offer, the typed name docker, then delete the container and unset dockerManager
+#   hs docker migrate      quiet, idempotent (hs update runs it): set docker=on from the older setting dockerManager, remember a manager that runs
+#                          in $HS_STATE_DIR/docker-manager-legacy (arcane|portainer), unset dockerManager. Touches no container.
+#                          --undo puts dockerManager back and removes docker and the legacy file.
+#   hs docker disable      plan, a backup offer, the typed name docker, then delete the container and unset docker, dockerManager and the legacy file
 #   hs sys docker mount    the only route that gives the locked container a folder (the lock refuses create-share, hs remote attach): plan, then
 #                          <share> <path> --as <uid:gid> (a local share; the idmap change restarts the container and so every app in it) or
 #                          remote:<peer> <path> (/mnt/remote/<peer>, recursive, rslave, as hs remote attach does); needs --yes without a terminal
@@ -47,7 +50,7 @@ CT=docker
 OWNER=docker
 tab=$'\t'
 
-usage() { fail "$(t 'usage: hs docker status | list | enable | disable | mount | move-apps | gpu [on|off]')" >&2; }
+usage() { fail "$(t 'usage: hs docker status | list | enable | migrate | disable | mount | move-apps | gpu [on|off]')" >&2; }
 interactive() { [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ]; }
 inc() { "${HS_INCUS:-incus}" "$@"; }
 ct_cmd() {   # ct_cmd <manage-ct args>: a call that changes the container, with the owner's pass
@@ -334,6 +337,18 @@ ct_ip() {   # the address of the container, up to 10 tries; nothing when it has 
     sleep 1
   done
 }
+manager_name() {   # the manager of the status row: the legacy file, else the setting dockerManager, else an installed recipe that provides one
+  local m st=${HS_STATE_DIR:-/var/lib/hs}
+  m=$(head -n 1 "$st/docker-manager-legacy" 2>/dev/null || true)
+  [ -n "$m" ] || m=$(setting_get dockerManager 2>/dev/null || true)
+  if [ -z "$m" ]; then
+    for m in portainer arcane; do
+      grep -qs 'docker-manager' "$st/packages/current/$m/package.toml" && break
+      m=
+    done
+  fi
+  printf '%s' "$m"
+}
 dash() { if [ -n "${1:-}" ]; then printf '%s' "$1"; else printf -- '-'; fi; }
 
 status_rows() {   # key<TAB>value
@@ -342,7 +357,7 @@ status_rows() {   # key<TAB>value
   if owned; then own=yes; if running; then run=yes; fi; fi
   # on = the capability is listed AND hobnix owns the container; a listed capability without a container is not "on"
   if [ "$own" = yes ] && capability_on docker; then on=on; fi
-  mgr=$(setting_get dockerManager 2>/dev/null || true)
+  mgr=$(manager_name)
   size=$(setting_get dockerSize 2>/dev/null || true); [ -n "$size" ] || size=m
   read -r mem cpus < <(size_of)
   n=$(children | wc -l | tr -d ' ')
@@ -551,6 +566,7 @@ cmd_enable() {
   case "$manager" in arcane|portainer) run_step "$(t 'Start the manager %s' "$manager")" st_manager ;; esac
   run_step "$(if backup_new_instances_on; then t 'Add it to the backup'; else t 'Leave it out of the backup'; fi)" st_backup
   setting_set dockerManager "$manager"
+  setting_set docker on
   if [ -n "$size" ]; then setting_set dockerSize "$size"; fi
   ok "$(t 'Docker is on.')"
   next_step "$(t 'give it a fixed IP: hs ct docker ip')"
@@ -559,6 +575,35 @@ cmd_enable() {
       mport=$( . "$here/providers/docker/$manager.sh"; printf '%s' "$manager_default_port" )
       next_step "$(t 'the manager: http://%s:%s' "$(ct_ip)" "$mport")" ;;
   esac
+  return 0
+}
+
+drop_settings() { setting_unset docker; setting_unset dockerManager; rm -f "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy"; }
+
+cmd_migrate() {   # quiet; nothing is stopped, removed or restarted: only settings and one state file change
+  local legacy=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy old w=
+  case "${1:-}" in
+    "") ;;
+    --undo)
+      old=$(cat "$legacy" 2>/dev/null || true); [ -n "$old" ] || old=webui
+      setting_set dockerManager "$old"; setting_unset docker; rm -f "$legacy"
+      ok "$(t 'dockerManager is back: %s.' "$old")"; return 0 ;;
+    *) usage ;;
+  esac
+  old=$(setting_get dockerManager 2>/dev/null || true)
+  if [ -z "$old" ]; then
+    # an install from before the question counts as Arcane (or Portainer); only before the first migration, else a recipe's own project would match
+    [ -z "$(setting_get docker 2>/dev/null || true)" ] && owned || return 0
+    for w in arcane portainer; do
+      if inc exec "$CT" -- test -f "/opt/$w/docker-compose.yml" </dev/null >/dev/null 2>&1; then old=$w; break; fi
+    done
+    [ -n "$old" ] || return 0
+  fi
+  case "$old" in arcane|portainer) mkdir -p "$(dirname "$legacy")"; printf '%s\n' "$old" > "$legacy" ;; esac
+  setting_set docker on
+  setting_unset dockerManager
+  ok "$(t 'Docker is switched by the setting docker now.')"
+  case "$old" in arcane|portainer) note "$(t '%s keeps running as before.' "$old")" ;; esac
   return 0
 }
 
@@ -574,7 +619,7 @@ cmd_disable() {
       *) usage ;;
     esac
   done
-  if ! owned; then setting_unset dockerManager; ok "$(t 'Docker is off already.')"; return 0; fi
+  if ! owned; then drop_settings; ok "$(t 'Docker is off already.')"; return 0; fi
   n=$(children | wc -l | tr -d ' ')
   snap=$(ct_cmd "$CT" --snapshots 2>/dev/null </dev/null | tail -1 | cut -f2 || true)
   step "$(t 'Turn Docker off')"
@@ -601,7 +646,7 @@ cmd_disable() {
   fi
   step "$(t 'Delete the container')"
   ct_cmd "$CT" --delete --yes || fail "$(t 'Deleting the container failed.')"
-  setting_unset dockerManager
+  drop_settings
   ok "$(t 'Docker is off.')"
 }
 
@@ -973,6 +1018,7 @@ case "$verb" in
   status) cmd_status ;;
   list) cmd_list ;;
   enable) cmd_enable "$@" ;;
+  migrate) cmd_migrate "$@" ;;
   disable) cmd_disable "$@" ;;
   mount) cmd_mount "$@" ;;
   move-apps) cmd_move_apps "$@" ;;

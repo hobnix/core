@@ -1212,6 +1212,22 @@ networkProvider = "unifi"'''
 
 [[item]]
 kind = "option"
+key = "docker"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "docker"
+store = "settings"
+choices = ["on"]
+doc = '''
+# The on switch of the capability docker (a locked container with Docker inside, and the share apps). `hs docker enable` sets it, `hs docker disable`
+# and only that removes it; `hs docker migrate` sets it on a server that has the older setting dockerManager. No rebuild.'''
+value = '''
+docker = "on"'''
+
+[[item]]
+kind = "option"
 key = "dockerManager"
 type = "string"
 required = false
@@ -1221,9 +1237,8 @@ capability = "docker"
 store = "settings"
 choices = ["webui", "arcane", "portainer", "none"]
 doc = '''
-# Which page manages Docker, when the capability docker is on: webui (the web interface of hobnix, the default of
-# `hs docker enable`; built later, until then it only records the choice), arcane, portainer, or none (Docker only).
-# `hs docker enable` sets it; setting it switches the capability docker on. Only `hs docker disable` removes it. No rebuild.'''
+# Superseded by the setting docker (the on switch); `hs docker migrate` (run by hs update) moves it there and removes this one. `hs docker enable`
+# still writes it for now, because it still installs the manager. Setting it still switches the capability docker on. No rebuild.'''
 value = '''
 dockerManager = "webui"'''
 
