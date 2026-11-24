@@ -487,6 +487,8 @@ Add a repository of your own (a typed repository name confirms it; releases must
 hs pkg repo add <name> <url> --key <allowed-signers-file>
 ```
 
+A repository that publishes a signed index is added with `--index <address>` (the key must list the namespace `hobnix-index`): `hs pkg fetch` then verifies the index, refuses an older one than it already has, and the version of a package is the one in the index. Before an install the files of the pinned commit are checked against the hash in the index, and a withdrawn (yanked) version is neither offered nor installed. Not tested on hardware yet.
+
 `hs pkg repo list` and `hs pkg repo remove <name>` show and remove them. (The Marketplace only adds signed repositories; `--unsigned` is
 for the command line, and a repository without signatures lets its owner run code on your server.) Extensions are switched on and off with `hs ext enable <name>`
 and `hs ext disable <name>`, and `hs ext list` shows them.

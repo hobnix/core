@@ -1,5 +1,5 @@
 <script>
-  // Give an instance the mounted shares of a peer, read only, or take them away again (hs sys peers plan|start attach|detach <peer> <instance>).
+  // Give an instance the mounted shares of a server, read only, or take them away again (hs sys peers plan|start attach|detach <peer> <instance>).
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { Field, TextInput, Select } from '../../ui/index.js';
 

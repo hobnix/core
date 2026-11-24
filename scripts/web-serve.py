@@ -1885,8 +1885,8 @@ def parse_change(out, rc):
         elif k == "job" and re.fullmatch(r"[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]{1,60}-[a-z]{4}", v):
             d["job"] = v           # the job record of an interactive recipe run (ADR 0018): the page follows it
         elif k == "secret":
-            name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer): login, domain, host, password
-            if name in ("login", "domain", "host", "password", "token"):
+            name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer, code): login, domain, host, password; code, address, expires_in
+            if name in ("login", "domain", "host", "password", "token", "code", "address", "expires_in"):
                 d.setdefault("secret", {})[name] = val
         elif k in ("file", "color", "seed", "size"):
             d[k] = v           # what a poster drawing reports

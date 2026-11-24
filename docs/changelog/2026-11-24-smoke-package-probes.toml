@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "hs smoke checks only what the switched-on parts need"
+body  = """The programs and probes of a part (storage, Incus, Samba, backup, edge status) are checked only while that part is on. A probe of a command whose part is off is skipped."""
