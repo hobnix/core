@@ -3,6 +3,7 @@
 //! Try it without the core, with the reference runner:
 //!   cargo build --example hello
 //!   python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
+#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
 use hobnix_ext_sdk::command::{run, Failure, Request, Success};
 use hobnix_ext_sdk::{Ctx, Event, LogLevel};
 use serde_json::json;

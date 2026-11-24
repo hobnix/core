@@ -141,6 +141,22 @@ jobs:
             all|"") echo scripts/*.sh scripts/lib/*.sh scripts/recipes/*.sh vps/*.sh tests/*.sh | xargs -n 25 -P 4 shellcheck -S error -x ;;
             *) echo $FILES | xargs -n 25 -P 4 shellcheck -S error -x ;;
           esac
+      - name: shellcheck at warning level on the changed files (ratchet, baseline tests/shellcheck-ratchet.tsv)
+        if: github.event_name == 'pull_request' && needs.changes.outputs.shellcheck_files != 'none' && needs.changes.outputs.shellcheck_files != 'all'
+        env:
+          FILES: ${{ needs.changes.outputs.shellcheck_files }}
+        # a changed file may not have more findings than the baseline lists (a new file: none); fewer: lower the number (--update)
+        run: bash scripts/dev/shellcheck-ratchet.sh $FILES
+      - name: shfmt layout of the changed files (-i 2 -ci; reports only until the flags are checked on a runner)
+        if: github.event_name == 'pull_request' && needs.changes.outputs.shellcheck_files != 'none' && needs.changes.outputs.shellcheck_files != 'all'
+        continue-on-error: true
+        env:
+          FILES: ${{ needs.changes.outputs.shellcheck_files }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shfmt
+          shfmt --version
+          # shellcheck disable=SC2086
+          shfmt -d -i 2 -ci $FILES
       - name: shellcheck warnings in the pool scripts (informational, counts only)
         if: needs.changes.outputs.shellcheck_files == 'all'
         continue-on-error: true
