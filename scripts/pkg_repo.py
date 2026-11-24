@@ -196,6 +196,9 @@ class Repos:
             raise Refused("the repository name is a lowercase word")
         if name in self.all():
             raise Refused("a repository called %s exists already" % name)
+        for d in self.defaults():
+            if name in (d.get("replaces") or []):
+                raise Refused("the name %s belongs to the default repository %s, which took over the old repository of that name: pick another name" % (name, d["name"]))
         if not re.match(r"^(https://|ssh://|git@|file://|/|[A-Za-z]:[\/])", url):
             raise Refused("the address must be https://, ssh://, git@host:path or a local path")
         if index and not re.match(r"^(https://|file://|/|[A-Za-z]:[\/])", index):
@@ -245,6 +248,12 @@ class Repos:
 
     def fetch(self, r):
         d = self.clone_dir(r["name"])
+        if os.path.isdir(d) and os.path.isdir(os.path.join(d, ".git")) or os.path.isfile(os.path.join(d, "HEAD")):
+            # a clone of another address (a repository of that name was removed and the name is used again): never reused
+            have = git_run(["config", "--get", "remote.origin.url"], cwd=d).stdout
+            have = have.decode("utf-8", "replace").strip() if isinstance(have, bytes) else str(have).strip()
+            if have != r["url"]:
+                shutil.rmtree(d, ignore_errors=True)
         if os.path.isdir(os.path.join(d, ".git")) or os.path.isfile(os.path.join(d, "HEAD")):
             git("fetch", "--quiet", "--tags", "--force", "origin", cwd=d)
         else:

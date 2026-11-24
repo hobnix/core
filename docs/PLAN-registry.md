@@ -24,6 +24,8 @@ step 4.
 3. **Three repositories:** `hobnix/core` (renamed from `hobnix/server`), `hobnix/official` (recipes, extensions and capabilities as one
    set; `kind` tells them apart) and `hobnix/community`. Third-party repositories stay possible. `hobnix/recipes`, `hobnix/extensions` and
    `hobnix/capabilities` are retired.
+   **Switched (2026-11-24, #1074):** `config/package-repos.toml` has the one default row `official` (signed index, `replaces` the three old
+   names, `core` the four packages the core names); `hs pkg repo migrate` moves installed packages over. Not tested on hardware yet.
 4. **The core is only the framework.** All capabilities move to `hobnix/official`. A server works with any subset.
 5. **Blueprints** choose the set at install time.
 

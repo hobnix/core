@@ -22,13 +22,13 @@ printf '2.0.0' > "$WORK/new-maj"
 cat > "$HS_STATE_DIR/packages/installed.toml" <<'F'
 [package.good]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 [package.bad]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 [package.maj]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 [package.added]
 version = "1.0.0"
 repo = "mine"
@@ -46,8 +46,8 @@ cat > "$WORK/pkg" <<F
 echo "pkg \$*" >> "$CALLS"
 case "\$1" in
   fetch|rollback) exit 0 ;;
-  market) for a in $apps; do v=\$(cat "$WORK/new-\$a"); r=recipes; [ \$a = added ] && r=mine; printf '%s\trecipe\t%s\t%s\t1.0.0\tupdate\tno\tgeneric\t%s\n' \$a \$r "\$v" \$a; done ;;
-  show) v=\$(cat "$WORK/new-\$2"); r=recipes; [ "\$2" = added ] && r=mine; printf 'status\tok\nname\t%s\nrepo\t%s\nversion\t%s\napp_version\t%s\n' "\$2" \$r "\$v" "\$v" ;;
+  market) for a in $apps; do v=\$(cat "$WORK/new-\$a"); r=official; [ \$a = added ] && r=mine; printf '%s\trecipe\t%s\t%s\t1.0.0\tupdate\tno\tgeneric\t%s\n' \$a \$r "\$v" \$a; done ;;
+  show) v=\$(cat "$WORK/new-\$2"); r=official; [ "\$2" = added ] && r=mine; printf 'status\tok\nname\t%s\nrepo\t%s\nversion\t%s\napp_version\t%s\n' "\$2" \$r "\$v" "\$v" ;;
   update) case "\$*" in *--yes*) exit 0 ;; esac; cat "$WORK/diff-\$2" 2>/dev/null; exit 1 ;;
 esac
 F

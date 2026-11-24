@@ -1,10 +1,12 @@
-# The package repositories every server has (docs/PLAN-packages.md). Their release tags are signed; the keys that may sign are in
-# config/trusted-keys/<name>.allowed_signers (ssh-keygen allowed-signers format). Without that file the repository is listed but
-# nothing is fetched from it: it fails closed. More repositories: hs pkg repo add <name> <url> --key <allowed_signers file>.
+# The package repository every server has (docs/PLAN-packages.md, docs/PLAN-registry.md): hobnix/official, read through its signed index
+# (index.json + index.json.sig; the signing key is in config/trusted-keys/official.allowed_signers). Without that file the repository is
+# listed but nothing is fetched from it: it fails closed. More repositories: hs pkg repo add <name> <url> --key <allowed_signers file>.
+#   replaces  the repositories this one took over (the old recipes and extensions rows are gone): an installed package recorded under one of
+#             them moves here on `hs pkg repo migrate` (also run by hs update), never downgraded; a repository a person added is never moved.
+#   core      the packages the core refers to by name (CI only: scripts/dev/core-names-check.py checks that each is in the index with core = true; `hs pkg install --core` installs the packages the index flags core = true).
 [[repo]]
-name = "recipes"
-url = "https://github.com/hobnix/recipes"
-
-[[repo]]
-name = "extensions"
-url = "https://github.com/hobnix/extensions"
+name = "official"
+url = "https://github.com/hobnix/official"
+index = "https://hobnix.github.io/official/index.json"
+replaces = ["recipes", "extensions"]
+core = ["domain", "monitoring", "ntfy", "zoraxy"]
