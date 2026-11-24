@@ -14,7 +14,7 @@ install and update), the SDK `rust/hobnix-ext-sdk` (command and service runners,
 index pins `commit` plus `tree`, and `tree` hashes every file of the package folder, so the binary bytes are already under the index signature.
 
 Gaps found: a service calls `hs` (`hs sys pkg integrations`, `hs sys ext posters start`) from inside the confined unit, where `/var/lib/hs` is an empty tmpfs; `hs pkg update`
-and `rollback` do not restart a running service; services run as uid 0 (#1134); no CI builds an extension crate against the SDK of a core pull request.
+and `rollback` do not restart a running service; services run as uid 0 (#1134); the CI job `ext-crates` builds the extension crates of hobnix/official against the SDK of a core pull request.
 
 ## Decision
 

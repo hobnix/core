@@ -30,6 +30,7 @@ jobs:
       capmx: ${{ steps.f.outputs.capmx }}
       root: ${{ steps.f.outputs.root }}
       rust: ${{ steps.f.outputs.rust }}
+      ext: ${{ steps.f.outputs.ext }}
       pkg: ${{ steps.f.outputs.pkg }}
       shellcheck_files: ${{ steps.f.outputs.shellcheck_files }}
       test_names: ${{ steps.f.outputs.test_names }}
@@ -42,7 +43,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
-          nix=true root=true rust=true pkg=true capmx=true
+          nix=true root=true rust=true ext=true pkg=true capmx=true
           # only a pull request is narrowed; everything else gets the full set (the merge queue, `develop`, the nightly run)
           [ "${{ github.event_name }}" = pull_request ] || BASE=""
           if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
@@ -56,6 +57,8 @@ jobs:
             echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/(nix-matrix|official-ref)\.sh)$' || capmx=false
             echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|scripts/dev/(official-ref|core-names-check)|tests/(core-names|official-ref|profile-core-only|fixtures/official)|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
             echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
+            # ext: the extension crates of hobnix/official are built against the SDK (job ext-crates): only its folder, the workspace files, this workflow
+            echo "$files" | grep -qE '^rust/(hobnix-ext-sdk/|Cargo\.(toml|lock)$)|^\.github/workflows/ci\.yml$' || ext=false
           fi
           # shellcheck: a pull request checks the shell files it changed (the empty list: nothing to check); everything else checks every file
           sc=all
@@ -77,6 +80,7 @@ jobs:
           echo "capmx=$capmx" >> "$GITHUB_OUTPUT"
           echo "root=$root" >> "$GITHUB_OUTPUT"
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "ext=$ext" >> "$GITHUB_OUTPUT"
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
           echo "shellcheck_files=$sc" >> "$GITHUB_OUTPUT"
           echo "test_names=$names" >> "$GITHUB_OUTPUT"
@@ -226,6 +230,52 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq jq python3-pil
           HS_CORE="$PWD" HS_TEST_CI=1 bash pkgs/official/tests/run-all.sh
 
+  # The Rust crates of hobnix/official built and tested against the SDK of this core (ADR 0031): official's crates pin the SDK by git rev;
+  # `--config patch` replaces it with rust/hobnix-ext-sdk of this checkout, nothing is edited. No --locked: the patch changes the SDK
+  # source in the crate's Cargo.lock. Ref of official: the branch of the same name, else develop (main for a release). Reads only; no secrets.
+  ext-crates:
+    needs: changes
+    if: needs.changes.outputs.ext == 'true' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Choose the ref of hobnix/official
+        id: offref
+        env:
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          # unlike official-ref.sh (packages job: main): a core pull request targets develop, so official's develop is the fallback;
+          # a release pull request or a tag uses main
+          url=https://github.com/hobnix/official.git
+          if [ "$RELEASE" = true ]; then ref=main
+          elif git ls-remote --exit-code --heads "$url" "$HEAD_REF" >/dev/null 2>&1; then ref=$HEAD_REF
+          else ref=develop; fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/official
+          ref: ${{ steps.offref.outputs.ref }}
+          path: pkgs/official
+      - name: Crates of official against this SDK
+        run: |
+          echo "hobnix/official: ${{ steps.offref.outputs.ref }} at $(git -C pkgs/official rev-parse HEAD)"
+          # the toolchain official pins (rustup does not install it by itself any more)
+          ch=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' pkgs/official/rust-toolchain.toml)
+          rustup toolchain install "$ch" --profile minimal
+          sdk="$PWD/rust/hobnix-ext-sdk"
+          n=0
+          for c in pkgs/official/extensions/*/Cargo.toml pkgs/official/examples/*/Cargo.toml; do
+            [ -f "$c" ] || continue
+            n=$((n + 1))
+            echo "== $c"
+            (cd "$(dirname "$c")" && cargo test --config "patch.'https://github.com/hobnix/core'.hobnix-ext-sdk.path='$sdk'")
+          done
+          [ "$n" -gt 0 ] || { echo "no crate found in hobnix/official"; exit 1; }
+          echo "crates built: $n"
+
   nixos:
     needs: changes
     if: needs.changes.outputs.nix == 'true'
@@ -316,7 +366,7 @@ jobs:
   # other jobs must have succeeded (a failed or skipped one stops the release). On a tag `changes` turns every job on, so `rust` is only
   # skipped if that ever changes. A beta tag (vX.Y.Z-beta.N, cut from the milestone branch) builds the ISO too and its release is a prerelease (owner decision 2026-11-13).
   iso:
-    needs: [changes, rust, scripts, tests, packages, nixos, integration]
+    needs: [changes, rust, scripts, tests, packages, ext-crates, nixos, integration]
     if: >-
       !cancelled() && startsWith(github.ref, 'refs/tags/v')
       && needs.changes.result == 'success'
@@ -324,6 +374,7 @@ jobs:
       && needs.scripts.result == 'success'
       && needs.tests.result == 'success'
       && needs.packages.result == 'success'
+      && (needs.ext-crates.result == 'success' || needs.ext-crates.result == 'skipped')
       && needs.nixos.result == 'success'
       && needs.integration.result == 'success'
     runs-on: ubuntu-latest
@@ -399,7 +450,7 @@ jobs:
   # Jobs come and go and the test parts have their own names; the rule only knows `ci-ok`.
   ci-ok:
     if: always()
-    needs: [changes, rust, scripts, tests, packages, nixos, integration]
+    needs: [changes, rust, scripts, tests, packages, ext-crates, nixos, integration]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or was skipped
