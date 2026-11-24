@@ -137,6 +137,14 @@ check "the schema describes init.integrations" python3 -I -c "
 import json; d=json.load(open('$SCHEMA'))['\$defs']['init']
 assert 'integrations' in d['properties'] and 'integrations' not in d['required']"
 
+echo "-- init.integrations travel in a file, not in argv"
+check "ext.sh passes no listing text in argv" sh -c "! grep -q -e 'svc-run.*--integrations ' '$SCRIPTS/ext.sh' && grep -q -e '--integrations-file' '$SCRIPTS/ext.sh'"
+printf 'jellyfin\tmedia\trecipe\thttp://x\tok\tsecret=hunter2\t-\n' > "$WORK/listing.tsv"
+check "the bridge refuses a listing in argv" sh -c "! python3 -I '$SCRIPTS/lib/ext_service.py' svc-run --name fixsvc --state-dir '$WORK/svcstate' --integrations 'x' 2>/dev/null"
+FIX_MODE=good python3 -I "$SCRIPTS/lib/ext_service.py" svc-run --name fixsvc --dir "$WORK" --state-dir "$WORK/svcstate" --integrations-file "$WORK/listing.tsv" >/dev/null 2>&1 &
+BRIDGE=$!; sleep 1; kill $BRIDGE 2>/dev/null; wait $BRIDGE 2>/dev/null
+check "the bridge removes the listing file after reading it" test ! -e "$WORK/listing.tsv"
+
 echo "-- svc-run: the unit's bridge, five failures in ten minutes (fake supervisor = a loop that restarts like Restart=on-failure)"
 PKG=$WORK/pkgs/fixsvc; mkdir -p "$PKG" "$WORK/svcstate"
 printf 'name = "fixsvc"\n[service]\nexec = "@/run.sh"\nhealth_interval = 5\n' > "$PKG/package.toml"

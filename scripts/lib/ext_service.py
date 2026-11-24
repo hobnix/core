@@ -827,7 +827,7 @@ def main_svc(argv):
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--active", default="no")
     ap.add_argument("--stopped", default="no")
-    ap.add_argument("--integrations", default="", help="the listing of hs sys pkg integrations for the declared integrations (no keys): sent in init")
+    ap.add_argument("--integrations-file", help="a file with the listing of hs sys pkg integrations for the declared integrations: read once and removed (not argv: visible in ps); sent in init")
     ap.add_argument("--credential", action="append", default=[], help="NAME=PROVIDER=KEYFILE (the key is copied privately for LoadCredential=)")
     a = ap.parse_args(argv[1:])
     if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
@@ -838,7 +838,18 @@ def main_svc(argv):
             n, _, rest = c.partition("=")
             prov, _, p = rest.partition("=")
             creds.append((n, prov, p))
-        return svc_run(a.name, a.dir or ".", a.state_dir, creds, a.integrations)
+        text = ""
+        if a.integrations_file:
+            try:
+                with open(a.integrations_file, encoding="utf-8", errors="replace") as fh:
+                    text = fh.read(1 << 18)
+            except OSError:
+                print("ext_service.py: the integration listing could not be read: the service gets no integrations", file=sys.stderr)
+            try:
+                os.unlink(a.integrations_file)
+            except OSError:
+                pass
+        return svc_run(a.name, a.dir or ".", a.state_dir, creds, text)
     if argv[0] == "reset":
         try:
             os.unlink(state_path(a.state_dir, a.name))
