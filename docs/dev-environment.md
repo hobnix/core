@@ -184,7 +184,7 @@ gate later). One that is not merged moves on with its branch.
 | --- | --- | --- |
 | `changes` | decides which jobs can be affected | always (not on a draft pull request) |
 | `scripts` | `bash -n`, shellcheck (errors; only the changed files on a pull request), the changelog warning | always |
-| `tests` | the tests that need no root, in one to four parts on separate runners (`tests/run-all.sh --shard I/N`). A pull request runs the tests that mention its files (`scripts/dev/tests-for.sh`, the local cousin is `t changed`); everything else runs all | always (skipped when no test matches) |
+| `tests` | the tests that need no root, in one to four parts on separate runners (`tests/run-all.sh --shard I/N`). A pull request runs the tests that mention its files (`scripts/dev/tests-for.sh`, the local cousin is `t changed`); everything else runs all | always (a pull request always runs `profile-core-only` and `profile-vps`) |
 | `rust` | format, clippy, tests of the Cargo workspace | Rust files or the scripts they stand in for changed |
 | `packages` | hobnix/recipes and hobnix/extensions against this core | the package helpers, `scripts/lib/`, `packages/`, `capabilities/` or their tests changed |
 | `integration` | the root tests on loop devices | not for web-only or docs-only changes |
