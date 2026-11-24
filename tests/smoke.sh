@@ -60,4 +60,52 @@ check_out "an installed program passes" "tool	all other programs	ok" echo "$tl"
 check_out "no gum is only a hint" "tool	gum	skip" echo "$tl"
 check_out "a wrong option is refused" "usage: hs smoke" $S --nope
 
+echo "-- packages bring their probes and tools"
+rm -f "$BIN/smartctl" "$BIN/restic"
+ln -sf "$(command -v python3)" "$BIN/python3"
+PK=$WORK/pk; mkdir -p "$PK/onpkg" "$PK/offpkg"
+printf 'name = "onpkg"
+tools = ["smartctl"]
+[[probe]]
+label = "pkg probe"
+words = "good"
+ok = [0]
+[[probe]]
+label = "pkg one"
+words = "one"
+ok = [0, 1]
+limit = 3
+' > "$PK/onpkg/capability.toml"
+printf 'name = "offpkg"
+tools = ["restic"]
+[[probe]]
+label = "off probe"
+words = "good"
+ok = [0]
+' > "$PK/offpkg/capability.toml"
+printf 'onpkg
+' > "$WORK/caps-on"
+printf '# kind
+user	good	x.sh	-	h	h	-
+user	one	x.sh	-	h	h	capability:offpkg
+user	bad	x.sh	-	h	h	capability:onpkg
+' > "$WORK/registry-pk.tsv"
+unset HS_SMOKE_PROBES
+export HS_PACKAGES_DIR=$PK HS_CAPABILITIES_FILE=$WORK/caps-on HS_CAPABILITIES_TSV=$WORK/none.tsv HS_STATE_DIR=$WORK/state
+PS="env PATH=$BIN HS_REGISTRY=$WORK/registry-pk.tsv bash $SCRIPTS/smoke.sh"
+pl=$($PS --list 2>&1 || true)
+check_out "a probe of a package that is on runs" "probe	pkg probe	ok" echo "$pl"
+if grep -q 'off probe' <<<"$pl"; then fail "a probe of a package that is off is not run"; else pass "a probe of a package that is off is not run"; fi
+check_out "the tool of a package that is on is looked for" "tool	smartctl	fail" echo "$pl"
+if grep -q 'tool	restic' <<<"$pl"; then fail "the tool of a package that is off is not looked for"; else pass "the tool of a package that is off is not looked for"; fi
+check_out "a core probe of a capability that is off is skipped" "probe	pkg one	skip	capability offpkg is off" echo "$pl"
+printf 'onpkg
+offpkg
+' > "$WORK/caps-on"
+pl=$($PS --list 2>&1 || true)
+check_out "once it is on, the probe runs" "probe	off probe	ok" echo "$pl"
+check_out "and so does the core probe of that capability" "probe	pkg one	ok" echo "$pl"
+check_out "pkg_probes.py prints label, words, codes, limit" "pkg one	one	0 1	3" python3 "$SCRIPTS/lib/pkg_probes.py" probes "$PK/onpkg"
+unset HS_PACKAGES_DIR HS_CAPABILITIES_FILE HS_CAPABILITIES_TSV HS_STATE_DIR
+
 finish
