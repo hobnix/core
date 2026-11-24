@@ -85,8 +85,7 @@ check_eq "net:lan keeps AF_INET and AF_INET6 (net is declared only)" "1" "$($EC 
 check_eq "no IP filter: network filtering is a firewall decision" "0" "$($EC net:lan net:wan | grep -c 'IPAddress\|PrivateNetwork')"
 check_eq "devices:gpu keeps its device (DeviceAllow, not PrivateDevices)" "2" "$(printf '%s\n' "$ALL" | grep -c '^DeviceAllow=char-drm rw$\|^PrivateDevices=no$')"
 check_eq "fs.write stays writable (no ProtectSystem=full, no ReadOnly of it)" "1" "$(printf '%s\n' "$ALL" | grep -c '^ReadWritePaths=-/srv/a$')"
-check_eq "an allow list would kill a service with SIGSYS: the filter is a deny list and refused calls are errors" "0" "$(printf '%s
-' "$ALL" | grep -c '^SystemCallFilter=@\|ProtectProc\|ProcSubset')"
+check_eq "an allow list would kill a service with SIGSYS: the filter is a deny list and refused calls are errors" "0" "$(printf '%s\n' "$ALL" | grep -c '^SystemCallFilter=@\|ProtectProc\|ProcSubset')"
 check_eq "no DynamicUser yet (step 7) and no MemoryDenyWriteExecute" "0" "$(printf '%s\n' "$ALL" | grep -c 'DynamicUser\|MemoryDenyWriteExecute\|^User=')"
 check_eq "props (confined commands) carry the same flags" "14" "$(python3 -I $SCRIPTS/lib/ext_confine.py props --name fixsvc -- - | grep -c '^Protect\(Kernel\|Control\|Clock\|Hostname\)\|^Restrict\|^LockPers\|^SystemCall')"
 
@@ -301,5 +300,38 @@ check_out "it says what is not covered: reads, network, hs and incus" "it does N
 check_out "it says the other commands run as root, unconfined" "run as root, unconfined" printf '%s' "$PRM"
 check_out "a package without a confined row gets no extra text" 'PLAIN=\[\]' printf '%s' "$PRM"
 check_out "an uninstalled package gets none and no error" 'NONE=\[\]' printf '%s' "$PRM"
+
+# --- the dynamic mapping (#1134 slice 2): not used by a running service yet, so every check above is the old text ---
+ECD="python3 -I $SCRIPTS/lib/ext_confine.py dropin --dynamic --name fixsvc --"
+dyn=$($ECD fs.write:/var/lib/hs/fixsvc | sed '1,2d')
+check_eq "dynamic: no line binds the bridge state" "0" "$(printf '%s\n' "$dyn" | grep -c 'ext-svc')"
+check_eq "dynamic: the user and the state folder" "4" "$(printf '%s\n' "$dyn" | grep -c '^DynamicUser=yes$\|^User=hsx-fixsvc$\|^StateDirectory=hs-ext/fixsvc$\|^StateDirectoryMode=0700$')"
+check_eq "dynamic: UMask=0077" "1" "$(printf '%s\n' "$dyn" | grep -c '^UMask=0077$')"
+check_eq "dynamic: the own folder is bound from the state folder, no other bind" "1" "$(printf '%s\n' "$dyn" | grep -c '^BindPaths=-/var/lib/hs-ext/fixsvc:/var/lib/hs/fixsvc$')"
+check_eq "dynamic: no ReadWritePaths for it" "0" "$(printf '%s\n' "$dyn" | grep -c '^ReadWritePaths=')"
+check_eq "dynamic: the hardening of the old mapping is kept" "$($EC fs.write:/var/lib/hs/fixsvc | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')" "$(printf '%s\n' "$dyn" | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')"
+check_eq "dynamic: without devices no extra groups" "0" "$($ECD - | grep -c SupplementaryGroups)"
+check_eq "dynamic: devices:gpu adds the groups" "1" "$($ECD devices:gpu | grep -c '^SupplementaryGroups=render video$')"
+rc=0; err=$($ECD fs.write:/srv/a 2>&1 >/dev/null) || rc=$?
+check_eq "dynamic: fs.write outside /var/lib/hs/<name> is refused" "1" "$rc"
+check_eq "dynamic: and the refusal has the code" "1" "$(printf '%s\n' "$err" | grep -c 'ext.dynamic-write')"
+rc=0; $ECD fs.write:/var/lib/hs/other >/dev/null 2>&1 || rc=$?
+check_eq "dynamic: another package's state folder is refused too" "1" "$rc"
+check_eq "dynamic: fs.read below the own folder adds no line" "$($ECD - )" "$($ECD fs.read:/var/lib/hs/fixsvc/x)"
+check_eq "dynamic: other fs.read is a ReadOnlyPaths line" "1" "$($ECD fs.read:/etc/hs | grep -c '^ReadOnlyPaths=-/etc/hs$')"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --dynamic --name disks -- - >/dev/null 2>&1 || rc=$?
+check_eq "dynamic: a name of the core's own /var/lib/hs folders is refused (ext_state.RESERVED)" "1" "$rc"
+rc=0; python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic -- - >/dev/null 2>&1 || rc=$?
+check_eq "dynamic: props needs the package name" "1" "$rc"
+long=$(printf 'a%.0s' $(seq 1 40))
+u1=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$long" -- - | sed -n 's/^User=//p')
+u2=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$long" -- - | sed -n 's/^User=//p')
+check_eq "dynamic: a 40-character name gives a 31-character user" "31" "${#u1}"
+check_eq "dynamic: ending in six hex digits" "1" "$(printf '%s\n' "$u1" | grep -c -- '-[0-9a-f]\{6\}$')"
+check_eq "dynamic: and it is stable" "$u1" "$u2"
+rc=0; $EC fs.read:/var/lib/hs-ext/other >/dev/null 2>&1 || rc=$?
+check_eq "a grant may never reach another package's dynamic state folder" "1" "$rc"
+rc=0; $EC fs.write:/var/lib/private/hs-ext/other >/dev/null 2>&1 || rc=$?
+check_eq "nor the private folder behind it" "1" "$rc"
 
 finish
