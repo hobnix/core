@@ -1,0 +1,2 @@
+# Who may sign the package index of hobnix/official (ssh-keygen allowed-signers format, namespace hobnix-index). hobnix/official has no release tags: only the signed index.json counts. Rotation: add the new key, merge, let servers run hs update, switch the CI secret, remove the old line later.
+index-ci namespaces="hobnix-index" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO9N8eb2Y1FLw11pXmvp5TI4vibm7BxJwJEBUSESj4sU
