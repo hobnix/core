@@ -124,7 +124,7 @@ echo "-- plan: refusals"
 run plan apply nosuch;  if [ "$rc" = 1 ] && has "No blueprint called"; then pass "unknown blueprint refused"; else fail "nosuch: $out"; fi
 run plan apply hostile
 check_eq "a hostile message is one status line and one reason line" 2 "$(printf '%s\n' "$out" | wc -l)"
-check_eq "and no control, C1 or U+2028 byte is left in it" 0 "$(printf '%s' "$out" | LC_ALL=C grep -c -P '\xc2[\x80-\x9f]|\xe2\x80[\xa8\xa9]|\x1b' || true)"
+check_eq "and no control, C1 or U+2028 byte is left in it" 0 "$(printf '%s' "$out" | LC_ALL=C grep -c -E $'\xc2[\x80-\x9f]|\xe2\x80[\xa8\xa9]|\x1b' || true)"
 run plan apply bad;     if [ "$rc" = 1 ] && has "Docker is the core capability"; then pass "a blueprint with problems is refused with them"; else fail "bad: $out"; fi
 run plan apply edge;    if [ "$rc" = 1 ] && has "role"; then pass "a role that does not fit is refused"; else fail "edge: $out"; fi
 run plan apply 'A b';   if [ "$rc" = 1 ]; then pass "a bad name is refused"; else fail "bad name: $out"; fi

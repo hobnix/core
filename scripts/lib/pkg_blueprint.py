@@ -42,24 +42,28 @@ TOP_TABLES = ("blueprint", "docker", "machine", "settings", "answers", "meta")
 SCALARS = (str, int, float, bool)
 
 
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-import schema_options
+def _so():
+    """schema_options, imported when it is needed: pkg.py loads this file at start, and a pulled core without schema_options.py (hs update) must still load it"""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import schema_options
+    return schema_options
 
 
 def _schema():
     """(options {key: store}, secrets {key}) of config/schema.toml, or None when it cannot be read."""
     try:
-        return schema_options.options(), schema_options.secrets()
-    except (OSError, ValueError, KeyError):
+        so = _so()
+        return so.options(), so.secrets()
+    except (OSError, ValueError, KeyError, ImportError):
         return None
 
 
 def _typed(k, v):
     """why the value does not fit the schema entry of the option k (type, pattern, choices), else empty"""
     try:
-        it = schema_options.specs().get(k)
-    except (OSError, ValueError, KeyError):
+        it = _so().specs().get(k)
+    except (OSError, ValueError, KeyError, ImportError):
         return ""
     if not it:
         return ""
