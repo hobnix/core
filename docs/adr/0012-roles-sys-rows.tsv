@@ -130,7 +130,6 @@ parts plan <action>	admin	plan
 parts start <action>	admin	start
 node start <action>	admin	start
 node remote	admin	read
-edge status	admin	read
 notify channels	viewer	read
 notify channel <name>	viewer	read
 notify providers	viewer	read
@@ -296,3 +295,4 @@ incident start <action>	admin	start
 testlab results	viewer	read
 testlab plan <action>	admin	plan
 testlab start <action>	admin	start
+edge status	admin	read
