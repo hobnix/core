@@ -33,7 +33,7 @@ DOCKER_SIZES = ("s", "m", "l")
 ALLOWED_KEYS = ("language", "timeZone", "keyMap", "icons", "loginMessage", "webAccent", "hostName", "siteName", "quietHours", "notifications",
                 "backupNewShares", "backupNewInstances")
 # every string of a blueprint (keys and values, any depth): no control character (a newline would start a new line of the plan), and a length cap
-CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")   # C0, DEL, C1 (U+0085 too), line and paragraph separators: splitlines() breaks on them
 MAX_KEY, MAX_TEXT, MAX_LONG = 64, 300, 2000
 LONG_FIELDS = ("description", "description_de")
 TOP_KEYS = ("name", "version", "kind", "title", "title_de", "description", "description_de", "requires_core", "audience", "roles",
@@ -42,15 +42,44 @@ TOP_TABLES = ("blueprint", "docker", "machine", "settings", "answers", "meta")
 SCALARS = (str, int, float, bool)
 
 
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import schema_options
+
+
 def _schema():
     """(options {key: store}, secrets {key}) of config/schema.toml, or None when it cannot be read."""
-    if HERE not in sys.path:
-        sys.path.insert(0, HERE)
-    import schema_options
     try:
         return schema_options.options(), schema_options.secrets()
     except (OSError, ValueError, KeyError):
         return None
+
+
+def _typed(k, v):
+    """why the value does not fit the schema entry of the option k (type, pattern, choices), else empty"""
+    try:
+        it = schema_options.specs().get(k)
+    except (OSError, ValueError, KeyError):
+        return ""
+    if not it:
+        return ""
+    t = it.get("type", "string")
+    if t == "string":
+        ok = isinstance(v, str)
+    elif t == "bool":
+        ok = isinstance(v, bool) or v in ("true", "false")
+    elif t == "int":
+        ok = (isinstance(v, int) and not isinstance(v, bool)) or (isinstance(v, str) and re.fullmatch(r"-?[0-9]{1,9}", v) is not None)
+    else:
+        return ""
+    if not ok:
+        return "must be " + t
+    sv = v if isinstance(v, str) else str(v)
+    if t == "string" and it.get("pattern") and not re.search(it["pattern"], sv):
+        return "does not match " + str(it.get("hint") or it["pattern"])
+    if it.get("choices") and sv not in it["choices"]:
+        return "is not one of " + ", ".join(it["choices"])
+    return ""
 
 
 def _flat(v):
@@ -170,6 +199,10 @@ def manifest_problems(m):
                     bad(f"[{table}] {k} is a secret: a blueprint never carries one")
             if k not in ALLOWED_KEYS and len(out) == n0:
                 bad(f"[{table}] {k} is not allowed in a blueprint" + " (only plain preferences: " + ", ".join(ALLOWED_KEYS) + ")")
+            if k in ALLOWED_KEYS and sch:
+                why = _typed(k, v)
+                if why:
+                    bad(f"[{table}] {k} {why}")
             if table == "settings" and not isinstance(v, str):
                 bad(f"[settings] {k} must be text")
             elif not _flat(v):

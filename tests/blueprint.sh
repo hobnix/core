@@ -311,6 +311,22 @@ try:
     b._row("a", "b\nc"); raise SystemExit("_row let a newline through")
 except ValueError:
     pass
+# Unicode line breaks (splitlines() in web-serve.py parse_change breaks on them) and C1 controls
+for ch in ("\u0085", " ", " ", "\x80", "\x9f", "\x0b", "\x0c", "\x1c"):
+    for field in ("title", "description"):
+        lines, bad = b.show(R(mut(lambda m: m.update({field: "a" + ch + "machine\tpools\t[]"}))), P(), "bp")
+        assert lines == [] and bad, (repr(ch), field, lines, bad)
+    assert b.text_problems(mut(lambda m: m["settings"].update(language="a" + ch + "b"))), repr(ch)
+    try:
+        b._row("a", "b" + ch + "c"); raise SystemExit("_row let %r through" % ch)
+    except ValueError:
+        pass
+# an allowed key must fit its schema entry (type, pattern, choices): else every later machine-sync check breaks
+for table, key, val in (("machine", "siteName", 5), ("machine", "siteName", "Evil Name!"), ("machine", "timeZone", ["a", "b"]),
+                        ("machine", "hostName", [1]), ("settings", "icons", "emoji"), ("settings", "loginMessage", "maybe")):
+    assert any(key in x for x in b.manifest_problems(mut(lambda m: m.update({table: {key: val}})))), (table, key, val)
+for table, key, val in (("machine", "siteName", "home"), ("machine", "timeZone", "Europe/Vienna"), ("settings", "icons", "ascii"), ("settings", "loginMessage", "true")):
+    assert not b.manifest_problems(mut(lambda m: m.update({table: {key: val}}))), (table, key, val, b.manifest_problems(mut(lambda m: m.update({table: {key: val}}))))
 # the allow-list: nothing security-relevant, whatever the table
 for key in ("nodeKeys", "sshKeys", "adminUser", "sshOverIp", "gatewayUnknownHostPublic", "tailscaleAuthKeyFile", "incusDefaultPool", "pools", "role", "capabilities", "firewall", "notAnOption"):
     for table in ("machine", "settings"):
