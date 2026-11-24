@@ -1,7 +1,7 @@
 # 0032: Rust is the main language, Python is retired
 
 Status: Accepted (2026-11-24)
-Issue: to be created (epic: Rust as the main language). Related: ADR 0001 (strangler), ADR 0015 (Wasm), ADR 0031 (Rust extensions: shipping, SDK pin, service rules), docs/PLAN-rust.md, docs/PLAN-package-sdk.md, docs/CODE-PRACTICES.md.
+Issue: hobnix/core#1189 (epic: Rust as the main language). Related: ADR 0001 (strangler), ADR 0015 (Wasm), ADR 0031 (Rust extensions: shipping, SDK pin, service rules), docs/PLAN-rust.md, docs/PLAN-package-sdk.md, docs/CODE-PRACTICES.md.
 
 ## Context
 
