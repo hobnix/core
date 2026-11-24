@@ -101,6 +101,42 @@ assert d["init"]["properties"]["v"]["const"] == p.VERSION
 assert {r["$ref"].split("/")[-1] for r in d["fromCore"]["oneOf"]} == {"init", "event", "shutdown"}
 PY
 
+echo "-- init.integrations: only the declared ones, no key, sent in init"
+LISTING=$(printf 'jellyfin\tmedia\trecipe\thttp://127.0.0.1:8096\tok\ta=1,b=2\tX-Emby-Token\nplex\tmedia\trecipe\t-\tmissing\t-\t-\nsecretapp\tvault\trecipe\thttp://h\tok\t-\t-\n')
+: > "$SVC_LOG"
+check "the bridge sends the declared rows in init and drops an undeclared integration" python3 -I - "$SCRIPTS/lib" "$SVC" "$SVC_LOG" "$LISTING" <<'PY'
+import json, os, sys, threading
+sys.path.insert(0, sys.argv[1])
+import ext_service as p
+rows = p.integration_rows(sys.argv[4], ["integration:media", "events:emit"])
+assert [r["package"] for r in rows] == ["jellyfin", "plex"], rows
+assert rows[0] == {"package": "jellyfin", "integration": "media", "source": "recipe", "api_url": "http://127.0.0.1:8096",
+                   "extras": {"a": "1", "b": "2"}, "key_header": "X-Emby-Token"}
+assert rows[1]["api_url"] is None and rows[1]["extras"] == {} and rows[1]["key_header"] is None
+assert not any("key_file" in r or "key" in r or "key_state" in r for r in rows)
+assert p.integration_rows(sys.argv[4], None) == [] and p.integration_rows(sys.argv[4], ["integration:other"]) == []
+os.environ["SVC_LOG"] = sys.argv[3]
+stop = threading.Event()
+threading.Timer(1.5, stop.set).start()
+p.supervise([sys.executable, "-I", sys.argv[2], "good"], "fixsvc", health_interval=1, grace=1, stop=stop, integrations=rows)
+init = json.loads(open(sys.argv[3]).readline())
+assert init["type"] == "init" and init["v"] == 1 and init["integrations"] == rows
+PY
+: > "$SVC_LOG"
+check "without declared integrations init has no integrations field (older services see the same init)" python3 -I - "$SCRIPTS/lib" "$SVC" "$SVC_LOG" <<'PY'
+import json, os, sys, threading
+sys.path.insert(0, sys.argv[1])
+import ext_service as p
+os.environ["SVC_LOG"] = sys.argv[3]
+stop = threading.Event()
+threading.Timer(1.5, stop.set).start()
+p.supervise([sys.executable, "-I", sys.argv[2], "good"], "fixsvc", health_interval=1, grace=1, stop=stop)
+assert "integrations" not in json.loads(open(sys.argv[3]).readline())
+PY
+check "the schema describes init.integrations" python3 -I -c "
+import json; d=json.load(open('$SCHEMA'))['\$defs']['init']
+assert 'integrations' in d['properties'] and 'integrations' not in d['required']"
+
 echo "-- svc-run: the unit's bridge, five failures in ten minutes (fake supervisor = a loop that restarts like Restart=on-failure)"
 PKG=$WORK/pkgs/fixsvc; mkdir -p "$PKG" "$WORK/svcstate"
 printf 'name = "fixsvc"\n[service]\nexec = "@/run.sh"\nhealth_interval = 5\n' > "$PKG/package.toml"

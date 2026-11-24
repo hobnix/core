@@ -25,7 +25,23 @@
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,40}$" },
         "lang": { "enum": ["en", "de"] },
         "subscribe": { "type": "array", "items": { "type": "string" }, "description": "event kind globs from the manifest, e.g. job.* ; empty for a pure collector" },
-        "health_interval": { "type": "number", "minimum": 0.1, "description": "seconds between `health` messages the core expects at most" }
+        "health_interval": { "type": "number", "minimum": 0.1, "description": "seconds between `health` messages the core expects at most" },
+        "integrations": {
+          "type": "array",
+          "description": "optional, additive (v stays 1): the rows of the integrations the package declared as integration:<name> in `permissions` (what `hs sys pkg integrations <name>` lists), because a confined service cannot run `hs`. No key and no key path: keys are systemd credentials. An older service ignores the field.",
+          "items": {
+            "type": "object",
+            "required": ["package", "integration", "source"],
+            "properties": {
+              "package": { "type": "string", "description": "the provider; names the credential integration-<integration>-<package>" },
+              "integration": { "type": "string" },
+              "source": { "type": "string" },
+              "api_url": { "type": ["string", "null"] },
+              "extras": { "type": "object", "additionalProperties": { "type": "string" } },
+              "key_header": { "type": ["string", "null"] }
+            }
+          }
+        }
       }
     },
     "event": {
