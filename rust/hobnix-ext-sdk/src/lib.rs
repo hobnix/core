@@ -13,7 +13,8 @@
 //! every line is under 1 MiB, free text is cut to the schema limits, and event kinds are checked against `pkg.<name>.<kind>`
 //! before they are written.
 //!
-//! Not in the SDK: the core does not call extensions through this protocol from `hs` yet (the ADRs call that a follow-up).
+//! The core calls commands (ADR 0010) and services (ADR 0011) through this protocol; ADR 0031 describes how a Rust extension is built, shipped and run.
+//! A service must not call `hs`: what it needs from the core arrives as protocol data.
 
 pub mod command;
 pub mod http;
