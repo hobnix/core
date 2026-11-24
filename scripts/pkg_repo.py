@@ -20,12 +20,16 @@ State, all under <state>/packages (root-owned on the server):
     ../pkg-events/<name>.tsv   the events the package declares (written on install, removed with it)
 A repository that has an `index` address (docs/PLAN-registry.md) is read the other way: the signed index.json (and index.json.sig beside it) is
 fetched, verified against the allowed signers (namespace hobnix-index), checked for serial (never lower than the one kept) and kept in
-    index/<name>/index.json (+ .sig)   the last accepted index; the version of a package is the one in it, not a release tag
-The commit of an entry is fetched into repos/<name>/ and its tree is checked against the entry's `tree` hash before anything is installed.
-A repository without `index` keeps the signed release tags. The tag shown for an index package is `v<version>` (the shape stays).
+    index/<name>/live/index.json (+ .sig)   the last accepted index (as one pair; .old while a swap is interrupted); the version of a package is the one in it, not a release tag
+    index/<name>/serial   the serial floor (serial and sha256), written before the swap and never removed by it; .lock = the fetch lock
+    index-cache/<name>/   the package folders of the index commits whose tree hash was checked (read by the web without git or hashing again)
+The commit of an entry is fetched into repos/<name>/ (by `hs pkg fetch`; a read never runs git clone or fetch) and its tree is checked against the entry's `tree` hash before anything is installed.
+A repository without `index` keeps the signed release tags. The tag shown for an index package is `v<version>-<8 hex of the commit><8 hex of the tree hash>` (the shape stays).
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
 import atexit
+import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -33,13 +37,20 @@ import os
 import re
 import shutil
 import stat
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import tomllib
 import urllib.request
 from datetime import timedelta
+
+try:
+    import fcntl
+except ImportError:         # Windows (development only): no lock
+    fcntl = None
 
 TAG = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 BETA_TAG = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.([1-9]\d*)$")
@@ -62,6 +73,11 @@ def beta_allowed(state):
         return False
 REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 MAX_INDEX = 20 * 1024 * 1024
+CACHE_KEEP_SECONDS = 600   # prune leaves a cached folder alone that was created or read this recently
+GIT_TIMEOUT = 180          # seconds for one git call (as HS_INSTALL_FETCH_TIMEOUT in scripts/lib/checkout.sh)
+# The longest a fetch holds the lock: the index (two loads of 30 s at most) + clone + fetch (2 x GIT_TIMEOUT) + all fetches of commits by id together
+# (one more GIT_TIMEOUT, see fetch_index) = 3 x GIT_TIMEOUT + 60 s. A fetch or install that waits for the lock waits that long (HS_PKG_LOCK_WAIT sets it).
+LOCK_FACTOR = 3
 GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -74,15 +90,60 @@ class Refused(Exception):
         self.code = code
 
 
+def git_limit():
+    try:
+        return float(os.environ.get("HS_PKG_GIT_TIMEOUT") or GIT_TIMEOUT)
+    except ValueError:
+        return GIT_TIMEOUT
+
+
+def ssh_configured():
+    """the person set core.sshCommand in a git configuration: ours is not put over it"""
+    if not hasattr(ssh_configured, "v"):
+        r = subprocess.run(["git", "config", "--get", "core.sshCommand"], capture_output=True)
+        ssh_configured.v = r.returncode == 0 and bool(r.stdout.strip())
+    return ssh_configured.v
+
+
+def git_run(args, cwd=None, input=None, limit=None):
+    """run git without a terminal prompt (like scripts/lib/checkout.sh) and with a time limit (HS_PKG_GIT_TIMEOUT, default 180 s): a stalled remote
+    is killed with its helpers, so a lock held around it is always released. -> CompletedProcess; Refused on a timeout"""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="true")
+    # a fetch that outlives its caller (the caller was killed) ends by itself: it is its own session, so no signal of the caller reaches it
+    env.setdefault("GIT_HTTP_LOW_SPEED_LIMIT", "1000")
+    env.setdefault("GIT_HTTP_LOW_SPEED_TIME", "60")
+    if "GIT_SSH_COMMAND" not in env and "GIT_SSH" not in env and not ssh_configured():
+        env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+    limit = git_limit() if limit is None else limit
+    p = subprocess.Popen(["git", *args], cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         start_new_session=hasattr(os, "killpg"))
+    try:
+        out, err = p.communicate(input, timeout=limit)
+    except subprocess.TimeoutExpired:
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(p.pid, signal.SIGKILL)
+            else:
+                p.kill()
+        except OSError:
+            p.kill()
+        p.communicate()
+        raise Refused("git %s timed out after %d s (the remote does not answer)" % (args[0], limit))
+    return subprocess.CompletedProcess(p.args, p.returncode, out, err)
+
+
 def git(*args, cwd=None, input=None):
-    r = subprocess.run(["git", *args], cwd=cwd, input=input, capture_output=True)
+    r = git_run(args, cwd=cwd, input=input)
     if r.returncode != 0:
         raise Refused("git %s: %s" % (args[0], r.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or "failed"))
     return r.stdout
 
 
-def git_ok(*args, cwd=None):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True).returncode == 0
+def git_ok(*args, cwd=None, limit=None):
+    try:
+        return git_run(args, cwd=cwd, limit=limit).returncode == 0
+    except Refused:
+        return False
 
 
 class Repos:
@@ -139,17 +200,26 @@ class Repos:
             raise Refused("the address must be https://, ssh://, git@host:path or a local path")
         if index and not re.match(r"^(https://|file://|/|[A-Za-z]:[\/])", index):
             raise Refused("the index address must be https:// or a local path")
+        if key and not os.path.isfile(key):
+            raise Refused("the key file %s does not exist" % key)
         if index and not unsigned and key:
-            with open(key, encoding="utf-8") as fh:
-                if not re.search(r'namespaces="[^"]*\bhobnix-index\b', fh.read()):
-                    raise Refused('the key file has no line with namespaces="hobnix-index": a key that signs git tags does not sign indexes')
+            try:
+                with open(key, encoding="utf-8") as fh:
+                    has_ns = re.search(r'namespaces="[^"]*\bhobnix-index\b', fh.read())
+            except (OSError, ValueError) as e:
+                raise Refused("the key file %s cannot be read: %s" % (key, e))
+            if not has_ns:
+                raise Refused('the key file has no line with namespaces="hobnix-index": a key that signs git tags does not sign indexes')
         if index and unsigned:
             raise Refused("a signed index needs --key <allowed_signers file>, not --unsigned")
         if bool(key) == bool(unsigned):
             raise Refused("give --key <allowed_signers file> (releases must be signed) or --unsigned")
         if key:
-            with open(key, encoding="utf-8") as fh:
-                text = fh.read()
+            try:
+                with open(key, encoding="utf-8") as fh:
+                    text = fh.read()
+            except (OSError, ValueError) as e:
+                raise Refused("the key file %s cannot be read: %s" % (key, e))
             if not re.search(r"(ssh-ed25519|ssh-rsa|ecdsa-sha2-\S+|sk-\S+)\s+\S+", text):
                 raise Refused("%s holds no SSH public key in allowed-signers format" % key)
             os.makedirs(os.path.join(self.state, "keys"), exist_ok=True)
@@ -163,6 +233,7 @@ class Repos:
         self.save_added([r for r in rows if r["name"] != name])
         shutil.rmtree(os.path.join(self.state, "repos", name), ignore_errors=True)
         shutil.rmtree(os.path.join(self.state, "index", name), ignore_errors=True)
+        self.rm_quiet(os.path.join(self.state, "index-cache", name))
         try:
             os.remove(os.path.join(self.state, "keys", name + ".signers"))
         except OSError:
@@ -241,8 +312,112 @@ class Repos:
             raise Refused("%s: the index is refused: it is the index of %r, not of %s (add the repository under the name its index has)" % (r["name"], doc.get("repo"), r["name"]))
         return doc
 
+    def floor_file(self, name):
+        return os.path.join(self.index_dir(name), "serial")
+
+    def read_floor(self, name):
+        """(serial, sha256 of that index.json) kept in the separate floor file; None when there is none; False when the file is damaged"""
+        try:
+            with open(self.floor_file(name), encoding="utf-8") as f:
+                s, h = f.read().split()
+            return int(s), h
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            return False
+
+    def write_floor(self, name, doc, path):
+        """the serial floor, written (and synced) before the swap and never removed by it: a crash in the swap cannot lose it"""
+        with open(path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+        ff = self.floor_file(name)
+        with open(ff + ".new", "w", encoding="utf-8") as o:
+            o.write("%d %s\n" % (doc["serial"], digest))
+            o.flush()
+            os.fsync(o.fileno())
+        os.replace(ff + ".new", ff)
+
+    @contextlib.contextmanager
+    def locked(self, name):
+        """the one lock of a repository (index/<name>/.lock) around everything that may write the index or run git clone/fetch. Waits at most
+        HS_PKG_LOCK_WAIT seconds, then Refused "another pkg fetch is running"; flock is released when the process ends. Re-entrant in this process."""
+        held = self.__dict__.setdefault("_held", set())
+        if name in held:
+            yield
+            return
+        os.makedirs(self.index_dir(name), exist_ok=True)
+        f = open(os.path.join(self.index_dir(name), ".lock"), "w")
+        try:
+            if fcntl:
+                try:
+                    wait = float(os.environ.get("HS_PKG_LOCK_WAIT") or LOCK_FACTOR * git_limit() + 60)
+                except ValueError:
+                    wait = LOCK_FACTOR * git_limit() + 60
+                end = time.monotonic() + wait
+                while True:
+                    try:
+                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except OSError:
+                        if time.monotonic() >= end:
+                            raise Refused("%s: another pkg fetch is running (waited %d s); try again in a minute" % (name, wait))
+                        time.sleep(0.2)
+            held.add(name)
+            try:
+                yield
+            finally:
+                held.discard(name)
+        finally:
+            f.close()
+
     def fetch_index(self, r):
         """fetch index.json and its signature, keep them only when signature, schema and serial are right; returns the document"""
+        name = r["name"]
+        with self.locked(name):
+            doc = self.fetch_index_locked(r)
+            self.fetch(r)       # once per run: the clone and the commits the index names, so reads of the web never run git clone or fetch
+            d = self.clone_dir(name)
+            missing = {}
+            end = time.monotonic() + git_limit()        # all fetches by id together: the lock is held for a known time at most
+            for pname, e in doc["packages"].items():
+                sha = e["commit"]
+                if git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
+                    continue
+                left = end - time.monotonic()
+                if left > 0:    # a commit no branch or tag reaches any more is fetched by its id
+                    git_ok("fetch", "--quiet", "origin", sha, cwd=d, limit=left)
+                if not git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
+                    missing[pname] = [sha, "the commit %s cannot be fetched from %s%s" % (sha[:12], r["url"], "" if left > 0 else " (time used up; the next fetch tries again)")]
+            self.write_unfetchable(name, missing)
+            for pname, (sha, why) in sorted(missing.items()):
+                print("warning: %s: %s is not available: %s" % (name, pname, why), file=sys.stderr)
+            return doc
+
+    def unfetchable_file(self, name):
+        return os.path.join(self.index_dir(name), "unfetchable.json")
+
+    def unfetchable(self, name):
+        """{package: [commit, reason]} of the packages whose pinned commit the last fetch could not get (they are not available)"""
+        try:
+            with open(self.unfetchable_file(name), encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def write_unfetchable(self, name, missing):
+        f = self.unfetchable_file(name)
+        try:
+            if not missing:
+                self.rm_quiet(f)
+                return
+            with open(f + ".new", "w", encoding="utf-8") as o:
+                json.dump(missing, o)
+            os.replace(f + ".new", f)
+        except OSError:
+            pass
+
+    def fetch_index_locked(self, r):
         pi = self.pkg_index
         name = r["name"]
         d = self.index_dir(name)
@@ -259,17 +434,35 @@ class Repos:
             except (OSError, ValueError):
                 old = None
             why = pi.check_serial(doc, old) if old else None
+            floor = self.read_floor(name)
+            if floor is False:      # fail closed: without a readable floor and a kept pair an older signed index could not be told apart
+                if old is None:
+                    raise Refused("%s: the serial floor file %s is damaged and no kept index remains to check against; nothing was changed. "
+                                  "Delete that file by hand (rm %s) to accept the current index as the first one; this works for the default repositories too" % (name, self.floor_file(name), self.floor_file(name)))
+                floor = None
+            if not why and floor:       # the floor outlives the pair: with live and .old gone an older signed index is still refused
+                with open(os.path.join(new, "index.json"), "rb") as f:
+                    digest = hashlib.sha256(f.read()).hexdigest()
+                if doc["serial"] < floor[0]:
+                    why = "serial %d is below the one already seen (%d)" % (doc["serial"], floor[0])
+                elif doc["serial"] == floor[0] and digest != floor[1]:
+                    why = "serial %d was already used for a different index" % doc["serial"]
             if why:
                 raise Refused("%s: the index is refused: %s (no rollback to an older index)" % (name, why))
+            try:
+                self.write_floor(name, doc, os.path.join(new, "index.json"))
+            except OSError as e:
+                raise Refused("%s: the serial floor cannot be written (%s); nothing was changed" % (name, e))
             live, prev = os.path.join(d, "live"), os.path.join(d, ".old")
-            self.rm_quiet(prev)
             if os.path.isdir(live):
+                self.rm_quiet(prev)
                 os.rename(live, prev)       # a crash here leaves .old, which live_dir still reads
-            os.rename(new, live)
+            os.rename(new, live)            # .old is not removed before live exists again: it may be the only kept pair
             self.rm_quiet(prev)
         finally:
             self.rm_quiet(new)
         self._idx = {}
+        self.prune_cache(name, doc)
         if pi.now_utc() > pi.now_utc(doc["expires"]) + timedelta(days=GRACE_DAYS):
             print("warning: the index of %s expired on %s" % (name, doc["expires"]), file=sys.stderr)
         return doc
@@ -289,24 +482,36 @@ class Repos:
         """v<version>-<8 of the commit><8 of the tree hash>: a plan made for this tag is only ever installed as these files (the tag shape of the web job allows it)"""
         return "v%s-%s%s" % (entry["version"], entry["commit"][:8], entry["tree"][7:15])
 
-    def index_entries(self, r):
-        """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry"""
+    def index_entries(self, r, with_unavailable=False):
+        """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry. A package whose
+        commit could not be fetched is left out, or (with_unavailable) kept with `_unavailable` = the reason: never offered, but still known"""
         out = {}
+        bad = self.unfetchable(r["name"])
         for n, e in self.read_index(r)["packages"].items():
-            out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""))
+            extra = {}
+            if n in bad and bad[n][0] == e["commit"]:
+                if not with_unavailable:
+                    continue
+                extra = {"_unavailable": "its commit could not be fetched: %s" % bad[n][1]}
+            out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""), **extra)
         return out
 
-    def ensure_commit(self, r, sha):
-        """the pinned commit is in the clone (fetched when it is not); Refused otherwise"""
+    def ensure_commit(self, r, sha, fetch=True):
+        """the pinned commit is in the clone (fetched when it is not, unless fetch=False: a read of the web never runs git clone or fetch); Refused otherwise"""
         d = self.clone_dir(r["name"])
         have = lambda: os.path.isdir(d) and git_ok("cat-file", "-e", sha + "^{commit}", cwd=d)
         if have():
             return
-        self.fetch(r)
-        if not have():
-            git_ok("fetch", "--quiet", "origin", sha, cwd=d)
-        if not have():
-            raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
+        if not fetch:
+            raise Refused("%s: the commit %s is not in the local clone yet (hs pkg fetch)" % (r["name"], sha[:12]))
+        with self.locked(r["name"]):        # no second git fetch beside a running pkg fetch ("cannot lock ref")
+            if have():
+                return
+            self.fetch(r)
+            if not have():
+                git_ok("fetch", "--quiet", "origin", sha, cwd=d)
+            if not have():
+                raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
 
     def verified_dir(self, r_name, entry):
         """a temporary folder with the package at the pinned commit, tree hash checked (for reading files before an install)"""
@@ -314,12 +519,68 @@ class Repos:
         key = (r_name, entry["commit"], entry["path"])
         if key not in memo:
             r = self.all()[r_name]
-            self.ensure_commit(r, entry["commit"])
-            tmp = tempfile.mkdtemp(prefix="hs-pkg-")
+            cached = self.cache_path(r_name, entry)
+            if self.cache_valid(cached, entry):
+                memo[key] = os.path.join(cached, "pkg")
+                return memo[key]
+            self.ensure_commit(r, entry["commit"], fetch=False)
+            try:        # beside the cache so the finished folder is renamed into place
+                os.makedirs(os.path.dirname(cached), exist_ok=True)
+                tmp = tempfile.mkdtemp(prefix=".tmp-", dir=os.path.dirname(cached))
+            except OSError:
+                tmp = tempfile.mkdtemp(prefix="hs-pkg-")
             atexit.register(self.rm_quiet, tmp)
             self.extract(r, entry["commit"], entry["path"], os.path.join(tmp, "pkg"), entry["tree"])
             memo[key] = os.path.join(tmp, "pkg")
+            self.cache_store(cached, tmp, entry)
+            if os.path.isdir(os.path.join(cached, "pkg")):
+                memo[key] = os.path.join(cached, "pkg")
         return memo[key]
+
+    # the checked folders of the index packages, kept per commit: a read of the web does not archive and hash every capability again.
+    # The folder is only written after its tree hash matched the signed index; the marker holds that hash, a different entry is never served from it.
+    def cache_path(self, r_name, entry):
+        return os.path.join(self.state, "index-cache", r_name, "%s-%s" % (entry["commit"], hashlib.sha256(entry["path"].encode()).hexdigest()[:12]))
+
+    @staticmethod
+    def cache_valid(path, entry):
+        try:
+            with open(os.path.join(path, "tree"), encoding="utf-8") as f:
+                ok = f.read().strip() == entry["tree"] and os.path.isdir(os.path.join(path, "pkg"))
+            if ok:
+                os.utime(path)      # used now: prune keeps it
+            return ok
+        except OSError:
+            return False
+
+    def cache_store(self, cached, tmp, entry):
+        """move the checked folder `tmp`/pkg to `cached` (atomic rename); a state folder that cannot be written just means no cache"""
+        try:
+            with open(os.path.join(tmp, "tree"), "w", encoding="utf-8") as f:
+                f.write(entry["tree"] + "\n")
+            os.makedirs(os.path.dirname(cached), exist_ok=True)
+            if self.cache_valid(cached, entry):     # another read was first: its folder may be in use, keep it
+                return
+            self.rm_quiet(cached)
+            os.rename(tmp, cached)
+        except OSError:
+            pass
+
+    def prune_cache(self, name, doc):
+        """drop the cached folders of commits the accepted index no longer names"""
+        d = os.path.join(self.state, "index-cache", name)
+        if not os.path.isdir(d):
+            return
+        keep = {"%s-%s" % (e["commit"], hashlib.sha256(e["path"].encode()).hexdigest()[:12]) for e in doc["packages"].values()}
+        now = time.time()
+        for n in os.listdir(d):
+            p = os.path.join(d, n)
+            try:
+                recent = now - os.stat(p).st_mtime < CACHE_KEEP_SECONDS     # created or read a moment ago: a running read may be using it
+            except OSError:
+                continue
+            if n not in keep and not recent:
+                self.rm_quiet(p)
 
     def read_at(self, r_name, entry, ref, rel):
         """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
@@ -388,13 +649,14 @@ class Repos:
                 out.append((name, "", "", str(e)))
         return out
 
-    def catalog(self):
-        """{package name: [(repo, entry, tag, commit)]} from the cached clones, newest verified tag each"""
+    def catalog(self, with_unavailable=False):
+        """{package name: [(repo, entry, tag, commit)]} from the cached clones, newest verified tag each; with_unavailable also lists the
+        packages whose commit could not be fetched (entry["_unavailable"] = why): for what must know an installed copy, never for an offer"""
         cat = {}
         for name, r in self.all().items():
             try:
                 if r.get("index"):
-                    for pname, entry in self.index_entries(r).items():
+                    for pname, entry in self.index_entries(r, with_unavailable).items():
                         cat.setdefault(pname, []).append((name, entry, self.index_tag(entry), entry["commit"]))
                     continue
                 t, c = self.verified_tag(r)
@@ -410,6 +672,9 @@ class Repos:
         if repo:
             cat = [c for c in cat if c[0] == repo]
         if not cat:
+            for rn in self.all():
+                if (not repo or rn == repo) and name in self.unfetchable(rn):
+                    raise Refused("%s is not available: %s" % (name, self.unfetchable(rn)[name][1]))
             raise Refused("no package %s in the repositories (hs pkg fetch updates them)" % name)
         if len(cat) > 1:
             raise Refused("%s is in %s: name one with --repo (a package name is never shadowed silently)" % (name, ", ".join(c[0] for c in cat)))
@@ -708,7 +973,7 @@ class Repos:
         dropped repo, commit and tag) gets the repository that lists the package when exactly one does"""
         have = dict(self.pkg.installed().get(name, {}))
         if "repo" not in have and os.path.isdir(os.path.join(self.state, "current", name)):
-            repos = [c[0] for c in self.catalog().get(name, [])]
+            repos = [c[0] for c in self.catalog(True).get(name, [])]
             if len(repos) == 1:
                 have["repo"] = repos[0]
         if "repo" not in have:
@@ -745,9 +1010,9 @@ class Repos:
         # no recorded commit (see recorded): show the whole new package against the empty tree
         old = have.get("commit") or EMPTY_TREE
         if indexed:
-            self.ensure_commit(self.all()[r_name], commit)
+            self.ensure_commit(self.all()[r_name], commit, fetch=False)     # the plan never runs git fetch: hs pkg fetch does
             try:
-                self.ensure_commit(self.all()[r_name], old)
+                self.ensure_commit(self.all()[r_name], old, fetch=False)
             except Refused:
                 old = EMPTY_TREE
         text = git("diff", "--stat", "-p", old, commit, "--", entry["path"], cwd=d).decode("utf-8", "replace")
@@ -877,9 +1142,11 @@ class Repos:
         return data
 
     def choose_installed(self, name, repo):
-        cat = [c for c in self.catalog().get(name, []) if c[0] == repo]
+        cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
         if not cat:
             raise Refused("%s is not in %s any more" % (name, repo))
+        if cat[0][1].get("_unavailable"):
+            raise Refused("%s: %s" % (name, cat[0][1]["_unavailable"]))
         return cat[0]
 
 
@@ -935,12 +1202,18 @@ def run(pkg, cmd, rest):
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
             seen = set()
-            for pname, rows in sorted(R.catalog().items()):
+            for pname, rows in sorted(R.catalog(True).items()):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
                     if os.path.isdir(os.path.join(cur, pname)):
                         inst = str(have.get(pname, {}).get("version", "?"))
+                    if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
+                        if inst != "-":
+                            seen.add(pname)
+                            print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
+                                             e.get("audience", "generic"), ("%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])).replace("	", " ")]))
+                        continue
                     if inst == "-":
                         state = "new"
                     elif inst == ver:
@@ -975,9 +1248,13 @@ def run(pkg, cmd, rest):
             # recorded before packages came from a repository); there: its folder in current/ or a built-in one
             applied = pkg.installed()
             builtin = {m.get("name") for p, m in pkg.manifests() if "/current/" not in p.replace("\\", "/")}
-            for pname, rows in sorted(R.catalog().items()):
+            for pname, rows in sorted(R.catalog(True).items()):
                 there = os.path.isdir(os.path.join(R.state, "current", pname)) or pname in builtin
                 if there or not (rows[0][1].get("core") or pname in applied):
+                    continue
+                if rows[0][1].get("_unavailable"):       # a core package that cannot be had is a failure, not a silent skip
+                    bad += 1
+                    print("%s: %s" % (pname, rows[0][1]["_unavailable"]), file=sys.stderr)
                     continue
                 try:
                     v, r_name, tag = R.install(pname, rows[0][0])
