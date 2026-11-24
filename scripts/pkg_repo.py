@@ -20,12 +20,18 @@ State, all under <state>/packages (root-owned on the server):
     ../pkg-events/<name>.tsv   the events the package declares (written on install, removed with it)
 A repository that has an `index` address (docs/PLAN-registry.md) is read the other way: the signed index.json (and index.json.sig beside it) is
 fetched, verified against the allowed signers (namespace hobnix-index), checked for serial (never lower than the one kept) and kept in
-    index/<name>/index.json (+ .sig)   the last accepted index; the version of a package is the one in it, not a release tag
-The commit of an entry is fetched into repos/<name>/ and its tree is checked against the entry's `tree` hash before anything is installed.
-A repository without `index` keeps the signed release tags. The tag shown for an index package is `v<version>` (the shape stays).
+    index/<name>/live/index.json (+ .sig)   the last accepted index; the version of a package is the one in it, not a release tag
+    index/<name>/floor.json   the highest serial accepted (and the digest of that index), written before the swap and never lost with it
+    cache/<name>/<commit>-<tree>-<path>/   a package folder at a pinned commit, tree hash checked; hashed again at every use (no git archive per read)
+    fetch.lock            held (flock) by `hs pkg fetch`: two fetches never share the .new folder
+`hs pkg fetch` also fetches the clone repos/<name>/; the commit of an entry is checked against the entry's `tree` hash before anything is installed.
+The read commands (show, asset, capabilities) never run git clone or fetch: a commit that is not in the clone is "hs pkg fetch" first.
+A repository without `index` keeps the signed release tags. The tag shown for an index package is `v<version>-<8 hex of the commit><8 hex of the
+tree hash>`.
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
 import atexit
+import hashlib
 import importlib.util
 import io
 import json
@@ -39,6 +45,10 @@ import tarfile
 import tempfile
 import tomllib
 import urllib.request
+try:
+    import fcntl
+except ImportError:        # Windows: no lock (the server is Linux)
+    fcntl = None
 from datetime import timedelta
 
 TAG = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
@@ -139,17 +149,22 @@ class Repos:
             raise Refused("the address must be https://, ssh://, git@host:path or a local path")
         if index and not re.match(r"^(https://|file://|/|[A-Za-z]:[\/])", index):
             raise Refused("the index address must be https:// or a local path")
+        keytext = None
+        if key:
+            try:
+                with open(key, encoding="utf-8") as fh:
+                    keytext = fh.read()
+            except (OSError, ValueError) as e:
+                raise Refused("the key file %s cannot be read: %s" % (key, getattr(e, "strerror", None) or e))
         if index and not unsigned and key:
-            with open(key, encoding="utf-8") as fh:
-                if not re.search(r'namespaces="[^"]*\bhobnix-index\b', fh.read()):
-                    raise Refused('the key file has no line with namespaces="hobnix-index": a key that signs git tags does not sign indexes')
+            if not re.search(r'namespaces="[^"]*\bhobnix-index\b', keytext):
+                raise Refused('the key file has no line with namespaces="hobnix-index": a key that signs git tags does not sign indexes')
         if index and unsigned:
             raise Refused("a signed index needs --key <allowed_signers file>, not --unsigned")
         if bool(key) == bool(unsigned):
             raise Refused("give --key <allowed_signers file> (releases must be signed) or --unsigned")
         if key:
-            with open(key, encoding="utf-8") as fh:
-                text = fh.read()
+            text = keytext
             if not re.search(r"(ssh-ed25519|ssh-rsa|ecdsa-sha2-\S+|sk-\S+)\s+\S+", text):
                 raise Refused("%s holds no SSH public key in allowed-signers format" % key)
             os.makedirs(os.path.join(self.state, "keys"), exist_ok=True)
@@ -163,6 +178,7 @@ class Repos:
         self.save_added([r for r in rows if r["name"] != name])
         shutil.rmtree(os.path.join(self.state, "repos", name), ignore_errors=True)
         shutil.rmtree(os.path.join(self.state, "index", name), ignore_errors=True)
+        shutil.rmtree(os.path.join(self.state, "cache", name), ignore_errors=True)
         try:
             os.remove(os.path.join(self.state, "keys", name + ".signers"))
         except OSError:
@@ -241,6 +257,55 @@ class Repos:
             raise Refused("%s: the index is refused: it is the index of %r, not of %s (add the repository under the name its index has)" % (r["name"], doc.get("repo"), r["name"]))
         return doc
 
+    def floor_file(self, name):
+        return os.path.join(self.index_dir(name), "floor.json")
+
+    def read_floor(self, name):
+        """{serial, digest} of the highest index accepted so far, None when there is none (or the file is not readable: the kept index still counts)"""
+        try:
+            with open(self.floor_file(name), encoding="utf-8") as f:
+                got = json.load(f)
+            if isinstance(got.get("serial"), int) and isinstance(got.get("digest"), str):
+                return got
+        except (OSError, ValueError, AttributeError):
+            pass
+        return None
+
+    @staticmethod
+    def digest(doc):
+        return hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    def write_floor(self, name, doc):
+        """the serial floor as its own small file, replaced atomically; written BEFORE the swap of the index folders"""
+        path = self.floor_file(name)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as o:
+            json.dump({"serial": doc["serial"], "digest": self.digest(doc)}, o)
+            o.flush()
+            os.fsync(o.fileno())
+        os.replace(tmp, path)
+
+    def check_floor(self, name, doc, old):
+        """None, or why `doc` is refused: its serial is below the floor (the file, or the kept index when it is higher or there is no file), or the same serial with other content"""
+        floor = self.read_floor(name)
+        if old and (not floor or old["serial"] > floor["serial"]):
+            floor = {"serial": old["serial"], "digest": self.digest(old)}      # an install from before floor.json
+        if not floor:
+            return None
+        if doc["serial"] < floor["serial"]:
+            return "serial %d is below the one already seen (%d)" % (doc["serial"], floor["serial"])
+        if doc["serial"] == floor["serial"] and self.digest(doc) != floor["digest"]:
+            return "serial %d was already used for a different index" % doc["serial"]
+        return None
+
+    def fetch_lock(self):
+        """an exclusive flock on <state>/fetch.lock until the returned file is closed (one fetch at a time)"""
+        os.makedirs(self.state, exist_ok=True)
+        f = open(os.path.join(self.state, "fetch.lock"), "a")
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        return f
+
     def fetch_index(self, r):
         """fetch index.json and its signature, keep them only when signature, schema and serial are right; returns the document"""
         pi = self.pkg_index
@@ -258,15 +323,16 @@ class Repos:
                     old = json.load(f)
             except (OSError, ValueError):
                 old = None
-            why = pi.check_serial(doc, old) if old else None
+            why = self.check_floor(name, doc, old)
             if why:
                 raise Refused("%s: the index is refused: %s (no rollback to an older index)" % (name, why))
             live, prev = os.path.join(d, "live"), os.path.join(d, ".old")
-            self.rm_quiet(prev)
+            self.write_floor(name, doc)             # first: a crash anywhere below never lowers the floor
             if os.path.isdir(live):
+                self.rm_quiet(prev)
                 os.rename(live, prev)       # a crash here leaves .old, which live_dir still reads
             os.rename(new, live)
-            self.rm_quiet(prev)
+            self.rm_quiet(prev)             # (with no live, .old was kept until the new pair was in place)
         finally:
             self.rm_quiet(new)
         self._idx = {}
@@ -302,6 +368,8 @@ class Repos:
         have = lambda: os.path.isdir(d) and git_ok("cat-file", "-e", sha + "^{commit}", cwd=d)
         if have():
             return
+        if getattr(self, "offline", False):      # a read (web): never git clone or fetch here
+            raise Refused("%s: the commit %s of the index is not in the local clone yet (hs pkg fetch)" % (r["name"], sha[:12]))
         self.fetch(r)
         if not have():
             git_ok("fetch", "--quiet", "origin", sha, cwd=d)
@@ -309,17 +377,52 @@ class Repos:
             raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
 
     def verified_dir(self, r_name, entry):
-        """a temporary folder with the package at the pinned commit, tree hash checked (for reading files before an install)"""
+        """a folder with the package at the pinned commit, tree hash checked (for reading files before an install). Kept in cache/ by commit and
+        tree: a read hashes the kept folder again (never trusts it) and only runs git archive when that is not the signed tree hash"""
         memo = self.__dict__.setdefault("_vd", {})
         key = (r_name, entry["commit"], entry["path"])
         if key not in memo:
             r = self.all()[r_name]
+            pi = self.pkg_index
+            hexs = re.sub(r"[^0-9a-f]", "", entry["tree"][7:])[:64]
+            kept = os.path.join(self.state, "cache", r_name, "%s-%s-%s" % (entry["commit"], hexs, entry["path"].replace("/", "_")))
+            if os.path.isdir(kept):
+                try:
+                    if pi.tree_hash(kept) == entry["tree"]:
+                        memo[key] = kept
+                        return kept
+                except (pi.Problem, OSError):
+                    pass
+                self.rm_quiet(kept)
             self.ensure_commit(r, entry["commit"])
-            tmp = tempfile.mkdtemp(prefix="hs-pkg-")
-            atexit.register(self.rm_quiet, tmp)
-            self.extract(r, entry["commit"], entry["path"], os.path.join(tmp, "pkg"), entry["tree"])
-            memo[key] = os.path.join(tmp, "pkg")
+            try:
+                os.makedirs(os.path.dirname(kept), exist_ok=True)
+                tmp = kept + ".tmp%d" % os.getpid()
+                self.rm_quiet(tmp)
+                self.extract(r, entry["commit"], entry["path"], tmp, entry["tree"])
+                try:
+                    os.rename(tmp, kept)
+                except OSError:                 # a parallel read was first
+                    self.rm_quiet(tmp)
+                    if not os.path.isdir(kept):
+                        raise
+                memo[key] = kept
+            except OSError:                     # the cache is not writable: a temporary folder as before
+                tmp = tempfile.mkdtemp(prefix="hs-pkg-")
+                atexit.register(self.rm_quiet, tmp)
+                self.extract(r, entry["commit"], entry["path"], os.path.join(tmp, "pkg"), entry["tree"])
+                memo[key] = os.path.join(tmp, "pkg")
         return memo[key]
+
+    def prune_cache(self, name, doc):
+        """drop the kept folders of commits the accepted index no longer names"""
+        base = os.path.join(self.state, "cache", name)
+        if not os.path.isdir(base):
+            return
+        keep = {e["commit"] for e in doc["packages"].values()}
+        for x in os.listdir(base):
+            if x.split("-")[0] not in keep:
+                self.rm_quiet(os.path.join(base, x))
 
     def read_at(self, r_name, entry, ref, rel):
         """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
@@ -377,15 +480,23 @@ class Repos:
         for name, r in self.all().items():
             if only and name != only:
                 continue
+            lock = self.fetch_lock()
             try:
                 if r.get("index"):
-                    self.fetch_index(r)
+                    doc = self.fetch_index(r)
+                    try:
+                        self.fetch(r)       # the clone too: the reads of the web never run git clone or fetch
+                    except Refused as e:
+                        raise Refused("%s: the index is kept, the repository could not be fetched: %s" % (name, e))
+                    self.prune_cache(name, doc)
                 else:
                     self.fetch(r)
                 t, c = self.verified_tag(r)
                 out.append((name, t, c, ""))
             except Refused as e:
                 out.append((name, "", "", str(e)))
+            finally:
+                lock.close()
         return out
 
     def catalog(self):
@@ -918,6 +1029,7 @@ def run(pkg, cmd, rest):
                     print("\t".join([r_name, pname, e.get("kind", "?"), str(e.get("version")), have.get(pname, {}).get("version", "-")]))
         elif cmd == "show":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            R.offline = True
             try:
                 lines = R.show(rest[0], repo)
             except (Refused, AttributeError, TypeError, KeyError) as e:
@@ -927,6 +1039,7 @@ def run(pkg, cmd, rest):
             print("\n".join(lines))
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            R.offline = True
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version

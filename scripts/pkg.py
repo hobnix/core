@@ -775,6 +775,7 @@ def main(argv):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         R = mod.Repos(MAIN)
+        R.offline = True      # a web read: local clone only (hs pkg fetch fills it)
         have = installed()
         cur = os.path.join(R.state, "current")
         for pname, found in sorted(R.catalog().items()):

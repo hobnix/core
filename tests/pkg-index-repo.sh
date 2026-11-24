@@ -140,6 +140,61 @@ check_out "the new tag installs" "shots 1[.]0[.]0 from hub" $PKG install shots -
 echo "-- asset paths stay inside the package"
 check_out "a screenshot path with .. is refused" "outside the package" $PKG asset shots ../../../x.png
 
+echo "-- fetch also fetches the clone; reads stay local and the checked folder is kept by commit"
+export HS_STATE_DIR=$WORK/state2; mkdir -p "$HS_STATE_DIR"; PK2=$HS_STATE_DIR/packages
+check "a repository is added in a fresh state" $PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json"
+check "no clone yet" test ! -e "$PK2/repos/hub"
+check_out "show before any fetch is refused, not cloned" "refused" $PKG show shots
+check "and it did not clone" test ! -e "$PK2/repos/hub"
+check_out "fetch ok" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+check "fetch made the clone" test -e "$PK2/repos/hub/HEAD" -o -e "$PK2/repos/hub/.git"
+check_out "show reads it" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+check "the checked folder is kept by commit" bash -c "ls $PK2/cache/hub | grep -Eq '^[0-9a-f]{40}-[0-9a-f]{64}-recipes_shots\$'"
+mv "$PK2/repos/hub" "$WORK/clone-away"
+check_out "show again needs no clone (the kept folder is hashed again)" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+K=$(ls -d "$PK2"/cache/hub/*recipes_shots)
+chmod -R u+w "$K"; echo tampered >> "$K/run.sh"
+check_out "a changed kept folder is not trusted: it needs the clone again" "refused" $PKG show shots
+check "and it did not clone in a read" test ! -e "$PK2/repos/hub"
+check "capabilities is a read: it works and clones nothing" bash -c "$PKG capabilities >/dev/null 2>&1 && test ! -e $PK2/repos/hub"
+mv "$WORK/clone-away" "$PK2/repos/hub"
+check_out "with the clone the folder is checked and kept again" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+check "the tampered file is gone" bash -c "! grep -rq tampered $PK2/cache/hub"
+cp "$OUT/index.json" "$WORK/cur.json"; cp "$OUT/index.json.sig" "$WORK/cur.json.sig"
+
+echo "-- the serial floor survives a crash between the steps"
+IDXD=$PK2/index/hub
+check "the floor is its own file" test -s "$IDXD/floor.json"
+check "a lock file exists after a fetch" test -e "$PK2/fetch.lock"
+rm -rf "$IDXD/live"; mkdir -p "$IDXD/.old"; cp "$WORK/keep.json" "$IDXD/.old/index.json"; cp "$WORK/keep.json.sig" "$IDXD/.old/index.json.sig"
+cp "$WORK/keep.json" "$OUT/index.json"; cp "$WORK/keep.json.sig" "$OUT/index.json.sig"
+check_out "crash: floor written, only an older .old is left: the older signed index is refused" "no rollback" $PKG fetch hub
+rm -rf "$IDXD/.old" "$IDXD/live"
+check_out "crash: floor written, nothing else is left: the older signed index is refused" "no rollback" $PKG fetch hub
+cp "$WORK/cur.json" "$OUT/index.json"; cp "$WORK/cur.json.sig" "$OUT/index.json.sig"
+check_out "the index of the floor itself is accepted again" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+check "live is back" test -f "$IDXD/live/index.json.sig"
+check "no .old is left" test ! -e "$IDXD/.old"
+rm -f "$IDXD/floor.json"
+cp "$WORK/keep.json" "$OUT/index.json"; cp "$WORK/keep.json.sig" "$OUT/index.json.sig"
+check_out "no floor file (an older install): the kept index is the floor" "no rollback" $PKG fetch hub
+cp "$WORK/cur.json" "$OUT/index.json"; cp "$WORK/cur.json.sig" "$OUT/index.json.sig"
+check_out "and the right one rewrites it" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+check "floor is back" test -s "$IDXD/floor.json"
+if have flock; then
+  ( flock -x 9; sleep 4 ) 9>"$PK2/fetch.lock" &
+  sleep 1
+  check_out "a fetch waits while another holds the lock" "^124$" bash -c "timeout 1 $PKG fetch hub >/dev/null 2>&1; echo \$?"
+  wait
+  check_out "and runs when the lock is free" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+else skip "needs flock"; fi
+export HS_STATE_DIR=$WORK/state
+
+echo "-- a key file that is not there is a refusal"
+check_out "repo add --key /missing is refused with a message" "key file /missing cannot be read" $PKG repo add x "$R" --key /missing --index "$OUT/index.json"
+check "and prints no traceback" bash -c "! $PKG repo add x '$R' --key /missing --index '$OUT/index.json' 2>&1 | grep -q Traceback"
+check "also without --index" bash -c "! $PKG repo add x '$R' --key /missing 2>&1 | grep -q Traceback"
+
 echo "-- a repository without index keeps the tag path"
 check "list still works" $PKG list
 finish

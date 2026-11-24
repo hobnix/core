@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "hs pkg fetch keeps the signed index safe across a crash"
+body  = """For a repository with a signed index, hs pkg fetch now also fetches the repository itself, so the package pages only read local data and stay fast. The newest accepted index serial is kept in its own file and written first, and one fetch runs at a time, so an older index is still refused after an interrupted fetch. hs pkg repo add with a key file that does not exist now says so instead of printing an error trace. Not tested on hardware yet."""
