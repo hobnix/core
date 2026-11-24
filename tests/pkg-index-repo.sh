@@ -70,6 +70,7 @@ cp "$WORK/keep.json" "$OUT/index.json"
 
 echo "-- update shows the diff"
 cd "$R"; release 1.1.0 2; cd "$ROOT"
+cp "$OUT/index.json" "$WORK/s2.json"; cp "$OUT/index.json.sig" "$WORK/s2.json.sig"
 check_out "fetch takes the higher serial" "^hub${tab}serial-2" $PKG fetch hub
 check_out "updates names the new version" "^demo${tab}1[.]0[.]0${tab}1[.]1[.]0" $PKG updates
 check_out "update shows the diff first" "echo demo 1[.]1[.]0" $PKG update demo --yes --accept-permissions
@@ -79,6 +80,19 @@ echo "-- serial: no rollback"
 cp "$WORK/keep.json" "$OUT/index.json"; cp "$WORK/keep.json.sig" "$OUT/index.json.sig"
 check_out "an older index (lower serial) is refused" "no rollback" $PKG fetch hub
 check_out "the newer one is kept" "^hub${tab}demo${tab}recipe${tab}1[.]1[.]0" $PKG available
+
+echo "-- serial floor survives a crash in the swap"
+IDXD=$HS_STATE_DIR/packages/index/hub
+check "the floor is a separate file" test -s "$IDXD/serial"
+mv "$IDXD/live" "$IDXD/.old"
+check_out "with only .old an older index is refused" "no rollback" $PKG fetch hub
+check "and .old is still there" test -f "$IDXD/.old/index.json"
+rm -rf "$IDXD/.old"
+check_out "with live and .old both gone the floor refuses it" "no rollback" $PKG fetch hub
+cp "$WORK/s2.json" "$OUT/index.json"; cp "$WORK/s2.json.sig" "$OUT/index.json.sig"
+check_out "the same index as the floor is accepted again" "^hub${tab}serial-2" $PKG fetch hub
+check "live is back" test -f "$IDXD/live/index.json"
+check "the lock file is kept" test -e "$IDXD/.lock"
 
 echo "-- tree hash"
 cd "$R"; release 1.2.0 3; cd "$ROOT"
@@ -139,6 +153,28 @@ check_out "the new tag installs" "shots 1[.]0[.]0 from hub" $PKG install shots -
 
 echo "-- asset paths stay inside the package"
 check_out "a screenshot path with .. is refused" "outside the package" $PKG asset shots ../../../x.png
+
+echo "-- fetch clones; reads stay local and are cached"
+S1=$HS_STATE_DIR; export HS_STATE_DIR=$WORK/state2; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+check "a read before the first fetch does not clone" bash -c "$PKG show shots >/dev/null 2>&1; test ! -e '$HS_STATE_DIR/packages/repos/hub'"
+check_out "fetch" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+check "fetch cloned the repository" test -d "$HS_STATE_DIR/packages/repos/hub"
+mv "$R" "$R.gone"
+check_out "show reads without touching the source" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+check "the checked folder is cached by commit" bash -c "ls '$HS_STATE_DIR'/packages/index-cache/hub/*/tree >/dev/null"
+mv "$HS_STATE_DIR/packages/repos/hub" "$HS_STATE_DIR/packages/repos/hub.gone"
+check_out "a second read comes from the cache (no clone needed)" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+rm -rf "$HS_STATE_DIR/packages/index-cache"
+check_out "an uncached commit is not cloned by a read" "hs pkg fetch" $PKG show shots
+check "and still no clone" test ! -e "$HS_STATE_DIR/packages/repos/hub"
+mv "$HS_STATE_DIR/packages/repos/hub.gone" "$HS_STATE_DIR/packages/repos/hub"; mv "$R.gone" "$R"
+export HS_STATE_DIR=$S1
+
+echo "-- a missing key file is a refusal, not a traceback"
+check_out "repo add with a missing key" "does not exist" $PKG repo add nokey "$R" --key /missing/signers --index "$OUT/index.json"
+check "no traceback" bash -c "! $PKG repo add nokey '$R' --key /missing/signers --index '$OUT/index.json' 2>&1 | grep -q Traceback"
+check "and nothing was added" bash -c "! $PKG repo list | grep -q '^nokey'"
 
 echo "-- a repository without index keeps the tag path"
 check "list still works" $PKG list
