@@ -26,7 +26,12 @@ appschange=${HS_APPS_CHANGE:-$here/apps-change.sh}
 alist=${HS_APPS_LIST:-$here/apps-list.sh}
 tab=$'\t'
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+# the reason is one line whatever a package text put into it: no C0 or DEL, no C1 and no U+2028/2029 (the web interface splits lines on them)
+refuse() {
+  local r
+  r=$(printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177' | LC_ALL=C sed -E 's/\xc2[\x80-\x9f]//g; s/\xe2\x80[\xa8\xa9]//g')
+  printf 'status\trefused\nreason\t%s\n' "$r"; exit 1
+}
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}

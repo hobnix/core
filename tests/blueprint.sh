@@ -22,6 +22,7 @@ show_media() {
 show_media > "$WORK/bp/media"
 show_media | sed "s/^added${tab}no/added${tab}yes/; s/^repo${tab}official/repo${tab}mine/" > "$WORK/bp/added"
 printf '%s\n' "error${tab}Docker is the core capability: use the [docker] table" > "$WORK/bp/bad"
+printf 'error\t[settings] x \033[2Jpwned\xc2\x85status ok\xe2\x80\xa8line\n' > "$WORK/bp/hostile"
 show_media | grep -v "^docker${tab}" > "$WORK/bp/nodocker"
 show_media | sed "s/^part${tab}recipes${tab}r2${tab}ok/part${tab}recipes${tab}r2${tab}later:it comes from the repository mine you added, so you confirm it yourself/" > "$WORK/bp/addedapp"
 show_media | sed "s/^part${tab}capabilities${tab}a${tab}-/part${tab}capabilities${tab}edge-ports${tab}-/" > "$WORK/bp/edgeports"
@@ -120,6 +121,9 @@ check_eq "no confirm_name for an official blueprint without a docker name" 0 "$(
 
 echo "-- plan: refusals"
 run plan apply nosuch;  if [ "$rc" = 1 ] && has "No blueprint called"; then pass "unknown blueprint refused"; else fail "nosuch: $out"; fi
+run plan apply hostile
+check_eq "a hostile message is one status line and one reason line" 2 "$(printf '%s\n' "$out" | wc -l)"
+check_eq "and no control, C1 or U+2028 byte is left in it" 0 "$(printf '%s' "$out" | LC_ALL=C grep -c -P '\xc2[\x80-\x9f]|\xe2\x80[\xa8\xa9]|\x1b' || true)"
 run plan apply bad;     if [ "$rc" = 1 ] && has "Docker is the core capability"; then pass "a blueprint with problems is refused with them"; else fail "bad: $out"; fi
 run plan apply edge;    if [ "$rc" = 1 ] && has "role"; then pass "a role that does not fit is refused"; else fail "edge: $out"; fi
 run plan apply 'A b';   if [ "$rc" = 1 ]; then pass "a bad name is refused"; else fail "bad name: $out"; fi
@@ -327,6 +331,26 @@ for table, key, val in (("machine", "siteName", 5), ("machine", "siteName", "Evi
     assert any(key in x for x in b.manifest_problems(mut(lambda m: m.update({table: {key: val}})))), (table, key, val)
 for table, key, val in (("machine", "siteName", "home"), ("machine", "timeZone", "Europe/Vienna"), ("settings", "icons", "ascii"), ("settings", "loginMessage", "true")):
     assert not b.manifest_problems(mut(lambda m: m.update({table: {key: val}}))), (table, key, val, b.manifest_problems(mut(lambda m: m.update({table: {key: val}}))))
+# hostile KEYS: no message may carry them (a message is printed as a line)
+HK = "x status\t\x1b[2J\u2028reason\tpwned"
+for m in (mut(lambda m: m["settings"].update({HK: "v"})), mut(lambda m: m["machine"].update({HK: "v"})) if "machine" in GOOD else mut(lambda m: m.update(machine={HK: "v"})),
+          mut(lambda m: m.update({HK: "v"})), mut(lambda m: m["answers"]["ok"].update({HK: "v"})), mut(lambda m: m["blueprint"].update({HK: ["a"]})),
+          mut(lambda m: m.update(answers={HK: {"K": "v"}}))):
+    probs = b.manifest_problems(m)
+    assert probs and not any(b.CONTROL.search(x) for x in probs), probs
+    lines, bad = b.show(R(m), P(), "bp")
+    assert lines == [] and bad and not any(b.CONTROL.search(x) or "pwned" in x.split("?")[0] for x in bad), bad
+    assert all(len(x.splitlines()) == 1 for x in bad), bad
+# hostName is not settable and has no pattern: never allowed
+assert "hostName" not in b.ALLOWED_KEYS
+assert any("hostName" in x for x in b.manifest_problems(mut(lambda m: m.update(machine={"hostName": "Evil Name!"}))))
+import schema_options
+for key in b.ALLOWED_KEYS:
+    assert schema_options.specs()[key].get("settable") is not False, key
+orig_allowed = b.ALLOWED_KEYS
+b.ALLOWED_KEYS = orig_allowed + ("hostName",)
+assert any("not settable" in x for x in b.manifest_problems(mut(lambda m: m.update(machine={"hostName": "x"})))), "a key with settable = false"
+b.ALLOWED_KEYS = orig_allowed
 # the allow-list: nothing security-relevant, whatever the table
 for key in ("nodeKeys", "sshKeys", "adminUser", "sshOverIp", "gatewayUnknownHostPublic", "tailscaleAuthKeyFile", "incusDefaultPool", "pools", "role", "capabilities", "firewall", "notAnOption"):
     for table in ("machine", "settings"):

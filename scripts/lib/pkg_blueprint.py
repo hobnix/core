@@ -30,7 +30,7 @@ DOCKER_SIZES = ("s", "m", "l")
 # THE ONE LIST of the options a blueprint may fill ([machine] and [settings]): plain preferences only. Everything that touches access, keys,
 # the firewall, storage, networks or users (sshKeys, nodeKeys, adminUser, sshOverIp, gateway*, tailscale*, pools, incusDefaultPool, role,
 # capabilities, hostId ...) is NOT in it, and neither is anything new by default: a key that is not here refuses the blueprint. Docker only through [docker].
-ALLOWED_KEYS = ("language", "timeZone", "keyMap", "icons", "loginMessage", "webAccent", "hostName", "siteName", "quietHours", "notifications",
+ALLOWED_KEYS = ("language", "timeZone", "keyMap", "icons", "loginMessage", "webAccent", "siteName", "quietHours", "notifications",
                 "backupNewShares", "backupNewInstances")
 # every string of a blueprint (keys and values, any depth): no control character (a newline would start a new line of the plan), and a length cap
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")   # C0, DEL, C1 (U+0085 too), line and paragraph separators: splitlines() breaks on them
@@ -63,6 +63,8 @@ def _typed(k, v):
         return ""
     if not it:
         return ""
+    if it.get("settable") is False:
+        return "is not settable"
     t = it.get("type", "string")
     if t == "string":
         ok = isinstance(v, str)
@@ -84,6 +86,12 @@ def _typed(k, v):
 
 def _flat(v):
     return isinstance(v, SCALARS) or (isinstance(v, list) and all(isinstance(x, SCALARS) for x in v))
+
+
+def _safe(t):
+    """a message is printed as a line: whatever a hostile manifest put into it (a key, a name) loses its control characters and is cut short"""
+    t = CONTROL.sub("?", str(t))
+    return t if len(t) <= 240 else t[:240] + "..."
 
 
 def _strings(v, path, out):
@@ -111,7 +119,7 @@ def text_problems(m):
             out.append(f"{where}: a text with a control character (a line break, a tab) is not allowed in a blueprint")
         elif len(text) > cap:
             out.append(f"{where}: a text of {len(text)} characters is too long (at most {cap})")
-    return out
+    return [_safe(x) for x in out]
 
 
 def manifest_problems(m):
@@ -207,7 +215,7 @@ def manifest_problems(m):
                 bad(f"[settings] {k} must be text")
             elif not _flat(v):
                 bad(f"[{table}] {k}: only text, numbers, true/false and lists of them")
-    return out
+    return [_safe(x) for x in out]
 
 
 # ── reading (hs pkg blueprint ...) ──
@@ -275,9 +283,10 @@ def _recipe_state(pm, given, n, bad):
 
 def show(R, pkg, name, lang="en"):
     try:
-        return _show(R, pkg, name, lang)
+        out, bad = _show(R, pkg, name, lang)
     except ValueError as e:     # _row: a control character got as far as the writer
-        return [], [str(e)]
+        out, bad = [], [str(e)]
+    return out, [_safe(x) for x in bad]
 
 
 def _show(R, pkg, name, lang):
