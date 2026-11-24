@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# hs blueprint / hs sys blueprint plan|start (scripts/blueprint.sh, blueprint-change.sh, lib/bundle-resolve.sh, lib/pkg_blueprint.py): the plan, the fill-only rule,
+# the typed names, the order of the job and its failure rule, the record. Stand-ins for pkg.sh, parts.sh, part-change.sh, rebuild.sh, docker.sh,
+# docker-setup.sh, apps-change.sh, apps-list.sh and the job library; nothing real is touched.
+# shellcheck source=tests/lib.sh
+. "$(dirname "$0")/lib.sh"
+export HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_PYTHON=python3 PYTHONUTF8=1 HS_BUNDLE_NET=ok HS_LOCKED_MARKER=$WORK/locked
+export HS_STATE_DIR=$WORK/state HS_SETTINGS_DIR=$WORK/state/settings HS_MACHINE_FILE=$WORK/machine.toml HS_BLUEPRINT_POLL=0
+mkdir -p "$HS_SETTINGS_DIR" "$WORK/jobs"
+tab=$'\t'
+LOG=$WORK/log; : > "$LOG"
+printf 'role = "homeserver"\ntimeZone = "UTC"\n' > "$HS_MACHINE_FILE"
+
+# ── the fixtures: what `hs pkg blueprint show` says (the real reader is tested below with a fake repository) ──
+mkdir -p "$WORK/bp"
+show_media() {
+  printf '%s\n' "repo${tab}official" "version${tab}1.0.0" "tag${tab}v1.0.0" "commit${tab}abc" "title${tab}Media server" "description${tab}x" "roles${tab}homeserver" "added${tab}no" \
+    "machine${tab}timeZone${tab}\"Europe/Vienna\"" "machine${tab}gpu${tab}\"nvidia\"" "setting${tab}backupNewShares${tab}true" \
+    "part${tab}capabilities${tab}a${tab}-" "part${tab}recipes${tab}r1${tab}ok" "needs${tab}r1${tab}docker" "answer${tab}r1${tab}K${tab}V" \
+    "part${tab}recipes${tab}r2${tab}ok" "needs${tab}r2${tab}-" "part${tab}recipes${tab}r3${tab}later:it asks for a secret (PASS)" "needs${tab}r3${tab}-" "docker${tab}webui${tab}m"
+}
+show_media > "$WORK/bp/media"
+show_media | sed "s/^added${tab}no/added${tab}yes/; s/^repo${tab}official/repo${tab}mine/" > "$WORK/bp/added"
+printf '%s\n' "error${tab}Docker is the core capability: use the [docker] table" > "$WORK/bp/bad"
+show_media | grep -v "^docker${tab}" > "$WORK/bp/nodocker"
+show_media | sed "s/^roles${tab}homeserver/roles${tab}edge/" > "$WORK/bp/edge"
+
+CAPS=$WORK/caps.tsv
+printf '%s\n' "a${tab}caps${tab}1.0.0${tab}-${tab}new${tab}-${tab}feature${tab}A" > "$CAPS"
+cat > "$WORK/pkg.sh" <<STUB
+#!/usr/bin/env bash
+case "\$1" in
+  --capabilities) cat "$CAPS" ;;
+  --repos) printf 'caps\turl\tsigned\tdefault\nmine\turl\tsigned\tadded\n' ;;
+  blueprint)
+    case "\$2" in
+      show) f="$WORK/bp/\$3"; [ -f "\$f" ] || { printf 'error\tNo blueprint called %s.\n' "\$3"; exit 1; }; cat "\$f"; grep -q '^error' "\$f" && exit 1 || exit 0 ;;
+      record) echo "record \$3" >> "$LOG"; echo "[applied.\$3]" > "$WORK/applied.toml" ;;
+      list) printf 'media\tofficial\t1.0.0\thomeserver\ta,r1,docker\tnew\tMedia server\n' ;;
+    esac ;;
+  install) echo "install \$2" >> "$LOG"; [ "\$2" != "\${FAIL_INSTALL:-}" ] ;;
+esac
+STUB
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$WORK/parts.tsv" > "$WORK/parts.sh"
+: > "$WORK/parts.tsv"
+printf '#!/usr/bin/env bash\necho "enable $3" >> "%s"\nprintf "status\\tdone\\n"\n' "$LOG" > "$WORK/part-change.sh"
+printf '#!/usr/bin/env bash\necho rebuild >> "%s"\n[ -z "${FAIL_REBUILD:-}" ]\n' "$LOG" > "$WORK/rebuild.sh"
+echo no > "$WORK/docker.on"
+cat > "$WORK/docker.sh" <<STUB
+#!/usr/bin/env bash
+case "\$1" in
+  --status) printf 'owned\t%s\n' "\$(cat "$WORK/docker.on")" ;;
+  enable) echo "docker enable \$*" >> "$LOG"; [ -z "\${FAIL_DOCKER:-}" ] ;;
+esac
+STUB
+cat > "$WORK/docker-setup.sh" <<STUB
+#!/usr/bin/env bash
+echo "docker-setup \$*" >> "$LOG"
+[ -z "\${REFUSE_DOCKER:-}" ] || { printf 'status\trefused\nreason\tan instance called docker exists\n'; exit 1; }
+printf 'status\tok\nheading\tTurn Docker on\nstep\tcreate the container docker\nnote\tthis takes a minute\n'
+[ -z "\${CONFIRM_DOCKER:-}" ] || printf 'confirm_name\tdocker\n'
+printf 'command\ths docker enable --yes --job\nlong\tyes\n'
+STUB
+cat > "$WORK/apps-change.sh" <<STUB
+#!/usr/bin/env bash
+echo "apps \$*" >> "$LOG"
+r=\$3
+if [ "\$r" = "\${REFUSE_APP:-}" ]; then printf 'status\trefused\nreason\tboom\n'; exit 1; fi
+printf 'status\tstarted\nunit\ths-job-%s\njob\tJ-%s\n' "\$r" "\$r"
+STUB
+: > "$WORK/apps.tsv"
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$WORK/apps.tsv" > "$WORK/apps-list.sh"
+mkdir -p "$WORK/jl"
+cat > "$WORK/jl/job.sh" <<STUB
+hs_job() { shift 2; "\${@:2}" >/dev/null 2>&1; HS_JOB_LAST_ID=J0; echo hs-job-test; }
+hs_job_step() { :; }
+hs_job_record() {
+  case "\$1" in
+    get) id=\$2; if [ "\$id" = "J-\${FAILJOB_APP:-}" ]; then echo '{"state": "failed"}'; else echo '{"state": "ok"}'; fi ;;
+    result) echo "\$4" > "$WORK/result.json" ;;
+  esac
+}
+STUB
+chmod +x "$WORK"/*.sh
+export HS_PKG=$WORK/pkg.sh HS_PARTS=$WORK/parts.sh HS_PART_CHANGE=$WORK/part-change.sh HS_REBUILD=$WORK/rebuild.sh HS_DOCKER_SCRIPT=$WORK/docker.sh
+export HS_DOCKER_SETUP=$WORK/docker-setup.sh HS_APPS_CHANGE=$WORK/apps-change.sh HS_APPS_LIST=$WORK/apps-list.sh HS_JOB_LIB=$WORK/jl/job.sh
+C="bash $SCRIPTS/blueprint-change.sh"
+run() { rc=0; out=$($C "$@" 2>&1 </dev/null) || rc=$?; }
+has() { grep -q -- "$1" <<<"$out"; }
+reset() { : > "$LOG"; rm -f "$WORK/result.json"; printf 'role = "homeserver"\ntimeZone = "UTC"\n' > "$HS_MACHINE_FILE"; rm -f "$HS_SETTINGS_DIR"/*; echo no > "$WORK/docker.on"; : > "$WORK/apps.tsv"; printf '%s
+' "a${tab}caps${tab}1.0.0${tab}-${tab}new${tab}-${tab}feature${tab}A" > "$CAPS"; : > "$WORK/parts.tsv"; }
+
+echo "-- registry"
+for r in "blueprint list${tab}blueprint.sh" "blueprint show${tab}blueprint.sh" "blueprint apply${tab}blueprint.sh"; do
+  check "user row: $r" grep -qF "user${tab}$r" "$SCRIPTS/lib/registry.tsv"
+done
+for r in "sys blueprint list${tab}blueprint.sh" "sys blueprint plan <action>${tab}blueprint-change.sh" "sys blueprint start <action>${tab}blueprint-change.sh"; do
+  check "sys row: $r" grep -qF "sys${tab}$r" "$SCRIPTS/lib/registry.tsv"
+done
+check "the preset rows are legacy" grep -qE "^user${tab}preset apply.*legacy:blueprint apply" "$SCRIPTS/lib/registry.tsv"
+check "CHANGES allows blueprint apply" grep -qF '"blueprint": [{"fixed"' "$SCRIPTS/web-serve.py"
+check "READS has blueprint/list" grep -qF '("blueprint", "list")' "$SCRIPTS/web-serve.py"
+
+echo "-- plan: fill-only"
+reset
+printf 'timeZone = "UTC"\n' > "$HS_MACHINE_FILE"; printf 'role = "homeserver"\n' >> "$HS_MACHINE_FILE"
+printf 'false' > "$HS_SETTINGS_DIR/backupNewShares"
+run plan apply media
+if [ "$rc" = 0 ] && has "^status${tab}ok" && has "^blueprint${tab}media${tab}official${tab}1.0.0${tab}v1.0.0" \
+   && has "^part${tab}1${tab}config${tab}timeZone${tab}kept" && has "^part${tab}2${tab}config${tab}gpu${tab}set" && has "^part${tab}3${tab}config${tab}backupNewShares${tab}kept"; then
+  pass "a value that is set is kept, the others are set"; else fail "plan media: $out"; fi
+if has "^part${tab}[0-9]*${tab}parts${tab}a${tab}install" && has "^part${tab}[0-9]*${tab}rebuild" && has "^part${tab}[0-9]*${tab}docker${tab}-${tab}enable" \
+   && has "^part${tab}[0-9]*${tab}app${tab}r1${tab}install" && has "^part${tab}[0-9]*${tab}app${tab}r3${tab}later" && has "^step${tab}create the container docker" && has "^long${tab}yes"; then
+  pass "plan: parts, one rebuild, docker with its plan lines, apps (one later), long"; else fail "plan parts: $out"; fi
+check_eq "the plan changes nothing" 'role = "homeserver"|timeZone = "UTC"' "$(sort "$HS_MACHINE_FILE" | paste -sd'|')"
+check_eq "no confirm_name for an official blueprint without a docker name" 0 "$(grep -c '^confirm_name' <<<"$out")"
+
+echo "-- plan: refusals"
+run plan apply nosuch;  if [ "$rc" = 1 ] && has "No blueprint called"; then pass "unknown blueprint refused"; else fail "nosuch: $out"; fi
+run plan apply bad;     if [ "$rc" = 1 ] && has "Docker is the core capability"; then pass "a blueprint with problems is refused with them"; else fail "bad: $out"; fi
+run plan apply edge;    if [ "$rc" = 1 ] && has "role"; then pass "a role that does not fit is refused"; else fail "edge: $out"; fi
+run plan apply 'A b';   if [ "$rc" = 1 ]; then pass "a bad name is refused"; else fail "bad name: $out"; fi
+touch "$WORK/locked"; run plan apply media; if [ "$rc" = 1 ] && has "locked"; then pass "locked storage refused"; else fail "locked: $out"; fi; rm -f "$WORK/locked"
+HS_BUNDLE_NET=fail run plan apply media; if [ "$rc" = 1 ] && has "network"; then pass "no network refused"; else fail "net: $out"; fi
+REFUSE_DOCKER=1 run plan apply media; if [ "$rc" = 1 ] && has "Docker cannot be turned on: an instance called docker exists"; then pass "a refused docker plan refuses the blueprint"; else fail "docker refused: $out"; fi
+run plan apply nodocker
+if [ "$rc" = 1 ] && has "r1 needs Docker"; then pass "an app that needs Docker, with Docker off and no [docker] table: refused"; else fail "nodocker: $out"; fi
+echo yes > "$WORK/docker.on"; : > "$LOG"
+run plan apply nodocker
+if [ "$rc" = 0 ]; then pass "the same with Docker on: allowed"; else fail "nodocker, docker on: $out"; fi
+run plan apply media
+if [ "$rc" = 0 ] && has "^part${tab}[0-9]*${tab}docker${tab}-${tab}kept" && ! has "^step${tab}create the container" && ! grep -q docker-setup "$LOG"; then
+  pass "Docker on: part kept, no docker plan asked"; else fail "docker on: $out"; fi
+echo no > "$WORK/docker.on"
+
+echo "-- typed names"
+run plan apply added;  if [ "$rc" = 0 ] && has "^confirm_name${tab}added"; then pass "an added repository: the blueprint name is typed"; else fail "added: $out"; fi
+CONFIRM_DOCKER=1 run plan apply media; if [ "$rc" = 0 ] && has "^confirm_name${tab}docker"; then pass "the docker plan's name becomes the blueprint's confirm_name"; else fail "docker name: $out"; fi
+run start apply added; if [ "$rc" = 1 ] && has "Type the name 'added'"; then pass "start without the name is refused"; else fail "start no confirm: $out"; fi
+run start apply added --confirm nope; if [ "$rc" = 1 ] && has "not a name this plan asks for"; then pass "a wrong name is refused"; else fail "wrong confirm: $out"; fi
+run start apply added --confirm added; if [ "$rc" = 0 ] && has "^status${tab}started" && has "^unit${tab}hs-job-test"; then pass "start with the name starts one job"; else fail "start added: $out"; fi
+run start apply media; if [ "$rc" = 0 ] && has "^job${tab}J0"; then pass "start answers unit and job"; else fail "start media: $out"; fi
+HS_BUNDLE_NET=fail run start apply media; if [ "$rc" = 1 ] && has "network"; then pass "start without network is refused"; else fail "start net: $out"; fi
+
+echo "-- the job"
+reset
+run run apply media --tag v1.0.0
+order=$(grep -E "^(install|enable|rebuild|docker|apps)" "$LOG" | sed -E 's/ .*//' | uniq | paste -sd'>')
+check_eq "order: parts, rebuild, docker, apps" "install>enable>rebuild>docker>apps" "$order"
+check_eq "r3 needs a person: its app is not started" 0 "$(grep -c "apps start install r3" "$LOG")"
+check_eq "docker comes before the first app" "docker" "$(grep -E '^(docker|apps)' "$LOG" | head -1 | sed 's/ .*//')"
+check_eq "an app gets its answers as --set" "apps start install r1 --set K=V" "$(grep 'install r1' "$LOG")"
+check_eq "a set value is not overwritten" '"UTC"' "$(python3 "$SCRIPTS/machine-toml.py" get "$HS_MACHINE_FILE" timeZone --json)"
+check_eq "a missing one is set (gpu)" '"nvidia"' "$(python3 "$SCRIPTS/machine-toml.py" get "$HS_MACHINE_FILE" gpu --json)"
+check_eq "a missing setting is set" true "$(cat "$HS_SETTINGS_DIR/backupNewShares")"
+check "the applied blueprint is recorded" grep -q "^record media" "$LOG"
+check "the result names every part" grep -q '"config":"done".*"app:r1":"done".*"app:r3":"later' "$WORK/result.json"
+echo yes > "$WORK/docker.on"; : > "$LOG"
+printf 'r1\trecipe\trunning\t-\n' > "$WORK/apps.tsv"
+printf '%s\n' "a${tab}caps${tab}1.0.0${tab}1.0.0${tab}current${tab}-${tab}feature${tab}A" > "$CAPS"
+printf 'a\ton\tpart\tno\tyes\tA\n' > "$WORK/parts.tsv"
+run run apply media --tag v1.0.0
+check_eq "a second apply: nothing installed, no docker, no rebuild" "" "$(grep -E '^(install|enable|rebuild|docker)' "$LOG" | paste -sd'|')"
+check_eq "a second apply: the app that is there is not installed again" "apps start install r2" "$(grep '^apps' "$LOG")"
+run run apply media --tag v9
+if [ "$rc" = 1 ] && has "read the plan again"; then pass "the job refuses a blueprint that changed since the plan"; else fail "tag: $out"; fi
+
+echo "-- failure rule"
+reset
+FAILJOB_APP=r1 run run apply media --tag v1.0.0
+if [ "$rc" = 1 ] && grep -q "install r2" "$LOG" && grep -q '"app:r1":"failed' "$WORK/result.json" && grep -q '"app:r2":"done"' "$WORK/result.json"; then
+  pass "a failed app does not stop the next one"; else fail "app failure: $out"; fi
+reset
+REFUSE_APP=r1 run run apply media --tag v1.0.0
+if [ "$rc" = 1 ] && grep -q "install r2" "$LOG" && grep -q '"app:r1":"failed: boom"' "$WORK/result.json"; then pass "a refused app start is a failed app, the next goes on"; else fail "app refused: $out"; fi
+reset
+FAIL_REBUILD=1 run run apply media --tag v1.0.0
+if [ "$rc" = 1 ] && ! grep -q '^apps' "$LOG" && ! grep -q '^docker' "$LOG" && grep -q '"rebuild":"failed' "$WORK/result.json" && grep -q '"docker":"skipped"' "$WORK/result.json" \
+   && ! grep -q "^record" "$LOG"; then pass "a failed rebuild stops before docker and apps, nothing is recorded"; else fail "rebuild failure: $out"; fi
+reset
+FAIL_INSTALL=a run run apply media --tag v1.0.0
+if [ "$rc" = 1 ] && ! grep -q '^rebuild' "$LOG" && grep -q '"parts":"failed' "$WORK/result.json" && grep -q '"app:r1":"skipped"' "$WORK/result.json"; then pass "a failed install stops before the rebuild"; else fail "install failure: $out"; fi
+reset
+FAIL_DOCKER=1 run run apply media --tag v1.0.0
+if [ "$rc" = 1 ] && ! grep -q '^apps' "$LOG" && grep -q '"docker":"failed' "$WORK/result.json"; then pass "a failed docker stops before the apps"; else fail "docker failure: $out"; fi
+
+echo "-- hs blueprint (terminal command)"
+B="bash $SCRIPTS/blueprint.sh"
+reset
+out=$($B list 2>&1); check_out "list shows the blueprint" "media.*Media server" echo "$out"
+out=$($B --list 2>&1); check_eq "--list is the machine line (7 fields)" 7 "$(awk -F'\t' 'NR == 1 { print NF }' <<<"$out")"
+out=$($B apply media --dry-run 2>&1 </dev/null); check_out "a dry run says nothing changed" "Dry run: nothing changed" echo "$out"
+check_eq "and starts nothing" "" "$(grep '^record' "$LOG")"
+out=$($B apply media 2>&1 </dev/null || true); check_out "without a terminal and without --yes it asks first" "asks first" echo "$out"
+out=$($B apply media --yes 2>&1 </dev/null); check_out "--yes starts the job" "Started as a job: hs job follow hs-job-test" echo "$out"
+out=$(CONFIRM_DOCKER=1 $B apply media --yes 2>&1 </dev/null || true); check_out "--yes without a terminal cannot type a name" "typed name" echo "$out"
+
+echo "-- the reader (lib/pkg_blueprint.py) with a fake repository"
+python3 - "$SCRIPTS" <<'PY' && pass "reader: lines, trust rule, secret answer, later" || fail "reader"
+import sys, os
+sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
+import pkg_blueprint as b
+BP = {"name": "bp", "version": "1.0.0", "kind": "blueprint", "requires_core": ">=11", "roles": ["homeserver"],
+      "blueprint": {"capabilities": ["storage"], "extensions": ["ext"], "recipes": ["ok", "term", "sec", "foreign"]},
+      "docker": {"manager": "webui", "size": "m"}, "machine": {"timeZone": "UTC"}, "settings": {"backupNewShares": "true"},
+      "answers": {"ok": {"K": "v"}}}
+PKGS = {"ok": ("recipe", {"ask": [{"key": "K"}]}), "term": ("recipe", {"input": "terminal"}),
+        "sec": ("recipe", {"ask": [{"key": "PASS", "type": "secret"}]}), "ext": ("extension", {})}
+class R:
+    def catalog(self):
+        c = {"bp": [("official", {"kind": "blueprint"}, "v1.0.0", "c")]}
+        for n, (k, _) in PKGS.items():
+            c[n] = [("official", {"kind": k}, "v1", "c")]
+        c["foreign"] = [("other", {"kind": "recipe"}, "v1", "c")]
+        return c
+    def all(self): return {"official": {"default": True}}
+    def verified_package(self, name, repo=None):
+        return ("official", {}, "v1.0.0", "c", BP if name == "bp" else PKGS[name][1])
+class P:
+    def installed(self): return {"ext": {}}
+    def api_level(self): return 99
+lines, bad = b.show(R(), P(), "bp")
+assert any("foreign" in x and "no repository this blueprint may use" in x for x in bad), bad
+assert "part\trecipes\tok\tok" in lines and "answer\tok\tK\tv" in lines
+assert "part\trecipes\tterm\tlater:it is set up in a terminal" in lines
+assert "part\trecipes\tsec\tlater:it asks for a secret (PASS)" in lines
+assert "part\textensions\text\tinstalled" in lines and "docker\twebui\tm" in lines and 'machine\ttimeZone\t"UTC"' in lines
+BP["answers"]["sec"] = {"PASS": "x"}
+BP["blueprint"]["recipes"] = ["ok", "sec"]
+lines, bad = b.show(R(), P(), "bp")
+assert any("is a secret" in x for x in bad), bad
+rows = b.listing(R(), P())
+assert len(rows) == 1 and len(rows[0].split("\t")) == 7 and rows[0].split("\t")[5] in ("new", "applied", "update"), rows
+PY
+
+finish

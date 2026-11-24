@@ -67,6 +67,7 @@ pkg_restart() {   # pkg_restart <service package>...
 case "${1:-list}" in
   --list) py list --all ;;
   --market) py market ;;
+  blueprint) shift; py blueprint "$@" ;;   # list [lang] | show <name> [lang] | record <name>: what hs blueprint reads (lib/pkg_blueprint.py)
   --show) shift; py show "$@" ;;
   --asset) shift; py asset "$@" ;;
   --states)

@@ -133,6 +133,27 @@ records = { status = ["status"], reason = ["text"], unit = ["unit"] }
 enums = { status = ["started", "refused"] }
 note = "Start a test-lab run as a background job: hs sys testlab start run [--ref R] [--stage 1|2|3|4|5|6|<name>|all]; status started + the job unit."
 
+["blueprint list"]
+role = "viewer"
+kind = "tsv"
+columns = ["name", "repo", "version", "roles", "packages", "state", "title"]
+enums = { state = ["new", "applied", "update", "waits"] }
+note = "The blueprints the repositories offer: name, repository, version, roles (comma list), packages (comma list in install order; docker stands for the [docker] table), state, title. Never translated; a - is an empty field. No row when no repository has an index."
+
+["blueprint plan <action>"]
+role = "admin"
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], heading = ["text"], blueprint = ["name", "repo", "version", "tag"], part = ["n", "part", "name", "state", "text"], step = ["text"], note = ["text"], warn = ["text"], confirm_name = ["name"], command = ["text"], long = ["yes"] }
+enums = { status = ["ok", "refused"] }
+note = "What applying a blueprint would do: hs sys blueprint plan apply <name>. part = config|parts|rebuild|docker|app; its state is set|kept|install|enable|present|later. One confirm_name line per name to type (an added repository: the blueprint; Docker: what its plan asks). Exit 0 ok, 1 refused. Never asks."
+
+["blueprint start <action>"]
+role = "admin"
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"] }
+enums = { status = ["started", "refused"] }
+note = "Apply a blueprint as ONE background job: hs sys blueprint start apply <name> [--confirm <name>]... (one --confirm per confirm_name line of the plan); fills only what is not set yet. The job record result holds one entry per part."
+
 ["preset list"]
 role = "viewer"
 kind = "tsv"

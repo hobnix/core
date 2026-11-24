@@ -295,6 +295,42 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "blueprint.list": {
+    /** the blueprints: name, repo, version, roles (csv), packages (csv, in order), state (new|applied|update|waits), title; - = empty */
+    words: ["blueprint", "list"];
+    path: "/blueprint/list";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, repo: Field, version: Field, roles: Field, packages: Field, state: "new" | "applied" | "update" | "waits", title: Field])[];
+  };
+  "blueprint.plan.by_action": {
+    /** what applying a blueprint would do, as data: status, blueprint, part lines, step|note|warn, confirm_name (never asks; exit 0 ok, 1 refused) */
+    words: ["blueprint", "plan", "<action>"];
+    path: "/blueprint/plan/{action}";
+    method: "post";
+    class: "plan";
+    role: "admin";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "blueprint.start.by_action": {
+    /** apply it as one background job (hs sys blueprint start apply <name> [--confirm <name>]...); fills only what is not set; status started, unit, job */
+    words: ["blueprint", "start", "<action>"];
+    path: "/blueprint/start/{action}";
+    method: "post";
+    class: "start";
+    role: "admin";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
   "cache.state": {
     /** upload cache state per share */
     words: ["cache", "state"];

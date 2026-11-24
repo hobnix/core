@@ -1488,6 +1488,211 @@
     }
    }
   },
+  "/blueprint/list": {
+   "get": {
+    "operationId": "blueprint.list",
+    "summary": "the blueprints: name, repo, version, roles (csv), packages (csv, in order), state (new|applied|update|waits), title; - = empty",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "blueprint",
+      "list"
+     ],
+     "script": "blueprint.sh",
+     "args": "--list",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/blueprint/list",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": []
+    },
+    "description": "The blueprints the repositories offer: name, repository, version, roles (comma list), packages (comma list in install order; docker stands for the [docker] table), state, title. Never translated; a - is an empty field. No row when no repository has an index.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "version"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "roles"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "packages"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "state",
+            "enum": [
+             "new",
+             "applied",
+             "update",
+             "waits"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "title"
+           }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/blueprint/plan/{action}": {
+   "post": {
+    "operationId": "blueprint.plan.by_action",
+    "summary": "what applying a blueprint would do, as data: status, blueprint, part lines, step|note|warn, confirm_name (never asks; exit 0 ok, 1 refused)",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "blueprint",
+      "plan",
+      "<action>"
+     ],
+     "script": "blueprint-change.sh",
+     "args": "plan {1} {rest}",
+     "class": "plan",
+     "rest": true
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "0": {
+      "description": "allowed",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused; the reason line says why",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing; the needs lines say what",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/blueprint/start/{action}": {
+   "post": {
+    "operationId": "blueprint.start.by_action",
+    "summary": "apply it as one background job (hs sys blueprint start apply <name> [--confirm <name>]...); fills only what is not set; status started, unit, job",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "blueprint",
+      "start",
+      "<action>"
+     ],
+     "script": "blueprint-change.sh",
+     "args": "start {1} {rest}",
+     "class": "start",
+     "rest": true,
+     "confirm": "--confirm <name>, the name the plan's confirm_name line asks for"
+    },
+    "parameters": [
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "a long change starts a job; the `unit` line names it; follow it with `jobs tail`",
+    "responses": {
+     "0": {
+      "description": "done or started",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "1": {
+      "description": "refused",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     },
+     "2": {
+      "description": "something is missing",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangeLines"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/cache/state": {
    "get": {
     "operationId": "cache.state",

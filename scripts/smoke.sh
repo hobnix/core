@@ -146,6 +146,7 @@ default_probes() {
     $'hs sys apps versions\tsys apps versions\t0' \
     $'hs sys rebuild pending\tsys rebuild pending\t0' \
     $'hs sys net nics\tsys net nics\t0' \
+    $'hs sys blueprint list\tsys blueprint list\t0' \
     $'hs sys preset list\tsys preset list\t0' \
     $'hs sys net check\tsys net check\t0 1' \
     $'hs sys fm locations\tsys fm locations\t0 1' \
@@ -163,6 +164,7 @@ default_probes() {
     $'hs job running\tjob running\t0' \
     $'hs job log\tjob log hs-health-check.service\t0 1' \
     $'hs config list\tconfig list\t0' \
+    $'hs blueprint list\tblueprint list\t0' \
     $'hs preset list\tpreset list\t0' \
     $'hs preset show minimal\tpreset show minimal\t0' \
     $'hs config get\tconfig get language\t0 1' \

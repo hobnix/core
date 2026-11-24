@@ -41,6 +41,9 @@ recipes versions	viewer	read
 setup list	viewer	read
 setup plan <action>	admin	plan
 setup start <action>	admin	start
+blueprint list	viewer	read
+blueprint plan <action>	admin	plan
+blueprint start <action>	admin	start
 preset list	viewer	read
 preset plan <action>	admin	plan
 preset start <action>	admin	start

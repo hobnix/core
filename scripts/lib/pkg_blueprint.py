@@ -1,9 +1,21 @@
 """The package.toml of a blueprint (kind = "blueprint", docs/PLAN-registry.md "Blueprints"): an ordered package list plus fill-only config,
-no script, no Nix, no other file read. Stdlib only, no CLI. pkg.py (validate, check-draft) and the repository check call `manifest_problems()`.
+no script, no Nix, no other file read. Stdlib only, no CLI. pkg.py (validate, check-draft) and the repository check call `manifest_problems()`;
+`hs pkg blueprint list|show|record` (pkg_repo.run) calls the three readers below.
 
 manifest_problems(m) -> [text]
+show(R, pkg, name, lang) -> (lines, problems)   the blueprint and the packages it names as key<TAB>value lines (the plan of blueprint-change.sh reads them):
+  repo, version, tag, commit, title, description, roles (csv), added (yes|no), machine<TAB>key<TAB>toml literal, setting<TAB>key<TAB>value,
+  part<TAB>capabilities|extensions|recipes<TAB>name<TAB>state (capabilities `-`; extensions new|installed; recipes `ok` or `later:<why>`: input terminal,
+  a secret ask, an ask without default or answer), needs<TAB>recipe<TAB>csv|-, docker<TAB>manager<TAB>size|-, answer<TAB>recipe<TAB>KEY<TAB>value
+listing(R, pkg, lang) -> [row]   name, repo, version, roles, packages (in order), state new|applied|update|waits, title (tab separated, - = empty)
+record(R, pkg, name)             writes [applied.<name>] to blueprints.toml (HS_BLUEPRINTS_FILE, else <HS_STATE_DIR or /var/lib/hs>/blueprints.toml), atomically
+R is a pkg_repo.Repos, pkg the module pkg.py. A blueprint may name packages of its own repository and of `official`, no other.
 """
+import datetime
+import json
 import os
+import tempfile
+import tomllib
 import re
 import sys
 
@@ -125,3 +137,150 @@ def manifest_problems(m):
             elif not _flat(v):
                 bad(f"[{table}] {k}: only text, numbers, true/false and lists of them")
     return out
+
+
+# ── reading (hs pkg blueprint ...) ──
+TRUSTED = "official"
+
+
+def literal(v):
+    """a value as the TOML literal machine_set takes"""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(literal(x) for x in v) + "]"
+    return json.dumps(v, ensure_ascii=False)
+
+
+def _one(R, name):
+    """(repo, entry, tag, commit, manifest) of the blueprint called name, else ValueError"""
+    rows = [r for r in R.catalog().get(name, []) if r[1].get("kind") == "blueprint"]
+    if not rows:
+        raise ValueError("No blueprint called '%s'." % name)
+    if len(rows) > 1:
+        raise ValueError("%s is in more than one repository (%s)." % (name, ", ".join(r[0] for r in rows)))
+    try:
+        return R.verified_package(name, rows[0][0])
+    except Exception as e:     # pkg_repo.Refused: the reason is the text
+        raise ValueError(str(e))
+
+
+def _named(R, name, repo):
+    """(kind, manifest) of a package a blueprint names, from its own repository or official only"""
+    rows = [r for r in R.catalog().get(name, []) if r[0] in (repo, TRUSTED)]
+    if not rows:
+        raise ValueError("%s is in no repository this blueprint may use (its own, %s)." % (name, TRUSTED))
+    try:
+        return rows[0][1].get("kind", ""), R.verified_package(name, rows[0][0])[4]
+    except Exception as e:
+        raise ValueError(str(e))
+
+
+def _recipe_state(pm, given, n, bad):
+    """ok, or later:<why>: a recipe that needs a person is not run by the blueprint"""
+    why = "it is set up in a terminal" if pm.get("input", "none") == "terminal" else ""
+    keys = [a.get("key") for a in pm.get("ask", [])]
+    for a in pm.get("ask", []):
+        key = a.get("key", "")
+        if a.get("type") == "secret":
+            if key in given:
+                bad.append("[answers.%s] %s is a secret: a blueprint never carries one" % (n, key))
+            why = why or "it asks for a secret (%s)" % key
+        elif key not in given and a.get("default") in (None, "") and a.get("when") is None:
+            why = why or "it asks for %s" % key
+    bad.extend("[answers.%s] %s is not a question of the recipe" % (n, k) for k in given if k not in keys)
+    return "later:" + why if why else "ok"
+
+
+def show(R, pkg, name, lang="en"):
+    try:
+        repo, _entry, tag, commit, m = _one(R, name)
+    except ValueError as e:
+        return [], [str(e)]
+    bad = manifest_problems(m)
+    if m.get("kind") != "blueprint":
+        bad.append("%s is not a blueprint." % name)
+    added = not R.all().get(repo, {}).get("default")
+    out = ["repo\t%s" % repo, "version\t%s" % m.get("version", ""), "tag\t%s" % tag, "commit\t%s" % commit,
+           "title\t%s" % (m.get("title_" + lang) or m.get("title") or name),
+           "description\t%s" % (" ".join(str(m.get("description_" + lang) or m.get("description") or "-").split())),
+           "roles\t%s" % ",".join(m.get("roles", [])), "added\t%s" % ("yes" if added else "no")]
+    out += ["machine\t%s\t%s" % (k, literal(v)) for k, v in (m.get("machine") or {}).items()]
+    out += ["setting\t%s\t%s" % (k, v) for k, v in (m.get("settings") or {}).items()]
+    bp, answers, have = m.get("blueprint") or {}, m.get("answers") or {}, pkg.installed()
+    for kind in LISTS:
+        for n in bp.get(kind, []) if isinstance(bp.get(kind), list) else []:
+            if kind == "capabilities":     # a core folder or a capability package: the bundle resolver of the shell part knows which
+                out.append("part\tcapabilities\t%s\t-" % n)
+                continue
+            try:
+                k, pm = _named(R, n, repo)
+            except ValueError as e:
+                bad.append(str(e))
+                continue
+            if kind == "extensions":
+                out.append("part\textensions\t%s\t%s" % (n, "installed" if n in have else "new"))
+            elif k != "recipe":
+                bad.append("%s is not a recipe." % n)
+            else:
+                out.append("part\trecipes\t%s\t%s" % (n, _recipe_state(pm, answers.get(n, {}), n, bad)))
+                out.append("needs\t%s\t%s" % (n, ",".join(pm.get("needs", [])) or "-"))
+                out += ["answer\t%s\t%s\t%s" % (n, k2, v) for k2, v in answers.get(n, {}).items()]
+    if isinstance(m.get("docker"), dict):
+        out.append("docker\t%s\t%s" % (m["docker"].get("manager", "webui"), m["docker"].get("size", "-")))
+    return out, bad
+
+
+def _nums(s):
+    return tuple(int(x) for x in re.findall(r"\d+", str(s))[:3])
+
+
+def listing(R, pkg, lang="en"):
+    have, rows = _applied(), []
+    for n, found in sorted(R.catalog().items()):
+        for repo, entry, _tag, _commit in found:
+            if entry.get("kind") != "blueprint":
+                continue
+            try:
+                m = R.verified_package(n, repo)[4]
+            except Exception:
+                continue
+            ver = str(m.get("version", ""))
+            st = "new" if n not in have else ("update" if _nums(have[n].get("version", "0")) < _nums(ver) else "applied")
+            rq = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
+            if rq and int(rq.group(1)) > pkg.api_level():
+                st = "waits"
+            bp = m.get("blueprint") or {}
+            names = [x for k in LISTS for x in (bp.get(k) if isinstance(bp.get(k), list) else [])] + (["docker"] if "docker" in m else [])
+            cells = [n, repo, ver, ",".join(m.get("roles", [])), ",".join(names), st, m.get("title_" + lang) or m.get("title") or n]
+            rows.append("\t".join(" ".join(str(c).split()) or "-" for c in cells))
+    return rows
+
+
+def _applied_file():
+    return os.environ.get("HS_BLUEPRINTS_FILE") or os.path.join(os.environ.get("HS_STATE_DIR") or "/var/lib/hs", "blueprints.toml")
+
+
+def _applied():
+    try:
+        with open(_applied_file(), "rb") as f:
+            return tomllib.load(f).get("applied", {})
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def record(R, pkg, name):
+    repo, _entry, _tag, commit, m = _one(R, name)
+    have = _applied()
+    have[name] = {"repo": repo, "version": str(m.get("version", "")), "commit": commit, "applied": datetime.date.today().isoformat()}
+    path = _applied_file()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".blueprints.")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        for n in sorted(have):
+            f.write("[applied.%s]\n" % n)
+            f.writelines("%s = %s\n" % (k, json.dumps(str(v), ensure_ascii=False)) for k, v in have[n].items())
+            f.write("\n")
+    os.replace(tmp, path)

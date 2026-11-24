@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "new"
+title = "hs blueprint: apply a blueprint"
+body  = """hs blueprint list, show and apply: a blueprint is shown as a plan first (settings, parts, one rebuild, Docker, apps), then applied as one background job. It only fills what is not set yet and never overwrites a value you set. A failed rebuild stops the job before the apps; a failed app does not stop the next one. Docker is turned on only through the blueprint's [docker] table. hs preset stays for one release. Not tested on hardware yet."""

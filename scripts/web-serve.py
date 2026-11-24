@@ -511,7 +511,7 @@ TOKEN_DENIED = frozenset(("token", "users", "secrets", "unlock", "vault", "termi
 # sets (tests/token-test.py fails for a new one); the denied areas can add keys, packages, routes, people or settings that survive a revoked token.
 TOKEN_CHANGE_ALLOWED = frozenset(("ct", "backup", "shares", "docker", "docker-app", "docker-registry", "apps", "recipes", "jobs", "notify", "health", "expiry", "iso"))
 TOKEN_CHANGE_DENIED = frozenset(("token", "users", "secrets", "ssh-key", "pkg", "config", "system", "routes", "net", "dc", "node", "migrate", "incident",
-                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "vps", "parts", "release", "gateway", "fm", "ext"))
+                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "blueprint", "vps", "parts", "release", "gateway", "fm", "ext"))
 
 _actor = threading.local()      # who a command runs for: _run hands it to the command as HS_ACTOR (the audit line, scripts/lib/audit.sh)
 
@@ -1141,6 +1141,7 @@ READS = {
     ("changes", "list"): {"kind": "tsv", "ttl": 60, "query": {"from": (r"^[0-9a-f]{7,40}$", "--from"), "since": (r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "--since")}},   # What's new
     ("parts", "pending"): {"kind": "tsv", "ttl": 15, "topic": "parts-pending"},
     ("rebuild", "pending"): {"kind": "tsv", "ttl": 15, "topic": "rebuild-pending"},
+    ("blueprint", "list"): {"kind": "tsv", "ttl": 60},                                                                   # the blueprints (first-run wizard)
     ("preset", "list"): {"kind": "tsv", "ttl": 60, "topic": "preset-list"},                                               # the presets (first-run wizard)
     ("net", "check"): {"kind": "tsv", "ttl": 5},                                                  # the network check rows (Network wizard)
     ("net", "nics"): {"kind": "tsv", "ttl": 15},                                                  # the physical network cards (Network wizard)
@@ -1472,6 +1473,8 @@ CHANGES = {
     "setup": [[r"^wizard-done$"]],
     # apply a preset (preset-change.sh): fills only what is not set yet; the name is a file name in presets/ (the script checks it exists)
     "preset": [[r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"]],
+    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines)
+    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True)}}],
     # posters (poster-change.sh) are the extension "posters": area "ext/posters", declared in its manifest; the picture is served by GET /api/poster/<file>
     # the router connection (net-change.sh): the address as an option, the API key as the one line on stdin
     "net": [{"fixed": [r"^setup$"], "opts": {"--address": (r"^https?://[A-Za-z0-9._:-]{1,100}/?$", False)}, "stdin": True}],
