@@ -582,7 +582,7 @@ cmd_enable() {
 drop_settings() { setting_unset docker; setting_unset dockerManager; rm -f "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy" "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-undo"; }
 
 cmd_migrate() {   # quiet; nothing is stopped, removed or restarted: only settings and one state file change
-  local legacy=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy undo=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-undo old w= saved
+  local legacy=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy undo=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-undo old='' w='' saved
   case "${1:-}" in
     "") ;;
     --undo)
