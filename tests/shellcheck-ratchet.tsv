@@ -34,7 +34,6 @@ scripts/lib/capability.sh	3
 scripts/lib/checkout.sh	1
 scripts/lib/config-keys.sh	2
 scripts/lib/crypt.sh	1
-scripts/lib/docker-apps.sh	2
 scripts/lib/fm.sh	12
 scripts/lib/hs.sh	3
 scripts/lib/i18n.sh	1
