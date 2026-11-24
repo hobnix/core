@@ -5,10 +5,11 @@
 //! passes each `event` to [`Service::on_event`] and sends the `ack` when that returns `Ok`, and returns when the core sends `shutdown`
 //! or closes stdin. Events are delivered at least once: `on_event` must be idempotent (use `EventRow::id` as the key).
 //!
-//! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (the [`Ctx`] is `Clone + Send`).
+//! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (`Ctx::shared` gives a handle that moves to another thread).
 
 use std::io::{self, BufRead, Write};
 use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -18,7 +19,7 @@ use serde_json::{json, Value};
 use crate::command::Lang;
 use crate::integrations::Integration;
 use crate::proto::{cut, read_line, Line, Out};
-use crate::{Event, LogLevel, VERSION};
+use crate::{Ctx, Event, LogLevel, VERSION};
 
 /// First message from the core.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -73,23 +74,33 @@ impl Health {
     }
 }
 
-/// Messages a service may send besides the SDK's own (`ready`, `health`, `ack`).
+/// The stdin/stdout side of [`Ctx`] for a service: `log`, `emit`, `rollup` and `snapshot` lines on stdout.
 #[derive(Clone)]
-pub struct Ctx {
+struct StdioCtx {
     out: Out,
+    integrations: Arc<[Integration]>,
 }
 
-impl Ctx {
-    pub fn log(&self, level: LogLevel, text: &str) -> io::Result<()> {
-        self.out.log(level, text)
+impl Ctx for StdioCtx {
+    fn credential(&self, name: &str, provider: &str) -> Option<String> {
+        credential_for(name, provider)
     }
-    /// Ask the core to write an event (`emit`). The core allows 50 a minute per service and only kinds of the manifest's `[[events]]`.
-    pub fn emit(&self, ev: &Event) -> io::Result<()> {
+    fn integrations(&self) -> &[Integration] {
+        &self.integrations
+    }
+    /// The core allows 50 a minute per service and only kinds of the manifest's `[[events]]`.
+    fn emit(&self, ev: &Event) -> io::Result<()> {
         self.out.event("emit", ev)
     }
-    /// Add to the monthly rollup of (month, `user`, `kind`) (`rollup`). The core does it, only for a `kind` of this package declared in `[[events]]`
-    /// with `retention = "metric"`; others are dropped with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`, the first a letter or digit (never an option).
-    pub fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
+    fn log(&self, level: LogLevel, text: &str) -> io::Result<()> {
+        self.out.log(level, text)
+    }
+    fn progress(&self, _fraction: Option<f64>, _text: &str) -> io::Result<()> {
+        Ok(())
+    }
+    /// The core does it, only for a `kind` of this package declared in `[[events]]` with `retention = "metric"`; others are dropped
+    /// with a warning. Counts against the emit limit. `user`: 1 to 64 of `A-Za-z0-9_.@-`, the first a letter or digit (never an option).
+    fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
         let user_ok = user
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
@@ -106,8 +117,8 @@ impl Ctx {
             json!({"kind": kind, "user": user, "n": n, "sum": sum}),
         )
     }
-    /// Publish the newest state of `topic` (`[a-z0-9-]{1,60}`); replaces the previous one. At most 256 KiB.
-    pub fn snapshot(&self, topic: &str, data: Value) -> io::Result<()> {
+    /// `topic` is `[a-z0-9-]{1,60}`; replaces the previous state. At most 256 KiB.
+    fn snapshot(&self, topic: &str, data: Value) -> io::Result<()> {
         let chars_ok = topic
             .chars()
             .all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'));
@@ -124,6 +135,9 @@ impl Ctx {
         }
         self.out
             .typed("snapshot", json!({"topic": topic, "data": data}))
+    }
+    fn shared(&self) -> Arc<dyn Ctx> {
+        Arc::new(self.clone())
     }
 }
 
@@ -160,18 +174,18 @@ pub fn credential(name: &str) -> Option<String> {
 
 pub trait Service {
     /// Called once after `init`, before `ready`. An `Err` ends the process with status 1 (the core marks the start failed).
-    fn start(&mut self, _init: &Init, _ctx: &Ctx) -> Result<(), String> {
+    fn start(&mut self, _init: &Init, _ctx: &dyn Ctx) -> Result<(), String> {
         Ok(())
     }
     /// Handle one event. `Ok` sends the `ack`. `Err` logs the reason, sends no ack and keeps going: the event comes again after a
     /// restart, and the core stops delivering when 100 events are unacknowledged, so a service that cannot handle events should
     /// report `Health::degraded` from [`Service::tick`].
-    fn on_event(&mut self, _event: &EventRow, _ctx: &Ctx) -> Result<(), String> {
+    fn on_event(&mut self, _event: &EventRow, _ctx: &dyn Ctx) -> Result<(), String> {
         Ok(())
     }
     /// Called at startup and then every half `health_interval`: do periodic work (a collector reads and sends a snapshot here) and
     /// say how the service is.
-    fn tick(&mut self, _ctx: &Ctx) -> Health {
+    fn tick(&mut self, _ctx: &dyn Ctx) -> Health {
         Health::ok()
     }
 }
@@ -196,7 +210,6 @@ pub fn run_with(
     mut service: impl Service,
 ) -> u8 {
     let out = Out::new(output);
-    let ctx = Ctx { out: out.clone() };
     // Before `ready` only `ready` may be written, so a failure here is reported on stderr only.
     let init: Init = match read_line(&mut input) {
         Ok(Line::Text(l)) => match parse(&l, "init") {
@@ -206,6 +219,10 @@ pub fn run_with(
         Ok(Line::Eof) => return die("stdin closed before init"),
         Ok(Line::TooLong) => return die("init longer than 1 MiB"),
         Err(e) => return die(&format!("cannot read init: {e}")),
+    };
+    let ctx = StdioCtx {
+        out: out.clone(),
+        integrations: init.integrations.clone().into(),
     };
     if let Err(e) = service.start(&init, &ctx) {
         return die(&format!("start failed: {e}"));

@@ -29,7 +29,7 @@ fn main() -> ExitCode {
 ```
 
 `run` reads the one request line, answers `unsupported_version` for a `v` it does not know, calls your closure, and writes exactly one
-`result` (exit status 0 for `ok`, 1 otherwise). A panic becomes `failed`. `Ctx` sends `progress`, `log` and `event` messages; free
+`result` (exit status 0 for `ok`, 1 otherwise). A panic becomes `failed`. The handler gets a `&dyn Ctx` that sends `progress`, `log` and `event` messages; free
 text is cut to the schema limits and an event kind that is not `pkg.<package>.<kind>` is refused before it is written. The example is
 `examples/hello.rs`.
 
@@ -38,7 +38,8 @@ text is cut to the schema limits and an event kind that is not `pkg.<package>.<k
 Implement `service::Service` (`start`, `on_event`, `tick`, all optional) and call `service::run(MyService)`. The SDK sends `ready`
 after `start`, calls `tick` and sends `health` every half `health_interval`, sends the `ack` after `on_event` returns `Ok`, and
 returns on `shutdown` or end of stdin. Delivery is at least once: `on_event` must be idempotent (key: `EventRow::id`). `Ctx` is
-`Clone + Send` and offers `log`, `emit` and `snapshot`. The example is `examples/ticker.rs`.
+a trait (`&dyn Ctx`; `ctx.shared()` gives an `Arc<dyn Ctx>` for another thread) and offers `log`, `emit`, `rollup` and `snapshot`;
+`testing::FakeCtx` stands in for it in a test. The example is `examples/ticker.rs`.
 
 ## Rules for the author
 

@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Rust extension SDK: Ctx is a trait, with a fake for tests"
+body  = """Handlers of Rust extensions now take `&dyn Ctx` instead of a `Ctx` struct, and `hobnix_ext_sdk::testing::FakeCtx` lets a test run a handler without a process. Messages on the wire are unchanged."""
