@@ -4,7 +4,6 @@
 # Stand-ins: pkg.py (HS_PKG_PY), the event writer (HS_PYTHON, logs its arguments), the push message (HS_PKG_NOTIFY).
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
-tab=$'\t'
 export WORK
 export HS_LANG=en HS_PLAIN=1 HS_STATE_DIR=$WORK/state HS_EVENT_NOROOT=1 HS_LIVE_LOG=$WORK/live.log
 export HS_PKG_PY=$WORK/pkgpy HS_PYTHON=$WORK/py HS_PKG_NOTIFY=$WORK/notify
