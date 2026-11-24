@@ -32,10 +32,13 @@ check_eq "plan: exit 0" 0 "$rc"
 has '^status	ok$' && has '^heading	acknowledge backup:stale$' && has 'text of backup:stale' && pass "plan names the problem" || fail "plan: $out"
 run plan ack nothere
 check_eq "an unknown id: refused" 1 "$rc"
+check_match "an unknown id: refused with health.not-active" $'code\thealth.not-active' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.not-active && pass "health.not-active is in the catalogue" || fail "health.not-active is not in the catalogue"
 run plan ack 'a;b'
 check_eq "a bad id: refused" 1 "$rc"
+check_match "a bad id: refused with health.id-invalid" $'code\thealth.id-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.id-invalid && pass "health.id-invalid is in the catalogue" || fail "health.id-invalid is not in the catalogue"
 run plan ack
 check_eq "no id: refused" 1 "$rc"
+check_match "no id: refused with health.id-missing" $'code\thealth.id-missing' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.id-missing && pass "health.id-missing is in the catalogue" || fail "health.id-missing is not in the catalogue"
 run plan unack backup:stale
 check_eq "unack of an open problem: refused" 1 "$rc"
 run start ack backup:stale
@@ -44,6 +47,7 @@ has '^status	done$' && pass "status done" || fail "start: $out"
 check_eq "the ack file has the id" backup:stale "$(cut -f1 "$HS_ACK_FILE")"
 run plan ack backup:stale
 check_eq "ack twice: refused" 1 "$rc"
+check_match "ack twice: refused with health.acked-already" $'code\thealth.acked-already' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.acked-already && pass "health.acked-already is in the catalogue" || fail "health.acked-already is not in the catalogue"
 
 echo "-- unack"
 run plan unack backup:stale
@@ -57,6 +61,7 @@ run plan ack backup:stale --for 7d --note "waiting for the new disk"
 check_eq "plan with --for and --note: exit 0" 0 "$rc"
 run plan ack backup:stale --for soon
 check_eq "a bad --for: refused" 1 "$rc"
+check_match "a bad --for: refused with health.for-invalid" $'code\thealth.for-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.for-invalid && pass "health.for-invalid is in the catalogue" || fail "health.for-invalid is not in the catalogue"
 run plan ack backup:stale --frob 1
 check_eq "an unknown option: refused" 1 "$rc"
 run start ack backup:stale --for 7d --note "waiting for the new disk"
@@ -78,6 +83,7 @@ check_eq "an ended row is not listed" 0 "$(HS_PLAIN=1 bash "$SCRIPTS/health-ack.
 echo "-- resume"
 run plan resume
 check_eq "nothing paused: refused" 1 "$rc"
+check_match "nothing paused: refused with health.nothing-paused" $'code\thealth.nothing-paused' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF health.nothing-paused && pass "health.nothing-paused is in the catalogue" || fail "health.nothing-paused is not in the catalogue"
 printf 'keys=backup:stale,zfs:tank:scrub-old\n' > "$HS_BULK_PAUSE"
 run plan resume
 check_eq "resume plan: exit 0" 0 "$rc"

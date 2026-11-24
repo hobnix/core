@@ -23,7 +23,7 @@ needs() { printf 'status\tneeds\nneeds\t%s\n' "$1"; exit 2; }
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: notify-change.sh plan|start add|set|remove|test <name> ... | migrate" >&2; exit 1 ;; esac
 case "$action" in
-  add|set|remove|test) [ -n "$name" ] || refuse "a channel name is needed"; shift 3 ;;
+  add|set|remove|test) [ -n "$name" ] || refuse_code notify.name-missing "a channel name is needed"; shift 3 ;;
   migrate) shift 2 ;;
   *) refuse_code action.unknown "unknown action (add, set, remove, test or migrate)" ;;
 esac
@@ -35,23 +35,23 @@ provider="" minp="" quiet="" enabled="" cats="" confirm=""
 sets=() secrets=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --provider)     [ "$action" = add ] || refuse "the provider of a channel cannot be changed"; provider=${2:-}; shift 2 || refuse "--provider needs a value" ;;
-    --min-priority) minp=${2:-}; shift 2 || refuse "--min-priority needs a value" ;;
-    --quiet)        quiet=${2:-}; shift 2 || refuse "--quiet needs a value" ;;
-    --enabled)      enabled=${2:-}; shift 2 || refuse "--enabled needs a value" ;;
-    --categories)   cats=${2:-}; shift 2 || refuse "--categories needs a value" ;;
-    --set)          [[ "${2:-}" == *=* ]] || refuse "--set needs key=value"; sets+=("$2"); shift 2 ;;
-    --secret)       [ -n "${2:-}" ] || refuse "--secret needs a setting name"; secrets+=("$2"); shift 2 ;;
+    --provider)     [ "$action" = add ] || refuse_code notify.provider-fixed "the provider of a channel cannot be changed"; provider=${2:-}; shift 2 || refuse_code notify.value-missing "--provider needs a value" ;;
+    --min-priority) minp=${2:-}; shift 2 || refuse_code notify.value-missing "--min-priority needs a value" ;;
+    --quiet)        quiet=${2:-}; shift 2 || refuse_code notify.value-missing "--quiet needs a value" ;;
+    --enabled)      enabled=${2:-}; shift 2 || refuse_code notify.value-missing "--enabled needs a value" ;;
+    --categories)   cats=${2:-}; shift 2 || refuse_code notify.value-missing "--categories needs a value" ;;
+    --set)          [[ "${2:-}" == *=* ]] || refuse_code notify.set-invalid "--set needs key=value"; sets+=("$2"); shift 2 ;;
+    --secret)       [ -n "${2:-}" ] || refuse_code notify.value-missing "--secret needs a setting name"; secrets+=("$2"); shift 2 ;;
     --confirm)      confirm=${2:-}; shift 2 || refuse_code confirm.missing "--confirm needs a value" ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-case "$action" in add|set) ;; *) [ ${#sets[@]} -eq 0 ] && [ ${#secrets[@]} -eq 0 ] && [ -z "$minp$quiet$enabled$cats$provider" ] || refuse "this action takes no options" ;; esac
-[ ${#secrets[@]} -le 1 ] || refuse "one secret at a time"
-case "$minp" in ""|min|low|default|high|urgent) ;; *) refuse "the minimum priority is min, low, default, high or urgent" ;; esac
-case "$quiet" in ""|respect|ignore) ;; *) refuse "the quiet rule is respect or ignore" ;; esac
-case "$enabled" in ""|yes|no) ;; *) refuse "enabled is yes or no" ;; esac
-[ -z "$cats" ] || [[ "$cats" =~ ^(alarm|status|heartbeat|digest)(,(alarm|status|heartbeat|digest))*$ ]] || refuse "the message classes are alarm, status, heartbeat and digest"
+case "$action" in add|set) ;; *) [ ${#sets[@]} -eq 0 ] && [ ${#secrets[@]} -eq 0 ] && [ -z "$minp$quiet$enabled$cats$provider" ] || refuse_code notify.options-misplaced "this action takes no options" ;; esac
+[ ${#secrets[@]} -le 1 ] || refuse_code notify.secret-many "one secret at a time"
+case "$minp" in ""|min|low|default|high|urgent) ;; *) refuse_code notify.priority-invalid "the minimum priority is min, low, default, high or urgent" ;; esac
+case "$quiet" in ""|respect|ignore) ;; *) refuse_code notify.quiet-invalid "the quiet rule is respect or ignore" ;; esac
+case "$enabled" in ""|yes|no) ;; *) refuse_code notify.enabled-invalid "enabled is yes or no" ;; esac
+[ -z "$cats" ] || [[ "$cats" =~ ^(alarm|status|heartbeat|digest)(,(alarm|status|heartbeat|digest))*$ ]] || refuse_code notify.classes-invalid "the message classes are alarm, status, heartbeat and digest"
 
 # does the channel exist (a derived one counts)?
 exists=false
@@ -79,35 +79,35 @@ load_provider() {
 case "$action" in
   add)
     [ -n "$provider" ] || needs "provider"
-    $exists && refuse "There is already a channel called $name."
+    $exists && refuse_code notify.exists "There is already a channel called $name."
     ;;
   set|remove|test)
-    $exists || refuse "There is no channel called $name."
+    $exists || refuse_code notify.unknown "There is no channel called $name."
     provider=$(bash "$channel" --show "$name" 2>/dev/null | awk -F'\t' '$1 == "provider" { print $2 }')
     ;;
 esac
 
 declare -A val=()
 if [ "$action" = add ] || [ "$action" = set ]; then
-  load_provider "$provider" || refuse "There is no provider called $provider."
+  load_provider "$provider" || refuse_code notify.provider-unknown "There is no provider called $provider."
   for kv in ${sets[@]+"${sets[@]}"}; do
     k=${kv%%=*}; v=${kv#*=}
-    [ "${FKIND[$k]:-}" = text ] || refuse "$provider has no text setting called $k (a secret goes in with --secret)."
-    [[ "$v" != *$'\n'* && "$v" != *$'\t'* ]] || refuse "the value of $k is one line without a tab"
+    [ "${FKIND[$k]:-}" = text ] || refuse_code notify.setting-unknown "$provider has no text setting called $k (a secret goes in with --secret)."
+    [[ "$v" != *$'\n'* && "$v" != *$'\t'* ]] || refuse_code notify.value-multiline "the value of $k is one line without a tab"
     val[$k]=$v
   done
   for k in ${secrets[@]+"${secrets[@]}"}; do
-    [ "${FKIND[$k]:-}" = secret ] || refuse "$k is not a secret setting of $provider."
+    [ "${FKIND[$k]:-}" = secret ] || refuse_code notify.secret-unknown "$k is not a secret setting of $provider."
     [ -n "$secret" ] || needs "${FLABEL[$k]}"
     val[$k]=$secret
   done
   for k in "${!val[@]}"; do
     pat=${FPAT[$k]:--}
-    if [ "$pat" != - ] && [ -n "${val[$k]}" ] && ! [[ "${val[$k]}" =~ $pat ]]; then refuse "the value of ${FLABEL[$k]} does not look right"; fi
+    if [ "$pat" != - ] && [ -n "${val[$k]}" ] && ! [[ "${val[$k]}" =~ $pat ]]; then refuse_code notify.value-invalid "the value of ${FLABEL[$k]} does not look right"; fi
   done
   if [ -n "$cats" ]; then
     for c in ${cats//,/ }; do
-      case ",${caps}," in *",$c,"*) ;; *) refuse "$provider cannot carry $c (it can carry: ${caps//,/, })." ;; esac
+      case ",${caps}," in *",$c,"*) ;; *) refuse_code notify.class-unsupported "$provider cannot carry $c (it can carry: ${caps//,/, })." ;; esac
     done
   fi
   if [ "$action" = add ]; then
@@ -119,7 +119,7 @@ if [ "$action" = add ] || [ "$action" = set ]; then
     envs=()
     for k in "${!val[@]}"; do envs+=("CH_$k=${val[$k]}"); done
     if ! err=$(env ${envs[@]+"${envs[@]}"} bash "$(chan_providers_dir)/$provider.sh" check 2>&1 >/dev/null); then
-      refuse "${err:-The settings are not usable.}"
+      refuse_code notify.settings-unusable "${err:-The settings are not usable.}"
     fi
   fi
 fi

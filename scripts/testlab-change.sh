@@ -20,19 +20,19 @@ shift 2 || true
 ref=develop; stage=all
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ref) [ $# -ge 2 ] || refuse "--ref needs a value"; ref=$2; shift 2 ;;
-    --stage) [ $# -ge 2 ] || refuse "--stage needs a value"; stage=$2; shift 2 ;;
+    --ref) [ $# -ge 2 ] || refuse_code testlab.value-missing "--ref needs a value"; ref=$2; shift 2 ;;
+    --stage) [ $# -ge 2 ] || refuse_code testlab.value-missing "--stage needs a value"; stage=$2; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-case "$stage" in [1-6]|install|smoke|rollback|backup|pool|browser|all) ;; *) refuse "stage must be 1 to 6, a stage name or all" ;; esac
+case "$stage" in [1-6]|install|smoke|rollback|backup|pool|browser|all) ;; *) refuse_code testlab.stage-invalid "stage must be 1 to 6, a stage name or all" ;; esac
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
 . "$here/lib/capability.sh"
-capability_on testlab || refuse "The test-lab is off (capability testlab)."
+capability_on testlab || refuse_code testlab.off "The test-lab is off (capability testlab)."
 # the same rules as testlab.sh: a dry run of it refuses a ref or repository that is not allowed
-bash "${HS_TESTLAB:-$here/testlab.sh}" run --ref "$ref" --stage "$stage" --dry-run >/dev/null 2>&1 </dev/null || refuse "That ref or repository is not accepted (only branches, tags and commits of the Hobnix repositories)."
+bash "${HS_TESTLAB:-$here/testlab.sh}" run --ref "$ref" --stage "$stage" --dry-run >/dev/null 2>&1 </dev/null || refuse_code testlab.ref-refused "That ref or repository is not accepted (only branches, tags and commits of the Hobnix repositories)."
 
 if [ "$verb" = start ]; then
   . "$here/lib/job.sh"

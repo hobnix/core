@@ -2336,6 +2336,334 @@ The router could not be connected, or it refused the key.
 - Text: The router could not be connected.
 - Fix: none
 
+### notify.name-missing
+
+A channel name was not given.
+
+- Layer: script
+- Text: A channel name is needed.
+- Fix: none
+
+### notify.provider-fixed
+
+The provider of an existing channel was changed.
+
+- Layer: script
+- Text: The provider of a channel cannot be changed.
+- Fix: none
+
+### notify.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### notify.set-invalid
+
+A --set option is not in the form key=value.
+
+- Layer: script
+- Text: The setting must be key=value.
+- Fix: none
+
+### notify.options-misplaced
+
+Options were given to an action that takes none.
+
+- Layer: script
+- Text: This action takes no options.
+- Fix: none
+
+### notify.secret-many
+
+More than one --secret was given.
+
+- Layer: script
+- Text: Give one secret at a time.
+- Fix: none
+
+### notify.priority-invalid
+
+The minimum priority is not min, low, default, high or urgent.
+
+- Layer: script
+- Text: The minimum priority is min, low, default, high or urgent.
+- Fix: none
+
+### notify.quiet-invalid
+
+The quiet rule is not respect or ignore.
+
+- Layer: script
+- Text: The quiet rule is respect or ignore.
+- Fix: none
+
+### notify.enabled-invalid
+
+The enabled value is not yes or no.
+
+- Layer: script
+- Text: Enabled is yes or no.
+- Fix: none
+
+### notify.classes-invalid
+
+A message class is not alarm, status, heartbeat or digest.
+
+- Layer: script
+- Text: The message classes are alarm, status, heartbeat and digest.
+- Fix: none
+
+### notify.exists
+
+A channel with this name exists already.
+
+- Layer: script
+- Text: There is already a channel with this name.
+- Fix: none
+
+### notify.unknown
+
+No channel has this name.
+
+- Layer: script
+- Text: There is no channel with this name.
+- Fix: none
+
+### notify.provider-unknown
+
+No provider has this name.
+
+- Layer: script
+- Text: There is no provider with this name.
+- Fix: none
+
+### notify.setting-unknown
+
+The provider has no text setting of this name.
+
+- Layer: script
+- Text: The provider has no such setting.
+- Fix: none
+
+### notify.value-multiline
+
+A setting value has a line break or a tab.
+
+- Layer: script
+- Text: A value is one line without a tab.
+- Fix: none
+
+### notify.secret-unknown
+
+The provider has no secret setting of this name.
+
+- Layer: script
+- Text: That is not a secret setting of the provider.
+- Fix: none
+
+### notify.value-invalid
+
+A setting value does not match the form the provider expects.
+
+- Layer: script
+- Text: A value does not look right.
+- Fix: none
+
+### notify.class-unsupported
+
+The provider cannot carry a message class that was asked for.
+
+- Layer: script
+- Text: The provider cannot carry this message class.
+- Fix: none
+
+### notify.settings-unusable
+
+The provider refused the settings as they are.
+
+- Layer: script
+- Text: The settings are not usable.
+- Fix: none
+
+### health.nothing-paused
+
+Resume was asked while nothing is paused.
+
+- Layer: script
+- Text: Nothing is paused.
+- Fix: none
+
+### health.id-missing
+
+A problem id was not given.
+
+- Layer: script
+- Text: A problem id is needed.
+- Fix: none
+
+### health.for-invalid
+
+The --for time is not a number with m, h, d or w.
+
+- Layer: script
+- Text: Give a time such as 90m, 12h, 7d or 2w.
+- Fix: none
+
+### health.note-invalid
+
+The --note text is missing or longer than 200 characters.
+
+- Layer: script
+- Text: The note is at most 200 characters.
+- Fix: none
+
+### health.id-invalid
+
+The problem id has characters that are not allowed.
+
+- Layer: script
+- Text: That is not a problem id.
+- Fix: none
+
+### health.not-active
+
+The problem is not in the list of active problems.
+
+- Layer: script
+- Text: This is not an active problem.
+- Fix: none
+
+### health.acked-already
+
+The problem is acknowledged already.
+
+- Layer: script
+- Text: This problem is acknowledged already.
+- Fix: none
+
+### health.not-acked
+
+The problem is not acknowledged.
+
+- Layer: script
+- Text: This problem is not acknowledged.
+- Fix: none
+
+### expiry.name-missing
+
+An entry name was not given.
+
+- Layer: script
+- Text: A name is needed.
+- Fix: none
+
+### expiry.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### expiry.date-invalid
+
+The date is not a real date in the form YYYY-MM-DD.
+
+- Layer: script
+- Text: Use a date as YYYY-MM-DD.
+- Fix: none
+
+### expiry.renew-invalid
+
+The renewal hint has a line break or a tab, or is longer than 120 characters.
+
+- Layer: script
+- Text: The hint is one line of at most 120 characters.
+- Fix: none
+
+### expiry.unknown
+
+No entry has this name.
+
+- Layer: script
+- Text: There is no entry with this name.
+- Fix: none
+
+### job.unit-invalid
+
+The unit is not a job of this server (hs-*).
+
+- Layer: script
+- Text: That is not a job of this server.
+- Fix: none
+
+### job.not-running
+
+Stop was asked for a job that is not running.
+
+- Layer: script
+- Text: This job is not running.
+- Fix: none
+
+### job.unknown
+
+No job has this name.
+
+- Layer: script
+- Text: There is no job with this name.
+- Fix: none
+
+### job.not-scheduled
+
+Run now was asked for a unit that is not a scheduled job.
+
+- Layer: script
+- Text: Only scheduled jobs can be run now.
+- Fix: none
+
+### job.systemctl-failed
+
+The service manager could not stop or start the job.
+
+- Layer: script
+- Text: The job could not be changed.
+- Fix: none
+
+### testlab.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### testlab.stage-invalid
+
+The stage is not 1 to 6, a stage name or all.
+
+- Layer: script
+- Text: The stage is 1 to 6, a stage name or all.
+- Fix: none
+
+### testlab.off
+
+The test-lab is off.
+
+- Layer: script
+- Text: The test-lab is off.
+- Fix: none
+
+### testlab.ref-refused
+
+The ref or repository is not a branch, tag or commit of a Hobnix repository.
+
+- Layer: script
+- Text: That ref or repository is not accepted.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

@@ -24,14 +24,17 @@ run plan add domain --date 2031-02-01
 has '^warn	domain is on the list already' && pass "an existing name is announced as replaced" || fail "exists: $out"
 run plan add cert --date 2028-13-45
 check_eq "an impossible date: refused" 1 "$rc"
+check_match "an impossible date: refused with expiry.date-invalid" $'code\texpiry.date-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF expiry.date-invalid && pass "expiry.date-invalid is in the catalogue" || fail "expiry.date-invalid is not in the catalogue"
 run plan add cert --date tomorrow
 check_eq "not ISO: refused" 1 "$rc"
 run plan add '../x' --date 2028-09-01
 check_eq "a bad name: refused" 1 "$rc"
+check_match "a bad name: refused with name.invalid" $'code\tname.invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF name.invalid && pass "name.invalid is in the catalogue" || fail "name.invalid is not in the catalogue"
 run plan add cert --date 2028-09-01 --frob x
 check_eq "an unknown option: refused" 1 "$rc"
 run plan add cert --date 2028-09-01 --renew "$(printf 'a\tb')"
 check_eq "a tab in the hint: refused" 1 "$rc"
+check_match "a tab in the hint: refused with expiry.renew-invalid" $'code\texpiry.renew-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF expiry.renew-invalid && pass "expiry.renew-invalid is in the catalogue" || fail "expiry.renew-invalid is not in the catalogue"
 
 echo "-- add: start"
 run start add cert --date 2028-09-01 --renew "run the renew script"
@@ -44,6 +47,7 @@ check_eq "an existing name changes its date" "cert|2028-09-01|run the renew scri
 echo "-- remove"
 run plan remove nothere
 check_eq "remove an unknown entry: refused" 1 "$rc"
+check_match "remove an unknown entry: refused with expiry.unknown" $'code\texpiry.unknown' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF expiry.unknown && pass "expiry.unknown is in the catalogue" || fail "expiry.unknown is not in the catalogue"
 run plan remove cert
 check_eq "remove plan: exit 0" 0 "$rc"
 has '^heading	remove cert from the expiry dates$' && has '^command	bash .*expiry.sh remove cert$' && pass "remove plan" || fail "remove plan: $out"
