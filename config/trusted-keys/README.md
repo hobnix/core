@@ -57,3 +57,20 @@ machine. The workflow signs with a key of its own, never with the maintainer's k
 
 The lines are added before the first release, because a server learns a key only through `hs update` of the core. The four `release-ci` lines
 are in the files (2026-11-11), but no workflow has signed with such a key and no server has checked such a tag: **Not tested on hardware yet.**
+
+## The index key of `hobnix/official`: `official.allowed_signers`
+
+`hobnix/official` has no release tags. Its packages are listed in a signed `index.json` (docs/PLAN-registry.md), and the signature of that index is
+what a server checks. The file `official.allowed_signers` holds one line, principal `index-ci`, with `namespaces="hobnix-index"` (not `git`):
+
+- **Two uses, two namespaces.** A release-tag key (`namespaces="git"`) cannot sign an index and the index key cannot sign a release tag, even if a
+  file lists both kinds of line. The verifier asks `ssh-keygen -Y find-principals` and `-Y verify -n hobnix-index`.
+- **Where the private key is.** Only in the secret `INDEX_SIGNING_KEY` of the GitHub environment `index-signing` of `hobnix/official` (the
+  environment allows the branch `main` only). It was made once, without a passphrase because the workflow cannot type one, apart from the release
+  key. The public part is the line in the file here.
+- **Order.** The line is merged here and servers run `hs update` before the first signed index is published, because a server learns a key only
+  through the core. Nothing uses the file until the repository row for `official` exists (the switch of #1074).
+- **Replacing it** follows the order above: add the new line, merge, let servers run `hs update`, change the secret, then remove the old line in
+  a later commit. A key that may have leaked is removed in the same commit that adds its successor.
+
+No workflow has signed with this key yet and no server has verified an index with it: **Not tested on hardware yet.**
