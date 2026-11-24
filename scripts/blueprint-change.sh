@@ -103,7 +103,7 @@ if [ -n "$dline" ] && ! $docker_on && [ "$verb" != run ]; then   # the job turns
 fi
 
 # apps: in order; one that needs a person is `later`; one that needs Docker needs Docker on (now or by this blueprint)
-apps=()   # name<TAB>state (install|present|later)<TAB>text
+apps=()   # name<TAB>state (install|present|later)<TAB>text<TAB>repository (the blueprint's own or official, as the reader found it)
 present=$(bash "$alist" --list 2>/dev/null </dev/null | awk -F'\t' '$3 == "on" || $3 == "running" { print $1 }' || true)
 while IFS=$'\t' read -r _ _ n st; do
   [ -n "$n" ] || continue
@@ -112,7 +112,7 @@ while IFS=$'\t' read -r _ _ n st; do
   if tr , '\n' < <(awk -F'\t' -v n="$n" '$1 == "needs" && $2 == n { print $3 }' <<<"$show") | grep -qx docker && [ -z "$dline" ] && ! $docker_on; then
     refuse "$n needs Docker: add a [docker] table to the blueprint or turn Docker on first (hs docker enable)."
   fi
-  apps+=("$n${tab}install${tab}install $n")
+  apps+=("$n${tab}install${tab}install $n${tab}$(awk -F'\t' -v n="$n" '$1 == "from" && $2 == n { print $3; exit }' <<<"$show")")
 done < <(awk -F'\t' '$1 == "part" && $2 == "recipes"' <<<"$show")
 
 # the typed names: the blueprint's own when it comes from an added repository, then the ones the docker plan asks for
@@ -128,6 +128,7 @@ if [ "$verb" = start ]; then
   done
 fi
 
+edge_warn="edge-ports opens public game and call ports of this server to the internet."
 join() { local sep=$1 out="" x; shift; for x in "$@"; do out=${out:+$out$sep}$x; done; printf '%s' "$out"; }
 config_todo() { awk -F'\t' '$4 == "set"' <<<"$cfg"; }
 need_rebuild=false
@@ -147,6 +148,7 @@ if [ "$verb" = plan ]; then
   for p in ${inst[@]+"${inst[@]}"}; do n=$((n + 1)); printf 'part\t%d\tparts\t%s\tinstall\tinstall %s from the signed release\n' "$n" "$p" "$p"; done
   for p in ${en[@]+"${en[@]}"}; do n=$((n + 1)); printf 'part\t%d\tparts\t%s\tenable\tswitch %s on\n' "$n" "$p" "$p"; done
   for w in ${why[@]+"${why[@]}"}; do printf 'note\t%s\n' "$w"; done
+  if printf '%s\n' ${en[@]+"${en[@]}"} ${inst[@]+"${inst[@]}"} | grep -qx edge-ports; then printf 'warn\t%s\n' "$edge_warn"; fi
   if $need_rebuild; then n=$((n + 1)); printf 'part\t%d\trebuild\t-\tset\trebuild the server (hs rebuild): one rebuild for all of it\n' "$n"; fi
   if [ -n "$dline" ]; then
     n=$((n + 1))
@@ -159,7 +161,7 @@ if [ "$verb" = plan ]; then
     fi
   fi
   for a in ${apps[@]+"${apps[@]}"}; do
-    IFS=$'\t' read -r an ast atext <<<"$a"
+    IFS=$'\t' read -r an ast atext _ <<<"$a"
     n=$((n + 1))
     case "$ast" in
       later) printf 'part\t%d\tapp\t%s\tlater\t%s needs you: %s (hs apps install %s)\n' "$n" "$an" "$an" "$atext" "$an" ;;
@@ -226,7 +228,7 @@ done <<<"$cfg"
 hs_job_step 2 5 parts
 mark parts "done"
 for p in ${inst[@]+"${inst[@]}"}; do ( inst_fetch "$p" ) || { mark parts "failed: install $p"; stopped "${all_parts[@]}"; }; done
-for p in ${en[@]+"${en[@]}"}; do ( inst_enable "$p" ) || { mark parts "failed: switch $p on"; stopped "${all_parts[@]}"; }; done
+for p in ${en[@]+"${en[@]}"}; do [ "$p" != edge-ports ] || warn "$edge_warn"; ( inst_enable "$p" ) || { mark parts "failed: switch $p on"; stopped "${all_parts[@]}"; }; done
 [ ${#inst[@]} -gt 0 ] || [ ${#en[@]} -gt 0 ] || mark parts kept
 
 hs_job_step 3 5 rebuild
@@ -249,7 +251,7 @@ job_state() { hs_job_record get "$1" 2>/dev/null | grep -o '"state": *"[a-z]*"' 
 hs_job_step 5 5 apps
 failed=0
 for a in ${apps[@]+"${apps[@]}"}; do
-  IFS=$'\t' read -r an ast atext <<<"$a"
+  IFS=$'\t' read -r an ast atext arepo <<<"$a"
   case "$ast" in
     later) mark "app:$an" "later: $atext"; note "$an needs you: hs apps install $an"; continue ;;
     present) mark "app:$an" "kept: $atext"; continue ;;
@@ -257,7 +259,11 @@ for a in ${apps[@]+"${apps[@]}"}; do
   step "Install $an"
   sets=()
   while IFS=$'\t' read -r _ _ k v; do [ -z "$k" ] || sets+=(--set "$k=$v"); done < <(awk -F'\t' -v n="$an" '$1 == "answer" && $2 == n' <<<"$show")
-  rc=0; out=$(bash "$appschange" start install "$an" ${sets[@]+"${sets[@]}"} </dev/null 2>&1) || rc=$?
+  # apps-change.sh wants the repository and the tag its own plan shows (never a typed name: an app of an added repository is `later`, see the reader)
+  rc=0; aplan=$(bash "$appschange" plan install "$an" --repo "${arepo:-official}" </dev/null 2>&1) || rc=$?
+  atag=$(sed -n 's/^command\t.* --tag \(v[^ ]*\)$/\1/p' <<<"$aplan" | head -n1)
+  if [ "$rc" != 0 ] || [ -z "$atag" ]; then rc=1; out=$aplan
+  else out=$(bash "$appschange" start install "$an" --repo "${arepo:-official}" --tag "$atag" ${sets[@]+"${sets[@]}"} </dev/null 2>&1) || rc=$?; fi
   jid=$(awk -F'\t' '$1 == "job" { print $2; exit }' <<<"$out")
   if [ "$rc" != 0 ] || [ -z "$jid" ]; then
     mark "app:$an" "failed: $(awk -F'\t' '$1 == "reason" { print $2; exit }' <<<"$out")"; warn "$an: $(awk -F'\t' '$1 == "reason" { print $2; exit }' <<<"$out")"; failed=1; continue

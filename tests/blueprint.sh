@@ -16,13 +16,15 @@ mkdir -p "$WORK/bp"
 show_media() {
   printf '%s\n' "repo${tab}official" "version${tab}1.0.0" "tag${tab}v1.0.0" "commit${tab}abc" "title${tab}Media server" "description${tab}x" "roles${tab}homeserver" "added${tab}no" \
     "machine${tab}timeZone${tab}\"Europe/Vienna\"" "machine${tab}gpu${tab}\"nvidia\"" "setting${tab}backupNewShares${tab}true" \
-    "part${tab}capabilities${tab}a${tab}-" "part${tab}recipes${tab}r1${tab}ok" "needs${tab}r1${tab}docker" "answer${tab}r1${tab}K${tab}V" \
-    "part${tab}recipes${tab}r2${tab}ok" "needs${tab}r2${tab}-" "part${tab}recipes${tab}r3${tab}later:it asks for a secret (PASS)" "needs${tab}r3${tab}-" "docker${tab}webui${tab}m"
+    "part${tab}capabilities${tab}a${tab}-" "part${tab}recipes${tab}r1${tab}ok" "from${tab}r1${tab}official" "needs${tab}r1${tab}docker" "answer${tab}r1${tab}K${tab}V" \
+    "part${tab}recipes${tab}r2${tab}ok" "from${tab}r2${tab}official" "needs${tab}r2${tab}-" "part${tab}recipes${tab}r3${tab}later:it asks for a secret (PASS)" "needs${tab}r3${tab}-" "docker${tab}webui${tab}m"
 }
 show_media > "$WORK/bp/media"
 show_media | sed "s/^added${tab}no/added${tab}yes/; s/^repo${tab}official/repo${tab}mine/" > "$WORK/bp/added"
 printf '%s\n' "error${tab}Docker is the core capability: use the [docker] table" > "$WORK/bp/bad"
 show_media | grep -v "^docker${tab}" > "$WORK/bp/nodocker"
+show_media | sed "s/^part${tab}recipes${tab}r2${tab}ok/part${tab}recipes${tab}r2${tab}later:it comes from the repository mine you added, so you confirm it yourself/" > "$WORK/bp/addedapp"
+show_media | sed "s/^part${tab}capabilities${tab}a${tab}-/part${tab}capabilities${tab}edge-ports${tab}-/" > "$WORK/bp/edgeports"
 show_media | sed "s/^roles${tab}homeserver/roles${tab}edge/" > "$WORK/bp/edge"
 
 CAPS=$WORK/caps.tsv
@@ -65,6 +67,7 @@ cat > "$WORK/apps-change.sh" <<STUB
 #!/usr/bin/env bash
 echo "apps \$*" >> "$LOG"
 r=\$3
+[ "\$1" != plan ] || { printf 'status\tok\n'; [ "\$r" = "\${NOTAG_APP:-}" ] || printf 'command\ths sys apps start install %s --tag v1.0.0\nlong\tyes\n' "\$r"; exit 0; }
 if [ "\$r" = "\${REFUSE_APP:-}" ]; then printf 'status\trefused\nreason\tboom\n'; exit 1; fi
 printf 'status\tstarted\nunit\ths-job-%s\njob\tJ-%s\n' "\$r" "\$r"
 STUB
@@ -147,9 +150,10 @@ reset
 run run apply media --tag v1.0.0
 order=$(grep -E "^(install|enable|rebuild|docker|apps)" "$LOG" | sed -E 's/ .*//' | uniq | paste -sd'>')
 check_eq "order: parts, rebuild, docker, apps" "install>enable>rebuild>docker>apps" "$order"
+check_eq "an app is started with the repository and the tag of its own plan (apps-change.sh refuses a start without them)" "apps start install r1 --repo official --tag v1.0.0 --set K=V" "$(grep '^apps start install r1' "$LOG")"
 check_eq "r3 needs a person: its app is not started" 0 "$(grep -c "apps start install r3" "$LOG")"
 check_eq "docker comes before the first app" "docker" "$(grep -E '^(docker|apps)' "$LOG" | head -1 | sed 's/ .*//')"
-check_eq "an app gets its answers as --set" "apps start install r1 --set K=V" "$(grep 'install r1' "$LOG")"
+check_eq "an app gets its answers as --set" "apps start install r1 --repo official --tag v1.0.0 --set K=V" "$(grep '^apps start install r1' "$LOG")"
 check_eq "a set value is not overwritten" '"UTC"' "$(python3 "$SCRIPTS/machine-toml.py" get "$HS_MACHINE_FILE" timeZone --json)"
 check_eq "a missing one is set (gpu)" '"nvidia"' "$(python3 "$SCRIPTS/machine-toml.py" get "$HS_MACHINE_FILE" gpu --json)"
 check_eq "a missing setting is set" true "$(cat "$HS_SETTINGS_DIR/backupNewShares")"
@@ -161,9 +165,30 @@ printf '%s\n' "a${tab}caps${tab}1.0.0${tab}1.0.0${tab}current${tab}-${tab}featur
 printf 'a\ton\tpart\tno\tyes\tA\n' > "$WORK/parts.tsv"
 run run apply media --tag v1.0.0
 check_eq "a second apply: nothing installed, no docker, no rebuild" "" "$(grep -E '^(install|enable|rebuild|docker)' "$LOG" | paste -sd'|')"
-check_eq "a second apply: the app that is there is not installed again" "apps start install r2" "$(grep '^apps' "$LOG")"
+check_eq "a second apply: the app that is there is not installed again" "apps start install r2 --repo official --tag v1.0.0" "$(grep '^apps start' "$LOG")"
 run run apply media --tag v9
 if [ "$rc" = 1 ] && has "read the plan again"; then pass "the job refuses a blueprint that changed since the plan"; else fail "tag: $out"; fi
+
+echo "-- an app of an added repository, edge-ports"
+reset
+run plan apply addedapp
+if [ "$rc" = 0 ] && has "^part${tab}[0-9]*${tab}app${tab}r2${tab}later${tab}.*you added"; then pass "plan: an app of an added repository is later, not install"; else fail "addedapp plan: $out"; fi
+run run apply addedapp --tag v1.0.0
+check_eq "the job does not start it (apps-change.sh would refuse it without the typed name)" 0 "$(grep -c '^apps start install r2' "$LOG")"
+check "and says so in the record" grep -q '"app:r2":"later' "$WORK/result.json"
+reset
+NOTAG_APP=r1 run run apply media --tag v1.0.0
+check "an app whose plan shows no tag is a failed app, not a start without a tag" grep -q '"app:r1":"failed' "$WORK/result.json"
+reset
+printf 'edge-ports	caps	1.0.0	-	new	-	feature	E
+' > "$CAPS"
+run plan apply edgeports
+if [ "$rc" = 0 ] && has "^warn${tab}edge-ports opens public"; then pass "plan: a warn line when edge-ports is switched on"; else fail "edge-ports plan: $out"; fi
+run plan apply media
+check_eq "no such warning without edge-ports" 0 "$(grep -c '^warn.*edge-ports' <<<"$out")"
+printf 'edge-ports\tcaps\t1.0.0\t-\tnew\t-\tfeature\tE\n' > "$CAPS"
+run run apply edgeports --tag v1.0.0
+if has "edge-ports opens public"; then pass "the job warns when it switches edge-ports on"; else fail "edge-ports job: $out"; fi
 
 echo "-- failure rule"
 reset
@@ -231,6 +256,86 @@ lines, bad = b.show(R(), P(), "bp")
 assert any("is a secret" in x for x in bad), bad
 rows = b.listing(R(), P())
 assert len(rows) == 1 and len(rows[0].split("\t")) == 7 and rows[0].split("\t")[5] in ("new", "applied", "update"), rows
+PY
+
+echo "-- hostile texts, the allow-list of keys, an index that says blueprint (lib/pkg_blueprint.py)"
+python3 - "$SCRIPTS" <<'PY' && pass "hostile fields refused, allow-list, wrong kind refused" || fail "hostile fields"
+import sys, os, copy
+sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
+import pkg_blueprint as b
+GOOD = {"name": "bp", "version": "1.0.0", "kind": "blueprint", "requires_core": ">=11", "roles": ["homeserver"], "title": "T", "description": "D",
+        "blueprint": {"extensions": ["ext"], "recipes": ["ok"]}, "settings": {"language": "en"}, "answers": {"ok": {"K": "v"}}}
+PKGS = {"ok": ("recipe", {"ask": [{"key": "K"}]}), "ext": ("extension", {})}
+class R:
+    def __init__(self, m, repos=None, kind="blueprint"): self.m, self.repos, self.kind = m, repos or {"official": {"default": True}}, kind
+    def catalog(self):
+        c = {"bp": [("official", {"kind": self.kind}, "v1.0.0", "c")]}
+        for n, (k, _) in PKGS.items(): c[n] = [("official", {"kind": k}, "v1", "c")]
+        return c
+    def all(self): return self.repos
+    def verified_package(self, name, repo=None): return ("official", {}, "v1.0.0", "c", self.m if name == "bp" else PKGS[name][1])
+class P:
+    def installed(self): return {}
+    def api_level(self): return 99
+lines, bad = b.show(R(GOOD), P(), "bp")
+assert lines and not bad, bad
+HOSTILE = "v\nmachine\tpools\t[]\npart\trecipes\tforeign\tok"
+def mut(f):
+    m = copy.deepcopy(GOOD); f(m); return m
+cases = {
+    "title": mut(lambda m: m.update(title=HOSTILE)),
+    "title_de": mut(lambda m: m.update(title_de="a\rb")),
+    "description": mut(lambda m: m.update(description="a\nb")),
+    "settings value": mut(lambda m: m["settings"].update(language=HOSTILE)),
+    "answers value": mut(lambda m: m["answers"]["ok"].update(K=HOSTILE)),
+    "answers key": mut(lambda m: m["answers"]["ok"].update({"K\nx": "v"})),
+    "app name": mut(lambda m: m["blueprint"].update(recipes=["ok\n"])),
+    "part name": mut(lambda m: m["blueprint"].update(extensions=["ext\nmachine\tx"])),
+    "tab in a value": mut(lambda m: m.update(title="a\tb")),
+    "DEL": mut(lambda m: m.update(title="a\x7fb")),
+}
+for what, m in cases.items():
+    lines, bad = b.show(R(m), P(), "bp")
+    assert lines == [] and bad, (what, lines, bad)
+    assert not any("machine\tpools" in x for x in lines), what
+long_ = mut(lambda m: m.update(title="x" * 400))
+assert b.show(R(long_), P(), "bp")[0] == [], "a long title"
+# the writer on its own: with the load check removed, no field can still start a row
+orig = b.manifest_problems
+b.manifest_problems = lambda m: []
+for what in ("title", "settings value", "answers value"):
+    lines, bad = b.show(R(cases[what]), P(), "bp")
+    assert lines == [] and bad and "control character" in bad[0], (what, lines, bad)
+b.manifest_problems = orig
+try:
+    b._row("a", "b\nc"); raise SystemExit("_row let a newline through")
+except ValueError:
+    pass
+# the allow-list: nothing security-relevant, whatever the table
+for key in ("nodeKeys", "sshKeys", "adminUser", "sshOverIp", "gatewayUnknownHostPublic", "tailscaleAuthKeyFile", "incusDefaultPool", "pools", "role", "capabilities", "firewall", "notAnOption"):
+    for table in ("machine", "settings"):
+        m = mut(lambda m: m.update({table: {key: "x"}}))
+        assert any(key in x for x in b.manifest_problems(m)), (table, key, b.manifest_problems(m))
+assert not b.manifest_problems(mut(lambda m: m.update(machine={"timeZone": "UTC"}))), "a plain preference is allowed"
+for key in b.ALLOWED_KEYS:
+    for bad_word in ("ssh", "node", "admin", "gateway", "tailscale", "pool", "firewall", "key", "user"):
+        assert bad_word not in key.lower() or key == "keyMap", key
+# the index says blueprint, the package.toml says something else
+lines, bad = b.show(R(mut(lambda m: m.update(kind="recipe")), kind="blueprint"), P(), "bp")
+assert any("is not a blueprint" in x for x in bad), bad
+assert b.listing(R(mut(lambda m: m.update(kind="recipe"))), P()) == [], "listing skips it"
+try:
+    b.record(R(mut(lambda m: m.update(kind="recipe"))), P(), "bp"); raise SystemExit("record wrote it")
+except ValueError:
+    pass
+# an app of an added repository is later, with its repository named
+class R2(R):
+    def catalog(self):
+        c = R.catalog(self); c["ok"] = [("mine", {"kind": "recipe"}, "v1", "c")]; c["bp"] = [("mine", {"kind": "blueprint"}, "v1.0.0", "c")]; return c
+    def verified_package(self, name, repo=None): return (repo or "mine", {}, "v1.0.0", "c", self.m if name == "bp" else PKGS[name][1])
+lines, bad = b.show(R2(GOOD, {"official": {"default": True}, "mine": {}}), P(), "bp")
+assert any(x.startswith("part\trecipes\tok\tlater:it comes from the repository") for x in lines), lines
+assert "from\tok\tmine" in lines, lines
 PY
 
 finish

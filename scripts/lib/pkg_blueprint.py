@@ -6,7 +6,7 @@ manifest_problems(m) -> [text]
 show(R, pkg, name, lang) -> (lines, problems)   the blueprint and the packages it names as key<TAB>value lines (the plan of blueprint-change.sh reads them):
   repo, version, tag, commit, title, description, roles (csv), added (yes|no), machine<TAB>key<TAB>toml literal, setting<TAB>key<TAB>value,
   part<TAB>capabilities|extensions|recipes<TAB>name<TAB>state (capabilities `-`; extensions new|installed; recipes `ok` or `later:<why>`: input terminal,
-  a secret ask, an ask without default or answer), needs<TAB>recipe<TAB>csv|-, docker<TAB>manager<TAB>size|-, answer<TAB>recipe<TAB>KEY<TAB>value
+  a secret ask, an ask without default or answer, or a repository the user added), from<TAB>recipe<TAB>repo, needs<TAB>recipe<TAB>csv|-, docker<TAB>manager<TAB>size|-, answer<TAB>recipe<TAB>KEY<TAB>value
 listing(R, pkg, lang) -> [row]   name, repo, version, roles, packages (in order), state new|applied|update|waits, title (tab separated, - = empty)
 record(R, pkg, name)             writes [applied.<name>] to blueprints.toml (HS_BLUEPRINTS_FILE, else <HS_STATE_DIR or /var/lib/hs>/blueprints.toml), atomically
 R is a pkg_repo.Repos, pkg the module pkg.py. A blueprint may name packages of its own repository and of `official`, no other.
@@ -20,15 +20,22 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
+NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}\Z")   # \Z, not $: a name with a newline at the end is no name
 ROLES = ("homeserver", "edge", "minimal")
 LISTS = ("capabilities", "extensions", "recipes")
 MAX_PACKAGES = 40
 LEVEL = 11      # the API level that knows the kind: an older core refuses a blueprint by its requires_core
 DOCKER_MANAGERS = ("webui", "arcane", "portainer", "none")
 DOCKER_SIZES = ("s", "m", "l")
-# the keys of [machine] that a blueprint never sets: who the server is, its disks, and Docker (only through [docker])
-MACHINE_REFUSED = ("role", "capabilities", "pools", "hostId", "bulkType", "dockerManager", "dockerSize")
+# THE ONE LIST of the options a blueprint may fill ([machine] and [settings]): plain preferences only. Everything that touches access, keys,
+# the firewall, storage, networks or users (sshKeys, nodeKeys, adminUser, sshOverIp, gateway*, tailscale*, pools, incusDefaultPool, role,
+# capabilities, hostId ...) is NOT in it, and neither is anything new by default: a key that is not here refuses the blueprint. Docker only through [docker].
+ALLOWED_KEYS = ("language", "timeZone", "keyMap", "icons", "loginMessage", "webAccent", "hostName", "siteName", "quietHours", "notifications",
+                "backupNewShares", "backupNewInstances")
+# every string of a blueprint (keys and values, any depth): no control character (a newline would start a new line of the plan), and a length cap
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+MAX_KEY, MAX_TEXT, MAX_LONG = 64, 300, 2000
+LONG_FIELDS = ("description", "description_de")
 TOP_KEYS = ("name", "version", "kind", "title", "title_de", "description", "description_de", "requires_core", "audience", "roles",
             "icon", "category", "upstream", "app_version", "screenshots", "renamed_from")
 TOP_TABLES = ("blueprint", "docker", "machine", "settings", "answers", "meta")
@@ -50,8 +57,36 @@ def _flat(v):
     return isinstance(v, SCALARS) or (isinstance(v, list) and all(isinstance(x, SCALARS) for x in v))
 
 
+def _strings(v, path, out):
+    """every (path, text, is_key) of a nested value"""
+    if isinstance(v, str):
+        out.append((path, v, False))
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            out.append((path, str(k), True))
+            _strings(x, path + "." + str(k) if path else str(k), out)
+    elif isinstance(v, list):
+        for x in v:
+            _strings(x, path, out)
+
+
+def text_problems(m):
+    """a control character or an over-long text anywhere in the manifest refuses the whole blueprint"""
+    found, out = [], []
+    _strings(m, "", found)
+    for path, text, is_key in found:
+        top = path.split(".")[0]
+        cap = MAX_KEY if is_key else (MAX_LONG if top in LONG_FIELDS else MAX_TEXT)
+        where = path or "the manifest"
+        if CONTROL.search(text):
+            out.append(f"{where}: a text with a control character (a line break, a tab) is not allowed in a blueprint")
+        elif len(text) > cap:
+            out.append(f"{where}: a text of {len(text)} characters is too long (at most {cap})")
+    return out
+
+
 def manifest_problems(m):
-    out = []
+    out = text_problems(m)
     bad = out.append
     for k, v in m.items():
         if k in TOP_KEYS:
@@ -122,8 +157,9 @@ def manifest_problems(m):
             if sch is False:
                 bad("config/schema.toml cannot be read: [machine] and [settings] are not checked")
         for k, v in t.items():
-            if k in MACHINE_REFUSED:
-                bad(f"[{table}] {k} is not allowed in a blueprint" + (" (Docker only through [docker])" if k.startswith("docker") else ""))
+            n0 = len(out)
+            if k.startswith("docker"):
+                bad(f"[{table}] {k} is not allowed in a blueprint (Docker only through [docker])")
             elif sch:
                 opts, secrets = sch
                 if k not in opts:
@@ -132,6 +168,8 @@ def manifest_problems(m):
                     bad(f"[{table}] {k} belongs in [{'settings' if store == 'machine' else 'machine'}]")
                 elif k in secrets:
                     bad(f"[{table}] {k} is a secret: a blueprint never carries one")
+            if k not in ALLOWED_KEYS and len(out) == n0:
+                bad(f"[{table}] {k} is not allowed in a blueprint" + " (only plain preferences: " + ", ".join(ALLOWED_KEYS) + ")")
             if table == "settings" and not isinstance(v, str):
                 bad(f"[settings] {k} must be text")
             elif not _flat(v):
@@ -141,6 +179,14 @@ def manifest_problems(m):
 
 # ── reading (hs pkg blueprint ...) ──
 TRUSTED = "official"
+
+
+def _row(*cells):
+    """one tab separated output row: a cell with a control character is refused, so no field can ever start a new row or a new column"""
+    for c in cells:
+        if CONTROL.search(str(c)):
+            raise ValueError("a blueprint text holds a control character: refused")
+    return "	".join(str(c) for c in cells)
 
 
 def literal(v):
@@ -168,12 +214,12 @@ def _one(R, name):
 
 
 def _named(R, name, repo):
-    """(kind, manifest) of a package a blueprint names, from its own repository or official only"""
+    """(kind, manifest, repo) of a package a blueprint names, from its own repository or official only"""
     rows = [r for r in R.catalog().get(name, []) if r[0] in (repo, TRUSTED)]
     if not rows:
         raise ValueError("%s is in no repository this blueprint may use (its own, %s)." % (name, TRUSTED))
     try:
-        return rows[0][1].get("kind", ""), R.verified_package(name, rows[0][0])[4]
+        return rows[0][1].get("kind", ""), R.verified_package(name, rows[0][0])[4], rows[0][0]
     except Exception as e:
         raise ValueError(str(e))
 
@@ -196,40 +242,54 @@ def _recipe_state(pm, given, n, bad):
 
 def show(R, pkg, name, lang="en"):
     try:
+        return _show(R, pkg, name, lang)
+    except ValueError as e:     # _row: a control character got as far as the writer
+        return [], [str(e)]
+
+
+def _show(R, pkg, name, lang):
+    try:
         repo, _entry, tag, commit, m = _one(R, name)
     except ValueError as e:
         return [], [str(e)]
     bad = manifest_problems(m)
     if m.get("kind") != "blueprint":
         bad.append("%s is not a blueprint." % name)
+    if bad and any("control character" in x or "too long" in x for x in bad):
+        return [], bad        # a hostile text is not even printed
     added = not R.all().get(repo, {}).get("default")
-    out = ["repo\t%s" % repo, "version\t%s" % m.get("version", ""), "tag\t%s" % tag, "commit\t%s" % commit,
-           "title\t%s" % (m.get("title_" + lang) or m.get("title") or name),
-           "description\t%s" % (" ".join(str(m.get("description_" + lang) or m.get("description") or "-").split())),
-           "roles\t%s" % ",".join(m.get("roles", [])), "added\t%s" % ("yes" if added else "no")]
-    out += ["machine\t%s\t%s" % (k, literal(v)) for k, v in (m.get("machine") or {}).items()]
-    out += ["setting\t%s\t%s" % (k, v) for k, v in (m.get("settings") or {}).items()]
+    out = [_row("repo", repo), _row("version", m.get("version", "")), _row("tag", tag), _row("commit", commit),
+           _row("title", m.get("title_" + lang) or m.get("title") or name),
+           _row("description", " ".join(str(m.get("description_" + lang) or m.get("description") or "-").split())),
+           _row("roles", ",".join(m.get("roles", []))), _row("added", "yes" if added else "no")]
+    out += [_row("machine", k, literal(v)) for k, v in (m.get("machine") or {}).items()]
+    out += [_row("setting", k, v) for k, v in (m.get("settings") or {}).items()]
     bp, answers, have = m.get("blueprint") or {}, m.get("answers") or {}, pkg.installed()
     for kind in LISTS:
         for n in bp.get(kind, []) if isinstance(bp.get(kind), list) else []:
             if kind == "capabilities":     # a core folder or a capability package: the bundle resolver of the shell part knows which
-                out.append("part\tcapabilities\t%s\t-" % n)
+                out.append(_row("part", "capabilities", n, "-"))
                 continue
             try:
-                k, pm = _named(R, n, repo)
+                k, pm, prepo = _named(R, n, repo)
             except ValueError as e:
                 bad.append(str(e))
                 continue
             if kind == "extensions":
-                out.append("part\textensions\t%s\t%s" % (n, "installed" if n in have else "new"))
+                out.append(_row("part", "extensions", n, "installed" if n in have else "new"))
             elif k != "recipe":
                 bad.append("%s is not a recipe." % n)
             else:
-                out.append("part\trecipes\t%s\t%s" % (n, _recipe_state(pm, answers.get(n, {}), n, bad)))
-                out.append("needs\t%s\t%s" % (n, ",".join(pm.get("needs", [])) or "-"))
-                out += ["answer\t%s\t%s\t%s" % (n, k2, v) for k2, v in answers.get(n, {}).items()]
+                state = _recipe_state(pm, answers.get(n, {}), n, bad)
+                if state == "ok" and not R.all().get(prepo, {}).get("default"):
+                    # an app of an added repository needs its own typed name (apps-change.sh): the blueprint does not type it for you
+                    state = "later:it comes from the repository %s you added, so you confirm it yourself" % prepo
+                out.append(_row("part", "recipes", n, state))
+                out.append(_row("from", n, prepo))
+                out.append(_row("needs", n, ",".join(pm.get("needs", [])) or "-"))
+                out += [_row("answer", n, k2, v) for k2, v in answers.get(n, {}).items()]
     if isinstance(m.get("docker"), dict):
-        out.append("docker\t%s\t%s" % (m["docker"].get("manager", "webui"), m["docker"].get("size", "-")))
+        out.append(_row("docker", m["docker"].get("manager", "webui"), m["docker"].get("size", "-")))
     return out, bad
 
 
@@ -246,6 +306,8 @@ def listing(R, pkg, lang="en"):
             try:
                 m = R.verified_package(n, repo)[4]
             except Exception:
+                continue
+            if m.get("kind") != "blueprint" or text_problems(m):     # the index says blueprint, the package.toml does not (or it holds a hostile text)
                 continue
             ver = str(m.get("version", ""))
             st = "new" if n not in have else ("update" if _nums(have[n].get("version", "0")) < _nums(ver) else "applied")
@@ -273,6 +335,8 @@ def _applied():
 
 def record(R, pkg, name):
     repo, _entry, _tag, commit, m = _one(R, name)
+    if m.get("kind") != "blueprint":
+        raise ValueError("%s is not a blueprint." % name)
     have = _applied()
     have[name] = {"repo": repo, "version": str(m.get("version", "")), "commit": commit, "applied": datetime.date.today().isoformat()}
     path = _applied_file()
