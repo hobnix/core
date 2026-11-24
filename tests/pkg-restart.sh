@@ -7,7 +7,20 @@
 export HS_LANG=en HS_PLAIN=1 HS_STATE_DIR=$WORK/state
 cur=$HS_STATE_DIR/packages/current; mkdir -p "$cur"
 S=$WORK/scripts; mkdir -p "$S"; cp -r "$SCRIPTS/lib" "$S/lib"; cp "$SCRIPTS/pkg.sh" "$S/pkg.sh"
-stub() { printf 'import os, sys\nif "--plan" in sys.argv:\n    print("hub\\t1.1.0\\t1.0.0")\nsys.exit(int(os.environ.get("STUB_RC", "0")))\n' > "$S/pkg.py"; }
+stub() {
+  cat > "$S/pkg.py" <<'PY'
+import os, sys
+if "--plan" in sys.argv:
+    print("hub" + chr(9) + "1.1.0" + chr(9) + "1.0.0")
+if os.environ.get("STUB_CURRENT"):
+    print("current")
+    sys.exit(0)
+if len(sys.argv) > 2 and sys.argv[1] in ("update", "install"):
+    with open(os.path.join(os.environ["HS_STATE_DIR"], "packages", "current", sys.argv[2], "package.toml"), "a") as f:
+        f.write("# changed" + chr(10))
+sys.exit(int(os.environ.get("STUB_RC", "0")))
+PY
+}
 stub
 PKGSH="bash $S/pkg.sh"
 mk() {   # mk <name> [toml line]...
@@ -52,6 +65,12 @@ check_eq "and restarts nothing" 0 "$(restarts)"
 out=$(CTL_FAIL=1 $PKGSH update hub --yes 2>&1); rc=$?
 check_eq "a failed restart does not fail the update" 0 "$rc"
 check_out "it warns and names the way out" "did not restart" echo "$out"
+
+: > "$CALLS"
+STUB_CURRENT=1 $PKGSH update hub --yes >/dev/null 2>&1
+check_eq "an update that answers current restarts nothing" 0 "$(restarts)"
+STUB_CURRENT=1 $PKGSH install hub >/dev/null 2>&1
+check_eq "an install that changed nothing restarts nothing" 0 "$(restarts)"
 
 echo "-- rollback"
 : > "$CALLS"

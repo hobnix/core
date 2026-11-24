@@ -47,6 +47,11 @@ pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:pkg.changed; 
 # restarts to run the new code and load the keys again (ADR 0011: keys are read at start). Only active units, `--no-block` like `hs ext`.
 # Never fails the command: the change has happened, a failed restart is a warning. pkg_services runs BEFORE a remove (the manifest is gone after).
 pkg_services() { python3 -I "$here/lib/pkg_restart.py" "${HS_STATE_DIR:-/var/lib/hs}/packages/current" "$@" 2>/dev/null || true; }
+# pkg_stamp <name>: what says a package changed (its record in installed.toml and its manifest); equal before and after = nothing was installed
+pkg_stamp() {
+  local st=${HS_STATE_DIR:-/var/lib/hs}
+  { sed -n "/^\[package\.$1\]/,/^\[/p" "$st/packages/installed.toml"; cat "$st/packages/current/$1/package.toml"; } 2>/dev/null | cksum || true
+}
 pkg_restart() {   # pkg_restart <service package>...
   local n ctl=${HS_SYSTEMCTL:-systemctl}
   for n in "$@"; do
@@ -248,18 +253,20 @@ case "${1:-list}" in
   install)
     cmd=$1; shift
     pkg_changed; pkg_refusal_file
+    stamp=$(pkg_stamp "${1:-}")
     if res=$(py "$cmd" "$@"); then
       rm -f "$HS_PKG_REFUSAL"
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
       # shellcheck disable=SC2046
-      pkg_restart $(pkg_services "${1:-}" --providers)
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}" --providers)
     else pkg_refused; exit 1; fi ;;
   update)
     shift; pkg_changed; pkg_refusal_file
+    stamp=$(pkg_stamp "${1:-}")
     if python3 -I "$here/pkg.py" update "$@"; then
       rm -f "$HS_PKG_REFUSAL"
       # shellcheck disable=SC2046
-      pkg_restart $(pkg_services "${1:-}")
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}")
     else pkg_refused; exit 1; fi ;;
   rollback)
     # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
