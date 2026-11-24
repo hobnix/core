@@ -28,6 +28,12 @@ Derived files (never edit them by hand):
 The schema is a TOML file with an ordered array of [[item]] tables:
   kind = "header"   text = the opening comment of the example
   kind = "section"  title = name of a section header line
+  kind = "include"  capability = "<name>" (optional keys = ["a", "b"]): an anchor. The options of capabilities/<name>/options.toml (the
+                    same [[item]] tables as below, each with capability = "<name>") stand at this spot, as if written here. Without
+                    `keys` it takes every option that no keyed anchor of that capability took (one such anchor per capability); with
+                    `keys` only those, so one capability can have its options in several places. Order and every generated file stay
+                    as if the options were written in schema.toml. A missing folder or file is skipped (the keys then come from the
+                    runtime overlay, once the capability is a vendored package). Every option must be placed, none may be in schema.toml too.
   kind = "option"   key, type (bool|string|int|float|list|table), required (on in the example),
                     settable (the web interface may change it), secret (value never shown),
                     doc (the comment lines above the option), value (the option line(s), without a leading "# "),
@@ -118,12 +124,74 @@ def check_page(it, what):
     die('%s: page must be one of %s or cap:<name> of a folder in capabilities/ (got %r)' % (what, ' '.join(PAGES), pg))
 
 
+def capabilities_dir(schema=None):
+    """capabilities/ beside the config/ folder of the schema (the checkout), else the one next to scripts/"""
+    beside = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(schema or SCHEMA))), 'capabilities')
+    return beside if os.path.isdir(beside) else os.path.join(ROOT, 'capabilities')
+
+
+def expand_includes(items, schema=None):
+    """The items with every kind = "include" anchor replaced by the options of capabilities/<name>/options.toml (see the docstring)."""
+    cdir = capabilities_dir(schema)
+    files, claimed, anchors = {}, {}, {}
+    for it in items:
+        if it.get('kind') != 'include':
+            continue
+        cap = it.get('capability')
+        if not (isinstance(cap, str) and re.fullmatch(r'[a-z][a-z0-9-]*', cap)):
+            die('include: capability must be a name like "tailscale" (got %r)' % (cap,))
+        keys = it.get('keys')
+        if keys is not None and not (isinstance(keys, list) and keys and all(isinstance(k, str) for k in keys)):
+            die('include %s: keys must be a non-empty list of option keys' % cap)
+        if cap not in files:
+            f = os.path.join(cdir, cap, 'options.toml')
+            files[cap] = None
+            if os.path.isfile(f):
+                try:
+                    with open(f, 'rb') as fh:
+                        files[cap] = tomllib.load(fh).get('item', [])
+                except (tomllib.TOMLDecodeError, OSError) as e:
+                    die('%s: %s' % (f, e))
+        anchors.setdefault(cap, []).append(keys)
+        if keys is not None:
+            claimed.setdefault(cap, set()).update(keys)
+    out = []
+    for it in items:
+        if it.get('kind') != 'include':
+            out.append(it)
+            continue
+        cap, keys = it['capability'], it.get('keys')
+        found = files[cap]
+        if found is None:
+            continue
+        have = [o.get('key') for o in found]
+        for o in found:
+            if not isinstance(o, dict) or o.get('kind') != 'option' or o.get('capability') != cap:
+                die('capabilities/%s/options.toml: every [[item]] must be kind = "option" with capability = "%s" (%r)' % (cap, cap, o.get('key') if isinstance(o, dict) else o))
+        if keys is None:
+            if sum(1 for a in anchors[cap] if a is None) > 1:
+                die('include %s: only one anchor without keys' % cap)
+            out.extend(o for o in found if o['key'] not in claimed.get(cap, ()))
+        else:
+            for k in keys:
+                if k not in have:
+                    die('include %s: no option %s in capabilities/%s/options.toml' % (cap, k, cap))
+            out.extend(o for o in found if o['key'] in keys)
+    for cap, found in files.items():
+        if found and None not in anchors[cap]:
+            left = [o.get('key') for o in found if o.get('key') not in claimed.get(cap, ())]
+            if left:
+                die('capabilities/%s/options.toml: not placed by any include in schema.toml: %s' % (cap, ' '.join(left)))
+    return out
+
+
 def load():
     with open(SCHEMA, 'rb') as f:
         data = tomllib.load(f)
     items = data.get('item')
     if not items:
         die('%s has no [[item]]' % SCHEMA)
+    items = expand_includes(items)
     seen = set()
     for it in items:
         kind = it.get('kind')
