@@ -62,6 +62,7 @@ _ext_is_cap_package() { [ ! -f "$1/capability.toml" ] && [ -f "$1/package.toml" 
 
 # The repository a package was installed from (installed.toml), empty when unknown.
 _ext_installed_repo() {
+  if [ "${HS_STAGE_PKG:-}" = "$1" ] && [ -n "${HS_STAGE_REPO:-}" ]; then echo "$HS_STAGE_REPO"; return 0; fi   # a package being checked before it is installed
   awk -v sec="[package.$1]" '
     /^\[/ { on = ($0 == sec); next }
     on && /^repo[[:space:]]*=/ { v = $0; sub(/^[^"]*"/, "", v); sub(/".*$/, "", v); print v; exit }'     "${HS_STATE_DIR:-/var/lib/hs}/packages/installed.toml" 2>/dev/null
@@ -157,9 +158,15 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   done
   # a package that says `protocol = [1]` has its rows run through scripts/lib/ext_proto.py: the row gets the flag `proto` (hs.sh)
   ! grep -qE '^protocol[[:space:]]*=' "$2/package.toml" 2>/dev/null || proto=1
-  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" -v cmds="$2/commands.tsv" '
+  # a start row needs an ACCEPTED plan row: pass 1 (no such rule) lists the accepted paths, pass 2 applies the rule against that list
+  local acc=""
+  if [ -z "${_EXT_PASS1:-}" ]; then
+    acc=$(mktemp) || return 1
+    _EXT_PASS1=1 _ext_filter "$1" "$2" 0 | cut -f2 > "$acc"
+  fi
+  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" -v acc="$acc" '
     BEGIN {
-      while ((getline l < cmds) > 0) { sub(/$/, "", l); split(l, cf, "	"); if (l !~ /^#/ && cf[2] != "") allpath[cf[2]] = 1 }   # every path of the file, for the plan twin
+      if (acc != "") while ((getline l < acc) > 0) accepted[l] = 1   # the paths of the first pass: only an accepted plan row counts as a twin
       now = split(words, ow, " "); for (i = 1; i <= now; i++) owned[ow[i]] = 1
       nt = split(taken, tk, " "); for (i = 1; i <= nt; i++) { split(tk[i], kv, ":"); takenby[kv[1]] = kv[2] }
       alt = ""; for (i = 1; i <= now; i++) alt = alt (i > 1 ? " or " : "") ow[i]
@@ -191,8 +198,8 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       if (reason == "" && script ~ /^@/ && script !~ /^@\/./) reason = "the script must be a path under scripts/ or @/file in the package, without .."
       if (reason == "" && script ~ /^rust:/) reason = "rust: rows belong to the core registry"
       if (reason == "" && $7 ~ /(^|,)legacy:/) reason = "a legacy: flag belongs to the core registry"
-      if (reason == "" && kind == "sys") {   # a start row needs its plan row (words alike, start -> plan): the plan shows what changes before it does
-        for (i = 1; i <= nw; i++) if (w[i] == "start") { tw = ""; for (j = 1; j <= nw; j++) tw = tw (j > 1 ? " " : "") (j == i ? "plan" : w[j]); if (!(tw in allpath)) reason = "a start row needs its plan row" }
+      if (reason == "" && kind == "sys" && acc != "") {   # a start row needs its plan row (words alike, start -> plan): the plan shows what changes before it does
+        for (i = 1; i <= nw; i++) if (w[i] == "start") { tw = ""; for (j = 1; j <= nw; j++) tw = tw (j > 1 ? " " : "") (j == i ? "plan" : w[j]); if (!(tw in accepted)) reason = "a start row needs its plan row" }
       }
       if (reason == "" && (path in seen)) reason = "the words are used twice"
       if (reason != "") { if (report == 1) print "REFUSED", FNR, path, reason; next }
@@ -202,6 +209,7 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       if (proto == 1) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
       print
     }' "$(ext_core_file)" "$2/commands.tsv"
+  [ -z "$acc" ] || rm -f "$acc"
 }
 
 registry_rows() {

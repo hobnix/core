@@ -11,9 +11,6 @@ mk() {   # mk <name> <kind> [requires]
   mkdir -p "$HS_STATE_DIR/packages/current/$1"
   printf 'name = "%s"\nversion = "1.0.0"\nkind = "%s"\ntitle = "T"\nrequires_core = ">=1"\n' "$1" "$2" > "$HS_STATE_DIR/packages/current/$1/package.toml"
   [ -z "${3:-}" ] || printf 'requires = ["%s"]\n' "$3" >> "$HS_STATE_DIR/packages/current/$1/package.toml"
-  # the loader (scripts/lib/pkg-deps.sh) knows an extension by its capability.toml, as a real one has
-  [ "$2" != extension ] || printf 'name = "%s"\nversion = "1.0.0"\ntitle = "T"\nextension = true\n%s' "$1" "${3:+requires = [\"$3\"]
-}" > "$HS_STATE_DIR/packages/current/$1/capability.toml"
   printf '[package.%s]\nversion = "1.0.0"\nrepo = "test"\n\n' "$1" >> "$HS_STATE_DIR/packages/installed.toml"
 }
 mk base extension

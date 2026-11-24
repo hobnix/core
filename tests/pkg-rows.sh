@@ -30,6 +30,14 @@ pk withplan '' "$(row sys 'sys ext withplan start go' '@/run.sh')"$'
 pk dotdot '' "$(row user 'ext dotdot x' '@/../../etc/passwd')"
 pk rusty '' "$(row user 'ext rusty x' 'rust:evil')"
 pk zoraxy '[app]\ninstances = "one"\n[app.health]\ncheck = "container"\n[app.routes.web]\nport = 8000\nexposure = "public-ok"\n[app.uses]\nram_mb = 64\ndisk_gb = 1' "$(row user 'ext zoraxy x' '@/run.sh')"
+pk upd '' "$(row user 'ext upd hello' '@/run.sh')"
+# a start row whose plan twin is itself refused (a rust: script) does not count as a plan row
+pk twin '' "$(row sys 'sys ext twin start go' '@/run.sh')"$'\n'"$(row sys 'sys ext twin plan go' 'rust:evil')"
+# an ESC and a tab in the words of a row must never reach the terminal or the machine lines as they are
+pk ctrl '' "$(row user $'ext ctrl\033[31mx' '@/run.sh')"
+# a package the core names (core = true): hs pkg install --core must apply the same rules
+pk coreclash '' "$(row sys 'sys ext coreclash start go' '@/run.sh')"
+printf 'core = true\n' >> "$R/index.toml"
 git add -A && git commit -q -m pkgs && git -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m rel
 cd "$ROOT"
 $PKGSH repo add test "$R" --key "$WORK/signers" --confirm-name test >/dev/null 2>&1
@@ -41,7 +49,7 @@ check "and stays in current/" test -f "$HS_STATE_DIR/packages/current/fine/packa
 check "a start row with its plan row installs" $PKGSH install withplan
 
 echo "-- a refused row keeps the whole package out"
-for p in nostart dotdot rusty zoraxy; do
+for p in nostart dotdot rusty zoraxy twin ctrl; do
   check "$p: install fails" bash -c "! $PKGSH install $p >/dev/null 2>&1"
   check "$p: nothing is left in current/" test ! -e "$HS_STATE_DIR/packages/current/$p"
   check "$p: nothing is recorded as installed" bash -c "! grep -q 'package.$p\]' '$HS_STATE_DIR/packages/installed.toml'"
@@ -52,6 +60,31 @@ check_out "the script with .. is named" "without \.\." bash -c "$PKGSH install d
 check_out "a rust: script is refused" "rust: rows belong to the core" bash -c "$PKGSH install rusty 2>&1; true"
 check_out "an admin page is never public" "admin page is never public" bash -c "$PKGSH install zoraxy 2>&1; true"
 
+check "no control character reaches the output or the machine lines" bash -c "! { $PKGSH install ctrl 2>&1; } | LC_ALL=C grep -q \$'\\033'"
+check_out "a refused plan twin leaves the start row refused too" "twin" bash -c "$PKGSH install twin 2>&1; true"
+
+echo "-- hs pkg install --core applies the same rules"
+$PKGSH install --core >/dev/null 2>&1 || true
+check "a core package with a refused row is not kept" test ! -e "$HS_STATE_DIR/packages/current/coreclash"
+check "and is not recorded" bash -c "! grep -q 'package.coreclash\]' '$HS_STATE_DIR/packages/installed.toml'"
+
+echo "-- an update to a refused version changes nothing"
+$PKGSH install upd >/dev/null 2>&1
+cd "$R"
+sed -i '/^\[package.upd\]/{n;s/1.0.0/2.0.0/}' index.toml
+sed -i 's/^version = "1.0.0"/version = "2.0.0"/' recipes/upd/package.toml
+printf '[[events]]\nkind = "done"\nlevel = "warn"\nlabel = "Done"\nmeaning = "x"\nretention = "audit"\nnotify = { category = "ok", title = "{kind}", message = "{text}" }\n' >> recipes/upd/package.toml
+{ printf '
+'; row sys 'sys ext upd start go' '@/run.sh'; } >> recipes/upd/commands.tsv
+git add -A && git commit -q -m upd2 && git -c user.signingkey="$WORK/good.pub" tag -s v2.0.0 -m rel2
+cd "$ROOT"
+$PKGSH fetch test >/dev/null 2>&1
+check "the update is refused" bash -c "! $PKGSH update upd --yes >/dev/null 2>&1"
+check_out "the old version is still installed" 'version = "1.0.0"' cat "$HS_STATE_DIR/packages/current/upd/package.toml"
+check "its events were not written" test ! -e "$HS_STATE_DIR/pkg-events/upd.tsv"
+check "no previous copy was made" test ! -e "$HS_STATE_DIR/packages/previous"
+check "nothing half staged is left" bash -c "! ls -a '$HS_STATE_DIR/packages/current' | grep -q '^[.]new-'"
+
 echo "-- the loader, without an install"
 D=$WORK/pk; mkdir -p "$D/one"
 printf 'name = "one"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "T"\nrequires_core = ">=1"\n' > "$D/one/package.toml"
@@ -59,6 +92,15 @@ printf 'name = "one"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "T"\nrequires_
 check_out "a start row without its plan row is refused" "sys ext one start b${tab}a start row needs its plan row" \
   bash -c "HS_PACKAGES_DIR='$D' bash -c '. $SCRIPTS/lib/registry-load.sh; registry_refused one'"
 check_eq "the start row with its plan row is not refused" "1" "$(HS_PACKAGES_DIR=$D bash -c ". $SCRIPTS/lib/registry-load.sh; registry_refused one" | wc -l | tr -d ' ')"
+
+mkdir -p "$D/two"
+cp "$D/one/package.toml" "$D/two/package.toml"; sed -i 's/"one"/"two"/' "$D/two/package.toml"
+{ row sys 'sys ext two start a' '@/x.sh'; row sys 'sys ext two plan a' 'rust:evil'; } > "$D/two/commands.tsv"
+check_out "a start row does not pass on a refused plan row" "sys ext two start a${tab}a start row needs its plan row" \
+  bash -c "HS_PACKAGES_DIR='$D' bash -c '. $SCRIPTS/lib/registry-load.sh; registry_refused two'"
+{ row sys 'sys ext two start a' '@/x.sh'; row user 'ext two plan a' '@/x.sh'; } > "$D/two/commands.tsv"
+check_out "a plan twin of the wrong kind does not count" "sys ext two start a${tab}a start row needs its plan row" \
+  bash -c "HS_PACKAGES_DIR='$D' bash -c '. $SCRIPTS/lib/registry-load.sh; registry_refused two'"
 
 echo "-- hs pkg validate lists the rows"
 check_out "validate names a refused row" "start row needs its plan row" bash -c "HS_PACKAGES_DIR='$D' $PKGSH validate 2>&1; true"

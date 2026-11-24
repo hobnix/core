@@ -892,6 +892,10 @@ class Repos:
         if bp:
             self.rm_quiet(tmp)
             raise Refused("%s: %s" % (name, bp[0][1]), bp[0][0])
+        why = self.stage_problems(name, tmp, r_name, m)
+        if why:
+            self.rm_quiet(tmp)
+            raise Refused("%s: %s" % (name, why), "pkg.rows")
         old = self.pkg.installed().get(name, {})
         if os.path.isdir(cur):
             prev = os.path.join(self.state, "previous")
@@ -919,6 +923,24 @@ class Repos:
             print("%s: its events were not installed: %s" % (name, e), file=sys.stderr)
         self.last_permissions = self.pkg.pkg_perms.of(m)
         return entry["version"], r_name, tag
+
+    def stage_problems(self, name, tmp, r_name, m):
+        """The staged copy before it replaces anything (#1072): manifest findings (an app route to an admin page ...) and the rows the loader
+        refuses (scripts/lib/pkg-stage-check.sh, the one place that knows the row rules). -> "" or one line; fails closed when the check cannot run.
+        Nothing is vendored, no event is written and the old copy stays where it is until this is empty."""
+        # the staged folder is called .new-<name>: that one finding is about the folder, not the package
+        found = [str(x) for x in self.pkg.manifest_problems(m, os.path.join(tmp, "package.toml")) if not str(x).startswith("name differs from the folder")]
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg-stage-check.sh").replace("\\", "/")
+        try:
+            res = subprocess.run([os.environ.get("HS_BASH") or "bash", script, name, tmp, r_name], capture_output=True, timeout=120)
+            if res.returncode not in (0, 1):
+                found.append("the check of its commands could not run")
+            else:
+                found += [ln.replace("\t", ": ", 1) for ln in res.stdout.decode("utf-8", "replace").splitlines() if ln]
+        except (OSError, subprocess.SubprocessError):
+            found.append("the check of its commands could not run")
+        clean = [re.sub(r"[\x00-\x1f\x7f-\x9f]", "?", x)[:200] for x in found]   # a hostile package text never reaches the terminal as it is
+        return "; ".join(clean[:5]) + ("; and %d more" % (len(clean) - 5) if len(clean) > 5 else "") if clean else ""
 
     def keep_previous(self, name, old, vendored):
         """An update replaced the copy: keep what a rollback needs besides previous/<name>@<commit>: the installed.toml entry, and for a
