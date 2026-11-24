@@ -1,0 +1,113 @@
+# Build, sign and publish the package index of a package repository (docs/PLAN-registry.md "CI", hobnix/core#1069). Reusable: hobnix/official and
+# hobnix/community each carry a short caller (on push to main, daily, workflow_dispatch). UNVERIFIED: this workflow has never run.
+#
+# 1. `build` (no secret, any branch, also pull requests): validates the repository, builds index.json and the resized assets with
+#    `pkg.py index build`, validates the result, uploads it as an artifact.
+# 2. `sign` (main only, environment `index-signing` of the CALLING repository, which the owner restricts to the main branch): the only job that sees
+#    the signing key. The key is written to a file (umask 077, in a temporary directory that is removed at the end) by the step that receives
+#    the secret, and `pkg.py index sign --key-file` gets the file name: the key is never an argument and never in the environment of a later step
+#    (the secret is only in the env of the one step that writes the file; GitHub offers no other way to hand a secret to a job). The signature
+#    is verified against config/trusted-keys/<repo>.allowed_signers of the core before anything is published, so a wrong key fails here.
+# 3. `publish` uploads index.json, index.json.sig and assets/ to GitHub Pages. Pages holds only these, never package contents.
+#
+# The serial: the run is given the serial of the index on Pages (--prev) plus 1; it only goes up (a lower serial is refused by clients).
+# Open questions (first run): does an environment secret reach a reusable workflow's job (else the caller passes `secrets: inherit`); the Pages URL
+# layout packages.hobnix.dev/<repo>/index.json (one repository per Pages site means one site per caller).
+name: package-index
+on:
+  workflow_call:
+    inputs:
+      repo_id:
+        description: "the id written to the index (official, community, ...)"
+        type: string
+        required: true
+      core_ref:
+        description: "ref of hobnix/core that holds pkg.py and the trusted keys"
+        type: string
+        default: develop
+      pages_url:
+        description: "where the published index lives, to read the last serial (empty = the first index, serial 1)"
+        type: string
+        default: ""
+    secrets:
+      INDEX_SIGNING_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: repo
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/core
+          ref: ${{ inputs.core_ref }}
+          path: core
+      - name: Install Pillow (asset resizing)
+        run: python3 -m pip install --user pillow
+      - name: Validate the repository
+        run: python3 core/scripts/pkg.py repo-check repo
+      - name: Build the index and the assets
+        env:
+          REPO_ID: ${{ inputs.repo_id }}
+          PAGES_URL: ${{ inputs.pages_url }}
+        run: |
+          prev=()
+          if [ -n "$PAGES_URL" ] && curl -fsS "$PAGES_URL/index.json" -o prev.json; then prev=(--prev prev.json); fi
+          python3 core/scripts/pkg.py index build repo --repo "$REPO_ID" --out site "${prev[@]}"
+          python3 core/scripts/pkg.py index validate site/index.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: index
+          path: site
+          if-no-files-found: error
+
+  sign:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: index-signing
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: hobnix/core
+          ref: ${{ inputs.core_ref }}
+          path: core
+      - uses: actions/download-artifact@v4
+        with:
+          name: index
+          path: site
+      - name: Write the key to a file (the only step that sees the secret)
+        env:
+          INDEX_SIGNING_KEY: ${{ secrets.INDEX_SIGNING_KEY }}
+        run: |
+          [ -n "$INDEX_SIGNING_KEY" ] || { echo "::error::The secret INDEX_SIGNING_KEY is not set in the environment index-signing."; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/k"
+          printf '%s\n' "$INDEX_SIGNING_KEY" > "$RUNNER_TEMP/k/key"
+      - name: Sign and verify against the trusted key
+        env:
+          REPO_ID: ${{ inputs.repo_id }}
+        run: |
+          trap 'rm -rf "$RUNNER_TEMP/k"' EXIT
+          python3 core/scripts/pkg.py index sign site/index.json --key-file "$RUNNER_TEMP/k/key"
+          python3 core/scripts/pkg.py index verify site/index.json --signers "core/config/trusted-keys/$REPO_ID.allowed_signers"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4

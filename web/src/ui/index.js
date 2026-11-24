@@ -10,6 +10,12 @@ export { default as EmptyState } from './EmptyState.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export { default as Switch } from './Switch.svelte';          // also the checkbox: <Switch box>
 export { default as Combobox } from './Combobox.svelte';
+export { default as ServerField } from './ServerField.svelte';   // base of the five below: searchable list with loading, error and empty states
+export { default as ShareField } from './ShareField.svelte';     // a form field for a share of the server (groups local / remote, kind filter, `free`)
+export { default as DiskField } from './DiskField.svelte';       // a disk (free by default, `multiple` = DiskPicker)
+export { default as PoolField } from './PoolField.svelte';       // a pool
+export { default as InstanceField } from './InstanceField.svelte'; // an instance with its state (`running` filter)
+export { default as UserField } from './UserField.svelte';       // a user (or `principals`: users and groups by SID)
 export { default as Drawer } from './Drawer.svelte';
 export { default as Button } from './Button.svelte';          // every button that starts something: busy state, spinner, promise-aware
 export { default as Kv } from './Kv.svelte';

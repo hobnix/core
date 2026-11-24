@@ -21,6 +21,7 @@
   pkg.py perms <name>                                     the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
   pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
   pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
+  pkg.py index tree|build|validate|sign|verify ...         the signed package index index.json of a repository (lib/pkg_index.py; CI builds and signs it)
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
 
 Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work is `git`, signatures are SSH signatures on release tags:
@@ -816,6 +817,11 @@ def main(argv):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod.run(MAIN, rest)
+    elif cmd == "index":     # index tree|build|validate|sign|verify ...: the signed package index (lib/pkg_index.py, docs/PLAN-registry.md)
+        spec = importlib.util.spec_from_file_location("pkg_index", os.path.join(HERE, "lib", "pkg_index.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.run(rest)
     elif cmd == "perms":
         found = [m for _, m in manifests(True) if m.get("name") == (rest[0] if rest else "")]
         if not found:

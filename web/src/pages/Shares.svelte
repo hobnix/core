@@ -16,7 +16,12 @@
   import { rowstate } from '../rowstate.svelte.js';
   import { sharePending, shareFailed } from './rows.js';
   import Button from '../ui/Button.svelte';
+  import Menu from '../ui/Menu.svelte';
   import NewShare from '../forms/shares/NewShare.svelte';
+  import RemoteShares from './shares/RemoteShares.svelte';
+  import PeerMount from '../forms/ops/PeerMount.svelte';
+  import PeerOffer from '../forms/ops/PeerOffer.svelte';
+  import PeerOffered from '../forms/ops/PeerOffered.svelte';
   import { filesLink } from '../files/links.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
   import { onMount } from 'svelte';
@@ -30,9 +35,9 @@
   const POOLS = $derived([{ id: 'all', label: 'All' }, ...pools.rows.map((p) => ({ id: p.name, label: p.name }))]);
   // a ?pool= this server does not know shows all shares
   const pool = $derived(POOLS.some((p) => p.id === route.query.pool) ? route.query.pool : 'all');
-  const view = $derived(route.query.view === 'kept' ? 'kept' : 'shares');
+  const view = $derived(route.query.view === 'kept' || route.query.view === 'remote' ? route.query.view : 'shares');
   const query = (o) => {
-    const q = new URLSearchParams({ ...(pool !== 'all' ? { pool } : {}), ...(view === 'kept' ? { view } : {}), ...o });
+    const q = new URLSearchParams({ ...(pool !== 'all' && view === 'shares' ? { pool } : {}), ...(view !== 'shares' ? { view } : {}), ...o });
     for (const [k, v] of [...q]) if (!v || v === 'all' || (k === 'view' && v === 'shares')) q.delete(k);
     return `${P.shares}${[...q].length ? `?${q}` : ''}`;
   };
@@ -41,6 +46,10 @@
   const locked = $derived(!!deck?.data?.locked);
 
   const m = shareModel();
+  // the shares of other servers (kind offer|mount, peer, share, host or login, state)
+  const remote = poll('/api/sys/remote/list', 30000);
+  const remItems = $derived(rows(remote).map((r) => ({ kind: r[0], peer: r[1], share: r[2], state: r[4] })));
+  let offered = $state(null);   // the answer of "Give access": holds the new password once; dropped when the dialog is closed
   const deleted = poll('/api/sys/shares/deleted', 60000, 'shares-deleted');
   const shares = $derived(m.all.filter((s) => pool === 'all' || s.pool === pool));
   const kept = $derived(rows(deleted).map((r) => ({ name: r[0], kind: r[1], size: Number(r[2]) || 0, disks: r[3] })));
@@ -56,7 +65,7 @@
     }
   });
 
-  const VIEWS = $derived([{ value: 'shares', label: 'Shares' }, { value: 'kept', label: `Kept folders${deleted.loaded ? ` · ${kept.length}` : ''}` }]);
+  const VIEWS = $derived([{ value: 'shares', label: 'Local' }, { value: 'remote', label: `Remote${remote.loaded ? ` · ${remItems.length}` : ''}` }, { value: 'kept', label: `Kept folders${deleted.loaded ? ` · ${kept.length}` : ''}` }]);
   const columns = [
     { key: 'name', label: 'Share' }, { key: 'kind', label: 'Kind', optional: true }, { key: 'pool', label: 'Pool', optional: true },
     { key: 'size', label: 'Size', sort: 'num', value: (s) => s.size }, { key: 'backup', label: 'Backup', optional: true },
@@ -68,8 +77,13 @@
 
 <PageHeader title="Shares" crumb="Storage" sub={m.measured ? `Sizes measured ${m.measured}.` : 'Network shares, who may use them and what has been kept of them.'}>
   {#snippet actions()}
-    {#if m.hasCache}<Button need="admin" icon="arrow-line-down" busy={rowstate.pending('admin', ['cache-mover'])} busyLabel="Emptying…" disabled={locked} tooltip={'Move the uploaded files from the SSD cache to the disks now'} onclick={() => openPlan('admin', ['cache-mover'], 'Empty the upload cache')}>Empty cache</Button>{/if}
-    <Button need="admin" variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>
+    {#if m.hasCache}<Menu items={[{ label: 'Empty cache…', icon: 'arrow-line-down', need: 'admin', disabled: locked || rowstate.pending('admin', ['cache-mover']), reason: locked ? 'Storage is locked' : 'Already emptying', onclick: () => openPlan('admin', ['cache-mover'], 'Empty the upload cache') }]} />{/if}
+    {#if view === 'remote'}
+      <Button need="admin" tooltip={'Let another server read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access</Button>
+      <Button need="admin" variant="primary" tooltip={'Use a share of another server, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Add remote share</Button>
+    {:else}
+      <Button need="admin" variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>
+    {/if}
   {/snippet}
 </PageHeader>
 
@@ -80,7 +94,9 @@
   {/if}
 </Row>
 
-{#if view === 'kept'}
+{#if view === 'remote'}
+  <RemoteShares {remote} items={remItems} onoffered={(o) => (offered = o)} />
+{:else if view === 'kept'}
   <PageState loading={!deleted.loaded} hasData={deleted.data != null} error={deleted.error?.message ?? ''} empty={deleted.loaded && !kept.length} emptyIcon="folder-dashed"
              emptyTitle="No kept folders" emptyText="When a share is deleted its folder stays as a renamed copy until someone removes it for good.">
     <Banner tone="info">Deleting a share keeps its files as <code>name.deleted-date</code>, never published again. Remove a kept folder for good only when you are sure; copies in old backup snapshots stay until they age out.</Banner>
@@ -104,6 +120,7 @@
              emptyTitle={pool === 'all' ? 'No shares yet' : `No shares on ${pool}`} emptyText={pool !== 'all' && pool === poolOfRole('apps') ? 'This pool holds the instances’ own volumes; network shares live on the data pool.' : 'A share is a folder that Windows and Linux computers on the network can open.'}>
     {#snippet emptyAction()}<Button need="admin" variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>{/snippet}
     <div>
+      {#if remItems.length}<Muted style="display:block;margin-bottom:8px">{remItems.length} remote share{remItems.length === 1 ? '' : 's'}, <a href={url(query({ view: 'remote' }))} onclick={(e) => { e.preventDefault(); go(query({ view: 'remote' })); }}>see Remote</a>.</Muted>{/if}
       <Card style="padding:4px 8px;overflow-x:auto">
         <Table id="shares" {columns} rows={shares} key="name" compact empty="No shares.">
           {#snippet cell(s, col)}
@@ -125,3 +142,5 @@
     </div>
   </PageState>
 {/if}
+
+{#if offered}<PeerOffered offer={offered} onclose={() => (offered = null)} />{/if}

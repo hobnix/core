@@ -110,6 +110,13 @@ export function redirect(addr, local) {
   else { inner = path || '/'; node = local; }
   const [to, add] = moved(inner);
   let rest = rest0;
+  // the Network tab Remote shares moved to the Shares page, view Remote (docs/PLAN-remote-shares.md D1)
+  if (to === P.network && /^\?(.*&)?tab=remote(&|#|$)/.test(rest)) {
+    const hash = rest.indexOf('#');
+    const q = new URLSearchParams(hash < 0 ? rest.slice(1) : rest.slice(1, hash));
+    q.delete('tab'); q.set('view', 'remote');
+    return `/node/${encodeURIComponent(node)}${P.shares}?${q}${hash < 0 ? '' : rest.slice(hash)}`;
+  }
   const extra = Object.keys(add);
   if (extra.length) {
     const hash = rest.indexOf('#');
