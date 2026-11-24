@@ -19,9 +19,9 @@
   import Menu from '../ui/Menu.svelte';
   import NewShare from '../forms/shares/NewShare.svelte';
   import RemoteShares from './shares/RemoteShares.svelte';
-  import PeerMount from '../forms/ops/PeerMount.svelte';
-  import PeerOffer from '../forms/ops/PeerOffer.svelte';
-  import PeerOffered from '../forms/ops/PeerOffered.svelte';
+  import RemoteAdd from '../forms/ops/RemoteAdd.svelte';
+  import RemoteGive from '../forms/ops/RemoteGive.svelte';
+  import RemoteCode from '../forms/ops/RemoteCode.svelte';
   import { filesLink } from '../files/links.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
   import { onMount } from 'svelte';
@@ -49,7 +49,7 @@
   // the shares of other servers (kind offer|mount, peer, share, host or login, state)
   const remote = poll('/api/sys/remote/list', 30000);
   const remItems = $derived(rows(remote).map((r) => ({ kind: r[0], peer: r[1], share: r[2], state: r[4] })));
-  let offered = $state(null);   // the answer of "Give access": holds the new password once; dropped when the dialog is closed
+  let offered = $state(null);   // the answer of "Give access" and "New code…": holds the code once; dropped when the dialog is closed
   const deleted = poll('/api/sys/shares/deleted', 60000, 'shares-deleted');
   const shares = $derived(m.all.filter((s) => pool === 'all' || s.pool === pool));
   const kept = $derived(rows(deleted).map((r) => ({ name: r[0], kind: r[1], size: Number(r[2]) || 0, disks: r[3] })));
@@ -79,8 +79,8 @@
   {#snippet actions()}
     {#if m.hasCache}<Menu items={[{ label: 'Empty cache…', icon: 'arrow-line-down', need: 'admin', disabled: locked || rowstate.pending('admin', ['cache-mover']), reason: locked ? 'Storage is locked' : 'Already emptying', onclick: () => openPlan('admin', ['cache-mover'], 'Empty the upload cache') }]} />{/if}
     {#if view === 'remote'}
-      <Button need="admin" tooltip={'Let another server read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access</Button>
-      <Button need="admin" variant="primary" tooltip={'Use a share of another server, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Add remote share</Button>
+      <Button need="admin" tooltip={'Let another server read one of your shares'} onclick={() => openCreate(RemoteGive, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access</Button>
+      <Button need="admin" variant="primary" tooltip={'Use a share of another server, read only'} onclick={() => openCreate(RemoteAdd)}><i class="ph ph-plus"></i>Add remote share</Button>
     {:else}
       <Button need="admin" variant="primary" tooltip={locked ? 'Storage is locked' : 'Create a share'} disabled={locked} onclick={() => openCreate(NewShare)}><i class="ph ph-plus"></i>New share</Button>
     {/if}
@@ -143,4 +143,4 @@
   </PageState>
 {/if}
 
-{#if offered}<PeerOffered offer={offered} onclose={() => (offered = null)} />{/if}
+{#if offered}<RemoteCode offer={offered} onclose={() => (offered = null)} />{/if}

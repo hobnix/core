@@ -1,5 +1,5 @@
 <script>
-  // Mount a share of another homeserver read only (hs sys peers plan|start add <peer> <host> <share> --user <login> [--domain <D>]).
+  // Mount a share of another server read only with a login by hand, the fallback of RemoteAdd (hs sys peers plan|start add <peer> <host> <share> --user <login> [--domain <D>]).
   // The password of the login is one line on standard input: it never goes into the arguments or the job log.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { Field, TextInput } from '../../ui/index.js';
@@ -47,7 +47,7 @@
     <Field label="Password" id="pm-pass">
       <TextInput type="password" bind:value={pass} autocomplete="new-password" />
     </Field>
-    <div class="hint">Read only. It is not part of /{dataPool}, the parity or the backup. The other server makes the login with “Give access…” on its Network page (or <code>hs remote offer</code>); the password is shown once.</div>
+    <div class="hint">Read only. It is not part of /{dataPool}, the parity or the backup. Prefer a code: Add remote share takes the code the other server makes with Give access.</div>
   {/snippet}
 </CreateDialog>
 
