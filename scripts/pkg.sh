@@ -31,6 +31,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/live.sh"
+. "$here/lib/pkg-deps.sh"
 py() { python3 -I "$here/pkg.py" "$@"; }
 # A coded refusal of pkg_repo.py (HS_PKG_REFUSAL = a file it writes "code TAB reason" to): shown the ADR 0028 way, through refuse_code
 pkg_refusal_file() { HS_PKG_REFUSAL=$(mktemp); export HS_PKG_REFUSAL; }
@@ -51,6 +52,14 @@ pkg_services() { python3 -I "$here/lib/pkg_restart.py" "${HS_STATE_DIR:-/var/lib
 pkg_stamp() {
   local st=${HS_STATE_DIR:-/var/lib/hs}
   { sed -n "/^\[package\.$1\]/,/^\[/p" "$st/packages/installed.toml"; cat "$st/packages/current/$1/package.toml"; } 2>/dev/null | cksum || true
+}
+# pkg_row_problems <name>: what keeps an installed package out, one "what TAB why" per line (nothing = fine): rows the loader refuses
+# (core first word, another package's word, a start row without its plan row ...) and manifest findings (an app route to an admin page ...)
+pkg_row_problems() {
+  local n r w
+  registry_refused "$1" | while IFS=$'\t' read -r n _ r w; do printf '%s\t%s\n' "row $r" "$w"; done
+  py validate 2>/dev/null | while IFS=$'\t' read -r n w; do [ "$n" != "$1" ] || printf 'manifest\t%s\n' "$w"; done
+  return 0
 }
 pkg_restart() {   # pkg_restart <service package>...
   local n ctl=${HS_SYSTEMCTL:-systemctl}
@@ -122,10 +131,11 @@ case "${1:-list}" in
     done <<<"$waits"
     [ -z "$rows" ] || next_step "hs recipe <name>" ;;
   validate)
-    if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
-      while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
-      exit 1
-    fi ;;
+    rc=0; out=$(py validate) || rc=1
+    while IFS=$'\t' read -r n p; do [ -z "$n" ] || warn "$n: $p"; done <<<"$out"
+    # the rows a package may not carry (scripts/lib/registry-load.sh) are findings too: package TAB line TAB words TAB reason
+    while IFS=$'\t' read -r n l w r; do [ -z "$n" ] || { warn "$n: row $w (line $l): $r"; rc=1; }; done < <(registry_refused)
+    if [ "$rc" = 0 ]; then ok "$(t 'Every manifest is valid.')"; else exit 1; fi ;;
   index)    # the signed package index of a repository: what CI builds (pkg.py index, lib/pkg_index.py); build|validate|sign|verify|tree
     shift
     sub=${1:-}
@@ -201,15 +211,8 @@ case "${1:-list}" in
     if [ "$kind" != recipe ] && capability_on "$name"; then
       fail "$(t "'%s' is switched on: switch it off first." "$name")"; next_step "hs ext disable $name"; exit 1
     fi
-    for d in "$st"/packages/current/*/ "${HS_PACKAGES_ROOT:-$(dirname "$here")}"/capabilities/*/; do
-      [ -d "$d" ] || continue
-      n=$(basename "$d")
-      [ "$n" != "$name" ] || continue
-      f=$d/capability.toml; [ -f "$f" ] || f=$d/package.toml
-      [ -f "$f" ] || continue
-      sed -n 's/^requires[[:space:]]*=[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/p' "$f" | head -n1 | tr ',' '\n' | tr -d ' "' | grep -qxF -- "$name" || continue
-      ! capability_on "$n" || deps+="${deps:+ }$n"
-    done
+    # names it directly or through an interface only it provides (scripts/lib/pkg-deps.sh); a second provider that is on lets it go, and is refused later
+    deps=$(pkg_dependents "$name" | paste -sd' ' -)
     if [ -n "$deps" ]; then
       fail "$(t "'%s' cannot be removed: %s needs it." "$name" "$deps")"; next_step "hs ext disable ${deps%% *}"; exit 1
     fi
@@ -263,8 +266,18 @@ case "${1:-list}" in
     cmd=$1; shift
     pkg_changed; pkg_refusal_file
     stamp=$(pkg_stamp "${1:-}")
+    had=0; [ -d "${HS_STATE_DIR:-/var/lib/hs}/packages/current/${1:-}" ] && had=1
     if res=$(py "$cmd" "$@"); then
       rm -f "$HS_PKG_REFUSAL"
+      # a package whose rows clash with the core or another package, or whose manifest fails the checks, is not kept (#1072): the previous copy
+      # comes back, or the new one goes; nothing is half installed
+      bad=$(pkg_row_problems "${1:-}")
+      if [ -n "$bad" ]; then
+        while IFS=$'\t' read -r r why; do warn "$r: $why"; done <<<"$bad"
+        if [ "$had" = 1 ]; then py rollback "${1:-}" >/dev/null 2>&1 || py remove "${1:-}" >/dev/null 2>&1 || true
+        else py remove "${1:-}" >/dev/null 2>&1 || true; fi
+        refuse_code pkg.rows "$(t "'%s' was not installed: its commands clash." "${1:-}")"
+      fi
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
       # shellcheck disable=SC2046
       [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}" --providers)

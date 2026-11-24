@@ -20,6 +20,8 @@
 #   - no rust:<subcommand> script (Rust implementations are core rows, docs/adr/0001-rust-strangler.md).
 #   - no `legacy:` flag (the old words of a moved command are rows of the core registry), no second row for the same words.
 #   - the names list, enable, disable, status, start, stop and svc-run are reserved (they are core commands of `hs ext`).
+#   - a sys row with the word `start` needs its twin with `plan` in the same file (`sys x start y` needs `sys x plan y`): the plan shows
+#     what changes first. The typed name of a destructive command stays a review rule (#1072).
 #   - a package whose package.toml says `protocol = [1]` gets the flag `proto` on every row (docs/PLAN-extensions-access.md step 2).
 #   - a CAPABILITY package (package.toml kind = "capability", docs/PLAN-capabilities-repo.md, decision O4) that was installed from a DEFAULT
 #     repository may also own its name as the first word: user rows `<name> <command...>`, sys rows `sys <name> <command...>`. A row whose
@@ -155,8 +157,9 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   done
   # a package that says `protocol = [1]` has its rows run through scripts/lib/ext_proto.py: the row gets the flag `proto` (hs.sh)
   ! grep -qE '^protocol[[:space:]]*=' "$2/package.toml" 2>/dev/null || proto=1
-  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" '
+  awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" -v cmds="$2/commands.tsv" '
     BEGIN {
+      while ((getline l < cmds) > 0) { sub(/$/, "", l); split(l, cf, "	"); if (l !~ /^#/ && cf[2] != "") allpath[cf[2]] = 1 }   # every path of the file, for the plan twin
       now = split(words, ow, " "); for (i = 1; i <= now; i++) owned[ow[i]] = 1
       nt = split(taken, tk, " "); for (i = 1; i <= nt; i++) { split(tk[i], kv, ":"); takenby[kv[1]] = kv[2] }
       alt = ""; for (i = 1; i <= now; i++) alt = alt (i > 1 ? " or " : "") ow[i]
@@ -188,6 +191,9 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       if (reason == "" && script ~ /^@/ && script !~ /^@\/./) reason = "the script must be a path under scripts/ or @/file in the package, without .."
       if (reason == "" && script ~ /^rust:/) reason = "rust: rows belong to the core registry"
       if (reason == "" && $7 ~ /(^|,)legacy:/) reason = "a legacy: flag belongs to the core registry"
+      if (reason == "" && kind == "sys") {   # a start row needs its plan row (words alike, start -> plan): the plan shows what changes before it does
+        for (i = 1; i <= nw; i++) if (w[i] == "start") { tw = ""; for (j = 1; j <= nw; j++) tw = tw (j > 1 ? " " : "") (j == i ? "plan" : w[j]); if (!(tw in allpath)) reason = "a start row needs its plan row" }
+      }
       if (reason == "" && (path in seen)) reason = "the words are used twice"
       if (reason != "") { if (report == 1) print "REFUSED", FNR, path, reason; next }
       seen[path] = 1

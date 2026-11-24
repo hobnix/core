@@ -10,6 +10,7 @@ vault.locked	script	The vault is closed and the step needs a secret in it	The va
 docker.off	script	Docker is not on or not running	Docker is not on or not running.	-
 app.unknown	script	No app of that name exists	No such app was found.	-
 pkg.blueprint	script	hs pkg install was asked for a blueprint, which is applied and never installed	This is a blueprint: apply it instead of installing it.	hs blueprint apply <name>
+pkg.rows	script	An installed package carried a command or app route the core refuses (it clashes with the core or another package), so it was not kept	The package was not installed: its commands clash with the core or another package.	-
 name.invalid	script	A name is not in the allowed form	The name is not valid.	-
 plan.changed	script	What the plan saw changed before it was applied	It changed meanwhile. Reload it and try again.	-
 job.busy	script	The same job is running already	This is running already.	-

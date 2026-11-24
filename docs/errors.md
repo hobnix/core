@@ -88,6 +88,14 @@ hs pkg install was asked for a blueprint, which is applied and never installed.
 - Text: This is a blueprint: apply it instead of installing it.
 - Fix: `hs blueprint apply <name>`
 
+### pkg.rows
+
+An installed package carried a command or app route the core refuses (it clashes with the core or another package), so it was not kept.
+
+- Layer: script
+- Text: The package was not installed: its commands clash with the core or another package.
+- Fix: none
+
 ### name.invalid
 
 A name is not in the allowed form.
