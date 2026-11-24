@@ -9,6 +9,8 @@ needs = []
 # the NixOS module, loaded only while the capability is on (capabilities/default.nix)
 nix = "module.nix"
 notes = "NOTES.md"
+# the commands of commands.tsv start with `edge` (hs edge health, hs sys edge status): the capability owns that first word (#1072)
+words = ["edge"]
 
 # a probe of `hs smoke`, run while the capability is on: the read-only form of the health check (--dry-run sends nothing)
 [[probe]]

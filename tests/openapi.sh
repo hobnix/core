@@ -45,7 +45,8 @@ bad=$(python3 - "$ROOT" <<'EOF'
 import sys, tomllib
 root = sys.argv[1]
 rows = set()
-for line in open(root + "/scripts/lib/registry.tsv", encoding="utf-8"):
+import glob
+for line in [l for f in [root + "/scripts/lib/registry.tsv"] + glob.glob(root + "/capabilities/*/commands.tsv") for l in open(f, encoding="utf-8")]:
     c = line.rstrip("\n").split("\t")
     if c[0] == "sys":
         rows.add(c[1].split(" ", 1)[1])
@@ -54,7 +55,7 @@ for k in tomllib.load(open(root + "/docs/api/sys.toml", "rb")):
         print(k)
 EOF
 )
-check_eq "every sys.toml key is a core sys row" "" "$bad"
+check_eq "every sys.toml key is a sys row" "" "$bad"
 
 echo "-- the document parses and agrees with the registry"
 got=$(python3 - "$ROOT" <<'EOF'
@@ -62,7 +63,8 @@ import json, sys
 root = sys.argv[1]
 d = json.load(open(root + "/docs/api/openapi.json", encoding="utf-8"))
 ops = sum(len(v) for v in d["paths"].values())
-rows = sum(1 for l in open(root + "/scripts/lib/registry.tsv", encoding="utf-8") if l.startswith("sys\t"))
+import glob
+rows = sum(1 for f in [root + "/scripts/lib/registry.tsv"] + glob.glob(root + "/capabilities/*/commands.tsv") for l in open(f, encoding="utf-8") if l.startswith("sys	"))
 level = open(root + "/scripts/lib/api-level", encoding="utf-8").read().strip()
 print("ok" if ops == rows and d["info"]["version"] == level else "operations %d, rows %d, version %s, api-level %s" % (ops, rows, d["info"]["version"], level))
 EOF

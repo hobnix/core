@@ -8,7 +8,8 @@
 Every row needs a `role` in docs/api/sys.toml (viewer, app-manager, admin; ADR 0012): it becomes `x-hs-role`. A row without one, or a
 `plan`/`start` row marked viewer, is an error: a new row cannot ship without a decision.
 
-Sources: the `sys` rows of scripts/lib/registry.tsv (one operation each), the READS table of scripts/web-serve.py (x-hs-web),
+Sources: the `sys` rows of scripts/lib/registry.tsv and of capabilities/*/commands.tsv (the in-tree packages, which own words such as
+`sys edge status`; the output is the same as if the rows were in the registry; one operation each), the READS table of scripts/web-serve.py (x-hs-web),
 and docs/api/sys.toml (hand-written field shapes). The document describes the CLI (words, argv, lines, exit codes), not the web JSON.
 The output file is generated: never edit it by hand. Python stdlib only.
 """
@@ -61,6 +62,21 @@ def read_rows(path):
             c = line.split("\t") + [""] * 7
             if c[0] == "sys":
                 rows.append({"words": c[1].split()[1:], "script": c[2], "args": c[3], "help": c[4], "flags": c[6].split(",")})
+    return rows
+
+
+def package_rows():
+    """the `sys` rows of the in-tree packages (capabilities/<name>/commands.tsv), in the order of the folder names"""
+    rows = []
+    base = os.path.join(ROOT, "capabilities")
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        f = os.path.join(base, name, "commands.tsv")
+        if not os.path.isfile(f):
+            continue
+        for r in read_rows(f):
+            if r["script"].startswith("@/"):   # a file inside the package folder: script_help() looks under scripts/
+                r["script"] = "../capabilities/%s/%s" % (name, r["script"][2:])
+            rows.append(r)
     return rows
 
 
@@ -209,7 +225,7 @@ def build(registry, shapes_path=SHAPES):
     with open(shapes_path, "rb") as f:
         shapes = tomllib.load(f)
     ws = load_web()
-    rows = read_rows(registry)
+    rows = read_rows(registry) + package_rows()
     reads = reads_map(ws)
     validate_shapes(shapes, rows, reads)
     with open(os.path.join(ROOT, "scripts", "lib", "api-level"), encoding="utf-8") as f:
