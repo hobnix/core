@@ -24,7 +24,7 @@ NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,40}")   # used with fullmatch: "$" would
 # What the core itself keeps directly under /var/lib/hs (read from scripts/, rust/, capabilities/, web/, configuration.nix, 2026-11-24). A package of
 # this name would get a core folder renamed away and chowned to its user (`disks` is the whole array), so prepare refuses it before any change.
 # Not the same as the list of reserved package names: the official packages (posters, media-hub) are fine and must stay allowed.
-RESERVED = frozenset("""adopting api-tokens apps apps-autoupdate backup bulk capabilities config deck detached disks docker ext ext-svc expiry generated
+RESERVED = frozenset("""adopting api-tokens apps apps-autoupdate backup capabilities config deck detached disks docker ext ext-svc expiry generated
 health heartbeat hs hs-ext iso jobs last-rebuild live luks machine matrix metrics migrate nodes notify packages parity pci pkg pkg-events ports private
 recovering remote removals removed restic scrub selftest services settings share snapshots state sync tailscale testlab vault vps""".split())
 RESERVED_PREFIXES = ("backup-", "bulk-", "disk-", "docker-", "health-", "heartbeat-", "live-", "luks-", "machine-", "migrate-", "notify-", "parity-",
