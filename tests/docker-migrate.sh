@@ -25,7 +25,7 @@ FAKE
 chmod +x "$BIN/incus"
 export PATH="$BIN:$PATH"
 D="bash $SCRIPTS/docker.sh"
-reset() { rm -f "$STATE" "$OWNERF" "$HS_SETTINGS_DIR"/* "$HS_STATE_DIR/docker-manager-legacy" "$STATE".old-*; rm -rf "$HS_STATE_DIR/packages"; : > "$LOG"; }
+reset() { rm -f "$STATE" "$OWNERF" "$HS_SETTINGS_DIR"/* "$HS_STATE_DIR/docker-manager-legacy" "$HS_STATE_DIR/docker-manager-undo" "$STATE".old-*; rm -rf "$HS_STATE_DIR/packages"; : > "$LOG"; }
 sget() { cat "$HS_SETTINGS_DIR/$1" 2>/dev/null || true; }
 cap_on() { bash -c ". $SCRIPTS/lib/capability.sh; capability_on docker"; }
 owned_ct() { : > "$STATE"; echo docker > "$OWNERF"; }
@@ -75,6 +75,26 @@ reset; owned_ct; echo portainer > "$HS_SETTINGS_DIR/dockerManager"
 $D migrate </dev/null >/dev/null 2>&1; $D migrate --undo </dev/null >/dev/null 2>&1
 check_eq "dockerManager back" portainer "$(sget dockerManager)"
 [ ! -e "$HS_SETTINGS_DIR/docker" ] && [ ! -e "$HS_STATE_DIR/docker-manager-legacy" ] && pass "docker and the legacy file gone" || fail "undo left files"
+
+echo "-- --undo twice: the second is a no-op (a)"
+$D migrate </dev/null >/dev/null 2>&1; echo portainer > "$HS_SETTINGS_DIR/dockerManager"; $D migrate </dev/null >/dev/null 2>&1
+$D migrate --undo </dev/null >/dev/null 2>&1; check_eq "first undo: portainer" portainer "$(sget dockerManager)"
+rc=0; $D migrate --undo </dev/null >/dev/null 2>&1 || rc=$?
+check_eq "second undo exit 0" 0 "$rc"; check_eq "second undo keeps portainer" portainer "$(sget dockerManager)"
+echo "-- --undo where nothing was migrated: nothing happens (b)"
+reset
+rc=0; $D migrate --undo </dev/null >/dev/null 2>&1 || rc=$?
+check_eq "exit 0" 0 "$rc"; [ ! -e "$HS_SETTINGS_DIR/dockerManager" ] && [ ! -e "$HS_SETTINGS_DIR/docker" ] && pass "no setting written" || fail "undo wrote a setting"
+echo "-- none and webui come back exactly (c)"
+for v in none webui; do
+  reset; owned_ct; echo "$v" > "$HS_SETTINGS_DIR/dockerManager"
+  $D migrate </dev/null >/dev/null 2>&1; $D migrate --undo </dev/null >/dev/null 2>&1
+  check_eq "undo restores $v" "$v" "$(sget dockerManager)"
+done
+echo "-- an unset dockerManager found by /opt/arcane is unset again after undo"
+reset; owned_ct; : > "$STATE.old-arcane"
+$D migrate </dev/null >/dev/null 2>&1; $D migrate --undo </dev/null >/dev/null 2>&1
+[ ! -e "$HS_SETTINGS_DIR/dockerManager" ] && [ ! -e "$HS_SETTINGS_DIR/docker" ] && pass "back to unset" || fail "undo left a setting"
 
 echo "-- the manager row follows an installed recipe"
 reset; owned_ct; echo on > "$HS_SETTINGS_DIR/docker"

@@ -10,7 +10,8 @@
 #                          nothing: the page of hobnix itself is built later), lock it, add it to the backup, write dockerManager
 #   hs docker migrate      quiet, idempotent (hs update runs it): set docker=on from the older setting dockerManager, remember a manager that runs
 #                          in $HS_STATE_DIR/docker-manager-legacy (arcane|portainer), unset dockerManager. Touches no container.
-#                          --undo puts dockerManager back and removes docker and the legacy file.
+#                          The exact old value (or - for unset) is kept in docker-manager-undo; --undo puts it back, removes docker, the legacy file
+#                          and that record, and does nothing when there is no record (so a second --undo is a no-op).
 #   hs docker disable      plan, a backup offer, the typed name docker, then delete the container and unset docker, dockerManager and the legacy file
 #   hs sys docker mount    the only route that gives the locked container a folder (the lock refuses create-share, hs remote attach): plan, then
 #                          <share> <path> --as <uid:gid> (a local share; the idmap change restarts the container and so every app in it) or
@@ -578,19 +579,22 @@ cmd_enable() {
   return 0
 }
 
-drop_settings() { setting_unset docker; setting_unset dockerManager; rm -f "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy"; }
+drop_settings() { setting_unset docker; setting_unset dockerManager; rm -f "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy" "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-undo"; }
 
 cmd_migrate() {   # quiet; nothing is stopped, removed or restarted: only settings and one state file change
-  local legacy=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy old w=
+  local legacy=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy undo=${HS_STATE_DIR:-/var/lib/hs}/docker-manager-undo old w= saved
   case "${1:-}" in
     "") ;;
     --undo)
-      old=$(cat "$legacy" 2>/dev/null || true); [ -n "$old" ] || old=webui
-      setting_set dockerManager "$old"; setting_unset docker; rm -f "$legacy"
-      ok "$(t 'dockerManager is back: %s.' "$old")"; return 0 ;;
+      if [ ! -s "$undo" ]; then note "$(t 'Nothing to undo.')"; return 0; fi
+      saved=$(head -n 1 "$undo")
+      if [ "$saved" = - ]; then setting_unset dockerManager; else setting_set dockerManager "$saved"; fi
+      setting_unset docker; rm -f "$legacy" "$undo"
+      ok "$(t 'The older setting is back.')"; return 0 ;;
     *) usage ;;
   esac
   old=$(setting_get dockerManager 2>/dev/null || true)
+  saved=${old:--}   # the exact old value for --undo; - = it was unset
   if [ -z "$old" ]; then
     # an install from before the question counts as Arcane (or Portainer); only before the first migration, else a recipe's own project would match
     [ -z "$(setting_get docker 2>/dev/null || true)" ] && owned || return 0
@@ -599,7 +603,8 @@ cmd_migrate() {   # quiet; nothing is stopped, removed or restarted: only settin
     done
     [ -n "$old" ] || return 0
   fi
-  case "$old" in arcane|portainer) mkdir -p "$(dirname "$legacy")"; printf '%s\n' "$old" > "$legacy" ;; esac
+  mkdir -p "$(dirname "$legacy")"; printf '%s\n' "$saved" > "$undo"
+  case "$old" in arcane|portainer) printf '%s\n' "$old" > "$legacy" ;; esac
   setting_set docker on
   setting_unset dockerManager
   ok "$(t 'Docker is switched by the setting docker now.')"
