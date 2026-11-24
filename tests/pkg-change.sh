@@ -66,9 +66,9 @@ check_out "fetch (start) names the unit" "^unit${tab}hs-job-pkg-fetch-1" env HS_
 check_out "the job fetches that repository" "fetch test" bash -c "cat '$WORK/jobcalls'"
 # the same with a default repository and a stand-in that only records (needs neither the network nor the signed test repository)
 mkdir -p "$WORK/jl2"; printf 'hs_job() { shift 2; printf "%%s\\n" "$*" > "%s/jobcalls2"; echo hs-job-pkg-fetch-2; }\n' "$WORK" > "$WORK/jl2/job.sh"
-check_out "fetch of a default repository: started and its unit" "^status${tab}started" env HS_JOB_LIB="$WORK/jl2/job.sh" $C start fetch recipes
-check_out "the unit is the one hs_job printed" "^unit${tab}hs-job-pkg-fetch-2" env HS_JOB_LIB="$WORK/jl2/job.sh" $C start fetch recipes
-check_out "the job command fetches that repository" "pkg.sh fetch recipes" bash -c "cat '$WORK/jobcalls2'"
+check_out "fetch of a default repository: started and its unit" "^status${tab}started" env HS_JOB_LIB="$WORK/jl2/job.sh" $C start fetch official
+check_out "the unit is the one hs_job printed" "^unit${tab}hs-job-pkg-fetch-2" env HS_JOB_LIB="$WORK/jl2/job.sh" $C start fetch official
+check_out "the job command fetches that repository" "pkg.sh fetch official" bash -c "cat '$WORK/jobcalls2'"
 check_out "fetch without a name is a job too" "^status${tab}started" env HS_JOB_LIB="$WORK/jl2/job.sh" $C start fetch
 check_out "fetch of an unknown repository is refused before any job" "no repository" bash -c "HS_JOB_LIB='$WORK/jl/job.sh' $C start fetch nope; true"
 check_out "market: update" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}1[.]0[.]0${tab}update" $PKGSH --market
@@ -88,7 +88,7 @@ check_out "market: new again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}-
 check_out "removing what is not installed is refused" "not installed" bash -c "$C plan remove demo; true"
 
 echo "-- removing a repository"
-check_out "a default repository stays" "default" bash -c "$C plan repo-remove recipes; true"
+check_out "a default repository stays" "default" bash -c "$C plan repo-remove official; true"
 check_out "plan: red" "^confirm_name${tab}test" $C plan repo-remove test
 check_out "without the name it is refused" "type the name" bash -c "$C start repo-remove test; true"
 check_out "with it the repository goes" "^status${tab}done" $C start repo-remove test --confirm test
