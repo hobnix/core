@@ -811,6 +811,8 @@ class Repos:
 
     def install(self, name, repo=None, want_tag=None):
         r_name, entry, tag, commit = self.choose(name, repo)
+        if entry.get("kind") == "blueprint":
+            raise Refused("%s is a blueprint: hs blueprint apply %s" % (name, name), "pkg.blueprint")
         if want_tag and tag != want_tag:
             # the person saw the plan of one release (docs/PLAN-app-lifecycle.md D4): a newer or different verified tag is not installed behind their back
             raise Refused("%s: the plan was made for %s but the newest verified release is %s now: read the plan again" % (name, want_tag, tag))
@@ -827,6 +829,12 @@ class Repos:
         self.extract(r, ref, entry["path"], tmp, entry["tree"] if indexed else None)
         with open(os.path.join(tmp, "package.toml"), "rb") as fh:
             m = tomllib.load(fh)
+        if m.get("kind") == "blueprint" or entry.get("kind") == "blueprint":
+            # the checked package.toml decides, not the kind a repository index says; a disagreement is refused too
+            self.rm_quiet(tmp)
+            if m.get("kind") != "blueprint":
+                raise Refused("%s: the index says kind blueprint but package.toml says %s" % (name, m.get("kind")))
+            raise Refused("%s is a blueprint: hs blueprint apply %s" % (name, name), "pkg.blueprint")
         if m.get("name") != name or m.get("version") != entry["version"]:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
@@ -1331,7 +1339,7 @@ def run(pkg, cmd, rest):
             builtin = {m.get("name") for p, m in pkg.manifests() if "/current/" not in p.replace("\\", "/")}
             for pname, rows in sorted(R.catalog(True).items()):
                 there = os.path.isdir(os.path.join(R.state, "current", pname)) or pname in builtin
-                if there or not (rows[0][1].get("core") or pname in applied):
+                if there or rows[0][1].get("kind") == "blueprint" or not (rows[0][1].get("core") or pname in applied):   # a blueprint is applied, never installed
                     continue
                 if rows[0][1].get("_unavailable"):       # a core package that cannot be had is a failure, not a silent skip
                     bad += 1

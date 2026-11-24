@@ -88,6 +88,7 @@ fi
 sv() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' <<<"$show"; }
 kind=$(sv kind); srepo=$(sv repo); version=$(sv version); stag=$(sv tag); title=$(sv title); desc=$(sv description)
 needs_csv=$(sv needs); input=$(sv input)
+[ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
 [ -z "$repo" ] || [ "$repo" = "$srepo" ] || refuse "$name is not in the repository $repo"
 if [ -n "$tag" ] && [ "$tag" != "$stag" ]; then
   refuse "The release moved: the plan showed $tag but the newest verified release is $stag now. Read the plan again."

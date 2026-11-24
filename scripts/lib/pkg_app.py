@@ -292,8 +292,8 @@ def check(m, folder=None, core=False):
         rq = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
         if rq and int(rq.group(1)) < API_LEVEL:
             bad(f"app contract and store fields need requires_core \">={API_LEVEL}\" (this manifest says {m.get('requires_core')})")
-        if kind not in ("recipe", "extension"):
-            bad("[app] and the store fields belong to a recipe or an extension")
+        if kind not in ("recipe", "extension", "blueprint"):
+            bad("[app] and the store fields belong to a recipe, an extension or a blueprint")
     if "app" in m:
         _contract(name, m, bad)
     _store(m, folder, bad)

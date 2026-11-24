@@ -22,6 +22,38 @@ release() {   # release <tag> <demo version> <key>
     printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho %s %s\n' "$n" "$v" > "$R/recipes/$n/run.sh"
   done
   printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/demo"\ntitle = "The demo package"\nrequires_core = ">=1"\n\n[package.corer]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/corer"\ntitle = "The corer package"\nrequires_core = ">=1"\ncore = true\n' "$2" > "$R/index.toml"
+  mkdir -p "$R/blueprints/bp" "$R/blueprints/bpl"   # bp says blueprint in the index; bpl lies there (kind = recipe)
+  printf 'name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+recipes = []
+' > "$R/blueprints/bp/package.toml"
+  printf 'name = "bpl"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+recipes = []
+' > "$R/blueprints/bpl/package.toml"
+  printf '[package.bp]
+version = "1.0.0"
+kind = "blueprint"
+path = "blueprints/bp"
+title = "Bp"
+requires_core = ">=11"
+[package.bpl]
+version = "1.0.0"
+kind = "recipe"
+path = "blueprints/bpl"
+title = "Bpl"
+requires_core = ">=1"
+' >> "$R/index.toml"
   git add -A && git commit -q -m "demo $2" && git -c user.signingkey="$3.pub" tag -s "$1" -m "release $2"
 }
 release v1.0.0 1.0.0 "$WORK/good"
@@ -43,6 +75,13 @@ check_out "the same name twice is refused" "already" bash -c "echo '$GOOD' | $C 
 echo "-- the market"
 check_out "market lists demo as new" "^demo${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}no${tab}generic${tab}The demo package" $PKGSH --market
 check_out "and the core flag of corer" "^corer${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}yes" $PKGSH --market
+
+echo "-- a blueprint is applied, never installed"
+check_out "plan: a blueprint is refused with its reason" "blueprint: hs blueprint apply bp" bash -c "$C plan install bp; true"
+check_eq "plan: not status ok" "0" "$($C plan install bp 2>&1 | grep -c "^status${tab}ok")"
+check_out "plan: and its code" "pkg.blueprint" bash -c "$C plan install bp 2>&1; true"
+check_out "a blueprint the index calls a recipe is refused at the install: the package.toml says" "is a blueprint" bash -c "python3 -I $SCRIPTS/pkg.py install bpl 2>&1; true"
+check "and nothing of it is in current/" test ! -e "$HS_STATE_DIR/packages/current/bpl"
 
 echo "-- install"
 check_out "plan: a package of an added repository is red" "^confirm_name${tab}demo" $C plan install demo

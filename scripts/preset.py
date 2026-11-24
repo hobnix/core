@@ -60,15 +60,9 @@ def load(name):
 
 
 def options():
-    with open(SCHEMA, "rb") as f:
-        items = tomllib.load(f).get("item", [])
-    # options a capability folder owns stand in schema.toml as kind = "include" anchors: schema-gen puts them back
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("schema_gen", os.path.join(HERE, "schema-gen.py"))
-    sg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(sg)
-    items = sg.expand_includes(items, SCHEMA)
-    return {i["key"]: i.get("store", "machine") for i in items if i.get("kind") == "option"}
+    sys.path.insert(0, os.path.join(HERE, "lib"))
+    import schema_options     # the checks of presets and blueprints share one reader of config/schema.toml
+    return schema_options.options()
 
 
 def main(argv):

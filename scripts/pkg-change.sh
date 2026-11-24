@@ -76,6 +76,7 @@ case "$action" in
     row=$(row_of "$name")
     [ -n "$row" ] || refuse "There is no package $name in the repositories (fetch them again first)."
     IFS=$'\t' read -r _ kind repo avail inst state core _ title <<<"$row"
+    [ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
     r_from=$(repo_row "$repo" | cut -f4)
     [ "$r_from" = added ] && red=$name
     case "$action" in

@@ -9,6 +9,7 @@ run.no-status	run	The command ended without a status line	The server could not d
 vault.locked	script	The vault is closed and the step needs a secret in it	The vault is closed: unlock it first.	hs vault open
 docker.off	script	Docker is not on or not running	Docker is not on or not running.	-
 app.unknown	script	No app of that name exists	No such app was found.	-
+pkg.blueprint	script	hs pkg install was asked for a blueprint, which is applied and never installed	This is a blueprint: apply it instead of installing it.	hs blueprint apply <name>
 name.invalid	script	A name is not in the allowed form	The name is not valid.	-
 plan.changed	script	What the plan saw changed before it was applied	It changed meanwhile. Reload it and try again.	-
 job.busy	script	The same job is running already	This is running already.	-

@@ -154,7 +154,7 @@ PY
   else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate; true"; fi
 }
 appcase "the good fixture package passes" "" 'pass'
-check_eq "the API level is 10" "10" "$($PKG api)"
+check_eq "the API level is 11" "11" "$($PKG api)"
 appcase "an old manifest (requires >=1, no app fields) is unchanged" "" 't = "name = \"fixstore\"\nversion = \"1.0.0\"\nkind = \"recipe\"\ntitle = \"x\"\nrequires_core = \">=1\"\nscript = \"run.sh\"\n"'
 appcase "app fields on an older requires_core are named" 'need requires_core' 't = t.replace(">=9", ">=8")'
 appcase "an unknown category is named" 'category is not one of' 't = t.replace("tools", "stuff")'
@@ -353,5 +353,54 @@ ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k'}), mk('radarr', {'key_file'
 on = {'jelly', 'radarr', 'plain'}
 ok, bad, why = m.grant_all(ms, on, 'media', 'e')
 print('|'.join([','.join(p for _, p in ok), m.grant_all(ms, on, 'media', 'x')[2][0], m.grant_all(ms, on, 'media', 'jelly')[2][0]]))")"
+
+echo "-- a blueprint (kind = blueprint, #1075)"
+BP=$WORK/bptree; mkdir -p "$BP/packages/bp"
+good_bp='name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+capabilities = ["storage"]
+recipes = ["jellyfin"]
+[docker]
+manager = "webui"
+size = "m"
+[machine]
+timeZone = "Europe/Vienna"
+[settings]
+backupNewShares = "true"
+[answers.jellyfin]
+library = "/srv/media"
+'
+bpv() { printf '%s\n' "$1" > "$BP/packages/bp/package.toml"; HS_PACKAGES_ROOT=$BP $PKG validate 2>&1; }
+check "a good blueprint passes" bpv "$good_bp"
+bad_bp() {   # bad_bp "what" "text that must be named" "text of the good manifest" "its replacement" ("" = append the replacement)
+  local t=$good_bp; [ -n "$3" ] && t=${good_bp/"$3"/"$4"} || t=$good_bp$'\n'"$4"
+  check_out "$1" "$2" bpv "$t"
+}
+bad_bp "role in [machine] is refused" "role is not allowed" "[machine]" $'[machine]\nrole = "edge"'
+bad_bp "capabilities in [machine] is refused" "capabilities is not allowed" "[machine]" $'[machine]\ncapabilities = ["x"]'
+bad_bp "dockerManager in [machine] points to [docker]" "Docker only through" "[machine]" $'[machine]\ndockerManager = "arcane"'
+bad_bp "a key that is not an option is refused" "not an option of config/schema.toml" 'timeZone = "Europe/Vienna"' 'noSuchOption = "x"'
+bad_bp "a secret setting is refused" "is a secret" 'backupNewShares = "true"' 'notifyUrl = "x"'
+bad_bp "a key in the wrong table is refused" "belongs in" 'backupNewShares = "true"' 'timeZone = "x"'
+bad_bp "the recipe docker is refused" "Docker is the core capability" '"jellyfin"' '"docker"'
+bad_bp "a name twice is refused" "named twice" 'capabilities = ["storage"]' 'capabilities = ["jellyfin"]'
+bad_bp "docker in capabilities is refused" "Docker is the core capability" 'capabilities = ["storage"]' 'capabilities = ["docker"]'
+bad_bp "docker in extensions is refused" "Docker is the core capability" 'capabilities = ["storage"]' $'capabilities = ["storage"]
+extensions = ["docker"]'
+bad_bp "a requires_core below 11 is refused (older cores do not know the kind)" "a blueprint needs requires_core" 'requires_core = ">=11"' 'requires_core = ">=10"'
+bad_bp "an unknown manager is refused" "manager is not" '"webui"' '"nope"'
+bad_bp "an unknown size is refused" "size is not" 'size = "m"' 'size = "xl"'
+bad_bp "an answer for a recipe it does not name is refused" "recipe the blueprint does not name" 'answers.jellyfin' 'answers.other'
+bad_bp "empty roles are refused" "roles is missing or empty" 'roles = ["homeserver"]' 'roles = []'
+bad_bp "an unknown role is refused" "unknown role" '"homeserver"' '"nas"'
+bad_bp "module is refused" "module is not allowed" 'kind = "blueprint"' $'kind = "blueprint"\nmodule = "x.nix"'
+bad_bp "a [[binary]] table is refused" "binary is not allowed" "" $'[[binary]]\nname = "x"'
+bad_bp "more than 40 packages are refused" "at most 40" 'capabilities = ["storage"]' "capabilities = [$(seq -s, -f '"p%g"' 1 41)]"
+bad_bp "a manager that is missing is refused" "needs manager" 'manager = "webui"' 'sizeless = "x"'
 
 finish
