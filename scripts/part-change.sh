@@ -22,23 +22,23 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: part-change.sh plan|start enable|disable <part>" >&2; exit 1 ;; esac
 case "$action" in enable|disable) ;; *) refuse_code action.unknown "unknown action (enable or disable)" ;; esac
-[[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || refuse "not a part name"
+[[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] || refuse_code name.invalid "not a part name"
 [ $# -eq 3 ] || refuse_code args.unexpected "unexpected extra arguments"
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
 
 row=$(bash "$parts" --list 2>/dev/null | awk -F'\t' -v n="$name" '$1 == n { print; exit }')
-[ -n "$row" ] || refuse "There is no part called $name."
+[ -n "$row" ] || refuse_code part.unknown "There is no part called $name."
 IFS=$'\t' read -r _ st kind nix sw _ <<<"$row"
-[ "$sw" = yes ] || refuse "$name follows the role of this server; it is not switched here."
+[ "$sw" = yes ] || refuse_code part.not-switchable "$name follows the role of this server; it is not switched here."
 
 caps_list() { machine_has capabilities || return 0; machine_get capabilities 2>/dev/null || true; }
 # switched on in machine.toml, not built yet: it still reads off, but a switch-off just takes the line out again
 pend=no
 if [ "$st" = off ] && [ "$nix" = yes ] && caps_list | grep -qxF -- "$name"; then pend=yes; fi
-if [ "$action" = enable ] && [ "$pend" = yes ]; then refuse "$name is switched on already; it takes effect with the next hs rebuild."; fi
-if [ "$action" = enable ] && [ "$st" = on ]; then refuse "$name is on already."; fi
-if [ "$action" = disable ] && [ "$st" = off ] && [ "$pend" = no ]; then refuse "$name is off already."; fi
+if [ "$action" = enable ] && [ "$pend" = yes ]; then refuse_code part.pending "$name is switched on already; it takes effect with the next hs rebuild."; fi
+if [ "$action" = enable ] && [ "$st" = on ]; then refuse_code part.already "$name is on already."; fi
+if [ "$action" = disable ] && [ "$st" = off ] && [ "$pend" = no ]; then refuse_code part.already "$name is off already."; fi
 caps_write() { local v="" n; for n in "$@"; do v+="${v:+, }\"$n\""; done; machine_set capabilities "[$v]" ext; }
 
 if [ "$kind" = extension ]; then cmd=(bash "$ext" "$action" "$name"); else cmd=(machine.toml capabilities "$action" "$name"); fi
@@ -55,7 +55,7 @@ if [ "$verb" = start ]; then
     keep=()
     for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$name" ] || keep+=("$x"); done
     if [ "$action" = enable ]; then keep+=("$name"); fi
-    caps_write ${keep[@]+"${keep[@]}"} || refuse "machine.toml could not be changed"
+    caps_write ${keep[@]+"${keep[@]}"} || refuse_code part.write-failed "machine.toml could not be changed"
   fi
   printf 'status\tdone\n'
   exit 0

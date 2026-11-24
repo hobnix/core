@@ -88,29 +88,29 @@ fi
 case "$action" in
   toggle)
     [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse_code name.invalid "invalid name"
-    case "$kind" in shares|sensitive|ct) ;; *) refuse "--kind is shares, sensitive or ct" ;; esac
-    [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
-  browse) [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
+    case "$kind" in shares|sensitive|ct) ;; *) refuse_code backup.kind-invalid "--kind is shares, sensitive or ct" ;; esac
+    [ "$to" = on ] || [ "$to" = off ] || refuse_code backup.to-invalid "--to is on or off" ;;
+  browse) [ "$to" = on ] || [ "$to" = off ] || refuse_code backup.to-invalid "--to is on or off" ;;
   rules)
     [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse_code name.invalid "invalid name"
     . "$here/lib/backup-rules.sh"
     for s in "${sets[@]}"; do
       case "$s" in
-        include=*) rules_path_ok "${s#include=}" || refuse "an include is an absolute path inside the instance, without .. in it" ;;
-        exclude=*) rules_glob_ok "${s#exclude=}" || refuse "an exclude is a restic pattern: not empty, no ! in front" ;;
-        reset=*) [ "${s#reset=}" = all ] || [ -n "${s#reset=}" ] || refuse "reset needs a path or all" ;;
-        *) refuse "--set is include=<path>, exclude=<glob>, reset=<path> or reset=all" ;;
+        include=*) rules_path_ok "${s#include=}" || refuse_code backup.rule-invalid "an include is an absolute path inside the instance, without .. in it" ;;
+        exclude=*) rules_glob_ok "${s#exclude=}" || refuse_code backup.rule-invalid "an exclude is a restic pattern: not empty, no ! in front" ;;
+        reset=*) [ "${s#reset=}" = all ] || [ -n "${s#reset=}" ] || refuse_code backup.rule-invalid "reset needs a path or all" ;;
+        *) refuse_code backup.rule-invalid "--set is include=<path>, exclude=<glob>, reset=<path> or reset=all" ;;
       esac
     done ;;
-  offsite-set) { [[ "$repo" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$repo" != -* ]] && [[ "$repo" != *..* ]]; } || refuse "that is not a restic repository address (for example sftp:user@host:/path, b2:bucket:path or a folder)" ;;
+  offsite-set) { [[ "$repo" =~ ^[A-Za-z0-9/@:._+=,~%-]+$ ]] && [[ "$repo" != -* ]] && [[ "$repo" != *..* ]]; } || refuse_code backup.repo-invalid "that is not a restic repository address (for example sftp:user@host:/path, b2:bucket:path or a folder)" ;;
   offsite-config)
-    case "$kind" in s3|rest|sftp|folder|typed) ;; *) refuse "--kind is s3, rest, sftp, folder or typed" ;; esac
+    case "$kind" in s3|rest|sftp|folder|typed) ;; *) refuse_code backup.kind-invalid "--kind is s3, rest, sftp, folder or typed" ;; esac
     # every field is a plain word: no option look-alike, no .. (backup.sh checks the shape of each kind again)
     for f in "$endpoint" "$bucket" "$prefix" "$url" "$user" "$host" "$port" "$path" "$repo"; do
-      { [[ "$f" =~ ^[A-Za-z0-9/@:._+=,~%-]*$ ]] && [[ "$f" != -* ]] && [[ "$f" != *..* ]]; } || refuse "a field of the target has characters that do not belong in an address"
+      { [[ "$f" =~ ^[A-Za-z0-9/@:._+=,~%-]*$ ]] && [[ "$f" != -* ]] && [[ "$f" != *..* ]]; } || refuse_code backup.repo-invalid "a field of the target has characters that do not belong in an address"
     done ;;
-  init)   [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || refuse "that is not a disk id (see hs sys pool disks)" ;;
-  drill)  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 1 ] && [ "$count" -le 100 ] || refuse "--count is a number from 1 to 100" ;;
+  init)   [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || refuse_code disk.unknown "that is not a disk id (see hs sys pool disks)" ;;
+  drill)  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 1 ] && [ "$count" -le 100 ] || refuse_code backup.count-invalid "--count is a number from 1 to 100" ;;
 esac
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
@@ -123,31 +123,31 @@ state_dir=${HS_STATE_DIR:-/var/lib/hs}
 
 # the actions that read the backup disk need it set up, the vault open and the disk there
 needs_disk() {
-  [ "$(st configured)" = yes ] || refuse "The backup is not set up yet (hs backup init <device>)."
-  [ "$(st vault)" != closed ] || refuse "The vault is closed: unlock it first (hs unlock)."
-  [ "$(st disk)" = present ] || refuse "The backup disk is not plugged in."
+  [ "$(st configured)" = yes ] || refuse_code backup.not-set-up "The backup is not set up yet (hs backup init <device>)."
+  [ "$(st vault)" != closed ] || refuse_code vault.locked "The vault is closed: unlock it first (hs unlock)."
+  [ "$(st disk)" = present ] || refuse_code backup.disk-missing "The backup disk is not plugged in."
 }
 
 case "$action" in
   toggle)
     if [ "$kind" = ct ]; then
-      ${HS_INCUS:-incus} info "$name" >/dev/null 2>&1 || refuse "There is no instance called '$name'."
+      ${HS_INCUS:-incus} info "$name" >/dev/null 2>&1 || refuse_code backup.instance-unknown "There is no instance called '$name'."
       cmd=(bash "$backup" ct "$name" "$to")
     else
-      awk -F'\t' -v n="$name" '$1 != "ct" && $1 != "always" && $2 == n { f = 1 } END { exit !f }' <<<"$overview" || refuse "There is no share called '$name'."
+      awk -F'\t' -v n="$name" '$1 != "ct" && $1 != "always" && $2 == n { f = 1 } END { exit !f }' <<<"$overview" || refuse_code share.unknown "There is no share called '$name'."
       cmd=(bash "$backup" "$name" "$to")
     fi ;;
   rules)
-    ${HS_INCUS:-incus} info "$name" >/dev/null 2>&1 || refuse "There is no instance called '$name'."
+    ${HS_INCUS:-incus} info "$name" >/dev/null 2>&1 || refuse_code backup.instance-unknown "There is no instance called '$name'."
     cmd=(bash "$backup" ct "$name" apply "${sets[@]}") ;;
   now)    needs_disk; cmd=(bash "$backup" now) ;;
   verify) needs_disk; cmd=(bash "$backup" verify) ;;
   prune)  needs_disk; cmd=(bash "$backup" prune) ;;
   drill)  needs_disk; cmd=(bash "$backup" drill "$count") ;;
   init)
-    [ "$(st vault)" != closed ] || refuse "The vault is closed: unlock it first (hs unlock)."
+    [ "$(st vault)" != closed ] || refuse_code vault.locked "The vault is closed: unlock it first (hs unlock)."
     # a disk labelled backup is plugged in: formatting another one would leave two, and init would not touch the first
-    [ "$(st disk)" != present ] || refuse "A backup disk is plugged in already (label 'backup'). Unplug it first if you really want to replace it."
+    [ "$(st disk)" != present ] || refuse_code backup.disk-present "A backup disk is plugged in already (label 'backup'). Unplug it first if you really want to replace it."
     dev=${HS_DISK_BYID:-/dev/disk/by-id}/$disk
     [ -e "$dev" ] || refuse_code disk.unknown "There is no disk '$disk' (see hs sys pool disks)."
     diskname=$(basename "$(readlink -f "$dev")")
@@ -169,18 +169,18 @@ case "$action" in
       done
     fi ;;
   offsite-now)
-    [ -n "$(st offsite)" ] || refuse "There is no off-site repository yet: set one first."
+    [ -n "$(st offsite)" ] || refuse_code backup.no-offsite "There is no off-site repository yet: set one first."
     needs_disk; cmd=(bash "$backup" offsite now) ;;
   offsite-off)
-    [ -n "$(st offsite)" ] || refuse "The off-site copy is off already."
+    [ -n "$(st offsite)" ] || refuse_code backup.no-offsite "The off-site copy is off already."
     cmd=(bash "$backup" offsite off) ;;
   browse)
     if [ "$to" = on ]; then
       needs_disk
-      [ "$(st browse)" != on ] || refuse "Browsing is on already."
+      [ "$(st browse)" != on ] || refuse_code backup.browse-state "Browsing is on already."
       cmd=(bash "$backup" browse)
     else
-      [ "$(st browse)" = on ] || refuse "Browsing is off already."
+      [ "$(st browse)" = on ] || refuse_code backup.browse-state "Browsing is off already."
       cmd=(bash "$backup" browse --off)
     fi ;;
 esac

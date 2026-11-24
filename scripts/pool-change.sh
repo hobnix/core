@@ -82,12 +82,12 @@ if [ "$action" = add ]; then
   for id in ${disks//,/ }; do
     row=$(awk -F'\t' -v i="$id" '$1 == i' <<<"$disc")
     if [ -z "$row" ]; then
-      ! $newpool || refuse "$id is not a disk this server sees"
+      ! $newpool || refuse_code disk.unknown "$id is not a disk this server sees"
       continue
     fi
     k=$(cut -f5 <<<"$row"); l=$(cut -f6 <<<"$row"); s=$(cut -f7 <<<"$row")
-    if $newpool && [ "$k" != empty ]; then refuse "$id is not empty ($k $s): erase it on its disk page first (hs sys disk plan $id wipe)"; fi
-    if [ "$k" = zfs ] && [ "$l" != - ]; then refuse "$id belongs to the ZFS pool $l: import it (hs pool $l import) or erase it on its disk page first"; fi
+    if $newpool && [ "$k" != empty ]; then refuse_code disk.not-empty "$id is not empty ($k $s): erase it on its disk page first (hs sys disk plan $id wipe)"; fi
+    if [ "$k" = zfs ] && [ "$l" != - ]; then refuse_code pool.zfs-member "$id belongs to the ZFS pool $l: import it (hs pool $l import) or erase it on its disk page first"; fi
   done
 fi
 

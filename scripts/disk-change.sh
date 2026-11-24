@@ -31,7 +31,7 @@ verb=${1:-}; action=${2:-}; disk=${3:-}; kind=${4:-}
 case "$verb" in plan|start) ;; *) echo "usage: disk-change.sh plan|start test <disk> short|long" >&2; exit 1 ;; esac
 case "$action" in test|wipe|forget|recover|recover-finish|move|detach|attach|temp-mount|temp-eject|temp-copy) ;; *) refuse_code action.unknown "unknown action (test, wipe, forget, recover, recover-finish, move, detach, attach, temp-mount, temp-eject or temp-copy)" ;; esac
 # a plain device or by-id name: no path, no dots-dots, no options
-{ [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}$ ]] && [[ "$disk" != *..* ]]; } || refuse "that is not a disk name"
+{ [[ "$disk" =~ ^[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}$ ]] && [[ "$disk" != *..* ]]; } || refuse_code name.invalid "that is not a disk name"
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
@@ -54,9 +54,9 @@ if [ "$action" = recover ]; then
   exec bash "$here/disk-recover.sh" "$verb" "$disk" "$@"
 fi
 if [ "$action" = recover-finish ]; then
-  [[ "$disk" =~ ^data-[0-9]+$ ]] || refuse "that is not a data disk of the array (data-NN)"
+  [[ "$disk" =~ ^data-[0-9]+$ ]] || refuse_code disk.not-data-disk "that is not a data disk of the array (data-NN)"
   if [ "$verb" = plan ]; then
-    [ -e "${HS_STATE_DIR:-/var/lib/hs}/recovering/$disk" ] || refuse "$disk is not out of the pool for a recovery."
+    [ -e "${HS_STATE_DIR:-/var/lib/hs}/recovering/$disk" ] || refuse_code disk.not-recovering "$disk is not out of the pool for a recovery."
     printf 'status	ok
 heading	give %s back to the pool
 step	allow writing to %s again and mount it into /bulk
@@ -81,10 +81,10 @@ if [ "$action" = forget ]; then
   state=${HS_STATE_SH:-$here/state.sh}
   row=$(bash "$state" disks 2>/dev/null | awk -F'	' -v s="$disk" '$1 == s { print; exit }' || true)
   [ -n "$row" ] || refuse_code disk.unknown "There is no disk with the serial '$disk' in the inventory."
-  [ "$(cut -f5 <<<"$row")" = missing ] || refuse "$disk is in the machine: only a missing disk can be forgotten."
+  [ "$(cut -f5 <<<"$row")" = missing ] || refuse_code disk.not-missing "$disk is in the machine: only a missing disk can be forgotten."
   if [ "$verb" = start ]; then
     [ "$confirm" = "$disk" ] || refuse_code confirm.missing "type the serial to confirm: $disk"
-    bash "$state" forget "$disk" --yes >/dev/null 2>&1 || refuse "the disk could not be forgotten"
+    bash "$state" forget "$disk" --yes >/dev/null 2>&1 || refuse_code disk.forget-failed "the disk could not be forgotten"
     printf 'status	done
 '
     exit 0
@@ -124,23 +124,23 @@ if [ "$action" = wipe ]; then
   [ -n "$tree" ] || refuse_code disk.unknown "There is no disk '$disk'."
   field() { sed -n "s/.*[ ]$1=\"\([^\"]*\)\".*/\1/p" <<<" $2"; }   # field <KEY> <lsblk -P line>
   first=$(sed -n 1p <<<"$tree")
-  [ "$(field TYPE "$first")" = disk ] || refuse "$disk is not a whole disk."
+  [ "$(field TYPE "$first")" = disk ] || refuse_code disk.not-whole "$disk is not a whole disk."
   cryptmaps=()
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     mp=$(field MOUNTPOINTS "$line"); fs=$(field FSTYPE "$line"); lb=$(field LABEL "$line"); ty=$(field TYPE "$line")
-    [ -z "$mp" ] || refuse "$disk is in use (mounted at ${mp%% *}). Unmount or eject it first; a system or pool disk is never erased here."
-    [ "$fs" != swap ] || refuse "$disk holds swap."
-    case "$lb" in bulk-*) refuse "$disk is a member of the bulk array (take it out with hs pool bulk remove first)." ;; backup) refuse "$disk is the backup disk." ;; esac
+    [ -z "$mp" ] || refuse_code disk.in-use "$disk is in use (mounted at ${mp%% *}). Unmount or eject it first; a system or pool disk is never erased here."
+    [ "$fs" != swap ] || refuse_code disk.in-use "$disk holds swap."
+    case "$lb" in bulk-*) refuse_code disk.pool-member "$disk is a member of the bulk array (take it out with hs pool bulk remove first)." ;; backup) refuse_code disk.backup-disk "$disk is the backup disk." ;; esac
     # an encrypted volume that is open but mounted nowhere and holds no array label (a disk taken out of the array leaves it open): closed first
     [ "$ty" != crypt ] || cryptmaps+=("$(field NAME "$line")")
   done <<<"$tree"
   base=$(basename "$dev")
-  if zpool status -L 2>/dev/null | awk '{ print $1 }' | grep -Eq "^${base}([0-9]+|p[0-9]+)?$"; then refuse "$disk is a member of a ZFS pool."; fi
+  if zpool status -L 2>/dev/null | awk '{ print $1 }' | grep -Eq "^${base}([0-9]+|p[0-9]+)?$"; then refuse_code disk.pool-member "$disk is a member of a ZFS pool."; fi
   # (it probes the disk itself: lsblk's file system column can lag behind a fresh header)
   case "$( ( . "$here/lib/crypt.sh"; crypt_disk_class "$dev" ) 2>/dev/null || true)" in
     # closed: nobody can tell whether it is a member of the array (its label is inside), so it is never erased; open and unused it is fine
-    own|ambiguous) [ ${#cryptmaps[@]} -gt 0 ] || refuse "$disk is one of this server's encrypted disks and it is closed. Open it first (hs unlock) so that the array label can be checked." ;;
+    own|ambiguous) [ ${#cryptmaps[@]} -gt 0 ] || refuse_code vault.locked "$disk is one of this server's encrypted disks and it is closed. Open it first (hs unlock) so that the array label can be checked." ;;
   esac
   if [ "$verb" = start ]; then
     [ "$confirm" = "$disk" ] || refuse_code confirm.missing "type the name to confirm: $disk"
@@ -160,7 +160,7 @@ if [ "$action" = wipe ]; then
     done
     for m in "${cryptmaps[@]}"; do
       echo "Closing the encrypted volume $m"
-      cryptsetup close "$m" 2>/dev/null || refuse "the encrypted volume $m could not be closed (is something using it?)"
+      cryptsetup close "$m" 2>/dev/null || refuse_code disk.close-failed "the encrypted volume $m could not be closed (is something using it?)"
     done
     echo "Erasing every signature and the partition table"
     for part in $(lsblk -nr -o PATH "$dev" | tail -n +2); do
@@ -168,7 +168,7 @@ if [ "$action" = wipe ]; then
       wipefs -a -q "$part" 2>/dev/null || true
     done
     zpool labelclear -f "$dev" 2>/dev/null || true
-    wipefs -a -q "$dev" >/dev/null 2>&1 || refuse "the disk could not be erased (wipefs failed)"
+    wipefs -a -q "$dev" >/dev/null 2>&1 || refuse_code disk.wipe-failed "the disk could not be erased (wipefs failed)"
     ! command -v sgdisk >/dev/null 2>&1 || sgdisk --zap-all "$dev" >/dev/null 2>&1 || true
     blockdev --rereadpt "$dev" 2>/dev/null || true
     udevadm settle 2>/dev/null || true
@@ -206,13 +206,13 @@ if [ "$action" != test ]; then
   name="" to=""
   while [ $# -gt 0 ]; do
     case "$1:$action" in
-      --name:temp-mount) [ $# -ge 2 ] || refuse "--name needs a value"; name=$2; shift 2 ;;
-      --to:temp-copy)    [ $# -ge 2 ] || refuse "--to needs a value"; to=$2; shift 2 ;;
+      --name:temp-mount) [ $# -ge 2 ] || refuse_code option.unknown "--name needs a value"; name=$2; shift 2 ;;
+      --to:temp-copy)    [ $# -ge 2 ] || refuse_code option.unknown "--to needs a value"; to=$2; shift 2 ;;
       *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
-  [[ "$disk" =~ ^[a-z0-9][a-z0-9-]*$ ]] || refuse "that is not a partition or temp disk name"
-  [ -z "$name" ] || [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || refuse "the name is letters, digits and hyphens"
+  [[ "$disk" =~ ^[a-z0-9][a-z0-9-]*$ ]] || refuse_code name.invalid "that is not a partition or temp disk name"
+  [ -z "$name" ] || [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || refuse_code name.invalid "the name is letters, digits and hyphens"
   raw=$(bash "$tdisk" raw </dev/null 2>/dev/null || true)       # device|fstype|label|bytes|mountpoints, one per partition
   row=""
   case "$action" in
@@ -221,22 +221,22 @@ if [ "$action" != test ]; then
   esac
   case "$action" in
     temp-mount)
-      [ -n "$row" ] || refuse "/dev/$disk is not offered: system, pool and swap disks are never mounted here (see hs sys temp-disk raw)."
+      [ -n "$row" ] || refuse_code disk.not-offered "/dev/$disk is not offered: system, pool and swap disks are never mounted here (see hs sys temp-disk raw)."
       IFS='|' read -r dev fs label bytes mps <<<"$row"
-      [ -z "$mps" ] || refuse "/dev/$disk is mounted at $mps already."
+      [ -z "$mps" ] || refuse_code disk.in-use "/dev/$disk is mounted at $mps already."
       cmd=(bash "$tdisk" mount "$dev"); [ -z "$name" ] || cmd+=(--name "$name")
       rc=0; dry=$("${cmd[@]}" --dry-run </dev/null 2>&1) || rc=$?
       if [ "$rc" -ne 0 ]; then
-        refuse "$(printf '%s' "$dry" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
+        refuse_code disk.temp-refused "$(printf '%s' "$dry" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
       fi ;;
     temp-eject)
-      [ -n "$row" ] || refuse "There is no temp disk called '$disk' mounted."
+      [ -n "$row" ] || refuse_code disk.unknown "There is no temp disk called '$disk' mounted."
       cmd=(bash "$tdisk" eject "$disk") ;;
     temp-copy)
-      [ -n "$row" ] || refuse "There is no temp disk called '$disk' mounted."
+      [ -n "$row" ] || refuse_code disk.unknown "There is no temp disk called '$disk' mounted."
       [ -n "$to" ] || { printf 'status\tneeds\nneeds\tto\n'; exit 2; }
-      [[ "$to" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || refuse "that is not a share name"
-      [ -d "$bulk/shares/$to" ] || refuse "There is no share '$to' (hs share add $to)."
+      [[ "$to" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || refuse_code name.invalid "that is not a share name"
+      [ -d "$bulk/shares/$to" ] || refuse_code share.unknown "There is no share '$to' (hs share add $to)."
       cmd=(bash "$tdisk" copy "$disk" "$to") ;;
   esac
   if [ "$verb" = start ]; then
@@ -248,7 +248,7 @@ if [ "$action" != test ]; then
     fi
     rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$?
     if [ "$rc" -ne 0 ]; then
-      refuse "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
+      refuse_code disk.temp-refused "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
     fi
     printf 'status\tdone\n'
     exit 0
@@ -276,7 +276,7 @@ if [ "$action" != test ]; then
   exit 0
 fi
 
-case "$kind" in short|long) ;; *) refuse "the test is short or long" ;; esac
+case "$kind" in short|long) ;; *) refuse_code disk.test-kind "the test is short or long" ;; esac
 [ $# -le 4 ] || refuse_code option.unknown "unknown option $5"
 
 # the dry run knows whether the disk exists and which command would run; the results say whether a test is running now
@@ -284,12 +284,12 @@ rc=0
 dry=$(bash "$health" --test "$kind" "$disk" --dry-run </dev/null 2>&1) || rc=$?
 if [ "$rc" -ne 0 ]; then
   reason=$(printf '%s\n' "$dry" | awk 'NF { sub(/^[ \t]+/, ""); print; exit }')
-  refuse "${reason:-the disk is not available}"
+  refuse_code disk.test-refused "${reason:-the disk is not available}"
 fi
 cmd=$(printf '%s\n' "$dry" | sed -n 's/^[ \t]*Would run: //p' | sed -n 1p)
 res=$(bash "$health" --results "$disk" </dev/null 2>&1 || true)
 if grep -q 'A test is running' <<<"$res"; then
-  refuse "A self-test is running in $disk already. Wait until it is done."
+  refuse_code disk.test-running "A self-test is running in $disk already. Wait until it is done."
 fi
 inuse=$(printf '%s\n' "$dry" | sed -n 's/^[ \t]*\(.* is in use: .*\)$/\1/p' | sed -n 1p)
 
@@ -298,7 +298,7 @@ if [ "$verb" = start ]; then
   out=$(bash "$health" --test "$kind" "$disk" </dev/null 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     reason=$(printf '%s\n' "$out" | awk 'NF { sub(/^[ \t]+/, ""); l = $0 } END { print l }')
-    refuse "${reason:-the self-test did not start}"
+    refuse_code disk.test-refused "${reason:-the self-test did not start}"
   fi
   printf 'status\tdone\n'
   exit 0
