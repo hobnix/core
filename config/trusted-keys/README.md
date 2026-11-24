@@ -67,7 +67,7 @@ what a server checks. The file `official.allowed_signers` holds one line, princi
   file lists both kinds of line. The verifier asks `ssh-keygen -Y find-principals` and `-Y verify -n hobnix-index`.
 - **Where the private key is.** Only in the secret `INDEX_SIGNING_KEY` of the GitHub environment `index-signing` of `hobnix/official` (the
   environment allows the branch `main` only). It was made once, without a passphrase because the workflow cannot type one, apart from the release
-  key. The public part is the line in the file here.
+  key. The public part is the line in the file here. The job that reads the secret is `sign` in the CALLER workflow of `hobnix/official` (it calls the action `.github/actions/index-sign` of the core), not a job of the reusable workflow.
 - **Order.** The line is merged here and servers run `hs update` before the first signed index is published, because a server learns a key only
   through the core. Nothing uses the file until the repository row for `official` exists (the switch of #1074).
 - **Replacing it** follows the order above: add the new line, merge, let servers run `hs update`, change the secret, then remove the old line in

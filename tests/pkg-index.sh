@@ -127,6 +127,11 @@ fi
 echo "-- the CI workflow stub"
 W=$ROOT/.github/workflows/package-index.yml
 check "the workflow exists" test -f "$W"
-check "the secret is named in one place only" test "$(grep -c "secrets\." "$W")" = 1
-check "only the sign job uses the signing environment" test "$(grep -c "environment: index-signing" "$W")" = 1
+check "the reusable workflow has no secret and no signing environment" test "$(grep -v '^ *#' "$W" | grep -c 'secrets\.\|environment: index-signing')" = 0
+check "the reusable workflow has the build job only" test "$(grep -c "^  [a-z]*:$" "$W")" = 1
+A=$ROOT/.github/actions/index-sign/action.yml
+check "the sign action exists" test -f "$A"
+check "the sign action never reads secrets" test "$(grep -v '^ *#' "$A" | grep -c "secrets\.")" = 0
+check "the sign action masks the key" grep -q "add-mask" "$A"
+check "the sign action removes the key file always" grep -q "if: always()" "$A"
 finish

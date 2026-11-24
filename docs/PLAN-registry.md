@@ -86,9 +86,11 @@ Not tested on hardware yet; the signing workflow has never run on GitHub.
   (`config/trusted-keys/<repo>.allowed_signers`) whose line carries `namespaces="hobnix-index"`, so a key that signs git tags does not sign
   indexes. `verify` checks the signature first and reads nothing from the file before that.
 - **The key** is never in the repository, in argv or in a build step's environment: `sign` takes the name of a key FILE. In CI only the
-  `sign` job of `.github/workflows/package-index.yml` (reusable, environment `index-signing`, main branch only) has the secret; the step
-  that receives it writes it to a file with mode 600 and the job removes the file at the end. The `build` job needs no secret, and the tests
-  sign with a key made on the spot. The workflow has never run.
+  `sign` job of the CALLER workflow (environment `index-signing`, main branch only) has the secret, because an environment secret did not reach the
+  jobs of a reusable workflow (hobnix/official run 45365647291). The job passes it as the input `key` to the composite action
+  `.github/actions/index-sign` of the core, which masks it, writes it to a file with mode 600 in the one step that gets it, signs, verifies against
+  the trusted keys and removes the file in an always() step. `build` (reusable, `.github/workflows/package-index.yml`) needs no secret, and the
+  tests sign with a key made on the spot. The caller block is in the header of the workflow. Neither has run in this shape.
 - **Not decided here:** the key itself (nobody has made it; its public half goes into `config/trusted-keys/` with the namespace above), the
   channels (the index has no `channel` field yet; a client ignores unknown fields, so adding one later is a compatible change), the offline
   root key.
