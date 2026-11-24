@@ -800,7 +800,8 @@ MANIFEST_FIELDS = ("kind", "source", "path", "commit", "tree", "license", "maint
 
 def _clean(text: object, limit: int = 300) -> str:
     """Untrusted text made safe to print: control and format characters (escape sequences, bidi overrides) become \\xNN, long text is cut."""
-    t = "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in str(text))
+    # `#` and `[` too: the runner reads `##[warning]...` as a command anywhere in a line (`::` only at a line start, see _quote)
+    t = "".join(c if c.isprintable() and c not in "#[" else f"\\x{ord(c):02x}" for c in str(text))
     return t if len(t) <= limit else t[:limit] + "..."
 
 
@@ -951,6 +952,11 @@ def community_diff(new_checkout: str, base_checkout: str | None = None, allow_lo
                 before = files   # same pin, only the manifest text changed
             up, up_old = _toml_of(files, "package.toml"), _toml_of(before or {}, "package.toml")
             report.append(f"  version: {_clean(up_old.get('version', '-'))} -> {_clean(up.get('version', '-'))}" if before else f"  version: {_clean(up.get('version', '-'))}")
+            wrong = [f"{k} is not a list" for k in ("permissions", "binary") if any(t.get(k) not in (None, []) and not isinstance(t.get(k), list) for t in (up, up_old))]
+            if wrong:
+                problems += [f"{name}: {t}" for t in wrong]
+                report += [f"  REFUSED: {t}" for t in wrong]
+                continue
             report += _list_changes("permissions", up_old.get("permissions") or [], up.get("permissions") or [])
             rows = lambda t: [f"{b.get('path')} {b.get('url')} {b.get('sha256')}" for b in t.get("binary") or [] if isinstance(b, dict)]
             report += _list_changes("[[binary]]", rows(up_old), rows(up))
@@ -987,7 +993,7 @@ def run(argv):
         elif cmd == "assemble" and pos and opt("--out"):
             commit, bad = assemble(pos[0], opt("--out"), opt("--official-index"), opt("--pins-tip"), os.environ.get("HS_COMMUNITY_ALLOW_LOCAL") == "1")
             for t in bad:
-                print(f"error\t{t}", file=sys.stderr)
+                print(f"error\t{_clean(t)}", file=sys.stderr)
             if bad:
                 return 1
             print(f"commit\t{commit}")
@@ -1031,7 +1037,7 @@ def run(argv):
             print(__doc__)
             return 2
     except (Problem, OSError, ValueError, json.JSONDecodeError) as e:
-        print(f"error\t{e}", file=sys.stderr)
+        print(f"error\t{_clean(e)}", file=sys.stderr)
         return 1
     return 0
 

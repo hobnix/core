@@ -40,7 +40,7 @@
 #         - uses: actions/upload-pages-artifact@v3
 #           with: {path: site}
 #     publish:
-#       needs: sign
+#       needs: sign                # hobnix/community with assemble: needs: [sign, mirror]
 #       runs-on: ubuntu-latest
 #       timeout-minutes: 10
 #       permissions: {pages: write, id-token: write}
@@ -78,11 +78,18 @@
 #           - uses: actions/download-artifact@v4
 #             with: {name: pins, path: pins}
 #           - run: |
-#               git init -q mirror && git -C mirror fetch -q ../pins/pins.bundle pins:refs/heads/pins
-#               git -C mirror push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "$(cat pins/pins.commit):refs/heads/pins"
+#               url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+#               git init -q mirror
+#               git -C mirror fetch -q "$url" pins:refs/heads/pins || true   # first: the bundle is thin (needs the previous tip); no branch on the first run
+#               git -C mirror fetch -q ../pins/pins.bundle pins:refs/heads/pins
+#               git -C mirror push -q "$url" "$(cat pins/pins.commit):refs/heads/pins"
 #
-#     A push that is not a fast-forward is refused (the first run creates the branch). When the tree did not change there is no new bundle; the job
+#     `publish` MUST list `needs: [sign, mirror]` (servers must never get an index whose commit is not on `pins` yet). A push that is not a fast-forward is refused (the first run creates the branch). When the tree did not change there is no new bundle; the job
 #     then has nothing to push and `pins.bundle` is absent from the artifact (skip with `if: hashFiles('pins/pins.bundle') != ''`).
+#
+# USER STEP in hobnix/community: a pull request runs its OWN copy of the caller workflow and of policy.toml, so .github/ and policy.toml need a
+# CODEOWNERS entry (maintainers only) with required review. `index diff` uses the base policy.toml; `assemble` on main uses the merged one.
+# Do not create that file in core.
 #
 # Every job carries timeout-minutes: a stalled fetch of a pinned source must not hold a runner for the default six hours (pkg_index.py also bounds each
 # git call by 300 s). The fetch asks the source for blobs up to the largest allowed file only (--filter=blob:limit, GIT_NO_LAZY_FETCH=1).
