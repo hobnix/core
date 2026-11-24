@@ -760,7 +760,7 @@ def main(argv):
             if "repo" not in have or n in seen:
                 continue
             for r_name, e, _, _ in cat.get(n, []):
-                if r_name == have["repo"] and semver_key(e["version"]) > semver_key(have["version"]):
+                if r_name == have["repo"] and not e.get("yanked") and semver_key(e["version"]) > semver_key(have["version"]):
                     w = waits_for(e)
                     if "--waits" in rest:     # newer releases this core cannot take yet: name, available, what they wait for
                         if w:
@@ -794,7 +794,7 @@ def main(argv):
                     except ValueError:
                         state = "update"
                 try:
-                    m = tomllib.loads(mod.git("show", "%s:%s/package.toml" % (tag, path), cwd=R.clone_dir(r_name)).decode("utf-8"))
+                    m = tomllib.loads(R.read_at(r_name, e, tag, "package.toml").decode("utf-8"))
                 except Exception:
                     m = {}
                 req = m.get("requires") if isinstance(m.get("requires"), list) else []

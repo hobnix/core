@@ -18,8 +18,15 @@ State, all under <state>/packages (root-owned on the server):
     previous/<name>@<commit>/   the one before, kept for a rollback until the next update
     installed.toml        version, repo, commit and tag of every applied package
     ../pkg-events/<name>.tsv   the events the package declares (written on install, removed with it)
+A repository that has an `index` address (docs/PLAN-registry.md) is read the other way: the signed index.json (and index.json.sig beside it) is
+fetched, verified against the allowed signers (namespace hobnix-index), checked for serial (never lower than the one kept) and kept in
+    index/<name>/index.json (+ .sig)   the last accepted index; the version of a package is the one in it, not a release tag
+The commit of an entry is fetched into repos/<name>/ and its tree is checked against the entry's `tree` hash before anything is installed.
+A repository without `index` keeps the signed release tags. The tag shown for an index package is `v<version>` (the shape stays).
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
+import atexit
+import importlib.util
 import io
 import json
 import os
@@ -29,7 +36,10 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import tomllib
+import urllib.request
+from datetime import timedelta
 
 TAG = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 BETA_TAG = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.([1-9]\d*)$")
@@ -51,6 +61,9 @@ def beta_allowed(state):
     except OSError:
         return False
 REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
+MAX_INDEX = 20 * 1024 * 1024
+GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 class Refused(Exception):
@@ -112,16 +125,22 @@ class Repos:
                 o.write("[[repo]]\nname = %s\nurl = %s\n" % (self.pkg.q(r["name"]), self.pkg.q(r["url"])))
                 if r.get("unsigned"):
                     o.write("unsigned = true\n")
+                if r.get("index"):
+                    o.write("index = %s\n" % self.pkg.q(r["index"]))
                 o.write("\n")
         os.replace(f + ".new", f)
 
-    def add(self, name, url, key=None, unsigned=False):
+    def add(self, name, url, key=None, unsigned=False, index=None):
         if not REPO_NAME.match(name):
             raise Refused("the repository name is a lowercase word")
         if name in self.all():
             raise Refused("a repository called %s exists already" % name)
         if not re.match(r"^(https://|ssh://|git@|file://|/|[A-Za-z]:[\/])", url):
             raise Refused("the address must be https://, ssh://, git@host:path or a local path")
+        if index and not re.match(r"^(https://|file://|/|[A-Za-z]:[\/])", index):
+            raise Refused("the index address must be https:// or a local path")
+        if index and unsigned:
+            raise Refused("a signed index needs --key <allowed_signers file>, not --unsigned")
         if bool(key) == bool(unsigned):
             raise Refused("give --key <allowed_signers file> (releases must be signed) or --unsigned")
         if key:
@@ -131,7 +150,7 @@ class Repos:
                 raise Refused("%s holds no SSH public key in allowed-signers format" % key)
             os.makedirs(os.path.join(self.state, "keys"), exist_ok=True)
             shutil.copyfile(key, os.path.join(self.state, "keys", name + ".signers"))
-        self.save_added(self.added() + [{"name": name, "url": url, "unsigned": unsigned}])
+        self.save_added(self.added() + [dict(name=name, url=url, unsigned=unsigned, **({"index": index} if index else {}))])
 
     def remove(self, name):
         rows = self.added()
@@ -139,6 +158,7 @@ class Repos:
             raise Refused("%s is not a repository that was added (the defaults stay)" % name)
         self.save_added([r for r in rows if r["name"] != name])
         shutil.rmtree(os.path.join(self.state, "repos", name), ignore_errors=True)
+        shutil.rmtree(os.path.join(self.state, "index", name), ignore_errors=True)
         try:
             os.remove(os.path.join(self.state, "keys", name + ".signers"))
         except OSError:
@@ -157,6 +177,139 @@ class Repos:
             git("clone", "--quiet", "--no-checkout", "--", r["url"], d)
             git("fetch", "--quiet", "--tags", "--force", "origin", cwd=d)
 
+    # ── the signed index (docs/PLAN-registry.md) ──
+    @property
+    def pkg_index(self):
+        if not hasattr(self, "_pi"):
+            spec = importlib.util.spec_from_file_location("pkg_index", os.path.join(self.pkg.HERE, "lib", "pkg_index.py"))
+            self._pi = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(self._pi)
+        return self._pi
+
+    def index_dir(self, name):
+        return os.path.join(self.state, "index", name)
+
+    @staticmethod
+    def load_from(src, dest):
+        """copy an https:// address or a local path to dest (at most MAX_INDEX bytes)"""
+        if src.startswith("https://"):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(src, headers={"User-Agent": "hs-pkg"}), timeout=30) as resp:
+                    data = resp.read(MAX_INDEX + 1)
+            except (OSError, ValueError) as e:
+                raise Refused("could not fetch %s: %s" % (src, e))
+        else:
+            try:
+                with open(src[7:] if src.startswith("file://") else src, "rb") as f:
+                    data = f.read(MAX_INDEX + 1)
+            except OSError as e:
+                raise Refused("could not read %s: %s" % (src, e))
+        if len(data) > MAX_INDEX:
+            raise Refused("%s is larger than %d MB" % (src, MAX_INDEX // 1048576))
+        with open(dest, "wb") as o:
+            o.write(data)
+
+    def signers_file(self, r):
+        sig = self.signers(r)
+        if sig is None or not os.path.isfile(sig):
+            raise Refused("%s: no trusted key (%s); the index cannot be verified" % (r["name"], os.path.basename(sig or "--key")))
+        return sig
+
+    def checked_index(self, r, path):
+        """the document of the index at `path` after its signature (first) and its schema; Refused with the reason"""
+        pi = self.pkg_index
+        try:
+            pi.verify_signature(path, self.signers_file(r))
+            with open(path, encoding="utf-8") as f:
+                doc = json.load(f)
+        except (pi.Problem, OSError, ValueError) as e:
+            raise Refused("%s: the index is refused: %s" % (r["name"], e))
+        bad = pi.validate(doc)
+        if bad:
+            raise Refused("%s: the index is refused: %s" % (r["name"], "; ".join(bad[:3])))
+        return doc
+
+    def fetch_index(self, r):
+        """fetch index.json and its signature, keep them only when signature, schema and serial are right; returns the document"""
+        pi = self.pkg_index
+        name = r["name"]
+        d = self.index_dir(name)
+        new = os.path.join(d, ".new")
+        self.rm_quiet(new)
+        os.makedirs(new)
+        try:
+            self.load_from(r["index"], os.path.join(new, "index.json"))
+            self.load_from(r["index"] + ".sig", os.path.join(new, "index.json.sig"))
+            doc = self.checked_index(r, os.path.join(new, "index.json"))
+            try:
+                with open(os.path.join(d, "index.json"), encoding="utf-8") as f:
+                    old = json.load(f)
+            except (OSError, ValueError):
+                old = None
+            why = pi.check_serial(doc, old) if old else None
+            if why:
+                raise Refused("%s: the index is refused: %s (no rollback to an older index)" % (name, why))
+            for n in ("index.json.sig", "index.json"):
+                os.replace(os.path.join(new, n), os.path.join(d, n))
+        finally:
+            self.rm_quiet(new)
+        self._idx = {}
+        if pi.now_utc() > pi.now_utc(doc["expires"]) + timedelta(days=GRACE_DAYS):
+            print("warning: the index of %s expired on %s" % (name, doc["expires"]), file=sys.stderr)
+        return doc
+
+    def read_index(self, r):
+        """the kept index of a repository, its signature checked again; Refused when there is none or it does not verify"""
+        memo = self.__dict__.setdefault("_idx", {})
+        if r["name"] not in memo:
+            path = os.path.join(self.index_dir(r["name"]), "index.json")
+            if not os.path.isfile(path):
+                raise Refused("%s: no index yet (hs pkg fetch)" % r["name"])
+            memo[r["name"]] = self.checked_index(r, path)
+        return memo[r["name"]]
+
+    def index_entries(self, r):
+        """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry"""
+        out = {}
+        for n, e in self.read_index(r)["packages"].items():
+            out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""))
+        return out
+
+    def ensure_commit(self, r, sha):
+        """the pinned commit is in the clone (fetched when it is not); Refused otherwise"""
+        d = self.clone_dir(r["name"])
+        have = lambda: os.path.isdir(d) and git_ok("cat-file", "-e", sha + "^{commit}", cwd=d)
+        if have():
+            return
+        self.fetch(r)
+        if not have():
+            git_ok("fetch", "--quiet", "origin", sha, cwd=d)
+        if not have():
+            raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
+
+    def verified_dir(self, r_name, entry):
+        """a temporary folder with the package at the pinned commit, tree hash checked (for reading files before an install)"""
+        memo = self.__dict__.setdefault("_vd", {})
+        key = (r_name, entry["commit"], entry["path"])
+        if key not in memo:
+            r = self.all()[r_name]
+            self.ensure_commit(r, entry["commit"])
+            tmp = tempfile.mkdtemp(prefix="hs-pkg-")
+            atexit.register(self.rm_quiet, tmp)
+            self.extract(r, entry["commit"], entry["path"], os.path.join(tmp, "pkg"), entry["tree"])
+            memo[key] = os.path.join(tmp, "pkg")
+        return memo[key]
+
+    def read_at(self, r_name, entry, ref, rel):
+        """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
+        if not entry.get("_index"):
+            return git("show", "%s:%s/%s" % (ref, entry["path"], rel), cwd=self.clone_dir(r_name))
+        try:
+            with open(os.path.join(self.verified_dir(r_name, entry), rel), "rb") as f:
+                return f.read()
+        except OSError:
+            raise Refused("%s: %s is not in the package" % (r_name, rel))
+
     def tags(self, r):
         d = self.clone_dir(r["name"])
         if not os.path.isdir(d):
@@ -168,6 +321,8 @@ class Repos:
     def verified_tag(self, r):
         """the newest release tag whose signature verifies, as (tag, commit); Refused with the reason when there is none"""
         d = self.clone_dir(r["name"])
+        if r.get("index"):      # the version comes from the index: "serial-N" stands for the release, the commit is per package
+            return "serial-%d" % self.read_index(r)["serial"], ""
         sig = self.signers(r)
         tags = self.tags(r)
         if not tags:
@@ -196,7 +351,10 @@ class Repos:
             if only and name != only:
                 continue
             try:
-                self.fetch(r)
+                if r.get("index"):
+                    self.fetch_index(r)
+                else:
+                    self.fetch(r)
                 t, c = self.verified_tag(r)
                 out.append((name, t, c, ""))
             except Refused as e:
@@ -208,6 +366,10 @@ class Repos:
         cat = {}
         for name, r in self.all().items():
             try:
+                if r.get("index"):
+                    for pname, entry in self.index_entries(r).items():
+                        cat.setdefault(pname, []).append((name, entry, "v" + str(entry["version"]), entry["commit"]))
+                    continue
                 t, c = self.verified_tag(r)
                 for pname, entry in self.index(r, t).items():
                     cat.setdefault(pname, []).append((name, entry, t, c))
@@ -226,9 +388,13 @@ class Repos:
             raise Refused("%s is in %s: name one with --repo (a package name is never shadowed silently)" % (name, ", ".join(c[0] for c in cat)))
         if any(m.get("name") == name and "/current/" not in p.replace("\\", "/") for p, m in self.pkg.manifests()):
             raise Refused("%s is part of this installation already (a built-in package is not replaced by a repository)" % name)
+        if cat[0][1].get("yanked"):
+            why = cat[0][1].get("yanked_reason")
+            raise Refused("%s %s was withdrawn (yanked)%s: it is not installed" % (name, cat[0][1].get("version"), ": " + why if why else ""))
         return cat[0]
 
-    def extract(self, r, tag, path, dest):
+    def extract(self, r, tag, path, dest, tree=None):
+        """the folder `path` of `tag` (a tag, or a commit for an index package) into dest; `tree` = the hash the signed index names: checked before use"""
         d = self.clone_dir(r["name"])
         if not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
             raise Refused("%s: the path %r in index.toml is not allowed" % (r["name"], path))
@@ -239,6 +405,15 @@ class Repos:
                 if not (m.isfile() or m.isdir()) or m.name.startswith("/") or ".." in m.name.split("/"):
                     raise Refused("%s: %s is a link or leaves the folder; refused" % (r["name"], m.name))
             tf.extractall(dest)
+        if tree:
+            try:
+                got = self.pkg_index.tree_hash(dest)
+            except self.pkg_index.Problem as e:
+                self.rm_quiet(dest)
+                raise Refused("%s: %s" % (r["name"], e))
+            if got != tree:
+                self.rm_quiet(dest)
+                raise Refused("%s: the files at the pinned commit do not match the tree hash in the signed index (%s, expected %s); nothing was installed" % (r["name"], got[:19], tree[:19]))
         for base, dirs, files in os.walk(dest):      # read-only: nothing a user can write is ever run as root
             for n in files:
                 p = os.path.join(base, n)
@@ -272,7 +447,11 @@ class Repos:
         tmp = os.path.join(self.state, "current", ".new-" + name)
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
-        self.extract(r, tag, entry["path"], tmp)
+        indexed = bool(entry.get("_index"))
+        ref = commit if indexed else tag
+        if indexed:
+            self.ensure_commit(r, commit)
+        self.extract(r, ref, entry["path"], tmp, entry["tree"] if indexed else None)
         with open(os.path.join(tmp, "package.toml"), "rb") as fh:
             m = tomllib.load(fh)
         if m.get("name") != name or m.get("version") != entry["version"]:
@@ -335,7 +514,7 @@ class Repos:
         os.rename(tmp, cur)
         if m.get("kind") == "capability":
             if vendored:
-                tree = git("rev-parse", "%s:%s" % (tag, entry["path"]), cwd=self.clone_dir(r_name)).decode().strip()
+                tree = git("rev-parse", "%s:%s" % (ref, entry["path"]), cwd=self.clone_dir(r_name)).decode().strip()
                 self.pkg_vendor.vendor(cur, self.nixos_dir(), dict(repo=r_name, tag=tag, commit=commit, tree=tree))
             else:
                 self.pkg_vendor.unvendor(name, self.nixos_dir())
@@ -458,7 +637,7 @@ class Repos:
                     text = f.read()
             else:
                 r_name, entry, _, _ = self.choose_installed(name, self.recorded(name)["repo"])
-                text = git("show", "%s:%s/commands.tsv" % (commit, entry["path"]), cwd=self.clone_dir(r_name)).decode("utf-8", "replace")
+                text = self.read_at(r_name, entry, commit, "commands.tsv").decode("utf-8", "replace")
         except (OSError, Refused, subprocess.SubprocessError):
             return []
         proto = self.pkg.pkg_protocol
@@ -467,7 +646,7 @@ class Repos:
     def new_permissions(self, name, commit):
         """The permissions the release `commit` declares: (declared list or None, the ones the installed copy lacks)."""
         r_name, entry, _, _ = self.choose_installed(name, self.recorded(name)["repo"])
-        raw = git("show", "%s:%s/package.toml" % (commit, entry["path"]), cwd=self.clone_dir(r_name))
+        raw = self.read_at(r_name, entry, commit, "package.toml")
         new = self.pkg.pkg_perms.of(tomllib.loads(raw.decode("utf-8", "replace")))
         return new, self.pkg.pkg_perms.added(self.installed_permissions(name), new)
 
@@ -522,15 +701,22 @@ class Repos:
         have = self.recorded(name)
         r_name, entry, tag, commit = self.choose_installed(name, have["repo"])
         self.check_entry(name, entry, r_name)
-        if commit == have.get("commit"):
+        if commit == have.get("commit") or entry.get("yanked"):
             return None
         ev, hv, ht = self.pkg.semver_key(entry["version"]), self.pkg.semver_key(have["version"]), have.get("tag", "")
-        # same version under a newer tag: a beta that became the release
-        if not (ev > hv or (ev == hv and (TAG.match(ht) or BETA_TAG.match(ht)) and tag_key(tag) > tag_key(ht))):
+        indexed = bool(entry.get("_index"))
+        # same version under a newer tag: a beta that became the release (release tags only; an index version is what the package says)
+        if not (ev > hv or (not indexed and ev == hv and (TAG.match(ht) or BETA_TAG.match(ht)) and tag_key(tag) > tag_key(ht))):
             return None
         d = self.clone_dir(r_name)
         # no recorded commit (see recorded): show the whole new package against the empty tree
-        old = have.get("commit") or "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+        old = have.get("commit") or EMPTY_TREE
+        if indexed:
+            self.ensure_commit(self.all()[r_name], commit)
+            try:
+                self.ensure_commit(self.all()[r_name], old)
+            except Refused:
+                old = EMPTY_TREE
         text = git("diff", "--stat", "-p", old, commit, "--", entry["path"], cwd=d).decode("utf-8", "replace")
         return old, tag, commit, text
 
@@ -546,7 +732,10 @@ class Repos:
                 if repo and n != repo:
                     continue
                 try:
-                    self.verified_tag(r)
+                    if r.get("index"):
+                        self.read_index(r)
+                    else:
+                        self.verified_tag(r)
                 except Refused as x:
                     if "no release tag" not in str(x):
                         why.append(str(x))
@@ -558,7 +747,7 @@ class Repos:
         if not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
             raise Refused("%s: the path %r in index.toml is not allowed" % (r_name, path))
         try:
-            m = tomllib.loads(git("show", "%s:%s/package.toml" % (commit, path), cwd=self.clone_dir(r_name)).decode("utf-8"))
+            m = tomllib.loads(self.read_at(r_name, entry, commit, "package.toml").decode("utf-8"))
         except tomllib.TOMLDecodeError as e:
             raise Refused("%s: package.toml is not valid (%s)" % (name, e))
         if m.get("name") != name or m.get("version") != entry.get("version"):
@@ -622,8 +811,8 @@ class Repos:
         card once <name> is on). Best effort: a package without slots, or one that cannot be read, adds no line."""
         try:
             try:
-                cap = tomllib.loads(git("show", "%s:%s/capability.toml" % (commit, entry["path"]), cwd=self.clone_dir(r_name)).decode("utf-8"))
-            except (subprocess.SubprocessError, tomllib.TOMLDecodeError):
+                cap = tomllib.loads(self.read_at(r_name, entry, commit, "capability.toml").decode("utf-8"))
+            except (subprocess.SubprocessError, Refused, tomllib.TOMLDecodeError):
                 cap = None
             hs_ext = self.pkg.pkg_slots._hs_ext()
             on = set(hs_ext.capabilities()) | hs_ext.applied_recipes()
@@ -641,7 +830,7 @@ class Repos:
         if file not in allowed:
             raise Refused("%s has no store file %s (the icon and the screenshots of its package.toml are served)" % (name, file))
         lim = 20 * 1024 if file == icon else 300 * 1024
-        data = git("show", "%s:%s/%s" % (commit, entry["path"], file), cwd=self.clone_dir(r_name))
+        data = self.read_at(r_name, entry, commit, file)
         if len(data) > lim:
             raise Refused("%s: %s is larger than %d bytes" % (name, file, lim))
         if file == icon:
@@ -672,7 +861,8 @@ def run(pkg, cmd, rest):
                     print("\t".join([n, r["url"], "unsigned" if r.get("unsigned") else "signed", "default" if r.get("default") else "added"]))
             elif sub == "add":
                 key = rest[rest.index("--key") + 1] if "--key" in rest else None
-                R.add(rest[1], rest[2], key=key, unsigned="--unsigned" in rest)
+                index = rest[rest.index("--index") + 1] if "--index" in rest else None
+                R.add(rest[1], rest[2], key=key, unsigned="--unsigned" in rest, index=index)
             elif sub == "remove":
                 R.remove(rest[1])
             else:
@@ -687,6 +877,8 @@ def run(pkg, cmd, rest):
             have = pkg.installed()
             for pname, rows in sorted(R.catalog().items()):
                 for r_name, e, tag, _ in rows:
+                    if e.get("yanked"):
+                        continue       # withdrawn: not offered
                     print("\t".join([r_name, pname, e.get("kind", "?"), str(e.get("version")), have.get(pname, {}).get("version", "-")]))
         elif cmd == "show":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
@@ -722,6 +914,10 @@ def run(pkg, cmd, rest):
                             state = "update" if pkg.semver_key(ver) > pkg.semver_key(inst) else "current"
                         except ValueError:
                             state = "update"
+                    if e.get("yanked"):
+                        if inst == "-":
+                            continue    # withdrawn: not offered; an installed copy just stays as it is
+                        state = "current"
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
                     seen.add(pname)

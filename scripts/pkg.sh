@@ -252,7 +252,7 @@ case "${1:-list}" in
         { thead 'Repository' 'Address' 'Signed' 'From'; py repo list; } | table ;;
       add)
         pkg_changed
-        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> | --unsigned) [--confirm-name <name>]"; exit 1; }
+        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> [--index <address>] | --unsigned) [--confirm-name <name>]"; exit 1; }
         shift 3; confirmed=""; extra=()
         while [ $# -gt 0 ]; do
           case "$1" in
