@@ -22,47 +22,47 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: token-change.sh plan|start <create <name>|revoke <name>> --by <user> --cap <role>" >&2; exit 1 ;; esac
 case "$action" in create|revoke) ;; *) refuse_code action.unknown "unknown action (create or revoke)" ;; esac
-[ $# -ge 3 ] || refuse "give the name of the token"
+[ $# -ge 3 ] || refuse_code token.name-missing "give the name of the token"
 shift 3
 role=viewer; days=90; by=""; cap=""; confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --role) role=${2:-}; shift 2 || refuse "an option needs a value" ;;
-    --days) days=${2:-}; shift 2 || refuse "an option needs a value" ;;
-    --by) by=${2:-}; shift 2 || refuse "an option needs a value" ;;
-    --cap) cap=${2:-}; shift 2 || refuse "an option needs a value" ;;
-    --confirm) confirm=${2:-}; shift 2 || refuse "an option needs a value" ;;
+    --role) role=${2:-}; shift 2 || refuse_code token.value-missing "an option needs a value" ;;
+    --days) days=${2:-}; shift 2 || refuse_code token.value-missing "an option needs a value" ;;
+    --by) by=${2:-}; shift 2 || refuse_code token.value-missing "an option needs a value" ;;
+    --cap) cap=${2:-}; shift 2 || refuse_code token.value-missing "an option needs a value" ;;
+    --confirm) confirm=${2:-}; shift 2 || refuse_code token.value-missing "an option needs a value" ;;
     *) refuse_code option.unknown "unknown option" ;;
   esac
 done
-[ -n "$by" ] && [ -n "$cap" ] || refuse "who asks is missing"
-case "$cap" in viewer|app-manager|admin) ;; *) refuse "unknown role of the person who asks" ;; esac
-case "$days" in ''|*[!0-9]*) refuse "the days are a number (1 to 365)" ;; esac
+[ -n "$by" ] && [ -n "$cap" ] || refuse_code token.caller-missing "who asks is missing"
+case "$cap" in viewer|app-manager|admin) ;; *) refuse_code token.role-unknown "unknown role of the person who asks" ;; esac
+case "$days" in ''|*[!0-9]*) refuse_code token.days-invalid "the days are a number (1 to 365)" ;; esac
 store=("$py" "$here/token_store.py")
 adm=$(admin_user)
 realm=domain; [ "$by" != "$adm" ] || realm=local
 
 case "$action" in
   create)
-    if ! msg=$("${store[@]}" validate --name "$name" --owner "$by" --realm "$realm" --role "$role" --days "$days" --cap "$cap" 2>&1); then refuse "${msg:-the token cannot be created}"; fi
+    if ! msg=$("${store[@]}" validate --name "$name" --owner "$by" --realm "$realm" --role "$role" --days "$days" --cap "$cap" 2>&1); then refuse_code token.invalid "${msg:-the token cannot be created}"; fi
     danger="" ;;
   revoke)
-    line=$("${store[@]}" find "$name" 2>/dev/null) || refuse "there is no token with this name"
+    line=$("${store[@]}" find "$name" 2>/dev/null) || refuse_code token.not-found "there is no token with this name"
     owner=$(cut -f3 <<<"$line")
-    { [ "$cap" = admin ] || [ "$owner" = "$by" ]; } || refuse "there is no token with this name"
+    { [ "$cap" = admin ] || [ "$owner" = "$by" ]; } || refuse_code token.not-found "there is no token with this name"
     danger="Every program that uses the token '$name' stops working at once. This cannot be undone: create a new token for it." ;;
 esac
 
 if [ "$verb" = start ]; then
   case "$action" in
     create)
-      out=$(HS_CALLER=${HS_CALLER:-ui} "${store[@]}" create --name "$name" --owner "$by" --realm "$realm" --role "$role" --days "$days" --cap "$cap" 2>&1) || refuse "${out:-the token cannot be created}"
+      out=$(HS_CALLER=${HS_CALLER:-ui} "${store[@]}" create --name "$name" --owner "$by" --realm "$realm" --role "$role" --days "$days" --cap "$cap" 2>&1) || refuse_code token.invalid "${out:-the token cannot be created}"
       IFS=$'\t' read -r _ token tid exp <<<"$out"
       printf 'status\tdone\nsecret\ttoken\t%s\nid\t%s\nnote\tCopy the token now: it is shown only once and only its hash is kept. It ends on %s.\n' "$token" "$tid" "$(date -d "@$exp" +%F 2>/dev/null || echo "$exp")" ;;
     revoke)
       [ "$confirm" = "$name" ] || refuse_code confirm.missing "type the name of the token to confirm: $name"
-      if [ "$cap" = admin ]; then "${store[@]}" revoke "$name" >/dev/null || refuse "there is no token with this name"
-      else "${store[@]}" revoke "$name" --owner "$by" >/dev/null || refuse "there is no token with this name"; fi
+      if [ "$cap" = admin ]; then "${store[@]}" revoke "$name" >/dev/null || refuse_code token.not-found "there is no token with this name"
+      else "${store[@]}" revoke "$name" --owner "$by" >/dev/null || refuse_code token.not-found "there is no token with this name"; fi
       printf 'status\tdone\nnote\tThe token %s no longer works.\n' "$name" ;;
   esac
   exit 0

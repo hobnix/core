@@ -360,6 +360,486 @@ A service or confined command declares fs.read of the state of the server or of 
 - Text: This extension wants to read data that is not its own; its service does not start.
 - Fix: none
 
+### user.name-missing
+
+The user or group name was not given.
+
+- Layer: script
+- Text: Give the name of the user or group.
+- Fix: none
+
+### user.option-misplaced
+
+An option was given to an action it does not belong to.
+
+- Layer: script
+- Text: That option does not belong to this action.
+- Fix: none
+
+### user.nothing-to-change
+
+An edit names no field to change.
+
+- Layer: script
+- Text: Nothing was changed: give a field to change.
+- Fix: none
+
+### user.group-forbidden
+
+Domain Users was chosen as a group; every user is in it already.
+
+- Layer: script
+- Text: Every user is in Domain Users; it cannot be chosen.
+- Fix: none
+
+### user.group-unknown
+
+A group that does not exist was named.
+
+- Layer: script
+- Text: No such group was found.
+- Fix: none
+
+### user.access-invalid
+
+A share access is not written as share=read, write or full.
+
+- Layer: script
+- Text: The access is share=read, write or full.
+- Fix: none
+
+### user.share-unknown
+
+A share that does not exist was named.
+
+- Layer: script
+- Text: No such share was found.
+- Fix: none
+
+### user.password-missing
+
+The password was not passed on standard input.
+
+- Layer: script
+- Text: No password was given.
+- Fix: none
+
+### admin.option-misplaced
+
+An option was given to an action it does not belong to.
+
+- Layer: script
+- Text: That option does not belong to this action.
+- Fix: none
+
+### admin.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### admin.no-push-address
+
+The test push message needs an address that is not set.
+
+- Layer: script
+- Text: There is no push address yet.
+- Fix: none
+
+### admin.test-failed
+
+The test message could not be sent.
+
+- Layer: script
+- Text: The test message could not be sent.
+- Fix: none
+
+### admin.pin-failed
+
+The MAC addresses could not be pinned.
+
+- Layer: script
+- Text: The MAC addresses could not be pinned.
+- Fix: none
+
+### admin.not-snapraid
+
+The upload cache exists only on the snapraid layout.
+
+- Layer: script
+- Text: There is no upload cache on this layout.
+- Fix: none
+
+### admin.no-cache
+
+The upload cache is not mounted.
+
+- Layer: script
+- Text: There is no upload cache on this server.
+- Fix: none
+
+### admin.seconds-invalid
+
+The seconds of the fan cleaning are not a number from 3 to 30.
+
+- Layer: script
+- Text: The seconds are a number from 3 to 30.
+- Fix: none
+
+### admin.no-fan-controller
+
+No fan controller was found on this machine.
+
+- Layer: script
+- Text: No fan controller was found.
+- Fix: none
+
+### dc.option-misplaced
+
+An option was given to an action it does not belong to.
+
+- Layer: script
+- Text: That option does not belong to this action.
+- Fix: none
+
+### dc.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### dc.name-invalid
+
+The name of the domain controller is not an instance name.
+
+- Layer: script
+- Text: That is not an instance name.
+- Fix: none
+
+### dc.ca-exists
+
+The certificate authority exists already (a new one would make every certificate invalid).
+
+- Layer: script
+- Text: The CA exists already.
+- Fix: none
+
+### dc.ca-failed
+
+The certificate authority could not be made.
+
+- Layer: script
+- Text: The CA could not be made.
+- Fix: none
+
+### dc.no-ca
+
+There is no certificate authority yet.
+
+- Layer: script
+- Text: There is no CA yet: make it first.
+- Fix: none
+
+### dc.not-local
+
+The domain controller does not run on this server.
+
+- Layer: script
+- Text: That controller does not run on this server.
+- Fix: none
+
+### token.name-missing
+
+The name of the token was not given.
+
+- Layer: script
+- Text: Give the name of the token.
+- Fix: none
+
+### token.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### token.caller-missing
+
+Who asks (the person and the role) was not given.
+
+- Layer: script
+- Text: Who asks is missing.
+- Fix: none
+
+### token.role-unknown
+
+The role of the person who asks is not one that exists.
+
+- Layer: script
+- Text: That role is not known.
+- Fix: none
+
+### token.days-invalid
+
+The days of a token are not a number from 1 to 365.
+
+- Layer: script
+- Text: The days are a number from 1 to 365.
+- Fix: none
+
+### token.invalid
+
+The token cannot be created with these values.
+
+- Layer: script
+- Text: The token cannot be created.
+- Fix: none
+
+### token.not-found
+
+There is no token with this name, or it belongs to someone else.
+
+- Layer: script
+- Text: There is no token with this name.
+- Fix: none
+
+### ssh.key-missing
+
+The public key or the id of the key was not given.
+
+- Layer: script
+- Text: Give the public key or the id of the key.
+- Fix: none
+
+### ssh.too-long
+
+The key line is longer than 800 characters.
+
+- Layer: script
+- Text: That is too long.
+- Fix: none
+
+### ssh.not-one-line
+
+The key has more than one line or has control characters.
+
+- Layer: script
+- Text: It must be one line without control characters.
+- Fix: none
+
+### ssh.not-public-key
+
+The text is not a public key line.
+
+- Layer: script
+- Text: That is not a public key line.
+- Fix: none
+
+### ssh.key-invalid
+
+The public key did not pass the check of ssh-keygen.
+
+- Layer: script
+- Text: That is not a valid public key.
+- Fix: none
+
+### ssh.key-listed
+
+The key is in the list already.
+
+- Layer: script
+- Text: This key is in the list already.
+- Fix: none
+
+### ssh.key-unknown
+
+There is no key with this id.
+
+- Layer: script
+- Text: There is no key with this id.
+- Fix: none
+
+### ssh.last-key
+
+The key is the last one; without a key nobody could log in over SSH.
+
+- Layer: script
+- Text: That is the last key.
+- Fix: none
+
+### ssh.session-key
+
+The key is the one the current SSH session used.
+
+- Layer: script
+- Text: That key is in use by your session.
+- Fix: none
+
+### ssh.failed
+
+The key script refused the change.
+
+- Layer: script
+- Text: The key could not be changed.
+- Fix: none
+
+### peer.invalid
+
+A value of the peer (name, host, share, path ...) has characters that do not belong in it.
+
+- Layer: script
+- Text: That value is not valid.
+- Fix: none
+
+### peer.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### peer.name-missing
+
+The name for the other server was not given.
+
+- Layer: script
+- Text: Give the name of the other server.
+- Fix: none
+
+### peer.args-missing
+
+The host and the share were not both given.
+
+- Layer: script
+- Text: Give the host and the share.
+- Fix: none
+
+### peer.user-missing
+
+The login of the mount was not given.
+
+- Layer: script
+- Text: Give the login.
+- Fix: none
+
+### peer.offered
+
+The share is offered to this peer already.
+
+- Layer: script
+- Text: That share is offered already.
+- Fix: none
+
+### peer.mounted
+
+The share of this peer is set up already.
+
+- Layer: script
+- Text: That share is set up already.
+- Fix: none
+
+### peer.not-mounted
+
+Nothing is mounted from this peer.
+
+- Layer: script
+- Text: Nothing is mounted from that peer.
+- Fix: none
+
+### peer.not-offered
+
+Nothing is shared with this peer.
+
+- Layer: script
+- Text: Nothing is shared with that peer.
+- Fix: none
+
+### peer.failed
+
+The peer script refused the step.
+
+- Layer: script
+- Text: The step was refused.
+- Fix: none
+
+### node.name-missing
+
+The name of the node was not given.
+
+- Layer: script
+- Text: Give the name of the node.
+- Fix: none
+
+### node.name-invalid
+
+The name is not a node name (lower case letters, digits and dashes, starting with a letter).
+
+- Layer: script
+- Text: That is not a node name.
+- Fix: none
+
+### node.host-invalid
+
+The host is not a host name or an address.
+
+- Layer: script
+- Text: That is not a host name or address.
+- Fix: none
+
+### node.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### node.kind-invalid
+
+The kind of the node is not peer, vps or edge.
+
+- Layer: script
+- Text: The kind is peer, vps or edge.
+- Fix: none
+
+### node.port-invalid
+
+The port is not a number from 1 to 65535.
+
+- Layer: script
+- Text: That is not a port.
+- Fix: none
+
+### node.exists
+
+A node with this name exists already.
+
+- Layer: script
+- Text: There is already a node with this name.
+- Fix: none
+
+### node.unknown
+
+No node has this name.
+
+- Layer: script
+- Text: There is no node with this name.
+- Fix: none
+
+### node.from-config
+
+The node comes from a setting and goes away with that setting.
+
+- Layer: script
+- Text: That node comes from a setting.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

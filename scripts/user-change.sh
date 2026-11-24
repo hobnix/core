@@ -109,26 +109,26 @@ while [ $# -gt 0 ]; do
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ "$action" = flush ] || [ -n "$name" ] || refuse "no name"
+[ "$action" = flush ] || [ -n "$name" ] || refuse_code user.name-missing "no name"
 [[ "$name" != *$'\t'* && "$name" != *$'\n'* ]] || refuse_code name.invalid "invalid name"
 
-[ ${#groups[@]} -eq 0 ] || [ "$action" = user-add ] || refuse "--group belongs to user-add"
-[ ${#grant[@]} -eq 0 ] || [ "$action" = group-add ] || refuse "--access belongs to group-add"
-[ -z "$mail$descr" ] || [[ "$action" == *-edit ]] || refuse "--mail and --description belong to user-edit and group-edit"
-[ "$action" != group-edit ] || [ -z "$full$mail" ] || refuse "a group has only a description"
-[[ "$action" != *-edit ]] || [ ${#edits[@]} -gt 0 ] || refuse "nothing to change"
+[ ${#groups[@]} -eq 0 ] || [ "$action" = user-add ] || refuse_code user.option-misplaced "--group belongs to user-add"
+[ ${#grant[@]} -eq 0 ] || [ "$action" = group-add ] || refuse_code user.option-misplaced "--access belongs to group-add"
+[ -z "$mail$descr" ] || [[ "$action" == *-edit ]] || refuse_code user.option-misplaced "--mail and --description belong to user-edit and group-edit"
+[ "$action" != group-edit ] || [ -z "$full$mail" ] || refuse_code user.option-misplaced "a group has only a description"
+[[ "$action" != *-edit ]] || [ ${#edits[@]} -gt 0 ] || refuse_code user.nothing-to-change "nothing to change"
 if [ ${#groups[@]} -gt 0 ]; then
   known=$(bash "$mu" --groups 2>/dev/null | cut -f1 || true)
   for g in "${groups[@]}"; do
-    $local_be || ! has_line "$g" "domain users" || refuse "Every user is in Domain Users; that can't be chosen here."
-    has_line "$known" "$g" || refuse "No group called '$g'."
+    $local_be || ! has_line "$g" "domain users" || refuse_code user.group-forbidden "Every user is in Domain Users; that can't be chosen here."
+    has_line "$known" "$g" || refuse_code user.group-unknown "No group called '$g'."
   done
 fi
 if [ ${#grant[@]} -gt 0 ]; then
   known=$(bash "$mshares" --list 2>/dev/null | cut -f1 || true)
   for a in "${grant[@]}"; do
-    [[ "$a" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*=(read|write|full)$ ]] || refuse "expected <share>=read|write|full, got '$a'"
-    has_line "$known" "${a%%=*}" || refuse "No share called '${a%%=*}'."
+    [[ "$a" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*=(read|write|full)$ ]] || refuse_code user.access-invalid "expected <share>=read|write|full, got '$a'"
+    has_line "$known" "${a%%=*}" || refuse_code user.share-unknown "No share called '${a%%=*}'."
   done
 fi
 if [ "$action" = membership ] && [ ${#changes[@]} -eq 0 ]; then
@@ -211,7 +211,7 @@ if [ "$verb" = start ]; then
   case "$action" in
     password|user-add)
       IFS= read -r pass || pass=""
-      [ -n "$pass" ] || refuse "no password on standard input"
+      [ -n "$pass" ] || refuse_code user.password-missing "no password on standard input"
       run_dir=${HS_RUN_DIR:-/run/hs}
       mkdir -p "$run_dir"; chmod 700 "$run_dir"
       passfile=$(mktemp "$run_dir/user-pass.XXXXXX")

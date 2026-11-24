@@ -43,11 +43,13 @@ has "^dc${T}dc2" && has "^cert${T}ok" || has "^cert${T}unreadable" && pass "the 
 
 echo "-- make the CA"
 run plan renew;  check_eq "renew without a CA is refused" 1 "$rc"; has "There is no CA" && pass "says why" || fail "$out"
+check_match "renew without a CA is refused with dc.no-ca" $'code\tdc.no-ca' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF dc.no-ca && pass "dc.no-ca is in the catalogue" || fail "dc.no-ca is not in the catalogue"
 run plan ca;     check_eq "plan ca: exit 0" 0 "$rc"
 has "^confirm_name" && fail "making the CA is not red" || pass "no typed word"
 run start ca;    check_eq "start ca: exit 0" 0 "$rc"; has "^status${T}done" && pass "done" || fail "$out"
 check "the CA certificate exists" test -s "$HS_STATE_DIR/dc-ca.pem"
 run plan ca;     check_eq "a second CA is refused" 1 "$rc"; has "exists already" && pass "says it exists" || fail "$out"
+check_match "a second CA is refused with dc.ca-exists" $'code\tdc.ca-exists' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF dc.ca-exists && pass "dc.ca-exists is in the catalogue" || fail "dc.ca-exists is not in the catalogue"
 
 echo "-- renew"
 run plan renew;  check_eq "plan renew: exit 0" 0 "$rc"
