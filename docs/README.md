@@ -32,6 +32,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | --- | --- |
 | [dev-environment](dev-environment.md) | Running tests, the WSL and VM tiers, the agent workflow |
 | [GUIDE-TEMPLATE](GUIDE-TEMPLATE.md) | How a guide is written: shape, rules, the glossary |
+| [CODE-PRACTICES](CODE-PRACTICES.md) | Code rules for the core and every new package |
 | [PLAN-modular-core](PLAN-modular-core.md) | The option schema, capabilities and roles |
 | [extensions-sdk](extensions-sdk.md) | Write an extension command in shell, Python, Go or Rust: the protocol, the helpers, the examples |
 | [PLAN-extensions](PLAN-extensions.md) | Extension packages: commands and web pages |
@@ -63,6 +64,8 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-app-lifecycle](PLAN-app-lifecycle.md) | Design for milestone 0.6: one lifecycle for apps and packages, one Install job, app contract, store fields, update policy |
 | [PLAN-storage-nas](PLAN-storage-nas.md) | Design for milestone 0.7: file manager write and trash, spin-down, Unraid takeover, partial container backup, off-site copy, further capacity levels |
 | [PLAN-extensions-access](PLAN-extensions-access.md) | Design for milestone 0.8: extension protocol and SDK, enforced permissions, package events, roles and API tokens, two-factor login and single sign-on |
+| [PLAN-package-sdk](PLAN-package-sdk.md) | One SDK for packages: command protocol, permissions, lifecycle (plan, nothing built) |
+| [PLAN-rust](PLAN-rust.md) | Rust as the main language behind the `hs sys` contract, Python retired (plan, nothing built) |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
