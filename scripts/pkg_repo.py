@@ -28,6 +28,7 @@ A repository without `index` keeps the signed release tags. The tag shown for an
 The two default repositories come from config/package-repos.toml; their allowed signers from config/trusted-keys/<name>.allowed_signers.
 """
 import atexit
+import contextlib
 import hashlib
 import importlib.util
 import io
@@ -36,6 +37,7 @@ import os
 import re
 import shutil
 import stat
+import signal
 import subprocess
 import sys
 import tarfile
@@ -72,6 +74,8 @@ def beta_allowed(state):
 REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 MAX_INDEX = 20 * 1024 * 1024
 CACHE_KEEP_SECONDS = 600   # prune leaves a cached folder alone that was created or read this recently
+GIT_TIMEOUT = 180          # seconds for one git call (as HS_INSTALL_FETCH_TIMEOUT in scripts/lib/checkout.sh)
+LOCK_WAIT = 240           # seconds a fetch waits for another one (a git call under the lock ends after GIT_TIMEOUT)
 GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -84,15 +88,43 @@ class Refused(Exception):
         self.code = code
 
 
+def git_run(args, cwd=None, input=None):
+    """run git without a terminal prompt (like scripts/lib/checkout.sh) and with a time limit (HS_PKG_GIT_TIMEOUT, default 180 s): a stalled remote
+    is killed with its helpers, so a lock held around it is always released. -> CompletedProcess; Refused on a timeout"""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="true")
+    try:
+        limit = float(os.environ.get("HS_PKG_GIT_TIMEOUT") or GIT_TIMEOUT)
+    except ValueError:
+        limit = GIT_TIMEOUT
+    p = subprocess.Popen(["git", *args], cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         start_new_session=hasattr(os, "killpg"))
+    try:
+        out, err = p.communicate(input, timeout=limit)
+    except subprocess.TimeoutExpired:
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(p.pid, signal.SIGKILL)
+            else:
+                p.kill()
+        except OSError:
+            p.kill()
+        p.communicate()
+        raise Refused("git %s timed out after %d s (the remote does not answer)" % (args[0], limit))
+    return subprocess.CompletedProcess(p.args, p.returncode, out, err)
+
+
 def git(*args, cwd=None, input=None):
-    r = subprocess.run(["git", *args], cwd=cwd, input=input, capture_output=True)
+    r = git_run(args, cwd=cwd, input=input)
     if r.returncode != 0:
         raise Refused("git %s: %s" % (args[0], r.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or "failed"))
     return r.stdout
 
 
 def git_ok(*args, cwd=None):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True).returncode == 0
+    try:
+        return git_run(args, cwd=cwd).returncode == 0
+    except Refused:
+        return False
 
 
 class Repos:
@@ -286,26 +318,82 @@ class Repos:
             os.fsync(o.fileno())
         os.replace(ff + ".new", ff)
 
+    @contextlib.contextmanager
     def locked(self, name):
-        """an exclusive lock on one file per repository for the fetch; a second fetch waits (flock is released when the process ends)"""
+        """the one lock of a repository (index/<name>/.lock) around everything that may write the index or run git clone/fetch. Waits at most
+        HS_PKG_LOCK_WAIT seconds, then Refused "another pkg fetch is running"; flock is released when the process ends. Re-entrant in this process."""
+        held = self.__dict__.setdefault("_held", set())
+        if name in held:
+            yield
+            return
         os.makedirs(self.index_dir(name), exist_ok=True)
         f = open(os.path.join(self.index_dir(name), ".lock"), "w")
-        if fcntl:
-            fcntl.flock(f, fcntl.LOCK_EX)
-        return f
+        try:
+            if fcntl:
+                try:
+                    wait = float(os.environ.get("HS_PKG_LOCK_WAIT") or LOCK_WAIT)
+                except ValueError:
+                    wait = LOCK_WAIT
+                end = time.monotonic() + wait
+                while True:
+                    try:
+                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except OSError:
+                        if time.monotonic() >= end:
+                            raise Refused("%s: another pkg fetch is running (waited %d s); try again in a minute" % (name, wait))
+                        time.sleep(0.2)
+            held.add(name)
+            try:
+                yield
+            finally:
+                held.discard(name)
+        finally:
+            f.close()
 
     def fetch_index(self, r):
         """fetch index.json and its signature, keep them only when signature, schema and serial are right; returns the document"""
         name = r["name"]
-        lock = self.locked(name)
-        try:
+        with self.locked(name):
             doc = self.fetch_index_locked(r)
-            self.fetch(r)       # the clone and the commits the index names, so reads of the web never run git clone or fetch (same lock: no "cannot lock ref")
-            for e in doc["packages"].values():
-                self.ensure_commit(r, e["commit"])      # a commit no branch or tag reaches any more is fetched by its id
+            self.fetch(r)       # once per run: the clone and the commits the index names, so reads of the web never run git clone or fetch
+            d = self.clone_dir(name)
+            missing = {}
+            for pname, e in doc["packages"].items():
+                sha = e["commit"]
+                if git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
+                    continue
+                git_ok("fetch", "--quiet", "origin", sha, cwd=d)      # a commit no branch or tag reaches any more is fetched by its id
+                if not git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
+                    missing[pname] = [sha, "the commit %s cannot be fetched from %s" % (sha[:12], r["url"])]
+            self.write_unfetchable(name, missing)
+            for pname, (sha, why) in sorted(missing.items()):
+                print("warning: %s: %s is not available: %s" % (name, pname, why), file=sys.stderr)
             return doc
-        finally:
-            lock.close()
+
+    def unfetchable_file(self, name):
+        return os.path.join(self.index_dir(name), "unfetchable.json")
+
+    def unfetchable(self, name):
+        """{package: [commit, reason]} of the packages whose pinned commit the last fetch could not get (they are not available)"""
+        try:
+            with open(self.unfetchable_file(name), encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def write_unfetchable(self, name, missing):
+        f = self.unfetchable_file(name)
+        try:
+            if not missing:
+                self.rm_quiet(f)
+                return
+            with open(f + ".new", "w", encoding="utf-8") as o:
+                json.dump(missing, o)
+            os.replace(f + ".new", f)
+        except OSError:
+            pass
 
     def fetch_index_locked(self, r):
         pi = self.pkg_index
@@ -328,7 +416,7 @@ class Repos:
             if floor is False:      # fail closed: without a readable floor and a kept pair an older signed index could not be told apart
                 if old is None:
                     raise Refused("%s: the serial floor file %s is damaged and no kept index remains to check against; nothing was changed. "
-                                  "Delete that file by hand to accept the current index as the first one, or run `hs pkg repo remove %s` and add the repository again" % (name, self.floor_file(name), name))
+                                  "Delete that file by hand (rm %s) to accept the current index as the first one; this works for the default repositories too" % (name, self.floor_file(name), self.floor_file(name)))
                 floor = None
             if not why and floor:       # the floor outlives the pair: with live and .old gone an older signed index is still refused
                 with open(os.path.join(new, "index.json"), "rb") as f:
@@ -339,7 +427,10 @@ class Repos:
                     why = "serial %d was already used for a different index" % doc["serial"]
             if why:
                 raise Refused("%s: the index is refused: %s (no rollback to an older index)" % (name, why))
-            self.write_floor(name, doc, os.path.join(new, "index.json"))
+            try:
+                self.write_floor(name, doc, os.path.join(new, "index.json"))
+            except OSError as e:
+                raise Refused("%s: the serial floor cannot be written (%s); nothing was changed" % (name, e))
             live, prev = os.path.join(d, "live"), os.path.join(d, ".old")
             if os.path.isdir(live):
                 self.rm_quiet(prev)
@@ -372,7 +463,10 @@ class Repos:
     def index_entries(self, r):
         """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry"""
         out = {}
+        bad = self.unfetchable(r["name"])
         for n, e in self.read_index(r)["packages"].items():
+            if n in bad and bad[n][0] == e["commit"]:
+                continue        # its commit could not be fetched: not available (choose says why)
             out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""))
         return out
 
@@ -384,11 +478,14 @@ class Repos:
             return
         if not fetch:
             raise Refused("%s: the commit %s is not in the local clone yet (hs pkg fetch)" % (r["name"], sha[:12]))
-        self.fetch(r)
-        if not have():
-            git_ok("fetch", "--quiet", "origin", sha, cwd=d)
-        if not have():
-            raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
+        with self.locked(r["name"]):        # no second git fetch beside a running pkg fetch ("cannot lock ref")
+            if have():
+                return
+            self.fetch(r)
+            if not have():
+                git_ok("fetch", "--quiet", "origin", sha, cwd=d)
+            if not have():
+                raise Refused("%s: the commit %s of the index is not in the repository" % (r["name"], sha[:12]))
 
     def verified_dir(self, r_name, entry):
         """a temporary folder with the package at the pinned commit, tree hash checked (for reading files before an install)"""
@@ -548,6 +645,9 @@ class Repos:
         if repo:
             cat = [c for c in cat if c[0] == repo]
         if not cat:
+            for rn in self.all():
+                if (not repo or rn == repo) and name in self.unfetchable(rn):
+                    raise Refused("%s is not available: %s" % (name, self.unfetchable(rn)[name][1]))
             raise Refused("no package %s in the repositories (hs pkg fetch updates them)" % name)
         if len(cat) > 1:
             raise Refused("%s is in %s: name one with --repo (a package name is never shadowed silently)" % (name, ", ".join(c[0] for c in cat)))
@@ -883,9 +983,9 @@ class Repos:
         # no recorded commit (see recorded): show the whole new package against the empty tree
         old = have.get("commit") or EMPTY_TREE
         if indexed:
-            self.ensure_commit(self.all()[r_name], commit)
+            self.ensure_commit(self.all()[r_name], commit, fetch=False)     # the plan never runs git fetch: hs pkg fetch does
             try:
-                self.ensure_commit(self.all()[r_name], old)
+                self.ensure_commit(self.all()[r_name], old, fetch=False)
             except Refused:
                 old = EMPTY_TREE
         text = git("diff", "--stat", "-p", old, commit, "--", entry["path"], cwd=d).decode("utf-8", "replace")

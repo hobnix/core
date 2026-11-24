@@ -122,7 +122,7 @@ echo "-- the plan is bound to the commit and tree"
 mkshots() {   # mkshots <text>: a second package whose run.sh says <text> (same version), committed, indexed and signed
   mkdir -p "$R/recipes/shots"
   printf 'name = "shots"
-version = "1.0.0"
+version = "%s"
 kind = "recipe"
 title = "Shots"
 requires_core = ">=1"
@@ -132,7 +132,7 @@ uses = []
 input = "none"
 script = "run.sh"
 screenshots = ["../../../x.png"]
-' > "$R/recipes/shots/package.toml"
+' "${3:-1.0.0}" > "$R/recipes/shots/package.toml"
   printf '#!/usr/bin/env bash
 # kind: generic
 # needs: -
@@ -239,13 +239,77 @@ echo "-- a damaged floor file fails closed"
 IDXD=$HS_STATE_DIR/packages/index/hub
 printf 'garbage' > "$IDXD/serial"
 rm -rf "$IDXD/live" "$IDXD/.old"
-check_out "refused with the way out" "damaged.*hs pkg repo remove" $PKG fetch hub
+check_out "refused with the way out" "damaged.*rm " $PKG fetch hub
 check "nothing was written" test ! -e "$IDXD/live"
 rm -f "$IDXD/serial"
 check_out "a missing floor with no copy is the first fetch" "^hub${tab}serial-6.*ok" $PKG fetch hub
 printf 'garbage' > "$IDXD/serial"
 check_out "a damaged floor with a kept index is repaired" "^hub${tab}serial-6.*ok" $PKG fetch hub
 check "the floor is rewritten" grep -qE '^6 [0-9a-f]{64}$' "$IDXD/serial"
+rm -f "$IDXD/serial"; mkdir "$IDXD/serial"
+check_out "a floor that cannot be written is a clean refusal" "serial floor cannot be written" $PKG fetch hub
+check "without a traceback" bash -c "! $PKG fetch hub 2>&1 | grep -q Traceback"
+rmdir "$IDXD/serial"
+export HS_STATE_DIR=$S1
+
+echo "-- a stalled git remote does not hold the lock"
+STUB=$WORK/stub; mkdir -p "$STUB"; REALGIT=$(command -v git)
+cat > "$STUB/git" <<'STUBEOF'
+#!/bin/sh
+case "$1" in fetch|clone)
+  [ -n "$STUB_HANG" ] && exec sleep 30
+  echo "$*" >> "${STUB_LOG:-/dev/null}";;
+esac
+exec REALGIT_PATH "$@"
+STUBEOF
+sed -i "s#REALGIT_PATH#$REALGIT#" "$STUB/git"; chmod +x "$STUB/git"
+export HS_STATE_DIR=$WORK/state4; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+check_out "a hanging git is stopped and named" "^hub${tab}-${tab}-${tab}.*timed out" env PATH="$STUB:$PATH" STUB_HANG=1 HS_PKG_GIT_TIMEOUT=2 timeout 60 $PKG fetch hub
+check_out "the next fetch is not blocked" "^hub${tab}serial-6${tab}-${tab}ok" timeout 60 $PKG fetch hub
+python3 - "$HS_STATE_DIR/packages/index/hub/.lock" "$WORK/release2" <<'PYEOF' &
+import fcntl, os, sys, time
+f = open(sys.argv[1], "w"); fcntl.flock(f, fcntl.LOCK_EX)
+open(sys.argv[2] + ".held", "w").close()
+for _ in range(100):
+    if os.path.exists(sys.argv[2]): break
+    time.sleep(0.1)
+PYEOF
+HOLDER=$!
+for _ in $(seq 50); do [ -e "$WORK/release2.held" ] && break; sleep 0.1; done
+check_out "waiting for the lock is bounded and says why" "another pkg fetch is running" env HS_PKG_LOCK_WAIT=1 timeout 30 $PKG fetch hub
+touch "$WORK/release2"; wait $HOLDER
+
+echo "-- the plan of an update never runs git fetch"
+export HS_STATE_DIR=$WORK/state6; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+$PKG fetch hub >/dev/null; $PKG install shots >/dev/null
+mkshots three 7 1.1.0; $PKG fetch hub >/dev/null
+rm -rf "$HS_STATE_DIR/packages/repos/hub" "$HS_STATE_DIR/packages/index-cache"
+check_out "a missing commit says hs pkg fetch (no hang, no fetch)" "hs pkg fetch" env PATH="$STUB:$PATH" STUB_HANG=1 timeout 30 $PKG update shots
+check "and no clone was made" test ! -e "$HS_STATE_DIR/packages/repos/hub"
+$PKG fetch hub >/dev/null
+check_out "after hs pkg fetch the update shows its diff" "echo three" $PKG update shots --yes --accept-permissions
+
+echo "-- one commit that cannot be fetched does not fail the others"
+python3 - "$OUT/index.json" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["packages"]["demo"]["commit"] = "d" * 40
+json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PYEOF
+$IDX sign "$OUT/index.json" --key-file "$WORK/good" >/dev/null
+export HS_STATE_DIR=$WORK/state7; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+: > "$WORK/fetch.log"
+env PATH="$STUB:$PATH" STUB_LOG="$WORK/fetch.log" $PKG fetch hub > "$WORK/f.out" 2> "$WORK/f.err"; rc=$?
+check "fetch succeeds (exit 0)" test "$rc" = 0
+check_out "with the normal row" "^hub${tab}serial-7${tab}-${tab}ok" cat "$WORK/f.out"
+check_out "the unfetchable package is named on stderr" "demo is not available" cat "$WORK/f.err"
+check "the clone was fetched once (plus one fetch by id)" test "$(grep -c -- '--tags' "$WORK/fetch.log")" = 1
+check_out "the other package is available" "^hub${tab}shots" $PKG available
+check "the unfetchable one is not" bash -c "! $PKG available | grep -q '${tab}demo${tab}'"
+check_out "show gives the reason" "demo is not available.*cannot be fetched" $PKG show demo
 export HS_STATE_DIR=$S1
 
 echo "-- a missing key file is a refusal, not a traceback"
