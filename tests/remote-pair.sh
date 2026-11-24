@@ -332,4 +332,13 @@ for s in "$code" "$raw"; do grep -qF -- "$s" "$A/codes.json" && leaks="$leaks co
 [ -z "$leaks" ] && pass "no state file or job record holds them (the credentials file apart)" || fail "files with a secret:$leaks"
 [ "$(stat -c %a "$WORK/e/state/remote-alpha.cred")" = 600 ] && pass "the credentials file of the using side is 0600" || fail "cred mode"
 
+echo "-- HOBNIX_LOG=debug: the log lines on stderr stay out of the request and the answer (issue 1174)"
+srv "$WORK/e" echo remove alpha --yes >/dev/null 2>&1
+export FAKE_SRC=10.0.0.82
+code=$(newcode "$A" alpha secret-docs) || fail "no code for the debug run"
+out=$(HOBNIX_LOG=debug srv "$WORK/e" echo add --code --stdin 2>"$WORK/err-debug" <<<"$code@$addr") && pass "add --code works with HOBNIX_LOG=debug" || fail "add at debug level: $out $(head -c 300 "$WORK/err-debug")"
+grep -q "^remote-echo$" "$A/users" && pass "the login was made through the debug run" || fail "no pairing at debug level"
+pw=$(cat "$A/last-pw")
+grep -qF -- "$pw" "$WORK/err-debug" 2>/dev/null && fail "the password reached the debug log" || pass "no password in the debug run's stderr"
+
 finish

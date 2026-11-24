@@ -126,7 +126,12 @@ pair_bin() {   # the hobnix program (HOBNIX_BIN, else the PATH); the pairing nee
   [ -n "$b" ] && [ -x "$b" ] || fail_fix "The pairing needs the hobnix program; it arrives with the next rebuild." "hs rebuild"
   printf '%s' "$b"
 }
-pair() { local b; b=$(pair_bin) || exit $?; "$b" pair "$@"; }
+# stderr of the program never joins a request or an answer (HOBNIX_LOG=debug writes log lines there): it goes to a file, and only the
+# "hobnix: <error>" line of it is shown when a call fails
+pair_err=${TMPDIR:-/tmp}/hs-remote-pair.$$
+trap 'rm -f "$pair_err"' EXIT
+pair() { local b; b=$(pair_bin) || exit $?; "$b" pair "$@" 2>"$pair_err"; }
+pair_error() { local m; m=$(grep '^hobnix: ' "$pair_err" 2>/dev/null | tail -n 1); printf '%s' "${m#hobnix: }"; }
 web_port() { printf '%s' "${HS_WEB_PORT:-8480}"; }
 own_name() { local n=${HS_HOST_NAME:-$(hostname)}; printf '%s' "${n,,}"; }
 own_hostkey() {   # the public SSH host key of this server: "ssh-ed25519 AAAA..."
@@ -236,7 +241,7 @@ offer_code() {   # offer <share> --code: make a code the other server types
   { [ "$mins" = "-" ] || [[ "$mins" =~ ^[0-9]{1,2}$ ]]; } || fail "The life time is a number of minutes (1 to 60)."
   need_root
   sure "$yes" "$(t 'Make a code for %s?' "$share")"
-  out=$(pair make offer "$share" "$srv" "$mins" 2>&1) || fail "${out#hobnix: }"
+  out=$(pair make offer "$share" "$srv" "$mins") || fail "$(pair_error)"
   c=$(tagged code <<<"$out"); exp=$(tagged expires_in <<<"$out")
   addr="$(own_name).local:$(web_port)"
   event_emit remote.code.made "$share" "" --payload "{\"share\":\"$share\",\"server\":\"$srv\"}" || true
@@ -263,7 +268,7 @@ receive_code() {   # receive [--minutes N]: this server shows a code, the other 
   need_root
   vault_ready
   sure "$yes" "Make a code?"
-  out=$(pair make receive - - "$mins" 2>&1) || fail "${out#hobnix: }"
+  out=$(pair make receive - - "$mins") || fail "$(pair_error)"
   c=$(tagged code <<<"$out"); exp=$(tagged expires_in <<<"$out")
   addr="$(own_name).local:$(web_port)"
   event_emit remote.code.made "-" "" --payload '{"share":"-","server":"-"}' || true
@@ -293,7 +298,7 @@ add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--std
   hostn=$(own_name); v_peer "$hostn"
   hk=$(own_hostkey) || true
   [ -n "$hk" ] || fail "This server has no SSH host key to show the other side."
-  req=$(printf 'code\t%s\nname\t%s\nhostkey\t%s\n' "$c" "$hostn" "$hk" | pair request 2>&1) || fail "${req#hobnix: }"
+  req=$(printf 'code\t%s\nname\t%s\nhostkey\t%s\n' "$c" "$hostn" "$hk" | pair request) || fail "$(pair_error)"
   if is_node "$srv"; then   # the node link: SSH with the node key, the host key is pinned already
     p_body=$(printf '%s' "$req" | bash "$node_sh" --pair "$srv" 2>/dev/null) || rc=$?
     case "$rc" in 0) p_status=200 ;; 1) p_status=404 ;; 3) p_status=nodelink; p_body="" ;; *) p_status=000; p_body="" ;; esac
@@ -302,7 +307,7 @@ add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--std
     post_json "$s_url_base/api/remote/claim" "$req"
   fi
   [ "$p_status" = 200 ] || fail "$(refusal_text "$p_status" "$p_body")"
-  inner=$(printf 'code\t%s\nrequest\t%s\nanswer\t%s\n' "$c" "$req" "$p_body" | pair open 2>&1) || fail "${inner#hobnix: }"
+  inner=$(printf 'code\t%s\nrequest\t%s\nanswer\t%s\n' "$c" "$req" "$p_body" | pair open) || fail "$(pair_error)"
   p=$(tagged server <<<"$inner"); h=$(tagged host <<<"$inner"); s=$(tagged share <<<"$inner"); l=$(tagged login <<<"$inner")
   d=$(tagged domain <<<"$inner"); pw=$(tagged password <<<"$inner"); fp=$(tagged fingerprint <<<"$inner")
   v_peer "$p"; v_host "$h"; v_share "$s"; v_login "$l"; [ -z "$d" ] || v_login "$d"
@@ -350,8 +355,8 @@ send_code() {   # send <share> --peer <name> --code [--server <host>] [--stdin]:
   [ "$rc" -ne 1 ] || fail "$(t "'%s' has an access from this server already. Take it back first (hs remote revoke %s), or make a code with hs remote offer <share> --code --peer %s on this server and type it there." "$peer" "$peer" "$peer")"
   [ "$rc" -eq 0 ] || fail "The access could not be made (is the storage unlocked and the domain up?)."
   body=$(printf 'code\t%s\nserver\t%s\nhost\t%s\nshare\t%s\nlogin\t%s\ndomain\t%s\npassword\t%s\nhostkey\t%s\n' \
-    "$c" "$(own_name)" "$(own_name).local" "$share" "$g_login" "$g_dsh" "$g_pw" "$(own_hostkey || true)" | pair push 2>&1) \
-    || { bash "$0" revoke "$peer" "$share" --yes >/dev/null 2>&1 || true; fail "${body#hobnix: }"; }
+    "$c" "$(own_name)" "$(own_name).local" "$share" "$g_login" "$g_dsh" "$g_pw" "$(own_hostkey || true)" | pair push) \
+    || { bash "$0" revoke "$peer" "$share" --yes >/dev/null 2>&1 || true; fail "$(pair_error)"; }
   post_json "$s_url_base/api/remote/push" "$body"
   if [ "$p_status" != 200 ]; then
     bash "$0" revoke "$peer" "$share" --yes >/dev/null 2>&1 || true   # nothing was handed over: take the login back
