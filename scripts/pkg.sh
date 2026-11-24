@@ -43,6 +43,26 @@ pkg_refused() {
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
 pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:pkg.changed; exit "$rc"' EXIT; }
+# A package changed (update, rollback, install, remove): a running service of it, and one that uses an integration it offers (--providers),
+# restarts to run the new code and load the keys again (ADR 0011: keys are read at start). Only active units, `--no-block` like `hs ext`.
+# Never fails the command: the change has happened, a failed restart is a warning. pkg_services runs BEFORE a remove (the manifest is gone after).
+pkg_services() { python3 -I "$here/lib/pkg_restart.py" "${HS_STATE_DIR:-/var/lib/hs}/packages/current" "$@" 2>/dev/null || true; }
+# pkg_stamp <name>: what says a package changed (its record in installed.toml and its manifest); equal before and after = nothing was installed
+pkg_stamp() {
+  local st=${HS_STATE_DIR:-/var/lib/hs}
+  { sed -n "/^\[package\.$1\]/,/^\[/p" "$st/packages/installed.toml"; cat "$st/packages/current/$1/package.toml"; } 2>/dev/null | cksum || true
+}
+pkg_restart() {   # pkg_restart <service package>...
+  local n ctl=${HS_SYSTEMCTL:-systemctl}
+  for n in "$@"; do
+    "$ctl" is-active --quiet "hs-ext-svc@$n.service" 2>/dev/null || continue
+    if "$ctl" restart --no-block "hs-ext-svc@$n.service" </dev/null >/dev/null 2>&1; then
+      note "$(t "The service of '%s' restarts to run the changed package." "$n")"
+    else
+      warn "$(t "The service of '%s' did not restart: run hs ext restart %s" "$n" "$n")"
+    fi
+  done
+}
 
 case "${1:-list}" in
   --list) py list --all ;;
@@ -212,6 +232,7 @@ case "${1:-list}" in
     # the keys of its options become "retired" (hs config check says "unused", not "unknown"): written before the folder is gone
     PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay retire "$name" --packages "$st/packages/current" --out "$st/generated" >/dev/null \
       || warn "$(t 'The options of this package could not be remembered.')"
+    svcs=$(pkg_services "$name" --providers)
     py remove "$name"
     for o in on off; do
       f=$st/capabilities-$o
@@ -225,17 +246,28 @@ case "${1:-list}" in
       PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay write --packages "$st/packages/current" --out "$st/generated" >/dev/null \
         || warn "$(t 'The generated capability list could not be refreshed.')"
     fi
-    ok "$(t 'Package %s removed.' "$name")" ;;
+    ok "$(t 'Package %s removed.' "$name")"
+    # the package's own service is off already (it had to be off); the ones that used an integration it offered restart without it
+    # shellcheck disable=SC2086
+    pkg_restart $(printf '%s\n' $svcs | grep -vxF -- "$name" || true) ;;
   install)
     cmd=$1; shift
     pkg_changed; pkg_refusal_file
+    stamp=$(pkg_stamp "${1:-}")
     if res=$(py "$cmd" "$@"); then
       rm -f "$HS_PKG_REFUSAL"
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
+      # shellcheck disable=SC2046
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}" --providers)
     else pkg_refused; exit 1; fi ;;
   update)
     shift; pkg_changed; pkg_refusal_file
-    if python3 -I "$here/pkg.py" update "$@"; then rm -f "$HS_PKG_REFUSAL"; else pkg_refused; exit 1; fi ;;
+    stamp=$(pkg_stamp "${1:-}")
+    if python3 -I "$here/pkg.py" update "$@"; then
+      rm -f "$HS_PKG_REFUSAL"
+      # shellcheck disable=SC2046
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}")
+    else pkg_refused; exit 1; fi ;;
   rollback)
     # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
     shift; name="${1:-}"; [ -n "$name" ] || fail "$(t 'Usage: hs pkg rollback <name>')"
@@ -244,7 +276,11 @@ case "${1:-list}" in
     note "$(t '%s: %s goes back to %s (its copy in vendor/ and the lock line).' "$name" "$from" "$to")"
     [ "${2:-}" = --yes ] || confirm_name "$name" "$(t 'the package')" || fail "$(t 'Left as it is.')"
     pkg_changed
-    py rollback "$name" >/dev/null && ok "$(t '%s is back at %s.' "$name" "$to")" && next_step "hs rebuild" ;;
+    py rollback "$name" >/dev/null || exit 1
+    ok "$(t '%s is back at %s.' "$name" "$to")"
+    # shellcheck disable=SC2046
+    pkg_restart $(pkg_services "$name")
+    next_step "hs rebuild" ;;
   repo)
     shift
     case "${1:-list}" in

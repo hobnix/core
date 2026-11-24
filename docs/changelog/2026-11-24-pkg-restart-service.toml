@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "fix"
+title = "An extension service restarts after its package is updated or rolled back"
+body  = """hs pkg update and hs pkg rollback restart the running service of that package, so it runs the new version. Installing or removing a package that offers an integration restarts the running services that use it, so they load the keys again. A service that is not running is left alone."""
