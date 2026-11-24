@@ -109,4 +109,13 @@ check_eq "all raised in both files: nothing is listed" "" "$($PKG repo-unbumped 
 check "and the exit is 0" $PKG repo-unbumped base .
 check_out "an unknown tag is an error" "no index.toml" bash -c "$PKG repo-unbumped nope . 2>&1; true"
 git checkout -q main
+
+echo "-- a repository that publishes an index has no tags"
+git checkout -q main
+before=$(remote_tags)
+sed -i '1i publish = "index"
+' index.toml
+check_out "release.sh refuses to tag" "publishes a signed index, no tags" rel patch --yes
+check_eq "and no tag was made" "$before" "$(remote_tags)"
+sed -i '1,2d' index.toml
 finish

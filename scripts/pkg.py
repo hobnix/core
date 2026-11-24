@@ -608,6 +608,9 @@ def repo_unbumped(folder, since):
     return out
 
 
+FOLDER_KINDS = {"recipes": "recipe", "extensions": "extension", "capabilities": "capability", "blueprints": "blueprint"}
+
+
 def repo_check(folder, warnings=None, release=False):
     """Problems of a package REPOSITORY checkout: index.toml against the package folders (what CI of a repository runs)."""
     out = []
@@ -658,12 +661,47 @@ def repo_check(folder, warnings=None, release=False):
         for k in ("icon", "category", "app_version"):
             if m.get(k) != e.get(k):
                 out.append(f"{name}: {k} differs between index and package.toml")
-    for sub in ("recipes", "extensions", "capabilities"):
+    for sub, kind in FOLDER_KINDS.items():
         d = os.path.join(folder, sub)
         if os.path.isdir(d):
             for n in sorted(os.listdir(d)):
-                if os.path.isfile(os.path.join(d, n, "package.toml")) and os.path.normpath(f"{sub}/{n}") not in listed:
+                mf = os.path.join(d, n, "package.toml")
+                if not os.path.isfile(mf):
+                    continue
+                if os.path.normpath(f"{sub}/{n}") not in listed:
                     out.append(f"{sub}/{n}: has a package.toml but is not in index.toml")
+                try:
+                    with open(mf, "rb") as f:
+                        k = tomllib.load(f).get("kind")
+                except (OSError, tomllib.TOMLDecodeError):
+                    continue   # reported above when it is listed
+                if k != kind:
+                    out.append(f"{sub}/{n}: kind {k} does not belong in {sub}/")
+    out += licence_problems(folder, warnings)
+    return out
+
+
+def licence_problems(folder, warnings):
+    """One repository for several kinds (hobnix/official): AGPL-3.0 at the root, MIT only in recipes/. Only a repository that publishes an index
+    (`publish = "index"` in index.toml) is held to it; a licence file that is absent is a warning, one that says the wrong thing is an error."""
+    try:
+        with open(os.path.join(folder, "index.toml"), "rb") as f:
+            if tomllib.load(f).get("publish") != "index":
+                return []
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    out = []
+    for rel, word, name in (("LICENSE", "GNU AFFERO GENERAL PUBLIC LICENSE", "AGPL-3.0"), ("recipes/LICENSE", "MIT License", "MIT")):
+        if rel.startswith("recipes/") and not os.path.isdir(os.path.join(folder, "recipes")):
+            continue
+        try:
+            with open(os.path.join(folder, rel), encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            warnings.append(f"{rel}: is missing (expected {name})")
+            continue
+        if word.lower() not in text.lower():
+            out.append(f"{rel}: is not the {name} licence")
     return out
 
 

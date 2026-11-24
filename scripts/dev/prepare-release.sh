@@ -8,7 +8,9 @@
 #       `pkg.py repo-check`, pushes the branch release/prepare-<date> and opens a pull request into develop with the list
 #       "package: old -> new" and the tag level (the highest bump of the release, the input of the release workflow). The release pull
 #       request develop -> main (merge commit) follows once that one is merged.
-#       --plan prints "package<TAB>old<TAB>new<TAB>level" and the tag level and changes nothing. A pull request with both bump labels is refused.
+#       --plan prints "package<TAB>old<TAB>new<TAB>level" and the tag level and changes nothing.
+#       A repository that publishes a signed index (`publish = "index"` at the top of index.toml, hobnix/official) has no tags: the
+#       reference is origin/main (HS_RELEASE_REMOTE replaces origin) and no tag level is printed or put in the pull request. A pull request with both bump labels is refused.
 #
 # Where the labels come from: `gh api repos/<repo>/commits/<sha>/pulls`; HS_PREPARE_LABELS=<file> (lines "<sha><TAB><label>") replaces that in tests.
 set -uo pipefail
@@ -23,7 +25,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --plan) plan=true ;;
     --no-push) push=false ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "Unknown argument: $1 (see --help)" ;;
   esac
   shift
@@ -36,9 +38,18 @@ if [ -d recipes ]; then repo=recipes; elif [ -d extensions ]; then repo=extensio
 $plan || [ "$(git branch --show-current)" = develop ] || fail "Switch to develop first: a release is prepared from develop."
 [ -z "$(git status --porcelain)" ] || fail "The tree has uncommitted changes."
 
-last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+# A repository that publishes a signed index (`publish = "index"` at the top of index.toml, hobnix/official) has no tags: the reference is what
+# main holds, and there is no tag level.
+index_repo=false
+awk '/^\[/ { exit } /^publish[[:space:]]*=[[:space:]]*"index"/ { found = 1 } END { exit !found }' index.toml && index_repo=true
+if $index_repo; then
+  last=${HS_RELEASE_REMOTE:-origin}/main
+  git rev-parse -q --verify "$last" >/dev/null || fail "There is no $last: git fetch first."
+else
+  last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+  [ -n "$last" ] || fail "There is no tag yet: the first release keeps the versions as they are. Use release.sh --version vX.Y.Z."
+fi
 range=$last..HEAD
-[ -n "$last" ] || fail "There is no tag yet: the first release keeps the versions as they are. Use release.sh --version vX.Y.Z."
 
 labels_of() {   # labels_of <sha>: the bump labels of the pull requests that brought the commit in, one per line
   if [ -n "${HS_PREPARE_LABELS:-}" ]; then awk -F'\t' -v s="$1" '$1 == s { print $2 }' "$HS_PREPARE_LABELS"; return 0; fi
@@ -78,12 +89,14 @@ for pkg in $(printf '%s\n' "${!level[@]}" | sort); do
   [ "$(rank "${level[$pkg]}")" -le "$(rank "$top")" ] || top=${level[$pkg]}
 done
 [ -n "$rows" ] || fail "Every changed package has a new version already."
-if $plan; then printf '%s' "$rows"; echo "tag	$top"; exit 0; fi
+if $plan; then printf '%s' "$rows"; $index_repo || echo "tag	$top"; exit 0; fi
 
-step "Prepare the release ($repo, tag level $top)"
+if $index_repo; then step "Prepare the release ($repo, against $last)"; else step "Prepare the release ($repo, tag level $top)"; fi
 branch=release/prepare-$(date -u +%Y%m%d-%H%M)
 git checkout -q -b "$branch" || fail "Could not make the branch $branch."
-body="Raises the versions of the packages that changed since $last. Tag level for the release workflow: **$top**.
+body="Raises the versions of the packages that changed since $last."
+$index_repo || body="$body Tag level for the release workflow: **$top**."
+body="$body
 "
 while IFS=$'\t' read -r pkg old new lv; do
   [ -n "$pkg" ] || continue

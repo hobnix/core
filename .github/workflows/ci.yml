@@ -204,6 +204,7 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
           RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
+          HS_CAPS_URL: https://github.com/hobnix/capabilities.git   # until the checkout below is hobnix/official (hobnix/core#1074 step C3)
         run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         with:
@@ -304,6 +305,7 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
           RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
+          HS_CAPS_URL: https://github.com/hobnix/capabilities.git   # until the checkout below is hobnix/official (hobnix/core#1074 step C3)
         run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         if: steps.capref.outputs.ref != ''
