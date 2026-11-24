@@ -24,6 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/machine.sh"
 . "$here/lib/registry-load.sh"
+. "$here/lib/pkg-deps.sh"
 . "$here/lib/effect.sh"
 . "$here/lib/integration.sh"
 state=${HS_STATE_DIR:-/var/lib/hs}
@@ -66,17 +67,7 @@ compat_problem() {   # compat_problem <name> <dir>: prints why the package canno
   done < <(manifest_list "$2" requires)
   return 0
 }
-dependents_on() {   # dependents_on <name>: the packages that are on and require it, one per line
-  local n d
-  while IFS= read -r n; do
-    [ "$n" != "$1" ] || continue
-    d=$(ext_package_dir "$n") || continue
-    [ -f "$d/capability.toml" ] || continue
-    ext_package_on "$n" || continue
-    manifest_list "$d" requires | grep -qxF -- "$1" && printf '%s\n' "$n"
-  done < <(ext_package_names)
-  return 0
-}
+dependents_on() { pkg_dependents "$1"; }   # the packages that are on and need it, one per line (scripts/lib/pkg-deps.sh)
 title_of() {   # title_of <dir>
   local t=""
   [ "$lang" = en ] || t=$(manifest "$1" "title_$lang")
@@ -283,7 +274,7 @@ cmd_disable() {
   d=$(ext_package_dir "$n")
   if is_recipe "$n"; then fail_fix "$(t "'%s' is a recipe: its container is managed with hs ct." "$n")" "hs ct"; fi
   deps=$(dependents_on "$n" | paste -sd' ' -)
-  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "hs ext disable ${deps%% *}"; fi
+  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "$(if is_recipe "${deps%% *}"; then echo "hs ct"; else echo "hs ext disable ${deps%% *}"; fi)"; fi
   if has_service "$n"; then ctl stop "hs-ext-svc@$n.service" >/dev/null 2>&1 || true; fi   # a package that is off has no unit running (ADR 0011 rule 3)
   mapfile -t cur < <(caps_list)
   for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$n" ] || keep+=("$x"); done
