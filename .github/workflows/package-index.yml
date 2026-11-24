@@ -11,8 +11,9 @@
 # 3. `publish` uploads index.json, index.json.sig and assets/ to GitHub Pages. Pages holds only these, never package contents.
 #
 # The serial: the run is given the serial of the index on Pages (--prev) plus 1; it only goes up (a lower serial is refused by clients).
-# Open questions (first run): does an environment secret reach a reusable workflow's job (else the caller passes `secrets: inherit`); the Pages URL
-# layout packages.hobnix.dev/<repo>/index.json (one repository per Pages site means one site per caller).
+# First run (hobnix/official, 2026-11-24): `sign` got an empty secret because of the `workflow_call.secrets` entry that was here (removed, see below).
+# Whether the environment secret then reaches the job is the next thing the run shows. Still open: the Pages URL layout
+# packages.hobnix.dev/<repo>/index.json (one repository per Pages site means one site per caller).
 name: package-index
 on:
   workflow_call:
@@ -29,9 +30,9 @@ on:
         description: "where the published index lives, to read the last serial (empty = the first index, serial 1)"
         type: string
         default: ""
-    secrets:
-      INDEX_SIGNING_KEY:
-        required: false
+    # No `secrets:` block on purpose. The signing key is an ENVIRONMENT secret (environment index-signing of the calling repository), read by the
+    # `sign` job through its own `environment:`. A `workflow_call.secrets` entry that the caller does not pass arrives as an EMPTY value and hides
+    # the environment secret: the first run on hobnix/official failed exactly so ("INDEX_SIGNING_KEY is not set"). A caller must not pass the key.
 
 permissions:
   contents: read
