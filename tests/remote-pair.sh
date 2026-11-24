@@ -86,7 +86,7 @@ out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code2=$(aw
 for i in 1 2 3 4 5; do printf 'AAAA-BBBB-CCCC-DDDD@%s\n' "$addr" | srv "$B" beta add --code --stdin >/dev/null 2>&1; done
 out=$(printf '%s\n' "$code2@$addr" | srv "$B" beta add --code --stdin 2>&1) && fail "rate limit did not hold" || pass "6th try from one source is refused"
 echo "$out" | grep -q "Too many" && pass "the refusal is code.rate" || fail "rate text: $out"
-out=$(printf '%s\n' "$code2@$addr" | FAKE_SRC=10.0.0.77 srv "$B" beta add --code --stdin 2>&1) && pass "another source still works" || fail "other source: $out"
+out=$(printf '%s\n' "$code2@$addr" | FAKE_SRC=10.0.0.77 srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && pass "another source still works" || fail "other source: $out"
 
 echo "-- a name taken by another server is refused (Q4)"
 out=$(srv "$A" alpha offer media --code --plain --yes) && code3=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
@@ -99,6 +99,7 @@ l=$(srv "$B" beta list); echo "$l" | grep -q "^mount${T}alpha${T}media${T}alpha.
 l=$(srv "$A" alpha list); echo "$l" | grep -q "^offer${T}beta${T}media${T}remote-beta${T}given$" && pass "hs remote list: offer line unchanged" || fail "list: $l"
 
 echo "-- reverse: receive on B, send on A"
+srv "$B" beta remove alpha --yes >/dev/null 2>&1   # a pushed share never reuses a name: start with a free one
 out=$(srv "$B" beta receive --plain --yes) && rcode=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out") || fail "receive: $out"
 mkdir -p "$WORK/d"; mkserver "$WORK/d" gamma
 srv "$WORK/d" gamma remove alpha --yes >/dev/null 2>&1
@@ -132,6 +133,26 @@ check_eq "accept-mount without the stored key is refused (exit 1)" 1 "$rc"
 out=$(printf 'evilpw\n' | srv "$B" beta accept-mount alpha evil.local docs2 remote-x HOME SHA256:otherkey 2>&1); rc=$?
 check_eq "accept-mount with another key is refused (exit 1)" 1 "$rc"
 check_eq "the credentials file is unchanged" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+echo "-- the MATCHING public host key proves nothing: a pushed or claimed box cannot take a name that is mounted"
+fpmatch=$(awk -F'\t' '$1 == "alpha" && $6 ~ /^SHA256/ { print $6; exit }' "$B/state/remote-mounts")
+[ -n "$fpmatch" ] && pass "B has the stored key of alpha" || fail "no stored key: $(cat "$B/state/remote-mounts")"
+rowsbefore=$(wc -l < "$B/state/remote-mounts")
+out=$(printf 'evilpw\n' | srv "$B" beta accept-mount alpha evil.local docs2 remote-x HOME "$fpmatch" 2>&1); rc=$?
+check_eq "a push with the matching key for a taken name is refused (exit 1)" 1 "$rc"
+check_eq "the credentials file is unchanged by it" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "no new row" "$rowsbefore" "$(wc -l < "$B/state/remote-mounts")"
+if grep -q "evil.local" "$B/state/remote-mounts"; then fail "a row for the attacker host"; else pass "no row for the attacker host"; fi
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code7=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code7@$addr" | srv "$B" beta add --code --stdin 2>&1) && fail "add --code took a name that is mounted" || pass "add --code refuses a taken name without --reconnect"
+check_eq "the credentials file is unchanged by add --code" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code8=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code8@$addr" | srv "$B" beta add --code --stdin --reconnect gamma 2>&1) && fail "reconnect for another name worked" || pass "--reconnect names the server and the answer must match"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code9=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code9@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && pass "--reconnect alpha with the stored key works" || fail "reconnect: $out"
+echo "-- send: a second share for a server that has access gets an accurate error"
+out=$(srv "$B" beta receive --plain --yes) && rcode3=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send to an existing name worked" || pass "send refuses it"
+echo "$out" | grep -q "has an access from this server already" && pass "the error says why" || fail "error text: $out"
 echo "-- no secret in argv of the programs (the code goes on stdin)"
 grep -n 'pair request\|pair open\|pair push\|pair check' "$SCRIPTS/remote.sh" | grep -v '|' | grep -q . && fail "a pair call without stdin pipe" || pass "every pair call reads the code from a pipe"
 

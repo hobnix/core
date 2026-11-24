@@ -1452,7 +1452,7 @@ CHANGES = {
     # send-code take the code as ONE LINE on stdin (it may carry @host), never in the arguments
     "peers": [{"fixed": [r"^code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--minutes": (r"^[0-9]{1,2}$", False)}},
               {"fixed": [r"^receive-code$"], "opts": {"--minutes": (r"^[0-9]{1,2}$", False)}},
-              {"fixed": [r"^add-code$"], "opts": {"--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False)}, "stdin": True},
+              {"fixed": [r"^add-code$"], "opts": {"--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False), "--reconnect": (r"^[a-z0-9][a-z0-9-]{0,19}$", False)}, "stdin": True},
               {"fixed": [r"^send-code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False)}, "need": ["--peer"], "stdin": True},
               {"fixed": [r"^offer$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--new-password": (None, False)}},
 {"fixed": [r"^add$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"],

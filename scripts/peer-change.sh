@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change the shares between two homeservers without asking anything: what would happen (plan), then do it (start)
 # help.de: die Freigaben zwischen zwei Homeservern ändern, ohne etwas zu fragen: was passieren würde (plan), dann ausführen (start)
-# args: plan|start code <share> [--peer <name>] [--minutes N] | receive-code [--minutes N] | add-code [--server <name|host>] (code on stdin) | send-code <share> --peer <name> [--server <host>] (code on stdin) | offer <peer> <share> [--new-password] | add <peer> <host> <share> --user <login> [--domain <D>] | remove <peer> [<share>] | revoke <peer> [<share>] | attach <peer> <instance> [--path <inside>] | detach <peer> <instance>
+# args: plan|start code <share> [--peer <name>] [--minutes N] | receive-code [--minutes N] | add-code [--server <name|host>] [--reconnect <server>] (code on stdin) | send-code <share> --peer <name> [--server <host>] (code on stdin) | offer <peer> <share> [--new-password] | add <peer> <host> <share> --user <login> [--domain <D>] | remove <peer> [<share>] | revoke <peer> [<share>] | attach <peer> <instance> [--path <inside>] | detach <peer> <instance>
 # System command (hs sys peers plan|start): for the interface and tests. It never asks and prints plain key<TAB>value lines like backup-change.sh.
 # The work is remote.sh's (no logic is repeated here). The reads are `hs sys remote list`.
 #   offer    give another homeserver read access to a share (the login remote-<peer>). It is answered in the start answer itself, never as a
@@ -36,7 +36,7 @@ valid() { [[ "$2" =~ $3 ]] || refuse "that is not a valid $1"; }
 #   add-code [--server <name|host>]               use the code of another server: ONE LINE ON STANDARD INPUT of start (the code, maybe with @host); never in the arguments
 #   send-code <share> --peer <name> [--server <host>]   give a share to the server whose code is on standard input
 case "$action" in code|receive-code|add-code|send-code)
-  a="" peer="" server="" minutes=""
+  a="" peer="" server="" minutes="" reconnect=""
   case "$action" in
     code|send-code) a=${1:-}; shift || true; valid "share name" "$a" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' ;;
   esac
@@ -44,12 +44,14 @@ case "$action" in code|receive-code|add-code|send-code)
     case "$1" in
       --peer)    [ $# -ge 2 ] || refuse "--peer needs a value"; peer=$2; shift 2 ;;
       --server)  [ $# -ge 2 ] || refuse "--server needs a value"; server=$2; shift 2 ;;
+      --reconnect) [ $# -ge 2 ] || refuse "--reconnect needs a value"; reconnect=$2; shift 2 ;;
       --minutes) [ $# -ge 2 ] || refuse "--minutes needs a value"; minutes=$2; shift 2 ;;
       *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   [ -z "$peer" ] || valid "server name (lower-case letters, digits and dashes, at most 20)" "$peer" '^[a-z0-9][a-z0-9-]{0,19}$'
   [ -z "$server" ] || valid "server (a name or an address)" "$server" '^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$'
+  [ -z "$reconnect" ] || valid "server name" "$reconnect" '^[a-z0-9][a-z0-9-]{0,19}$'
   [ -z "$minutes" ] || valid "life time (1 to 60 minutes)" "$minutes" '^[0-9]{1,2}$'
   if [ "$action" = send-code ] && [ -z "$peer" ]; then refuse "send-code needs --peer <name for the other server>"; fi
   if [ "$action" = add-code ] && [ "$verb" = plan ] && [ -z "$server" ]; then :; fi
@@ -59,7 +61,7 @@ case "$action" in code|receive-code|add-code|send-code)
   case "$action" in
     code) args=(offer "$a" --code); [ -z "$peer" ] || args+=(--peer "$peer"); [ -z "$minutes" ] || args+=(--minutes "$minutes"); args+=(--plain --yes) ;;
     receive-code) args=(receive); [ -z "$minutes" ] || args+=(--minutes "$minutes"); args+=(--plain --yes) ;;
-    add-code) args=(add --code --stdin); [ -z "$server" ] || args+=(--server "$server"); args+=(--yes) ;;
+    add-code) args=(add --code --stdin); [ -z "$server" ] || args+=(--server "$server"); [ -z "$reconnect" ] || args+=(--reconnect "$reconnect"); args+=(--yes) ;;
     send-code) args=(send "$a" --peer "$peer" --code --stdin); [ -z "$server" ] || args+=(--server "$server"); args+=(--yes) ;;
   esac
   if [ "$verb" = start ]; then

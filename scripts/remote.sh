@@ -140,13 +140,17 @@ read_code() {   # read_code <what>: one line from stdin (--stdin) or asked; the 
   printf '%s' "$line"
 }
 
-setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerprint|->; the password on stdin. 1 = another host key than the stored one
-  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} old="" n
+setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerprint|-> <new|reconnect>; the password on stdin. 1 = the name is taken
+  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} mode=${7:-new} old="" n
   # The name is taken (Q4) when this server has any mount from it: the credentials file is ONE per name, so the check is per name, not per share.
-  # Only the same server (the same host key, known on both sides) may add a share or reconnect; a legacy row without a key, or no key, is refused.
+  # The name and the host key in the answer come from the sender's own box, and a public host key proves nothing (ssh-keyscan), so a taken name is
+  # never given away because the box says so. Only the owner of THIS server, who typed `--reconnect <name>` for that existing server, may reuse it,
+  # and then the key must still be the stored one. A pushed share (accept-mount) is always `new`.
   n=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" '$1 == p { c++ } END { print c + 0 }')
   old=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" '$1 == p && $6 != "" && $6 != "-" { print $6; exit }')
-  if [ "$n" -gt 0 ] && { [ -z "$old" ] || [ "$fp" = "-" ] || [ "$old" != "$fp" ]; }; then cat >/dev/null; return 1; fi
+  if [ "$n" -gt 0 ]; then
+    if [ "$mode" != reconnect ] || [ -z "$old" ] || [ "$fp" = "-" ] || [ "$old" != "$fp" ]; then cat >/dev/null; return 1; fi
+  fi
   write_cred "$p" "$l" "$d"
   mkdir -p "$state"; touch "$MOUNTS"
   awk -F'\t' -v p="$p" -v s="$s" '!($1 == p && $3 == s)' "$MOUNTS" > "$MOUNTS.new" || true
@@ -260,7 +264,7 @@ $(say "and type this code when asked:")  $c
 EOT
 }
 
-add_code() {   # add --code [--server <name|host>] [--stdin]: type the code another server made
+add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--stdin]: type the code another server made
   [ $# -eq 0 ] || usage
   local line fields c at srv hostn hk req inner p h s l d pw fp rc=0
   need_root
@@ -289,8 +293,9 @@ add_code() {   # add --code [--server <name|host>] [--stdin]: type the code anot
   step "$(t 'Mount %s from %s' "$s" "$p")"
   kv "Address" "//$h/$s"
   kv "Where" "$(mnt_of "$p" "$s")"
-  printf '%s\n' "$pw" | setup_mount "$p" "$h" "$s" "$l" "$d" "$fp" \
-    || fail_fix "$(t "%s shows another host key than the one stored for it (%s). Not changed." "$p" "$fp")" "hs remote remove $p $s"
+  if [ -n "$reconnect" ] && [ "$reconnect" != "$p" ]; then fail "$(t "The answer comes from '%s', not from '%s'. Not changed." "$p" "$reconnect")"; fi
+  printf '%s\n' "$pw" | setup_mount "$p" "$h" "$s" "$l" "$d" "$fp" "${reconnect:+reconnect}" \
+    || fail_fix "$(t "'%s' is already mounted here and the answer does not prove it is the same server. Nothing is changed. To renew it, use a code of that server with --reconnect %s; for a different server, remove it first." "$p" "$p")" "hs remote remove $p"
   ok "$(t 'Connected to %s, key %s' "$p" "$fp")"
   note "$(t 'Compare the key with the screen of %s.' "$p")"
   next_step "hs remote attach $p <instance>"
@@ -310,7 +315,7 @@ send_code() {   # send <share> --peer <name> --code [--server <host>] [--stdin]:
   step "$(t 'Give %s read access to %s' "$peer" "$share")"
   sure "$yes" "Go ahead?"
   grant_login "$peer" "$share" "-" new || rc=$?
-  [ "$rc" -ne 1 ] || fail "$(t "'%s' belongs to another server." "$peer")"
+  [ "$rc" -ne 1 ] || fail "$(t "'%s' has an access from this server already. Take it back first (hs remote revoke %s), or make a code with hs remote offer <share> --code --peer %s on this server and type it there." "$peer" "$peer" "$peer")"
   [ "$rc" -eq 0 ] || fail "The access could not be made (is the storage unlocked and the domain up?)."
   body=$(printf 'code\t%s\nserver\t%s\nhost\t%s\nshare\t%s\nlogin\t%s\ndomain\t%s\npassword\t%s\nhostkey\t%s\n' \
     "$c" "$(own_name)" "$(own_name).local" "$share" "$g_login" "$g_dsh" "$g_pw" "$(own_hostkey || true)" | pair push 2>&1) \
@@ -330,7 +335,7 @@ cmd=${1:-}
 shift
 
 yes=false; stdin_pw=false; newpw=false; plain=false; code=false; cancel=false
-peer=""; login=""; domain=""; path=""; server=""; minutes=""; pos=()
+peer=""; login=""; domain=""; path=""; server=""; minutes=""; reconnect=""; pos=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) yes=true ;;
@@ -340,6 +345,7 @@ while [ $# -gt 0 ]; do
     --code) code=true ;;
     --cancel) cancel=true ;;
     --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
+    --reconnect) [ $# -ge 2 ] || usage; reconnect=$2; shift ;;
     --minutes) [ $# -ge 2 ] || usage; minutes=$2; shift ;;
     --peer)   [ $# -ge 2 ] || usage; peer=$2; shift ;;
     --user)   [ $# -ge 2 ] || usage; login=$2; shift ;;
@@ -543,7 +549,7 @@ EOF
     v_peer "$1"; v_host "$2"; v_share "$3"; v_login "$4"; [ -z "$5" ] || v_login "$5"
     need_root
     if vault_configured && ! vault_is_open; then exit 3; fi
-    rc=0; setup_mount "$1" "$2" "$3" "$4" "$5" "$6" || rc=$?
+    rc=0; setup_mount "$1" "$2" "$3" "$4" "$5" "$6" new || rc=$?   # a pushed share never reuses a name: the sender's box proves nothing
     exit "$rc" ;;
 
   mount-all)   # the timer: mount what is configured and not mounted; never fails the unit because a peer is off
