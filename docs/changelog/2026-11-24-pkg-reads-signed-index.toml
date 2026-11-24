@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "hs pkg can read a signed package index"
+body  = """A package repository can now be added with an index address: hs pkg repo add <name> <url> --key <allowed-signers-file> --index <address>. hs pkg then checks the signature of the index, refuses an older index than the one it already has, takes the version of each package from the index instead of a release tag, checks the files of the pinned commit against the hash in the index before installing, and offers no update for a version that was withdrawn. Repositories without an index work as before. Not tested on hardware yet."""
