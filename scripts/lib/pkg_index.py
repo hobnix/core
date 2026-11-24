@@ -6,7 +6,7 @@ One `index.json` per package repository, built from package.toml and assets/ by 
   pkg_index.py tree <folder>                                       the tree hash of a package folder (sha256:<hex>)
   pkg_index.py build <repo checkout> --repo <id> --out <dir> [--serial N | --prev <index.json>] [--commit SHA] [--ttl-days 14]
                                                                    [--now <ISO>] [--skip-assets]    write <dir>/index.json and <dir>/assets/
-  pkg_index.py assemble <community checkout> --out <dir> [--pins-tip SHA] [--official-index <file|url>]
+  pkg_index.py assemble <community checkout> --out <dir> [--pins-tip SHA] --official-index <file|url>
                                                                    hobnix/community: fetch every pinned commit of manifests/*.toml, check it against
                                                                    the manifest and policy.toml, write the pins commit (<dir>/pins.commit, pins.bundle,
                                                                    tree/ for `build`); `error<TAB>text` per problem, exit 1
@@ -25,14 +25,12 @@ Decisions (the plan names no scheme, these follow what the core already uses for
 """
 import hashlib
 import importlib.util
-import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import tomllib
 from datetime import datetime, timedelta, timezone
@@ -326,7 +324,7 @@ def validate(doc, now=None, warnings=None, strict=False):
         for k in META_TEXT[1:] + META_PROVENANCE:
             if k in m and not isinstance(m[k], str):
                 w(f"meta.{k} is not text")
-        if strict and "source_commit" in m and not COMMIT.match(str(m["source_commit"])):
+        if strict and "source_commit" in m and not COMMIT.fullmatch(str(m["source_commit"])):
             w("meta.source_commit is not a 40-digit hex id")
         if not isinstance(m.get("tags", []), list):
             w("meta.tags is not a list")
@@ -421,7 +419,7 @@ def source_problem(source: object, policy: dict, allow_local: bool = False) -> s
         return "source is not text"
     if allow_local and (source.startswith("file://") or source.startswith("/")):
         return None
-    m = SOURCE_URL.match(source)
+    m = SOURCE_URL.fullmatch(source)
     if not m:
         return "source must be an https address like https://github.com/<owner>/<repository> (no login, no port)"
     if m.group(1) not in policy["hosts"]:
@@ -433,7 +431,7 @@ def manifest_problems(m: dict, file_name: str, policy: dict, allow_local: bool =
     """Problems of one manifest: the fields, the name against the file name and the reserved words, kind, host, licence."""
     out = [f"unknown field {k}" for k in sorted(set(m) - set(MANIFEST_KEYS))]
     name = m.get("name")
-    if not isinstance(name, str) or not NAME.match(name):
+    if not isinstance(name, str) or not NAME.fullmatch(name):
         out.append("name is not a lowercase word")
     elif name != os.path.splitext(os.path.basename(file_name))[0]:
         out.append(f"name {name} differs from the file name")
@@ -444,12 +442,12 @@ def manifest_problems(m: dict, file_name: str, policy: dict, allow_local: bool =
     bad = source_problem(m.get("source"), policy, allow_local)
     if bad:
         out.append(bad)
-    if not COMMIT.match(str(m.get("commit", ""))):
+    if not COMMIT.fullmatch(str(m.get("commit", ""))):
         out.append("commit is not a 40-digit hex id")
-    if not TREE.match(str(m.get("tree", ""))):
+    if not TREE.fullmatch(str(m.get("tree", ""))):
         out.append("tree is not sha256:<64 hex>")
     p = m.get("path")
-    if not isinstance(p, str) or (p != "." and (not re.match(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$", p) or ".." in p.split("/"))):
+    if not isinstance(p, str) or (p != "." and (not re.fullmatch(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$", p) or ".." in p.split("/"))):
         out.append('path is not "." or a relative folder')
     if m.get("license") not in policy["licences"]:
         out.append(f"license {m.get('license')!r} is not on the list of policy.toml")
@@ -462,12 +460,18 @@ def manifest_problems(m: dict, file_name: str, policy: dict, allow_local: bool =
 
 
 def _git(git_dir: str, args: list[str], local: bool = False, data: bytes | None = None, extra_env: dict | None = None) -> subprocess.CompletedProcess:
-    """git on a bare directory: no prompt, no password, a time limit, https only (file:// and paths only when `local`, for tests)."""
+    argv, env = _git_command(git_dir, args, local, extra_env)
+    return subprocess.run(argv, capture_output=True, input=data, env=env, timeout=GIT_TIMEOUT)
+
+
+def _git_command(git_dir: str, args: list[str], local: bool = False, extra_env: dict | None = None) -> tuple[list[str], dict]:
+    """git on a bare directory: no prompt, no password, no hooks, no redirects, no submodules, no text conversion, a time limit, https only
+    (file:// and paths only when `local`, for tests). Returns (argv, environment)."""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_NOSYSTEM="1", **CI_ENV, **(extra_env or {}))
-    proto = ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60"]
-    if local:
-        proto += ["-c", "protocol.file.allow=always"]
-    return subprocess.run(["git", *proto, "--git-dir", git_dir, *args], capture_output=True, input=data, env=env, timeout=GIT_TIMEOUT)
+    config = ["protocol.allow=never", "protocol.https.allow=always", f"protocol.file.allow={'always' if local else 'never'}",
+              "http.followRedirects=false", "http.lowSpeedLimit=1000", "http.lowSpeedTime=60", f"core.hooksPath={os.devnull}",
+              "core.fsmonitor=false", "core.autocrlf=false", "submodule.recurse=false", "fetch.recurseSubmodules=false"]
+    return ["git", *[x for c in config for x in ("-c", c)], "--git-dir", git_dir, *args], env
 
 
 def _git_out(git_dir: str, args: list[str], what: str, local: bool = False, data: bytes | None = None, extra_env: dict | None = None) -> bytes:
@@ -481,19 +485,58 @@ def _git_text(git_dir: str, args: list[str], what: str, local: bool = False, dat
     return _git_out(git_dir, args, what, local, data, extra_env).decode().strip()
 
 
-def _extract_tar(archive: bytes, dest: str) -> None:
-    """Unpack a `git archive` tar. Only files and folders: a link or a path leaving `dest` is refused (the archive comes from a stranger)."""
-    os.makedirs(dest, exist_ok=True)
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        for member in tar.getmembers():
-            if not (member.isfile() or member.isdir()) or member.name.startswith("/") or ".." in member.name.split("/"):
-                raise Problem(f"{member.name}: only regular files are allowed in a package")
-        tar.extractall(dest, filter="fully_trusted")
+def _list_tree(git_dir: str, tree: str) -> list[tuple[str, str, int, str]]:
+    """[(mode, blob id, size, path)] of every entry below a git tree: the SAME object set that is checked, copied and hashed. A gitlink has size -1."""
+    rows = []
+    for record in _git_out(git_dir, ["ls-tree", "-r", "-l", "-z", tree], "git ls-tree").split(b"\0"):
+        if not record:
+            continue
+        head, _, raw_path = record.partition(b"\t")
+        mode, _kind, oid, size = head.split()
+        try:
+            path = raw_path.decode("utf-8")
+        except UnicodeDecodeError:
+            raise Problem("a file name is not UTF-8")
+        rows.append((mode.decode(), oid.decode(), -1 if size == b"-" else int(size), path))
+    return rows
 
 
-def materialise(source: str, commit: str, path: str, git_dir: str, folder: str, local: bool = False) -> str:
-    """Fetch exactly `commit` into the bare repository `git_dir`, refuse a .gitattributes at the source root, extract the package folder
-    into `folder`. Returns the git id of the folder's tree."""
+def tree_problems(rows: list[tuple[str, str, int, str]], policy: dict) -> list[str]:
+    """What a listing says before any file is read: only regular files, no .gitattributes or .gitmodules, file count and sizes within the caps
+    (a file may be as large as a binary; the total as the folder plus one binary; the exact rules follow on the files themselves)."""
+    out = []
+    for mode, _oid, _size, path in rows:
+        parts = path.split("/")
+        if mode not in ("100644", "100755"):
+            out.append(f"{path}: only regular files are allowed in a package (mode {mode})")
+        if any(x in ("", ".", "..", ".git") for x in parts):
+            out.append(f"{path}: this path is not allowed")
+        if parts[-1] in (".gitattributes", ".gitmodules"):
+            out.append(f"{path}: {parts[-1]} is not allowed")
+    if len(rows) > policy["max_files"]:
+        out.append(f"{len(rows)} files, the limit is {policy['max_files']}")
+    for _mode, _oid, size, path in rows:
+        if size > policy["max_binary_bytes"]:
+            out.append(f"{path}: larger than {policy['max_binary_bytes']} bytes")
+    if sum(max(r[2], 0) for r in rows) > policy["max_folder_bytes"] + policy["max_binary_bytes"]:
+        out.append("the folder is far larger than the limit")
+    return out
+
+
+def _blob_to_file(git_dir: str, oid: str, dest: str, executable: bool) -> None:
+    """Write one blob to a file without holding it in memory."""
+    argv, env = _git_command(git_dir, ["cat-file", "blob", oid])
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as out:
+        done = subprocess.run(argv, stdout=out, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
+    if done.returncode != 0:
+        raise Problem(f"cannot read a file: {done.stderr.decode(errors='replace').strip()[:200]}")
+    os.chmod(dest, 0o755 if executable else 0o644)
+
+
+def materialise(source: str, commit: str, path: str, git_dir: str, folder: str, policy: dict, local: bool = False) -> str:
+    """Fetch exactly `commit` into the bare repository `git_dir`, check the listing of the package folder's tree (links, submodules, git
+    attribute files, caps) BEFORE reading a file, then write exactly those files into `folder`. Returns the git id of the tree."""
     if not os.path.isdir(git_dir):
         _git_text(git_dir, ["init", "--bare", "-q"], "git init")
     _git_text(git_dir, ["fetch", "--depth", "1", "--no-tags", "-q", source, commit], f"cannot fetch {commit[:12]} from {source}", local)
@@ -504,9 +547,13 @@ def materialise(source: str, commit: str, path: str, git_dir: str, folder: str, 
     if got.returncode != 0:
         raise Problem(f"folder {path} is not in commit {commit[:12]}")
     subtree = got.stdout.decode().strip()
-    if _git(git_dir, ["cat-file", "-e", f"{commit}:.gitattributes"]).returncode == 0:
-        raise Problem(".gitattributes at the root of the source: export rules would make archives differ")
-    _extract_tar(_git_out(git_dir, ["archive", "--format=tar", subtree], "git archive"), folder)
+    rows = _list_tree(git_dir, subtree)
+    bad = tree_problems(rows, policy)
+    if bad:
+        raise Problem("; ".join(bad))
+    os.makedirs(folder, exist_ok=True)
+    for mode, oid, _size, rel in rows:
+        _blob_to_file(git_dir, oid, os.path.join(folder, *rel.split("/")), mode == "100755")
     return subtree
 
 
@@ -559,7 +606,7 @@ def folder_problems(folder: str, manifest: dict, policy: dict) -> list[str]:
 
 
 def _version_key(text: object) -> tuple[int, ...]:
-    return tuple(int(x) for x in str(text).split(".")) if SEMVER.match(str(text)) else (0, 0, 0)
+    return tuple(int(x) for x in str(text).split(".")) if SEMVER.fullmatch(str(text)) else (0, 0, 0)
 
 
 def _index_toml(packages: dict[str, dict]) -> str:
@@ -581,9 +628,9 @@ def _pins_entry(m: dict, up: dict) -> dict:
 
 
 def _official_names(location: str | None) -> set[str]:
-    """Package names of the official index (a file or an https address). Unreachable is a failure, not a pass."""
+    """Package names of the official index (a file or an https address). Required, and unreachable is a failure: the check fails closed."""
     if not location:
-        return set()
+        raise Problem("--official-index is required (the CI check passes https://hobnix.github.io/official/index.json)")
     try:
         if location.startswith("https://"):
             import urllib.request
@@ -631,7 +678,7 @@ def _read_manifests(checkout: str, policy: dict, allow_local: bool) -> tuple[lis
 def _check_pin(m: dict, git_dir: str, scratch: str, policy: dict, pins_tip: str | None, local: bool) -> tuple[str, dict, list[str]]:
     """Fetch one pin and check it: (git id of the folder, its upstream package.toml, problems)."""
     folder = os.path.join(scratch, m["name"])
-    subtree = materialise(m["source"], m["commit"], m["path"], git_dir, folder, local)
+    subtree = materialise(m["source"], m["commit"], m["path"], git_dir, folder, policy, local)
     found = folder_problems(folder, m, policy)
     actual = tree_hash(folder)
     if actual != m["tree"]:
@@ -675,7 +722,7 @@ def assemble(checkout: str, out_dir: str, official_index: str | None = None, pin
             continue
         try:
             subtree, up, found = _check_pin(m, git_dir, scratch, policy, pins_tip, allow_local)
-        except (Problem, OSError, tarfile.TarError, tomllib.TOMLDecodeError) as e:
+        except (Problem, OSError, tomllib.TOMLDecodeError) as e:
             found = [str(e)]
         problems += [f"{m['name']}: {t}" for t in found]
         if not found:
@@ -702,13 +749,15 @@ def _write_pins(git_dir: str, index_file: str, entries: dict[str, dict], pins_ti
         _git_text(git_dir, ["bundle", "create", "-q", os.path.join(out_dir, "pins.bundle"), "refs/heads/pins", *([f"^{pins_tip}"] if pins_tip else [])], "git bundle")
     with open(os.path.join(out_dir, "pins.commit"), "w", encoding="utf-8", newline="\n") as f:
         f.write(commit + "\n")
-    _extract_tar(_git_out(git_dir, ["archive", "--format=tar", commit], "git archive"), os.path.join(out_dir, "tree"))
+    tree_dir = os.path.join(out_dir, "tree")
+    os.makedirs(tree_dir)
+    _git_text(git_dir, ["checkout-index", "-a"], "checkout-index", extra_env={**env, "GIT_WORK_TREE": tree_dir})   # the staged objects, nothing converted
     return commit
 
 
 def pin(manifest_file: str, commit: str, allow_local: bool = False) -> str:
     """Point a manifest at `commit`: fetch it, compute the tree hash of the package folder, rewrite the commit and tree lines in place."""
-    if not COMMIT.match(commit):
+    if not COMMIT.fullmatch(commit):
         raise Problem("commit is not a 40-digit hex id")
     policy = load_policy(os.path.dirname(os.path.dirname(os.path.abspath(manifest_file))))
     with open(manifest_file, "rb") as f:
@@ -717,7 +766,7 @@ def pin(manifest_file: str, commit: str, allow_local: bool = False) -> str:
     if bad or not isinstance(m.get("path"), str):
         raise Problem(bad or "path is missing")
     with tempfile.TemporaryDirectory() as work:
-        materialise(m["source"], commit, m["path"], os.path.join(work, "git"), os.path.join(work, "folder"), allow_local)
+        materialise(m["source"], commit, m["path"], os.path.join(work, "git"), os.path.join(work, "folder"), policy, allow_local)
         tree = tree_hash(os.path.join(work, "folder"))
     with open(manifest_file, encoding="utf-8") as f:
         text = f.read()
