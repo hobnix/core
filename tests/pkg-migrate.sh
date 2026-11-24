@@ -119,7 +119,86 @@ before=$(cat "$INST")
 check_out "migrate waits and exits 0" "^waits${tab}demo${tab}old${tab}hub" $PKG repo migrate
 check_eq "and writes nothing" "$before" "$(cat "$INST")"
 
+echo "-- a revert restores two rows that both replace the same repository: the one that lists the package wins"
+R2=$WORK/repo2; mkdir -p "$R2/recipes/other2"
+cp "$R/recipes/demo/package.toml" "$R2/recipes/other2/package.toml"; sed -i 's/name = "demo"/name = "other2"/' "$R2/recipes/other2/package.toml"
+cp "$R/recipes/demo/run.sh" "$R2/recipes/other2/run.sh"
+( cd "$R2" && git init -q . && git config user.email t@t && git config user.name t && git config commit.gpgsign false && git add -A && git commit -q -m one )
+OUT2=$WORK/pub2; OUT3=$WORK/pub3; mkdir -p "$OUT2" "$OUT3"
+$IDX build "$R" --repo rec --out "$WORK/b2" --serial 1 --skip-assets >/dev/null; cp "$WORK/b2/index.json" "$OUT2/index.json"; $IDX sign "$OUT2/index.json" --key-file "$WORK/good" >/dev/null
+$IDX build "$R2" --repo ext --out "$WORK/b3" --serial 1 --skip-assets >/dev/null; cp "$WORK/b3/index.json" "$OUT3/index.json"; $IDX sign "$OUT3/index.json" --key-file "$WORK/good" >/dev/null
+cp "$HS_PACKAGES_ROOT/config/trusted-keys/hub.allowed_signers" "$HS_PACKAGES_ROOT/config/trusted-keys/rec.allowed_signers"
+cp "$HS_PACKAGES_ROOT/config/trusted-keys/hub.allowed_signers" "$HS_PACKAGES_ROOT/config/trusted-keys/ext.allowed_signers"
+printf '[[repo]]
+name = "rec"
+url = "%s"
+index = "%s"
+replaces = ["hub"]
+
+[[repo]]
+name = "ext"
+url = "%s"
+index = "%s"
+replaces = ["hub"]
+' "$R" "$OUT2/index.json" "$R2" "$OUT3/index.json" > "$HS_PACKAGES_ROOT/config/package-repos.toml"
+rm -rf "$HS_STATE_DIR/packages/index"
+$PKG fetch >/dev/null 2>&1
+printf '[package.demo]
+version = "1.0.0"
+repo = "hub"
+
+[package.other2]
+version = "1.0.0"
+repo = "hub"
+
+[package.nowhere]
+version = "1.0.0"
+repo = "hub"
+' > "$INST"
+out=$($PKG repo migrate)
+check_match "a package of the first row goes there" "migrated${tab}demo${tab}hub${tab}rec" "$out"
+check_match "a package of the second row goes there" "migrated${tab}other2${tab}hub${tab}ext" "$out"
+check_match "a package neither lists is kept" "unmoved${tab}nowhere${tab}hub${tab}-" "$out"
+check "other2 is recorded under ext" in_entry other2 'repo = "ext"'
+echo "-- the lock is healed from installed.toml (a run that died between the two writes)"
+printf '[package.demo]
+version = "1.0.0"
+repo = "rec"
+' > "$INST"
+printf '[demo]
+version = "1.0.0"
+repo = "hub"
+
+[demo.nix]
+' > "$LOCK"
+$PKG repo migrate >/dev/null
+check "a stale lock line follows installed.toml" bash -c "grep -A3 '^\[demo\]' '$LOCK' | grep -qx 'repo = \"rec\"'"
+lock1=$(cat "$LOCK"); $PKG repo migrate >/dev/null
+check_eq "the heal is idempotent" "$lock1" "$(cat "$LOCK")"
+echo "-- an unreadable re-read never empties installed.toml"
+fresh; rows "$OUT/index.json" '["old"]'; rm -rf "$HS_STATE_DIR/packages/index"; $PKG fetch hub >/dev/null 2>&1
+before=$(cat "$INST")
+rc=0; msg=$(cd "$SCRIPTS" && python3 -c '
+import sys, pkg, pkg_repo
+sys.argv = ["pkg.py"]
+calls = []
+real = pkg.installed
+def flaky():
+    calls.append(1)
+    return real() if len(calls) == 1 else {}
+pkg.installed = flaky
+try:
+    pkg_repo.Repos(pkg).migrate()
+except pkg_repo.Refused as e:
+    print(e); sys.exit(1)
+' 2>&1) || rc=$?
+check_eq "refused" 1 "$rc"
+check_match "says why" "could not be read again" "$msg"
+check_eq "installed.toml is as it was" "$before" "$(cat "$INST")"
+
 echo "-- hs update: the fetch and the migration never fail the update"
 check "update.sh guards the fetch" bash -c "grep -q 'if ! fetched=.*pkg.py\" fetch' '$SCRIPTS/update.sh'"
-check "and the migration" bash -c "grep -n 'repo migrate' '$SCRIPTS/update.sh' | grep -q '||'"
+check "and the migration" bash -c "grep -q 'if mig=.*repo migrate' '$SCRIPTS/update.sh'"
+check "a migration that moved something refreshes the web interface" bash -c "grep -q 'live_refresh event:pkg.changed' '$SCRIPTS/update.sh'"
+check "hs pkg fetch heals too, and keeps its exit code" bash -c "grep -A3 'out=\$(py fetch' '$SCRIPTS/pkg.sh' | grep -q 'repo migrate.*|| true'"
 finish

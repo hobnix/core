@@ -168,6 +168,7 @@ case "${1:-list}" in
     trap 'live_refresh event:pkg.changed' EXIT
     hs_job_step 1 1 "Fetching the package repositories and checking their signatures"
     out=$(py fetch "$@") || rc=$?
+    py repo migrate >/dev/null 2>&1 || true   # heals what a replaced repository left behind; never changes the exit code of the fetch
     { thead 'Repository' 'Release' 'Commit' 'Result'; printf '%s\n' "$out"; } | table
     exit "${rc:-0}" ;;
   available)
@@ -335,6 +336,7 @@ case "${1:-list}" in
           case "$kind" in
             migrated) moved=$((moved + 1)); kv "$pname" "$old -> $new" ;;
             unmoved) note "$(t '%s is no longer in a default repository: it stays installed and gets no updates.' "$pname")" ;;
+            ambiguous) note "$(t '%s is listed by several repositories (%s): it stays as it is. Name one: hs pkg install %s --repo <name>' "$pname" "$new" "$pname")" ;;
             waits) note "$(t '%s: repository %s has no index yet. It runs again with the next hs pkg fetch.' "$pname" "$new")" ;;
           esac
         done <<<"$lines"

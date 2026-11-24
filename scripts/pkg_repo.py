@@ -685,47 +685,62 @@ class Repos:
           unmoved   the row that replaced the repository does not list it: stays installed as it is, gets no updates (new = -)
           waits     the replacing row has no verified index yet (first fetch failed): nothing changes (new = the row)
         Never moved: a package of a repository that is gone and that no default row replaces (a removed ADDED repository must not gain the
-        trust of a default one), or that two rows replace. Idempotent: a migrated entry has a row. Revert: a commit that restores the old rows
+        trust of a default one). Several rows may replace one repository (a revert): the one that lists the package wins, none or several -> unmoved or
+        ambiguous (kept, a note). Idempotent: a migrated entry has a row. Revert: a commit that restores the old rows
         and sets `replaces = ["official"]` on both maps the packages back by the same rule. apply=False only plans."""
         rows = self.all()
         defaults = [r for r in self.defaults() if isinstance(r.get("replaces"), list)]
-        have = self.pkg.installed()
+        first = self.pkg.installed()
         listing, out = {}, []
-        for n in sorted(have):
-            e = have[n]
+        for n in sorted(first):
+            e = first[n]
             old = e.get("repo") if isinstance(e, dict) else None
             if not isinstance(old, str) or not old or old in rows:
                 continue
             target = [r for r in defaults if old in r["replaces"]]
-            if len(target) != 1:
+            if not target:
                 continue
-            tn = target[0]["name"]
-            if tn not in listing:
-                listing[tn] = self.listed(target[0])
-            if listing[tn] is None:
-                out.append(("waits", n, old, tn))
-            elif n not in listing[tn]:
-                out.append(("unmoved", n, old, "-"))
+            for r in target:
+                if r["name"] not in listing:
+                    listing[r["name"]] = self.listed(r)
+            # a revert restores several rows that all name the same replacing row: the one whose index lists the package is the new home
+            hits = [r["name"] for r in target if listing[r["name"]] is not None and n in listing[r["name"]]]
+            if len(hits) == 1:
+                out.append(("migrated", n, old, hits[0]))
+            elif len(hits) > 1:
+                out.append(("ambiguous", n, old, ",".join(hits)))
+            elif any(listing[r["name"]] is None for r in target):
+                out.append(("waits", n, old, next(r["name"] for r in target if listing[r["name"]] is None)))
             else:
-                out.append(("migrated", n, old, tn))
+                out.append(("unmoved", n, old, "-"))
         moved = {n: (old, new) for k, n, old, new in out if k == "migrated"}
-        if apply and moved:
+        if apply:
             have = self.pkg.installed()          # re-read right before writing: a beside-running install is not lost
+            if first and not have:
+                raise Refused("installed.toml could not be read again: nothing was migrated")
             if not all(isinstance(v, dict) for v in have.values()):
                 raise Refused("installed.toml has an entry that is not a table: nothing was migrated")
-            for n, (old, new) in moved.items():
-                if n in have and have[n].get("repo") == old:
-                    have[n]["repo"] = new
-            self.pkg.save_installed(have)        # temp file + rename
+            for n, (old, new) in list(moved.items()):
+                if have.get(n, {}).get("repo") != old:
+                    del moved[n]
+            # the lock first, installed.toml second: a run that dies in between is finished by the next one (the lock heals on every run
+            # from installed.toml, which still says `old` and is migrated again)
             vend = self.pkg.pkg_vendor
             lock = vend.read_lock(self.nixos_dir())
             hit = False
-            for n, (old, new) in moved.items():
-                if isinstance(lock.get(n), dict) and lock[n].get("repo") == old:
-                    lock[n]["repo"] = new
+            for n, e in lock.items():
+                if not isinstance(e, dict):
+                    continue
+                want = moved[n][1] if n in moved else have.get(n, {}).get("repo")
+                if isinstance(want, str) and want in rows and e.get("repo") != want:
+                    e["repo"] = want
                     hit = True
             if hit:
                 vend.write_lock(self.nixos_dir(), lock)
+            if moved:
+                for n, (old, new) in moved.items():
+                    have[n]["repo"] = new
+                self.pkg.save_installed(have)    # temp file + rename
         return out
 
     # ── install ──

@@ -141,7 +141,11 @@ if [ -f "$repo/scripts/pkg.py" ]; then
       [ -z "${rname:-}" ] || [ "${rerr:-ok}" = ok ] || note "$rname: $rerr"
     done <<< "$fetched"
   fi
-  python3 -I "$repo/scripts/pkg.py" repo migrate >/dev/null 2>&1 || warn "$(t 'Installed packages were not moved to the new repository: hs pkg repo migrate shows why.')"
+  if mig=$(python3 -I "$repo/scripts/pkg.py" repo migrate 2>&1); then
+    ! grep -q '^migrated' <<< "$mig" || live_refresh event:pkg.changed
+  else
+    warn "$(t 'Installed packages were not moved to the new repository: hs pkg repo migrate shows why.')"
+  fi
 fi
 
 # machine.nix -> machine.toml once (the old file is kept as machine.nix.migrated), then the options that are new in
