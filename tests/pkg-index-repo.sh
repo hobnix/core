@@ -35,12 +35,28 @@ echo "-- add and fetch"
 check "an index repository is added with a key" $PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json"
 check "an unsigned index repository is refused" bash -c "! $PKG repo add hub2 '$R' --unsigned --index '$OUT/index.json' 2>/dev/null"
 check "an index address must be https or a path" bash -c "! $PKG repo add hub3 '$R' --key $WORK/signers --index ftp://x/index.json 2>/dev/null"
+printf 'ci@test namespaces="git" %s
+' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/git-signers"
+check_out "a key that is not trusted for indexes is refused" "hobnix-index" $PKG repo add hub4 "$R" --key "$WORK/git-signers" --index "$OUT/index.json"
+check_out "--index without an address is a usage error" "needs a value" $PKG repo add hub5 "$R" --key "$WORK/signers" --index
 check_out "repo list is unchanged in shape" "^hub${tab}.*${tab}signed${tab}added" $PKG repo list
 check_out "fetch verifies the index" "^hub${tab}serial-1${tab}-${tab}ok" $PKG fetch hub
 check_out "available takes the version of the index" "^hub${tab}demo${tab}recipe${tab}1[.]0[.]0${tab}-" $PKG available
+echo "-- an index of another repository"
+check "the same index under another name is added" $PKG repo add other "$R" --key "$WORK/signers" --index "$OUT/index.json"
+check_out "is refused: it names another repository" "index of 'hub', not of other" $PKG fetch other
+check "and nothing of it is available" bash -c "! $PKG available | grep -q '^other'"
+$PKG repo remove other
+echo "-- install"
 check_out "install says where it came from" "demo 1[.]0[.]0 from hub" $PKG install demo
 check_out "installed.toml has the commit" 'commit = "[0-9a-f]{40}"' cat "$HS_STATE_DIR/packages/installed.toml"
 check "the package is in current/" test -f "$HS_STATE_DIR/packages/current/demo/package.toml"
+
+echo "-- a crash in the swap keeps the old pair readable"
+mv "$HS_STATE_DIR/packages/index/hub/live" "$HS_STATE_DIR/packages/index/hub/.old"
+check_out "the old index is still read" "^hub${tab}demo${tab}recipe${tab}1[.]0[.]0" $PKG available
+check_out "the next fetch repairs it" "^hub${tab}serial-1${tab}-${tab}ok" $PKG fetch hub
+check "live is back" test -f "$HS_STATE_DIR/packages/index/hub/live/index.json.sig"
 
 echo "-- signature"
 cp "$OUT/index.json" "$WORK/keep.json"; cp "$OUT/index.json.sig" "$WORK/keep.json.sig"
@@ -86,6 +102,43 @@ check_out "fetch ok" "^hub${tab}serial-4" $PKG fetch hub
 check "a yanked version is not offered" bash -c "! $PKG available | grep -q demo"
 check "and gives no update" bash -c "! $PKG updates | grep -q demo"
 check_out "install refuses it with the reason" "withdrawn.*broken" $PKG install demo
+check_out "update refuses it with the reason" "withdrawn.*broken" $PKG update demo --yes --accept-permissions
+
+echo "-- the plan is bound to the commit and tree"
+mkshots() {   # mkshots <text>: a second package whose run.sh says <text> (same version), committed, indexed and signed
+  mkdir -p "$R/recipes/shots"
+  printf 'name = "shots"
+version = "1.0.0"
+kind = "recipe"
+title = "Shots"
+requires_core = ">=1"
+audience = "generic"
+needs = []
+uses = []
+input = "none"
+script = "run.sh"
+screenshots = ["../../../x.png"]
+' > "$R/recipes/shots/package.toml"
+  printf '#!/usr/bin/env bash
+# kind: generic
+# needs: -
+# uses: -
+echo %s
+' "$1" > "$R/recipes/shots/run.sh"
+  git -C "$R" add -A && git -C "$R" commit -q -m "shots $1"
+  (cd "$R" && publish "$2" "$WORK/good")
+}
+mkshots one 5; $PKG fetch hub >/dev/null
+T1=$($PKG show shots | awk -F'	' '$1=="tag"{print $2}')
+check_out "the tag of the plan names commit and tree" '^v1[.]0[.]0-[0-9a-f]{16}$' echo "$T1"
+mkshots two 6; $PKG fetch hub >/dev/null
+check_out "the same version with other files is another tag" "plan was made" $PKG install shots --tag "$T1"
+T2=$($PKG show shots | awk -F'	' '$1=="tag"{print $2}')
+check "so the tag differs" test "$T1" != "$T2"
+check_out "the new tag installs" "shots 1[.]0[.]0 from hub" $PKG install shots --tag "$T2"
+
+echo "-- asset paths stay inside the package"
+check_out "a screenshot path with .. is refused" "outside the package" $PKG asset shots ../../../x.png
 
 echo "-- a repository without index keeps the tag path"
 check "list still works" $PKG list

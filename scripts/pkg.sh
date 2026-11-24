@@ -262,11 +262,13 @@ case "${1:-list}" in
         done
         step "$(t 'Package repository %s' "$name")"
         kv "$(t 'Address')" "$url"
-        key=""; unsigned=false
+        key=""; unsigned=false; index=""
         for ((i = 0; i < ${#extra[@]}; i++)); do
           [ "${extra[i]}" != --key ] || key=${extra[i + 1]:-}
+          [ "${extra[i]}" != --index ] || index=${extra[i + 1]:-}
           [ "${extra[i]}" != --unsigned ] || unsigned=true
         done
+        [ -z "$index" ] || kv "$(t 'Index')" "$index"
         if [ -n "$key" ] && [ -r "$key" ]; then
           while read -r line; do
             kv "$(t 'Signer')" "$(sed -E 's/^.*(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) /\1 /' <<<"$line" | ssh-keygen -lf /dev/stdin 2>/dev/null || echo "$line")"

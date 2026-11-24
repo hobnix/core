@@ -93,17 +93,17 @@ Not tested on hardware yet; the signing workflow has never run on GitHub.
 `scripts/pkg_repo.py`. Not tested on hardware yet; no default repository has an index yet, so nothing changes for a server until one does.
 
 - **Which repository:** a repository row with an `index` address (`hs pkg repo add <name> <git url> --key <file> --index <address>`, or `index =` in
-  `config/package-repos.toml`). `url` stays the git address the commits come from. A row without `index` keeps the signed release tags.
+  `config/package-repos.toml`). `url` stays the git address the commits come from. A row without `index` keeps the signed release tags. The key file must carry `namespaces="hobnix-index"`, and the `repo` field of the index must equal the row's name (so another repository's index, signed by the same CI key, cannot be served under this address): add the repository under the name its index has.
 - **Fetch:** `hs pkg fetch` loads `index.json` and `index.json.sig` (https or a local path), checks the signature first (the same key file, line with
   `namespaces="hobnix-index"`), the schema, and the serial against the kept `index/<repo>/index.json`: lower is refused, the same serial with other
-  content too. Only then the kept copy is replaced. Every read re-verifies the signature of the kept copy. An index past `expires` plus 7 days
+  content too. Only then the kept pair (`index/<repo>/live/`) is replaced by a directory swap; a crash in the swap leaves `.old`, which is still read, and the next fetch repairs it. Every read re-verifies the signature of the kept copy. An index past `expires` plus 7 days
   prints a warning; it keeps working.
-- **Version:** the `version` of the entry is the available version. The tag column of the existing machine lines is `v<version>`, the Release
+- **Version:** the `version` of the entry is the available version. The tag column of the existing machine lines is `v<version>-<8 hex of the commit><8 hex of the tree hash>`, so a plan made for a tag installs only those files (the web job accepts that shape), the Release
   column of `hs pkg fetch` is `serial-<N>` (shapes unchanged). An update is offered when the index version is higher; a changed commit with the same
   version is not an update.
 - **Install:** the pinned `commit` is fetched into the clone, `git archive` of the package folder is extracted and its tree hash (`pkg_index.py tree_hash`)
-  must equal the entry's `tree`, else nothing is installed. `show`, `asset` and the update prompts read files from such a checked copy, not from git objects.
-- **Yanked:** a yanked entry is not listed by `available`, not offered by `updates`, refused by `install` and `update` with its reason; an installed copy stays.
+  must equal the entry's `tree`, else nothing is installed. `show`, `asset` and the update prompts read files from such a checked copy, not from git objects; a path with `..`, an absolute path or one that resolves outside the folder is refused.
+- **Yanked:** a yanked entry is not listed by `available`, not offered by `updates`, refused by `install`, `update` and the plan (`show`) with its reason; an installed copy stays.
 - **Not built:** the timer and event, ETag, the per-channel index, the check that a name does not exist in two repositories, `repo/name` syntax.
 
 ## Hosting

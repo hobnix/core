@@ -139,6 +139,10 @@ class Repos:
             raise Refused("the address must be https://, ssh://, git@host:path or a local path")
         if index and not re.match(r"^(https://|file://|/|[A-Za-z]:[\/])", index):
             raise Refused("the index address must be https:// or a local path")
+        if index and not unsigned and key:
+            with open(key, encoding="utf-8") as fh:
+                if not re.search(r'namespaces="[^"]*\bhobnix-index\b', fh.read()):
+                    raise Refused('the key file has no line with namespaces="hobnix-index": a key that signs git tags does not sign indexes')
         if index and unsigned:
             raise Refused("a signed index needs --key <allowed_signers file>, not --unsigned")
         if bool(key) == bool(unsigned):
@@ -189,6 +193,12 @@ class Repos:
     def index_dir(self, name):
         return os.path.join(self.state, "index", name)
 
+    def live_dir(self, name):
+        """the folder holding the accepted index.json and its .sig as one pair; after a crash in the swap the kept old pair is still readable"""
+        d = self.index_dir(name)
+        live, old = os.path.join(d, "live"), os.path.join(d, ".old")
+        return live if os.path.isdir(live) or not os.path.isdir(old) else old
+
     @staticmethod
     def load_from(src, dest):
         """copy an https:// address or a local path to dest (at most MAX_INDEX bytes)"""
@@ -227,6 +237,8 @@ class Repos:
         bad = pi.validate(doc)
         if bad:
             raise Refused("%s: the index is refused: %s" % (r["name"], "; ".join(bad[:3])))
+        if doc.get("repo") != r["name"]:      # another repository's signed index served under this address (the same CI key may sign both)
+            raise Refused("%s: the index is refused: it is the index of %r, not of %s (add the repository under the name its index has)" % (r["name"], doc.get("repo"), r["name"]))
         return doc
 
     def fetch_index(self, r):
@@ -242,15 +254,19 @@ class Repos:
             self.load_from(r["index"] + ".sig", os.path.join(new, "index.json.sig"))
             doc = self.checked_index(r, os.path.join(new, "index.json"))
             try:
-                with open(os.path.join(d, "index.json"), encoding="utf-8") as f:
+                with open(os.path.join(self.live_dir(name), "index.json"), encoding="utf-8") as f:
                     old = json.load(f)
             except (OSError, ValueError):
                 old = None
             why = pi.check_serial(doc, old) if old else None
             if why:
                 raise Refused("%s: the index is refused: %s (no rollback to an older index)" % (name, why))
-            for n in ("index.json.sig", "index.json"):
-                os.replace(os.path.join(new, n), os.path.join(d, n))
+            live, prev = os.path.join(d, "live"), os.path.join(d, ".old")
+            self.rm_quiet(prev)
+            if os.path.isdir(live):
+                os.rename(live, prev)       # a crash here leaves .old, which live_dir still reads
+            os.rename(new, live)
+            self.rm_quiet(prev)
         finally:
             self.rm_quiet(new)
         self._idx = {}
@@ -262,11 +278,16 @@ class Repos:
         """the kept index of a repository, its signature checked again; Refused when there is none or it does not verify"""
         memo = self.__dict__.setdefault("_idx", {})
         if r["name"] not in memo:
-            path = os.path.join(self.index_dir(r["name"]), "index.json")
+            path = os.path.join(self.live_dir(r["name"]), "index.json")
             if not os.path.isfile(path):
                 raise Refused("%s: no index yet (hs pkg fetch)" % r["name"])
             memo[r["name"]] = self.checked_index(r, path)
         return memo[r["name"]]
+
+    @staticmethod
+    def index_tag(entry):
+        """v<version>-<8 of the commit><8 of the tree hash>: a plan made for this tag is only ever installed as these files (the tag shape of the web job allows it)"""
+        return "v%s-%s%s" % (entry["version"], entry["commit"][:8], entry["tree"][7:15])
 
     def index_entries(self, r):
         """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry"""
@@ -302,10 +323,16 @@ class Repos:
 
     def read_at(self, r_name, entry, ref, rel):
         """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
+        if not rel or rel.startswith("/") or "\\" in rel or ".." in rel.split("/") or re.match(r"^[A-Za-z]:", rel):
+            raise Refused("%s: %r is outside the package folder" % (r_name, rel))
         if not entry.get("_index"):
             return git("show", "%s:%s/%s" % (ref, entry["path"], rel), cwd=self.clone_dir(r_name))
+        base = os.path.realpath(self.verified_dir(r_name, entry))
+        full = os.path.realpath(os.path.join(base, rel))
+        if os.path.commonpath([base, full]) != base:
+            raise Refused("%s: %r is outside the package folder" % (r_name, rel))
         try:
-            with open(os.path.join(self.verified_dir(r_name, entry), rel), "rb") as f:
+            with open(full, "rb") as f:
                 return f.read()
         except OSError:
             raise Refused("%s: %s is not in the package" % (r_name, rel))
@@ -368,7 +395,7 @@ class Repos:
             try:
                 if r.get("index"):
                     for pname, entry in self.index_entries(r).items():
-                        cat.setdefault(pname, []).append((name, entry, "v" + str(entry["version"]), entry["commit"]))
+                        cat.setdefault(pname, []).append((name, entry, self.index_tag(entry), entry["commit"]))
                     continue
                 t, c = self.verified_tag(r)
                 for pname, entry in self.index(r, t).items():
@@ -389,9 +416,13 @@ class Repos:
         if any(m.get("name") == name and "/current/" not in p.replace("\\", "/") for p, m in self.pkg.manifests()):
             raise Refused("%s is part of this installation already (a built-in package is not replaced by a repository)" % name)
         if cat[0][1].get("yanked"):
-            why = cat[0][1].get("yanked_reason")
-            raise Refused("%s %s was withdrawn (yanked)%s: it is not installed" % (name, cat[0][1].get("version"), ": " + why if why else ""))
+            raise Refused(self.yanked_text(name, cat[0][1]) + ": it is not installed")
         return cat[0]
+
+    @staticmethod
+    def yanked_text(name, entry):
+        why = entry.get("yanked_reason")
+        return "%s %s was withdrawn (yanked)%s" % (name, entry.get("version"), ": " + why if why else "")
 
     def extract(self, r, tag, path, dest, tree=None):
         """the folder `path` of `tag` (a tag, or a commit for an index package) into dest; `tree` = the hash the signed index names: checked before use"""
@@ -701,7 +732,9 @@ class Repos:
         have = self.recorded(name)
         r_name, entry, tag, commit = self.choose_installed(name, have["repo"])
         self.check_entry(name, entry, r_name)
-        if commit == have.get("commit") or entry.get("yanked"):
+        if entry.get("yanked"):
+            raise Refused(self.yanked_text(name, entry) + " (the installed copy is %s)" % have.get("version", "?"))
+        if commit == have.get("commit"):
             return None
         ev, hv, ht = self.pkg.semver_key(entry["version"]), self.pkg.semver_key(have["version"]), have.get("tag", "")
         indexed = bool(entry.get("_index"))
@@ -860,6 +893,9 @@ def run(pkg, cmd, rest):
                 for n, r in R.all().items():
                     print("\t".join([n, r["url"], "unsigned" if r.get("unsigned") else "signed", "default" if r.get("default") else "added"]))
             elif sub == "add":
+                for flag in ("--key", "--index"):
+                    if flag in rest and (rest.index(flag) + 1 >= len(rest) or rest[rest.index(flag) + 1].startswith("--")):
+                        raise Refused("usage: repo add <name> <url> (--key <allowed_signers file> [--index <address>] | --unsigned); %s needs a value" % flag)
                 key = rest[rest.index("--key") + 1] if "--key" in rest else None
                 index = rest[rest.index("--index") + 1] if "--index" in rest else None
                 R.add(rest[1], rest[2], key=key, unsigned="--unsigned" in rest, index=index)
