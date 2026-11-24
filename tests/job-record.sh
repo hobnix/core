@@ -3,7 +3,7 @@
 # field names, atomic write, rate limit, retention, no argv in the file, a bad directory. No root, no systemd.
 set -uo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); export T; trap 'rm -rf "$T"' EXIT
 export HS_JOBS_DIR="$T/jobs" HS_STATE_DIR="$T/state" HS_JOB_RATE=60   # long: the rate limit test must not depend on how fast python starts
 W="python3 $here/scripts/job-record.py"
 fail=0
@@ -65,12 +65,29 @@ check "empty initiator is null" "null" "$(jf "$id2" initiator)"
 check "a failure without a code has no error.code" "null" "$(jf "$id2" error.code)"
 id3=$($W new --slug refused --desc "refused one" --unit u --source web --initiator "")
 $W run "$id3"
-( HS_JOB_ID=$id3 bash -c '. "$1/scripts/lib/refuse-code.sh"; refuse_code name.invalid "bad" >/dev/null' _ "$here" )
-check "refuse_code leaves the code for the job" "name.invalid" "$(cat "$HS_JOBS_DIR/$id3.code")"
-( . "$here/scripts/lib/job.sh"; HS_JOB_RECORD=python hs_job_record finish "$id3" 1 >/dev/null 2>&1 )
+# a stand-in job unit: its shell is HS_JOB_PID, the job's own script is its child; event_emit is stubbed to log the payload
+mkdir -p "$T/lib" "$T/bin"
+cp "$here/scripts/lib/job.sh" "$here/scripts/lib/refuse-code.sh" "$here/scripts/lib/error-codes.tsv" "$T/lib/"; cp "$here/scripts/job-record.py" "$T/"
+printf 'event_emit() { printf "%%s\\n" "$*" >>"$T/events.log"; }\n' >"$T/lib/event.sh"
+printf '. "%s/lib/refuse-code.sh"\nrefuse_code name.invalid "bad"\n' "$T" >"$T/bin/refuse.sh"
+printf '. "%s/lib/refuse-code.sh"\nout=$(bash "%s/bin/refuse.sh") || true\nexit 1\n' "$T" "$T" >"$T/bin/caught.sh"
+unit() { HS_JOB_ID=$1 HS_JOB_RECORD=python HS_JOB_NOBUMP=1 bash -c 'HS_JOB_PID=$$; export HS_JOB_PID; bash "$2"; rc=$?; . "$1/lib/job.sh"; hs_job_record finish "$HS_JOB_ID" "$rc"' _ "$T" "$3" >/dev/null 2>&1; }
+unit "$id3" x "$T/bin/refuse.sh"
 check "the failed record carries the code" "name.invalid" "$(jf "$id3" error.code)"
 check "the failed record keeps its category" "exit" "$(jf "$id3" error.category)"
-check "the code file is gone" "0" "$(ls "$HS_JOBS_DIR"/*.code 2>/dev/null | wc -l)"
+check "the job.failed event carries the code" "1" "$(grep -c 'job.failed .*"code":"name.invalid"' "$T/events.log")"
+check "the code file is gone" "0" "$(ls "$HS_JOBS_DIR"/*.code "$HS_JOBS_DIR"/.code.* 2>/dev/null | wc -l)"
+# a refusal the job catches in a child does not name the job's code
+id4=$($W new --slug caught --desc "caught one" --unit u --source web --initiator ""); $W run "$id4"
+unit "$id4" x "$T/bin/caught.sh"
+check "a caught refusal leaves no error.code" "null" "$(jf "$id4" error.code)"
+check "a caught refusal leaves no code file" "0" "$(ls "$HS_JOBS_DIR"/*.code 2>/dev/null | wc -l)"
+# a stale code file does not outlive a successful finish
+id5=$($W new --slug fine --desc "fine one" --unit u --source web --initiator ""); $W run "$id5"
+printf 'name.invalid\n' >"$HS_JOBS_DIR/$id5.code"
+( . "$T/lib/job.sh"; HS_JOB_RECORD=python HS_JOB_NOBUMP=1 hs_job_record finish "$id5" 0 >/dev/null 2>&1 )
+check "a successful finish removes the code file" "0" "$(ls "$HS_JOBS_DIR"/*.code 2>/dev/null | wc -l)"
+check "a successful job has no error" "null" "$(jf "$id5" error)"
 check "the code is in the catalogue" "name.invalid" "$(python3 "$here/scripts/errors-doc-gen.py" codes | grep -xF name.invalid)"
 check "ids differ" "1" "$([ "$id" != "$id2" ] && echo 1 || echo 0)"
 
@@ -279,3 +296,5 @@ $W finish "$sid" 0 >/dev/null
 check "finish keeps skipped" "skipped" "$(jf "$sid" state)"
 check "skip of an ended job is refused" "1" "$($W skip "$sid" x >/dev/null 2>&1; echo $?)"
 
+
+exit "$fail"

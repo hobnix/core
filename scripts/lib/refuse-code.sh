@@ -13,7 +13,15 @@ refuse_code() {
   printf 'status\trefused\nreason\t%s\n' "${text:-${cat_text:-The server did not do this.}}"
   [ "$fix" = - ] || printf 'fix\t%s\n' "$fix"
   printf 'code\t%s\n' "$code"
-  # a job that ends on this refusal: its record gets the code (hs_job_record finish reads the file; best effort, never changes the output or the exit)
-  [ -z "${HS_JOB_ID:-}" ] || printf '%s\n' "$code" >"${HS_JOBS_DIR:-/var/lib/hs/jobs}/$HS_JOB_ID.code" 2>/dev/null || true
+  # a job that ends on this refusal: its record gets the code (hs_job_record finish reads the file). Only the job's own top-level script counts
+  # (its parent is the job unit's shell, HS_JOB_PID, and it is no subshell): a refusal a job catches in a child must not name the job's code.
+  # Best effort, never changes the output or the exit.
+  if [ -n "${HS_JOB_ID:-}" ] && [ "${HS_JOB_PID:-}" = "$PPID" ] && [ "$BASH_SUBSHELL" = 0 ] \
+     && [[ "$HS_JOB_ID" =~ ^[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]+-[a-z]{4}$ ]]; then
+    local dir=${HS_JOBS_DIR:-/var/lib/hs/jobs} tmp
+    if [ -d "$dir" ] && [ ! -L "$dir/$HS_JOB_ID.code" ] && tmp=$(umask 077; mktemp "$dir/.code.XXXXXX" 2>/dev/null); then
+      { printf '%s\n' "$code" >"$tmp" && mv -f "$tmp" "$dir/$HS_JOB_ID.code"; } 2>/dev/null || rm -f "$tmp"
+    fi
+  fi
   exit 1
 }
