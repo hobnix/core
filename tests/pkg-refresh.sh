@@ -15,6 +15,10 @@ mode=$(cat "$WORK/mode")
 d=$HS_STATE_DIR/packages/index/official/live; mkdir -p "$d"
 case "$mode" in
   fail) printf 'official\t-\t-\tcould not be reached\n'; exit 1 ;;
+  warn) echo 'warning: the index of official expired on 2020-01-01' >&2; printf 'official	-	-	ok
+' ;;
+  lock) echo 'official: another pkg fetch is running (waited 0 s); try again in a minute' >&2; exit 1 ;;
+  nokey) echo 'warning: no tab here' >&2; exit 1 ;;
   same) printf 'official\t-\t-\tok\n' ;;
   *) printf '{"expires": "%s"}\n' "$(cat "$WORK/expires")" > "$d/index.json"; printf 'official\t-\t-\tok\n' ;;
 esac
@@ -46,6 +50,17 @@ check_eq "... the error is in the state, last_ok stays" "could not be reached $n
 check_eq "no warning within 3 days" "" "$($R --warn 2>&1)"
 export HS_NOW=$((now + 4 * 86400))
 check_contains "a warning after 3 days without a fetch" "could not be fetched since" "$($R --warn 2>&1)"
+
+echo warn > "$WORK/mode"; export HS_NOW=$((now + 200)); failed=$(events index.failed)
+$R >/dev/null 2>&1
+check_eq "a warning on stderr is not a repository row: state repo is official, ok" "official -" "$(st repo error)"
+check_eq "... and no failed event" "$failed" "$(events index.failed)"
+echo lock > "$WORK/mode"; before=$(cat "$HS_STATE_DIR/pkg-index-state"); rc=0; $R >/dev/null 2>&1 || rc=$?
+check_eq "a fetch that waits for a running one is skipped: exit 0" 0 "$rc"
+check_eq "... no failed event, state untouched" "$failed same" "$(events index.failed) $([ "$before" = "$(cat "$HS_STATE_DIR/pkg-index-state")" ] && echo same || echo changed)"
+echo nokey > "$WORK/mode"; rm -f "$HS_STATE_DIR/pkg-index-state"; $R >/dev/null 2>&1
+check_eq "a failure with only a stderr line: the repo stays official, the error is that line" "official warning: no tab here" "$(st repo error)"
+check_contains "never fetched, a failed try: --warn says so" "has not been fetched yet" "$($R --warn 2>&1)"
 
 exp=$(date -u -d 2027-12-31T00:00:00Z +%s)
 export HS_NOW=$((exp - 2 * 86400)); echo same > "$WORK/mode"

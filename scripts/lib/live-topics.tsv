@@ -73,6 +73,7 @@ pkg-states	pkg states	120	skip	-	system,instances	-
 apps-list	apps list	120	skip	-	system,instances	-
 apps-health	apps health	60	skip	-	instances,system	-
 pkg-repos	pkg repos	300	run	-	system	-
+pkg-index	pkg index	300	run	-	system	-
 recipes-list	recipes list	60	skip	incus	instances,system	-
 recipes-versions	recipes versions	60	skip	-	instances,system	-
 gateway-status	gateway status	60	skip	gateway	network,instances,system	-

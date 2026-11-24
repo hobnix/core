@@ -29,7 +29,9 @@ case "${1:-}" in
     ok_at=$(get last_ok); exp=$(get expires); err=$(get error)
     if [ -n "$exp" ] && [ "$exp" != - ] && [ "$now" -gt "$exp" ]; then
       warn "$(t 'The package index expired on %s. Fetch a new one: hs pkg refresh' "$(fmt "$exp")")"
-    elif [ -n "$ok_at" ] && [ "$ok_at" != - ] && [ $((now - ok_at)) -gt $((3 * day)) ]; then
+    elif [ "${ok_at:--}" = - ] && [ "${err:--}" != - ]; then
+      warn "$(t 'The package index has not been fetched yet: %s. Installed packages keep running.' "$err")"
+    elif [ "${ok_at:--}" != - ] && [ $((now - ok_at)) -gt $((3 * day)) ]; then
       warn "$(t 'The package index could not be fetched since %s: %s. Installed packages keep running.' "$(fmt "$ok_at")" "${err:--}")"
     fi
     exit 0 ;;
@@ -39,15 +41,24 @@ esac
 
 if [ -z "${HS_PKG_PY:-}" ] && [ ! -f "$here/pkg.py" ]; then fail "$(t 'pkg.py is missing')"; exit 1; fi
 before=$(digest)
-rc=0; out=$(pkgpy fetch 2>&1) || rc=$?
+# stdout is the result table (name, release, commit, result: tab separated); stderr carries warnings (an index past its grace, a commit that cannot be
+# fetched) and goes to the journal as notes. A fetch that waits for the lock of a running `hs update` is not a failure: this run is skipped quietly.
+errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+rc=0; out=$(HS_PKG_LOCK_WAIT=${HS_PKG_LOCK_WAIT:-0} pkgpy fetch 2>"$errf") || rc=$?
+while IFS= read -r l; do [ -z "$l" ] || note "$l"; done < "$errf"
+if grep -q 'another pkg fetch is running' "$errf" <(printf '%s
+' "$out"); then note "$(t 'Another package fetch is running: skipped.')"; exit 0; fi
 after=$(digest)
+rows=$(awk -F'	' 'NF >= 4' <<< "$out")
 repo=""; err=""
-while IFS=$'\t' read -r rname _ _ rerr; do
+while IFS=$'	' read -r rname _ _ rerr; do
   [ -n "${rname:-}" ] || continue
   [ -n "$repo" ] || repo=$rname
   if [ "${rerr:-ok}" != ok ] && [ -z "$err" ]; then repo=$rname; err=$rerr; fi
-done <<< "$out"
-[ "$rc" -eq 0 ] || [ -n "$err" ] || err=$(head -n1 <<< "$out")
+done <<< "$rows"
+[ "$rc" -eq 0 ] || [ -n "$err" ] || err=$(head -n1 < <(cat "$errf"; printf '%s
+' "$out") | head -c 200)
+[ -n "$err" ] || [ "$rc" -eq 0 ] || err="exit $rc"
 [ -n "$repo" ] || repo=official
 
 last_ok=$(get last_ok); notified=$(get notified)

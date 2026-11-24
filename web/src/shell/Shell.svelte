@@ -19,6 +19,8 @@
   import { treeMeta } from '../pages/proxy/status.js';
   import { treeMeta as dockerTree, dockerChildren } from '../pages/docker/health.js';
   import { tree } from '../nav.js';
+  import Banner from '../ui/Banner.svelte';
+  import { indexWarning } from '../pages/pkgindex.js';
   import { VPS_NODE } from '../redirects.js';
 
   let { user, onsignout } = $props();
@@ -72,8 +74,12 @@
   const prox = poll('/api/proxy/status', 15000);
   const proxState = $derived(prox.data ? 'ok' : !prox.loaded ? 'loading' : prox.error?.status === 404 ? 'off' : 'down');
   // new commits upstream (refs fetched earlier by hs update; the read never fetches): the count tag of the Update button
-  const upd = poll(() => (locked || !admin ? '' : '/api/sys/system/updates'), 60000);
+  const upd = poll(() => (locked || !admin ? '' : '/api/sys/system/updates'), 60000, 'system-updates');
   const pending = $derived(Number(rows(upd).find((r) => r[0] === 'behind')?.[1]) || 0);
+
+  // the package index could not be fetched for days, or it expired (hs sys pkg index, kept by the timer hs-pkg-refresh); follows the event index.changed|failed
+  const pkgIndex = poll(() => (locked || !admin ? '' : '/api/sys/pkg/index'), 300000, 'pkg-index');
+  const indexWarn = $derived(indexWarning(rows(pkgIndex)));
 
   // ── the servers: this one first, then the rows of `hs node list` (name kind host port source key), plus the implicit proxyserver of the old vps part
   const nodeList = poll(() => (admin ? '/api/sys/node/list' : ''), 30000);
@@ -160,6 +166,7 @@
   {#if navOpen}<button class="treescrim" aria-label="Close the resource tree" onclick={() => (navOpen = false)}></button>{/if}
   <main class="main gridbg">
     <div class="wrap">
+      {#if indexWarn}<Banner tone={indexWarn.tone}>{indexWarn.text}</Banner>{/if}
       {#if !host || !route.node}
         <Skeleton lines={5} height={16} gap={16} />
       {:else if !known && nodeList.loaded}

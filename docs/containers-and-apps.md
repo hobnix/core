@@ -501,7 +501,7 @@ The signed index of `official` is read from the address in `config/package-repos
 A timer, `hs-pkg-refresh`, fetches it once a day (at a random time within six hours, and 15 minutes after boot). `hs update` does the same. When the
 index changed, the update count in the top bar and the Marketplace read again without a reload; when it could not be fetched, the reason is kept.
 Fetch it by hand with `hs pkg refresh`, and read the state with `hs sys pkg index` (`last_ok`, `last_try`, `error`, `expires`; times are epoch seconds,
-`-` is unknown). After three days without a successful fetch, or once the index has expired, `hs pkg list` prints a warning. One push message goes
+`-` is unknown). After three days without a successful fetch, or once the index has expired, `hs pkg list` prints a warning and the web interface shows a banner at the top of the page (also when the very first fetch failed). One push message goes
 out when the index is less than three days from expiring. Installed packages keep running. Check the timer with `systemctl list-timers hs-pkg-refresh`
 and `journalctl -u hs-pkg-refresh`. Not tested on hardware yet.
 

@@ -10005,6 +10005,12 @@
      "class": "read",
      "rest": false
     },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/index",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": []
+    },
     "description": "The state of the package index (pkg-refresh.sh): the repository, when it was last fetched (last_ok) and tried (last_try), the error of the last try (- = none), when the index expires and for which expiry a push message went out (notified). No line before the first fetch. Epoch values are seconds, - = unknown.",
     "responses": {
      "0": {
