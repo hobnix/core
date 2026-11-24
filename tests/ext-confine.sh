@@ -16,6 +16,20 @@ ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 CapabilityBoundingSet=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 PrivateDevices=yes
 TemporaryFileSystem=/var/lib/hs:ro
 InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
@@ -30,6 +44,20 @@ ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 CapabilityBoundingSet=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 PrivateDevices=no
 DevicePolicy=closed
 DeviceAllow=char-drm rw
@@ -44,6 +72,23 @@ check_eq "a path listed twice is written once" "1" "$($EC fs.write:/srv/a fs.wri
 check_eq "fs.read alone never makes a path writable" "0" "$($EC fs.read:/srv/a | grep -c 'ReadWritePaths=.*/srv/a')"
 check_eq "no devices: PrivateDevices=yes and no DeviceAllow" "0" "$($EC fs.write:/srv/a | grep -c 'DeviceAllow\|PrivateDevices=no')"
 check_eq "no capabilities by default" "1" "$($EC fs.write:/srv/a | grep -c '^CapabilityBoundingSet=$')"
+
+echo "-- hardening: every flag is in the unit, and no declared permission loses its access"
+ALL="$($EC fs.write:/srv/a fs.read:/etc/hs devices:gpu net:lan)"
+for l in ProtectKernelTunables=yes ProtectKernelModules=yes ProtectKernelLogs=yes ProtectControlGroups=yes ProtectClock=yes ProtectHostname=yes \
+  RestrictNamespaces=yes RestrictRealtime=yes RestrictSUIDSGID=yes LockPersonality=yes   SystemCallArchitectures=native "SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete" SystemCallErrorNumber=EPERM "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK"; do
+  check_eq "a package without permissions gets $l" "1" "$($EC - | grep -c -x -- "$l")"
+  check_eq "and so does one with fs, devices and net: $l" "1" "$(printf '%s\n' "$ALL" | grep -c -x -- "$l")"
+done
+check_eq "unix sockets stay (the bridge pipe, incus, journal): AF_UNIX is allowed" "1" "$($EC host:incus | grep -c '^RestrictAddressFamilies=AF_UNIX ')"
+check_eq "net:lan keeps AF_INET and AF_INET6 (net is declared only)" "1" "$($EC net:lan | grep -c '^RestrictAddressFamilies=.*AF_INET AF_INET6 ')"
+check_eq "no IP filter: network filtering is a firewall decision" "0" "$($EC net:lan net:wan | grep -c 'IPAddress\|PrivateNetwork')"
+check_eq "devices:gpu keeps its device (DeviceAllow, not PrivateDevices)" "2" "$(printf '%s\n' "$ALL" | grep -c '^DeviceAllow=char-drm rw$\|^PrivateDevices=no$')"
+check_eq "fs.write stays writable (no ProtectSystem=full, no ReadOnly of it)" "1" "$(printf '%s\n' "$ALL" | grep -c '^ReadWritePaths=-/srv/a$')"
+check_eq "an allow list would kill a service with SIGSYS: the filter is a deny list and refused calls are errors" "0" "$(printf '%s
+' "$ALL" | grep -c '^SystemCallFilter=@\|ProtectProc\|ProcSubset')"
+check_eq "no DynamicUser yet (step 7) and no MemoryDenyWriteExecute" "0" "$(printf '%s\n' "$ALL" | grep -c 'DynamicUser\|MemoryDenyWriteExecute\|^User=')"
+check_eq "props (confined commands) carry the same flags" "14" "$(python3 -I $SCRIPTS/lib/ext_confine.py props --name fixsvc -- - | grep -c '^Protect\(Kernel\|Control\|Clock\|Hostname\)\|^Restrict\|^LockPers\|^SystemCall')"
 
 echo "-- bad input is refused"
 for bad in relative/path ../etc /srv/../etc /srv/./a /srv//a / // '/srv/a b' '/srv/$HOME' '/srv/*'; do
@@ -187,6 +232,20 @@ expect="--pipe
 --property=PrivateTmp=yes
 --property=NoNewPrivileges=yes
 --property=CapabilityBoundingSet=
+--property=ProtectKernelTunables=yes
+--property=ProtectKernelModules=yes
+--property=ProtectKernelLogs=yes
+--property=ProtectControlGroups=yes
+--property=ProtectClock=yes
+--property=ProtectHostname=yes
+--property=RestrictNamespaces=yes
+--property=RestrictRealtime=yes
+--property=RestrictSUIDSGID=yes
+--property=LockPersonality=yes
+--property=SystemCallArchitectures=native
+--property=SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete
+--property=SystemCallErrorNumber=EPERM
+--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 --property=PrivateDevices=yes
 --property=TemporaryFileSystem=/var/lib/hs:ro
 --property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred

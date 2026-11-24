@@ -95,6 +95,7 @@ service could not emit, roll up, read an integration key or even start under the
 | From the package | systemd property |
 | --- | --- |
 | always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` |
+| always (hardening, ADR 0031 decision 5) | `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectControlGroups`, `ProtectClock`, `ProtectHostname`, `RestrictNamespaces`, `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality` (all `yes`), `SystemCallArchitectures=native`, `SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete` with `SystemCallErrorNumber=EPERM`, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK` (unix sockets and the network stay: `net` is not filtered, no `IPAddressAllow`; netlink for `ip` and `hs` tools). Not set, because a violation is invisible before a hardware run: the allow list `SystemCallFilter=@system-service` (a call outside it kills the process with SIGSYS and no message), `ProtectProc=invisible` and `ProcSubset=pid` (`hs` and tools read /proc), `MemoryDenyWriteExecute` (Python). Riskiest of the set: `RestrictNamespaces` and the syscall filter; the hardware test runs a real service and a confined command. |
 | `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
