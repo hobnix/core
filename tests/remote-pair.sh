@@ -47,7 +47,7 @@ cat > "$WORK/curl.sh" <<EOF
 #!/usr/bin/env bash
 url=\${@: -1}
 case "\$url" in */claim) w=remote-claim; d=$A; n=alpha ;; */push) w=remote-accept; d=$B; n=beta ;; *) exit 7 ;; esac
-export HS_STATE_DIR=\$d/state HS_MANAGE_USERS=\$d/bin/mu.sh HS_SHARE_PERM=\$d/bin/sp.sh HS_HOST_NAME=\$n HS_DOMAIN_SHORT=HOME \\
+export HS_REMOTE=\${FAKE_REMOTE:-} HS_STATE_DIR=\$d/state HS_MANAGE_USERS=\$d/bin/mu.sh HS_SHARE_PERM=\$d/bin/sp.sh HS_HOST_NAME=\$n HS_DOMAIN_SHORT=HOME \\
   HS_HOST_KEY_FILE=\$d/hostkey.pub HS_REMOTE_CODES=\$d/codes.json HS_REMOTE_ROOT=\$d/mnt HS_MOUNT_CMD=true HS_MOUNTPOINT=false HS_VAULT_DIR=\$d/novault
 out=\$("$bin" \$w --source \${FAKE_SRC:-10.0.0.9}); rc=\$?
 printf '%s\n%s' "\$out" "\$( [ \$rc = 0 ] && echo 200 || { case "\$out" in *code.rate*) echo 429 ;; *code.unknown*) echo 404 ;; *) echo 503 ;; esac; } )"
@@ -149,6 +149,23 @@ out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code8=$(aw
 out=$(printf '%s\n' "$code8@$addr" | srv "$B" beta add --code --stdin --reconnect gamma 2>&1) && fail "reconnect for another name worked" || pass "--reconnect names the server and the answer must match"
 out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code9=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 out=$(printf '%s\n' "$code9@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && pass "--reconnect alpha with the stored key works" || fail "reconnect: $out"
+echo "-- --reconnect is anchored to the stored host: a code maker who shows alpha's public key and name but another host is refused"
+cat > "$WORK/evil-remote.sh" <<EOT
+#!/usr/bin/env bash
+# an attacker's server: patched remote.sh that answers server=alpha, the PUBLIC host key of alpha, but its own host
+[ "\$1" = grant ] || exit 3
+printf 'server\talpha\nhost\tevil.local\nlogin\tremote-beta\ndomain\tHOME\npassword\tevilpw\nhostkey\t%s\n' "\$(awk '{ print \$1 " " \$2; exit }' "$A/hostkey.pub")"
+EOT
+chmod +x "$WORK/evil-remote.sh"
+credbefore=$(cat "$B/state/remote-alpha.cred"); rowsbefore=$(cat "$B/state/remote-mounts")
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code10=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code10@$addr" | FAKE_REMOTE=$WORK/evil-remote.sh srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a reconnect moved alpha to another host" || pass "the answer's host must be the stored host"
+check_eq "the credentials file is unchanged (host in the answer)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "the rows are unchanged (host in the answer)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code11=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code11@evil.local:8480" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a reconnect followed a code that points to another host" || pass "the address the code points to must be the stored host"
+check_eq "the credentials file is unchanged (address of the code)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "the rows are unchanged (address of the code)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
 echo "-- send: a second share for a server that has access gets an accurate error"
 out=$(srv "$B" beta receive --plain --yes) && rcode3=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send to an existing name worked" || pass "send refuses it"

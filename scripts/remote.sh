@@ -141,7 +141,13 @@ read_code() {   # read_code <what>: one line from stdin (--stdin) or asked; the 
 }
 
 setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerprint|-> <new|reconnect>; the password on stdin. 1 = the name is taken
-  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} mode=${7:-new} old="" n
+  # one writer at a time: the count check, the .cred file and the rewrite of the rows are one step (two pairings at once must not both pass)
+  mkdir -p "$state"
+  if command -v flock >/dev/null 2>&1; then ( flock 8; setup_mount_locked "$@" ) 8>"$state/.remote.lock"
+  else setup_mount_locked "$@"; fi
+}
+setup_mount_locked() {
+  local p=$1 h=$2 s=$3 l=$4 d=$5 fp=${6:--} mode=${7:-new} old="" n oldhost
   # The name is taken (Q4) when this server has any mount from it: the credentials file is ONE per name, so the check is per name, not per share.
   # The name and the host key in the answer come from the sender's own box, and a public host key proves nothing (ssh-keyscan), so a taken name is
   # never given away because the box says so. Only the owner of THIS server, who typed `--reconnect <name>` for that existing server, may reuse it,
@@ -150,6 +156,10 @@ setup_mount() {   # setup_mount <peer> <host> <share> <login> <domain> <fingerpr
   old=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" '$1 == p && $6 != "" && $6 != "-" { print $6; exit }')
   if [ "$n" -gt 0 ]; then
     if [ "$mode" != reconnect ] || [ -z "$old" ] || [ "$fp" = "-" ] || [ "$old" != "$fp" ]; then cat >/dev/null; return 1; fi
+    # The stored key came from the first answer and a public key proves nothing, so the owner's own record is the anchor: a reconnect never changes
+    # the host of an existing server. A server that moved is a new pairing under a new name (remove the old one first).
+    oldhost=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" -v h="$h" '$1 == p && $2 != h { print $2; exit }')
+    if [ -n "$oldhost" ]; then cat >/dev/null; return 1; fi
   fi
   write_cred "$p" "$l" "$d"
   mkdir -p "$state"; touch "$MOUNTS"
@@ -293,7 +303,15 @@ add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--std
   step "$(t 'Mount %s from %s' "$s" "$p")"
   kv "Address" "//$h/$s"
   kv "Where" "$(mnt_of "$p" "$s")"
-  if [ -n "$reconnect" ] && [ "$reconnect" != "$p" ]; then fail "$(t "The answer comes from '%s', not from '%s'. Not changed." "$p" "$reconnect")"; fi
+  if [ -n "$reconnect" ]; then
+    # anchored to what this server already knows: the address the code points to AND the host in the answer must be the stored host of that server
+    local want shost; want=$(rows "$MOUNTS" | awk -F'\t' -v p="$reconnect" '$1 == p { print $2; exit }'); shost=${srv%:*}
+    [ "$reconnect" = "$p" ] || fail "$(t "The answer comes from '%s', not from '%s'. Not changed." "$p" "$reconnect")"
+    [ -n "$want" ] || fail "$(t "Nothing is mounted from '%s': use hs remote add --code without --reconnect." "$reconnect")"
+    if [ "$h" != "$want" ] || { ! is_node "$srv" && [ "${shost,,}" != "${want,,}" ]; }; then
+      fail_fix "$(t "A reconnect must reach the address stored for %s (%s); the code points to %s and the answer says %s. Nothing is changed. If the server moved, remove it first." "$p" "$want" "$srv" "$h")" "hs remote remove $p"
+    fi
+  fi
   printf '%s\n' "$pw" | setup_mount "$p" "$h" "$s" "$l" "$d" "$fp" "${reconnect:+reconnect}" \
     || fail_fix "$(t "'%s' is already mounted here and the answer does not prove it is the same server. Nothing is changed. To renew it, use a code of that server with --reconnect %s; for a different server, remove it first." "$p" "$p")" "hs remote remove $p"
   ok "$(t 'Connected to %s, key %s' "$p" "$fp")"
@@ -363,7 +381,7 @@ case "$cmd" in
   list)
     if [ -t 1 ] && [ -z "${HS_CALLER:-}" ]; then
       step "Access given"
-      if [ -n "$(rows "$OFFERS")" ]; then { thead 'Peer' 'Share' 'Login' 'Since'; rows "$OFFERS"; } | table; else note "Nothing is shared with another server."; fi
+      if [ -n "$(rows "$OFFERS")" ]; then { thead 'Peer' 'Share' 'Login' 'Since' 'Host key'; rows "$OFFERS"; } | table; else note "Nothing is shared with another server."; fi
       step "Mounted from other servers"
       if [ -n "$(rows "$MOUNTS")" ]; then
         { thead 'Peer' 'Share' 'Host' 'State'
