@@ -332,4 +332,30 @@ for s in "$code" "$raw"; do grep -qF -- "$s" "$A/codes.json" && leaks="$leaks co
 [ -z "$leaks" ] && pass "no state file or job record holds them (the credentials file apart)" || fail "files with a secret:$leaks"
 [ "$(stat -c %a "$WORK/e/state/remote-alpha.cred")" = 600 ] && pass "the credentials file of the using side is 0600" || fail "cred mode"
 
+echo "-- HOBNIX_LOG=debug: the log lines on stderr stay out of the request and the answer (issue 1174)"
+mkserver "$WORK/g" golf
+export FAKE_SRC=10.0.0.82
+code=$(newcode "$A" alpha secret-docs) || fail "no code for the debug run"
+out=$(HOBNIX_LOG=debug srv "$WORK/g" golf add --code --stdin 2>"$WORK/err-debug" <<<"$code@$addr") && pass "add --code works with HOBNIX_LOG=debug" || fail "add at debug level: $out $(head -c 300 "$WORK/err-debug")"
+grep -q "^remote-golf$" "$A/users" && pass "the login was made through the debug run" || fail "no pairing at debug level"
+pw=$(cat "$A/last-pw")
+grep -qF -- "$pw" "$WORK/err-debug" 2>/dev/null && fail "the password reached the debug log" || pass "no password in the debug run's stderr"
+
+echo "-- the stderr file of the pair calls: 0600, made by mktemp in the state directory, removed on exit"
+cat > "$WORK/spy.sh" <<EOT
+#!/usr/bin/env bash
+t=\$(readlink /proc/\$\$/fd/2); printf '%s %s
+' "\$(stat -c %a "\$t")" "\$t" >> "$WORK/spy.log"
+exec "$bin" "\$@"
+EOT
+chmod +x "$WORK/spy.sh"; : > "$WORK/spy.log"
+export FAKE_SRC=10.0.0.83
+code=$(newcode "$A" alpha secret-docs) || fail "no code for the stderr file run"
+mkserver "$WORK/h" hotel
+HOBNIX_BIN=$WORK/spy.sh srv "$WORK/h" hotel add --code --stdin >/dev/null 2>&1 <<<"$code@$addr"
+mode=$(awk '{ print $1; exit }' "$WORK/spy.log"); path=$(awk '{ print $2; exit }' "$WORK/spy.log")
+check_eq "the stderr file is 0600" 600 "$mode"
+case "$path" in "$WORK/h/state/.pair-err."*) pass "it lives in the state directory" ;; *) fail "stderr file path: '$path'" ;; esac
+[ -n "$path" ] && [ ! -e "$path" ] && pass "it is removed on exit" || fail "the stderr file is still there"
+
 finish
