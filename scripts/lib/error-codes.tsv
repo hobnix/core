@@ -225,5 +225,5 @@ ct.pool-unknown	script	The storage pool does not exist	No such storage pool exis
 ct.pool-full	script	The disk does not fit in the free space of the pool	The disk does not fit in the pool.	-
 ct.bind-invalid	script	A bind is not tier:name:path	The bind is not valid.	-
 ct.bind-duplicate	script	Two binds have the same name	Two binds have the same name.	-
-ct.bind-vm	script	A bulk folder cannot be passed into a virtual machine	Bulk folders cannot be passed into a virtual machine.	-
+ct.bind-vm	script	A folder of the large-storage tier cannot be passed into a virtual machine	That folder cannot be passed into a virtual machine.	-
 ct.none-running	script	No running instance is left to update	No instance is running.	-

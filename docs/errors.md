@@ -1786,10 +1786,10 @@ Two binds have the same name.
 
 ### ct.bind-vm
 
-A bulk folder cannot be passed into a virtual machine.
+A folder of the large-storage tier cannot be passed into a virtual machine.
 
 - Layer: script
-- Text: Bulk folders cannot be passed into a virtual machine.
+- Text: That folder cannot be passed into a virtual machine.
 - Fix: none
 
 ### ct.none-running
