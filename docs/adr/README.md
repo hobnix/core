@@ -51,3 +51,4 @@ Issue: hobnix/server#<n>
 | [0029](0029-component-gallery-instead-of-storybook.md) | The component gallery page (`Developer > Components`) instead of Storybook; triggers to revisit #193 | Accepted (2026-11-18) |
 | [0030](0030-ui-sdk-for-the-map.md) | UI SDK for the Network Map: use it for behaviour, exact pin, one part at a time; +37 kB gzip for the first popover | Accepted (2026-11-21), spike result |
 | [0031](0031-rust-extensions.md) | Rust extensions: `[[binary]]` shipping, one workspace per crate, SDK pinned by rev, dynamic user and state directory, hardening, no `hs` calls from a service, restart after update | Accepted (2026-11-24), design only |
+| [0032](0032-rust-main-language.md) | Rust is the main language, Python is retired, bash stays for launcher, installer and recovery; packages may be Rust | Accepted (2026-11-24) |
