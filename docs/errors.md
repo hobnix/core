@@ -1800,6 +1800,542 @@ No running instance is left to update.
 - Text: No instance is running.
 - Fix: none
 
+### system.force-misplaced
+
+--force was given to an action other than sync.
+
+- Layer: script
+- Text: --force belongs to sync only.
+- Fix: none
+
+### system.days-invalid
+
+The number of days is not a whole number of 1 or more.
+
+- Layer: script
+- Text: Give a number of days, 1 or more.
+- Fix: none
+
+### system.not-snapraid
+
+A sync was asked on a server whose data is not on SnapRAID.
+
+- Layer: script
+- Text: There is nothing to sync on this server.
+- Fix: none
+
+### system.pool-unknown
+
+A storage pool that does not exist was named.
+
+- Layer: script
+- Text: No such storage pool was found.
+- Fix: none
+
+### system.scrub-running
+
+A scrub of the pool is running already.
+
+- Layer: script
+- Text: A scrub is running already.
+- Fix: none
+
+### system.storage-locked
+
+The storage is locked, so an update or rebuild would refuse.
+
+- Layer: script
+- Text: The storage is locked: unlock it first.
+- Fix: none
+
+### system.power-refused
+
+The reboot or shutdown check refused.
+
+- Layer: script
+- Text: The server cannot do this now.
+- Fix: none
+
+### system.schedule-failed
+
+The reboot, update or rebuild could not be scheduled.
+
+- Layer: script
+- Text: It could not be scheduled.
+- Fix: none
+
+### service.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### service.value-invalid
+
+An option was given a value that is not yes or no.
+
+- Layer: script
+- Text: The value is yes or no.
+- Fix: none
+
+### service.proxy-invalid
+
+The --proxy option is neither public nor local.
+
+- Layer: script
+- Text: The proxy is public or local.
+- Fix: none
+
+### service.public-name-invalid
+
+The public name is not a full domain name.
+
+- Layer: script
+- Text: The public name is a full name like app.example.org.
+- Fix: none
+
+### service.public-name-missing
+
+A public service was asked without a public name.
+
+- Layer: script
+- Text: A public service needs its public name.
+- Fix: none
+
+### service.no-proxy
+
+No reverse proxy is set up.
+
+- Layer: script
+- Text: No reverse proxy is set up yet.
+- Fix: none
+
+### service.exists
+
+A service with this name exists already.
+
+- Layer: script
+- Text: There is a service with this name already.
+- Fix: none
+
+### service.unknown
+
+No service has this name.
+
+- Layer: script
+- Text: No such service was found.
+- Fix: none
+
+### service.port-invalid
+
+The port is not a number from 1 to 65535.
+
+- Layer: script
+- Text: The port is a number from 1 to 65535.
+- Fix: none
+
+### service.target-both
+
+Both a container and a host were given.
+
+- Layer: script
+- Text: Give a container or a host, not both.
+- Fix: none
+
+### service.target-missing
+
+Neither a container nor a host was given.
+
+- Layer: script
+- Text: Give the container or the host the service runs on.
+- Fix: none
+
+### service.exposure-invalid
+
+The exposure is not never-public, private-ok or public-ok.
+
+- Layer: script
+- Text: The exposure is never-public, private-ok or public-ok.
+- Fix: none
+
+### service.nothing-to-change
+
+An edit or set names nothing to change.
+
+- Layer: script
+- Text: Nothing was changed: give a field to change.
+- Fix: none
+
+### service.nothing-to-do
+
+There is nothing to adopt, describe or reconcile.
+
+- Layer: script
+- Text: There is nothing to do.
+- Fix: none
+
+### service.failed
+
+The service command failed or refused.
+
+- Layer: script
+- Text: The service could not be changed.
+- Fix: none
+
+### config.no-machine-toml
+
+There is no machine.toml on this server.
+
+- Layer: script
+- Text: There is no machine.toml on this server.
+- Fix: none
+
+### config.no-machine-nix
+
+There is no machine.nix to convert.
+
+- Layer: script
+- Text: There is no machine.nix to convert.
+- Fix: none
+
+### config.exists
+
+machine.toml exists already, so there is nothing to convert.
+
+- Layer: script
+- Text: machine.toml exists already.
+- Fix: none
+
+### config.nothing-new
+
+machine.toml is in the layout of the example already.
+
+- Layer: script
+- Text: Nothing is new.
+- Fix: none
+
+### config.rewrite-failed
+
+machine.toml could not be rewritten or converted (it is left as it was).
+
+- Layer: script
+- Text: machine.toml could not be rewritten.
+- Fix: none
+
+### config.not-settable
+
+The setting cannot be changed from the interface.
+
+- Layer: script
+- Text: This setting is changed on the server.
+- Fix: none
+
+### config.key-unknown
+
+The name is not an option of machine.toml.example.
+
+- Layer: script
+- Text: No such setting was found.
+- Fix: none
+
+### config.not-scalar
+
+The setting is a list or table.
+
+- Layer: script
+- Text: Edit this setting in machine.toml on the server.
+- Fix: none
+
+### config.value-invalid
+
+The value does not fit the setting.
+
+- Layer: script
+- Text: The value does not fit this setting.
+- Fix: none
+
+### config.not-set
+
+The setting to switch off is not set.
+
+- Layer: script
+- Text: This setting is not set.
+- Fix: none
+
+### config.unchanged
+
+The setting has this value already.
+
+- Layer: script
+- Text: The setting has this value already.
+- Fix: none
+
+### config.cannot-switch-off
+
+The setting cannot be switched off.
+
+- Layer: script
+- Text: This setting cannot be switched off.
+- Fix: none
+
+### config.args-invalid
+
+The arguments of set or apply are wrong.
+
+- Layer: script
+- Text: The arguments are not a key and a value.
+- Fix: none
+
+### config.key-twice
+
+A setting was given twice in one apply.
+
+- Layer: script
+- Text: A setting was given twice.
+- Fix: none
+
+### config.write-failed
+
+A setting could not be written (the earlier state is put back).
+
+- Layer: script
+- Text: The setting could not be written.
+- Fix: none
+
+### config.check-failed
+
+machine.toml would have problems after the change (it was put back).
+
+- Layer: script
+- Text: The change would break machine.toml.
+- Fix: none
+
+### setup.not-open
+
+The first-run wizard is not open.
+
+- Layer: script
+- Text: The first-run wizard is not open.
+- Fix: none
+
+### setup.close-failed
+
+The first-run wizard could not be closed.
+
+- Layer: script
+- Text: The wizard could not be closed.
+- Fix: none
+
+### iso.args-missing
+
+A file or URL, or an image name, was not given.
+
+- Layer: script
+- Text: Give a file or URL, or an image name.
+- Fix: none
+
+### iso.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### iso.option-misplaced
+
+An option was given to an action it does not belong to.
+
+- Layer: script
+- Text: That option does not belong to this action.
+- Fix: none
+
+### iso.not-found
+
+No image has this name in the library.
+
+- Layer: script
+- Text: No such image was found.
+- Fix: none
+
+### iso.attached
+
+The image is attached to an instance.
+
+- Layer: script
+- Text: Detach the image first.
+- Fix: none
+
+### iso.url-invalid
+
+The URL is too long or not a plain http or https address.
+
+- Layer: script
+- Text: The URL is not valid.
+- Fix: none
+
+### iso.url-local
+
+The URL points to this server itself.
+
+- Layer: script
+- Text: This server does not download from itself.
+- Fix: none
+
+### iso.path-invalid
+
+The path of a file is not an absolute path without "..".
+
+- Layer: script
+- Text: The path is not valid.
+- Fix: none
+
+### iso.file-missing
+
+The file does not exist.
+
+- Layer: script
+- Text: No such file was found.
+- Fix: none
+
+### iso.file-unreadable
+
+The file cannot be read.
+
+- Layer: script
+- Text: The file cannot be read.
+- Fix: none
+
+### iso.in-library
+
+The file is in the image library already.
+
+- Layer: script
+- Text: The file is in the library already.
+- Fix: none
+
+### iso.source-invalid
+
+The source is neither an absolute path nor an http(s) URL.
+
+- Layer: script
+- Text: Give a file path or an http(s) URL.
+- Fix: none
+
+### iso.exists
+
+An image with this name is in the library already.
+
+- Layer: script
+- Text: Remove it first or use another name.
+- Fix: none
+
+### iso.checksum-conflict
+
+Both --checksum and --no-checksum were given.
+
+- Layer: script
+- Text: Give one of them, not both.
+- Fix: none
+
+### iso.checksum-invalid
+
+The checksum is not hexadecimal text, or its length or prefix does not fit.
+
+- Layer: script
+- Text: The checksum is not valid.
+- Fix: none
+
+### iso.no-room
+
+The image does not fit in the free space of the folder.
+
+- Layer: script
+- Text: There is not enough room for the image.
+- Fix: none
+
+### release.channel-unknown
+
+The channel is not stable, beta or edge.
+
+- Layer: script
+- Text: The channel is stable, beta or edge.
+- Fix: none
+
+### release.unchanged
+
+The server is on this channel already.
+
+- Layer: script
+- Text: The server is on this channel already.
+- Fix: none
+
+### release.signature-invalid
+
+The signature of the release is not valid for a trusted release key.
+
+- Layer: script
+- Text: The release is not signed by a trusted key.
+- Fix: none
+
+### vps.host-missing
+
+The setting vpsHost is not set.
+
+- Layer: script
+- Text: The proxyserver is not set up yet.
+- Fix: none
+
+### vps.host-invalid
+
+The setting vpsHost is not a host name or address.
+
+- Layer: script
+- Text: vpsHost is not a host name or address.
+- Fix: none
+
+### vps.no-key
+
+There is no key for the proxyserver yet.
+
+- Layer: script
+- Text: There is no key for the proxyserver yet.
+- Fix: none
+
+### net.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### net.address-invalid
+
+The address of the router is not an http(s) address.
+
+- Layer: script
+- Text: That is not an address of the router.
+- Fix: none
+
+### net.key-invalid
+
+The key of the router has a control character.
+
+- Layer: script
+- Text: The key has a control character.
+- Fix: none
+
+### net.failed
+
+The router could not be connected, or it refused the key.
+
+- Layer: script
+- Text: The router could not be connected.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

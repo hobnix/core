@@ -227,3 +227,71 @@ ct.bind-invalid	script	A bind is not tier:name:path	The bind is not valid.	-
 ct.bind-duplicate	script	Two binds have the same name	Two binds have the same name.	-
 ct.bind-vm	script	A folder of the large-storage tier cannot be passed into a virtual machine	That folder cannot be passed into a virtual machine.	-
 ct.none-running	script	No running instance is left to update	No instance is running.	-
+# S4: system., service., config., setup., iso., release., vps., net. (#1127)
+system.force-misplaced	script	--force was given to an action other than sync.	--force belongs to sync only.	-
+system.days-invalid	script	The number of days is not a whole number of 1 or more.	Give a number of days, 1 or more.	-
+system.not-snapraid	script	A sync was asked on a server whose data is not on SnapRAID.	There is nothing to sync on this server.	-
+system.pool-unknown	script	A storage pool that does not exist was named.	No such storage pool was found.	-
+system.scrub-running	script	A scrub of the pool is running already.	A scrub is running already.	-
+system.storage-locked	script	The storage is locked, so an update or rebuild would refuse.	The storage is locked: unlock it first.	-
+system.power-refused	script	The reboot or shutdown check refused.	The server cannot do this now.	-
+system.schedule-failed	script	The reboot, update or rebuild could not be scheduled.	It could not be scheduled.	-
+service.value-missing	script	An option was given without its value.	The option needs a value.	-
+service.value-invalid	script	An option was given a value that is not yes or no.	The value is yes or no.	-
+service.proxy-invalid	script	The --proxy option is neither public nor local.	The proxy is public or local.	-
+service.public-name-invalid	script	The public name is not a full domain name.	The public name is a full name like app.example.org.	-
+service.public-name-missing	script	A public service was asked without a public name.	A public service needs its public name.	-
+service.no-proxy	script	No reverse proxy is set up.	No reverse proxy is set up yet.	-
+service.exists	script	A service with this name exists already.	There is a service with this name already.	-
+service.unknown	script	No service has this name.	No such service was found.	-
+service.port-invalid	script	The port is not a number from 1 to 65535.	The port is a number from 1 to 65535.	-
+service.target-both	script	Both a container and a host were given.	Give a container or a host, not both.	-
+service.target-missing	script	Neither a container nor a host was given.	Give the container or the host the service runs on.	-
+service.exposure-invalid	script	The exposure is not never-public, private-ok or public-ok.	The exposure is never-public, private-ok or public-ok.	-
+service.nothing-to-change	script	An edit or set names nothing to change.	Nothing was changed: give a field to change.	-
+service.nothing-to-do	script	There is nothing to adopt, describe or reconcile.	There is nothing to do.	-
+service.failed	script	The service command failed or refused.	The service could not be changed.	-
+config.no-machine-toml	script	There is no machine.toml on this server.	There is no machine.toml on this server.	-
+config.no-machine-nix	script	There is no machine.nix to convert.	There is no machine.nix to convert.	-
+config.exists	script	machine.toml exists already, so there is nothing to convert.	machine.toml exists already.	-
+config.nothing-new	script	machine.toml is in the layout of the example already.	Nothing is new.	-
+config.rewrite-failed	script	machine.toml could not be rewritten or converted (it is left as it was).	machine.toml could not be rewritten.	-
+config.not-settable	script	The setting cannot be changed from the interface.	This setting is changed on the server.	-
+config.key-unknown	script	The name is not an option of machine.toml.example.	No such setting was found.	-
+config.not-scalar	script	The setting is a list or table.	Edit this setting in machine.toml on the server.	-
+config.value-invalid	script	The value does not fit the setting.	The value does not fit this setting.	-
+config.not-set	script	The setting to switch off is not set.	This setting is not set.	-
+config.unchanged	script	The setting has this value already.	The setting has this value already.	-
+config.cannot-switch-off	script	The setting cannot be switched off.	This setting cannot be switched off.	-
+config.args-invalid	script	The arguments of set or apply are wrong.	The arguments are not a key and a value.	-
+config.key-twice	script	A setting was given twice in one apply.	A setting was given twice.	-
+config.write-failed	script	A setting could not be written (the earlier state is put back).	The setting could not be written.	-
+config.check-failed	script	machine.toml would have problems after the change (it was put back).	The change would break machine.toml.	-
+setup.not-open	script	The first-run wizard is not open.	The first-run wizard is not open.	-
+setup.close-failed	script	The first-run wizard could not be closed.	The wizard could not be closed.	-
+iso.args-missing	script	A file or URL, or an image name, was not given.	Give a file or URL, or an image name.	-
+iso.value-missing	script	An option was given without its value.	The option needs a value.	-
+iso.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+iso.not-found	script	No image has this name in the library.	No such image was found.	-
+iso.attached	script	The image is attached to an instance.	Detach the image first.	-
+iso.url-invalid	script	The URL is too long or not a plain http or https address.	The URL is not valid.	-
+iso.url-local	script	The URL points to this server itself.	This server does not download from itself.	-
+iso.path-invalid	script	The path of a file is not an absolute path without "..".	The path is not valid.	-
+iso.file-missing	script	The file does not exist.	No such file was found.	-
+iso.file-unreadable	script	The file cannot be read.	The file cannot be read.	-
+iso.in-library	script	The file is in the image library already.	The file is in the library already.	-
+iso.source-invalid	script	The source is neither an absolute path nor an http(s) URL.	Give a file path or an http(s) URL.	-
+iso.exists	script	An image with this name is in the library already.	Remove it first or use another name.	-
+iso.checksum-conflict	script	Both --checksum and --no-checksum were given.	Give one of them, not both.	-
+iso.checksum-invalid	script	The checksum is not hexadecimal text, or its length or prefix does not fit.	The checksum is not valid.	-
+iso.no-room	script	The image does not fit in the free space of the folder.	There is not enough room for the image.	-
+release.channel-unknown	script	The channel is not stable, beta or edge.	The channel is stable, beta or edge.	-
+release.unchanged	script	The server is on this channel already.	The server is on this channel already.	-
+release.signature-invalid	script	The signature of the release is not valid for a trusted release key.	The release is not signed by a trusted key.	-
+vps.host-missing	script	The setting vpsHost is not set.	The proxyserver is not set up yet.	-
+vps.host-invalid	script	The setting vpsHost is not a host name or address.	vpsHost is not a host name or address.	-
+vps.no-key	script	There is no key for the proxyserver yet.	There is no key for the proxyserver yet.	-
+net.value-missing	script	An option was given without its value.	The option needs a value.	-
+net.address-invalid	script	The address of the router is not an http(s) address.	That is not an address of the router.	-
+net.key-invalid	script	The key of the router has a control character.	The key has a control character.	-
+net.failed	script	The router could not be connected, or it refused the key.	The router could not be connected.	-

@@ -57,26 +57,26 @@ if [ "$action" = scrub ] && [ -z "$pool" ]; then
   printf 'status\tneeds\nneeds\tpool\n'
   exit 2
 fi
-[ "$force" = no ] || [ "$action" = sync ] || refuse "--force is only for sync"
-[ -z "$pool" ] || [[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || refuse "invalid pool name"
-[[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -ge 1 ] || refuse "--days is a number of days (1 or more)"
+[ "$force" = no ] || [ "$action" = sync ] || refuse_code system.force-misplaced "--force is only for sync"
+[ -z "$pool" ] || [[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || refuse_code name.invalid "invalid pool name"
+[[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -ge 1 ] || refuse_code system.days-invalid "--days is a number of days (1 or more)"
 
 snapraid=false
 { [ "$bulk_type" = snapraid ] && [ "$pool" = bulk ]; } && snapraid=true
 case "$action" in
   sync)
-    [ "$bulk_type" = snapraid ] || refuse "This server keeps /bulk on ZFS: the parity is always current, there is nothing to sync."
+    [ "$bulk_type" = snapraid ] || refuse_code system.not-snapraid "This server keeps /bulk on ZFS: the parity is always current, there is nothing to sync."
     cmd=(bash "$bulk_sync"); [ "$force" != yes ] || cmd+=(--force) ;;
   scrub)
     if $snapraid; then
       cmd=(bash "$bulk_sync" --scrub)
     else
-      "$zpool" list -H -o name "$pool" >/dev/null 2>&1 || refuse "There is no pool called '$pool'."
-      if "$zpool" status "$pool" 2>/dev/null | grep -q 'scrub in progress'; then refuse "A scrub of '$pool' is running already."; fi
+      "$zpool" list -H -o name "$pool" >/dev/null 2>&1 || refuse_code system.pool-unknown "There is no pool called '$pool'."
+      if "$zpool" status "$pool" 2>/dev/null | grep -q 'scrub in progress'; then refuse_code system.scrub-running "A scrub of '$pool' is running already."; fi
       cmd=("$zpool" scrub "$pool")
     fi ;;
   update)
-    [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse "The storage is locked: unlock it first (hs unlock), an update would refuse."
+    [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse_code system.storage-locked "The storage is locked: unlock it first (hs unlock), an update would refuse."
     cmd=(bash "$update")
     # a person clicked Update: that confirms the beta / edge channel (a timer does not come through here with the web's caller)
     case "${HS_CALLER:-}" in web|ui) cmd+=(--yes) ;; esac
@@ -88,14 +88,14 @@ case "$action" in
       exit 1
     fi ;;
   rebuild)
-    [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
+    [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse_code system.storage-locked "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
     cmd=(bash "$rebuild") ;;
   rollback) cmd=("nixos-rebuild" switch --rollback) ;;
   gc) cmd=(bash "$system" gc "$days" --yes) ;;
   reboot|shutdown)
     cmd=(bash "$power" "$action" --yes)
     # power.sh checks what must not be cut off; --dry-run only says it (it does not refuse), so the plan reads its list
-    pw=$(HS_PLAIN=1 HS_LANG=en HS_CALLER=ui bash "$power" "$action" --dry-run </dev/null 2>&1) || refuse "$(printf '%s' "$pw" | tail -n 1)"
+    pw=$(HS_PLAIN=1 HS_LANG=en HS_CALLER=ui bash "$power" "$action" --dry-run </dev/null 2>&1) || refuse_code system.power-refused "$(printf '%s' "$pw" | tail -n 1)"
     if grep -q 'still running' <<<"$pw"; then
       echo "status	refused"
       printf 'reason\tNot now: something is still running that must not be cut off.\n'
@@ -120,7 +120,7 @@ if [ "$verb" = start ]; then
       # not a job that runs now: a timer starts power.sh a few seconds later, the caller still gets this answer
       unit=hs-job-system-$action-$(date +%H%M%S)
       systemd-run --quiet --unit="$unit" --on-active="${HS_REBOOT_DELAY:-5}" --description="hs $action (from the web interface)" \
-        -E HS_CALLER=job -E "HS_POWER_SELF=$unit.service" -E "PATH=$PATH" "${cmd[@]}" || refuse "the $action could not be scheduled"
+        -E HS_CALLER=job -E "HS_POWER_SELF=$unit.service" -E "PATH=$PATH" "${cmd[@]}" || refuse_code system.schedule-failed "the $action could not be scheduled"
       printf 'status\tstarted\nunit\t%s\n' "$unit"
       exit 0 ;;
   esac
