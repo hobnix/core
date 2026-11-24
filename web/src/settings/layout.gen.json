@@ -80,6 +80,7 @@
   "proxyStatusUrl": "cap:vps",
   "vpsHost": "cap:vps",
   "networkProvider": "cap:network",
+  "docker": "cap:docker",
   "dockerManager": "cap:docker",
   "dockerSize": "cap:docker",
   "dockerMemory": "cap:docker",

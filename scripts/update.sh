@@ -190,6 +190,11 @@ if ( . "$(dirname "$0")/lib/capability.sh"; capability_on notifications ) 2>/dev
   bash "$(dirname "$0")/notify-channel.sh" migrate >/dev/null 2>&1 || true
 fi
 
+# Docker: the setting docker is the on switch now (it was dockerManager). Quiet; a manager that runs keeps running (hs docker migrate).
+if ( . "$(dirname "$0")/lib/capability.sh"; capability_on docker ) 2>/dev/null; then
+  bash "$(dirname "$0")/docker.sh" migrate >/dev/null 2>&1 || true
+fi
+
 event_emit update.started "$(hostname)" "hs update is running"
 bash "$(dirname "$0")/notify.sh" --category start "$(hostname): update started" "\`hs update\` is running." low || true
 [ "$old" = "$rev_now" ] || export HS_UPDATE_FROM=$old   # rebuild.sh counts the new changelog entries since then

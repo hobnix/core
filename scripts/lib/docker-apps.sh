@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # What runs in the container docker, for the callers that must not disturb it (docs/PLAN-docker-instances.md). Needs setting_get (scripts/lib/settings).
 # Test knob: HS_INCUS.
-#   docker_manager_project <manager>   the compose project of the manager (arcane, portainer; not an app of the person): nothing for webui and none
+#   docker_manager_project [manager]   the compose project of the manager (arcane, portainer; not an app of the person): the word in
+#                                      $HS_STATE_DIR/docker-manager-legacy (hs docker migrate), else the argument (the older setting dockerManager)
 #   docker_others_running <app>        the running things in Docker that a restart of the container would stop, other than <app> itself and the
 #                                      manager: one name per line (compose project, else the container name). Exit 1 when Docker can not be
 #                                      read (container stopped, Docker not running, no answer in 8 s): the caller must not go on as if nothing ran.
@@ -42,11 +43,12 @@ docker_new_app_dir() {   # docker_new_app_dir <app> web|recipe
   esac
 }
 
-docker_manager_project() {
+docker_manager_project() {   # the legacy file wins over the argument (the older setting dockerManager)
   local m=${1:-} f
-  f=$_dockerapps_lib/../providers/docker/$m.sh
-  [ -n "$m" ] && [ -f "$f" ] || return 0
-  ( . "$f"; basename "$manager_dir" )
+  f=$(head -n 1 "${HS_STATE_DIR:-/var/lib/hs}/docker-manager-legacy" 2>/dev/null || true)
+  [ -z "$f" ] || m=$f
+  case "$m" in arcane|portainer) printf '%s\n' "$m" ;; esac
+  return 0
 }
 
 docker_port_owner() {   # docker_port_owner <port> <app>: prints the other Compose project publishing <port> (? for an unlabelled owner), nothing when free
