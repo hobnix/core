@@ -13,4 +13,5 @@ check_eq "no such branch: develop" "develop" "$($CR feature/other false)"
 check_eq "a release without a tag: main" "main" "$($CR develop true)"
 git tag v0.1.0 && git tag v0.10.0 && git tag v0.2.0 && git tag v0.11.0-beta.1
 check_eq "a release: the newest stable tag, sorted as versions, no beta" "v0.10.0" "$($CR develop true)"
+check_match "the default repository is hobnix/official" 'hobnix/official[.]git' "$(grep '^url=' "$SCRIPTS/dev/caps-ref.sh")"
 finish

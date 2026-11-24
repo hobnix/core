@@ -205,6 +205,44 @@ check "and repo-check still passes" $PKG repo-check "$RC"
 sed -i 's/>=1/>=9/' "$RC/recipes/fixold/package.toml" "$RC/index.toml"
 check_out "a core recipe at level 9 without the contract is an error" 'missing: \[app.health\]' bash -c "$PKG repo-check $RC; true"
 
+echo "-- repo-check: a folder holds the kind of its top-level folder; licences of an index repository"
+KT=$WORK/kindrepo; rm -rf "$KT"; mkdir -p "$KT/extensions"; cp -r "$RC/recipes/fixold" "$KT/extensions/fixold"
+printf '[package.fixold]
+path = "extensions/fixold"
+kind = "recipe"
+version = "1.0.0"
+requires_core = ">=9"
+' > "$KT/index.toml"
+check_out "a recipe in extensions/ is refused" "extensions/fixold: kind recipe does not belong in extensions/" bash -c "$PKG repo-check $KT; true"
+check "and repo-check fails" bash -c "! $PKG repo-check $KT >/dev/null 2>&1"
+mkdir -p "$KT/recipes"; mv "$KT/extensions/fixold" "$KT/recipes/fixold"; rmdir "$KT/extensions"
+printf '[package.fixold]
+path = "recipes/fixold"
+kind = "recipe"
+version = "1.0.0"
+requires_core = ">=9"
+' > "$KT/index.toml"
+check "the same package in recipes/ passes" $PKG repo-check "$KT"
+check_out "no licence file in a repository without publish: no warning" "^0$" bash -c "$PKG repo-check $KT 2>&1 | grep -c LICENSE; true"
+printf 'publish = "index"
+
+' | cat - "$KT/index.toml" > "$KT/index.new" && mv "$KT/index.new" "$KT/index.toml"
+check "an index repository without licence files still passes" $PKG repo-check "$KT"
+check_out "and gets a warning for each missing file" 'warning: LICENSE: is missing' bash -c "$PKG repo-check $KT 2>&1"
+printf 'MIT License
+
+Copyright
+' > "$KT/LICENSE"
+check_out "an MIT root licence is refused" "LICENSE: is not the AGPL-3.0 licence" bash -c "$PKG repo-check $KT; true"
+printf 'GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3
+' > "$KT/LICENSE"; printf 'GNU AFFERO GENERAL PUBLIC LICENSE
+' > "$KT/recipes/LICENSE"
+check_out "an AGPL licence in recipes/ is refused" "recipes/LICENSE: is not the MIT licence" bash -c "$PKG repo-check $KT; true"
+printf 'MIT License
+' > "$KT/recipes/LICENSE"
+check "AGPL at the root and MIT in recipes/ passes" $PKG repo-check "$KT"
+
 echo "-- check-draft sees the fields"
 check_out "a draft with a bad category is an error" "error${tab}category${tab}category is not one of" bash -c "sed 's/tools/stuff/' $AF/packages/fixstore/package.toml | $PKG check-draft; true"
 

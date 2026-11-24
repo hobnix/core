@@ -42,4 +42,23 @@ check_eq "alpha was raised" 'version = "1.1.0"' "$(grep '^version' extensions/al
 check_eq "and index.toml agrees" 'version = "1.1.0"' "$(awk '/^\[package.alpha\]/{f=1;next} /^\[/{f=0} f&&/^version/' index.toml)"
 check_eq "gamma is 1.0.0" 'version = "1.0.0"' "$(grep '^version' extensions/gamma/package.toml)"
 check_eq "one commit per package" "3" "$(git rev-list --count develop..HEAD)"
+
+echo "-- a repository that publishes an index: no tags, the reference is origin/main"
+git init -q --bare "$WORK/remote2.git"
+R2=$WORK/repo2; mkdir -p "$R2"; cd "$R2" || exit 1
+git init -q -b main . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
+git remote add origin "$WORK/remote2.git"
+printf 'publish = "index"
+
+' > index.toml
+mkpkg alpha 1.0.0; mkpkg beta 2.3.4
+git add -A && git commit -q -m first && git push -q origin main && git checkout -q -b develop
+check_out "nothing newer than origin/main" "nothing to release" plan
+a=$(change alpha one); change beta one >/dev/null
+printf '%s	bump: minor
+' "$a" > "$WORK/labels"
+out=$(plan)
+check_eq "the bump level comes from the labels as before" "alpha	1.0.0	1.1.0	minor" "$(grep '^alpha' <<<"$out")"
+check_eq "and no tag level is printed" "0" "$(grep -c '^tag' <<<"$out")"
+check_out "the branch names origin/main, not a tag" "against origin/main" bash -c "$PR --no-push 2>&1"
 finish
