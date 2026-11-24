@@ -249,6 +249,12 @@ columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The recipe rows of pkg states, same columns. An app whose declared check fails while its instances run is stage on with the flag unhealthy."
 
+["pkg index"]
+role = "viewer"
+kind = "tsv"
+records = { repo = ["name"], last_ok = ["epoch"], last_try = ["epoch"], error = ["text"], expires = ["epoch"], notified = ["epoch"] }
+note = "The state of the package index (pkg-refresh.sh): the repository, when it was last fetched (last_ok) and tried (last_try), the error of the last try (- = none), when the index expires and for which expiry a push message went out (notified). No line before the first fetch. Epoch values are seconds, - = unknown."
+
 ["apps versions"]
 role = "viewer"
 kind = "tsv"

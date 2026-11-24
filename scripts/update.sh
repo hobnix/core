@@ -135,12 +135,8 @@ fi
 # The package repositories: fetch the signed index and move installed packages to the repository that replaced theirs (hs pkg repo migrate).
 # Never fatal: with the index host down the update still succeeds, the installed packages keep running and the next fetch heals the rest.
 if [ -f "$repo/scripts/pkg.py" ]; then
-  if ! fetched=$(python3 -I "$repo/scripts/pkg.py" fetch 2>&1); then
-    warn "$(t 'The package repositories could not be fetched: installed packages keep running, hs pkg fetch tries again.')"
-    while IFS=$'	' read -r rname _ _ rerr; do
-      [ -z "${rname:-}" ] || [ "${rerr:-ok}" = ok ] || note "$rname: $rerr"
-    done <<< "$fetched"
-  fi
+  # pkg-refresh.sh fetches, keeps the state (hs sys pkg index) and says so itself when the index changed or could not be fetched; it exits 0 for a host that is down
+  bash "$repo/scripts/pkg-refresh.sh" || warn "$(t 'The package repositories could not be fetched: installed packages keep running, hs pkg fetch tries again.')"
   if mig=$(python3 -I "$repo/scripts/pkg.py" repo migrate 2>&1); then
     ! grep -q '^migrated' <<< "$mig" || live_refresh event:pkg.changed
   else

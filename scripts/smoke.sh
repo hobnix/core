@@ -138,6 +138,7 @@ default_probes() {
     $'hs sys incident state\tsys incident state\t0 1' \
     $'hs sys parts pending\tsys parts pending\t0' \
     $'hs sys pkg states\tsys pkg states\t0' \
+    $'hs sys pkg index	sys pkg index	0' \
     $'hs sys pkg integrations\tsys pkg integrations\t0' \
     $'hs sys pkg show\tsys pkg show hs-smoke-none\t0 1' \
     $'hs sys pkg asset\tsys pkg asset hs-smoke-none x.svg\t0 1' \

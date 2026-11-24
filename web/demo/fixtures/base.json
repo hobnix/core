@@ -641,6 +641,7 @@
   "apps/versions": [],
   "pkg/capabilities": [],
   "pkg/repos": [],
+  "pkg/index": [["repo", "official"], ["last_ok", "4102444800"], ["last_try", "4102444800"], ["error", "-"], ["expires", "-"], ["notified", "-"]],
   "dc/state": [],
   "recipes/asks": [],
   "recipes/steps": [],

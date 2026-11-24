@@ -205,7 +205,7 @@ check "capabilities is not in the migrate output" bash -c "! grep -q 'capabiliti
 check "the entry stays under capabilities" in_entry demo 'repo = "capabilities"'
 
 echo "-- hs update: the fetch and the migration never fail the update"
-check "update.sh guards the fetch" bash -c "grep -q 'if ! fetched=.*pkg.py\" fetch' '$SCRIPTS/update.sh'"
+check "update.sh guards the fetch" bash -c "grep -q 'pkg-refresh.sh\" || warn' '$SCRIPTS/update.sh'"
 check "and the migration" bash -c "grep -q 'if mig=.*repo migrate' '$SCRIPTS/update.sh'"
 check "a migration that moved something refreshes the web interface" bash -c "grep -q 'live_refresh event:pkg.changed' '$SCRIPTS/update.sh'"
 check "hs pkg fetch heals too, and keeps its exit code" bash -c "grep -A3 'out=\$(py fetch' '$SCRIPTS/pkg.sh' | grep -q 'repo migrate.*|| true'"

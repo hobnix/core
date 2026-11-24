@@ -110,6 +110,7 @@ case "${1:-list}" in
     rows=$(py list "$@")
     if [ -z "$rows" ]; then note "No packages."; exit 0; fi
     { thead 'Package' 'Kind' 'Version' 'Applied' 'For' 'What it is'; printf '%s\n' "$rows"; } | table
+    bash "$here/pkg-refresh.sh" --warn || true   # no fetch for 3 days, or the index expired
     next_step "hs pkg updates" ;;
   updates)
     rows=$(py updates)

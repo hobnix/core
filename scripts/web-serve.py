@@ -1226,6 +1226,7 @@ READS = {
     ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
     ("pkg", "capabilities"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},   # the capability packages (first-run wizard)
     ("pkg", "repos"): {"kind": "tsv", "ttl": 30, "topic": "pkg-repos"},
+    ("pkg", "index"): {"kind": "tsv", "ttl": 60, "topic": "pkg-index"},   # the state of the package index (pkg-refresh.sh): last fetch, error, expiry
     ("dc", "state"): {"kind": "tsv", "ttl": 60, "topic": "dc-state"},
     ("recipes", "asks"): {"kind": "tsv", "ttl": 60, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},
     ("recipes", "steps"): {"kind": "tsv", "ttl": 60, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},

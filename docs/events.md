@@ -89,6 +89,8 @@ The payload is optional extra data for programs. Rules:
 | `update.rolled-back` | warn | none | a failed update was undone, the previous generation runs again |
 | `update.rollback-skipped` | warn | none | a failed update was not rolled back, the system was left as it is |
 | `update.rollback-failed` | error | none | a failed update could not be rolled back |
+| `index.changed` | info | none | the package index was fetched and is not the one kept before (subject: the repository) |
+| `index.failed` | warn | none | the package index could not be fetched (subject: the repository, text: why); installed packages keep running |
 | `health.new` | warn | none | the health check found a problem it did not know before (subject: the problem key; once per change, not per run) |
 | `health.resolved` | info | none | a health problem is gone (subject: the problem key) |
 | `health.acked` | info | `who`, `until` | somebody acknowledged a health problem: it is no longer sent or counted (subject: the problem key; payload: who, and until: epoch second it ends by itself or -) |
