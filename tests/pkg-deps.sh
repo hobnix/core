@@ -55,6 +55,7 @@ on base byname prova
 before=$(cat "$HS_CAPABILITIES_FILE")
 check_out "refused while a package that is on requires it" "byname needs it" $HS ext disable base
 check_out "refused for a recipe's interface" "rec needs it" $HS ext disable prova
+check_out "a recipe dependent points to hs ct, not hs ext disable" "Fix: hs ct" $HS ext disable prova
 check_eq "nothing changed on refusal" "$before" "$(cat "$HS_CAPABILITIES_FILE")"
 check_eq "base is still on" "on" "$($HS sys ext list | awk -F'\t' '$1 == "base" { print $2 }')"
 on base prova provb

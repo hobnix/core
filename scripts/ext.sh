@@ -274,7 +274,7 @@ cmd_disable() {
   d=$(ext_package_dir "$n")
   if is_recipe "$n"; then fail_fix "$(t "'%s' is a recipe: its container is managed with hs ct." "$n")" "hs ct"; fi
   deps=$(dependents_on "$n" | paste -sd' ' -)
-  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "hs ext disable ${deps%% *}"; fi
+  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "$(if is_recipe "${deps%% *}"; then echo "hs ct"; else echo "hs ext disable ${deps%% *}"; fi)"; fi
   if has_service "$n"; then ctl stop "hs-ext-svc@$n.service" >/dev/null 2>&1 || true; fi   # a package that is off has no unit running (ADR 0011 rule 3)
   mapfile -t cur < <(caps_list)
   for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$n" ] || keep+=("$x"); done
