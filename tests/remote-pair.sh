@@ -16,6 +16,14 @@ T=$'\t'
 unset HOBNIX_LOG HS_GUIDED_TTY
 export HOBNIX_BIN=$bin HS_SCRIPTS=$SCRIPTS HS_CALLER=test HS_PLAIN=1 HS_LANG=en HS_EVENT_NOROOT=1 HS_WEB_PORT=8480
 
+# rec.sh <log> args...: what a fake saw (its argv, the command line of its caller, its whole environment) is appended to <log>; stdin is not touched
+cat > "$WORK/rec.sh" <<'EOF'
+#!/usr/bin/env bash
+log=$1; shift
+{ echo "ARGV $*"; echo "CALLER $(tr '\0' ' ' < "/proc/$PPID/cmdline" 2>/dev/null)"; echo "CALLERS-CALLER $(tr '\0' ' ' < "/proc/$(awk '{ print $4 }' "/proc/$PPID/stat")/cmdline" 2>/dev/null)"; env; } >> "$log"
+EOF
+chmod +x "$WORK/rec.sh"
+
 # one fake server: its state dir, its fake manage-users (a list of logins), share-perm, host key
 mkserver() {   # mkserver <dir> <name>
   local d=$1 n=$2
@@ -23,6 +31,8 @@ mkserver() {   # mkserver <dir> <name>
   : > "$d/users"
   cat > "$d/bin/mu.sh" <<EOF
 #!/usr/bin/env bash
+"$WORK/rec.sh" "$d/rec.log" "\$@"
+if [ -e "$d/mu-fail" ]; then case "\$1" in --add|--password) exit 1 ;; esac; fi
 case "\$1" in
   --list) awk '{ print \$1 "\tx" }' "$d/users" ;;
   --add) echo "\$2" >> "$d/users"; cat > "$d/last-pw" ;;
@@ -31,7 +41,7 @@ case "\$1" in
   *) ;;
 esac
 EOF
-  printf '#!/usr/bin/env bash\necho "\$@" >> "%s/perm.log"\n' "$d" > "$d/bin/sp.sh"
+  printf '#!/usr/bin/env bash\n"%s/rec.sh" "%s/rec.log" "$@"\necho "$@" >> "%s/perm.log"\n' "$WORK" "$d" "$d" > "$d/bin/sp.sh"
   printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s comment\n' "$(printf '%-43s' "${n}key" | tr ' ' 'A')" > "$d/hostkey.pub"
 }
 srv() {   # srv <dir> <name> cmd...: run remote.sh as that server
@@ -45,11 +55,13 @@ mkserver "$A" alpha; mkserver "$B" beta
 # fake curl: the "network" is a direct call of `hobnix remote-claim|remote-accept` on server A (or B for a push)
 cat > "$WORK/curl.sh" <<EOF
 #!/usr/bin/env bash
+"$WORK/rec.sh" "$WORK/rec-curl.log" "\$@"
 url=\${@: -1}
 case "\$url" in */claim) w=remote-claim; d=$A; n=alpha ;; */push) w=remote-accept; d=$B; n=beta ;; *) exit 7 ;; esac
 export HS_REMOTE=\${FAKE_REMOTE:-} HS_STATE_DIR=\$d/state HS_MANAGE_USERS=\$d/bin/mu.sh HS_SHARE_PERM=\$d/bin/sp.sh HS_HOST_NAME=\$n HS_DOMAIN_SHORT=HOME \\
   HS_HOST_KEY_FILE=\$d/hostkey.pub HS_REMOTE_CODES=\$d/codes.json HS_REMOTE_ROOT=\$d/mnt HS_MOUNT_CMD=true HS_MOUNTPOINT=false HS_VAULT_DIR=\$d/novault
 out=\$("$bin" \$w --source \${FAKE_SRC:-10.0.0.9}); rc=\$?
+printf '%s' "\$out" > "$WORK/last-answer"
 printf '%s\n%s' "\$out" "\$( [ \$rc = 0 ] && echo 200 || { case "\$out" in *code.rate*) echo 429 ;; *code.unknown*) echo 404 ;; *) echo 503 ;; esac; } )"
 EOF
 chmod +x "$WORK/curl.sh"
@@ -204,5 +216,120 @@ out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer 
 echo "$out" | grep -q "has an access from this server already" && pass "the error says why" || fail "error text: $out"
 echo "-- no secret in argv of the programs (the code goes on stdin)"
 grep -n 'pair request\|pair open\|pair push\|pair check' "$SCRIPTS/remote.sh" | grep -v '|' | grep -q . && fail "a pair call without stdin pipe" || pass "every pair call reads the code from a pipe"
+
+# ---- what follows: the regressions of the review of the backend, the burn, the error names, and the leak check (issue 1155)
+export HS_STATE_DB=$WORK/state.db   # the events of the rest of this file land here
+unset FAKE_SRC FAKE_REMOTE
+newcode() {   # newcode <dir> <name> [args...]: a code of that server, on stdout
+  local out
+  out=$(srv "$1" "$2" offer "${@:3}" --code --plain --yes) || { echo "offer failed: $out" >&2; return 1; }
+  awk -F'\t' '$2 == "code" { print $3 }' <<<"$out"
+}
+answer_error() { python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("error",""))' < "$WORK/last-answer" 2>/dev/null; }
+srv "$A" alpha codes --cancel >/dev/null 2>&1; srv "$B" beta codes --cancel >/dev/null 2>&1
+
+echo "-- takeover regression: a free code and a taken name (the other side chose the name), the public host key matching"
+export FAKE_SRC=10.0.0.60
+cp "$B/hostkey.pub" "$WORK/c/hostkey.pub"
+code=$(newcode "$A" alpha docs)
+snap() { { cat "$A/users"; cat "$A/state/remote-offers"; cat "$A/perm.log"; cat "$A/last-pw"; } | cksum; }
+before=$(snap)
+out=$(printf '%s\n' "$code@$addr" | srv "$WORK/c" beta add --code --stdin 2>&1) && fail "a free code took the taken name beta" || pass "free code + taken name: refused"
+check_eq "nothing changed on the giving side (logins, offers, permissions, password)" "$before" "$(snap)"
+[ "$(srv "$A" alpha codes | wc -l)" -eq 0 ] && pass "the code is spent by the refusal" || fail "the code survived"
+
+echo "-- takeover regression: --reconnect for a name that is not the one the answer comes from"
+code=$(newcode "$A" alpha media --peer beta)
+credbefore=$(cat "$B/state/remote-alpha.cred"); rowsbefore=$(cat "$B/state/remote-mounts")
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect delta 2>&1) && fail "--reconnect delta accepted an answer from alpha" || pass "--reconnect with another name than the answering server: refused"
+check_eq "credentials unchanged (reconnect other name)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "rows unchanged (reconnect other name)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
+
+echo "-- the error names: unknown (wrong, used, expired), rate, unavailable"
+export FAKE_SRC=10.0.0.61
+srv "$A" alpha codes --cancel >/dev/null 2>&1
+code=$(newcode "$A" alpha docs --peer beta)
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && pass "a fresh code works once" || fail "fresh code: $out"
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a used code worked" || check_eq "a used code answers code.unknown" code.unknown "$(answer_error)"
+out=$(printf '%s\n' "ZZZZ-ZZZZ-ZZZZ-ZZZZ@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a wrong code worked" || check_eq "a wrong code answers code.unknown too (the same words)" code.unknown "$(answer_error)"
+code=$(newcode "$A" alpha docs --peer beta)
+# the clock is a parameter in the Rust tests (pair::Clock); here the stored expiry is moved into the past
+python3 - "$A/codes.json" <<'EOF'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+for c in d["codes"]:
+    c["expires"] = 1
+json.dump(d, open(p, "w"))
+EOF
+[ "$(srv "$A" alpha codes | wc -l)" -eq 0 ] && pass "an expired code is no longer listed" || fail "expired code listed"
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "an expired code worked" || check_eq "an expired code answers code.unknown" code.unknown "$(answer_error)"
+echo "$out" | grep -q "does not know that code" && pass "the text says: wrong, used or expired" || fail "text: $out"
+code=$(newcode "$A" alpha docs --peer beta)
+touch "$A/mu-fail"
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a claim worked without an account" || check_eq "no account possible answers code.unavailable" code.unavailable "$(answer_error)"
+rm -f "$A/mu-fail"
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "the code of a failed claim worked again" || check_eq "the code of a failed claim is spent (one use)" code.unknown "$(answer_error)"
+export FAKE_SRC=10.0.0.62
+for i in 1 2 3 4 5; do printf 'AAAA-BBBB-CCCC-DDDD@%s\n' "$addr" | srv "$B" beta add --code --stdin >/dev/null 2>&1; done
+printf 'AAAA-BBBB-CCCC-DDDD@%s\n' "$addr" | srv "$B" beta add --code --stdin >/dev/null 2>&1
+check_eq "the 6th try from one source answers code.rate" code.rate "$(answer_error)"
+
+echo "-- 20 wrong tries from several sources end every open code"
+srv "$A" alpha codes --cancel >/dev/null 2>&1
+code=$(newcode "$A" alpha docs --peer beta)
+for n in 71 72 73 74; do
+  export FAKE_SRC=10.0.0.$n
+  for i in 1 2 3 4 5; do printf 'AAAA-BBBB-CCCC-DDDD@%s\n' "$addr" | srv "$B" beta add --code --stdin >/dev/null 2>&1; done
+done
+[ "$(srv "$A" alpha codes | wc -l)" -eq 0 ] && pass "the open code ended with the 20th failure" || fail "the code is still open"
+export FAKE_SRC=10.0.0.75
+out=$(printf '%s\n' "$code@$addr" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a burned code worked" || check_eq "the right code of a burned set answers code.unknown" code.unknown "$(answer_error)"
+
+echo "-- the probe: hs sys remote codes is a read the smoke test runs, three tab-separated fields, never the code"
+grep -qF 'hs remote codes\tremote codes' "$SCRIPTS/smoke.sh" && pass "scripts/smoke.sh probes hs remote codes" || fail "no smoke probe for remote codes"
+grep -q "^sys	sys remote codes	rust:remote-codes	" "$SCRIPTS/lib/registry.tsv" && pass "the sys row is in the registry" || fail "no sys row"
+export FAKE_SRC=10.0.0.80
+code=$(newcode "$A" alpha docs --peer beta)
+lst=$(HS_REMOTE_CODES=$A/codes.json "$bin" remote-codes); rc=$?
+check_eq "remote-codes exits 0" 0 "$rc"
+check_eq "one row of three fields" 3 "$(awk -F'\t' '{ print NF }' <<<"$lst" | sort -u | tr -d '\n')"
+case "$lst" in *"$code"*|*"$(tr -d - <<<"$code")"*) fail "the code is in the list" ;; *) pass "the list never carries the code" ;; esac
+srv "$A" alpha codes --cancel >/dev/null 2>&1
+check_eq "an empty list is empty and exits 0" "0:" "$(HS_REMOTE_CODES=$A/codes.json "$bin" remote-codes; echo "$?:")"
+
+echo "-- the code and the password are in no argv, environment, journal line, state file or event"
+mkserver "$WORK/e" echo
+srv "$WORK/e" echo remove alpha --yes >/dev/null 2>&1
+: > "$A/rec.log"; : > "$WORK/rec-curl.log"; : > "$WORK/e/rec.log"
+export FAKE_SRC=10.0.0.81
+out=$(srv "$A" alpha offer secret-docs --code --plain --yes 2>"$WORK/err-offer") || fail "offer: $out"
+code=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out"); raw=$(tr -d - <<<"$code")
+HS_EVENT_VERBOSE=1 srv "$WORK/e" echo add --code --stdin >"$WORK/out-add" 2>"$WORK/err-add" <<<"$code@$addr"
+grep -q "^remote-echo$" "$A/users" && pass "the pairing ran (login remote-echo on A)" || fail "the pairing did not run: $(cat "$WORK/out-add" "$WORK/err-add" "$WORK/last-answer" | head -c 600)"
+pw=$(cat "$A/last-pw")
+[ ${#pw} -ge 12 ] && pass "there is a password to look for" || fail "no password: '$pw'"
+python3 - "$HS_STATE_DB" > "$WORK/events.txt" 2>&1 <<'EOF'
+import sqlite3, sys
+for r in sqlite3.connect(sys.argv[1]).execute("SELECT kind, subject, text, payload FROM events ORDER BY id"):
+    print("|".join(str(x) for x in r))
+EOF
+grep -q "claimed" "$WORK/events.txt" && grep -q "code.made" "$WORK/events.txt" && pass "the events were written (the check below is not empty)" || fail "no events: $(head -c 200 "$WORK/events.txt")"
+leaks=
+for f in "$A/rec.log" "$WORK/e/rec.log" "$WORK/rec-curl.log" "$WORK/err-offer" "$WORK/out-add" "$WORK/err-add" "$WORK/events.txt"; do
+  for s in "$code" "$raw" "$pw"; do grep -qF -- "$s" "$f" && leaks="$leaks ${f##*/}:${s:0:4}"; done
+done
+[ -z "$leaks" ] && pass "no argv, environment, journal line or event holds the code or the password" || fail "leaks:$leaks"
+grep -q "ARGV" "$A/rec.log" && grep -q "ARGV" "$WORK/rec-curl.log" && pass "the fakes recorded their calls (the check is not empty)" || fail "nothing recorded"
+leaks=
+for d in "$A/state" "$WORK/e/state"; do
+  while IFS= read -r f; do
+    case "$f" in *.cred) continue ;; esac   # the one place the password belongs: the credentials file of the using side
+    for s in "$code" "$raw" "$pw"; do grep -qF -- "$s" "$f" && leaks="$leaks ${f##*/}"; done
+  done < <(find "$d" -type f)
+done
+for s in "$code" "$raw"; do grep -qF -- "$s" "$A/codes.json" && leaks="$leaks codes.json"; done
+[ -z "$leaks" ] && pass "no state file or job record holds them (the credentials file apart)" || fail "files with a secret:$leaks"
+[ "$(stat -c %a "$WORK/e/state/remote-alpha.cred")" = 600 ] && pass "the credentials file of the using side is 0600" || fail "cred mode"
 
 finish
