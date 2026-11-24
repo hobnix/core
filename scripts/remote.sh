@@ -79,12 +79,17 @@ drop() {   # drop <file> <field=value>... : delete the records whose first N fie
 }
 gen_password() { local p; p=$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n'); echo "${p}-Aa1"; }
 
-write_cred() {   # write_cred <peer> <login> <domain>; password on stdin (one line)
-  local f pw; f=$(cred_file "$1")
+write_cred() {   # write_cred <peer> <login> <domain> [<exit code for a failure to save, default 1>]; password on stdin (one line)
+  local f pw rcx=${4:-1}; f=$(cred_file "$1")
   IFS= read -r pw || pw=""
-  # exit 4 = the credentials could not be saved (callers read exit 1 as "the name is taken")
-  [ -n "$pw" ] || { warn "No password." >&2; exit 4; }
-  secret_prepare "remote-$1.cred" "$state" || { warn "The vault is closed (hs unlock)." >&2; exit 4; }
+  # the pairing paths ask for exit 4 (their callers read exit 1 as "the name is taken"); the manual `add` keeps the plain fail (exit 1)
+  if [ "$rcx" -eq 1 ]; then
+    [ -n "$pw" ] || fail "No password."
+    secret_prepare "remote-$1.cred" "$state" || fail_fix "The vault is closed." "hs unlock"
+  else
+    [ -n "$pw" ] || { warn "No password." >&2; exit "$rcx"; }
+    secret_prepare "remote-$1.cred" "$state" || { warn "The vault is closed (hs unlock)." >&2; exit "$rcx"; }
+  fi
   ( umask 077
     { printf 'username=%s\n' "$2"; printf 'password=%s\n' "$pw"; [ -z "$3" ] || printf 'domain=%s\n' "$3"; } > "$f" )
   chmod 600 "$f"
@@ -162,7 +167,7 @@ setup_mount_locked() {
     oldhost=$(rows "$MOUNTS" | awk -F'\t' -v p="$p" -v h="$h" '$1 == p && $2 != h { print $2; exit }')
     if [ -n "$oldhost" ]; then cat >/dev/null; return 1; fi
   fi
-  write_cred "$p" "$l" "$d"
+  write_cred "$p" "$l" "$d" 4
   mkdir -p "$state"; touch "$MOUNTS"
   awk -F'\t' -v p="$p" -v s="$s" '!($1 == p && $3 == s)' "$MOUNTS" > "$MOUNTS.new" || true
   mv "$MOUNTS.new" "$MOUNTS"
@@ -309,11 +314,11 @@ add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--std
     local want shost; want=$(rows "$MOUNTS" | awk -F'\t' -v p="$reconnect" '$1 == p { print $2; exit }'); shost=${srv%:*}
     [ "$reconnect" = "$p" ] || fail "$(t "The answer comes from '%s', not from '%s'. Not changed." "$p" "$reconnect")"
     [ -n "$want" ] || fail "$(t "Nothing is mounted from '%s': use hs remote add --code without --reconnect." "$reconnect")"
-    local addr_ok=false nh
-    if is_node "$srv"; then   # a node link proves only that node X answered: X must be the server itself (its name) or live at the stored host
-      nh=$(bash "$node_sh" --list 2>/dev/null | awk -F'\t' -v n="$srv" '$1 == n { print $3; exit }')
-      { [ "$srv" = "$reconnect" ] || [ "${nh,,}" = "${want,,}" ]; } && addr_ok=true
-    else [ "${shost,,}" = "${want,,}" ] && addr_ok=true; fi
+    # ONE rule for every path: the host the code points to (HTTP: the address typed; node link: the host of that node in the node list; a label proves
+    # nothing) and the host in the answer must both be the stored host of that server
+    local addr_ok=false nh=$shost
+    if is_node "$srv"; then nh=$(bash "$node_sh" --list 2>/dev/null | awk -F'\t' -v n="$srv" '$1 == n { print $3; exit }'); fi
+    [ "${nh,,}" = "${want,,}" ] && addr_ok=true
     if [ "$h" != "$want" ] || ! $addr_ok; then
       fail_fix "$(t "A reconnect must reach the address stored for %s (%s); the code points to %s and the answer says %s. Nothing is changed. If the server moved, remove it first." "$p" "$want" "$srv" "$h")" "hs remote remove $p"
     fi

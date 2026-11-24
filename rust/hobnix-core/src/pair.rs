@@ -661,7 +661,7 @@ pub fn claim(
                 "remote.claimed",
                 server,
                 "info",
-                &json!({"server": server, "share": entry.share, "fingerprint": fp, "host": inner.host}),
+                &json!({"server": server, "share": entry.share, "fingerprint": fp}),
             );
             Reply {
                 error: None,

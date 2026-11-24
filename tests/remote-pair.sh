@@ -180,8 +180,24 @@ out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code12=$(a
 out=$(printf '%s\n' "$code12" | HS_NODE=$WORK/node2.sh srv "$B" beta add --code --stdin --server carol --reconnect alpha 2>&1) && fail "an unrelated node renewed alpha" || pass "a node that is not alpha and not at alpha's host is refused"
 check_eq "the credentials file is unchanged (node)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
 check_eq "the rows are unchanged (node)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
+cat > "$WORK/node3.sh" <<EOT
+#!/usr/bin/env bash
+# a node that is only LABELLED alpha (it lives at vps.example) and answers like alpha with the public key
+case "\$1" in
+  --list) printf 'alpha\tpeer\tvps.example\t22\tfile\tok\n' ;;
+  --pair) resp=\$($WORK/curl.sh http://x/api/remote/claim); body=\${resp%\$'\n'*}; printf '%s\n' "\$body"; [ "\${resp##*\$'\n'}" = 200 ] ;;
+esac
+EOT
+chmod +x "$WORK/node3.sh"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code14=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code14" | HS_NODE=$WORK/node3.sh srv "$B" beta add --code --stdin --server alpha --reconnect alpha 2>&1) && fail "a node labelled alpha at another host renewed alpha" || pass "a node label proves nothing: its host must be the stored host"
+check_eq "the credentials file is unchanged (label)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "the rows are unchanged (label)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
 out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code13=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 out=$(printf '%s\n' "$code13" | HS_NODE=$WORK/node2.sh srv "$B" beta add --code --stdin --server alpha --reconnect alpha 2>&1) && pass "the node named alpha renews alpha" || fail "node alpha: $out"
+echo "-- the manual add keeps its plain failure (exit 1) for an empty password"
+out=$(printf '\n' | srv "$B" beta add manual manual.local share --user u --stdin --yes 2>&1); rc=$?
+check_eq "manual add without a password fails with exit 1" 1 "$rc"
 echo "-- send: a second share for a server that has access gets an accurate error"
 out=$(srv "$B" beta receive --plain --yes) && rcode3=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send to an existing name worked" || pass "send refuses it"
