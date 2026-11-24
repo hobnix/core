@@ -111,7 +111,6 @@ tests/import-vzdump.sh	1
 tests/install-restore.sh	1
 tests/job-reconcile.sh	2
 tests/job-record-rust.sh	1
-tests/job-record.sh	1
 tests/job-step-live.sh	1
 tests/lib-unraid.sh	1
 tests/lib.sh	2
