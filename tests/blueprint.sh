@@ -23,6 +23,7 @@ show_media > "$WORK/bp/media"
 show_media | sed "s/^added${tab}no/added${tab}yes/; s/^repo${tab}official/repo${tab}mine/" > "$WORK/bp/added"
 printf '%s\n' "error${tab}Docker is the core capability: use the [docker] table" > "$WORK/bp/bad"
 printf 'error\t[settings] x \033[2Jpwned\xc2\x85status ok\xe2\x80\xa8line\n' > "$WORK/bp/hostile"
+{ show_media; printf 'setting\tk\tconfirm_name\tx\xc2\x85y\xe2\x80\xa8z\n'; } > "$WORK/bp/hostile2"
 show_media | grep -v "^docker${tab}" > "$WORK/bp/nodocker"
 show_media | sed "s/^part${tab}recipes${tab}r2${tab}ok/part${tab}recipes${tab}r2${tab}later:it comes from the repository mine you added, so you confirm it yourself/" > "$WORK/bp/addedapp"
 show_media | sed "s/^part${tab}capabilities${tab}a${tab}-/part${tab}capabilities${tab}edge-ports${tab}-/" > "$WORK/bp/edgeports"
@@ -263,7 +264,7 @@ assert len(rows) == 1 and len(rows[0].split("\t")) == 7 and rows[0].split("\t")[
 PY
 
 echo "-- hostile texts, the allow-list of keys, an index that says blueprint (lib/pkg_blueprint.py)"
-python3 - "$SCRIPTS" <<'PY' && pass "hostile fields refused, allow-list, wrong kind refused" || fail "hostile fields"
+python3 - "$SCRIPTS" "$WORK/bp/realhostile" <<'PY' && pass "hostile fields refused, allow-list, wrong kind refused" || fail "hostile fields"
 import sys, os, copy
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 import pkg_blueprint as b
@@ -376,6 +377,20 @@ class R2(R):
 lines, bad = b.show(R2(GOOD, {"official": {"default": True}, "mine": {}}), P(), "bp")
 assert any(x.startswith("part\trecipes\tok\tlater:it comes from the repository") for x in lines), lines
 assert "from\tok\tmine" in lines, lines
+# the real reader on a hostile manifest (a tab in a settings key): the whole show refuses; what it prints is what pkg.sh prints (error lines)
+m = mut(lambda m: m["settings"].update({"k\tconfirm_name\tx": "v"}))
+lines, bad = b.show(R(m), P(), "bp")
+assert lines == [] and bad
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join("error\t" + x for x in bad) + "\n")
 PY
+check_eq "the real reader's refusal of a tab in a key: only error lines, two columns each" "error 2" "$(awk -F'\t' '{ if ($1 != "error" || NF != 2) bad = 1; n++ } END { print (bad ? "bad" : "error"), (n ? 2 : 0) }' "$WORK/bp/realhostile")"
+run plan apply realhostile
+check_eq "a plan on that hostile manifest is refused: a status line and a reason line, nothing else" "status${tab}refused|reason" "$(printf '%s\n' "$out" | awk -F'\t' '{ printf "%s%s", (NR > 1 ? "|" : ""), ($1 == "status" ? $1 FS $2 : $1) }')"
+check_eq "and it is not a plan" 0 "$(grep -c '^part' <<<"$out")"
+# defence in depth: a stub that bypasses the reader's checks still cannot add a column or a line to the plan
+run plan apply hostile2
+check_eq "a tab in a setting key: every part line of the plan has 6 columns" "" "$(grep '^part' <<<"$out" | awk -F'\t' 'NF != 6' | paste -sd'|')"
+check_eq "and no line of its own comes out of it" 0 "$(grep -c '^confirm_name' <<<"$out")"
+check_eq "C1 and U+2028 in a field are one line with spaces" 1 "$(grep -c 'confirm_name x y z' <<<"$out")"
 
 finish

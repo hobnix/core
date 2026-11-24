@@ -27,9 +27,12 @@ alist=${HS_APPS_LIST:-$here/apps-list.sh}
 tab=$'\t'
 
 # the reason is one line whatever a package text put into it: no C0 or DEL, no C1 and no U+2028/2029 (the web interface splits lines on them)
+# cell: a text from the blueprint as ONE field of a plan line: control characters, tabs, C1 and U+2028/2029 become a space (defence in depth: the reader
+# lib/pkg_blueprint.py refuses such a blueprint already)
+cell() { printf '%s' "$1" | LC_ALL=C tr '\000-\037\177' ' ' | LC_ALL=C sed -E 's/\xc2[\x80-\x9f]/ /g; s/\xe2\x80[\xa8\xa9]/ /g'; }
 refuse() {
   local r
-  r=$(printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177' | LC_ALL=C sed -E 's/\xc2[\x80-\x9f]//g; s/\xe2\x80[\xa8\xa9]//g')
+  r=$(cell "$1")
   printf 'status\trefused\nreason\t%s\n' "$r"; exit 1
 }
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
@@ -71,6 +74,7 @@ net_ok || refuse "This needs the network (installing reads the signed releases, 
 cfg=""
 while IFS=$'\t' read -r kind key val; do
   [ -n "$kind" ] || continue
+  key=$(cell "$key"); val=$(cell "$val")   # a tab in the value would add a column to cfg
   st="set"
   if [ "$kind" = machine ]; then machine_has "$key" && st=kept
   else cur=$(setting_get "$key" 2>/dev/null || true); [ -z "$cur" ] || st=kept; fi
@@ -141,18 +145,18 @@ if [ -n "$(config_todo | awk -F'\t' '$1 == "machine"')" ] || [ ${#inst[@]} -gt 0
 
 # ── plan ──
 if [ "$verb" = plan ]; then
-  printf 'status\tok\nheading\tapply the blueprint %s\n' "$title"
+  printf 'status\tok\nheading\tapply the blueprint %s\n' "$(cell "$title")"
   printf 'blueprint\t%s\t%s\t%s\t%s\n' "$name" "$repo" "$version" "$tag"
   n=0
   while IFS=$'\t' read -r kind key val st; do
     [ -n "$kind" ] || continue
-    n=$((n + 1))
+    n=$((n + 1)); key=$(cell "$key"); val=$(cell "$val")
     if [ "$st" = set ]; then printf 'part\t%d\tconfig\t%s\tset\tset %s = %s\n' "$n" "$key" "$key" "$val"
     else printf 'part\t%d\tconfig\t%s\tkept\t%s is set already and is kept\n' "$n" "$key" "$key"; fi
   done <<<"$cfg"
-  for p in ${inst[@]+"${inst[@]}"}; do n=$((n + 1)); printf 'part\t%d\tparts\t%s\tinstall\tinstall %s from the signed release\n' "$n" "$p" "$p"; done
-  for p in ${en[@]+"${en[@]}"}; do n=$((n + 1)); printf 'part\t%d\tparts\t%s\tenable\tswitch %s on\n' "$n" "$p" "$p"; done
-  for w in ${why[@]+"${why[@]}"}; do printf 'note\t%s\n' "$w"; done
+  for p in ${inst[@]+"${inst[@]}"}; do n=$((n + 1)); p=$(cell "$p"); printf 'part\t%d\tparts\t%s\tinstall\tinstall %s from the signed release\n' "$n" "$p" "$p"; done
+  for p in ${en[@]+"${en[@]}"}; do n=$((n + 1)); p=$(cell "$p"); printf 'part\t%d\tparts\t%s\tenable\tswitch %s on\n' "$n" "$p" "$p"; done
+  for w in ${why[@]+"${why[@]}"}; do printf 'note\t%s\n' "$(cell "$w")"; done
   if printf '%s\n' ${en[@]+"${en[@]}"} ${inst[@]+"${inst[@]}"} | grep -qx edge-ports; then printf 'warn\t%s\n' "$edge_warn"; fi
   if $need_rebuild; then n=$((n + 1)); printf 'part\t%d\trebuild\t-\tset\trebuild the server (hs rebuild): one rebuild for all of it\n' "$n"; fi
   if [ -n "$dline" ]; then
@@ -167,7 +171,7 @@ if [ "$verb" = plan ]; then
   fi
   for a in ${apps[@]+"${apps[@]}"}; do
     IFS=$'\t' read -r an ast atext _ <<<"$a"
-    n=$((n + 1))
+    n=$((n + 1)); an=$(cell "$an"); atext=$(cell "$atext")
     case "$ast" in
       later) printf 'part\t%d\tapp\t%s\tlater\t%s needs you: %s (hs apps install %s)\n' "$n" "$an" "$an" "$atext" "$an" ;;
       present) printf 'part\t%d\tapp\t%s\tpresent\t%s\n' "$n" "$an" "$atext" ;;
