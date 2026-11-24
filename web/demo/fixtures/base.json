@@ -370,6 +370,17 @@
   "changes/list": [],
   "parts/pending": [],
   "rebuild/pending": [],
+  "blueprint/list": [
+   [
+    "home-server",
+    "core",
+    "1.0.0",
+    "home",
+    "samba,backup",
+    "new",
+    "Home server"
+   ]
+  ],
   "preset/list": [
    [
     "home",

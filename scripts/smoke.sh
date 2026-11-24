@@ -165,6 +165,7 @@ default_probes() {
     $'hs job log\tjob log hs-health-check.service\t0 1' \
     $'hs config list\tconfig list\t0' \
     $'hs blueprint list\tblueprint list\t0' \
+    $'hs blueprint show\tblueprint show web-server\t0 1' \
     $'hs preset list\tpreset list\t0' \
     $'hs preset show minimal\tpreset show minimal\t0' \
     $'hs config get\tconfig get language\t0 1' \
