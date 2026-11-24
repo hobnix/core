@@ -50,7 +50,7 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; share=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: share-change.sh plan|start <share> <action> [options]" >&2; exit 1 ;; esac
-[[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse "invalid share name"
+[[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || refuse_code name.invalid "invalid share name"
 case "$action" in backup|cache|auto|rename|snapshot|rollback|repair|perm|visibility|add|delete|purge|undelete|restore|parity-skip|parity-keep|parity-limit) ;; *) refuse_code action.unknown "unknown action" ;; esac
 shift 3
 
@@ -90,22 +90,22 @@ if [ ${#needs[@]} -gt 0 ]; then
   exit 2
 fi
 case "$action" in
-  backup|cache|auto) [ "$to" = on ] || [ "$to" = off ] || refuse "--to is on or off" ;;
-  parity-limit) [[ "$to" =~ ^[0-9]+$ ]] || [ "$to" = off ] || [ "$to" = default ] || refuse "--to is a number, off or default" ;;
+  backup|cache|auto) [ "$to" = on ] || [ "$to" = off ] || refuse_code share.to-invalid "--to is on or off" ;;
+  parity-limit) [[ "$to" =~ ^[0-9]+$ ]] || [ "$to" = off ] || [ "$to" = default ] || refuse_code share.to-invalid "--to is a number, off or default" ;;
   parity-skip|parity-keep)
-    [[ "$folder" =~ ^[A-Za-z0-9._\ -]+(/[A-Za-z0-9._\ -]+)*$ ]] && [[ "/$folder/" != *"/../"* ]] && [[ "/$folder/" != *"/./"* ]] || refuse "'$folder' is not a folder inside the share" ;;
-  visibility) [ "$to" = visible ] || [ "$to" = hidden ] || refuse "--to is visible or hidden" ;;
-  rename) [[ "$to" =~ $word ]] || refuse "'$to' is not a usable name (letters, digits, . _ -)" ;;
-  restore) [[ "$snapname" =~ ^[A-Za-z0-9]+$ ]] || refuse "'$snapname' is not a snapshot id (latest, or an id from the list)"
-           case "$inside" in *..*) refuse "the folder must lie inside the share" ;; esac ;;
-  purge) [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.deleted-[0-9]{8}$ ]] || refuse "only a kept folder (<name>.deleted-<date>) can be removed for good" ;;
-  undelete) [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.deleted-[0-9]{8}$ ]] || refuse "only a kept folder (<name>.deleted-<date>) can be brought back" ;;
-  perm) for x in "${sets[@]}"; do [[ "$x" =~ ^S-[0-9-]+=(none|read|write|full)$ ]] || refuse "expected <sid>=<level> (none, read, write or full), got '$x'"; done ;;
-  add) [ "$kind" = shares ] || [ "$kind" = sensitive ] || refuse "--kind is shares or sensitive"
-       [ "$tier" = bulk ] || [ "$tier" = fast ] || refuse "--tier is bulk or fast"
-       [ -z "$as" ] || [[ "$as" =~ ^[0-9]+:[0-9]+$ ]] || refuse "--as expects <uid>:<gid>, got '$as'"
-       [ -z "$ct" ] || [[ "$ct" =~ ^[a-z][a-z0-9-]*$ ]] || refuse "invalid instance name"
-       [ -z "$ctpath" ] || [[ "$ctpath" == /* ]] || refuse "the path inside must start with /" ;;
+    [[ "$folder" =~ ^[A-Za-z0-9._\ -]+(/[A-Za-z0-9._\ -]+)*$ ]] && [[ "/$folder/" != *"/../"* ]] && [[ "/$folder/" != *"/./"* ]] || refuse_code share.folder-invalid "'$folder' is not a folder inside the share" ;;
+  visibility) [ "$to" = visible ] || [ "$to" = hidden ] || refuse_code share.to-invalid "--to is visible or hidden" ;;
+  rename) [[ "$to" =~ $word ]] || refuse_code name.invalid "'$to' is not a usable name (letters, digits, . _ -)" ;;
+  restore) [[ "$snapname" =~ ^[A-Za-z0-9]+$ ]] || refuse_code share.snapshot-invalid "'$snapname' is not a snapshot id (latest, or an id from the list)"
+           case "$inside" in *..*) refuse_code share.folder-invalid "the folder must lie inside the share" ;; esac ;;
+  purge) [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.deleted-[0-9]{8}$ ]] || refuse_code share.not-kept "only a kept folder (<name>.deleted-<date>) can be removed for good" ;;
+  undelete) [[ "$share" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.deleted-[0-9]{8}$ ]] || refuse_code share.not-kept "only a kept folder (<name>.deleted-<date>) can be brought back" ;;
+  perm) for x in "${sets[@]}"; do [[ "$x" =~ ^S-[0-9-]+=(none|read|write|full)$ ]] || refuse_code share.perm-invalid "expected <sid>=<level> (none, read, write or full), got '$x'"; done ;;
+  add) [ "$kind" = shares ] || [ "$kind" = sensitive ] || refuse_code share.kind-invalid "--kind is shares or sensitive"
+       [ "$tier" = bulk ] || [ "$tier" = fast ] || refuse_code share.tier-invalid "--tier is bulk or fast"
+       [ -z "$as" ] || [[ "$as" =~ ^[0-9]+:[0-9]+$ ]] || refuse_code share.as-invalid "--as expects <uid>:<gid>, got '$as'"
+       [ -z "$ct" ] || [[ "$ct" =~ ^[a-z][a-z0-9-]*$ ]] || refuse_code name.invalid "invalid instance name"
+       [ -z "$ctpath" ] || [[ "$ctpath" == /* ]] || refuse_code share.path-invalid "the path inside must start with /" ;;
 esac
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
@@ -162,7 +162,7 @@ case "$action" in
     fi ;;
   restore)
     st=$(bash "$backup" --state 2>/dev/null | awk -F'\t' '$1 == "configured" { print $2 }' || true)
-    [ "$st" = yes ] || refuse "the backup is not set up (hs backup init <device>)" ;;
+    [ "$st" = yes ] || refuse_code backup.not-set-up "the backup is not set up (hs backup init <device>)" ;;
   delete)
     rc=0
     dry=$(bash "$deleter" "$share" --dry-run </dev/null 2>&1) || rc=$?
@@ -181,15 +181,15 @@ case "$action" in
       exit 1
     fi ;;
   rollback)
-    is_zfs || refuse "snapshots need the ZFS layout (the backup is the history on SnapRAID: hs share $share restore)"
+    is_zfs || refuse_code share.needs-zfs "snapshots need the ZFS layout (the backup is the history on SnapRAID: hs share $share restore)"
     list=$(bash "$overview" history "$share" 2>/dev/null | cut -f1 || true)
-    [ -n "$list" ] || refuse "this share has no snapshots (ZFS layout only)"
-    grep -qxF -- "$snapname" <<<"$list" || refuse "No snapshot '$snapname' on this share."
+    [ -n "$list" ] || refuse_code share.no-snapshots "this share has no snapshots (ZFS layout only)"
+    grep -qxF -- "$snapname" <<<"$list" || refuse_code share.snapshot-unknown "No snapshot '$snapname' on this share."
     newer=$(awk -v t="$snapname" 'f { n++ } $0 == t { f = 1 } END { print n + 0 }' <<<"$list") ;;
   add)
-    if share_name_taken "$share"; then refuse "A share called '$share' exists already."; fi
-    case "${share,,}" in shares|sensitive|global|homes|printers) refuse "'$share' is a reserved name." ;; esac
-    [ -z "$ct" ] || ${HS_INCUS:-incus} info "$ct" >/dev/null 2>&1 || refuse "'$ct' does not exist." ;;
+    if share_name_taken "$share"; then refuse_code share.exists "A share called '$share' exists already."; fi
+    case "${share,,}" in shares|sensitive|global|homes|printers) refuse_code share.reserved "'$share' is a reserved name." ;; esac
+    [ -z "$ct" ] || ${HS_INCUS:-incus} info "$ct" >/dev/null 2>&1 || refuse_code share.instance-unknown "'$ct' does not exist." ;;
   parity-skip|parity-keep|parity-limit)
     rc=0
     if [ "$action" = parity-limit ]; then dry=$(bash "$parity" "$share" limit "$to" --dry-run </dev/null 2>&1) || rc=$?
@@ -200,7 +200,7 @@ case "$action" in
       exit 1
     fi ;;
   snapshot|auto)
-    is_zfs || refuse "snapshots need the ZFS layout (the backup is the history on SnapRAID: hs share $share restore)" ;;
+    is_zfs || refuse_code share.needs-zfs "snapshots need the ZFS layout (the backup is the history on SnapRAID: hs share $share restore)" ;;
 esac
 
 danger=""

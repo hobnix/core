@@ -178,11 +178,15 @@ has '^heading	create the share newshare$' && has '^step	mount it into jellyfin a
 has "^command	.*create newshare --ct jellyfin /data --as 1000:100$" && pass "the command" || fail "add command: $out"
 run plan shares add --kind shares
 check_eq "a reserved name" 1 "$rc"
+check_match "a reserved name is refused with share.reserved" $'code	share.reserved' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF share.reserved && pass "share.reserved is in the catalogue" || fail "share.reserved is not in the catalogue"
 run plan newshare add --kind shares --tier fast
 check_eq "add --tier fast: exit 0" 0 "$rc"
 has "^command	.*create newshare --fast$" && has "SSD pool" && pass "add --tier fast: --fast and the plan text" || fail "add fast: $out"
 run plan newshare add --kind shares --tier slow
 check_eq "a bad tier is refused" 1 "$rc"
+check_match "a bad tier is refused with share.tier-invalid" $'code	share.tier-invalid' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF share.tier-invalid && pass "share.tier-invalid is in the catalogue" || fail "share.tier-invalid is not in the catalogue"
 
 echo "-- remove a kept folder for good"
 run plan docs purge

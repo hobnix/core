@@ -840,6 +840,398 @@ The node comes from a setting and goes away with that setting.
 - Text: That node comes from a setting.
 - Fix: none
 
+### backup.browse-state
+
+Browsing of the backup is already in the state asked for.
+
+- Layer: script
+- Text: Browsing is already in that state.
+- Fix: none
+
+### backup.count-invalid
+
+The number of drill restores is not from 1 to 100.
+
+- Layer: script
+- Text: The count is a number from 1 to 100.
+- Fix: none
+
+### backup.disk-missing
+
+The backup disk is not plugged in.
+
+- Layer: script
+- Text: The backup disk is not plugged in.
+- Fix: none
+
+### backup.disk-present
+
+A backup disk is plugged in already.
+
+- Layer: script
+- Text: A backup disk is plugged in already.
+- Fix: none
+
+### backup.instance-unknown
+
+The backup was asked about an instance that does not exist.
+
+- Layer: script
+- Text: No such instance was found.
+- Fix: none
+
+### backup.kind-invalid
+
+The kind of backup item or off-site target is not one that exists.
+
+- Layer: script
+- Text: That kind is not known.
+- Fix: none
+
+### backup.no-offsite
+
+No off-site repository is set, or it is off already.
+
+- Layer: script
+- Text: There is no off-site repository to change.
+- Fix: none
+
+### backup.not-set-up
+
+The backup is not set up yet.
+
+- Layer: script
+- Text: The backup is not set up yet.
+- Fix: `hs backup init <device>`
+
+### backup.repo-invalid
+
+A repository address or a field of an off-site target has characters that do not belong in it.
+
+- Layer: script
+- Text: That is not a valid repository address.
+- Fix: none
+
+### backup.rule-invalid
+
+A backup include or exclude rule is malformed.
+
+- Layer: script
+- Text: That backup rule is not valid.
+- Fix: none
+
+### backup.to-invalid
+
+The value after --to is not on or off.
+
+- Layer: script
+- Text: The value is on or off.
+- Fix: none
+
+### disk.backup-disk
+
+The disk is the backup disk and is not erased here.
+
+- Layer: script
+- Text: This is the backup disk.
+- Fix: none
+
+### disk.close-failed
+
+An encrypted volume on the disk could not be closed.
+
+- Layer: script
+- Text: The encrypted volume could not be closed.
+- Fix: none
+
+### disk.forget-failed
+
+A missing disk could not be removed from the inventory.
+
+- Layer: script
+- Text: The disk could not be forgotten.
+- Fix: none
+
+### disk.in-use
+
+The disk or partition is mounted or used as swap.
+
+- Layer: script
+- Text: The disk is in use.
+- Fix: none
+
+### disk.not-data-disk
+
+The name is not a data disk of the array (data-NN).
+
+- Layer: script
+- Text: That is not a data disk of the array.
+- Fix: none
+
+### disk.not-empty
+
+A disk to add to a pool still holds data.
+
+- Layer: script
+- Text: The disk is not empty.
+- Fix: none
+
+### disk.not-missing
+
+Only a disk that is missing can be forgotten.
+
+- Layer: script
+- Text: The disk is in the machine.
+- Fix: none
+
+### disk.not-offered
+
+The disk is not one that may be mounted as a temp disk.
+
+- Layer: script
+- Text: This disk is not offered for mounting.
+- Fix: none
+
+### disk.not-recovering
+
+The disk is not out of the pool for a recovery.
+
+- Layer: script
+- Text: The disk is not in a recovery.
+- Fix: none
+
+### disk.not-whole
+
+The name is a partition, not a whole disk.
+
+- Layer: script
+- Text: This is not a whole disk.
+- Fix: none
+
+### disk.pool-member
+
+The disk is a member of a ZFS pool or of the data array.
+
+- Layer: script
+- Text: The disk is a member of a pool.
+- Fix: none
+
+### disk.temp-refused
+
+The temp disk script refused a mount, an eject or a copy.
+
+- Layer: script
+- Text: The temp disk step was refused.
+- Fix: none
+
+### disk.test-kind
+
+The self-test is not short or long.
+
+- Layer: script
+- Text: The test is short or long.
+- Fix: none
+
+### disk.test-refused
+
+The disk cannot run a self-test now.
+
+- Layer: script
+- Text: The self-test cannot start.
+- Fix: none
+
+### disk.test-running
+
+A self-test is running on the disk already.
+
+- Layer: script
+- Text: A self-test is running already.
+- Fix: none
+
+### disk.wipe-failed
+
+The disk could not be erased.
+
+- Layer: script
+- Text: The disk could not be erased.
+- Fix: none
+
+### part.already
+
+The part is already in the state asked for.
+
+- Layer: script
+- Text: The part is already in that state.
+- Fix: none
+
+### part.not-switchable
+
+The part follows the role of this server and is not switched by hand.
+
+- Layer: script
+- Text: This part is not switched here.
+- Fix: none
+
+### part.pending
+
+The part is switched on and waits for the next rebuild.
+
+- Layer: script
+- Text: The part takes effect with the next rebuild.
+- Fix: `hs rebuild`
+
+### part.unknown
+
+No part of that name exists.
+
+- Layer: script
+- Text: No such part was found.
+- Fix: none
+
+### part.write-failed
+
+machine.toml could not be changed.
+
+- Layer: script
+- Text: machine.toml could not be changed.
+- Fix: none
+
+### pool.zfs-member
+
+The disk belongs to a ZFS pool.
+
+- Layer: script
+- Text: The disk belongs to a ZFS pool.
+- Fix: none
+
+### share.as-invalid
+
+The owner given with --as is not <uid>:<gid>.
+
+- Layer: script
+- Text: The owner is <uid>:<gid>.
+- Fix: none
+
+### share.exists
+
+A share of that name exists already.
+
+- Layer: script
+- Text: A share of that name exists already.
+- Fix: none
+
+### share.folder-invalid
+
+The folder is not a folder inside the share.
+
+- Layer: script
+- Text: That is not a folder inside the share.
+- Fix: none
+
+### share.instance-unknown
+
+The instance named for a share does not exist.
+
+- Layer: script
+- Text: No such instance was found.
+- Fix: none
+
+### share.kind-invalid
+
+The kind of share is not shares or sensitive.
+
+- Layer: script
+- Text: The kind is shares or sensitive.
+- Fix: none
+
+### share.needs-zfs
+
+Snapshots need the ZFS layout.
+
+- Layer: script
+- Text: Snapshots need the ZFS layout.
+- Fix: none
+
+### share.no-snapshots
+
+The share has no snapshots.
+
+- Layer: script
+- Text: This share has no snapshots.
+- Fix: none
+
+### share.not-kept
+
+Only a kept folder of a deleted share can be removed or brought back.
+
+- Layer: script
+- Text: Only a kept folder can be changed here.
+- Fix: none
+
+### share.path-invalid
+
+The path inside an instance does not start with /.
+
+- Layer: script
+- Text: The path must start with /.
+- Fix: none
+
+### share.perm-invalid
+
+A permission is not <sid>=<level>.
+
+- Layer: script
+- Text: The permission is <sid>=<level>.
+- Fix: none
+
+### share.reserved
+
+The share name is reserved.
+
+- Layer: script
+- Text: That name is reserved.
+- Fix: none
+
+### share.snapshot-invalid
+
+The snapshot id is not an id.
+
+- Layer: script
+- Text: That is not a snapshot id.
+- Fix: none
+
+### share.snapshot-unknown
+
+The share has no snapshot of that id.
+
+- Layer: script
+- Text: No such snapshot was found.
+- Fix: none
+
+### share.tier-invalid
+
+The tier is not one of the two offered.
+
+- Layer: script
+- Text: The tier is not one of the two offered.
+- Fix: none
+
+### share.to-invalid
+
+The value after --to does not fit the setting.
+
+- Layer: script
+- Text: That value does not fit the setting.
+- Fix: none
+
+### share.unknown
+
+No share of that name exists.
+
+- Layer: script
+- Text: No such share was found.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

@@ -105,3 +105,53 @@ node.port-invalid	script	The port is not a number from 1 to 65535.	That is not a
 node.exists	script	A node with this name exists already.	There is already a node with this name.	-
 node.unknown	script	No node has this name.	There is no node with this name.	-
 node.from-config	script	The node comes from a setting and goes away with that setting.	That node comes from a setting.	-
+# S1: disk. part. pool. share. backup.
+backup.browse-state	script	Browsing of the backup is already in the state asked for	Browsing is already in that state.	-
+backup.count-invalid	script	The number of drill restores is not from 1 to 100	The count is a number from 1 to 100.	-
+backup.disk-missing	script	The backup disk is not plugged in	The backup disk is not plugged in.	-
+backup.disk-present	script	A backup disk is plugged in already	A backup disk is plugged in already.	-
+backup.instance-unknown	script	The backup was asked about an instance that does not exist	No such instance was found.	-
+backup.kind-invalid	script	The kind of backup item or off-site target is not one that exists	That kind is not known.	-
+backup.no-offsite	script	No off-site repository is set, or it is off already	There is no off-site repository to change.	-
+backup.not-set-up	script	The backup is not set up yet	The backup is not set up yet.	hs backup init <device>
+backup.repo-invalid	script	A repository address or a field of an off-site target has characters that do not belong in it	That is not a valid repository address.	-
+backup.rule-invalid	script	A backup include or exclude rule is malformed	That backup rule is not valid.	-
+backup.to-invalid	script	The value after --to is not on or off	The value is on or off.	-
+disk.backup-disk	script	The disk is the backup disk and is not erased here	This is the backup disk.	-
+disk.close-failed	script	An encrypted volume on the disk could not be closed	The encrypted volume could not be closed.	-
+disk.forget-failed	script	A missing disk could not be removed from the inventory	The disk could not be forgotten.	-
+disk.in-use	script	The disk or partition is mounted or used as swap	The disk is in use.	-
+disk.not-data-disk	script	The name is not a data disk of the array (data-NN)	That is not a data disk of the array.	-
+disk.not-empty	script	A disk to add to a pool still holds data	The disk is not empty.	-
+disk.not-missing	script	Only a disk that is missing can be forgotten	The disk is in the machine.	-
+disk.not-offered	script	The disk is not one that may be mounted as a temp disk	This disk is not offered for mounting.	-
+disk.not-recovering	script	The disk is not out of the pool for a recovery	The disk is not in a recovery.	-
+disk.not-whole	script	The name is a partition, not a whole disk	This is not a whole disk.	-
+disk.pool-member	script	The disk is a member of a ZFS pool or of the data array	The disk is a member of a pool.	-
+disk.temp-refused	script	The temp disk script refused a mount, an eject or a copy	The temp disk step was refused.	-
+disk.test-kind	script	The self-test is not short or long	The test is short or long.	-
+disk.test-refused	script	The disk cannot run a self-test now	The self-test cannot start.	-
+disk.test-running	script	A self-test is running on the disk already	A self-test is running already.	-
+disk.wipe-failed	script	The disk could not be erased	The disk could not be erased.	-
+part.already	script	The part is already in the state asked for	The part is already in that state.	-
+part.not-switchable	script	The part follows the role of this server and is not switched by hand	This part is not switched here.	-
+part.pending	script	The part is switched on and waits for the next rebuild	The part takes effect with the next rebuild.	hs rebuild
+part.unknown	script	No part of that name exists	No such part was found.	-
+part.write-failed	script	machine.toml could not be changed	machine.toml could not be changed.	-
+pool.zfs-member	script	The disk belongs to a ZFS pool	The disk belongs to a ZFS pool.	-
+share.as-invalid	script	The owner given with --as is not <uid>:<gid>	The owner is <uid>:<gid>.	-
+share.exists	script	A share of that name exists already	A share of that name exists already.	-
+share.folder-invalid	script	The folder is not a folder inside the share	That is not a folder inside the share.	-
+share.instance-unknown	script	The instance named for a share does not exist	No such instance was found.	-
+share.kind-invalid	script	The kind of share is not shares or sensitive	The kind is shares or sensitive.	-
+share.needs-zfs	script	Snapshots need the ZFS layout	Snapshots need the ZFS layout.	-
+share.no-snapshots	script	The share has no snapshots	This share has no snapshots.	-
+share.not-kept	script	Only a kept folder of a deleted share can be removed or brought back	Only a kept folder can be changed here.	-
+share.path-invalid	script	The path inside an instance does not start with /	The path must start with /.	-
+share.perm-invalid	script	A permission is not <sid>=<level>	The permission is <sid>=<level>.	-
+share.reserved	script	The share name is reserved	That name is reserved.	-
+share.snapshot-invalid	script	The snapshot id is not an id	That is not a snapshot id.	-
+share.snapshot-unknown	script	The share has no snapshot of that id	No such snapshot was found.	-
+share.tier-invalid	script	The tier is not one of the two offered	The tier is not one of the two offered.	-
+share.to-invalid	script	The value after --to does not fit the setting	That value does not fit the setting.	-
+share.unknown	script	No share of that name exists	No such share was found.	-
