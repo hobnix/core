@@ -212,7 +212,7 @@ done
 mkdir -p "$HS_STATE_DIR/packages"
 printf '[package.capa]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 
 [package.capb]
 version = "1.0.0"
@@ -220,7 +220,7 @@ repo = "elsewhere"
 
 [package.disk]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 ' > "$HS_STATE_DIR/packages/installed.toml"
 printf 'capa
 capb
@@ -250,7 +250,7 @@ capmf wc; printf 'words = ["hx"]
 ' >> "$PK/wc/package.toml"
 printf '[package.wb]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 
 [package.wc]
 version = "1.0.0"

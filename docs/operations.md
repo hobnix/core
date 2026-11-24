@@ -658,7 +658,7 @@ hs apps policy <instance>
 How install, retry and remove work: [Containers and apps](containers-and-apps.md). Not tested on hardware yet.
 
 ## Optional parts from hobnix/capabilities
-Some optional parts of the server (capabilities) can come from the repository `capabilities` instead of the core. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
+Some optional parts of the server (capabilities) can come from the default repository `official` (the old repository `capabilities` is frozen) instead of the core. Not tested on hardware yet. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
 
 See what the repository offers, then install one:
 

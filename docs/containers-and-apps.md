@@ -437,8 +437,13 @@ unique among containers and services). The plan checks the name. Ports and the f
 
 ## Install packages from a repository
 
-Recipes and extensions are both packages. They come from repositories, from signed release tags only. The project's two repositories
-(`recipes` and `extensions`) are there from the start; you can add more.
+Recipes and extensions are both packages. They come from repositories. The project's one repository, `official` (hobnix/official), is there
+from the start: a server reads its signed index, and the packages it names, pinned to a commit and a hash. The old repositories `recipes`,
+`extensions` and `capabilities` are frozen. A server that still has packages recorded from them moves them to `official` by itself on
+`hs update` (or `hs pkg repo migrate`): the version, the copy and the running app stay as they are, nothing is downgraded, and a repository
+you added yourself is never touched. A package `official` does not list (for example `docker`) stays installed and gets no updates;
+`hs pkg repo migrate` says so. If the index cannot be reached, the move waits for the next `hs pkg fetch`. You can add more repositories.
+Not tested on hardware yet.
 
 In the web interface this is the **Marketplace** page: every package of every repository with its state (not installed, installed, update),
 Install / Update / Remove, and a Repositories tab to add or remove a repository. Adding a repository asks for its public signing key and for
@@ -479,7 +484,7 @@ A package update does not touch a running app. For a recipe it replaces the pack
 
 A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`). `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has: run `hs update` first. There is no upper bound: the core only raises its level and keeps a function for one level after announcing its removal (ADR 0008).
 
-A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from the repository `capabilities` and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
+A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from a default repository (`official`) and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
 
 Add a repository of your own (a typed repository name confirms it; releases must be signed with a key you trust):
 
@@ -495,8 +500,8 @@ and `hs ext disable <name>`, and `hs ext list` shows them.
 
 ## Write a package of your own
 
-A package is a folder in a checkout of a package repository: `recipes/<name>/` in hobnix/recipes, `extensions/<name>/` in
-hobnix/extensions, or the same layout in a repository of your own. `hs pkg new` writes one that passes the checks as it is. Run it inside
+A package is a folder in a checkout of a package repository: `recipes/<name>/` and `extensions/<name>/` in
+hobnix/official, or the same layout in a repository of your own. `hs pkg new` writes one that passes the checks as it is. Run it inside
 the checkout (or name it with `--dir <path>`):
 
 ```bash

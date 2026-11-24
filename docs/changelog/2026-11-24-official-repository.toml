@@ -1,0 +1,6 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Apps and extensions now come from one repository, official"
+body  = """New servers fetch recipes, extensions and optional parts from the one repository hobnix/official through its signed index. A server that has packages from the old repositories moves them over on hs update: versions and running apps stay as they are, nothing is downgraded, and repositories you added yourself are not touched.
+
+A package that official does not list stays installed but gets no updates. Not tested on hardware yet."""

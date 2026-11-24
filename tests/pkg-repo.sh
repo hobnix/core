@@ -34,7 +34,7 @@ echo "-- the default repositories are found from the Nix store copy of the scrip
 mkdir -p "$WORK/store" "$WORK/nixos/config"
 cp -r "$SCRIPTS" "$WORK/store/scripts"
 cp "$ROOT/config/package-repos.toml" "$WORK/nixos/config/"
-check_out "the list comes from the checkout, not the store copy" "^recipes${tab}.*${tab}default" env HS_NIXOS_DIR="$WORK/nixos" python3 -I "$WORK/store/scripts/pkg.py" repo list
+check_out "the list comes from the checkout, not the store copy" "^official${tab}.*${tab}default" env HS_NIXOS_DIR="$WORK/nixos" python3 -I "$WORK/store/scripts/pkg.py" repo list
 check_out "with no checkout either there is no default" "^$" bash -c "HS_NIXOS_DIR=$WORK/none python3 -I $WORK/store/scripts/pkg.py repo list; echo"
 
 echo "-- adding a repository"
@@ -42,9 +42,9 @@ check "an unsigned repository is refused without --unsigned" bash -c "! $PKG rep
 check "a bad key file is refused" bash -c "echo nonsense > $WORK/bad.signers; ! $PKG repo add test '$R' --key $WORK/bad.signers 2>/dev/null"
 check "a repository is added with a key" $PKG repo add test "$R" --key "$WORK/signers"
 check "the same name twice is refused" bash -c "! $PKG repo add test '$R' --key $WORK/signers 2>/dev/null"
-check "a default name cannot be taken" bash -c "! $PKG repo add recipes '$R' --key $WORK/signers 2>/dev/null"
+check "a default name cannot be taken" bash -c "! $PKG repo add official '$R' --key $WORK/signers 2>/dev/null"
 check_out "repo list shows it as added and signed" "^test${tab}.*${tab}signed${tab}added" $PKG repo list
-check_out "and the two defaults" "^extensions${tab}.*${tab}default" $PKG repo list
+check_out "and the default" "^official${tab}.*${tab}default" $PKG repo list
 check_out "hs pkg repo add needs a typed name without a terminal" "terminal" bash -c "bash $SCRIPTS/pkg.sh repo add other '$R' --key $WORK/signers </dev/null 2>&1; true"
 check "--confirm-name with the right name adds" bash "$SCRIPTS/pkg.sh" repo add other "$R" --key "$WORK/signers" --confirm-name other
 check "--confirm-name with the wrong name does not" bash -c "! bash $SCRIPTS/pkg.sh repo add third '$R' --key $WORK/signers --confirm-name nope >/dev/null 2>&1"
