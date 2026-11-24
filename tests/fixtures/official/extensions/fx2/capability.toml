@@ -1,0 +1,9 @@
+# Fixture extension.
+name = "fx2"
+title = "Fixture fx2"
+title_de = "Fixture fx2"
+kind = "feature"
+requires = []
+provides = []
+needs = []
+extension = true
