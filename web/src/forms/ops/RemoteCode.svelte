@@ -6,15 +6,16 @@
   import Button from '../../ui/Button.svelte';
   import { Muted } from '../../ui/index.js';
   import { live } from '../../live.svelte.js';
-  import { codeAnswer, shown, countdown, claimedBy } from './remotecode.js';
+  import { codeAnswer, shown, countdown, claimsOf, claimState } from './remotecode.js';
 
   let { offer, onclose } = $props();
 
   const a = codeAnswer(offer);
   const fromId = live.lastId;               // only events after the dialog opened count
+  const until = Date.now() / 1000 + (a?.seconds ?? 0) + 5;   // epoch seconds; a claim later than this is not of this code (5 s for clocks)
   let left = $state(a?.seconds ?? 0);
   let copied = $state(false);
-  const claimed = $derived(claimedBy(live.events, fromId, offer.share, offer.peer));
+  const claimed = $derived(claimState(claimsOf(live.events, { fromId, until, share: offer.share, server: offer.peer }), !!offer.peer));
 
   $effect(() => {
     if (claimed || left <= 0) return;
@@ -27,10 +28,16 @@
   }
 </script>
 
-<Dialog labelledby="rct" width="560px" onclose={onclose}>
+<Dialog labelledby="rct" panel="dialog" width="560px" onclose={onclose}>
   <div style="display:flex;flex-direction:column;gap:14px">
     <span class="kicker">Remote shares</span>
-    {#if claimed}
+    {#if claimed?.kind === 'ambiguous'}
+      <div id="rct" class="dialog-title">A server used a code for {offer.share}</div>
+      <div class="lede">Several servers took {offer.share} just now, so this window cannot tell which one used this code:</div>
+      <ul>{#each claimed.claims as c}<li>{c.server || 'a server'}, key <code>{c.fingerprint}</code></li>{/each}</ul>
+      <Muted>The list of shares you give shows who can read it. Take back… on a row removes one.</Muted>
+      <div class="dialog-actions"><span style="flex:1"></span><Button variant="primary" onclick={onclose}>Close</Button></div>
+    {:else if claimed}
       <div id="rct" class="dialog-title"><i class="ph ph-check-circle"></i> {claimed.server} connected</div>
       <div class="lede">{claimed.server} can now read {offer.share}.{#if claimed.fingerprint} Its key is <code>{claimed.fingerprint}</code>. Check that it is the key of that server.{/if}</div>
       <div class="dialog-actions"><span style="flex:1"></span><Button variant="primary" onclick={onclose}>Close</Button></div>

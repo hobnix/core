@@ -26,18 +26,30 @@ export function countdown(sec) {
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 }
 
-// the first event `remote.claimed` after `fromId` that is about this code: the share matches, and the server when the code was bound to a name.
-// Rows of the stream: { id, source, kind, subject, payload } (payload an object or JSON text). The code itself is never in an event.
-export function claimedBy(events, fromId, share, server) {
+// The events `remote.claimed` that can be the use of THIS code: after the dialog opened (id > fromId), not after the code ran out (time <= until, epoch
+// seconds; an event without a time is kept), about this share, about the server named when the code was bound, and WITH a fingerprint (the giving side;
+// a share another server pushes here has a host and no fingerprint, it is no use of this code). Rows of the stream: { id, time, source, kind, subject,
+// payload } (payload an object or JSON text). The code itself is never in an event.
+export function claimsOf(events, { fromId = 0, until = Infinity, share = '', server = '' } = {}) {
+  const out = [];
   for (const e of events ?? []) {
     if (!e || e.id <= fromId || e.source !== 'remote' || e.kind !== 'claimed') continue;
+    if (e.time && Number(e.time) > until) continue;
     let p = e.payload;
     if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = null; } }
-    if (!p) continue;
+    if (!p || !p.fingerprint) continue;
     if (share && p.share && p.share !== '-' && p.share !== share) continue;
     if (server && p.server !== server) continue;
-    const fp = String(p.fingerprint ?? '');
-    return { server: p.server ?? e.subject ?? '', fingerprint: fp && !fp.startsWith('SHA256:') ? `SHA256:${fp}` : fp };
+    const fp = String(p.fingerprint);
+    out.push({ server: p.server ?? e.subject ?? '', fingerprint: fp.startsWith('SHA256:') ? fp : `SHA256:${fp}` });
   }
-  return null;
+  return out;
+}
+
+// What the dialog says: nothing yet, one server (named: "<server> connected"), or an ambiguous claim (no name was given and several claims could be
+// this code: show it neutrally, never as "connected"). A proper match needs a code id in the start answer (follow-up, PR #1167).
+export function claimState(claims, bound) {
+  if (!claims.length) return null;
+  if (bound || claims.length === 1) return { kind: 'connected', ...claims[0] };
+  return { kind: 'ambiguous', claims };
 }

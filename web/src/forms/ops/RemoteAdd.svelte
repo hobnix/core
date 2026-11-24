@@ -18,6 +18,7 @@
   let server = $state('');
 
   const c = $derived(splitCode(code));
+  const optional = $derived(!!reconnect || !!c.host);   // the same rule as args(): the code's address or the stored server stands in
   // the code alone needs a server; CODE@host carries its address
   const args = () => {
     if (!c.ok || (!c.host && !server.trim() && !reconnect)) return null;
@@ -35,7 +36,7 @@
     <Field label="Code from the other server" id="ra-code" help="Like K7QX-9M2D-T4PW-3HNC@alpha.local. The other server makes it with Give access.">
       <TextInput bind:value={code} placeholder="K7QX-9M2D-T4PW-3HNC@alpha.local" autocomplete="off" spellcheck={false} />
     </Field>
-    <Field label={c.host ? 'Server (optional)' : 'Server'} id="ra-server" help="A server you know, or its address. Not needed when the code carries the address.">
+    <Field label={optional ? 'Server (optional)' : 'Server'} id="ra-server" help={reconnect ? `Leave it empty to use the address ${reconnect} already has.` : 'A server you know, or its address. Not needed when the code carries the address.'}>
       <ServerField {options} loaded={nodes.loaded} error={nodes.error} noun="servers" free bind:value={server} placeholder="Choose a server or type an address" />
     </Field>
     <Muted>The code works once and for a few minutes. Read only: the share is not part of the pool, the parity or the backup.</Muted>

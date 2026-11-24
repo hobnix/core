@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { serverOptions, splitCode, codeAnswer, shown, countdown, claimedBy } from '../web/src/forms/ops/remotecode.js';
+import { serverOptions, splitCode, codeAnswer, shown, countdown, claimsOf, claimState } from '../web/src/forms/ops/remotecode.js';
 
 const src = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'src');
 let failed = 0;
@@ -31,14 +31,22 @@ eq('no code', codeAnswer({ secret: { password: 'x' } }), null);
 eq('countdown', [countdown(600), countdown(59), countdown(-3)], ['10:00', '0:59', '0:00']);
 
 // the event that turns the dialog into "connected"
-const ev = (o) => ({ id: 5, source: 'remote', kind: 'claimed', subject: 'beta', payload: { server: 'beta', share: 'media', fingerprint: 'abc' }, ...o });
-eq('claimed', claimedBy([ev({})], 0, 'media', 'beta'), { server: 'beta', fingerprint: 'SHA256:abc' });
-eq('claimed: json text payload, key already named', claimedBy([ev({ payload: '{"server":"beta","share":"media","fingerprint":"SHA256:xyz"}' })], 0, 'media', ''), { server: 'beta', fingerprint: 'SHA256:xyz' });
-eq('claimed: unbound code takes any server', claimedBy([ev({})], 0, 'media', '')?.server, 'beta');
-eq('claimed: older than the dialog', claimedBy([ev({})], 5, 'media', 'beta'), null);
-eq('claimed: another share', claimedBy([ev({})], 0, 'photos', ''), null);
-eq('claimed: another server', claimedBy([ev({})], 0, 'media', 'gamma'), null);
-eq('claimed: another kind', claimedBy([ev({ kind: 'code.made' })], 0, 'media', ''), null);
+const ev = (o) => ({ id: 5, time: 1000, source: 'remote', kind: 'claimed', subject: 'beta', payload: { server: 'beta', share: 'media', fingerprint: 'abc' }, ...o });
+const q = (o) => ({ fromId: 0, until: 2000, share: 'media', server: '', ...o });
+eq('claimed', claimsOf([ev({})], q({ server: 'beta' })), [{ server: 'beta', fingerprint: 'SHA256:abc' }]);
+eq('claimed: json text payload, key already named', claimsOf([ev({ payload: '{"server":"beta","share":"media","fingerprint":"SHA256:xyz"}' })], q()), [{ server: 'beta', fingerprint: 'SHA256:xyz' }]);
+eq('push event ignored (host, no fingerprint)', claimsOf([ev({ payload: { server: 'beta', share: 'media', host: 'beta.local' } })], q()), []);
+eq('claim before the dialog opened ignored', claimsOf([ev({})], q({ fromId: 5 })), []);
+eq('wrong server name ignored', claimsOf([ev({})], q({ server: 'gamma' })), []);
+eq('expired ignored', claimsOf([ev({ time: 2001 })], q()), []);
+eq('another share ignored', claimsOf([ev({})], q({ share: 'photos' })), []);
+eq('another kind ignored', claimsOf([ev({ kind: 'code.made' })], q()), []);
+const one = claimsOf([ev({})], q());
+const two = claimsOf([ev({}), ev({ id: 6, payload: { server: 'gamma', share: 'media', fingerprint: 'def' } })], q());
+eq('state: none', claimState([], false), null);
+eq('state: bound name connects', claimState(two.slice(0, 1), true)?.kind, 'connected');
+eq('state: one unbound claim connects', claimState(one, false)?.server, 'beta');
+eq('state: several unbound claims are ambiguous, not connected', claimState(two, false)?.kind, 'ambiguous');
 
 // static contracts
 const add = read('forms/ops/RemoteAdd.svelte'), give = read('forms/ops/RemoteGive.svelte'), code = read('forms/ops/RemoteCode.svelte'), rs = read('pages/shares/RemoteShares.svelte');
@@ -47,7 +55,9 @@ must('add: add-code with --server and --reconnect', add.includes("'add-code'") &
 must('add: the fallback by hand is the old form', add.includes('Enter a login by hand') && add.includes('RemoteMount'));
 must('add: a server field, not a text input', add.includes('<ServerField') && !/<TextInput[^>]*bind:value=\{server\}/.test(add));
 must('give: ShareField and the code action', give.includes('<ShareField') && give.includes("['code', share]") && give.includes("'--peer'"));
-must('code: waits for the event, keeps nothing', code.includes('claimedBy(live.events') && !/localStorage|sessionStorage/.test(code));
+must('code: panel with padding', code.includes('panel="dialog"'));
+must('add: server label follows args in reconnect mode', add.includes('optional') && add.includes('!!reconnect'));
+must('code: waits for the event, keeps nothing', code.includes('claimsOf(live.events') && !/localStorage|sessionStorage/.test(code));
 must('rows: Reconnect and New code', rs.includes('Reconnect…') && rs.includes('New code…') && !rs.includes('New password') && rs.includes('reconnect: r.peer'));
 for (const f of ['forms/ops/RemoteAdd.svelte', 'forms/ops/RemoteGive.svelte', 'forms/ops/RemoteCode.svelte', 'pages/shares/RemoteShares.svelte']) {
   const t = read(f).replace(/<script>[\s\S]*?<\/script>/, '');      // the markup only: what the user reads
