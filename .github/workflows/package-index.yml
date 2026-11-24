@@ -26,6 +26,7 @@
 #       needs: build
 #       if: github.ref == 'refs/heads/main'
 #       runs-on: ubuntu-latest
+#       timeout-minutes: 10
 #       environment: index-signing
 #       steps:
 #         - uses: actions/checkout@v5
@@ -39,14 +40,61 @@
 #         - uses: actions/upload-pages-artifact@v3
 #           with: {path: site}
 #     publish:
-#       needs: sign
+#       needs: sign                # hobnix/community with assemble: needs: [sign, mirror]
 #       runs-on: ubuntu-latest
+#       timeout-minutes: 10
 #       permissions: {pages: write, id-token: write}
 #       environment: {name: github-pages}
 #       steps:
 #         - uses: actions/deploy-pages@v4
 #
 # UNVERIFIED: neither this workflow nor the action has run in this shape.
+#
+# hobnix/community (hobnix/core#1076): the same workflow with `assemble: true`. The repository then holds manifests/*.toml and policy.toml instead of
+# package folders; the build job does what `pkg.py index assemble` says (fetch every pinned commit, check it, write the pins commit) and builds the
+# index from the pins tree, `--commit` = the pins commit. Extra inputs and the three extra caller pieces:
+#
+#     build:
+#       uses: hobnix/core/.github/workflows/package-index.yml@<core-sha>
+#       with:
+#         repo_id: community
+#         core_ref: <core-sha>
+#         pages_url: https://packages.hobnix.dev/community
+#         assemble: true
+#         official_index: https://packages.hobnix.dev/official/index.json    # fails closed when unreachable
+#
+#   - Pull requests (no secret, fork-safe: the job only reads): the job prints `pkg.py index diff` (what the pin change does, every pin checked,
+#     the base policy.toml is the rule) into the job summary inside a code fence; a refused pin fails the job.
+#   - Artifact `pins`: pins.bundle and pins.commit (the objects of the pins commit; the index names it).
+#   - MIRROR (a job of the CALLER, only on main, needs contents: write): the servers fetch the pins commit from a git address, so the commit is
+#     pushed to the branch `pins` of the same repository once the index is signed:
+#
+#       mirror:
+#         needs: sign
+#         runs-on: ubuntu-latest
+#         timeout-minutes: 10
+#         permissions: {contents: write}
+#         steps:
+#           - uses: actions/download-artifact@v4
+#             with: {name: pins, path: pins}
+#           - run: |
+#               url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+#               git init -q mirror
+#               git -C mirror fetch -q "$url" pins:refs/heads/pins || true   # first: the bundle is thin (needs the previous tip); no branch on the first run
+#               if [ -f pins/pins.bundle ]; then      # no bundle: the tree did not change, the commit is on `pins` already
+#                 git -C mirror fetch -q ../pins/pins.bundle pins:refs/heads/pins
+#                 git -C mirror push -q "$url" "$(cat pins/pins.commit):refs/heads/pins"
+#               fi
+#
+#     `publish` MUST list `needs: [sign, mirror]` (servers must never get an index whose commit is not on `pins` yet). A push that is not a fast-forward is refused (the first run creates the branch). When the tree did not change there is no new bundle; the job
+#     then has nothing to push and `pins.bundle` is absent from the artifact (the snippet skips the fetch and push then).
+#
+# USER STEP in hobnix/community: a pull request runs its OWN copy of the caller workflow and of policy.toml, so .github/ and policy.toml need a
+# CODEOWNERS entry (maintainers only) with required review. `index diff` uses the base policy.toml; `assemble` on main uses the merged one.
+# Do not create that file in core.
+#
+# Every job carries timeout-minutes: a stalled fetch of a pinned source must not hold a runner for the default six hours (pkg_index.py also bounds each
+# git call by 300 s). The fetch asks the source for blobs up to the largest allowed file only (--filter=blob:limit, GIT_NO_LAZY_FETCH=1).
 name: package-index
 on:
   workflow_call:
@@ -63,6 +111,14 @@ on:
         description: "where the published index lives, to read the last serial (empty = the first index, serial 1)"
         type: string
         default: ""
+      assemble:
+        description: "hobnix/community: build the pins commit from manifests/*.toml first (see the header)"
+        type: boolean
+        default: false
+      official_index:
+        description: "assemble only: the official index (file or https address) the names are checked against; required with assemble"
+        type: string
+        default: ""
     # No `secrets:` here: this workflow never sees the signing key (see the header).
 
 permissions:
@@ -71,10 +127,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
         with:
           path: repo
+          fetch-depth: 0
       - uses: actions/checkout@v5
         with:
           repository: hobnix/core
@@ -82,17 +140,50 @@ jobs:
           path: core
       - name: Install Pillow (asset resizing)
         run: python3 -m pip install --user pillow
+      - name: What the pull request pins (assemble only)
+        if: inputs.assemble && github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git -C repo worktree add -q ../base "$BASE_SHA"
+          # the report is untrusted text: every line of it is marked and escaped by the tool; the fence cannot be closed from inside
+          rc=0
+          python3 core/scripts/pkg.py index diff repo --base base > diff.out 2> diff.err || rc=$?
+          { echo '```text'; cat diff.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cat diff.err >&2
+          exit "$rc"
+      - name: Assemble the pins commit (assemble only)
+        if: inputs.assemble
+        env:
+          OFFICIAL_INDEX: ${{ inputs.official_index }}
+        run: |
+          [ -n "$OFFICIAL_INDEX" ] || { echo "official_index is required with assemble"; exit 1; }
+          tip=()
+          if git -C repo fetch -q origin pins; then tip=(--pins-tip "$(git -C repo rev-parse FETCH_HEAD)"); fi   # the first run has no pins branch
+          python3 core/scripts/pkg.py index assemble repo --out pins --official-index "$OFFICIAL_INDEX" "${tip[@]}"
       - name: Validate the repository
-        run: python3 core/scripts/pkg.py repo-check repo
+        run: python3 core/scripts/pkg.py repo-check "${{ inputs.assemble && 'pins/tree' || 'repo' }}"
       - name: Build the index and the assets
         env:
           REPO_ID: ${{ inputs.repo_id }}
           PAGES_URL: ${{ inputs.pages_url }}
+          ASSEMBLE: ${{ inputs.assemble }}
         run: |
           prev=()
           if [ -n "$PAGES_URL" ] && curl -fsS "$PAGES_URL/index.json" -o prev.json; then prev=(--prev prev.json); fi
-          python3 core/scripts/pkg.py index build repo --repo "$REPO_ID" --out site "${prev[@]}"
+          src=repo; commit=()
+          if [ "$ASSEMBLE" = true ]; then src=pins/tree; commit=(--commit "$(cat pins/pins.commit)"); fi
+          python3 core/scripts/pkg.py index build "$src" --repo "$REPO_ID" --out site "${prev[@]}" "${commit[@]}"
           python3 core/scripts/pkg.py index validate site/index.json
+      - name: Keep the pins commit (assemble only)
+        if: inputs.assemble
+        run: mkdir keep && cp pins/pins.commit keep/ && { [ ! -f pins/pins.bundle ] || cp pins/pins.bundle keep/; }
+      - uses: actions/upload-artifact@v4
+        if: inputs.assemble
+        with:
+          name: pins
+          path: keep
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: index

@@ -129,6 +129,9 @@ W=$ROOT/.github/workflows/package-index.yml
 check "the workflow exists" test -f "$W"
 check "the reusable workflow has no secret and no signing environment" test "$(grep -v '^ *#' "$W" | grep -c 'secrets\.\|environment: index-signing')" = 0
 check "the reusable workflow has the build job only" test "$(grep -c "^  [a-z]*:$" "$W")" = 1
+check "the build job has a time limit" grep -q "^    timeout-minutes: " "$W"
+check "the assemble steps are optional (inputs.assemble)" test "$(grep -c "if: inputs.assemble" "$W")" -ge 3
+check "the workflow never uses pull_request_target" test "$(grep -v '^ *#' "$W" | grep -c pull_request_target)" = 0
 A=$ROOT/.github/actions/index-sign/action.yml
 check "the sign action exists" test -f "$A"
 check "the sign action never reads secrets" test "$(grep -v '^ *#' "$A" | grep -c "secrets\.")" = 0
