@@ -162,7 +162,8 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
   local acc=""
   if [ -z "${_EXT_PASS1:-}" ]; then
     acc=$(mktemp) || return 1
-    _EXT_PASS1=1 _ext_filter "$1" "$2" 0 | cut -f2 > "$acc"
+    if ! _EXT_PASS1=1 _ext_filter "$1" "$2" 0 > "$acc.rows"; then rm -f "$acc" "$acc.rows"; return 1; fi
+    cut -f2 "$acc.rows" > "$acc"; rm -f "$acc.rows"
   fi
   awk -F'\t' -v OFS='\t' -v name="$1" -v dir="$2" -v report="$3" -v words="$words" -v taken="$taken" -v proto="$proto" -v acc="$acc" '
     BEGIN {
@@ -209,7 +210,9 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       if (proto == 1) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
       print
     }' "$(ext_core_file)" "$2/commands.tsv"
+  local rc=$?   # an awk that failed (no registry, unreadable file) is a failure of the filter, never "no rows"
   [ -z "$acc" ] || rm -f "$acc"
+  return "$rc"
 }
 
 registry_rows() {

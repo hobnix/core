@@ -12,7 +12,7 @@ PKGSH="bash $SCRIPTS/pkg.sh"
 tab=$'\t'
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/good" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/signers"
-R=$WORK/repo; mkdir -p "$R/recipes"; cd "$R"
+R=$WORK/repo; mkdir -p "$R/recipes"; cd "$R" || exit 1
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
 : > "$R/index.toml"
 pk() {   # pk <name> <extra package.toml lines> <commands.tsv content, printf %b>: one recipe package of the repository
@@ -39,7 +39,7 @@ pk ctrl '' "$(row user $'ext ctrl\033[31mx' '@/run.sh')"
 pk coreclash '' "$(row sys 'sys ext coreclash start go' '@/run.sh')"
 printf 'core = true\n' >> "$R/index.toml"
 git add -A && git commit -q -m pkgs && git -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m rel
-cd "$ROOT"
+cd "$ROOT" || exit 1
 $PKGSH repo add test "$R" --key "$WORK/signers" --confirm-name test >/dev/null 2>&1
 $PKGSH fetch test >/dev/null 2>&1
 
@@ -70,14 +70,14 @@ check "and is not recorded" bash -c "! grep -q 'package.coreclash\]' '$HS_STATE_
 
 echo "-- an update to a refused version changes nothing"
 $PKGSH install upd >/dev/null 2>&1
-cd "$R"
+cd "$R" || exit 1
 sed -i '/^\[package.upd\]/{n;s/1.0.0/2.0.0/}' index.toml
 sed -i 's/^version = "1.0.0"/version = "2.0.0"/' recipes/upd/package.toml
 printf '[[events]]\nkind = "done"\nlevel = "warn"\nlabel = "Done"\nmeaning = "x"\nretention = "audit"\nnotify = { category = "ok", title = "{kind}", message = "{text}" }\n' >> recipes/upd/package.toml
 { printf '
 '; row sys 'sys ext upd start go' '@/run.sh'; } >> recipes/upd/commands.tsv
 git add -A && git commit -q -m upd2 && git -c user.signingkey="$WORK/good.pub" tag -s v2.0.0 -m rel2
-cd "$ROOT"
+cd "$ROOT" || exit 1
 $PKGSH fetch test >/dev/null 2>&1
 check "the update is refused" bash -c "! $PKGSH update upd --yes >/dev/null 2>&1"
 check_out "the old version is still installed" 'version = "1.0.0"' cat "$HS_STATE_DIR/packages/current/upd/package.toml"
@@ -101,6 +101,24 @@ check_out "a start row does not pass on a refused plan row" "sys ext two start a
 { row sys 'sys ext two start a' '@/x.sh'; row user 'ext two plan a' '@/x.sh'; } > "$D/two/commands.tsv"
 check_out "a plan twin of the wrong kind does not count" "sys ext two start a${tab}a start row needs its plan row" \
   bash -c "HS_PACKAGES_DIR='$D' bash -c '. $SCRIPTS/lib/registry-load.sh; registry_refused two'"
+
+echo "-- the check itself breaking is a refusal, not a pass"
+mkdir -p "$D/three/x"
+printf 'name = "x"\nkind = "recipe"\n' > "$D/three/x/package.toml"
+row user 'ext x go' 'rust:evil' > "$D/three/x/commands.tsv"
+check_eq "the normal run refuses the row (exit 1)" "1" "$(bash "$SCRIPTS/lib/pkg-stage-check.sh" x "$D/three/x" test >/dev/null 2>&1; echo $?)"
+rc=$(HS_REGISTRY=/nonexistent bash "$SCRIPTS/lib/pkg-stage-check.sh" x "$D/three/x" test >/dev/null 2>&1; echo $?)
+check "a missing registry is not a pass (exit $rc)" test "$rc" -ne 0
+rc=$(TMPDIR=/nonexistent/x bash "$SCRIPTS/lib/pkg-stage-check.sh" x "$D/three/x" test >/dev/null 2>&1; echo $?)
+check "an unusable temp folder is not a pass (exit $rc)" test "$rc" -ne 0
+
+echo "-- every refusal text is made printable (U+2028, U+0085, C0, DEL)"
+check_eq "clean_text" "a?b?c?d?e?f" "$(python3 -I -c "
+import sys; sys.path.insert(0, sys.argv[1]); import pkg_repo
+print(pkg_repo.clean_text('a\u2028b\u0085c\x1bd\x7fe\u2029f'))" "$SCRIPTS")"
+check_eq "a Refused is cleaned" "x?y" "$(python3 -I -c "
+import sys; sys.path.insert(0, sys.argv[1]); import pkg_repo
+print(str(pkg_repo.Refused('x\u2028y')))" "$SCRIPTS")"
 
 echo "-- hs pkg validate lists the rows"
 check_out "validate names a refused row" "start row needs its plan row" bash -c "HS_PACKAGES_DIR='$D' $PKGSH validate 2>&1; true"

@@ -62,4 +62,14 @@ on base prova provb
 check "allowed while another provider is on" $HS ext disable prova
 check_eq "and it is off" "off" "$($HS sys ext list | awk -F'\t' '$1 == "prova" { print $2 }')"
 
+echo "-- a dependent that has only a package.toml (no capability.toml, no command list)"
+rm -rf "${HS_PACKAGES_DIR:?}"/*
+cap base "" ""
+mkdir -p "$HS_PACKAGES_DIR/tomlonly"
+printf 'name = "tomlonly"\nversion = "1.0.0"\nkind = "extension"\ntitle = "T"\nrequires = ["base"]\n' > "$HS_PACKAGES_DIR/tomlonly/package.toml"
+on base tomlonly
+check_eq "it is a dependent" "tomlonly" "$(pkg_dependents base)"
+on base
+check_eq "off, it is not" "" "$(pkg_dependents base)"
+
 finish
