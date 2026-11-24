@@ -10,6 +10,10 @@ One `index.json` per package repository, built from package.toml and assets/ by 
                                                                    hobnix/community: fetch every pinned commit of manifests/*.toml, check it against
                                                                    the manifest and policy.toml, write the pins commit (<dir>/pins.commit, pins.bundle,
                                                                    tree/ for `build`); `error<TAB>text` per problem, exit 1
+  pkg_index.py diff <community checkout> [--base <checkout of the target branch>]
+                                                                   what a pull request does, for a reviewer: per changed manifest the fields, version, permissions,
+                                                                   command rows, web declaration, binary rows and a bounded text diff of the files; every pin is
+                                                                   checked like `assemble` does (the base policy.toml is the rule); `error<TAB>text`, exit 1 when refused
   pkg_index.py pin <manifest> <commit>                             point a manifest at a commit: rewrites commit and tree, prints the tree hash
   pkg_index.py validate <index.json> [--now <ISO>]               the schema; exit 1 on a problem (an expired index is only a warning)
   pkg_index.py sign <index.json> --key-file <private key>          write <index.json>.sig (an SSH signature, namespace hobnix-index)
@@ -386,8 +390,10 @@ MANIFEST_KEYS = ("name", "kind", "source", "commit", "path", "tree", "license", 
 SOURCE_URL = re.compile(r"^https://([a-z0-9][a-z0-9.-]*)/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)+$")
 LICENCE_FILES = ("LICENSE", "LICENSE.md", "COPYING")
 CI_ENV = {"GIT_AUTHOR_NAME": "hobnix-community-ci", "GIT_AUTHOR_EMAIL": "noreply@hobnix.invalid",
-          "GIT_COMMITTER_NAME": "hobnix-community-ci", "GIT_COMMITTER_EMAIL": "noreply@hobnix.invalid"}
+          "GIT_COMMITTER_NAME": "hobnix-community-ci", "GIT_COMMITTER_EMAIL": "noreply@hobnix.invalid",
+          "GIT_NO_LAZY_FETCH": "1"}   # a blob the partial fetch left out is never fetched behind our back (git 2.44+; older git ignores it)
 GIT_TIMEOUT = 300
+OMITTED = 1 << 40        # the size of a blob the partial fetch did not bring
 
 
 def _load_pkg_binary():
@@ -497,7 +503,8 @@ def _list_tree(git_dir: str, tree: str) -> list[tuple[str, str, int, str]]:
             path = raw_path.decode("utf-8")
         except UnicodeDecodeError:
             raise Problem("a file name is not UTF-8")
-        rows.append((mode.decode(), oid.decode(), -1 if size == b"-" else int(size), path))
+        # `BAD`: the blob was left out by the size filter of the fetch (GIT_NO_LAZY_FETCH=1): larger than the limit, so the caps refuse it
+        rows.append((mode.decode(), oid.decode(), -1 if size == b"-" else OMITTED if size == b"BAD" else int(size), path))
     return rows
 
 
@@ -539,7 +546,13 @@ def materialise(source: str, commit: str, path: str, git_dir: str, folder: str, 
     attribute files, caps) BEFORE reading a file, then write exactly those files into `folder`. Returns the git id of the tree."""
     if not os.path.isdir(git_dir):
         _git_text(git_dir, ["init", "--bare", "-q"], "git init")
-    _git_text(git_dir, ["fetch", "--depth", "1", "--no-tags", "-q", source, commit], f"cannot fetch {commit[:12]} from {source}", local)
+    # --filter=blob:limit: a blob above the largest allowed file is not downloaded at all (the listing then names it too large); a server that
+    # cannot filter ignores the option and sends everything, the caps are checked on the listing either way
+    limit = f"--filter=blob:limit={policy['max_binary_bytes'] + 1}"
+    # a filtered fetch needs a NAMED remote (git records it as the promisor; an address as name is refused). Reset on every call: the source was
+    # checked by source_problem() and is only ever https, or a path in the tests
+    _git_text(git_dir, ["config", "remote.pin.url", source], "git config")
+    _git_text(git_dir, ["fetch", "--depth", "1", "--no-tags", "-q", limit, "pin", commit], f"cannot fetch {commit[:12]} from {source}", local)
     if _git_text(git_dir, ["rev-parse", "FETCH_HEAD^{commit}"], "fetch") != commit:
         raise Problem(f"{source} gave another commit than {commit}")
     spec = commit + "^{tree}" if path == "." else f"{commit}:{path}"
@@ -779,6 +792,182 @@ def pin(manifest_file: str, commit: str, allow_local: bool = False) -> str:
     return tree
 
 
+MAX_DIFF_LINES = 120       # per file
+MAX_DIFF_TOTAL = 1500      # per run
+MAX_DIFF_FILE = 256 * 1024
+MANIFEST_FIELDS = ("kind", "source", "path", "commit", "tree", "license", "maintainers", "status")
+
+
+def _clean(text: object, limit: int = 300) -> str:
+    """Untrusted text made safe to print: control and format characters (escape sequences, bidi overrides) become \\xNN, long text is cut."""
+    t = "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in str(text))
+    return t if len(t) <= limit else t[:limit] + "..."
+
+
+def _quote(text: object) -> str:
+    """One line of untrusted text for the report: indented and marked, so a line can never start with `::` (a workflow command in the CI log)."""
+    return "    | " + _clean(text)
+
+
+def _files_of(folder: str) -> dict[str, tuple[bytes | None, bool, int]]:
+    """{relative path: (content or None when large, executable, size)} of a folder that materialise() wrote (regular files only)."""
+    out = {}
+    for base, _dirs, names in os.walk(folder):
+        for n in sorted(names):
+            p = os.path.join(base, n)
+            size = os.path.getsize(p)
+            data = None
+            if size <= MAX_DIFF_FILE:
+                with open(p, "rb") as f:
+                    data = f.read()
+            out[os.path.relpath(p, folder).replace(os.sep, "/")] = (data, bool(os.stat(p).st_mode & 0o111), size)
+    return out
+
+
+def _is_script(rel: str, entry: tuple[bytes | None, bool, int]) -> bool:
+    return entry[1] or rel.endswith((".sh", ".py", ".bash")) or (entry[0] or b"").startswith(b"#!")
+
+
+def _toml_of(files: dict, name: str) -> dict:
+    try:
+        return tomllib.loads((files.get(name, (b"",))[0] or b"").decode())
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return {}
+
+
+def _fetch_pin(m: dict, work: str, policy: dict, local: bool) -> tuple[dict | None, list[str]]:
+    """One pin fetched and checked like assemble does: (its files, problems). Files is None when the pin could not be read."""
+    folder = os.path.join(work, "folder")
+    try:
+        materialise(m["source"], m["commit"], m["path"], os.path.join(work, "git"), folder, policy, local)
+        problems = folder_problems(folder, m, policy)
+        actual = tree_hash(folder)
+        if actual != m["tree"]:
+            problems.append(f"the tree hash of the fetched folder is {actual}, the manifest says {m['tree']}")
+        return _files_of(folder), problems
+    except (Problem, OSError, tomllib.TOMLDecodeError, subprocess.TimeoutExpired) as e:
+        return None, [str(e)]
+
+
+def _list_changes(label: str, old: list, new: list) -> list[str]:
+    old_s, new_s = set(map(str, old)), set(map(str, new))
+    return [f"  {label}: +{_clean(x)}" for x in sorted(new_s - old_s)] + [f"  {label}: -{_clean(x)}" for x in sorted(old_s - new_s)]
+
+
+def _content_diff(old: dict, new: dict, budget: list[int]) -> tuple[list[str], set[str]]:
+    """The file list (added, removed, changed) and a bounded text diff of every changed file; the set names what the change touches."""
+    import difflib
+    out, touches = [], set()
+    for rel in sorted(set(old) | set(new)):
+        o, n = old.get(rel), new.get(rel)
+        if o and n and o == n:
+            continue
+        state = "added" if not o else "removed" if not n else "changed"
+        entry = n or o
+        kind = "script" if _is_script(rel, entry) else "commands" if rel == "commands.tsv" else "manifest" if rel == "package.toml" else \
+            "assets" if rel.startswith("assets/") else "other"
+        touches.add(kind)
+        out.append(f"  {state:<8}{entry[2]:>8} bytes  {_clean(rel)}" + ("  (executable)" if entry[1] else "") + (f"  [{kind}]" if kind in ("script", "commands") else ""))
+        if o and n and o[1] != n[1]:
+            out.append(f"    | mode: {'executable' if o[1] else 'plain'} -> {'executable' if n[1] else 'plain'}")
+        if state == "removed":
+            continue
+        texts = []
+        for side in (o, n):
+            if side is None:
+                texts.append([])
+                continue
+            try:
+                texts.append(side[0].decode("utf-8").splitlines() if side[0] is not None else None)
+            except UnicodeDecodeError:
+                texts.append(None)
+        if None in texts:
+            digest = hashlib.sha256(n[0]).hexdigest()[:16] if n[0] is not None else "not computed (large file)"
+            out.append(f"    | (binary, non-UTF-8 or large: no text diff, sha256 {digest})")
+            continue
+        shown = 0
+        for line in difflib.unified_diff(texts[0], texts[1], "old", "new", lineterm="", n=1):
+            if shown >= MAX_DIFF_LINES or budget[0] <= 0:
+                out.append("    | ... diff cut here, read the pinned commit itself")
+                break
+            out.append(_quote(line))
+            shown += 1
+            budget[0] -= 1
+    return out, touches
+
+
+def community_diff(new_checkout: str, base_checkout: str | None = None, allow_local: bool = False) -> tuple[list[str], list[str]]:
+    """What a pull request to hobnix/community does: for every manifest that differs from the base checkout, the manifest fields, then (the pinned
+    commits fetched and checked like `assemble` does) version, permissions, command rows, web declaration, binary rows and a bounded text diff of
+    the files. Returns (report lines, problems); a pin the check refuses is a problem. The base checkout's policy.toml is the rule (a pull request
+    that edits policy.toml is not allowed to loosen its own check) and a change to it is reported."""
+    policy = load_policy(base_checkout or new_checkout)
+    report, problems = [], []
+    new, bad = _read_manifests(new_checkout, policy, allow_local)
+    problems += bad
+    old = _read_manifests(base_checkout, policy, allow_local)[0] if base_checkout else []
+    if base_checkout:
+        try:
+            texts = []
+            for c in (base_checkout, new_checkout):
+                with open(os.path.join(c, "policy.toml"), "rb") as f:
+                    texts.append(f.read())
+        except OSError:
+            texts = [b"a", b"b"]
+        if texts[0] != texts[1]:
+            report.append("!! policy.toml differs from the base. The base policy was used for the checks below; a maintainer reads this change first.")
+    old_by, new_by = {m["name"]: m for m in old}, {m["name"]: m for m in new}
+    budget = [MAX_DIFF_TOTAL]
+    for name in sorted(set(old_by) | set(new_by)):
+        o, n = old_by.get(name), new_by.get(name)
+        if o == n:
+            continue
+        verb = "added" if not o else "removed" if not n else "changed"
+        report.append(f"== {_clean(name)}: manifest {verb}")
+        if not n:
+            report.append("  the package leaves the index at the next run")
+            continue
+        for k in MANIFEST_FIELDS:
+            ov, nv = (o or {}).get(k), n.get(k)
+            if o is None:
+                report.append(f"  {k}: {_clean(nv)}")
+            elif ov != nv:
+                report.append(f"  {k}: {_clean(ov)} -> {_clean(nv)}" + ("   !! the SOURCE of the code changes" if k == "source" else ""))
+        if n["status"] != "active":
+            report.append("  not active: nothing is fetched or built")
+            continue
+        with tempfile.TemporaryDirectory() as new_work, tempfile.TemporaryDirectory() as old_work:
+            files, found = _fetch_pin(n, new_work, policy, allow_local)
+            problems += [f"{name}: {t}" for t in found]
+            report += [f"  REFUSED: {_clean(t)}" for t in found]
+            if files is None:
+                continue
+            before = None
+            if o and o["status"] == "active" and (o["source"], o["commit"], o["path"]) != (n["source"], n["commit"], n["path"]):
+                before, why = _fetch_pin(o, old_work, policy, allow_local)
+                if before is None:
+                    report.append(f"  the old pin cannot be read ({_clean(why[0])}): all files are shown as new")
+            elif o and o["status"] == "active":
+                before = files   # same pin, only the manifest text changed
+            up, up_old = _toml_of(files, "package.toml"), _toml_of(before or {}, "package.toml")
+            report.append(f"  version: {_clean(up_old.get('version', '-'))} -> {_clean(up.get('version', '-'))}" if before else f"  version: {_clean(up.get('version', '-'))}")
+            report += _list_changes("permissions", up_old.get("permissions") or [], up.get("permissions") or [])
+            rows = lambda t: [f"{b.get('path')} {b.get('url')} {b.get('sha256')}" for b in t.get("binary") or [] if isinstance(b, dict)]
+            report += _list_changes("[[binary]]", rows(up_old), rows(up))
+            web_old, web_new = up_old.get("web") if isinstance(up_old.get("web"), dict) else {}, up.get("web") if isinstance(up.get("web"), dict) else {}
+            report += [f"  web.{_clean(k)}: {'added' if k not in web_old else 'removed' if k not in web_new else 'changed'}"
+                       for k in sorted(set(web_old) | set(web_new)) if web_old.get(k) != web_new.get(k)]
+            rows_old = (before or {}).get("commands.tsv", (b"",))[0] or b""
+            rows_new = files.get("commands.tsv", (b"",))[0] or b""
+            report += _list_changes("command row", rows_old.decode(errors="replace").splitlines(), rows_new.decode(errors="replace").splitlines())
+            lines, touches = _content_diff(before or {}, files, budget)
+            report.append(f"  touches: {', '.join(sorted(touches)) or 'nothing in the folder'}")
+            report += lines
+    if not report:
+        report.append("no manifest differs from the base")
+    return report, problems
+
+
 def run(argv):
     if not argv:
         print(__doc__)
@@ -802,6 +991,13 @@ def run(argv):
             if bad:
                 return 1
             print(f"commit\t{commit}")
+        elif cmd == "diff" and pos:
+            report, bad = community_diff(pos[0], opt("--base"), os.environ.get("HS_COMMUNITY_ALLOW_LOCAL") == "1")
+            for t in report:
+                print(t)
+            for t in bad:
+                print(f"error\t{_clean(t)}", file=sys.stderr)
+            return 1 if bad else 0
         elif cmd == "pin" and len(rest) == 2:
             print(pin(rest[0], rest[1], os.environ.get("HS_COMMUNITY_ALLOW_LOCAL") == "1"))
         elif cmd == "validate" and pos:
