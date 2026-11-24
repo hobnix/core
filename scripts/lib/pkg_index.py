@@ -37,6 +37,7 @@ REQUIRES = re.compile(r"^>=\s*([1-9]\d*)$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TREE = re.compile(r"^sha256:[0-9a-f]{64}$")
 ASSET = re.compile(r"^assets/[0-9a-f]{16}\.webp$")
+BIN_SHA = re.compile(r"[0-9a-f]{64}")      # fullmatch only
 TIME = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 SUBDIRS = ("packages", "recipes", "extensions", "capabilities", "blueprints")
 LIMITS = {"icon": (256, 256), "background": (1280, 720), "screenshot": (1280, 1280)}   # the largest size, kept in proportion
@@ -155,6 +156,24 @@ def build_assets(folder, out_dir):
     return got
 
 
+def binaries_of(folder, m):
+    """The [[binary]] rows of a manifest as [{bin, target, sha256, size}]: informational (docs/PLAN-registry.md), read from the manifest and the
+    file in the folder, nothing downloaded. A row that is not built yet (empty sha256) or not well formed is left out; size only when the file is there."""
+    out = []
+    rows = m.get("binary", [])
+    for t in rows if isinstance(rows, list) else []:
+        if not isinstance(t, dict) or not all(isinstance(t.get(k), str) for k in ("bin", "target", "sha256")) or not BIN_SHA.fullmatch(t["sha256"]):
+            continue
+        r = {"bin": t["bin"], "target": t["target"], "sha256": t["sha256"]}
+        try:
+            if isinstance(t.get("path"), str) and ".." not in t["path"].split("/") and not t["path"].startswith("/"):
+                r["size"] = os.path.getsize(os.path.join(folder, t["path"]))
+        except OSError:
+            pass
+        out.append(r)
+    return out
+
+
 def entry_of(checkout, path, extra, commit, yanked, assets_dir):
     if not re.match(r"^[A-Za-z0-9._/-]+$", path) or ".." in path.split("/"):
         raise Problem(f"path {path!r} is not allowed")
@@ -182,6 +201,9 @@ def entry_of(checkout, path, extra, commit, yanked, assets_dir):
          "needs": needs, "core": extra.get("core") is True, "meta": meta}
     if (name, version) in yanked and yanked[(name, version)]:
         e["yanked_reason"] = yanked[(name, version)]
+    bins = binaries_of(folder, m)
+    if bins:
+        e["binaries"] = bins
     if m.get("renamed_from"):
         e["renamed_from"] = list(m["renamed_from"])
     return name, e
@@ -216,8 +238,9 @@ def build(checkout, repo, out, serial=None, prev=None, commit=None, ttl_days=14,
     return doc
 
 
-def validate(doc, now=None, warnings=None):
-    """[text] for an index document. Unknown fields are ignored (a client reads every format it knows)."""
+def validate(doc, now=None, warnings=None, strict=False):
+    """[text] for an index document. Unknown fields are ignored (a client reads every format it knows). `binaries` is informational and nothing
+    trusts it: only strict (the builder side, CI) checks its shape; a client calls without strict and ignores a malformed field."""
     out = []
     bad = out.append
     if not isinstance(doc, dict):
@@ -268,6 +291,13 @@ def validate(doc, now=None, warnings=None):
                 w(f"{k} is not true or false")
         if not isinstance(e.get("needs"), list) or not all(isinstance(x, str) for x in e["needs"]):
             w("needs is not a list of names")
+        if strict and "binaries" in e:
+            b = e["binaries"]
+            if not isinstance(b, list) or not all(
+                    isinstance(x, dict) and isinstance(x.get("bin"), str) and isinstance(x.get("target"), str)
+                    and isinstance(x.get("sha256"), str) and BIN_SHA.fullmatch(x["sha256"])
+                    and (x.get("size") is None or (isinstance(x["size"], int) and not isinstance(x["size"], bool) and x["size"] >= 0)) for x in b):
+                w("binaries is not a list of {bin, target, sha256 (64 hex), size}")
         m = e.get("meta")
         if not isinstance(m, dict):
             w("meta is not an object")
@@ -346,7 +376,7 @@ def run(argv):
         elif cmd == "validate" and pos:
             with open(pos[0], encoding="utf-8") as f:
                 warns = []
-                bad = validate(json.load(f), opt("--now"), warns)
+                bad = validate(json.load(f), opt("--now"), warns, True)
             for t in warns:
                 print("warning: " + t, file=sys.stderr)
             for t in bad:
@@ -359,7 +389,7 @@ def run(argv):
             with open(pos[0], encoding="utf-8") as f:
                 doc = json.load(f)
             warns = []
-            bad = validate(doc, opt("--now"), warns)
+            bad = validate(doc, opt("--now"), warns, True)
             if bad:
                 raise Problem("; ".join(bad))
             if opt("--prev"):
