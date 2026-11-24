@@ -309,7 +309,7 @@ check_eq "dynamic: the user and the state folder" "4" "$(printf '%s\n' "$dyn" | 
 check_eq "dynamic: UMask=0077" "1" "$(printf '%s\n' "$dyn" | grep -c '^UMask=0077$')"
 check_eq "dynamic: the own folder is bound from the state folder, no other bind" "1" "$(printf '%s\n' "$dyn" | grep -c '^BindPaths=-/var/lib/hs-ext/fixsvc:/var/lib/hs/fixsvc$')"
 check_eq "dynamic: no ReadWritePaths for it" "0" "$(printf '%s\n' "$dyn" | grep -c '^ReadWritePaths=')"
-check_eq "dynamic: the hardening of the old mapping is kept" "$($EC fs.write:/var/lib/hs/fixsvc | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')" "$(printf '%s\n' "$dyn" | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')"
+check_eq "dynamic: the hardening of the old mapping is kept" "$($EC fs.write:/var/lib/hs/fixsvc | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')" "$(printf '%s\n' "$dyn" | grep -v "^ProtectProc" | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')"
 check_eq "dynamic: without devices no extra groups" "0" "$($ECD - | grep -c SupplementaryGroups)"
 check_eq "dynamic: devices:gpu adds the groups" "1" "$($ECD devices:gpu | grep -c '^SupplementaryGroups=render video$')"
 rc=0; err=$($ECD fs.write:/srv/a 2>&1 >/dev/null) || rc=$?
@@ -327,11 +327,38 @@ long=$(printf 'a%.0s' $(seq 1 40))
 u1=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$long" -- - | sed -n 's/^User=//p')
 u2=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$long" -- - | sed -n 's/^User=//p')
 check_eq "dynamic: a 40-character name gives a 31-character user" "31" "${#u1}"
-check_eq "dynamic: ending in six hex digits" "1" "$(printf '%s\n' "$u1" | grep -c -- '-[0-9a-f]\{6\}$')"
+check_eq "dynamic: ending in _ and twelve hex digits" "1" "$(printf '%s\n' "$u1" | grep -c -- '_[0-9a-f]\{12\}$')"
 check_eq "dynamic: and it is stable" "$u1" "$u2"
 rc=0; $EC fs.read:/var/lib/hs-ext/other >/dev/null 2>&1 || rc=$?
 check_eq "a grant may never reach another package's dynamic state folder" "1" "$rc"
 rc=0; $EC fs.write:/var/lib/private/hs-ext/other >/dev/null 2>&1 || rc=$?
 check_eq "nor the private folder behind it" "1" "$rc"
+
+check_eq "dynamic: the old 6-digit cut no longer collides (two names of the review get two users)" "2" "$(for n in media-hub-long-exten-7c910f media-hub-long-extension-name-x; do python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$n" -- - | sed -n 's/^User=//p'; done | sort -u | wc -l | tr -d ' ')"
+check_eq "dynamic: injective over many generated names, all within 31 characters" "ok" "$(python3 -I - "$SCRIPTS/lib" <<'PY'
+import importlib.util, random, sys
+sp = importlib.util.spec_from_file_location("c", sys.argv[1] + "/ext_confine.py"); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+r = random.Random(1); a = "abcdefghijklmnopqrstuvwxyz0123456789-"; seen = {}
+names = ["media-hub-long-exten-7c910f", "media-hub-long-extension-name-x"]
+for _ in range(20000):
+    base = "".join(r.choice(a[:26]) + "".join(r.choice(a) for _ in range(r.randint(0, 39))) for _ in [0])
+    names += [base, base[:27], base[:14] + "-x"]
+for n in names:
+    u = m.unit_user(n)
+    assert len(u) <= 31, u
+    assert seen.setdefault(u, n) == n, (u, n, seen[u])
+print("ok")
+PY
+)"
+rc=0; err=$($ECD fs.read:/var/lib/hs/ext-svc 2>&1 >/dev/null) || rc=$?
+check_eq "dynamic: fs.read of the bridge state is refused" "1" "$rc"
+check_eq "dynamic: with the code ext.dynamic-read" "1" "$(printf '%s
+' "$err" | grep -c 'ext.dynamic-read')"
+rc=0; $ECD fs.read:/var/lib/hs/ext/x >/dev/null 2>&1 || rc=$?
+check_eq "dynamic: and of /var/lib/hs/ext" "1" "$rc"
+rc=0; $ECD fs.read:/var/lib/hs-ext/other >/dev/null 2>&1 || rc=$?
+check_eq "dynamic: and of another extension's state" "1" "$rc"
+check_eq "dynamic: ProtectProc=invisible" "1" "$($ECD - | grep -c '^ProtectProc=invisible$')"
+check_eq "a literal --dynamic after -- is a permission, not the mode" "0" "$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --name fixsvc -- --dynamic | grep -c '^DynamicUser=')"
 
 finish

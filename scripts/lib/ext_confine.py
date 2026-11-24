@@ -93,10 +93,12 @@ def check_secret(key, p, name=None):
 
 
 def unit_user(name):
-    """The dynamic user of a package: hsx-<name>, at most 31 characters (a longer name is cut and gets 6 hex digits of its hash)."""
+    """The dynamic user of a package: hsx-<name>, at most 31 characters. A longer name is cut to 14 characters and gets "_" and 12 hex digits of the
+    hash of the FULL name: "_" cannot be in a package name, so no short name equals a cut one, and two long names differ in the hash (48 bits).
+    One user name is one uid: it must never be shared by two packages."""
     u = "hsx-" + name
     if len(u) > 31:
-        u = u[:24].rstrip("-") + "-" + hashlib.sha256(name.encode()).hexdigest()[:6]
+        u = "hsx-" + name[:14] + "_" + hashlib.sha256(name.encode()).hexdigest()[:12]
     return u
 
 
@@ -140,6 +142,9 @@ def properties(perms, name=None, dynamic=False):
             lst = write if key == "fs.write" else read
             arg = arg.rstrip("/") or arg
             own = dynamic and _under(arg, "/var/lib/hs/" + name)
+            if dynamic and not own and (any(_under(arg, d) for d in ("/var/lib/hs", EXT_STATE, "/var/lib/private")) or _under("/var/lib/hs/" + name, arg)):
+                return None, None, ("ext.dynamic-read: %s:%s is not allowed for a service or confined command: the state of the server and of the other "
+                                    "extensions stays closed; only /var/lib/hs/%s is its own" % (key, arg, name))
             if dynamic and key == "fs.write" and not own:
                 return None, None, ("ext.dynamic-write: fs.write:%s is not allowed for a service or confined command: it runs as its own user "
                                     "and may write only /var/lib/hs/%s" % (arg, name))
@@ -162,7 +167,10 @@ def properties(perms, name=None, dynamic=False):
     else:
         out.append("PrivateDevices=yes")
     if dynamic:
-        out += ["DynamicUser=yes", "User=" + unit_user(name), "StateDirectory=hs-ext/" + name, "StateDirectoryMode=0700", "UMask=0077"]
+        out += ["DynamicUser=yes", "User=" + unit_user(name), "StateDirectory=hs-ext/" + name, "StateDirectoryMode=0700", "UMask=0077", "ProtectProc=invisible"]
+        # ProtectProc=invisible: the unit cannot see the processes of other users (another extension, root). Without ProcSubset=pid (ADR 0031
+        # decision 5 left it out: a tool reading /proc/meminfo). Own StateDirectory only: /var/lib/private is 0700 root and the other folders are
+        # owned by other uids; whether that is enough or the VM stage needs an InaccessiblePaths is [nv] (see nested_stages.py confine_dynamic)
         if devs:
             out.append("SupplementaryGroups=" + GPU_GROUPS)
     # /var/lib/hs becomes an empty read-only tmpfs; only the granted paths below it are bound back in. The other secrets are made inaccessible.
@@ -194,8 +202,10 @@ def dropin(name, perms, dynamic=False):
 
 
 def main(argv):
-    dynamic = "--dynamic" in argv
-    argv = [a for a in argv if a != "--dynamic"]
+    head = argv[:argv.index("--")] if "--" in argv else argv      # options only before "--": after it every word is a permission
+    dynamic = "--dynamic" in head
+    if dynamic:
+        argv = [a for i, a in enumerate(argv) if a != "--dynamic" or i >= len(head)]
     if argv[:1] == ["props"]:
         args = argv[1:]
         name = None

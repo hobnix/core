@@ -344,6 +344,14 @@ A service or confined command declares fs.write outside /var/lib/hs/<its name>.
 - Text: This extension wants to write outside its own folder; its service does not start.
 - Fix: none
 
+### ext.dynamic-read
+
+A service or confined command declares fs.read of the state of the server or of another extension.
+
+- Layer: script
+- Text: This extension wants to read data that is not its own; its service does not start.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.
