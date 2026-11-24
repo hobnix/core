@@ -107,6 +107,11 @@ jobs:
           HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/vault-change-rust.sh
       - name: tests/job-record.sh, job-reconcile.sh and jobs-change.sh against the binary, and python and Rust side by side (tests/job-record-rust.sh)
         run: HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/job-record-rust.sh
+      - name: SDK examples, also built statically for musl (tests/ext-sdk-rust.sh runs its musl block when the target is installed)
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get install -y --no-install-recommends musl-tools
+          bash ../tests/ext-sdk-rust.sh
 
   scripts:
     needs: changes
