@@ -20,6 +20,15 @@ _hs_job_record_write() {
   fi
 }
 
+# _hs_job_record_write_or_python: error, result and skip are new in the Rust binary (#1192). A binary up to v0.12.0 answers the probe but rejects
+# them (a git pull before hs rebuild, or a rollback): then the Python writer does the word. TODO(remove in the release after the one that ships #1192:
+# ADR 0001, one release side by side): this fallback and its test in tests/job-record-rust.sh.
+_hs_job_record_write_or_python() {
+  _hs_job_record_write "$@" && return
+  [ "$_HS_JOB_RECORD_USE" = rust ] || return 1
+  python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"
+}
+
 # _hs_job_bump: count the change counter `reads:jobs-records` up (ADR 0005 rule 5) so the Jobs panel reads the list again; no log row. Best effort
 # (HS_JOB_NOBUMP switches it off), at most once per second per shell, like the Python writer's own bump.
 _hs_job_bump() {
@@ -41,14 +50,14 @@ hs_job_record() {
   local cmd=${1:-} out rc=0 id=${2:-} line text
   case "$cmd" in
     new|run|wait|resume|finish|reconcile|uncancel) ;;
-    skip)   # a job that found the same work running ends as skipped (exit 0): only the Python writer knows it
-      python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@" || return $?
+    skip)   # a job that found the same work running ends as skipped (exit 0)
+      _hs_job_record_write_or_python "$@" || return $?
+      [ "$_HS_JOB_RECORD_USE" != rust ] || _hs_job_bump
       # shellcheck source=scripts/lib/event.sh
       . "${BASH_SOURCE[0]%/*}/event.sh" 2>/dev/null && { event_emit job.skipped "$id" "${3:-Already running}" || true; }
       return 0 ;;
-    error|result|key)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
-      _hs_job_record_write "$@" && return
-      python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"; return ;;
+    error|result) _hs_job_record_write_or_python "$@"; return ;;   # ADR 0018; result: PLAN-app-lifecycle Q2
+    key) _hs_job_record_write "$@"; return ;;
     step|progress)   # the Rust writer does not count the change counter up (the Python one does): done here, once per second at most
       _hs_job_record_write "$@" || return $?
       [ "$_HS_JOB_RECORD_USE" != rust ] || _hs_job_bump

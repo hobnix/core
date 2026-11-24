@@ -162,6 +162,35 @@ same "wait on a queued job" wait @ID@ --seq 1 --key K --label L --kind text
 same "new with a bad kind" new --slug x --desc d --kind bogus
 same "new with a bad parent" new --slug x --desc d --parent nope
 
+# error, result, skip, key: the words the shell used to leave to the Python writer
+newboth "new for error" --slug errjob --desc "error job" --unit hs-job-err-1
+same "error on a queued job" error @ID@ --category input_timeout --message "no answer"
+same "run for error" run @ID@
+same "error on a running job" error @ID@ --category input_timeout --message "no answer"
+same "result on a running job" result @ID@ --json '{"url": "http://x", "n": 3, "f": 1.5, "name": "Caf\u00e9"}'
+same "result, keys in the order given" result @ID@ --json '{"b": "2", "a": "1"}'
+same "result, not JSON" result @ID@ --json '{oops'
+same "result, not an object" result @ID@ --json '[1]'
+same "result, a nested value" result @ID@ --json '{"a": {"b": 1}}'
+same "result, a boolean" result @ID@ --json '{"a": true}'
+same "result, too long" result @ID@ --json "{\"a\": \"$(printf 'x%.0s' $(seq 1 4100))\"}"
+same "result without --json" result @ID@
+same "key" key @ID@ "apps remove nextcloud"
+same "finish for error" finish @ID@ 4
+files_same "after finish 4"
+same "error on a failed job" error @ID@ --category input_rejected --message "bad value"
+same "error without a message" error @ID@ --category input_rejected
+same "error without --category" error @ID@ --message m
+same "error on a missing record" error 20240101-120000-gone-abcd --category c
+files_same "after error and result"
+newboth "new for skip" --slug skipjob --desc "skip job" --unit hs-job-skip-1
+same "skip" skip @ID@ "Already running"
+files_same "after skip"
+same "skip again" skip @ID@ "Already running"
+same "finish a skipped job" finish @ID@ 1
+files_same "after finish of a skipped job"
+same "skip without a message" skip @ID@
+
 # records that are not records
 for d in py rs; do
   printf '{oops' > "${!d}/20240101-120000-badjson-abcd.json"
@@ -202,4 +231,22 @@ export HS_UPTIME_FILE=$WORK/missing
 same "reconcile without an uptime file" reconcile
 rm -rf "$py" "$rs"
 same "reconcile without a directory" reconcile
+echo "-- an old binary (up to v0.12.0) that rejects error, result and skip: the shell falls back to Python"
+# TODO(remove with the fallback in scripts/lib/job.sh, the release after the one that ships #1192)
+cat > "$WORK/oldbin" <<OLD
+#!/usr/bin/env bash
+case "\$2" in error|result|skip) echo "hobnix: bad arguments" >&2; exit 1 ;; esac
+exec "$bin" "\$@"
+OLD
+chmod +x "$WORK/oldbin"
+old=$WORK/old; mkdir -p "$old"
+oldrun() { ( export HS_JOBS_DIR=$old HOBNIX_BIN=$WORK/oldbin HS_JOB_NOBUMP=1; unset HS_JOB_RECORD _HS_JOB_RECORD_USE
+  . "$root/scripts/lib/job.sh"; hs_job_record "$@" ); }
+oid=$(oldrun new --slug oldb --desc "old binary" --unit hs-job-oldb-1)
+oldrun run "$oid"; oldrun finish "$oid" 3
+oldrun error "$oid" --category input_timeout --message "no answer" && pass "old binary: error falls back" || fail "old binary: error"
+oldrun result "$oid" --json '{"a": "1"}' && pass "old binary: result falls back" || fail "old binary: result"
+grep -q '"category": "input_timeout"' "$old/$oid.json" && grep -q '"a": "1"' "$old/$oid.json" && pass "old binary: record has error and result" || fail "old binary: record wrong"
+sid=$(oldrun new --slug olds --desc "skip" --unit hs-job-olds-1)
+oldrun skip "$sid" "Already running" && grep -q '"state": "skipped"' "$old/$sid.json" && pass "old binary: skip ends as skipped" || fail "old binary: skip"
 finish

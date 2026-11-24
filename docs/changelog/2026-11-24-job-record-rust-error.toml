@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Job records are written by the Rust program for every word"
+body  = """The words error, result and skip of the job record writer now run in the Rust program too, so the Python fallback is no longer needed for them. The record files stay the same."""
