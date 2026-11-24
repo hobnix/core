@@ -47,7 +47,7 @@ Target releases for 5 to 8 are set when the inventory (step 1) shows the real si
 
 Counted 2026-11-24 on `origin/develop` with `git ls-files` and `wc -l`. "Called by" comes from `grep` for the file name in `scripts/`, `capabilities/`, `configuration.nix`, `install.nix`, `.github/` and `scripts/lib/registry.tsv`; the match is a first answer, not a full call graph, and the verdicts are proposals for review. Nothing was run on a server. Not tested on hardware yet.
 
-Counts: 129 Python files (60 runtime, 7 generators, 10 dev tools, 52 tests, fixtures and examples) and 44 shell scripts over 300 lines (31 runtime, 13 tests). The Python rows add up to `git ls-files '*.py' | wc -l`.
+Counts: 132 Python files (63 runtime, 7 generators, 10 dev tools, 52 tests, fixtures and examples) and 44 shell scripts over 300 lines (31 runtime, 13 tests). The Python rows add up to `git ls-files '*.py' | wc -l`.
 
 Reading the verdict column, after ADR 0001 and ADR 0032:
 
@@ -55,20 +55,22 @@ Reading the verdict column, after ADR 0001 and ADR 0032:
 - **stays**: shell kept by ADR 0001 (launcher, installer and first run, unlock and recovery, `hs update` and rollback, thin wrappers, `ui.sh` dialogues).
 - **retire**: Python that is not a program of the server (tests, dev tools, fixtures) leaves with step 8, or earlier together with the subject it tests.
 - **Target** is filled only where this plan already names a release (step 5: 0.14 and later). The web backend and the generators have no release yet: ADR 0032 decision 5 and step 7 leave them open. `-` means none named.
-- **(new)** marks a Python file added after ADR 0001 (2026-11-10). Files still in open pull requests (`scripts/lib/ext_state.py` in #1195, `pkg_blueprint.py` in #1197) are not in the table; they are pending and get a row when they merge. The step 1 done condition is checked against the table again then.
+- **(new)** marks a Python file added after ADR 0001 (2026-11-10). `ext_state.py` (#1195), `pkg_blueprint.py` and `schema_options.py` (#1197) merged after the first count and have their rows now; the step 1 done condition holds again.
 
-### Python: runtime programs (60)
+### Python: runtime programs (63)
 
 Sorted by size. All of them move except where stated, because ADR 0032 retires Python.
+
+Rule: no new Python program after ADR 0032. The three rows marked "debt" (`ext_state.py`, `pkg_blueprint.py`, `schema_options.py`) were added before it and accepted as debt by the maintainer's decision of 2026-11-24 ("merge, list as debt"); their target release is `-` until this plan names one.
 
 | Path | Lines | Called by | Verdict | Target |
 |---|---|---|---|---|
 | `scripts/web-serve.py` | 4126 | systemd unit `hs-web` (configuration.nix, install.nix) | moves: own ADR first (ADR 0032 decision 5) | - |
 | `scripts/state-db.py` | 1578 | `hs` commands and scripts (audit, disk-event, deck-status), event-notify, live state | moves: state store behind `hs sys` rows | - |
-| `scripts/pkg_repo.py` | 1412 | pkg.py, pkg.sh, hs_ext.py | moves: package tools (with pkg.py) | 0.14 and later (step 5) |
+| `scripts/pkg_repo.py` | 1420 | pkg.py, pkg.sh, hs_ext.py | moves: package tools (with pkg.py) | 0.14 and later (step 5) |
 | `scripts/services.py` | 1359 | `hs` scripts (apps-change, cleanup, config, ct-change ...), web-serve.py | moves: services and routes, guard `ADMIN_TARGETS` | - |
 | `scripts/live-collect.py` | 948 | systemd unit of the `live-state` part | moves: collector | 0.14 and later (step 5) |
-| `scripts/pkg.py` | 945 | `hs` scripts (apps-*, pkg.sh), app_autoupdate.py | moves: manifest and package tool | 0.14 and later (step 5) |
+| `scripts/pkg.py` | 960 | `hs` scripts (apps-*, pkg.sh), app_autoupdate.py | moves: manifest and package tool | 0.14 and later (step 5) |
 | `scripts/lib/ext_service.py` | 910 | ext.sh, event.sh, integration.sh, hs_ext.py | moves: extension protocol host | - |
 | `scripts/live_state.py` | 546 | live-collect.py, live.sh, state-db.py, hs_ext.py | moves with live-collect.py | 0.14 and later (step 5) |
 | `scripts/job-record.py` | 536 | scripts (apps-change, apps-recover, fm, job-reconcile ...) | moves: also in Rust; delete after one release side by side | 0.14 and later (step 5) |
@@ -78,7 +80,7 @@ Sorted by size. All of them move except where stated, because ADR 0032 retires P
 | `scripts/web_terminal.py` | 449 | web-serve.py | moves with the web backend | - |
 | `scripts/lib/ext_proto.py` | 443 | lib/hs.sh, registry-load.sh, pkg_binary.py | moves: protocol (Rust SDK exists) | - |
 | `scripts/recipes/files/matrix-card/bot.py` | 423 | matrix-card recipe (runs in the app container) | moves with the recipe (package-owned) | - |
-| `scripts/lib/pkg_index.py` (new) | 413 | pkg.py, pkg.sh, pkg_repo.py | moves with pkg.py | 0.14 and later (step 5) |
+| `scripts/lib/pkg_index.py` (new) | 418 | pkg.py, pkg.sh, pkg_repo.py | moves with pkg.py | 0.14 and later (step 5) |
 | `scripts/app_version.py` (new) | 395 | apps-version.sh, app_autoupdate.py, pkg.py | moves with pkg.py | 0.14 and later (step 5) |
 | `scripts/machine-toml.py` | 370 | config-list.py, install-restore.sh, lib/machine.sh | moves: reads machine.toml (contract with config) | - |
 | `scripts/gateway_render.py` | 368 | gateway.sh, traefik providers | moves: renders gateway config | - |
@@ -103,6 +105,7 @@ Sorted by size. All of them move except where stated, because ADR 0032 retires P
 | `scripts/lib/unraid_import.py` | 186 | import-unraid.sh | moves: parser of foreign data; low priority | - |
 | `scripts/lib/ext_confine.py` (new) | 180 | ext.sh, ext_service.py, pkg_perms.py | moves with the extension host | - |
 | `scripts/lib/ask-q.py` | 175 | ask.sh, recipes/_lib.sh, apps-change.sh, jobs-answer.sh | moves: question protocol (ADR 0018) | - |
+| `scripts/lib/ext_state.py` (new) | 169 | ext.sh, tests/ext-state.sh (ext_service.py not yet) | moves: debt, see below | - |
 | `scripts/lib/pkg_perms.py` | 168 | pkg.py, pkg_integrations.py, hs_ext.py | moves with pkg.py | 0.14 and later (step 5) |
 | `scripts/unit-watch.py` (new) | 164 | systemd unit `hs-unit-watch` | moves: long-running watcher | 0.14 and later (step 5) |
 | `scripts/lib/pkg_blocks.py` (new) | 155 | pkg.py, pkg_slots.py | moves with pkg.py | 0.14 and later (step 5) |
@@ -111,6 +114,7 @@ Sorted by size. All of them move except where stated, because ADR 0032 retires P
 | `scripts/lib/ext_sdk.py` (new) | 153 | ext_sdk.sh, pkg_new.py | moves: Python SDK for extensions; ADR 0032 decision 7 (SDK crates) | - |
 | `scripts/forecast.py` | 143 | backup.sh, health-check.sh, capacity.sh, state-db.py | moves: timer/collector class | 0.14 and later (step 5) |
 | `scripts/pkg_states.py` (new) | 131 | pkg.py, pkg.sh, app_health.py | moves with pkg.py | 0.14 and later (step 5) |
+| `scripts/lib/pkg_blueprint.py` (new) | 127 | pkg.py (manifest checks) | moves: debt, see below | - |
 | `scripts/lib/iommu.py` | 130 | none in scripts (test only; `tests/iommu.sh`) | retire or move: check for a caller first | - |
 | `scripts/config-list.py` | 116 | backup.sh, config-read.sh | moves with machine-toml.py | - |
 | `scripts/preset.py` | 116 | install-wizard.sh, install-restore.sh, lib/answers.py | stays for now: installer path (ADR 0001 Stays) | - |
@@ -119,6 +123,7 @@ Sorted by size. All of them move except where stated, because ADR 0032 retires P
 | `scripts/app_health.py` (new) | 94 | apps-list.sh | moves with pkg.py | 0.14 and later (step 5) |
 | `scripts/providers/reverse-proxy/zoraxy-list.py` | 77 | zoraxy.sh | moves with the Zoraxy provider; thin helper | - |
 | `scripts/job-records.py` | 76 | jobs.sh | moves with job-record.py | 0.14 and later (step 5) |
+| `scripts/lib/schema_options.py` (new) | 44 | preset.py (checks of presets and blueprints) | moves: debt, see below | - |
 | `scripts/lib/pkg_probes.py` (new) | 75 | smoke.sh | moves with pkg.py | 0.14 and later (step 5) |
 | `scripts/deck-serve.py` | 70 | systemd unit `hs-deck-api` (configuration.nix, edge-status part) | moves: small server, also runs on edge nodes | - |
 | `scripts/lib/pkg_restart.py` (new) | 49 | pkg.sh | moves with pkg.py | 0.14 and later (step 5) |
