@@ -659,6 +659,7 @@ in
     description = "Fetch the package index, say when it changed or could not be fetched (hs pkg refresh)";
     path = [ "/run/current-system/sw" pkgs.python3 pkgs.git pkgs.openssh ];
     serviceConfig = { Type = "oneshot"; Nice = 10; };
+    environment.HS_PKG_LOCK_WAIT = "0";   # a running hs update or install holds the lock: this run is skipped quietly
     script = "bash ${./scripts}/pkg-refresh.sh";
   };
   systemd.timers.hs-pkg-refresh = lib.mkIf (!isEdge) {

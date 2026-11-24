@@ -42,9 +42,9 @@ esac
 if [ -z "${HS_PKG_PY:-}" ] && [ ! -f "$here/pkg.py" ]; then fail "$(t 'pkg.py is missing')"; exit 1; fi
 before=$(digest)
 # stdout is the result table (name, release, commit, result: tab separated); stderr carries warnings (an index past its grace, a commit that cannot be
-# fetched) and goes to the journal as notes. A fetch that waits for the lock of a running `hs update` is not a failure: this run is skipped quietly.
+# fetched) and goes to the journal as notes. A fetch that finds the lock held (the timer sets HS_PKG_LOCK_WAIT=0; hs update and hs pkg refresh wait as usual) is not a failure: this run is skipped quietly.
 errf=$(mktemp); trap 'rm -f "$errf"' EXIT
-rc=0; out=$(HS_PKG_LOCK_WAIT=${HS_PKG_LOCK_WAIT:-0} pkgpy fetch 2>"$errf") || rc=$?
+rc=0; out=$(pkgpy fetch 2>"$errf") || rc=$?
 while IFS= read -r l; do [ -z "$l" ] || note "$l"; done < "$errf"
 if grep -q 'another pkg fetch is running' "$errf" <(printf '%s
 ' "$out"); then note "$(t 'Another package fetch is running: skipped.')"; exit 0; fi
