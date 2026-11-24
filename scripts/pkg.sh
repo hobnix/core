@@ -252,7 +252,7 @@ case "${1:-list}" in
         { thead 'Repository' 'Address' 'Signed' 'From'; py repo list; } | table ;;
       add)
         pkg_changed
-        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> | --unsigned) [--confirm-name <name>]"; exit 1; }
+        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> [--index <address>] | --unsigned) [--confirm-name <name>]"; exit 1; }
         shift 3; confirmed=""; extra=()
         while [ $# -gt 0 ]; do
           case "$1" in
@@ -262,11 +262,13 @@ case "${1:-list}" in
         done
         step "$(t 'Package repository %s' "$name")"
         kv "$(t 'Address')" "$url"
-        key=""; unsigned=false
+        key=""; unsigned=false; index=""
         for ((i = 0; i < ${#extra[@]}; i++)); do
           [ "${extra[i]}" != --key ] || key=${extra[i + 1]:-}
+          [ "${extra[i]}" != --index ] || index=${extra[i + 1]:-}
           [ "${extra[i]}" != --unsigned ] || unsigned=true
         done
+        [ -z "$index" ] || kv "$(t 'Index')" "$index"
         if [ -n "$key" ] && [ -r "$key" ]; then
           while read -r line; do
             kv "$(t 'Signer')" "$(sed -E 's/^.*(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) /\1 /' <<<"$line" | ssh-keygen -lf /dev/stdin 2>/dev/null || echo "$line")"
