@@ -31,6 +31,50 @@ done < <({
 } | sort -u)
 if [ -z "$bad" ]; then pass "all emitted codes are listed"; else fail "codes not in scripts/lib/error-codes.tsv:$bad"; fi
 
+echo "-- Python and Rust emit only listed codes"
+# the Python and Rust programs name a code as a string ("binary.hash", "ext.state-move-failed: text", "code.rate"); a name typed differently from the
+# tsv would pass the shell check above. Only the area prefixes that these programs use are scanned (a literal like "pkg.toml" is not a code).
+# ext.service-failed is an event kind, not an error code
+ROOT=$(dirname "$SCRIPTS")
+EMIT_PREFIX='binary|ext|integration|code|pkg|run'
+srcfiles() { { find "$SCRIPTS" -name '*.py' -o -name '*.sh'; find "$ROOT/rust" -name '*.rs' -not -path '*/target/*' 2>/dev/null; } | grep -v "^$SCRIPTS/dev/" | sort; }
+mapfile -t SRC < <(srcfiles)
+badpy=
+while IFS= read -r c; do
+  [ -n "$c" ] || continue
+  grep -qxF "$c" <<<"$known" || badpy="$badpy $c"
+done < <(grep -hoE "[\"'](${EMIT_PREFIX})\.[a-z][a-z0-9-]*[\"':]" "${SRC[@]}" | tr -d "\"':" | grep -vxE 'pkg\.(toml|py|json)|code\.json|run\.sh|ext\.service-failed' | sort -u)
+if [ -z "$badpy" ]; then pass "all Python and Rust codes are listed"; else fail "codes in Python or Rust, not in scripts/lib/error-codes.tsv:$badpy"; fi
+
+echo "-- a code in a variable cannot be checked"
+# Baseline, may only shrink: scripts/pkg.sh relays the code that pkg_repo.py chose (HS_PKG_REFUSAL); the Python scan above covers those codes.
+VARCODE_OK=" scripts/pkg.sh "
+varcode=
+while IFS= read -r f; do
+  case "$VARCODE_OK" in *" ${f#"$ROOT"/} "*) continue ;; esac
+  varcode="$varcode ${f#"$ROOT"/}"
+done < <(grep -rlE 'refuse_code "?\$' "$SCRIPTS" --include='*.sh')
+if [ -z "$varcode" ]; then pass "every refuse_code names its code literally"; else fail "refuse_code with a variable as code (write the code as a literal word):$varcode"; fi
+
+echo "-- every script code of the catalogue is emitted somewhere"
+# Allowed without an emitter: the generic fallback of refuse (plain text, no code of its own). Add nothing here without a reason; the list may only shrink.
+ALLOW_UNEMITTED=" refused "
+unused=
+while IFS= read -r c; do
+  case "$ALLOW_UNEMITTED" in *" $c "*) continue ;; esac
+  grep -qF -- "$c" "${SRC[@]}" || unused="$unused $c"
+done < <(awk -F'\t' '!/^#/ && $2=="script" {print $1}' "$CAT")
+if [ -z "$unused" ]; then pass "every catalogue code is used"; else fail "in scripts/lib/error-codes.tsv but emitted by no script or program (name differs?):$unused"; fi
+
+echo "-- report: plain refusals without a code (not a failure)"
+total=0
+while IFS=$'\t' read -r n f; do
+  total=$((total + n))
+  printf '   %s\t%s\n' "$n" "$f"
+done < <(cd "$ROOT" && for f in scripts/*.sh scripts/lib/*.sh; do n=$(grep -cE '(^|[^_a-z])refuse "' "$f"); [ "$n" -gt 0 ] && printf '%s\t%s\n' "$n" "$f"; done | sort -rn | head -15)
+all=$(grep -rcE '(^|[^_a-z])refuse "' "$SCRIPTS" --include='*.sh' | awk -F: '{s+=$2} END {print s+0}')
+printf '   plain refuse total in scripts: %s\n' "$all"
+
 echo "-- refuse_code prints the lines of the contract"
 out=$(bash -c '. "$1/lib/ui.sh"; refuse_code vault.locked' _ "$SCRIPTS"; echo "rc=$?")
 check_match "status, catalogue reason, fix and code, exit 1" 'status.refused' "$out"
