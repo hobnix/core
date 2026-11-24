@@ -32,19 +32,27 @@ echo "-- the Settings layout of the packages (web, step 6c)"
 check_eq "every option is on the page of its package" '{"alphaA":"cap:alpha","alphaB":"cap:alpha","zetaHost":"cap:zeta"}' "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["keys"],sort_keys=True,separators=(",",":")))' "$OUT/layout.overlay.json")"
 check_eq "a package has an entry with its title" "alpha zeta" "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]))["caps"];print(" ".join(sorted(k for k,v in d.items() if v["entry"] and v["title"]==k)))' "$OUT/layout.overlay.json")"
 
-echo "-- clashes are refused and the previous overlay stays"
-before=$(cat "$OUT/schema.overlay.json")
+echo "-- an option key the core or another package has: that package is left out, the rest is written, exit 1"
 refuse() { check "$1" bash -c '! python3 "$1/schema-gen.py" overlay write --packages "$2" --out "$3" >/dev/null 2>&1' _ "$SCRIPTS" "$PK" "$OUT"; }
+keys() { $GEN overlay keys --packages "$PK" 2>/dev/null | cut -f1 | paste -sd' '; }
+msg() { $GEN overlay write --packages "$PK" --out "$OUT" 2>&1 >/dev/null; }
 mkpkg clash "$(item language clash)"
 refuse "a key of the core schema"
-check_eq "the previous overlay stays" "$before" "$(cat "$OUT/schema.overlay.json")"
+check_eq "reason names the core" "clash: option language is also defined by core" "$(msg | tr -d '')"
+check_eq "only the clashing package is left out" "alphaB alphaA zetaHost" "$(keys)"
+check_eq "its capability row is left out too" "alpha zeta" "$(cut -f1 "$OUT/capabilities.tsv" | grep -v '^#' | paste -sd' ')"
+check_eq "check also fails" "1" "$($GEN overlay check --packages "$PK" --out "$OUT" >/dev/null 2>&1; echo $?)"
 mkpkg clash "$(item alphaA clash)"
 refuse "a key of another package"
+check_eq "both packages of the clash are left out (order independent)" "zetaHost" "$(keys)"
+check_eq "the reason names the other package" "alpha: option alphaA is also defined by clash;clash: option alphaA is also defined by alpha" "$(msg | tr -d '' | paste -sd';')"
 mkpkg clash "$(item clashKey other)"
 refuse "an option that names another capability"
 mkpkg clash "$(item Bad-Key clash)"
 refuse "a key that is not a word"
 rm -r "${PK:?}/clash"
-check "without the clash it works again" $GEN overlay check --packages "$PK" --out "$OUT"
+check "without the clash it works again" $GEN overlay write --packages "$PK" --out "$OUT"
+check_eq "clean packages stay unchanged" "alphaB alphaA zetaHost" "$(keys)"
+check "check is clean" $GEN overlay check --packages "$PK" --out "$OUT"
 
 finish
