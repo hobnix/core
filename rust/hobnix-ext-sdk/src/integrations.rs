@@ -93,7 +93,15 @@ mod tests {
         let r: Integration = serde_json::from_str(j).unwrap();
         assert_eq!(r.api_url.as_deref(), Some("http://127.0.0.1:1"));
         assert_eq!(r.extras["a"], "1");
-        let r: Integration = serde_json::from_str(r#"{"package":"p","integration":"i","source":"recipe","api_url":null}"#).unwrap();
-        assert!(r.api_url.is_none() && r.extras.is_empty() && r.key_file.is_none() && r.key_header.is_none());
+        let r: Integration = serde_json::from_str(
+            r#"{"package":"p","integration":"i","source":"recipe","api_url":null}"#,
+        )
+        .unwrap();
+        assert!(
+            r.api_url.is_none()
+                && r.extras.is_empty()
+                && r.key_file.is_none()
+                && r.key_header.is_none()
+        );
     }
 }
