@@ -128,8 +128,14 @@ pair_bin() {   # the hobnix program (HOBNIX_BIN, else the PATH); the pairing nee
 }
 # stderr of the program never joins a request or an answer (HOBNIX_LOG=debug writes log lines there): it goes to a file, and only the
 # "hobnix: <error>" line of it is shown when a call fails
-pair_err=${TMPDIR:-/tmp}/hs-remote-pair.$$
-trap 'rm -f "$pair_err"' EXIT
+# the file is made by mktemp (0600, unpredictable name) in the state directory, never in a path somebody else could have prepared
+pair_err=/dev/null
+pair_init() {
+  [ "$pair_err" = /dev/null ] || return 0
+  local d=$state; [ -d "$d" ] && [ -w "$d" ] || d=${TMPDIR:-/tmp}
+  pair_err=$(mktemp "$d/.pair-err.XXXXXX") || { pair_err=/dev/null; return 0; }
+  trap 'rm -f "$pair_err"' EXIT
+}
 pair() { local b; b=$(pair_bin) || exit $?; "$b" pair "$@" 2>"$pair_err"; }
 pair_error() { local m; m=$(grep '^hobnix: ' "$pair_err" 2>/dev/null | tail -n 1); printf '%s' "${m#hobnix: }"; }
 web_port() { printf '%s' "${HS_WEB_PORT:-8480}"; }
@@ -239,7 +245,7 @@ offer_code() {   # offer <share> --code: make a code the other server types
   local share=$1 srv=${peer:--} mins=${minutes:--} out c exp addr
   v_share "$share"; [ "$srv" = "-" ] || v_peer "$srv"
   { [ "$mins" = "-" ] || [[ "$mins" =~ ^[0-9]{1,2}$ ]]; } || fail "The life time is a number of minutes (1 to 60)."
-  need_root
+  need_root; pair_init
   sure "$yes" "$(t 'Make a code for %s?' "$share")"
   out=$(pair make offer "$share" "$srv" "$mins") || fail "$(pair_error)"
   c=$(tagged code <<<"$out"); exp=$(tagged expires_in <<<"$out")
@@ -265,7 +271,7 @@ receive_code() {   # receive [--minutes N]: this server shows a code, the other 
   [ $# -eq 0 ] || usage
   local mins=${minutes:--} out c exp addr
   { [ "$mins" = "-" ] || [[ "$mins" =~ ^[0-9]{1,2}$ ]]; } || fail "The life time is a number of minutes (1 to 60)."
-  need_root
+  need_root; pair_init
   vault_ready
   sure "$yes" "Make a code?"
   out=$(pair make receive - - "$mins") || fail "$(pair_error)"
@@ -288,7 +294,7 @@ EOT
 add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--stdin]: type the code another server made
   [ $# -eq 0 ] || usage
   local line fields c at srv hostn hk req inner p h s l d pw fp rc=0
-  need_root
+  need_root; pair_init
   vault_ready
   line=$(read_code "Code (as shown on the other server)")
   fields=$(printf '%s\n' "$line" | pair check 2>/dev/null) || fail "That is not a code (16 letters and digits, as shown on the other server)."
@@ -342,7 +348,7 @@ send_code() {   # send <share> --peer <name> --code [--server <host>] [--stdin]:
   [ $# -eq 1 ] && [ -n "$peer" ] || usage
   local share=$1 line fields c at srv body rc=0
   v_share "$share"; v_peer "$peer"
-  need_root
+  need_root; pair_init
   line=$(read_code "Code (as shown on the other server)")
   fields=$(printf '%s\n' "$line" | pair check 2>/dev/null) || fail "That is not a code (16 letters and digits, as shown on the other server)."
   c=${fields%%$'\t'*}; at=${fields#*$'\t'}

@@ -341,4 +341,21 @@ grep -q "^remote-golf$" "$A/users" && pass "the login was made through the debug
 pw=$(cat "$A/last-pw")
 grep -qF -- "$pw" "$WORK/err-debug" 2>/dev/null && fail "the password reached the debug log" || pass "no password in the debug run's stderr"
 
+echo "-- the stderr file of the pair calls: 0600, made by mktemp in the state directory, removed on exit"
+cat > "$WORK/spy.sh" <<EOT
+#!/usr/bin/env bash
+t=\$(readlink /proc/\$\$/fd/2); printf '%s %s
+' "\$(stat -c %a "\$t")" "\$t" >> "$WORK/spy.log"
+exec "$bin" "\$@"
+EOT
+chmod +x "$WORK/spy.sh"; : > "$WORK/spy.log"
+export FAKE_SRC=10.0.0.83
+code=$(newcode "$A" alpha secret-docs) || fail "no code for the stderr file run"
+mkserver "$WORK/h" hotel
+HOBNIX_BIN=$WORK/spy.sh srv "$WORK/h" hotel add --code --stdin >/dev/null 2>&1 <<<"$code@$addr"
+mode=$(awk '{ print $1; exit }' "$WORK/spy.log"); path=$(awk '{ print $2; exit }' "$WORK/spy.log")
+check_eq "the stderr file is 0600" 600 "$mode"
+case "$path" in "$WORK/h/state/.pair-err."*) pass "it lives in the state directory" ;; *) fail "stderr file path: '$path'" ;; esac
+[ -n "$path" ] && [ ! -e "$path" ] && pass "it is removed on exit" || fail "the stderr file is still there"
+
 finish
