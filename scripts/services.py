@@ -83,7 +83,7 @@ POINTER = re.compile(r'^(/[^/]*)*$')
 STAT_MAX_BODY = 1048576
 # containers whose web page is an admin interface: found on a public proxy they are imported as never-public
 # (or public-ok with only their public paths), the way CLAUDE.md describes the two exceptions (Arcane webhook, Kuma status page)
-ADMIN_TARGETS = {('docker', 80), ('zoraxy', 8000), ('monitoring', 3000), ('monitoring', 80), ('uptime-kuma', 3001), ('paperclip', 3100), ('stalwart', 8080)}
+ADMIN_TARGETS = {('docker', 80), ('docker', 9000), ('docker', 3552), ('zoraxy', 8000), ('monitoring', 3000), ('monitoring', 80), ('uptime-kuma', 3001), ('paperclip', 3100), ('stalwart', 8080)}
 
 
 def die(msg, code=2):

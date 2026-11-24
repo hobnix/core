@@ -131,6 +131,10 @@ $S remove hs-ok >/dev/null 2>&1
 $S add hs-paths --container docker --port 80 --exposure public-ok --public-path /api/webhooks/trigger --want reverse-proxy >/dev/null 2>&1
 check "so is public-ok with only its public_paths (the Arcane webhook)" test -e "$HS_SERVICES_DIR/hs-paths.toml"
 $S remove hs-paths >/dev/null 2>&1
+for p in 9000 3552; do
+  check_out "docker:$p (Portainer, Arcane) public-ok is refused like docker:80" "admin page" $S add hs-mgr --container docker --port $p --exposure public-ok --fqdn p.example.com
+  check "and nothing was written for docker:$p" test ! -e "$HS_SERVICES_DIR/hs-mgr.toml"
+done
 $S add other-app --container docker --port 8055 --exposure public-ok --want reverse-proxy >/dev/null 2>&1
 check "another app in the same container is not an admin page" test -e "$HS_SERVICES_DIR/other-app.toml"
 $S remove other-app >/dev/null 2>&1
@@ -257,6 +261,12 @@ cat > "$WORK/rules.txt" <<'EOF'
 ## /opt/zoraxy/conf/proxy/api.config
 {"RootOrMatchingDomain":"api.example.org","ActiveOrigins":[{"OriginIpOrDomain":"10.10.95.20:8055"}],"VirtualDirectories":[]}
 
+## /opt/zoraxy/conf/proxy/portainer.config
+{"RootOrMatchingDomain":"portainer.example.org","ActiveOrigins":[{"OriginIpOrDomain":"10.10.95.20:9000"}],"VirtualDirectories":[]}
+
+## /opt/zoraxy/conf/proxy/arcane2.config
+{"RootOrMatchingDomain":"arcane2.example.org","ActiveOrigins":[{"OriginIpOrDomain":"10.10.95.20:3552"}],"VirtualDirectories":[]}
+
 ## /opt/zoraxy/conf/proxy/auth.config
 {"RootOrMatchingDomain":"auth.example.org","ActiveOrigins":[{"OriginIpOrDomain":"10.10.95.23:80"}],"VirtualDirectories":[{"MatchingPath":"/if/admin/","Domain":"127.0.0.1:1"}]}
 
@@ -276,8 +286,10 @@ imp=$($S import --dry-run 2>&1)
 check_eq "the default site is no service" "0" "$(grep -c '^ *create.*  \*' <<<"$imp" || true)"
 $S import --yes >/dev/null 2>&1
 list=$($S list --plain)
-check_eq "seven services (the outpost path is the login of distillery, not a service)" "7" "$(printf '%s\n' "$list" | grep -c .)"
+check_eq "nine services (the outpost path is the login of distillery, not a service)" "9" "$(printf '%s\n' "$list" | grep -c .)"
 check_eq "an app in the docker container is not an admin page" "public-ok" "$(awk -F"$T" '$3 == "docker:8055" { print $4 }' <<<"$list")"
+check_eq "a hand-made route to docker:9000 is never-public" "never-public" "$(awk -F"$T" '$3 == "docker:9000" { print $4 }' <<<"$list")"
+check_eq "a hand-made route to docker:3552 is never-public" "never-public" "$(awk -F"$T" '$3 == "docker:3552" { print $4 }' <<<"$list")"
 check_eq "the Matrix paths are a service of their own" "1" "$(grep -l '"/_matrix"' "$HS_SERVICES_DIR"/*.toml | wc -l | tr -d ' ')"
 check "and the status page paths are another one" bash -c 'grep -l "\"/status\"" '"$HS_SERVICES_DIR"'/*.toml | xargs grep -L "_matrix" | grep -q toml'
 check "JMAP next to the webmail is its own service" grep -q 'container = "stalwart"' "$HS_SERVICES_DIR/stalwart.toml"
@@ -286,7 +298,8 @@ check "and not one of its public paths" bash -c '! grep -q "public_paths" "$1"' 
 check "the outpost path is forward auth of the root's service" grep -q 'auth = "authentik"' "$HS_SERVICES_DIR/distillery.toml"
 check "and has no service of its own" bash -c '! grep -rq "outpost.goauthentik.io" "$1"' _ "$HS_SERVICES_DIR"
 plan=$($S plan --plain)
-check_eq "no violation and no conflict after the import" "0" "$(grep -cE '^(violation|conflict)' <<<"$plan")"
+check_eq "the two hand-made manager routes are violations (never-public on the public proxy)" "2" "$(grep -cE "^violation${T}(portainer|arcane2).example.org" <<<"$plan")"
+check_eq "no other violation and no conflict after the import" "0" "$(grep -E '^(violation|conflict)' <<<"$plan" | grep -vcE "^violation${T}(portainer|arcane2).example.org" || true)"
 check_eq "only the default site is unmanaged" "1" "$(grep -c '^unmanaged' <<<"$plan")"
 check_eq "the blocked path is an ok row to the dead end" "1" "$(grep -c "^ok${T}auth.example.org${T}/if/admin/${T}127.0.0.1:1${T}authentik" <<<"$plan")"
 check_eq "forward auth on a Zoraxy that cannot do it is a manual row" "1" "$(grep -c "^manual${T}distillery.example.org${T}/${T}-${T}distillery${T}forward auth to 10.10.95.23:80/outpost.goauthentik.io/auth/traefik" <<<"$plan")"

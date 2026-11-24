@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "security"
+title = "Portainer and Arcane on their own ports can no longer be made public"
+body  = """The container managers on docker:9000 and docker:3552 are admin pages like docker:80: a public route to them is refused, and a hand-made proxy route to them is imported as never-public."""
