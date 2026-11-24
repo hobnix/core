@@ -1232,6 +1232,574 @@ No share of that name exists.
 - Text: No such share was found.
 - Fix: none
 
+### app.is-manager
+
+The app is the Docker manager, which is not changed here.
+
+- Layer: script
+- Text: This app is the Docker manager and cannot be changed here.
+- Fix: none
+
+### app.unreadable
+
+The app or its current revision cannot be read.
+
+- Layer: script
+- Text: The app could not be read.
+- Fix: none
+
+### app.not-web-managed
+
+The app is not managed by the web interface.
+
+- Layer: script
+- Text: Only apps managed by the web interface can be saved, rebuilt or deleted.
+- Fix: none
+
+### app.doc-invalid
+
+The document sent for an app is empty or has a malformed record.
+
+- Layer: script
+- Text: The document is not valid.
+- Fix: none
+
+### app.exists
+
+An app, a Docker app or an instance of that name exists already.
+
+- Layer: script
+- Text: That name is taken already.
+- Fix: none
+
+### app.folder-missing
+
+The folder of the app cannot be found.
+
+- Layer: script
+- Text: The folder of the app was not found.
+- Fix: none
+
+### app.compose-invalid
+
+The compose file does not pass the check.
+
+- Layer: script
+- Text: The compose file is not valid.
+- Fix: none
+
+### app.port-used
+
+A port of the compose file is used by another app.
+
+- Layer: script
+- Text: A port is used by another app.
+- Fix: none
+
+### app.container-name-used
+
+A container name of the compose file is used by another app.
+
+- Layer: script
+- Text: A container name is used by another app.
+- Fix: none
+
+### app.compose-refused
+
+The policy check of the compose file refused it.
+
+- Layer: script
+- Text: The compose file was refused.
+- Fix: none
+
+### app.recreate-failed
+
+The recreate of the app failed.
+
+- Layer: script
+- Text: The app could not be recreated.
+- Fix: none
+
+### app.workdir-missing
+
+The working directory of the app cannot be found.
+
+- Layer: script
+- Text: The working directory of the app was not found.
+- Fix: none
+
+### app.action-failed
+
+An action on the app failed.
+
+- Layer: script
+- Text: The action failed.
+- Fix: none
+
+### app.usage
+
+The command of the Docker app script got too few arguments.
+
+- Layer: script
+- Text: The command is missing arguments.
+- Fix: none
+
+### app.rev-missing
+
+The action needs --rev and did not get it.
+
+- Layer: script
+- Text: The action needs a revision.
+- Fix: none
+
+### registry.user-missing
+
+--user has no name.
+
+- Layer: script
+- Text: --user needs a name.
+- Fix: none
+
+### registry.user-invalid
+
+The user name of a registry login is not valid.
+
+- Layer: script
+- Text: The user name is not valid.
+- Fix: none
+
+### registry.unknown
+
+No registry of that name is set up.
+
+- Layer: script
+- Text: No such registry is set up.
+- Fix: none
+
+### registry.token-invalid
+
+The token of a registry login is missing or not valid.
+
+- Layer: script
+- Text: The token is missing or not valid.
+- Fix: none
+
+### registry.login-failed
+
+The registry did not accept the login.
+
+- Layer: script
+- Text: The login failed. Check the user and the token.
+- Fix: none
+
+### registry.store-failed
+
+The token of a registry login could not be stored.
+
+- Layer: script
+- Text: The token could not be stored.
+- Fix: none
+
+### registry.forget-failed
+
+The login of a registry could not be removed.
+
+- Layer: script
+- Text: The login could not be removed.
+- Fix: none
+
+### registry.usage
+
+The command of the registry script got too few arguments.
+
+- Layer: script
+- Text: The command is missing arguments.
+- Fix: none
+
+### apps.repo-invalid
+
+--repo is not a repository name.
+
+- Layer: script
+- Text: The repository name is not valid.
+- Fix: none
+
+### apps.tag-invalid
+
+--tag is not a release tag.
+
+- Layer: script
+- Text: The release tag is not valid.
+- Fix: none
+
+### apps.tag-missing
+
+A start has no --tag of the plan.
+
+- Layer: script
+- Text: The start needs the tag of the plan.
+- Fix: none
+
+### apps.from-missing
+
+--from has no step.
+
+- Layer: script
+- Text: --from needs a step.
+- Fix: none
+
+### apps.from-invalid
+
+--from names a step the package does not have.
+
+- Layer: script
+- Text: That step does not exist.
+- Fix: none
+
+### apps.by-invalid
+
+--by is not a user name.
+
+- Layer: script
+- Text: The user name is not valid.
+- Fix: none
+
+### apps.role-invalid
+
+--role is not a role.
+
+- Layer: script
+- Text: The role is not valid.
+- Fix: none
+
+### apps.set-invalid
+
+--set is not KEY=value.
+
+- Layer: script
+- Text: --set needs KEY=value.
+- Fix: none
+
+### apps.no-release
+
+The package has no verified release.
+
+- Layer: script
+- Text: The package has no verified release.
+- Fix: none
+
+### apps.not-in-repo
+
+The package is not in the repository asked for.
+
+- Layer: script
+- Text: The package is not in that repository.
+- Fix: none
+
+### apps.no-steps
+
+The release names no steps.
+
+- Layer: script
+- Text: The release names no steps.
+- Fix: none
+
+### apps.needs-newer-core
+
+The package needs a newer core than this server has.
+
+- Layer: script
+- Text: The package needs a newer core.
+- Fix: none
+
+### apps.update-available
+
+The package is installed and a newer release is out.
+
+- Layer: script
+- Text: The package is installed; update it instead.
+- Fix: none
+
+### apps.installed
+
+The package is installed already.
+
+- Layer: script
+- Text: The package is installed already.
+- Fix: none
+
+### apps.needs-terminal
+
+The package asks for a password and needs a terminal.
+
+- Layer: script
+- Text: This package must be installed at a terminal.
+- Fix: none
+
+### apps.takes-no-name
+
+The package takes no container name and no answers.
+
+- Layer: script
+- Text: This package takes no name and no answers.
+- Fix: none
+
+### apps.single-instance
+
+The package runs once on a server.
+
+- Layer: script
+- Text: This package runs once on a server.
+- Fix: none
+
+### apps.name-taken
+
+The instance name is taken by an instance or a service.
+
+- Layer: script
+- Text: That name is taken already.
+- Fix: none
+
+### apps.answer-invalid
+
+An answer to a question of the package does not fit.
+
+- Layer: script
+- Text: The answer does not fit.
+- Fix: none
+
+### apps.answer-unknown
+
+The package does not ask that question.
+
+- Layer: script
+- Text: The package does not ask that question.
+- Fix: none
+
+### apps.need-unknown
+
+The package needs something this server cannot provide.
+
+- Layer: script
+- Text: The package needs something this server cannot provide.
+- Fix: none
+
+### apps.need-off
+
+The package needs a part that is switched off.
+
+- Layer: script
+- Text: A part the package needs is off. Switch it on first.
+- Fix: none
+
+### apps.storage-locked
+
+The storage is locked.
+
+- Layer: script
+- Text: The storage is locked. Unlock it first.
+- Fix: none
+
+### apps.no-network
+
+The step needs the network and it is down.
+
+- Layer: script
+- Text: The server has no network.
+- Fix: none
+
+### apps.docker-self
+
+Docker was named as a need of itself.
+
+- Layer: script
+- Text: Docker cannot be a need of itself.
+- Fix: none
+
+### apps.secret-invalid
+
+The secret has a control character.
+
+- Layer: script
+- Text: The secret is not valid.
+- Fix: none
+
+### recipe.name-missing
+
+--name has no value.
+
+- Layer: script
+- Text: --name needs a value.
+- Fix: none
+
+### recipe.by-invalid
+
+--by is not a user name.
+
+- Layer: script
+- Text: The user name is not valid.
+- Fix: none
+
+### recipe.role-invalid
+
+--role is not a role.
+
+- Layer: script
+- Text: The role is not valid.
+- Fix: none
+
+### recipe.set-invalid
+
+--set is not KEY=value.
+
+- Layer: script
+- Text: --set needs KEY=value.
+- Fix: none
+
+### recipe.unknown
+
+No recipe of that name exists.
+
+- Layer: script
+- Text: No such recipe was found.
+- Fix: none
+
+### recipe.needs-terminal
+
+The recipe asks for a password and needs a terminal.
+
+- Layer: script
+- Text: This recipe must be run at a terminal.
+- Fix: none
+
+### recipe.parked
+
+The recipe is parked and does nothing without force.
+
+- Layer: script
+- Text: This recipe is parked.
+- Fix: none
+
+### recipe.answer-invalid
+
+An answer to a question of the recipe does not fit.
+
+- Layer: script
+- Text: The answer does not fit.
+- Fix: none
+
+### recipe.answer-unknown
+
+The recipe does not ask that question.
+
+- Layer: script
+- Text: The recipe does not ask that question.
+- Fix: none
+
+### recipe.secret-invalid
+
+The secret has a control character.
+
+- Layer: script
+- Text: The secret is not valid.
+- Fix: none
+
+### ct.all-misuse
+
+all is used with an action other than update-all, or update-all with another instance.
+
+- Layer: script
+- Text: all belongs to update-all only.
+- Fix: none
+
+### ct.value-invalid
+
+A value (number, autostart, docker, type or stop keep) is not one that exists.
+
+- Layer: script
+- Text: The value is not valid.
+- Fix: none
+
+### ct.option-misplaced
+
+An option is used with an action it does not belong to.
+
+- Layer: script
+- Text: The option does not belong to this action.
+- Fix: none
+
+### ct.iso-vm-only
+
+An installer image is given for something other than a virtual machine.
+
+- Layer: script
+- Text: An installer image is for a virtual machine only.
+- Fix: none
+
+### ct.iso-invalid
+
+The installer image name is not valid.
+
+- Layer: script
+- Text: The image name is not valid.
+- Fix: none
+
+### ct.iso-missing
+
+The installer image is not in the library.
+
+- Layer: script
+- Text: No such image is in the library.
+- Fix: none
+
+### ct.pool-unknown
+
+The storage pool does not exist.
+
+- Layer: script
+- Text: No such storage pool exists.
+- Fix: none
+
+### ct.pool-full
+
+The disk does not fit in the free space of the pool.
+
+- Layer: script
+- Text: The disk does not fit in the pool.
+- Fix: none
+
+### ct.bind-invalid
+
+A bind is not tier:name:path.
+
+- Layer: script
+- Text: The bind is not valid.
+- Fix: none
+
+### ct.bind-duplicate
+
+Two binds have the same name.
+
+- Layer: script
+- Text: Two binds have the same name.
+- Fix: none
+
+### ct.bind-vm
+
+A folder of the large-storage tier cannot be passed into a virtual machine.
+
+- Layer: script
+- Text: That folder cannot be passed into a virtual machine.
+- Fix: none
+
+### ct.none-running
+
+No running instance is left to update.
+
+- Layer: script
+- Text: No instance is running.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

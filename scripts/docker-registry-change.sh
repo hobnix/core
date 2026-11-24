@@ -102,9 +102,9 @@ parse_opts() {   # sets user, confirm from the arguments
   user=""; confirm=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --user) [ $# -ge 2 ] || refuse "--user needs a name."; user=$2; shift 2 ;;
-      --confirm) [ $# -ge 2 ] || refuse "--confirm needs the host."; confirm=$2; shift 2 ;;
-      *) refuse "Unexpected argument." ;;
+      --user) [ $# -ge 2 ] || refuse_code registry.user-missing "--user needs a name."; user=$2; shift 2 ;;
+      --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs the host."; confirm=$2; shift 2 ;;
+      *) refuse_code args.unexpected "Unexpected argument." ;;
     esac
   done
 }
@@ -115,10 +115,10 @@ common_checks() {   # common_checks <action> <host>
   [[ "$2" =~ $HOST_RE ]] || refuse_code name.invalid "The registry address is not valid."
   docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
   if [ "$1" = add ]; then
-    [[ "$user" =~ $USER_RE ]] || refuse "The user name is not valid."
+    [[ "$user" =~ $USER_RE ]] || refuse_code registry.user-invalid "The user name is not valid."
     if vault_blocks; then refuse_code vault.locked "The vault is closed: the token cannot be stored."; fi
   else
-    known "$2" || refuse "No registry called '$2' is set up."
+    known "$2" || refuse_code registry.unknown "No registry called '$2' is set up."
   fi
 }
 
@@ -152,12 +152,12 @@ cmd_start() {
   common_checks "$action" "$host"
   case "$action" in
     add)
-      tok=$(read_token) || refuse "The token is missing or not valid."
-      login_test "$host" "$user" "$tok" || refuse "The login to $host failed. Check the user and the token."
-      store "$host" "$user" "$tok" || refuse "The token could not be stored." ;;
+      tok=$(read_token) || refuse_code registry.token-invalid "The token is missing or not valid."
+      login_test "$host" "$user" "$tok" || refuse_code registry.login-failed "The login to $host failed. Check the user and the token."
+      store "$host" "$user" "$tok" || refuse_code registry.store-failed "The token could not be stored." ;;
     remove)
-      [ "$confirm" = "$host" ] || refuse "The name did not match. Nothing was removed."
-      forget "$host" || refuse "The login could not be removed." ;;
+      [ "$confirm" = "$host" ] || refuse_code confirm.missing "The name did not match. Nothing was removed."
+      forget "$host" || refuse_code registry.forget-failed "The login could not be removed." ;;
   esac
   printf 'status\tdone\n'
 }
@@ -219,7 +219,7 @@ case "${1:-list}" in
   add) shift; cmd_add "$@" ;;
   remove) shift; cmd_remove "$@" ;;
   plan|start)
-    [ $# -ge 3 ] || refuse "Usage: plan|start add|remove <host>"
+    [ $# -ge 3 ] || refuse_code registry.usage "Usage: plan|start add|remove <host>"
     verb=$1; action=$2; host=$3; shift 3
     case "$action" in add|remove) ;; *) refuse_code action.unknown "Action must be add or remove." ;; esac
     if [ "$verb" = plan ]; then cmd_plan "$action" "$host" "$@"; else cmd_start "$action" "$host" "$@"; fi ;;

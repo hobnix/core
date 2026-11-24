@@ -172,6 +172,8 @@ check_eq "'all' is only for update-all" 1 "$rc"
 NONE=1 run plan all update-all
 check_eq "nothing running is refused" 1 "$rc"
 has 'No running container' && pass "update-all: reason" || fail "update-all none: $out"
+check_match "nothing running is refused with ct.none-running" $'code	ct.none-running' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF ct.none-running && pass "ct.none-running is catalogued" || fail "ct.none-running is not in the catalogue"
 
 echo "-- create with a network profile and bindings"
 run plan newone create --profile home --bind shares:media:/media:ro --bind fast:data:/data
@@ -228,6 +230,8 @@ check_eq "a disk that does not fit the pool is refused" 1 "$rc"
 has 'does not fit' && pass "...and says why" || fail "fit: $out"
 run plan vm1 create --type vm --pool nope
 check_eq "an unknown pool is refused" 1 "$rc"
+check_match "an unknown pool is refused with ct.pool-unknown" $'code	ct.pool-unknown' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF ct.pool-unknown && pass "ct.pool-unknown is catalogued" || fail "ct.pool-unknown is not in the catalogue"
 run plan vm1 create --type container --iso deb.iso
 check_eq "an image for a container is refused" 1 "$rc"
 run plan vm1 create --type vm --iso gone.iso

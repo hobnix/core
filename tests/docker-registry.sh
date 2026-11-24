@@ -85,6 +85,8 @@ for b in "plan add -h --user wolf" "plan add --help --user wolf" "plan add .x.io
   rc=0; out=$($R $b </dev/null 2>&1) || rc=$?
   check_eq "refused: $b" 1 "$rc"
 done
+check_match "an unknown registry is refused with registry.unknown" $'code	registry.unknown' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF registry.unknown && pass "registry.unknown is catalogued" || fail "registry.unknown is not in the catalogue"
 
 echo "-- with a vault: the token goes into it, a closed vault refuses"
 echo uuid > "$HS_STATE_DIR/vault-uuid"

@@ -52,10 +52,10 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; ct=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: ct-change.sh plan|start <instance> <action> [options]" >&2; exit 1 ;; esac
-[[ "$ct" =~ ^[a-z][a-z0-9-]*$ ]] || refuse "invalid instance name"
+[[ "$ct" =~ ^[a-z][a-z0-9-]*$ ]] || refuse_code name.invalid "invalid instance name"
 case "$action" in start|stop|restart|snapshot|restore|delete-snapshot|add-storage|remove-storage|set|ip|update|update-all|delete|create) ;; *) refuse_code action.unknown "unknown action" ;; esac
-[ "$action" != update-all ] || [ "$ct" = all ] || refuse "update-all is for all instances: use 'all' as the instance"
-[ "$ct" != all ] || [ "$action" = update-all ] || refuse "'all' is only for update-all"
+[ "$action" != update-all ] || [ "$ct" = all ] || refuse_code ct.all-misuse "update-all is for all instances: use 'all' as the instance"
+[ "$ct" != all ] || [ "$action" = update-all ] || refuse_code ct.all-misuse "'all' is only for update-all"
 shift 3
 
 snap="" label="" kind="" sname="" path="" as="" device="" confirm="" readonly=false
@@ -100,40 +100,40 @@ case "$action" in
 esac
 for pair in "ram:$ram" "cpu:$cpu" "disk:$disk"; do
   v=${pair#*:}
-  [ -z "$v" ] || [ "$v" = none ] || [[ "$v" =~ ^[0-9]+$ ]] || refuse "${pair%%:*} must be a number (or none), got '$v'"
+  [ -z "$v" ] || [ "$v" = none ] || [[ "$v" =~ ^[0-9]+$ ]] || refuse_code ct.value-invalid "${pair%%:*} must be a number (or none), got '$v'"
 done
-[ -z "$autostart" ] || [ "$autostart" = on ] || [ "$autostart" = off ] || [ "$autostart" = yes ] || [ "$autostart" = no ] || refuse "autostart is on or off"
-[ -z "$docker" ] || [ "$docker" = yes ] || [ "$docker" = no ] || refuse "docker is yes or no"
-[ -z "$autostart" ] || [ "$action" = set ] || [ "$action" = stop ] || refuse "--autostart belongs to set and stop"
+[ -z "$autostart" ] || [ "$autostart" = on ] || [ "$autostart" = off ] || [ "$autostart" = yes ] || [ "$autostart" = no ] || refuse_code ct.value-invalid "autostart is on or off"
+[ -z "$docker" ] || [ "$docker" = yes ] || [ "$docker" = no ] || refuse_code ct.value-invalid "docker is yes or no"
+[ -z "$autostart" ] || [ "$action" = set ] || [ "$action" = stop ] || refuse_code ct.option-misplaced "--autostart belongs to set and stop"
 # on a stop, --autostart off means: also keep it off at boot (no other value makes sense there)
-[ "$action" != stop ] || [ -z "$autostart" ] || [ "$autostart" = off ] || [ "$autostart" = no ] || refuse "a stop can only keep the instance off at boot: --autostart off"
-case "$type" in container|docker|vm) ;; *) refuse "type is container, docker or vm" ;; esac
-[ "$action" = create ] || [ -z "$profile" -a ${#binds[@]} -eq 0 ] || refuse "--profile and --bind belong to create"
-[ "$action" = create ] || [ -z "$pool$iso" ] || refuse "--pool and --iso belong to create"
+[ "$action" != stop ] || [ -z "$autostart" ] || [ "$autostart" = off ] || [ "$autostart" = no ] || refuse_code ct.value-invalid "a stop can only keep the instance off at boot: --autostart off"
+case "$type" in container|docker|vm) ;; *) refuse_code ct.value-invalid "type is container, docker or vm" ;; esac
+[ "$action" = create ] || [ -z "$profile" -a ${#binds[@]} -eq 0 ] || refuse_code ct.option-misplaced "--profile and --bind belong to create"
+[ "$action" = create ] || [ -z "$pool$iso" ] || refuse_code ct.option-misplaced "--pool and --iso belong to create"
 isopath="" isofree="" poolfree="" poolkind=""
 if [ -n "$iso" ]; then
-  [ "$type" = vm ] || refuse "An installer image (ISO) is for a virtual machine only."
-  iso_valid_name "$iso" || refuse "invalid image name '$iso'"
-  [ -f "$(iso_dir)/$iso" ] || refuse "There is no image called '$iso' in the ISO library (hs iso list)."
+  [ "$type" = vm ] || refuse_code ct.iso-vm-only "An installer image (ISO) is for a virtual machine only."
+  iso_valid_name "$iso" || refuse_code ct.iso-invalid "invalid image name '$iso'"
+  [ -f "$(iso_dir)/$iso" ] || refuse_code ct.iso-missing "There is no image called '$iso' in the ISO library (hs iso list)."
   isopath=$(iso_dir)/$iso
   isochecked=$(iso_meta "$isopath.meta" verified)
 fi
 if [ -n "$pool" ]; then
   prow=$(bash "$pools" 2>/dev/null | awk -F'\t' -v p="$pool" '$1 == p { print; exit }') || prow=""
-  [ -n "$prow" ] || refuse "There is no storage pool called '$pool' (hs sys ct pools lists them)."
+  [ -n "$prow" ] || refuse_code ct.pool-unknown "There is no storage pool called '$pool' (hs sys ct pools lists them)."
   poolkind=$(cut -f3 <<<"$prow"); poolfree=$(cut -f4 <<<"$prow")
   need=${disk:-20}
   if [[ "$type" = vm && "$poolfree" =~ ^[0-9]+$ && "$disk" != none ]] && [ $((need * 1073741824)) -gt "$poolfree" ]; then
-    refuse "The pool '$pool' has $(numfmt --to=iec "$poolfree" 2>/dev/null || echo "$poolfree") free; a disk of $need GiB does not fit."
+    refuse_code ct.pool-full "The pool '$pool' has $(numfmt --to=iec "$poolfree" 2>/dev/null || echo "$poolfree") free; a disk of $need GiB does not fit."
   fi
 fi
 seen=" "
 for b in ${binds[@]+"${binds[@]}"}; do
-  [[ "$b" =~ ^(fast|shares|sensitive):[A-Za-z0-9][A-Za-z0-9._-]*:/[A-Za-z0-9._/-]*(:ro)?$ && "$b" != *..* ]] || refuse "expected <fast|shares|sensitive>:<name>:<absolute path>[:ro], got '$b'"
+  [[ "$b" =~ ^(fast|shares|sensitive):[A-Za-z0-9][A-Za-z0-9._-]*:/[A-Za-z0-9._/-]*(:ro)?$ && "$b" != *..* ]] || refuse_code ct.bind-invalid "expected <fast|shares|sensitive>:<name>:<absolute path>[:ro], got '$b'"
   n=${b#*:}; n=${n%%:*}
-  case "$seen" in *" $n "*) refuse "two bindings are called '$n'" ;; esac
+  case "$seen" in *" $n "*) refuse_code ct.bind-duplicate "two bindings are called '$n'" ;; esac
   seen="$seen$n "
-  [ "$type" != vm ] || [ "${b%%:*}" = fast ] || refuse "Bulk folders can't be passed into a VM this way. Mount the Samba share inside the VM instead."
+  [ "$type" != vm ] || [ "${b%%:*}" = fast ] || refuse_code ct.bind-vm "Bulk folders can't be passed into a VM this way. Mount the Samba share inside the VM instead."
 done
 if [ ${#needs[@]} -gt 0 ]; then
   echo "status	needs"
@@ -199,7 +199,7 @@ long=no
 targets=()
 if [ "$action" = update-all ]; then
   while IFS= read -r l; do targets+=("$l"); done < <(printf '%s\n' "$out" | awk '/^── /{ n++; next } n == 1 && NF { sub(/^[ \t]+/, ""); print }')
-  [ "${#targets[@]}" -gt 0 ] || refuse "No running container to update."
+  [ "${#targets[@]}" -gt 0 ] || refuse_code ct.none-running "No running container to update."
 fi
 
 if [ "$verb" = start ]; then
