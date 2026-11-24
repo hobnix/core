@@ -24,6 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/machine.sh"
 . "$here/lib/registry-load.sh"
+. "$here/lib/pkg-deps.sh"
 . "$here/lib/effect.sh"
 . "$here/lib/integration.sh"
 state=${HS_STATE_DIR:-/var/lib/hs}
@@ -66,17 +67,7 @@ compat_problem() {   # compat_problem <name> <dir>: prints why the package canno
   done < <(manifest_list "$2" requires)
   return 0
 }
-dependents_on() {   # dependents_on <name>: the packages that are on and require it, one per line
-  local n d
-  while IFS= read -r n; do
-    [ "$n" != "$1" ] || continue
-    d=$(ext_package_dir "$n") || continue
-    [ -f "$d/capability.toml" ] || continue
-    ext_package_on "$n" || continue
-    manifest_list "$d" requires | grep -qxF -- "$1" && printf '%s\n' "$n"
-  done < <(ext_package_names)
-  return 0
-}
+dependents_on() { pkg_dependents "$1"; }   # the packages that are on and need it, one per line (scripts/lib/pkg-deps.sh)
 title_of() {   # title_of <dir>
   local t=""
   [ "$lang" = en ] || t=$(manifest "$1" "title_$lang")
