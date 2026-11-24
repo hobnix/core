@@ -25,7 +25,7 @@ release() {   # release <version> [serial] [key]: package.toml + run.sh at that 
 version = "1.0.0"
 kind = "blueprint"
 title = "Bp"
-requires_core = ">=1"
+requires_core = ">=11"
 roles = ["homeserver"]
 [blueprint]
 recipes = ["demo"]

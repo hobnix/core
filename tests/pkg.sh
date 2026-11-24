@@ -154,7 +154,7 @@ PY
   else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate; true"; fi
 }
 appcase "the good fixture package passes" "" 'pass'
-check_eq "the API level is 10" "10" "$($PKG api)"
+check_eq "the API level is 11" "11" "$($PKG api)"
 appcase "an old manifest (requires >=1, no app fields) is unchanged" "" 't = "name = \"fixstore\"\nversion = \"1.0.0\"\nkind = \"recipe\"\ntitle = \"x\"\nrequires_core = \">=1\"\nscript = \"run.sh\"\n"'
 appcase "app fields on an older requires_core are named" 'need requires_core' 't = t.replace(">=9", ">=8")'
 appcase "an unknown category is named" 'category is not one of' 't = t.replace("tools", "stuff")'
@@ -360,7 +360,7 @@ good_bp='name = "bp"
 version = "1.0.0"
 kind = "blueprint"
 title = "Bp"
-requires_core = ">=1"
+requires_core = ">=11"
 roles = ["homeserver"]
 [blueprint]
 capabilities = ["storage"]
@@ -389,6 +389,10 @@ bad_bp "a secret setting is refused" "is a secret" 'backupNewShares = "true"' 'n
 bad_bp "a key in the wrong table is refused" "belongs in" 'backupNewShares = "true"' 'timeZone = "x"'
 bad_bp "the recipe docker is refused" "Docker is the core capability" '"jellyfin"' '"docker"'
 bad_bp "a name twice is refused" "named twice" 'capabilities = ["storage"]' 'capabilities = ["jellyfin"]'
+bad_bp "docker in capabilities is refused" "Docker is the core capability" 'capabilities = ["storage"]' 'capabilities = ["docker"]'
+bad_bp "docker in extensions is refused" "Docker is the core capability" 'capabilities = ["storage"]' $'capabilities = ["storage"]
+extensions = ["docker"]'
+bad_bp "a requires_core below 11 is refused (older cores do not know the kind)" "a blueprint needs requires_core" 'requires_core = ">=11"' 'requires_core = ">=10"'
 bad_bp "an unknown manager is refused" "manager is not" '"webui"' '"nope"'
 bad_bp "an unknown size is refused" "size is not" 'size = "m"' 'size = "xl"'
 bad_bp "an answer for a recipe it does not name is refused" "recipe the blueprint does not name" 'answers.jellyfin' 'answers.other'

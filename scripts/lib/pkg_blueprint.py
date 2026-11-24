@@ -12,6 +12,7 @@ NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 ROLES = ("homeserver", "edge", "minimal")
 LISTS = ("capabilities", "extensions", "recipes")
 MAX_PACKAGES = 40
+LEVEL = 11      # the API level that knows the kind: an older core refuses a blueprint by its requires_core
 DOCKER_MANAGERS = ("webui", "arcane", "portainer", "none")
 DOCKER_SIZES = ("s", "m", "l")
 # the keys of [machine] that a blueprint never sets: who the server is, its disks, and Docker (only through [docker])
@@ -48,6 +49,9 @@ def manifest_problems(m):
                 bad(f"{k} must be a table")
             continue
         bad(f"{k} is not allowed in a blueprint (only the package list and fill-only config: [blueprint], [docker], [machine], [settings], [answers.<recipe>])")
+    rq = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
+    if rq and int(rq.group(1)) < LEVEL:
+        bad(f'a blueprint needs requires_core ">={LEVEL}" (this manifest says {m.get("requires_core")})')
     roles = m.get("roles")
     if not isinstance(roles, list) or not roles:
         bad("roles is missing or empty (homeserver, edge or minimal)")
@@ -69,7 +73,7 @@ def manifest_problems(m):
         for x in v:
             if not NAME.match(x):
                 bad(f"[blueprint] {k}: {x!r} is not a lowercase package name")
-            elif x == "docker" and k == "recipes":
+            elif x == "docker":      # in every list: the capability folder docker would skip the fill-only and typed-name rules of [docker]
                 bad("Docker is the core capability: use the [docker] table")
             elif x in seen:
                 bad(f"[blueprint] {x} is named twice")

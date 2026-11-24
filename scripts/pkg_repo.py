@@ -829,6 +829,12 @@ class Repos:
         self.extract(r, ref, entry["path"], tmp, entry["tree"] if indexed else None)
         with open(os.path.join(tmp, "package.toml"), "rb") as fh:
             m = tomllib.load(fh)
+        if m.get("kind") == "blueprint" or entry.get("kind") == "blueprint":
+            # the checked package.toml decides, not the kind a repository index says; a disagreement is refused too
+            self.rm_quiet(tmp)
+            if m.get("kind") != "blueprint":
+                raise Refused("%s: the index says kind blueprint but package.toml says %s" % (name, m.get("kind")))
+            raise Refused("%s is a blueprint: hs blueprint apply %s" % (name, name), "pkg.blueprint")
         if m.get("name") != name or m.get("version") != entry["version"]:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
