@@ -168,6 +168,7 @@ case "${1:-list}" in
     trap 'live_refresh event:pkg.changed' EXIT
     hs_job_step 1 1 "Fetching the package repositories and checking their signatures"
     out=$(py fetch "$@") || rc=$?
+    py repo migrate >/dev/null 2>&1 || true   # heals what a replaced repository left behind; never changes the exit code of the fetch
     { thead 'Repository' 'Release' 'Commit' 'Result'; printf '%s\n' "$out"; } | table
     exit "${rc:-0}" ;;
   available)
@@ -324,7 +325,24 @@ case "${1:-list}" in
         fi
         py repo add "$name" "$url" "${extra[@]}" && ok "$(t 'Repository %s added.' "$name")" && next_step "hs pkg fetch $name" ;;
       remove) shift; pkg_changed; py repo remove "${1:-}" && ok "$(t 'Repository removed.')" ;;
-      *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>"; exit 1 ;;
+      migrate)
+        # installed packages of a repository that a default one replaced move to it (docs: hs pkg repo); --dry-run shows what would change
+        shift; dry=""; [ "${1:-}" != --dry-run ] || dry=--dry-run
+        lines=$(py repo migrate ${dry:+"$dry"}) || exit 1
+        [ -z "$dry" ] || step "$(t 'Packages that would move to the replacing repository')"
+        moved=0
+        while IFS=$'	' read -r kind pname old new; do
+          [ -n "$kind" ] || continue
+          case "$kind" in
+            migrated) moved=$((moved + 1)); kv "$pname" "$old -> $new" ;;
+            unmoved) note "$(t '%s is no longer in a default repository: it stays installed and gets no updates.' "$pname")" ;;
+            ambiguous) note "$(t '%s is listed by several repositories (%s): it stays as it is. Name one: hs pkg install %s --repo <name>' "$pname" "$new" "$pname")" ;;
+            waits) note "$(t '%s: repository %s has no index yet. It runs again with the next hs pkg fetch.' "$pname" "$new")" ;;
+          esac
+        done <<<"$lines"
+        if [ "$moved" -gt 0 ] && [ -z "$dry" ]; then pkg_changed; ok "$(t '%s package(s) moved to their new repository.' "$moved")"
+        elif [ "$moved" -eq 0 ]; then note "$(t 'No package has to move.')"; fi ;;
+      *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name> | migrate [--dry-run]"; exit 1 ;;
     esac ;;
   *) say "usage: hs pkg list [--all] [--kind recipe|extension|capability] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
 esac

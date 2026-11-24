@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "feature"
+title = "hs update moves installed packages to the repository that replaced theirs"
+body  = """`hs update` now fetches the package index and runs the new `hs pkg repo migrate`: an installed package whose repository was replaced by a default one is recorded under the new one (same version, nothing reinstalled or downgraded). A package the new repository does not list stays installed and gets no updates. If the index host is down the update still succeeds. `hs pkg repo migrate --dry-run` shows what would change."""

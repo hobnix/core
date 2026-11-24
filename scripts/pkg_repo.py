@@ -666,6 +666,83 @@ class Repos:
                 continue
         return cat
 
+    # ── migration of installed packages to the repository that replaced theirs ──
+    def listed(self, r):
+        """{package: entry} that a default repository lists (unavailable ones too), or None while its index/tags were never fetched"""
+        try:
+            if r.get("index"):
+                return self.index_entries(r, True)
+            t, _ = self.verified_tag(r)
+            return self.index(r, t)
+        except (Refused, OSError, KeyError, TypeError, AttributeError):
+            return None
+
+    def migrate(self, apply=True):
+        """Installed packages whose repository has no row any more move to the ONE default row that names it in `replaces = [...]` and lists the
+        package. -> [(kind, package, old, new)], sorted by package:
+          migrated  repo is now `new` (installed.toml and the repo of its vendor lock line; version, commit, tag, applied stay: nothing is
+                    downgraded when the server is newer than the index, nothing is installed or removed)
+          unmoved   the row that replaced the repository does not list it: stays installed as it is, gets no updates (new = -)
+          waits     the replacing row has no verified index yet (first fetch failed): nothing changes (new = the row)
+        Never moved: a package of a repository that is gone and that no default row replaces (a removed ADDED repository must not gain the
+        trust of a default one). Several rows may replace one repository (a revert): the one that lists the package wins, none or several -> unmoved or
+        ambiguous (kept, a note). Idempotent: a migrated entry has a row. Revert: a commit that restores the old rows
+        and sets `replaces = ["official"]` on both maps the packages back by the same rule. apply=False only plans."""
+        rows = self.all()
+        defaults = [r for r in self.defaults() if isinstance(r.get("replaces"), list)]
+        first = self.pkg.installed()
+        listing, out = {}, []
+        for n in sorted(first):
+            e = first[n]
+            old = e.get("repo") if isinstance(e, dict) else None
+            if not isinstance(old, str) or not old or old in rows:
+                continue
+            target = [r for r in defaults if old in r["replaces"]]
+            if not target:
+                continue
+            for r in target:
+                if r["name"] not in listing:
+                    listing[r["name"]] = self.listed(r)
+            # a revert restores several rows that all name the same replacing row: the one whose index lists the package is the new home
+            hits = [r["name"] for r in target if listing[r["name"]] is not None and n in listing[r["name"]]]
+            if len(hits) == 1:
+                out.append(("migrated", n, old, hits[0]))
+            elif len(hits) > 1:
+                out.append(("ambiguous", n, old, ",".join(hits)))
+            elif any(listing[r["name"]] is None for r in target):
+                out.append(("waits", n, old, next(r["name"] for r in target if listing[r["name"]] is None)))
+            else:
+                out.append(("unmoved", n, old, "-"))
+        moved = {n: (old, new) for k, n, old, new in out if k == "migrated"}
+        if apply:
+            have = self.pkg.installed()          # re-read right before writing: a beside-running install is not lost
+            if first and not have:
+                raise Refused("installed.toml could not be read again: nothing was migrated")
+            if not all(isinstance(v, dict) for v in have.values()):
+                raise Refused("installed.toml has an entry that is not a table: nothing was migrated")
+            for n, (old, new) in list(moved.items()):
+                if have.get(n, {}).get("repo") != old:
+                    del moved[n]
+            # the lock first, installed.toml second: a run that dies in between is finished by the next one (the lock heals on every run
+            # from installed.toml, which still says `old` and is migrated again)
+            vend = self.pkg.pkg_vendor
+            lock = vend.read_lock(self.nixos_dir())
+            hit = False
+            for n, e in lock.items():
+                if not isinstance(e, dict):
+                    continue
+                want = moved[n][1] if n in moved else have.get(n, {}).get("repo")
+                if isinstance(want, str) and want in rows and e.get("repo") != want:
+                    e["repo"] = want
+                    hit = True
+            if hit:
+                vend.write_lock(self.nixos_dir(), lock)
+            if moved:
+                for n, (old, new) in moved.items():
+                    have[n]["repo"] = new
+                self.pkg.save_installed(have)    # temp file + rename
+        return out
+
     # ── install ──
     def choose(self, name, repo=None):
         cat = self.catalog().get(name, [])
@@ -1168,8 +1245,12 @@ def run(pkg, cmd, rest):
                 R.add(rest[1], rest[2], key=key, unsigned="--unsigned" in rest, index=index)
             elif sub == "remove":
                 R.remove(rest[1])
+            elif sub == "migrate":
+                # machine lines: kind TAB package TAB old repository TAB new repository (- = none); --dry-run changes nothing
+                for kind, n, old, new in R.migrate(apply="--dry-run" not in rest):
+                    print("	".join([kind, n, old, new]))
             else:
-                raise Refused("repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>")
+                raise Refused("repo list | add <name> <url> (--key <file> | --unsigned) | remove <name> | migrate [--dry-run]")
         elif cmd == "fetch":
             bad = 0
             for name, tag, commit, err in R.fetch_all(rest[0] if rest else None):
