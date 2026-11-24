@@ -10,9 +10,9 @@ Never stores argv or environment, only the description the caller gives.
   run ID | wait ID --seq N --key K --label L --kind text|secret|choice [--default D --pattern P --choices a,b --error E --attempt N]
   resume ID   (waiting -> running) | step ID N OF TEXT | progress ID DONE TOTAL UNIT | finish ID EXIT | get ID
   find-unit UNIT | cancel ID --by NAME --safe yes|no | cancelled ID (exit 0 when cancelled)
-  error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected; Python writer only)
-  result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers; Python writer only)
-  key ID KEY   (the row key of a job, "apps remove nextcloud": the area and arguments the buttons of the web interface use; Python writer only)
+  error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected)
+  result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers)
+  key ID KEY   (the row key of a job, "apps remove nextcloud": the area and arguments the buttons of the web interface use)
   reconcile   mark queued/running/waiting records whose unit is gone as interrupted (boot); never re-runs anything
 """
 import argparse

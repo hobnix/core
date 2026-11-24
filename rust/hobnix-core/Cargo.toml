@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 # pairing of remote shares (docs/PLAN-remote-shares.md D4): ChaCha20-Poly1305, HKDF-SHA256, SHA-256 of a host key; RustCrypto, pure Rust
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 hkdf = "0.12"
