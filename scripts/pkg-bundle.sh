@@ -69,7 +69,10 @@ plist=$(bash "$parts" --list 2>/dev/null || true)
 mcaps=""
 if machine_has capabilities; then mcaps=$(machine_get capabilities 2>/dev/null || true); fi
 
+# shellcheck source=scripts/lib/bundle-resolve.sh
+# shellcheck source-path=SCRIPTDIR/..
 . "$here/lib/bundle-resolve.sh"   # visit(): the order and the refusals, shared with blueprint-change.sh
+bundle_inputs "$caps" "$repos" "$plist" "$mcaps"
 for n in "${picked[@]}"; do visit "$n" ""; done
 
 join() { local sep=$1 out="" x; shift; for x in "$@"; do out=${out:+$out$sep}$x; done; printf '%s' "$out"; }

@@ -66,7 +66,7 @@ net_ok || refuse "This needs the network (installing reads the signed releases, 
 cfg=""
 while IFS=$'\t' read -r kind key val; do
   [ -n "$kind" ] || continue
-  st=set
+  st="set"
   if [ "$kind" = machine ]; then machine_has "$key" && st=kept
   else cur=$(setting_get "$key" 2>/dev/null || true); [ -z "$cur" ] || st=kept; fi
   cfg+="$kind$tab$key$tab$val$tab$st"$'\n'
@@ -77,7 +77,10 @@ caps=$(bash "$pkg" --capabilities 2>/dev/null || true)
 repos=$(bash "$pkg" --repos 2>/dev/null || true)
 plist=$(bash "$parts" --list 2>/dev/null || true)
 mcaps=""; if machine_has capabilities; then mcaps=$(machine_get capabilities 2>/dev/null || true); fi
+# shellcheck source=scripts/lib/bundle-resolve.sh
+# shellcheck source-path=SCRIPTDIR/..
 . "$here/lib/bundle-resolve.sh"
+bundle_inputs "$caps" "$repos" "$plist" "$mcaps"
 while IFS= read -r n; do [ -z "$n" ] || visit "$n" ""; done < <(awk -F'\t' '$1 == "part" && $2 == "capabilities" { print $3 }' <<<"$show")
 while IFS=$'\t' read -r _ _ n st; do
   [ -n "$n" ] || continue
@@ -173,6 +176,7 @@ fi
 
 # ── start: one job ──
 if [ "$verb" = start ]; then
+  # shellcheck source=scripts/lib/job.sh
   . "${HS_JOB_LIB:-$here/lib/job.sh}"
   utmp=$(mktemp)   # not a subshell: hs_job leaves the record id in HS_JOB_LAST_ID
   hs_job "blueprint-$name" "hs blueprint apply $name" -- bash "$here/blueprint-change.sh" run apply "$name" --tag "$tag" >"$utmp" || { rm -f "$utmp"; refuse "the job could not be started"; }
@@ -186,6 +190,7 @@ fi
 # ui.sh `fail` exits: a step that can fail runs in a subshell or reports with `warn`, so the result of the record is always written
 . "$here/lib/ui.sh"
 . "$here/lib/install-steps.sh"
+# shellcheck source=scripts/lib/job.sh
 . "${HS_JOB_LIB:-$here/lib/job.sh}"
 declare -A res=()
 order=()
@@ -208,7 +213,7 @@ all_parts=(config parts rebuild docker)
 
 step "Blueprint: $title"
 hs_job_step 1 5 config
-mark config done
+mark config "done"
 while IFS=$'\t' read -r kind key val st; do
   [ "$st" = set ] || continue
   if [ "$kind" = machine ]; then
@@ -219,14 +224,14 @@ done <<<"$cfg"
 [ -n "$(config_todo)" ] || mark config kept
 
 hs_job_step 2 5 parts
-mark parts done
+mark parts "done"
 for p in ${inst[@]+"${inst[@]}"}; do ( inst_fetch "$p" ) || { mark parts "failed: install $p"; stopped "${all_parts[@]}"; }; done
 for p in ${en[@]+"${en[@]}"}; do ( inst_enable "$p" ) || { mark parts "failed: switch $p on"; stopped "${all_parts[@]}"; }; done
 [ ${#inst[@]} -gt 0 ] || [ ${#en[@]} -gt 0 ] || mark parts kept
 
 hs_job_step 3 5 rebuild
 if $need_rebuild; then
-  if ( inst_rebuild ); then mark rebuild done; else mark rebuild "failed: the rebuild"; stopped "${all_parts[@]}"; fi
+  if ( inst_rebuild ); then mark rebuild "done"; else mark rebuild "failed: the rebuild"; stopped "${all_parts[@]}"; fi
 else mark rebuild kept; fi
 
 hs_job_step 4 5 docker
@@ -235,7 +240,7 @@ elif $docker_on; then mark docker kept; note "$(t 'Docker is on already: not cha
 else
   step "Turn Docker on"
   dargs=(enable --manager "$dmanager" --yes); [ "$dsize" = - ] || dargs+=(--size "$dsize")
-  if bash "$dockersh" "${dargs[@]}" </dev/null; then mark docker done; ok "Docker is on"
+  if bash "$dockersh" "${dargs[@]}" </dev/null; then mark docker "done"; ok "Docker is on"
   else warn "Docker could not be turned on: the apps after it are not installed."; mark docker "failed: hs docker enable"; stopped docker; fi
 fi
 
@@ -264,7 +269,7 @@ for a in ${apps[@]+"${apps[@]}"}; do
     [ "$waited" -lt "$limit" ] || { st=timeout; break; }
     sleep "$poll"; waited=$((waited + poll))
   done
-  if [ "$st" = ok ] || [ "$st" = skipped ]; then mark "app:$an" done; ok "$an installed"
+  if [ "$st" = ok ] || [ "$st" = skipped ]; then mark "app:$an" "done"; ok "$an installed"
   else mark "app:$an" "failed: the install job ended as ${st:-unknown} (hs job log)"; warn "$an did not install ($st): the next app goes on."; failed=1; fi
 done
 

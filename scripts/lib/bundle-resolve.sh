@@ -3,6 +3,7 @@
 # already). Sourced by scripts/pkg-bundle.sh (hs sys pkg bundle) and scripts/blueprint-change.sh (hs sys blueprint), so both plan the same way.
 # The caller sets (before visit): refuse() (prints status/reason and exits 1), caps (pkg.sh --capabilities), repos (pkg.sh --repos), plist (parts.sh --list),
 # mcaps (the capabilities of machine.toml, one per line). `visit <name> ""` fills inst (to install), en (to switch on) and why (notes), in order.
+bundle_inputs() { caps=$1; repos=$2; plist=$3; mcaps=$4; }   # the caller hands over what it read
 inst=(); en=(); why=()
 declare -A done_=() busy=()
 visit() {   # visit <name> <required by or empty>
