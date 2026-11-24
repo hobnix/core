@@ -8,8 +8,8 @@ hand-write JSON lines:
 | Command extension (one process per call) | `command` | [ADR 0010](../../docs/adr/0010-extension-command-protocol.md) | `docs/api/ext-protocol-v1.schema.json` |
 | Service extension (one supervised process) | `service` | [ADR 0011](../../docs/adr/0011-extension-service-lifecycle.md) | `docs/api/ext-service-v1.schema.json` |
 
-Status: both ADRs are Proposed and `hs` does not call extensions through the protocol yet (their follow-ups). The SDK speaks version 1
-as the ADRs and schemas define it and is tested against the reference runners, not against `hs`.
+Status: both ADRs are Accepted and built in the core (`scripts/lib/ext_proto.py`, `scripts/lib/ext_service.py`, the unit `hs-ext-svc@`). The SDK speaks version 1
+as the ADRs and schemas define it and is tested against the reference runners, not against `hs` on a server. Not tested on hardware yet. How a Rust extension is built, shipped and run: ADR 0031.
 
 ## A command extension
 
