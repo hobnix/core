@@ -127,7 +127,7 @@ disk.not-missing	script	Only a disk that is missing can be forgotten	The disk is
 disk.not-offered	script	The disk is not one that may be mounted as a temp disk	This disk is not offered for mounting.	-
 disk.not-recovering	script	The disk is not out of the pool for a recovery	The disk is not in a recovery.	-
 disk.not-whole	script	The name is a partition, not a whole disk	This is not a whole disk.	-
-disk.pool-member	script	The disk is a member of a ZFS pool or of the bulk array	The disk is a member of a pool.	-
+disk.pool-member	script	The disk is a member of a ZFS pool or of the data array	The disk is a member of a pool.	-
 disk.temp-refused	script	The temp disk script refused a mount, an eject or a copy	The temp disk step was refused.	-
 disk.test-kind	script	The self-test is not short or long	The test is short or long.	-
 disk.test-refused	script	The disk cannot run a self-test now	The self-test cannot start.	-
@@ -152,6 +152,6 @@ share.perm-invalid	script	A permission is not <sid>=<level>	The permission is <s
 share.reserved	script	The share name is reserved	That name is reserved.	-
 share.snapshot-invalid	script	The snapshot id is not an id	That is not a snapshot id.	-
 share.snapshot-unknown	script	The share has no snapshot of that id	No such snapshot was found.	-
-share.tier-invalid	script	The tier is not bulk or fast	The tier is bulk or fast.	-
+share.tier-invalid	script	The tier is not one of the two offered	The tier is not one of the two offered.	-
 share.to-invalid	script	The value after --to does not fit the setting	That value does not fit the setting.	-
 share.unknown	script	No share of that name exists	No such share was found.	-

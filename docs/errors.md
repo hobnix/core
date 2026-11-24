@@ -1010,7 +1010,7 @@ The name is a partition, not a whole disk.
 
 ### disk.pool-member
 
-The disk is a member of a ZFS pool or of the bulk array.
+The disk is a member of a ZFS pool or of the data array.
 
 - Layer: script
 - Text: The disk is a member of a pool.
@@ -1210,10 +1210,10 @@ The share has no snapshot of that id.
 
 ### share.tier-invalid
 
-The tier is not bulk or fast.
+The tier is not one of the two offered.
 
 - Layer: script
-- Text: The tier is bulk or fast.
+- Text: The tier is not one of the two offered.
 - Fix: none
 
 ### share.to-invalid
