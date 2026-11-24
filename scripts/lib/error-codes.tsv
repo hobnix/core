@@ -155,3 +155,75 @@ share.snapshot-unknown	script	The share has no snapshot of that id	No such snaps
 share.tier-invalid	script	The tier is not one of the two offered	The tier is not one of the two offered.	-
 share.to-invalid	script	The value after --to does not fit the setting	That value does not fit the setting.	-
 share.unknown	script	No share of that name exists	No such share was found.	-
+# S2: app. apps. registry. recipe. ct.
+app.is-manager	script	The app is the Docker manager, which is not changed here	This app is the Docker manager and cannot be changed here.	-
+app.unreadable	script	The app or its current revision cannot be read	The app could not be read.	-
+app.not-web-managed	script	The app is not managed by the web interface	Only apps managed by the web interface can be saved, rebuilt or deleted.	-
+app.doc-invalid	script	The document sent for an app is empty or has a malformed record	The document is not valid.	-
+app.exists	script	An app, a Docker app or an instance of that name exists already	That name is taken already.	-
+app.folder-missing	script	The folder of the app cannot be found	The folder of the app was not found.	-
+app.compose-invalid	script	The compose file does not pass the check	The compose file is not valid.	-
+app.port-used	script	A port of the compose file is used by another app	A port is used by another app.	-
+app.container-name-used	script	A container name of the compose file is used by another app	A container name is used by another app.	-
+app.compose-refused	script	The policy check of the compose file refused it	The compose file was refused.	-
+app.recreate-failed	script	The recreate of the app failed	The app could not be recreated.	-
+app.workdir-missing	script	The working directory of the app cannot be found	The working directory of the app was not found.	-
+app.action-failed	script	An action on the app failed	The action failed.	-
+app.usage	script	The command of the Docker app script got too few arguments	The command is missing arguments.	-
+app.rev-missing	script	The action needs --rev and did not get it	The action needs a revision.	-
+registry.user-missing	script	--user has no name	--user needs a name.	-
+registry.user-invalid	script	The user name of a registry login is not valid	The user name is not valid.	-
+registry.unknown	script	No registry of that name is set up	No such registry is set up.	-
+registry.token-invalid	script	The token of a registry login is missing or not valid	The token is missing or not valid.	-
+registry.login-failed	script	The registry did not accept the login	The login failed. Check the user and the token.	-
+registry.store-failed	script	The token of a registry login could not be stored	The token could not be stored.	-
+registry.forget-failed	script	The login of a registry could not be removed	The login could not be removed.	-
+registry.usage	script	The command of the registry script got too few arguments	The command is missing arguments.	-
+apps.repo-invalid	script	--repo is not a repository name	The repository name is not valid.	-
+apps.tag-invalid	script	--tag is not a release tag	The release tag is not valid.	-
+apps.tag-missing	script	A start has no --tag of the plan	The start needs the tag of the plan.	-
+apps.from-missing	script	--from has no step	--from needs a step.	-
+apps.from-invalid	script	--from names a step the package does not have	That step does not exist.	-
+apps.by-invalid	script	--by is not a user name	The user name is not valid.	-
+apps.role-invalid	script	--role is not a role	The role is not valid.	-
+apps.set-invalid	script	--set is not KEY=value	--set needs KEY=value.	-
+apps.no-release	script	The package has no verified release	The package has no verified release.	-
+apps.not-in-repo	script	The package is not in the repository asked for	The package is not in that repository.	-
+apps.no-steps	script	The release names no steps	The release names no steps.	-
+apps.needs-newer-core	script	The package needs a newer core than this server has	The package needs a newer core.	-
+apps.update-available	script	The package is installed and a newer release is out	The package is installed; update it instead.	-
+apps.installed	script	The package is installed already	The package is installed already.	-
+apps.needs-terminal	script	The package asks for a password and needs a terminal	This package must be installed at a terminal.	-
+apps.takes-no-name	script	The package takes no container name and no answers	This package takes no name and no answers.	-
+apps.single-instance	script	The package runs once on a server	This package runs once on a server.	-
+apps.name-taken	script	The instance name is taken by an instance or a service	That name is taken already.	-
+apps.answer-invalid	script	An answer to a question of the package does not fit	The answer does not fit.	-
+apps.answer-unknown	script	The package does not ask that question	The package does not ask that question.	-
+apps.need-unknown	script	The package needs something this server cannot provide	The package needs something this server cannot provide.	-
+apps.need-off	script	The package needs a part that is switched off	A part the package needs is off. Switch it on first.	-
+apps.storage-locked	script	The storage is locked	The storage is locked. Unlock it first.	-
+apps.no-network	script	The step needs the network and it is down	The server has no network.	-
+apps.docker-self	script	Docker was named as a need of itself	Docker cannot be a need of itself.	-
+apps.secret-invalid	script	The secret has a control character	The secret is not valid.	-
+recipe.name-missing	script	--name has no value	--name needs a value.	-
+recipe.by-invalid	script	--by is not a user name	The user name is not valid.	-
+recipe.role-invalid	script	--role is not a role	The role is not valid.	-
+recipe.set-invalid	script	--set is not KEY=value	--set needs KEY=value.	-
+recipe.unknown	script	No recipe of that name exists	No such recipe was found.	-
+recipe.needs-terminal	script	The recipe asks for a password and needs a terminal	This recipe must be run at a terminal.	-
+recipe.parked	script	The recipe is parked and does nothing without force	This recipe is parked.	-
+recipe.answer-invalid	script	An answer to a question of the recipe does not fit	The answer does not fit.	-
+recipe.answer-unknown	script	The recipe does not ask that question	The recipe does not ask that question.	-
+recipe.secret-invalid	script	The secret has a control character	The secret is not valid.	-
+ct.all-misuse	script	all is used with an action other than update-all, or update-all with another instance	all belongs to update-all only.	-
+ct.value-invalid	script	A value (number, autostart, docker, type or stop keep) is not one that exists	The value is not valid.	-
+ct.option-misplaced	script	An option is used with an action it does not belong to	The option does not belong to this action.	-
+ct.iso-vm-only	script	An installer image is given for something other than a virtual machine	An installer image is for a virtual machine only.	-
+ct.iso-invalid	script	The installer image name is not valid	The image name is not valid.	-
+ct.iso-missing	script	The installer image is not in the library	No such image is in the library.	-
+ct.pool-unknown	script	The storage pool does not exist	No such storage pool exists.	-
+ct.pool-full	script	The disk does not fit in the free space of the pool	The disk does not fit in the pool.	-
+ct.bind-invalid	script	A bind is not tier:name:path	The bind is not valid.	-
+ct.bind-duplicate	script	Two binds have the same name	Two binds have the same name.	-
+ct.bind-vm	script	A bulk folder cannot be passed into a virtual machine	Bulk folders cannot be passed into a virtual machine.	-
+ct.none-running	script	No running instance is left to update	No instance is running.	-
