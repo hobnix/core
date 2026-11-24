@@ -27,6 +27,7 @@ has() { grep -q -- "$1" <<<"$out"; }
 echo "-- no proxy"
 printf 'status\tnone\n' > "$FAKE_PLAN"
 run plan apply; check_eq "no proxy: refused" 1 "$rc"; has "No reverse proxy" && pass "reason" || fail "$out"
+check_match "no reverse proxy is refused with service.no-proxy" $'code	service.no-proxy' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF service.no-proxy && pass "service.no-proxy is in the catalogue" || fail "service.no-proxy is not in the catalogue"
 
 echo "-- apply: only additions are not red"
 printf 'add\tjf.lan\t/\thttp://10.0.0.5:8096\tjellyfin\t-\nok\tx.lan\t/\thttp://a\tx\tfine\n' > "$FAKE_PLAN"

@@ -35,14 +35,14 @@ unset HS_GUIDED_TTY
 # the runtime setting (hs config set vpsHost), or the old line of machine.toml
 host=$(setting_get vpsHost 2>/dev/null || true)
 [ -n "$host" ] || host=$(machine_get vpsHost 2>/dev/null || true)
-[ -n "$host" ] || refuse "vpsHost is not set (hs config set vpsHost <the Tailscale name or address of the proxyserver>)."
-{ [[ "$host" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$ ]] && [[ "$host" != *..* ]]; } || refuse "vpsHost is not a host name or address."
+[ -n "$host" ] || refuse_code vps.host-missing "vpsHost is not set (hs config set vpsHost <the Tailscale name or address of the proxyserver>)."
+{ [[ "$host" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$ ]] && [[ "$host" != *..* ]]; } || refuse_code vps.host-invalid "vpsHost is not a host name or address."
 
 key=$state/vps-key
 case "$(secret_state "$key")" in
   ok) ;;
-  locked) refuse "The vault is closed: run hs unlock, then try again." ;;
-  *) refuse "There is no key for the proxyserver yet: run hs vps key and follow what it prints." ;;
+  locked) refuse_code vault.locked "The vault is closed: run hs unlock, then try again." ;;
+  *) refuse_code vps.no-key "There is no key for the proxyserver yet: run hs vps key and follow what it prints." ;;
 esac
 
 # pinned host key: the first connection is accepted and remembered, a changed key is refused afterwards (ssh says so in the job log)

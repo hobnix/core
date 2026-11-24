@@ -34,34 +34,34 @@ confirm=""
 name=""
 case "$action" in
   apply|adopt|import) ;;
-  remove) name=${1:-}; shift || true; [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$ ]] || refuse "that is not a service name" ;;
-  add) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "A service name is lower case letters, digits and - (at most 41)." ;;
-  edit) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "That is not a service name." ;;
-  set) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "A service name is lower case letters, digits and - (at most 41)." ;;
+  remove) name=${1:-}; shift || true; [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$ ]] || refuse_code name.invalid "that is not a service name" ;;
+  add) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "A service name is lower case letters, digits and - (at most 41)." ;;
+  edit) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "That is not a service name." ;;
+  set) name=${1:-}; shift || true; [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "A service name is lower case letters, digits and - (at most 41)." ;;
   *) refuse_code action.unknown "unknown action (apply, adopt, import, add, edit, set or remove)" ;;
 esac
 pargs=() addargs=() exposure=private-ok port="" container="" host="" title="" setargs=() set_public="" set_pname="" set_local=""
 [ "$action" != edit ] || exposure=   # an edit changes the exposure only when it is given
 while [ $# -gt 0 ]; do
   case "$1" in
-    --proxy) [ $# -ge 2 ] || refuse "--proxy needs a value"
+    --proxy) [ $# -ge 2 ] || refuse_code service.value-missing "--proxy needs a value"
       case "$action" in apply|import|adopt) ;; *) refuse_code option.unknown "unknown option $1" ;; esac
-      case "$2" in public) ;; local) pargs=(--proxy local) ;; *) refuse "--proxy is public or local" ;; esac
+      case "$2" in public) ;; local) pargs=(--proxy local) ;; *) refuse_code service.proxy-invalid "--proxy is public or local" ;; esac
       shift 2 ;;
     --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     --local|--public|--public-name)
       [ "$action" = set ] || refuse_code option.unknown "unknown option $1"
-      [ $# -ge 2 ] || refuse "$1 needs a value"
+      [ $# -ge 2 ] || refuse_code service.value-missing "$1 needs a value"
       case "$1" in
-        --local|--public) case "$2" in yes|no) ;; *) refuse "$1 is yes or no" ;; esac ;;
-        --public-name) [[ "$2" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] || refuse "The public name is a full name like app.example.org." ;;
+        --local|--public) case "$2" in yes|no) ;; *) refuse_code service.value-invalid "$1 is yes or no" ;; esac ;;
+        --public-name) [[ "$2" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] || refuse_code service.public-name-invalid "The public name is a full name like app.example.org." ;;
       esac
       case "$1" in --local) set_local=$2 ;; --public) set_public=$2 ;; --public-name) set_pname=$2 ;; esac
       setargs+=("$1" "$2"); shift 2 ;;
     --port|--container|--host|--title|--names|--exposure|--public-path|--blocked-path|--auth|--auth-skip|--request-header|--response-header|--want|--group|--icon|--description|--clear)
       case "$action" in add|edit) ;; *) refuse_code option.unknown "unknown option $1" ;; esac
       [ "$1" != --clear ] || [ "$action" = edit ] || refuse_code option.unknown "unknown option $1"
-      [ $# -ge 2 ] || refuse "$1 needs a value"
+      [ $# -ge 2 ] || refuse_code service.value-missing "$1 needs a value"
       case "$1" in --port) port=$2 ;; --container) container=$2 ;; --host) host=$2 ;; --exposure) exposure=$2 ;; --title) title=$2 ;; esac
       addargs+=("$1" "$2"); shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
@@ -75,21 +75,21 @@ unset HS_GUIDED_TTY
 load_plan() {
   plan_out=$(bash "$svc" plan --plain ${pargs[@]+"${pargs[@]}"} </dev/null 2>/dev/null || true)
   case "$plan_out" in
-    "status"*none*) refuse "No reverse proxy is set up (hs recipe zoraxy, then: hs config set reverseProxy zoraxy)." ;;
+    "status"*none*) refuse_code service.no-proxy "No reverse proxy is set up (hs recipe zoraxy, then: hs config set reverseProxy zoraxy)." ;;
   esac
 }
 
 case "$action" in
   add)
     list=$(bash "$svc" list --plain </dev/null 2>/dev/null || true)
-    if awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list"; then refuse "There is a service called '$name' already."; fi
-    [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || refuse "The port is a number from 1 to 65535."
-    if [ -n "$container" ] && [ -n "$host" ]; then refuse "Give a container or a host, not both."; fi
-    if [ -z "$container" ] && [ -z "$host" ]; then refuse "Give the container or the host the service runs on."; fi
-    case "$exposure" in never-public|private-ok|public-ok) ;; *) refuse "The exposure is never-public, private-ok or public-ok." ;; esac
+    if awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list"; then refuse_code service.exists "There is a service called '$name' already."; fi
+    [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || refuse_code service.port-invalid "The port is a number from 1 to 65535."
+    if [ -n "$container" ] && [ -n "$host" ]; then refuse_code service.target-both "Give a container or a host, not both."; fi
+    if [ -z "$container" ] && [ -z "$host" ]; then refuse_code service.target-missing "Give the container or the host the service runs on."; fi
+    case "$exposure" in never-public|private-ok|public-ok) ;; *) refuse_code service.exposure-invalid "The exposure is never-public, private-ok or public-ok." ;; esac
     if [ "$verb" = start ]; then
       if [ "$exposure" = public-ok ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
-      err=$(bash "$svc" add "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
+      err=$(bash "$svc" add "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse_code service.failed "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -103,17 +103,17 @@ case "$action" in
     printf 'command\ths services add %s %s\nlong\tno\n' "$name" "${addargs[*]}"
     exit 0 ;;
   edit)
-    cur=$(bash "$svc" show "$name" </dev/null 2>/dev/null) || refuse "There is no service called '$name'."
-    [ "${#addargs[@]}" -gt 0 ] || refuse "Nothing to change."
-    [ -z "$port" ] || { [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || refuse "The port is a number from 1 to 65535."; }
-    if [ -n "$container" ] && [ -n "$host" ]; then refuse "Give a container or a host, not both."; fi
-    case "$exposure" in ''|never-public|private-ok|public-ok) ;; *) refuse "The exposure is never-public, private-ok or public-ok." ;; esac
+    cur=$(bash "$svc" show "$name" </dev/null 2>/dev/null) || refuse_code service.unknown "There is no service called '$name'."
+    [ "${#addargs[@]}" -gt 0 ] || refuse_code service.nothing-to-change "Nothing to change."
+    [ -z "$port" ] || { [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || refuse_code service.port-invalid "The port is a number from 1 to 65535."; }
+    if [ -n "$container" ] && [ -n "$host" ]; then refuse_code service.target-both "Give a container or a host, not both."; fi
+    case "$exposure" in ''|never-public|private-ok|public-ok) ;; *) refuse_code service.exposure-invalid "The exposure is never-public, private-ok or public-ok." ;; esac
     was=$(awk -F'\t' '$1 == "exposure" { print $2; exit }' <<<"$cur")
     going_public=""
     if [ "$exposure" = public-ok ] && [ "$was" != public-ok ]; then going_public=yes; fi
     if [ "$verb" = start ]; then
       if [ -n "$going_public" ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
-      err=$(bash "$svc" edit "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
+      err=$(bash "$svc" edit "$name" "${addargs[@]}" </dev/null 2>&1 >/dev/null) || refuse_code service.failed "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -131,12 +131,12 @@ case "$action" in
     exit 0 ;;
   set)
     list=$(bash "$svc" list --plain </dev/null 2>/dev/null || true)
-    awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list" || refuse "There is no service called '$name'."
-    [ ${#setargs[@]} -gt 0 ] || refuse "Nothing to change: give --local, --public or --public-name."
-    if [ "$set_public" = yes ] && [ -z "$set_pname" ]; then refuse "A public service needs its public name."; fi
+    awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list" || refuse_code service.unknown "There is no service called '$name'."
+    [ ${#setargs[@]} -gt 0 ] || refuse_code service.nothing-to-change "Nothing to change: give --local, --public or --public-name."
+    if [ "$set_public" = yes ] && [ -z "$set_pname" ]; then refuse_code service.public-name-missing "A public service needs its public name."; fi
     if [ "$verb" = start ]; then
       if [ "$set_public" = yes ] && [ "$confirm" != "$name" ]; then refuse_code confirm.missing "type the word to confirm: $name"; fi
-      err=$(bash "$svc" set "$name" "${setargs[@]}" </dev/null 2>&1 >/dev/null) || refuse "$(tail -n 1 <<<"$err" | tr -d '\t')"
+      err=$(bash "$svc" set "$name" "${setargs[@]}" </dev/null 2>&1 >/dev/null) || refuse_code service.failed "$(tail -n 1 <<<"$err" | tr -d '\t')"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -153,9 +153,9 @@ case "$action" in
     exit 0 ;;
   remove)
     list=$(bash "$svc" list --plain </dev/null 2>/dev/null || true)
-    awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list" || refuse "There is no service called '$name'."
+    awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }' <<<"$list" || refuse_code service.unknown "There is no service called '$name'."
     if [ "$verb" = start ]; then
-      bash "$svc" remove "$name" >/dev/null 2>&1 || refuse "the service could not be removed"
+      bash "$svc" remove "$name" >/dev/null 2>&1 || refuse_code service.failed "the service could not be removed"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -167,9 +167,9 @@ case "$action" in
   adopt)
     load_plan
     rows=$(awk -F'\t' '$1 == "ok" && $6 ~ /^not adopted/' <<<"$plan_out")
-    [ -n "$rows" ] || refuse "Nothing to adopt."
+    [ -n "$rows" ] || refuse_code service.nothing-to-do "Nothing to adopt."
     if [ "$verb" = start ]; then
-      bash "$svc" adopt --yes ${pargs[@]+"${pargs[@]}"} >/dev/null 2>&1 || refuse "the routes could not be adopted"
+      bash "$svc" adopt --yes ${pargs[@]+"${pargs[@]}"} >/dev/null 2>&1 || refuse_code service.failed "the routes could not be adopted"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -183,10 +183,10 @@ case "$action" in
   import)
     out=$(bash "$svc" import --dry-run ${pargs[@]+"${pargs[@]}"} </dev/null 2>&1 || true)
     if grep -qiE 'nothing new|no routes|already says' <<<"$out"; then
-      refuse "Nothing new to describe: every route of the proxy has a service already (or the proxy has no routes)."
+      refuse_code service.nothing-to-do "Nothing new to describe: every route of the proxy has a service already (or the proxy has no routes)."
     fi
     if [ "$verb" = start ]; then
-      bash "$svc" import --yes ${pargs[@]+"${pargs[@]}"} >/dev/null 2>&1 || refuse "the services could not be described"
+      bash "$svc" import --yes ${pargs[@]+"${pargs[@]}"} >/dev/null 2>&1 || refuse_code service.failed "the services could not be described"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -205,7 +205,7 @@ case "$action" in
     load_plan
     rows=$plan_out
     todo=$(awk -F'\t' '$1 == "add" || $1 == "confirm" || $1 == "remove" || ($1 == "change" && $6 !~ /adopt it first/)' <<<"$rows")
-    [ -n "$todo" ] || refuse "Nothing to do: the routes of the proxy match the services."
+    [ -n "$todo" ] || refuse_code service.nothing-to-do "Nothing to do: the routes of the proxy match the services."
     red=$(awk -F'\t' '$1 == "confirm" || $1 == "change" || $1 == "remove"' <<<"$todo")
     hosts=$(awk -F'\t' '$1 == "confirm" || $1 == "change" || $1 == "remove" { print $2 }' <<<"$todo" | sort -u)
     if [ "$verb" = start ]; then
