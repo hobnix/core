@@ -15,6 +15,7 @@ en	Guides	operations
 en	Reference	@commands
 en	Contributing	dev-environment
 en	Contributing	GUIDE-TEMPLATE
+en	Contributing	CODE-PRACTICES
 en	Contributing	PLAN-modular-core
 en	Contributing	PLAN-extensions
 en	Contributing	PLAN-live-interface
@@ -39,6 +40,8 @@ en	Contributing	PLAN-capabilities-repo
 en	Contributing	PLAN-app-lifecycle
 en	Contributing	PLAN-storage-nas
 en	Contributing	PLAN-extensions-access
+en	Contributing	PLAN-package-sdk
+en	Contributing	PLAN-rust
 en	Contributing	PLAN-jobs
 en	Contributing	events
 en	Contributing	errors
