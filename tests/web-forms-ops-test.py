@@ -128,6 +128,13 @@ class Changes(unittest.TestCase):
         self.assertEqual(d["secret"], {"login": "remote-bob", "domain": "HOME", "host": "me.local", "password": "Pw-Aa1"})
         self.assertNotIn("secret", ws.parse_change("status\tdone\n", 0))
 
+    def test_secret_lines_of_a_code(self):
+        d = ws.parse_change("status\tdone\nsecret\tcode\tK7QXQ9M2DT4PW3HN\nsecret\taddress\talpha.local:8480\nsecret\texpires_in\t600\nsecret\tother\tx\n", 0)
+        self.assertEqual(d["secret"], {"code": "K7QXQ9M2DT4PW3HN", "address": "alpha.local:8480", "expires_in": "600"})
+        # an answer with a secret is never kept in the plan cache
+        out = "status\tok\nsecret\tcode\tK7QX\n"
+        self.assertFalse(ws.plan_stable(out, 0, ws.parse_change(out, 0)))
+
     def test_fix_lines_of_a_refused_plan(self):
         d = ws.parse_change("status\trefused\nreason\tno route\nfix\ths ext x expose public <name>\nfix\ths services apply\n", 1)
         self.assertEqual(d["fixes"], ["hs ext x expose public <name>", "hs services apply"])

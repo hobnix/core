@@ -9,8 +9,9 @@
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan, openCreate, jobRunning } from '../../ui.svelte.js';
   import { ctOf } from '../instances/ct.js';
-  import PeerAttach from '../../forms/ops/PeerAttach.svelte';
-  import PeerOffer from '../../forms/ops/PeerOffer.svelte';
+  import RemoteAttach from '../../forms/ops/RemoteAttach.svelte';
+  import RemoteAdd from '../../forms/ops/RemoteAdd.svelte';
+  import RemoteGive from '../../forms/ops/RemoteGive.svelte';
 
   let { remote, items, onoffered } = $props();
   const list = poll('/api/sys/ct/list', 15000);
@@ -33,8 +34,9 @@
         {:else if col.key === 'share'}<Muted>{r.share}</Muted>
         {:else if col.key === 'state'}<StatusDot state={dot(r.state)} label={r.state} />
         {:else}<span style="white-space:nowrap">
-          <Button need="admin" variant="ghost" size="sm" tooltip={`Give an instance the shares of ${r.peer}, or take them away`} onclick={() => openCreate(PeerAttach, { peer: r.peer, instances: cts.map((c) => c.name) })}>Instance…</Button>
-          <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['remove', r.peer, r.share])} tooltip={`Stop using ${r.share} of ${r.peer}`} onclick={() => openPlan('peers', ['remove', r.peer, r.share], 'Stop using ' + r.peer + ' / ' + r.share)}>Remove…</Button>
+          <Button need="admin" variant="ghost" size="sm" tooltip={`Give an instance the shares of ${r.peer}, or take them away`} onclick={() => openCreate(RemoteAttach, { peer: r.peer, instances: cts.map((c) => c.name) })}>Instance…</Button>
+          <Button need="admin" variant="ghost" size="sm" tooltip={`Type a new code from ${r.peer}: a new password, the same row`} onclick={() => openCreate(RemoteAdd, { reconnect: r.peer })}>Reconnect…</Button>
+          <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['remove', r.peer, r.share])} tooltip={`Stop using ${r.share} of ${r.peer}`} onclick={() => openPlan('peers', ['remove', r.peer, r.share], 'Stop using ' + r.peer + ' / ' + r.share)}>Stop using…</Button>
         </span>{/if}
       {/snippet}
     </Table>
@@ -47,8 +49,8 @@
         {:else if col.key === 'share'}<Muted>{r.share}</Muted>
         {:else if col.key === 'state'}<StatusDot state={dot(r.state)} label={r.state} />
         {:else}<span style="white-space:nowrap">
-          <Button need="admin" variant="ghost" size="sm" tooltip={`Make a new password for ${r.peer}`} onclick={() => openCreate(PeerOffer, { peer: r.peer, share: r.share, newpw: true, ondone: onoffered })}>New password…</Button>
-          <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['revoke', r.peer, r.share])} tooltip={`Take the access to ${r.share} away from ${r.peer}`} onclick={() => openPlan('peers', ['revoke', r.peer, r.share], 'Take back the access of ' + r.peer)}>Revoke…</Button>
+          <Button need="admin" variant="ghost" size="sm" tooltip={`Make a new code for ${r.peer}; the old password stops working`} onclick={() => openCreate(RemoteGive, { peer: r.peer, share: r.share, ondone: onoffered })}>New code…</Button>
+          <Button need="admin" variant="ghost" size="sm" busy={jobRunning('peers', ['revoke', r.peer, r.share])} tooltip={`Take the access to ${r.share} away from ${r.peer}`} onclick={() => openPlan('peers', ['revoke', r.peer, r.share], 'Take back the access of ' + r.peer)}>Take back…</Button>
         </span>{/if}
       {/snippet}
     </Table>

@@ -22,11 +22,9 @@ forms/ops/InputForm.svelte	0	0	0	1	0
 forms/ops/InstallDialog.svelte	0	0	0	1	0
 forms/ops/PassthroughForm.svelte	0	0	0	1	0
 forms/ops/PcForm.svelte	0	0	0	1	0
-forms/ops/PeerAttach.svelte	0	0	0	1	0
-forms/ops/PeerMount.svelte	0	0	0	1	0
-forms/ops/PeerOffer.svelte	0	0	0	1	0
-forms/ops/PeerOffered.svelte	0	0	0	1	0
 forms/ops/PosterForm.svelte	0	0	0	1	0
+forms/ops/RemoteAttach.svelte	0	0	0	1	0
+forms/ops/RemoteMount.svelte	0	0	0	1	0
 forms/ops/RepoAdd.svelte	0	0	0	1	0
 forms/ops/ServiceForm.svelte	0	0	0	1	0
 forms/shares/DeleteShare.svelte	0	0	0	1	0

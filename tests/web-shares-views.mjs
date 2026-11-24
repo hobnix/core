@@ -11,8 +11,8 @@ t('the view is read from the address (?view=remote)', /route\.query\.view === 'r
 t('the Remote view has the two buttons', /Add remote share/.test(shares) && /Give access/.test(shares));
 t('the Local view points to the Remote view', /see Remote/.test(shares));
 t('the Remote view has both blocks', /Shares I use from other servers/.test(remote) && /Shares I give to other servers/.test(remote));
-t('the Remote view keeps the actions of a row', ['Instance…', 'Remove…', 'New password…', 'Revoke…'].every((w) => remote.includes(w)));
-t('the Network page has no Remote tab and no peer forms', !/id: 'remote'/.test(net) && !/Peer(Mount|Offer|Attach)/.test(net) && !/remote\/list/.test(net));
+t('the Remote view keeps the actions of a row', ['Instance…', 'Reconnect…', 'Stop using…', 'New code…', 'Take back…'].every((w) => remote.includes(w)));
+t('the Network page has no Remote tab and no peer forms', !/id: 'remote'/.test(net) && !/(Peer|Remote)(Mount|Offer|Attach|Add|Give)/.test(net) && !/remote\/list/.test(net));
 t('the interface does not say peer to the user', !/>Peer</.test(remote) && !/label: 'Peer'/.test(remote));
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
