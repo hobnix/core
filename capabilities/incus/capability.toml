@@ -9,3 +9,4 @@ needs = []
 # the NixOS module, loaded only while the capability is on (capabilities/default.nix); role = "homeserver" switches it on
 nix = "module.nix"
 notes = "NOTES.md"
+tools = ["incus"]

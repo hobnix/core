@@ -9,3 +9,5 @@ needs = []
 # the NixOS module, loaded only while the capability is on (capabilities/default.nix); role = "homeserver" switches it on
 nix = "module.nix"
 notes = "NOTES.md"
+# programs `hs smoke` looks for while the capability is on (scripts/lib/pkg_probes.py)
+tools = ["zpool", "zfs", "smartctl", "snapraid", "mergerfs", "cryptsetup", "wipefs", "xfs_admin", "e2label", "btrfs", "mkfs.ext4"]

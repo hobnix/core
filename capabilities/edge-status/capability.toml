@@ -9,3 +9,10 @@ needs = []
 # the NixOS module, loaded only while the capability is on (capabilities/default.nix)
 nix = "module.nix"
 notes = "NOTES.md"
+
+# a probe of `hs smoke`, run while the capability is on: the read-only form of the health check (--dry-run sends nothing)
+[[probe]]
+label = "hs edge health --dry-run"
+words = "edge health --dry-run"
+ok = [0, 1]
+limit = 60

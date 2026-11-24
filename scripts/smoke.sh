@@ -11,6 +11,9 @@
 # --list = kind<TAB>name<TAB>ok|fail|skip<TAB>detail. Exit 1 when something failed.
 # HS_SMOKE_HS (a replacement for lib/hs.sh), HS_SMOKE_PROBES (a file: label<TAB>words<TAB>ok exit codes), HS_SMOKE_TIMEOUT,
 # HS_SMOKE_TOOLS (space separated), HS_BULK: tests.
+# Packages bring their own: `[[probe]]` (label, words, ok, limit) and `tools = [...]` in the capability.toml / package.toml of a package
+# that is ON are added to the lists below (scripts/lib/pkg_probes.py); the programs of storage, incus, samba, backup are the `tools` of
+# those capabilities. A core probe whose registry row says `capability:X` is skipped while X is off.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -49,6 +52,45 @@ in_registry() {
     for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
     found = 1
   } END { exit !found }' <(registry_rows)
+}
+
+# The folders of the packages that are ON (an in-tree capability, a capability package, a recipe that was applied), one per line.
+on_package_dirs() {
+  local r d n seen=" "
+  while IFS= read -r r; do
+    for d in "$r"/*/; do
+      d=${d%/}; n=${d##*/}
+      [ -f "$d/capability.toml" ] || [ -f "$d/package.toml" ] || continue
+      case "$seen" in *" $n "*) continue ;; esac
+      seen="$seen$n "
+      if [ -f "$d/capability.toml" ] || _ext_is_cap_package "$d"; then capability_on "$n" || continue
+      else grep -qxF "[package.$n]" "${HS_STATE_DIR:-/var/lib/hs}/packages/installed.toml" 2>/dev/null || continue
+      fi
+      printf '%s
+' "$d"
+    done
+  done < <(_ext_roots)
+}
+package_lines() {   # package_lines probes|tools: what the packages that are on bring
+  local dirs
+  dirs=$(on_package_dirs)
+  [ -n "$dirs" ] || return 0
+  # shellcheck disable=SC2086
+  python3 "$here/lib/pkg_probes.py" "$1" $(printf '%s
+' "$dirs" | tr '
+' ' ') 2>/dev/null || true
+}
+
+# The capability a probe belongs to: the `capability:X` flag of the longest registry row its words match (empty = none).
+probe_capability() {
+  awk -F'	' -v w="$1" '$1 == "user" || ($1 == "sys" && substr(w, 1, 4) == "sys ") {
+    n = split($2, p, " "); m = split(w, q, " ")
+    if (n > m || n <= bn) next
+    for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
+    bn = n; best = $7
+  } END {
+    k = split(best, f, ","); for (i = 1; i <= k; i++) if (f[i] ~ /^capability:/) { print substr(f[i], 12); exit }
+  }' <(registry_rows)
 }
 
 # ---- the probes and the rows that are left out on purpose ----------------------------------------
@@ -176,6 +218,7 @@ default_probes() {
     $'hs pkg list\tpkg list\t0' \
     $'hs pkg integrations\tpkg integrations\t0' \
     $'hs pkg updates\tpkg updates\t0 1'
+  package_lines probes
   if [ -n "$first_share" ]; then
     printf '%s\t%s\t%s\n' "hs share $first_share show" "share $first_share show" "0" "hs share $first_share snapshots" "share $first_share snapshots" "0 1"
   fi
@@ -236,7 +279,9 @@ if $coverage; then
 fi
 
 # ---- 1. the programs the scripts call ------------------------------------------------------
-tools=${HS_SMOKE_TOOLS-"incus zpool zfs smartctl restic samba-tool wbinfo sharesec snapraid mergerfs cryptsetup lsblk blkid jq curl rsync wipefs systemctl git setfacl getfacl xfs_admin e2label btrfs mkfs.ext4 findmnt nix-env"}
+# the core list; storage, incus, samba, backup and every other package add theirs (`tools` of the capability, only while it is on)
+tools=${HS_SMOKE_TOOLS-"lsblk blkid jq curl rsync systemctl git setfacl getfacl findmnt nix-env $(package_lines tools | tr '
+' ' ')"}
 $list || step "Programs the scripts need"
 for tool in $tools; do
   if command -v "$tool" >/dev/null 2>&1; then continue; fi
@@ -262,6 +307,8 @@ if $run; then
     [ -n "$label" ] || continue
     # a command this version does not have (the list below is longer than an old checkout) is skipped
     if [ "$words" != help ] && ! in_registry "$words"; then result probe "$label" skip "$(t 'no such command in this version')"; continue; fi
+    cap=$(probe_capability "$words")
+    if [ -n "$cap" ] && ! capability_on "$cap"; then result probe "$label" skip "$(t 'capability %s is off' "$cap")"; continue; fi
     out=$(HS_CALLER=smoke HS_PLAIN=1 timeout "${plimit:-$limit}" bash "$hs_sh" $words </dev/null 2>&1); rc=$?
     bad=$(grep -m1 -iE 'command not found|syntax error|unbound variable|No such file or directory|Traceback' <<<"$out" || true)
     if [ "$rc" = 124 ]; then
