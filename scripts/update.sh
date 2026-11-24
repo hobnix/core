@@ -132,6 +132,18 @@ if [ -f "$repo/scripts/pkg.py" ] && ! bad=$(python3 -I "$repo/scripts/pkg.py" co
   fi
 fi
 
+# The package repositories: fetch the signed index and move installed packages to the repository that replaced theirs (hs pkg repo migrate).
+# Never fatal: with the index host down the update still succeeds, the installed packages keep running and the next fetch heals the rest.
+if [ -f "$repo/scripts/pkg.py" ]; then
+  if ! fetched=$(python3 -I "$repo/scripts/pkg.py" fetch 2>&1); then
+    warn "$(t 'The package repositories could not be fetched: installed packages keep running, hs pkg fetch tries again.')"
+    while IFS=$'	' read -r rname _ _ rerr; do
+      [ -z "${rname:-}" ] || [ "${rerr:-ok}" = ok ] || note "$rname: $rerr"
+    done <<< "$fetched"
+  fi
+  python3 -I "$repo/scripts/pkg.py" repo migrate >/dev/null 2>&1 || warn "$(t 'Installed packages were not moved to the new repository: hs pkg repo migrate shows why.')"
+fi
+
 # machine.nix -> machine.toml once (the old file is kept as machine.nix.migrated), then the options that are new in
 # machine.toml.example are put into machine.toml in their place, commented out (nothing of yours is changed)
 sync=$repo/scripts/machine-sync.sh

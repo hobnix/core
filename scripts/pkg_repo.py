@@ -666,6 +666,68 @@ class Repos:
                 continue
         return cat
 
+    # ── migration of installed packages to the repository that replaced theirs ──
+    def listed(self, r):
+        """{package: entry} that a default repository lists (unavailable ones too), or None while its index/tags were never fetched"""
+        try:
+            if r.get("index"):
+                return self.index_entries(r, True)
+            t, _ = self.verified_tag(r)
+            return self.index(r, t)
+        except (Refused, OSError, KeyError, TypeError, AttributeError):
+            return None
+
+    def migrate(self, apply=True):
+        """Installed packages whose repository has no row any more move to the ONE default row that names it in `replaces = [...]` and lists the
+        package. -> [(kind, package, old, new)], sorted by package:
+          migrated  repo is now `new` (installed.toml and the repo of its vendor lock line; version, commit, tag, applied stay: nothing is
+                    downgraded when the server is newer than the index, nothing is installed or removed)
+          unmoved   the row that replaced the repository does not list it: stays installed as it is, gets no updates (new = -)
+          waits     the replacing row has no verified index yet (first fetch failed): nothing changes (new = the row)
+        Never moved: a package of a repository that is gone and that no default row replaces (a removed ADDED repository must not gain the
+        trust of a default one), or that two rows replace. Idempotent: a migrated entry has a row. Revert: a commit that restores the old rows
+        and sets `replaces = ["official"]` on both maps the packages back by the same rule. apply=False only plans."""
+        rows = self.all()
+        defaults = [r for r in self.defaults() if isinstance(r.get("replaces"), list)]
+        have = self.pkg.installed()
+        listing, out = {}, []
+        for n in sorted(have):
+            e = have[n]
+            old = e.get("repo") if isinstance(e, dict) else None
+            if not isinstance(old, str) or not old or old in rows:
+                continue
+            target = [r for r in defaults if old in r["replaces"]]
+            if len(target) != 1:
+                continue
+            tn = target[0]["name"]
+            if tn not in listing:
+                listing[tn] = self.listed(target[0])
+            if listing[tn] is None:
+                out.append(("waits", n, old, tn))
+            elif n not in listing[tn]:
+                out.append(("unmoved", n, old, "-"))
+            else:
+                out.append(("migrated", n, old, tn))
+        moved = {n: (old, new) for k, n, old, new in out if k == "migrated"}
+        if apply and moved:
+            have = self.pkg.installed()          # re-read right before writing: a beside-running install is not lost
+            if not all(isinstance(v, dict) for v in have.values()):
+                raise Refused("installed.toml has an entry that is not a table: nothing was migrated")
+            for n, (old, new) in moved.items():
+                if n in have and have[n].get("repo") == old:
+                    have[n]["repo"] = new
+            self.pkg.save_installed(have)        # temp file + rename
+            vend = self.pkg.pkg_vendor
+            lock = vend.read_lock(self.nixos_dir())
+            hit = False
+            for n, (old, new) in moved.items():
+                if isinstance(lock.get(n), dict) and lock[n].get("repo") == old:
+                    lock[n]["repo"] = new
+                    hit = True
+            if hit:
+                vend.write_lock(self.nixos_dir(), lock)
+        return out
+
     # ── install ──
     def choose(self, name, repo=None):
         cat = self.catalog().get(name, [])
@@ -1168,8 +1230,12 @@ def run(pkg, cmd, rest):
                 R.add(rest[1], rest[2], key=key, unsigned="--unsigned" in rest, index=index)
             elif sub == "remove":
                 R.remove(rest[1])
+            elif sub == "migrate":
+                # machine lines: kind TAB package TAB old repository TAB new repository (- = none); --dry-run changes nothing
+                for kind, n, old, new in R.migrate(apply="--dry-run" not in rest):
+                    print("	".join([kind, n, old, new]))
             else:
-                raise Refused("repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>")
+                raise Refused("repo list | add <name> <url> (--key <file> | --unsigned) | remove <name> | migrate [--dry-run]")
         elif cmd == "fetch":
             bad = 0
             for name, tag, commit, err in R.fetch_all(rest[0] if rest else None):
