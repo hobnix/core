@@ -43,6 +43,7 @@ check "a bad key file is refused" bash -c "echo nonsense > $WORK/bad.signers; ! 
 check "a repository is added with a key" $PKG repo add test "$R" --key "$WORK/signers"
 check "the same name twice is refused" bash -c "! $PKG repo add test '$R' --key $WORK/signers 2>/dev/null"
 check "a default name cannot be taken" bash -c "! $PKG repo add official '$R' --key $WORK/signers 2>/dev/null"
+check_out "a name a default row replaces cannot be added" "belongs to the default repository official" bash -c "$PKG repo add recipes '$R' --key $WORK/signers 2>&1; true"
 check_out "repo list shows it as added and signed" "^test${tab}.*${tab}signed${tab}added" $PKG repo list
 check_out "and the default" "^official${tab}.*${tab}default" $PKG repo list
 check_out "hs pkg repo add needs a typed name without a terminal" "terminal" bash -c "bash $SCRIPTS/pkg.sh repo add other '$R' --key $WORK/signers </dev/null 2>&1; true"
@@ -52,6 +53,9 @@ $PKG repo remove other
 
 echo "-- fetch and install"
 check_out "fetch finds the signed release" "^test${tab}v1[.]0[.]0" $PKG fetch test
+git -C "$HS_STATE_DIR/packages/repos/test" remote set-url origin /nonexistent/stale
+check_out "a clone of another address is never reused: fetch clones again" "^test${tab}v1[.]0[.]0" $PKG fetch test
+check_eq "and the clone points at the repository again" "$R" "$(git -C "$HS_STATE_DIR/packages/repos/test" config --get remote.origin.url)"
 check_out "available lists the package" "^test${tab}demo${tab}recipe${tab}1[.]0[.]0${tab}-" $PKG available
 check_out "install says where it came from" "demo 1[.]0[.]0 from test" $PKG install demo
 check "the package is in current/" test -f "$HS_STATE_DIR/packages/current/demo/package.toml"

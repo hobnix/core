@@ -3,10 +3,10 @@
 # listed but nothing is fetched from it: it fails closed. More repositories: hs pkg repo add <name> <url> --key <allowed_signers file>.
 #   replaces  the repositories this one took over (the old recipes and extensions rows are gone): an installed package recorded under one of
 #             them moves here on `hs pkg repo migrate` (also run by hs update), never downgraded; a repository a person added is never moved.
-#   core      the packages the core refers to by name (first run installs them); scripts/dev/core-names-check.py checks them in CI.
+#   core      the packages the core refers to by name (CI only: scripts/dev/core-names-check.py checks that each is in the index with core = true; `hs pkg install --core` installs the packages the index flags core = true).
 [[repo]]
 name = "official"
 url = "https://github.com/hobnix/official"
 index = "https://hobnix.github.io/official/index.json"
-replaces = ["recipes", "extensions", "capabilities"]
+replaces = ["recipes", "extensions"]
 core = ["domain", "monitoring", "ntfy", "zoraxy"]

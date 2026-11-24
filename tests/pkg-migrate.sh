@@ -196,6 +196,14 @@ check_eq "refused" 1 "$rc"
 check_match "says why" "could not be read again" "$msg"
 check_eq "installed.toml is as it was" "$before" "$(cat "$INST")"
 
+echo "-- a removed ADDED repository named capabilities is never moved; the shipped row does not list it"
+check "the shipped replaces list has no capabilities" bash -c "! grep -E '^replaces' '$ROOT/config/package-repos.toml' | grep -q capabilities"
+rows "$OUT/index.json" '["recipes", "extensions"]'; fresh
+sed -i '/^\[package.demo\]/,/^repo = /s/^repo = .*/repo = "capabilities"/' "$INST"
+out=$($PKG repo migrate 2>&1)
+check "capabilities is not in the migrate output" bash -c "! grep -q 'capabilities' <<<'$out'"
+check "the entry stays under capabilities" in_entry demo 'repo = "capabilities"'
+
 echo "-- hs update: the fetch and the migration never fail the update"
 check "update.sh guards the fetch" bash -c "grep -q 'if ! fetched=.*pkg.py\" fetch' '$SCRIPTS/update.sh'"
 check "and the migration" bash -c "grep -q 'if mig=.*repo migrate' '$SCRIPTS/update.sh'"
