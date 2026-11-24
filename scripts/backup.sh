@@ -332,7 +332,7 @@ host_files() {
     for f in $HS_BACKUP_HOST_FILES; do [ -e "$f" ] && echo "$f"; done
     return 0
   fi
-  for f in /etc/nixos/machine.toml /etc/nixos/machine.nix /etc/nixos/hardware-configuration.nix /etc/nixos/vendor "$STATE" \
+  for f in /etc/nixos/machine.toml /etc/nixos/machine.nix /etc/nixos/hardware-configuration.nix /etc/nixos/vendor "$STATE" /var/lib/hs-ext /var/lib/private/hs-ext \
            /var/lib/samba/private /etc/ssh/ssh_host_* /var/lib/hs-gateway/acme; do   # acme: the gateway's certificate keys (secret, never printed)
     [ -e "$f" ] && echo "$f"
   done

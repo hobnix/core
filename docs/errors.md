@@ -304,6 +304,22 @@ The server cannot make the access now (no domain controller, storage locked).
 - Text: The other server cannot make the access now (is its storage unlocked?).
 - Fix: none
 
+### ext.state-conflict
+
+The old and the new state folder of a service both exist, or the old path is a wrong link or not a folder (nothing is moved, nothing is deleted).
+
+- Layer: script
+- Text: This extension has its data in two places and the server does not know which one to use; its service does not start. Nothing was changed.
+- Fix: `see the guide`
+
+### ext.state-move-failed
+
+The state folder of a service cannot be moved because /var/lib/hs is on another file system (no copy is made).
+
+- Layer: script
+- Text: The data of this extension cannot be moved to its new folder; its service does not start. Nothing was changed.
+- Fix: `see the guide`
+
 <!-- END generated -->
 
 Not tested on hardware yet.
