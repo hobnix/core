@@ -26,32 +26,32 @@ list=$(bash "$hc" --list 2>/dev/null </dev/null || true)
 id="" text="" state="-"
 if [ "$action" = resume ]; then
   [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-  [ -e "$bulk_pause" ] || refuse "Nothing is paused."
+  [ -e "$bulk_pause" ] || refuse_code health.nothing-paused "Nothing is paused."
   cmd=(bash "$ackcmd" resume)
 else
   id=${1:-}
-  [ -n "$id" ] || refuse "a problem id is needed"
+  [ -n "$id" ] || refuse_code health.id-missing "a problem id is needed"
   shift
   extra=()
   if [ "$action" = ack ]; then
     # optional: --for <n><m|h|d|w> and --note <text> (what health-ack.sh takes)
     while [ $# -gt 0 ]; do
       case "$1" in
-        --for) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]{1,4}[mhdw]$ ]] || refuse "--for needs a time such as 90m, 12h, 7d or 2w"; extra+=(--for "$2"); shift 2 ;;
-        --note) [ $# -ge 2 ] && [ ${#2} -le 200 ] || refuse "--note needs a text of at most 200 characters"; extra+=(--note "$2"); shift 2 ;;
+        --for) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]{1,4}[mhdw]$ ]] || refuse_code health.for-invalid "--for needs a time such as 90m, 12h, 7d or 2w"; extra+=(--for "$2"); shift 2 ;;
+        --note) [ $# -ge 2 ] && [ ${#2} -le 200 ] || refuse_code health.note-invalid "--note needs a text of at most 200 characters"; extra+=(--note "$2"); shift 2 ;;
         *) refuse_code args.unexpected "unexpected extra arguments" ;;
       esac
     done
   fi
   [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-  [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9:._\ ()-]{0,100}$ ]] || refuse "invalid problem id"
+  [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9:._\ ()-]{0,100}$ ]] || refuse_code health.id-invalid "invalid problem id"
   row=$(awk -F'\t' -v k="$id" '$1 == k { print; exit }' <<<"$list")
-  [ -n "$row" ] || refuse "$id is not an active problem."
+  [ -n "$row" ] || refuse_code health.not-active "$id is not an active problem."
   text=$(cut -f2 <<<"$row"); state=$(cut -f3 <<<"$row")
   if [ "$action" = ack ]; then
-    [ "$state" != acked ] || refuse "$id is acknowledged already."
+    [ "$state" != acked ] || refuse_code health.acked-already "$id is acknowledged already."
   else
-    [ "$state" = acked ] || refuse "$id is not acknowledged."
+    [ "$state" = acked ] || refuse_code health.not-acked "$id is not acknowledged."
   fi
   cmd=(bash "$ackcmd" "$action" "$id" "${extra[@]}")
 fi

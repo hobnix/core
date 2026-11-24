@@ -295,3 +295,45 @@ net.value-missing	script	An option was given without its value.	The option needs
 net.address-invalid	script	The address of the router is not an http(s) address.	That is not an address of the router.	-
 net.key-invalid	script	The key of the router has a control character.	The key has a control character.	-
 net.failed	script	The router could not be connected, or it refused the key.	The router could not be connected.	-
+# S5: notify., health., expiry., job., testlab. (#1127)
+notify.name-missing	script	A channel name was not given.	A channel name is needed.	-
+notify.provider-fixed	script	The provider of an existing channel was changed.	The provider of a channel cannot be changed.	-
+notify.value-missing	script	An option was given without its value.	The option needs a value.	-
+notify.set-invalid	script	A --set option is not in the form key=value.	The setting must be key=value.	-
+notify.options-misplaced	script	Options were given to an action that takes none.	This action takes no options.	-
+notify.secret-many	script	More than one --secret was given.	Give one secret at a time.	-
+notify.priority-invalid	script	The minimum priority is not min, low, default, high or urgent.	The minimum priority is min, low, default, high or urgent.	-
+notify.quiet-invalid	script	The quiet rule is not respect or ignore.	The quiet rule is respect or ignore.	-
+notify.enabled-invalid	script	The enabled value is not yes or no.	Enabled is yes or no.	-
+notify.classes-invalid	script	A message class is not alarm, status, heartbeat or digest.	The message classes are alarm, status, heartbeat and digest.	-
+notify.exists	script	A channel with this name exists already.	There is already a channel with this name.	-
+notify.unknown	script	No channel has this name.	There is no channel with this name.	-
+notify.provider-unknown	script	No provider has this name.	There is no provider with this name.	-
+notify.setting-unknown	script	The provider has no text setting of this name.	The provider has no such setting.	-
+notify.value-multiline	script	A setting value has a line break or a tab.	A value is one line without a tab.	-
+notify.secret-unknown	script	The provider has no secret setting of this name.	That is not a secret setting of the provider.	-
+notify.value-invalid	script	A setting value does not match the form the provider expects.	A value does not look right.	-
+notify.class-unsupported	script	The provider cannot carry a message class that was asked for.	The provider cannot carry this message class.	-
+notify.settings-unusable	script	The provider refused the settings as they are.	The settings are not usable.	-
+health.nothing-paused	script	Resume was asked while nothing is paused.	Nothing is paused.	-
+health.id-missing	script	A problem id was not given.	A problem id is needed.	-
+health.for-invalid	script	The --for time is not a number with m, h, d or w.	Give a time such as 90m, 12h, 7d or 2w.	-
+health.note-invalid	script	The --note text is missing or longer than 200 characters.	The note is at most 200 characters.	-
+health.id-invalid	script	The problem id has characters that are not allowed.	That is not a problem id.	-
+health.not-active	script	The problem is not in the list of active problems.	This is not an active problem.	-
+health.acked-already	script	The problem is acknowledged already.	This problem is acknowledged already.	-
+health.not-acked	script	The problem is not acknowledged.	This problem is not acknowledged.	-
+expiry.name-missing	script	An entry name was not given.	A name is needed.	-
+expiry.value-missing	script	An option was given without its value.	The option needs a value.	-
+expiry.date-invalid	script	The date is not a real date in the form YYYY-MM-DD.	Use a date as YYYY-MM-DD.	-
+expiry.renew-invalid	script	The renewal hint has a line break or a tab, or is longer than 120 characters.	The hint is one line of at most 120 characters.	-
+expiry.unknown	script	No entry has this name.	There is no entry with this name.	-
+job.unit-invalid	script	The unit is not a job of this server (hs-*).	That is not a job of this server.	-
+job.not-running	script	Stop was asked for a job that is not running.	This job is not running.	-
+job.unknown	script	No job has this name.	There is no job with this name.	-
+job.not-scheduled	script	Run now was asked for a unit that is not a scheduled job.	Only scheduled jobs can be run now.	-
+job.systemctl-failed	script	The service manager could not stop or start the job.	The job could not be changed.	-
+testlab.value-missing	script	An option was given without its value.	The option needs a value.	-
+testlab.stage-invalid	script	The stage is not 1 to 6, a stage name or all.	The stage is 1 to 6, a stage name or all.	-
+testlab.off	script	The test-lab is off.	The test-lab is off.	-
+testlab.ref-refused	script	The ref or repository is not a branch, tag or commit of a Hobnix repository.	That ref or repository is not accepted.	-

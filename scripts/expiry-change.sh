@@ -20,21 +20,21 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: expiry-change.sh plan|start add <name> --date <YYYY-MM-DD> [--renew <text>] | remove <name>" >&2; exit 1 ;; esac
 case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
-[ -n "$name" ] || refuse "a name is needed"
+[ -n "$name" ] || refuse_code expiry.name-missing "a name is needed"
 [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._()-]{0,60}$ ]] || refuse_code name.invalid "invalid name (letters, digits, spaces and . _ ( ) -)"
 shift 3
 date="" renew=""
 if [ "$action" = add ]; then
   while [ $# -gt 0 ]; do
     case "$1" in
-      --date)  date=${2:-}; shift 2 || refuse "--date needs a value" ;;
-      --renew) renew=${2:-}; shift 2 || refuse "--renew needs a value" ;;
+      --date)  date=${2:-}; shift 2 || refuse_code expiry.value-missing "--date needs a value" ;;
+      --renew) renew=${2:-}; shift 2 || refuse_code expiry.value-missing "--renew needs a value" ;;
       *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   if [ -z "$date" ]; then printf 'status\tneeds\nneeds\tdate\n'; exit 2; fi
-  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && date -u -d "$date" +%s >/dev/null 2>&1 || refuse "'$date' is not a date. Use YYYY-MM-DD."
-  [[ "$renew" != *$'\t'* && "$renew" != *$'\n'* && ${#renew} -le 120 ]] || refuse "the renewal hint is one line of at most 120 characters"
+  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && date -u -d "$date" +%s >/dev/null 2>&1 || refuse_code expiry.date-invalid "'$date' is not a date. Use YYYY-MM-DD."
+  [[ "$renew" != *$'\t'* && "$renew" != *$'\n'* && ${#renew} -le 120 ]] || refuse_code expiry.renew-invalid "the renewal hint is one line of at most 120 characters"
 else
   [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
 fi
@@ -43,7 +43,7 @@ exists=false
 if bash "$expiry" --list 2>/dev/null | awk -F'\t' -v n="$name" '$1 == n { f = 1 } END { exit !f }'; then exists=true; fi
 if [ "$action" = add ]; then cmd=(bash "$expiry" add "$name" "$date"); [ -z "$renew" ] || cmd+=("$renew")
 else
-  $exists || refuse "There is no entry called '$name'."
+  $exists || refuse_code expiry.unknown "There is no entry called '$name'."
   cmd=(bash "$expiry" remove "$name")
 fi
 
