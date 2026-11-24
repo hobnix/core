@@ -5,6 +5,7 @@ use hobnix_core::Error;
 use std::process::ExitCode;
 
 mod jobs;
+mod pair;
 mod secrets;
 
 fn run(args: &[String]) -> hobnix_core::Result<u8> {
@@ -15,6 +16,10 @@ fn run(args: &[String]) -> hobnix_core::Result<u8> {
         }
         Some("job-record") => jobs::run(&args[1..]),
         Some("secrets") => secrets::run(&args[1..]),
+        Some("remote-codes") => pair::codes(&args[1..]),
+        Some("remote-claim") => pair::claim(&args[1..]),
+        Some("remote-accept") => pair::accept(&args[1..]),
+        Some("pair") => pair::run(&args[1..]),
         Some(other) => Err(Error::Refused(format!("unknown subcommand: {other}"))),
     }
 }

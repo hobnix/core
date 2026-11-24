@@ -16,6 +16,7 @@
   import { rowstate } from '../rowstate.svelte.js';
   import { sharePending, shareFailed } from './rows.js';
   import Button from '../ui/Button.svelte';
+  import Menu from '../ui/Menu.svelte';
   import NewShare from '../forms/shares/NewShare.svelte';
   import RemoteShares from './shares/RemoteShares.svelte';
   import PeerMount from '../forms/ops/PeerMount.svelte';
@@ -76,7 +77,7 @@
 
 <PageHeader title="Shares" crumb="Storage" sub={m.measured ? `Sizes measured ${m.measured}.` : 'Network shares, who may use them and what has been kept of them.'}>
   {#snippet actions()}
-    {#if m.hasCache}<Button need="admin" icon="arrow-line-down" busy={rowstate.pending('admin', ['cache-mover'])} busyLabel="Emptying…" disabled={locked} tooltip={'Move the uploaded files from the SSD cache to the disks now'} onclick={() => openPlan('admin', ['cache-mover'], 'Empty the upload cache')}>Empty cache</Button>{/if}
+    {#if m.hasCache}<Menu items={[{ label: 'Empty cache…', icon: 'arrow-line-down', need: 'admin', disabled: locked || rowstate.pending('admin', ['cache-mover']), reason: locked ? 'Storage is locked' : 'Already emptying', onclick: () => openPlan('admin', ['cache-mover'], 'Empty the upload cache') }]} />{/if}
     {#if view === 'remote'}
       <Button need="admin" tooltip={'Let another server read one of your shares'} onclick={() => openCreate(PeerOffer, { ondone: (r) => (offered = r) })}><i class="ph ph-share-network"></i>Give access</Button>
       <Button need="admin" variant="primary" tooltip={'Use a share of another server, read only'} onclick={() => openCreate(PeerMount)}><i class="ph ph-plus"></i>Add remote share</Button>

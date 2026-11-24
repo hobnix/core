@@ -856,6 +856,24 @@ role = "admin"
 ["remote mount-all"]
 role = "admin"
 
+["remote codes"]
+role = "admin"
+kind = "tsv"
+columns = ["share", "server", "expires_in"]
+note = "The pairing codes open on this server (docs/PLAN-remote-shares.md): the share (- for a code that waits for any share), the server name the code is bound to (- when none) and the seconds left. Never the code, its id or its key."
+
+["remote claim"]
+role = "admin"
+kind = "json"
+stdin = "bytes"
+note = "The giving side of a pairing: the claim request ({v, id, name, hostkey}) on stdin, the answer body on stdout ({v, nonce, box}, exit 0) or the one refusal shape ({v, error}, exit 1; error is code.unknown, code.rate or code.unavailable). Option --source <address> names the caller for the rate limit. Called by hs-web (POST /api/remote/claim, no session) and by the node word pair."
+
+["remote accept"]
+role = "admin"
+kind = "json"
+stdin = "bytes"
+note = "The receiving side of the reverse pairing: the push ({v, id, nonce, box}) on stdin, {v, ok} on stdout (exit 0) or the refusal shape (exit 1). Option --source <address>. Called by hs-web (POST /api/remote/push, no session)."
+
 ["ups status"]
 role = "viewer"
 

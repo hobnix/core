@@ -12,3 +12,4 @@ path = "src/main.rs"
 
 [dependencies]
 hobnix-core = { path = "../hobnix-core" }
+serde_json = "1"

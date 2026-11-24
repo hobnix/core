@@ -58,7 +58,7 @@ check_eq "nothing of that was written" 2 "$(wc -l < "$HS_STATE_DIR/nodes.tsv" | 
 
 echo "-- show"
 N --show cousin
-for kv in "name${T}cousin" "kind${T}peer" "user${T}adminuser" "port${T}22" "words${T}status" "key${T}missing"; do
+for kv in "name${T}cousin" "kind${T}peer" "user${T}adminuser" "port${T}22" "words${T}status pair" "key${T}missing"; do
   has "^$kv\$" && pass "show: ${kv//$T/=}" || fail "show lacks $kv: $out"
 done
 N --show vps2
@@ -163,5 +163,21 @@ id" '$(id)' "STATUS" " status" "status " "../status" "-o ProxyCommand=id" "sh -c
   R "$w"
   check_eq "refused with exit 2: '$(printf '%s' "$w" | head -c 20 | tr '\n' ' ')'" "2:" "$rc:$out"
 done
+for w in "pair extra" "pair;id" "PAIR" "pair --source x"; do
+  R "$w"
+  check_eq "pair with more is refused: '$w'" "2:" "$rc:$out"
+done
+echo "-- the pair word (remote shares by code): hs sys remote claim --source node, the request on stdin"
+printf '#!/usr/bin/env bash\necho "args: $*"\ncat\nexit "${FAKE_RC:-0}"\n' > "$WORK/fake-hs"
+chmod +x "$WORK/fake-hs"
+P() { rc=0; out=$(printf '{"v":1}' | SSH_ORIGINAL_COMMAND=pair HS_BIN=$WORK/fake-hs FAKE_RC=${1:-0} timeout 20 bash "$SCRIPTS/node-remote.sh" 2>"$WORK/err") || rc=$?; }
+P 0
+check_eq "pair: runs the claim row with the node as source, request on stdin" "0:args: sys remote claim --source node"$'\n''{"v":1}' "$rc:$out"
+P 1
+check_eq "pair: a refusal keeps exit 1" "1" "$rc"
+printf '#!/usr/bin/env bash\necho "sudo: a terminal is required" >&2\nexit 1\n' > "$WORK/fake-hs-sudo"
+chmod +x "$WORK/fake-hs-sudo"
+rc=0; out=$(printf '{"v":1}' | SSH_ORIGINAL_COMMAND=pair HS_BIN=$WORK/fake-hs-sudo timeout 20 bash "$SCRIPTS/node-remote.sh" 2>/dev/null) || rc=$?
+check_eq "pair: hs without passwordless sudo is 'not reachable' (exit 3), not a refusal" "3:" "$rc:$out"
 
 finish

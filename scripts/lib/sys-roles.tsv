@@ -218,6 +218,9 @@ vault usage	admin	read
 vault uses	admin	read
 remote list	admin	read
 remote mount-all	admin	change
+remote codes	admin	read
+remote claim	admin	read
+remote accept	admin	read
 ups status	viewer	read
 expiry list	viewer	read
 expiry plan <action>	admin	plan

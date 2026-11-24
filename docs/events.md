@@ -110,6 +110,10 @@ The payload is optional extra data for programs. Rules:
 | `testlab.failed` | error | `ref`, `stage` | a test-lab run failed or hit an error (subject: the run id; payload: the stage that failed) |
 | `testlab.skipped` | warn | `ref`, `stage` | a test-lab run could not run on this machine (no KVM, no nested virtualization or no incus; subject: the run id) |
 | `ext.service-failed` | error | `package`, `code` | a service extension failed 5 times in 10 minutes and the unit gave up (subject: the package; payload: its name and the last failure code) |
+| `remote.code.made` | info | `share`, `server` | a pairing code for a remote share was made (subject: the share; never the code) |
+| `remote.claimed` | info | `server`, `share`, `fingerprint`, `host` | a server used a code and got (or gave) a remote share (subject: the server; never the code or the password; fingerprint on the giving side, host (the address the share is mounted from) when a share was pushed to this server) |
+| `remote.claim.refused` | warn | `why` | a pairing request was refused: unknown, used or expired code, rate limit, bad request (subject: the source address or the server) |
+| `remote.codes.burned` | warn | none | 20 wrong pairing requests in 10 minutes ended every open code |
 
 <!-- END generated -->
 

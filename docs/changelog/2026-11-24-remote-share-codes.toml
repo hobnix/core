@@ -1,0 +1,6 @@
+date  = "2026-11-24"
+type  = "feature"
+title = "Remote shares: pair two servers with a short code"
+body  = """hs remote offer <share> --code makes a code of 16 letters and digits; the other server types it with hs remote add --code and the share is mounted, without copying a login by hand. The code works once and for at most an hour; the password travels encrypted and is never in a log or in the arguments of a program. hs remote codes shows the open codes, hs remote receive and hs remote send do the same the other way round.
+
+Needs the hobnix program, which comes with the next rebuild."""
