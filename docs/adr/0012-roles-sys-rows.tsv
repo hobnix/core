@@ -257,6 +257,7 @@ live check	viewer	read
 ext list	admin	read
 ext status	admin	read
 pkg list	admin	read
+pkg index	viewer	read
 pkg available	admin	read
 pkg market	admin	read
 pkg show <name>	admin	read

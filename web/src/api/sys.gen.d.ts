@@ -2059,6 +2059,23 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
+  "pkg.index": {
+    /** the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch */
+    words: ["pkg", "index"];
+    path: "/pkg/index";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "repo", name: Field]
+      | [tag: "last_ok", epoch: Field]
+      | [tag: "last_try", epoch: Field]
+      | [tag: "error", text: Field]
+      | [tag: "expires", epoch: Field]
+      | [tag: "notified", epoch: Field])[];
+  };
   "pkg.integrations": {
     /** what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty */
     words: ["pkg", "integrations"];

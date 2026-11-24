@@ -653,6 +653,20 @@ in
     timerConfig = { OnCalendar = "*:00,30"; Persistent = false; };
   };
 
+  # The package index (docs/PLAN-registry.md): fetched once a day (scripts/pkg-refresh.sh), also at boot. An index that changed or could not be
+  # fetched is an event (index.changed, index.failed), so the web interface reads the package lists again. Every server has the official repository: no option.
+  systemd.services.hs-pkg-refresh = lib.mkIf (!isEdge) {
+    description = "Fetch the package index, say when it changed or could not be fetched (hs pkg refresh)";
+    path = [ "/run/current-system/sw" pkgs.python3 pkgs.git pkgs.openssh ];
+    serviceConfig = { Type = "oneshot"; Nice = 10; };
+    script = "bash ${./scripts}/pkg-refresh.sh";
+  };
+  systemd.timers.hs-pkg-refresh = lib.mkIf (!isEdge) {
+    description = "Timer of hs-pkg-refresh";
+    wantedBy = [ "timers.target" ];
+    timerConfig = { OnCalendar = "daily"; RandomizedDelaySec = "6h"; Persistent = true; OnBootSec = "15min"; };
+  };
+
   # Old system generations pile up and fill the root disk. Weekly: delete the ones older than
   # 30 days (the newer ones stay for `hs system rollback`).
   systemd.services.hs-system-gc = {

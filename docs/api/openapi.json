@@ -9989,6 +9989,128 @@
     }
    }
   },
+  "/pkg/index": {
+   "get": {
+    "operationId": "pkg.index",
+    "summary": "the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch",
+    "x-hs-exit": true,
+    "x-hs-role": "viewer",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "index"
+     ],
+     "script": "pkg-refresh.sh",
+     "args": "--state",
+     "class": "read",
+     "rest": false
+    },
+    "description": "The state of the package index (pkg-refresh.sh): the repository, when it was last fetched (last_ok) and tried (last_try), the error of the last try (- = none), when the index expires and for which expiry a push message went out (notified). No line before the first fetch. Epoch values are seconds, - = unknown.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "repo"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "name"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "last_ok"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "last_try"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "error"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "text"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "expires"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "notified"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "epoch"
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/integrations": {
    "get": {
     "operationId": "pkg.integrations",
