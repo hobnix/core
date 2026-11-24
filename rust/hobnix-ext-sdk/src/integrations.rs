@@ -3,7 +3,10 @@
 //! [`parse`] turns that text into typed rows. How the extension gets the text (runs `hs`, or reads a file the core wrote) is its business.
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, PartialEq)]
+use serde::Deserialize;
+
+/// Also the shape of one entry of `init.integrations` (docs/api/ext-service-v1.schema.json): absent optional fields are `None` or empty.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Integration {
     pub package: String,
     pub integration: String,
@@ -11,10 +14,14 @@ pub struct Integration {
     pub source: String,
     /// Where the API is (`http://127.0.0.1:8096`); `None` when the core could not resolve `{port}`.
     pub api_url: Option<String>,
+    /// Never set in `init.integrations` (the core sends no key paths).
+    #[serde(default)]
     pub key_file: Option<String>,
     /// The `k=v` pairs beyond the common fields.
+    #[serde(default)]
     pub extras: BTreeMap<String, String>,
     /// Name of the HTTP header that carries the key (`X-Emby-Token`); `None` when the block names none.
+    #[serde(default)]
     pub key_header: Option<String>,
 }
 
@@ -78,5 +85,23 @@ mod tests {
         assert_eq!(r[1].api_url, None);
         assert!(r[1].extras.is_empty() && r[1].key_header.is_none());
         assert_eq!(r[2].key_header, None);
+    }
+
+    #[test]
+    fn init_rows() {
+        let j = r#"{"package":"jf","integration":"media","source":"recipe","api_url":"http://127.0.0.1:1","extras":{"a":"1"},"key_header":"X-Emby-Token"}"#;
+        let r: Integration = serde_json::from_str(j).unwrap();
+        assert_eq!(r.api_url.as_deref(), Some("http://127.0.0.1:1"));
+        assert_eq!(r.extras["a"], "1");
+        let r: Integration = serde_json::from_str(
+            r#"{"package":"p","integration":"i","source":"recipe","api_url":null}"#,
+        )
+        .unwrap();
+        assert!(
+            r.api_url.is_none()
+                && r.extras.is_empty()
+                && r.key_file.is_none()
+                && r.key_header.is_none()
+        );
     }
 }

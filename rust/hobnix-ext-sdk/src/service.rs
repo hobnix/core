@@ -16,6 +16,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::command::Lang;
+use crate::integrations::Integration;
 use crate::proto::{cut, read_line, Line, Out};
 use crate::{Event, LogLevel, VERSION};
 
@@ -28,6 +29,11 @@ pub struct Init {
     pub subscribe: Vec<String>,
     /// Seconds between `health` messages the core expects at most.
     pub health_interval: f64,
+    /// The rows of the integrations the package declared (`permissions = ["integration:<name>"]`), built by the core: a confined service
+    /// cannot run `hs pkg integrations`. No keys in it, read them with [`Integration::credential`]. Empty when none is declared or
+    /// when the core is older than this field.
+    #[serde(default)]
+    pub integrations: Vec<Integration>,
 }
 
 /// One row of the event log, delivered at least once and in `id` order.

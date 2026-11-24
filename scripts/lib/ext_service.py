@@ -137,7 +137,7 @@ def file_events(path):
 
 
 def supervise(prog, name, subscribe=(), fetch=None, cursor_file=None, ready_timeout=30.0, health_interval=30.0, missed=3,
-              grace=10.0, stop=None, on_state=None, on_message=None, lang="en"):
+              grace=10.0, stop=None, on_state=None, on_message=None, lang="en", integrations=()):
     """Run the service until `stop` is set or it ends. Returns {"state", "code", "reason", "exit"}."""
     stop = stop or threading.Event()
     state = {"v": None}
@@ -183,7 +183,10 @@ def supervise(prog, name, subscribe=(), fetch=None, cursor_file=None, ready_time
 
     def send(m):
         outbox.put((json.dumps({"v": VERSION, **m}, separators=(",", ":")) + "\n").encode())
-    send({"type": "init", "name": name, "lang": lang, "subscribe": list(subscribe), "health_interval": health_interval})
+    init = {"type": "init", "name": name, "lang": lang, "subscribe": list(subscribe), "health_interval": health_interval}
+    if integrations:    # additive: a service that does not know the field ignores it (ADR 0011)
+        init["integrations"] = list(integrations)
+    send(init)
 
     cursor = read_cursor(cursor_file) if cursor_file else 0
     sent = cursor              # the highest id sent
@@ -709,7 +712,29 @@ def confined_program(name, pkgdir, prog, creds=()):
     return cmd + ["--property=" + x for x in props] + ["--"] + prog, None
 
 
-def svc_run(name, pkgdir, state_dir, creds=()):
+def integration_rows(text, perms):
+    """The rows for `init.integrations`: `text` is the listing of `hs sys pkg integrations <name>` (package, integration, source, api_url, key_state,
+    extra, key_header; `-` = empty, tab separated), `perms` the declared permissions of the package. Only an integration declared as
+    integration:<name> is kept, whatever the text holds (the bridge does not trust the caller to have filtered). No key and no key path is in a
+    row: keys travel only as systemd credentials."""
+    declared = {p[len("integration:"):] for p in (perms or []) if p.startswith("integration:")}
+    opt = lambda v: None if v in ("-", "") else v
+    out = []
+    for line in (text or "").splitlines():
+        f = line.split("	")
+        if len(f) < 6 or f[1] not in declared:
+            continue
+        extras = {}
+        for kv in (opt(f[5]) or "").split(","):
+            k, eq, v = kv.partition("=")
+            if eq and k:
+                extras[k] = v
+        out.append({"package": f[0], "integration": f[1], "source": f[2], "api_url": opt(f[3]), "extras": extras,
+                    "key_header": opt(f[6]) if len(f) > 6 else None})
+    return out
+
+
+def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
     table = service_table(pkgdir)
     if not table or not isinstance(table.get("exec"), str):
         print(f"ext_service.py: {name} has no [service] table with exec", file=sys.stderr)
@@ -738,7 +763,8 @@ def svc_run(name, pkgdir, state_dir, creds=()):
     stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
     try:
         res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                        float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir))
+                        float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir),
+                        integrations=integration_rows(integrations_text, declared_perms(pkgdir)))
     finally:
         stop_unit(name)
         drop_creds(name)
@@ -801,6 +827,7 @@ def main_svc(argv):
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--active", default="no")
     ap.add_argument("--stopped", default="no")
+    ap.add_argument("--integrations-file", help="a file with the listing of hs sys pkg integrations for the declared integrations: read once and removed (not argv: visible in ps); sent in init")
     ap.add_argument("--credential", action="append", default=[], help="NAME=PROVIDER=KEYFILE (the key is copied privately for LoadCredential=)")
     a = ap.parse_args(argv[1:])
     if not re.match(r"^[a-z][a-z0-9-]{0,40}$", a.name):
@@ -811,7 +838,18 @@ def main_svc(argv):
             n, _, rest = c.partition("=")
             prov, _, p = rest.partition("=")
             creds.append((n, prov, p))
-        return svc_run(a.name, a.dir or ".", a.state_dir, creds)
+        text = ""
+        if a.integrations_file:
+            try:
+                with open(a.integrations_file, encoding="utf-8", errors="replace") as fh:
+                    text = fh.read(1 << 18)
+            except OSError:
+                print("ext_service.py: the integration listing could not be read: the service gets no integrations", file=sys.stderr)
+            try:
+                os.unlink(a.integrations_file)
+            except OSError:
+                pass
+        return svc_run(a.name, a.dir or ".", a.state_dir, creds, text)
     if argv[0] == "reset":
         try:
             os.unlink(state_path(a.state_dir, a.name))
