@@ -171,6 +171,83 @@ check "and still no clone" test ! -e "$HS_STATE_DIR/packages/repos/hub"
 mv "$HS_STATE_DIR/packages/repos/hub.gone" "$HS_STATE_DIR/packages/repos/hub"; mv "$R.gone" "$R"
 export HS_STATE_DIR=$S1
 
+echo "-- a pinned commit that no branch reaches any more is fetched by hs pkg fetch"
+git -C "$R" config uploadpack.allowAnySHA1InWant true
+PINNED=$(git -C "$R" rev-parse HEAD)
+git -C "$R" reset -q --hard HEAD~1
+export HS_STATE_DIR=$WORK/state3; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+check_out "fetch ok although the history was rewritten" "^hub${tab}serial-6${tab}-${tab}ok" $PKG fetch hub
+check "the pinned commit is in the clone" git -C "$HS_STATE_DIR/packages/repos/hub" cat-file -e "$PINNED^{commit}"
+check_out "show works from the local clone" "^tag${tab}v1[.]0[.]0-" $PKG show shots
+
+echo "-- the index is accepted but the git address fails: a parseable row, exit 1"
+mv "$R" "$R.gone"; rm -rf "$HS_STATE_DIR/packages/repos/hub" "$HS_STATE_DIR/packages/index-cache"
+$PKG fetch hub > "$WORK/row.out" 2>/dev/null; rc=$?
+check "fetch exits 1" test "$rc" = 1
+check "the row has four tab fields with - for release and commit" awk -F'\t' 'NF==4 && $1=="hub" && $2=="-" && $3=="-" && $4!="ok" && $4!="" {f=1} END{exit !f}' "$WORK/row.out"
+check_out "the accepted index is still listed" "^hub${tab}" $PKG available
+check "updates still runs" $PKG updates
+mv "$R.gone" "$R"; git -C "$R" reset -q --hard "$PINNED"
+
+echo "-- the fetch lock covers the git part too"
+LK=$HS_STATE_DIR/packages/index/hub/.lock
+python3 - "$LK" "$WORK/release" <<'PYEOF' &
+import fcntl, os, sys, time
+f = open(sys.argv[1], "w"); fcntl.flock(f, fcntl.LOCK_EX)
+open(sys.argv[2] + ".held", "w").close()
+for _ in range(100):
+    if os.path.exists(sys.argv[2]): break
+    time.sleep(0.1)
+PYEOF
+HOLDER=$!
+for _ in $(seq 50); do [ -e "$WORK/release.held" ] && break; sleep 0.1; done
+$PKG fetch hub > "$WORK/lock.out" 2>&1 &
+FETCH=$!
+sleep 1
+check "a second fetch waits for the lock" kill -0 $FETCH
+touch "$WORK/release"; wait $HOLDER; wait $FETCH; rc=$?
+check "and then runs through" test "$rc" = 0
+check_out "with its normal row" "^hub${tab}serial-6${tab}[0-9a-f-]*${tab}ok|^hub${tab}serial-6${tab}-${tab}ok" cat "$WORK/lock.out"
+
+echo "-- the cache: no race between reads, prune keeps what is in use"
+python3 -I - "$SCRIPTS" <<'PYEOF'
+import importlib.util, os, sys, tempfile, time
+S = sys.argv[1]
+def load(n, f):
+    sp = importlib.util.spec_from_file_location(n, os.path.join(S, f)); m = importlib.util.module_from_spec(sp); sys.modules[n] = m; sp.loader.exec_module(m); return m
+pkg = load("pkg", "pkg.py"); R = load("pkg_repo", "pkg_repo.py").Repos(pkg)
+e = {"commit": "a" * 40, "path": "recipes/x", "tree": "sha256:" + "1" * 64}
+cached = R.cache_path("racehub", e)
+os.makedirs(os.path.join(cached, "pkg")); open(os.path.join(cached, "pkg", "mine"), "w").close()
+open(os.path.join(cached, "tree"), "w").write(e["tree"] + "\n")
+tmp = tempfile.mkdtemp(dir=os.path.dirname(cached)); os.makedirs(os.path.join(tmp, "pkg")); open(os.path.join(tmp, "pkg", "other"), "w").close()
+R.cache_store(cached, tmp, e)            # the miss that lost the race
+assert os.path.exists(os.path.join(cached, "pkg", "mine")), "the folder of the first read was replaced"
+d = os.path.dirname(cached)
+old = os.path.join(d, "b" * 40 + "-old"); os.makedirs(old); t = time.time() - 7200; os.utime(old, (t, t))
+fresh = os.path.join(d, "c" * 40 + "-new"); os.makedirs(fresh)
+R.prune_cache("racehub", {"packages": {}})
+assert not os.path.exists(old), "an old unused folder stays"
+assert os.path.exists(fresh), "a folder created a moment ago was pruned"
+assert os.path.exists(cached), "a folder just used was pruned"
+PYEOF
+check "cache_store keeps the first folder, prune keeps recent ones" test $? = 0
+rm -rf "$HS_STATE_DIR/packages/index-cache/racehub"
+
+echo "-- a damaged floor file fails closed"
+IDXD=$HS_STATE_DIR/packages/index/hub
+printf 'garbage' > "$IDXD/serial"
+rm -rf "$IDXD/live" "$IDXD/.old"
+check_out "refused with the way out" "damaged.*hs pkg repo remove" $PKG fetch hub
+check "nothing was written" test ! -e "$IDXD/live"
+rm -f "$IDXD/serial"
+check_out "a missing floor with no copy is the first fetch" "^hub${tab}serial-6.*ok" $PKG fetch hub
+printf 'garbage' > "$IDXD/serial"
+check_out "a damaged floor with a kept index is repaired" "^hub${tab}serial-6.*ok" $PKG fetch hub
+check "the floor is rewritten" grep -qE '^6 [0-9a-f]{64}$' "$IDXD/serial"
+export HS_STATE_DIR=$S1
+
 echo "-- a missing key file is a refusal, not a traceback"
 check_out "repo add with a missing key" "does not exist" $PKG repo add nokey "$R" --key /missing/signers --index "$OUT/index.json"
 check "no traceback" bash -c "! $PKG repo add nokey '$R' --key /missing/signers --index '$OUT/index.json' 2>&1 | grep -q Traceback"

@@ -40,6 +40,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import tomllib
 import urllib.request
 from datetime import timedelta
@@ -70,6 +71,7 @@ def beta_allowed(state):
         return False
 REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 MAX_INDEX = 20 * 1024 * 1024
+CACHE_KEEP_SECONDS = 600   # prune leaves a cached folder alone that was created or read this recently
 GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -263,13 +265,15 @@ class Repos:
         return os.path.join(self.index_dir(name), "serial")
 
     def read_floor(self, name):
-        """(serial, sha256 of that index.json) kept in the separate floor file, or None; a damaged file counts as none (the live pair still guards)"""
+        """(serial, sha256 of that index.json) kept in the separate floor file; None when there is none; False when the file is damaged"""
         try:
             with open(self.floor_file(name), encoding="utf-8") as f:
                 s, h = f.read().split()
             return int(s), h
-        except (OSError, ValueError):
+        except FileNotFoundError:
             return None
+        except (OSError, ValueError):
+            return False
 
     def write_floor(self, name, doc, path):
         """the serial floor, written (and synced) before the swap and never removed by it: a crash in the swap cannot lose it"""
@@ -295,7 +299,11 @@ class Repos:
         name = r["name"]
         lock = self.locked(name)
         try:
-            return self.fetch_index_locked(r)
+            doc = self.fetch_index_locked(r)
+            self.fetch(r)       # the clone and the commits the index names, so reads of the web never run git clone or fetch (same lock: no "cannot lock ref")
+            for e in doc["packages"].values():
+                self.ensure_commit(r, e["commit"])      # a commit no branch or tag reaches any more is fetched by its id
+            return doc
         finally:
             lock.close()
 
@@ -317,6 +325,11 @@ class Repos:
                 old = None
             why = pi.check_serial(doc, old) if old else None
             floor = self.read_floor(name)
+            if floor is False:      # fail closed: without a readable floor and a kept pair an older signed index could not be told apart
+                if old is None:
+                    raise Refused("%s: the serial floor file %s is damaged and no kept index remains to check against; nothing was changed. "
+                                  "Delete that file by hand to accept the current index as the first one, or run `hs pkg repo remove %s` and add the repository again" % (name, self.floor_file(name), name))
+                floor = None
             if not why and floor:       # the floor outlives the pair: with live and .old gone an older signed index is still refused
                 with open(os.path.join(new, "index.json"), "rb") as f:
                     digest = hashlib.sha256(f.read()).hexdigest()
@@ -410,7 +423,10 @@ class Repos:
     def cache_valid(path, entry):
         try:
             with open(os.path.join(path, "tree"), encoding="utf-8") as f:
-                return f.read().strip() == entry["tree"] and os.path.isdir(os.path.join(path, "pkg"))
+                ok = f.read().strip() == entry["tree"] and os.path.isdir(os.path.join(path, "pkg"))
+            if ok:
+                os.utime(path)      # used now: prune keeps it
+            return ok
         except OSError:
             return False
 
@@ -420,6 +436,8 @@ class Repos:
             with open(os.path.join(tmp, "tree"), "w", encoding="utf-8") as f:
                 f.write(entry["tree"] + "\n")
             os.makedirs(os.path.dirname(cached), exist_ok=True)
+            if self.cache_valid(cached, entry):     # another read was first: its folder may be in use, keep it
+                return
             self.rm_quiet(cached)
             os.rename(tmp, cached)
         except OSError:
@@ -431,9 +449,15 @@ class Repos:
         if not os.path.isdir(d):
             return
         keep = {"%s-%s" % (e["commit"], hashlib.sha256(e["path"].encode()).hexdigest()[:12]) for e in doc["packages"].values()}
+        now = time.time()
         for n in os.listdir(d):
-            if n not in keep:
-                self.rm_quiet(os.path.join(d, n))
+            p = os.path.join(d, n)
+            try:
+                recent = now - os.stat(p).st_mtime < CACHE_KEEP_SECONDS     # created or read a moment ago: a running read may be using it
+            except OSError:
+                continue
+            if n not in keep and not recent:
+                self.rm_quiet(p)
 
     def read_at(self, r_name, entry, ref, rel):
         """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
@@ -494,7 +518,6 @@ class Repos:
             try:
                 if r.get("index"):
                     self.fetch_index(r)
-                    self.fetch(r)       # the commits the index names, so reads of the web never run git clone or fetch
                 else:
                     self.fetch(r)
                 t, c = self.verified_tag(r)
