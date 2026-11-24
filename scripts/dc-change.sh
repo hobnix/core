@@ -29,12 +29,12 @@ shift 2 || true
 dc="" confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dc)      [ "$action" != ca ] || refuse "--dc is for renew"; [ $# -ge 2 ] || refuse "--dc needs a value"; dc=$2; shift 2 ;;
+    --dc)      [ "$action" != ca ] || refuse_code dc.option-misplaced "--dc is for renew"; [ $# -ge 2 ] || refuse_code dc.value-missing "--dc needs a value"; dc=$2; shift 2 ;;
     --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ -z "$dc" ] || [[ "$dc" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || refuse "'$dc' is not an instance name"
+[ -z "$dc" ] || [[ "$dc" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || refuse_code dc.name-invalid "'$dc' is not an instance name"
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
@@ -51,9 +51,9 @@ fi
 
 case "$action" in
   ca)
-    [ ! -s "$state/dc-ca.pem" ] || refuse "The CA exists already (a new one would make every certificate invalid)."
+    [ ! -s "$state/dc-ca.pem" ] || refuse_code dc.ca-exists "The CA exists already (a new one would make every certificate invalid)."
     if [ "$verb" = start ]; then
-      bash "$cert" ca </dev/null >/dev/null 2>&1 || refuse "the CA could not be made (is the vault open? is this a domain server?)"
+      bash "$cert" ca </dev/null >/dev/null 2>&1 || refuse_code dc.ca-failed "the CA could not be made (is the vault open? is this a domain server?)"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -62,13 +62,13 @@ case "$action" in
     printf 'note\tDo this once, on the server that keeps the CA. Whoever holds the key can issue certificates for the domain.\n'
     printf 'command\ths dc cert ca\nlong\tno\n' ;;
   renew)
-    [ -s "$state/dc-ca.pem" ] || refuse "There is no CA on this server yet: make it first."
+    [ -s "$state/dc-ca.pem" ] || refuse_code dc.no-ca "There is no CA on this server yet: make it first."
     name=$dc
     if [ -z "$name" ]; then
       . "$here/lib/dc.sh"
       name=$(dc_name)
     fi
-    "$inc" info "$name" >/dev/null 2>&1 || refuse "The domain controller '$name' does not run on this server: renew its certificate in the terminal there (hs dc cert request / sign / install)."
+    "$inc" info "$name" >/dev/null 2>&1 || refuse_code dc.not-local "The domain controller '$name' does not run on this server: renew its certificate in the terminal there (hs dc cert request / sign / install)."
     if [ "$verb" = start ]; then
       [ "$confirm" = "$name" ] || refuse_code confirm.missing "type the name of the controller to confirm: $name"
       . "$here/lib/job.sh"

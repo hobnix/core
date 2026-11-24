@@ -25,9 +25,9 @@ case "$verb" in plan|start) ;; *) echo "usage: node-change.sh plan|start add <na
 case "$action" in add|remove|key) ;; *) refuse_code action.unknown "unknown action (add, remove or key)" ;; esac
 if [ -z "$name" ]; then
   if [ "$action" = add ]; then printf 'status\tneeds\nneeds\tname\n'; exit 2; fi
-  refuse "a node name is needed"
+  refuse_code node.name-missing "a node name is needed"
 fi
-[[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] && [ "$name" != local ] && [ "$name" != main ] || refuse "not a node name (lower case letters, digits and dashes, at most 31, starting with a letter)"
+[[ "$name" =~ ^[a-z][a-z0-9-]{0,30}$ ]] && [ "$name" != local ] && [ "$name" != main ] || refuse_code node.name-invalid "not a node name (lower case letters, digits and dashes, at most 31, starting with a letter)"
 shift 3
 
 # the web interface appends --confirm <word> to start (the typed name of a red change); take it out of the arguments
@@ -50,29 +50,29 @@ case "$action" in
   add)
     host=${1:-}; [ $# -eq 0 ] || shift
     if [ -z "$host" ]; then printf 'status\tneeds\nneeds\thost\n'; exit 2; fi
-    [[ "$host" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$ ]] && [[ "$host" != *..* ]] || refuse "not a host name or address"
+    [[ "$host" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$ ]] && [[ "$host" != *..* ]] || refuse_code node.host-invalid "not a host name or address"
     kind=peer
     while [ $# -gt 0 ]; do
       case "$1" in
-        --kind) kind=${2:-}; shift 2 || refuse "--kind needs a value" ;;
-        --port) port=${2:-}; shift 2 || refuse "--port needs a value" ;;
+        --kind) kind=${2:-}; shift 2 || refuse_code node.value-missing "--kind needs a value" ;;
+        --port) port=${2:-}; shift 2 || refuse_code node.value-missing "--port needs a value" ;;
         *) refuse_code option.unknown "unknown option $1" ;;
       esac
     done
-    case "$kind" in peer|vps|edge) ;; *) refuse "the kind is peer, vps or edge" ;; esac
-    if [ -n "$port" ]; then { [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; } || refuse "not a port"; fi
-    $exists && refuse "There is already a node called $name."
+    case "$kind" in peer|vps|edge) ;; *) refuse_code node.kind-invalid "the kind is peer, vps or edge" ;; esac
+    if [ -n "$port" ]; then { [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; } || refuse_code node.port-invalid "not a port"; fi
+    $exists && refuse_code node.exists "There is already a node called $name."
     cmd=(bash "$node" add "$name" "$host" --kind "$kind"); [ -z "$port" ] || cmd+=(--port "$port") ;;
   remove)
     [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-    $exists || refuse "There is no node called $name."
+    $exists || refuse_code node.unknown "There is no node called $name."
     # only a row of the list can go; the implicit proxyserver of the setting vpsHost goes away with the setting
     bash "$node" --list 2>/dev/null | awk -F'\t' -v n="$name" '$1 == n && $5 == "file" { f = 1 } END { exit !f }' \
-      || refuse "$name comes from the setting vpsHost: it goes away with hs config unset vpsHost."
+      || refuse_code node.from-config "$name comes from the setting vpsHost: it goes away with hs config unset vpsHost."
     cmd=(bash "$node" remove "$name" --yes) ;;
   key)
-    for a in "$@"; do case "$a" in --new) new=true ;; *) refuse "unexpected argument $a" ;; esac; done
-    $exists || refuse "There is no node called $name."
+    for a in "$@"; do case "$a" in --new) new=true ;; *) refuse_code args.unexpected "unexpected argument $a" ;; esac; done
+    $exists || refuse_code node.unknown "There is no node called $name."
     cmd=(bash "$node" key "$name" --yes); if $new; then cmd+=(--new); fi ;;
 esac
 

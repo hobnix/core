@@ -211,6 +211,7 @@ check_eq "user-add with a group: exit 0" 0 "$rc"
 has '^step	add newbie to Staff$' && pass "a step per group" || fail "groups: $out"
 run plan newbie user-add --group Nope
 check_eq "an unknown group is refused" 1 "$rc"
+check_match "an unknown group is refused with user.group-unknown" $'code\tuser.group-unknown' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF user.group-unknown && pass "user.group-unknown is in the catalogue" || fail "user.group-unknown is not in the catalogue"
 run plan newbie user-add --group 'Domain Users'
 check_eq "Domain Users is refused" 1 "$rc"
 run plan anna lock --group Staff
@@ -250,6 +251,7 @@ grep -qF -- 'HOME\Crew' "$WORK/wbcalls" && pass "the SID is looked up with the d
 echo "-- edit the details of a user and a group"
 run plan anna user-edit
 check_eq "nothing to change is refused" 1 "$rc"
+check_match "nothing to change is refused with user.nothing-to-change" $'code\tuser.nothing-to-change' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF user.nothing-to-change && pass "user.nothing-to-change is in the catalogue" || fail "user.nothing-to-change is not in the catalogue"
 run plan anna user-edit --full 'Anna Muster' --mail - --description 'Front desk'
 check_eq "user-edit: exit 0" 0 "$rc"
 has '^heading	change the details of anna$' && has '^step	set the full name to Anna Muster$' && has '^step	clear the email$' && has '^step	set the description to Front desk$' && pass "a step per field" || fail "user-edit: $out"

@@ -44,3 +44,64 @@ ext.state-reserved	script	A package has the name of a folder the server itself k
 ext.state-link-failed	script	The old path of a state folder could not be made a link to the new folder	The server could not link the data folder of this extension. Nothing was deleted.	see docs/extensions-sdk.md, "If something goes wrong"
 ext.dynamic-write	script	A service or confined command declares fs.write outside /var/lib/hs/<its name>	This extension wants to write outside its own folder; its service does not start.	-
 ext.dynamic-read	script	A service or confined command declares fs.read of the state of the server or of another extension	This extension wants to read data that is not its own; its service does not start.	-
+# S3: user., admin., dc., token., ssh., peer., node. (#1127)
+user.name-missing	script	The user or group name was not given.	Give the name of the user or group.	-
+user.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+user.nothing-to-change	script	An edit names no field to change.	Nothing was changed: give a field to change.	-
+user.group-forbidden	script	Domain Users was chosen as a group; every user is in it already.	Every user is in Domain Users; it cannot be chosen.	-
+user.group-unknown	script	A group that does not exist was named.	No such group was found.	-
+user.access-invalid	script	A share access is not written as share=read, write or full.	The access is share=read, write or full.	-
+user.share-unknown	script	A share that does not exist was named.	No such share was found.	-
+user.password-missing	script	The password was not passed on standard input.	No password was given.	-
+admin.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+admin.value-missing	script	An option was given without its value.	The option needs a value.	-
+admin.no-push-address	script	The test push message needs an address that is not set.	There is no push address yet.	-
+admin.test-failed	script	The test message could not be sent.	The test message could not be sent.	-
+admin.pin-failed	script	The MAC addresses could not be pinned.	The MAC addresses could not be pinned.	-
+admin.not-snapraid	script	The upload cache exists only on the snapraid layout.	There is no upload cache on this layout.	-
+admin.no-cache	script	The upload cache is not mounted.	There is no upload cache on this server.	-
+admin.seconds-invalid	script	The seconds of the fan cleaning are not a number from 3 to 30.	The seconds are a number from 3 to 30.	-
+admin.no-fan-controller	script	No fan controller was found on this machine.	No fan controller was found.	-
+dc.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+dc.value-missing	script	An option was given without its value.	The option needs a value.	-
+dc.name-invalid	script	The name of the domain controller is not an instance name.	That is not an instance name.	-
+dc.ca-exists	script	The certificate authority exists already (a new one would make every certificate invalid).	The CA exists already.	-
+dc.ca-failed	script	The certificate authority could not be made.	The CA could not be made.	-
+dc.no-ca	script	There is no certificate authority yet.	There is no CA yet: make it first.	-
+dc.not-local	script	The domain controller does not run on this server.	That controller does not run on this server.	-
+token.name-missing	script	The name of the token was not given.	Give the name of the token.	-
+token.value-missing	script	An option was given without its value.	The option needs a value.	-
+token.caller-missing	script	Who asks (the person and the role) was not given.	Who asks is missing.	-
+token.role-unknown	script	The role of the person who asks is not one that exists.	That role is not known.	-
+token.days-invalid	script	The days of a token are not a number from 1 to 365.	The days are a number from 1 to 365.	-
+token.invalid	script	The token cannot be created with these values.	The token cannot be created.	-
+token.not-found	script	There is no token with this name, or it belongs to someone else.	There is no token with this name.	-
+ssh.key-missing	script	The public key or the id of the key was not given.	Give the public key or the id of the key.	-
+ssh.too-long	script	The key line is longer than 800 characters.	That is too long.	-
+ssh.not-one-line	script	The key has more than one line or has control characters.	It must be one line without control characters.	-
+ssh.not-public-key	script	The text is not a public key line.	That is not a public key line.	-
+ssh.key-invalid	script	The public key did not pass the check of ssh-keygen.	That is not a valid public key.	-
+ssh.key-listed	script	The key is in the list already.	This key is in the list already.	-
+ssh.key-unknown	script	There is no key with this id.	There is no key with this id.	-
+ssh.last-key	script	The key is the last one; without a key nobody could log in over SSH.	That is the last key.	-
+ssh.session-key	script	The key is the one the current SSH session used.	That key is in use by your session.	-
+ssh.failed	script	The key script refused the change.	The key could not be changed.	-
+peer.invalid	script	A value of the peer (name, host, share, path ...) has characters that do not belong in it.	That value is not valid.	-
+peer.value-missing	script	An option was given without its value.	The option needs a value.	-
+peer.name-missing	script	The name for the other server was not given.	Give the name of the other server.	-
+peer.args-missing	script	The host and the share were not both given.	Give the host and the share.	-
+peer.user-missing	script	The login of the mount was not given.	Give the login.	-
+peer.offered	script	The share is offered to this peer already.	That share is offered already.	-
+peer.mounted	script	The share of this peer is set up already.	That share is set up already.	-
+peer.not-mounted	script	Nothing is mounted from this peer.	Nothing is mounted from that peer.	-
+peer.not-offered	script	Nothing is shared with this peer.	Nothing is shared with that peer.	-
+peer.failed	script	The peer script refused the step.	The step was refused.	-
+node.name-missing	script	The name of the node was not given.	Give the name of the node.	-
+node.name-invalid	script	The name is not a node name (lower case letters, digits and dashes, starting with a letter).	That is not a node name.	-
+node.host-invalid	script	The host is not a host name or an address.	That is not a host name or address.	-
+node.value-missing	script	An option was given without its value.	The option needs a value.	-
+node.kind-invalid	script	The kind of the node is not peer, vps or edge.	The kind is peer, vps or edge.	-
+node.port-invalid	script	The port is not a number from 1 to 65535.	That is not a port.	-
+node.exists	script	A node with this name exists already.	There is already a node with this name.	-
+node.unknown	script	No node has this name.	There is no node with this name.	-
+node.from-config	script	The node comes from a setting and goes away with that setting.	That node comes from a setting.	-

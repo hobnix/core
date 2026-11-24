@@ -28,7 +28,7 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: ssh-key-change.sh plan|start <add <key>|remove <id>> [--confirm remove]" >&2; exit 1 ;; esac
 case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
-[ $# -ge 3 ] || refuse "give the public key or the id of the key as one argument"
+[ $# -ge 3 ] || refuse_code ssh.key-missing "give the public key or the id of the key as one argument"
 arg=$3
 shift 3
 confirm=""
@@ -40,8 +40,8 @@ while [ $# -gt 0 ]; do
 done
 
 # one line without control characters (newline, tab, ...) and not too long, for both actions
-[ "${#arg}" -le 800 ] || refuse "that is too long"
-case "$arg" in *[[:cntrl:]]*) refuse "it must be one line without control characters" ;; esac
+[ "${#arg}" -le 800 ] || refuse_code ssh.too-long "that is too long"
+case "$arg" in *[[:cntrl:]]*) refuse_code ssh.not-one-line "it must be one line without control characters" ;; esac
 
 lastline() { sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' | awk 'NF { l = $0 } END { sub(/^[^A-Za-z0-9]+/, "", l); print l }'; }
 list=$(bash "$sshkey" --list 2>/dev/null || true)
@@ -51,30 +51,30 @@ danger=""
 case "$action" in
   add)
     re='^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]{16,}={0,3}( [A-Za-z0-9@._:+=, -]{1,100})?$'
-    [[ "$arg" =~ $re ]] || refuse "that is not a public key line (ssh-ed25519 AAAA... comment): use the .pub file, never the private key"
+    [[ "$arg" =~ $re ]] || refuse_code ssh.not-public-key "that is not a public key line (ssh-ed25519 AAAA... comment): use the .pub file, never the private key"
     type=${arg%% *}; body=$(cut -d' ' -f2 <<<"$arg"); comment=$(cut -d' ' -f3- <<<"$arg"); comment=${comment:-no comment}
     fp="?"
     if command -v ssh-keygen >/dev/null 2>&1; then
       tmp=$(mktemp); printf '%s\n' "$arg" > "$tmp"
       fp=$(ssh-keygen -lf "$tmp" 2>/dev/null | awk '{ print $2; exit }' || true); rm -f "$tmp"
-      [ -n "$fp" ] || refuse "that is not a valid public key"
+      [ -n "$fp" ] || refuse_code ssh.key-invalid "that is not a valid public key"
     fi
     while IFS= read -r k; do
       [ -n "$k" ] || continue
-      [ "$(cut -d' ' -f2 <<<"$k")" != "$body" ] || refuse "this key is in the list already"
+      [ "$(cut -d' ' -f2 <<<"$k")" != "$body" ] || refuse_code ssh.key-listed "this key is in the list already"
     done < <(machine_get sshKeys 2>/dev/null || true) ;;
   remove)
     line=$(awk -F'\t' -v id="$arg" '$1 == id { print; exit }' <<<"$list")
-    [ -n "$line" ] || refuse "there is no key with this id"
-    [ "$count" -gt 1 ] || refuse "that is the last key: without a key nobody could log in over SSH again. Add the new one first."
-    [ "$(cut -f4 <<<"$line")" != yes ] || refuse "that is the key your current SSH session used. Log in with another key first, then remove this one."
+    [ -n "$line" ] || refuse_code ssh.key-unknown "there is no key with this id"
+    [ "$count" -gt 1 ] || refuse_code ssh.last-key "that is the last key: without a key nobody could log in over SSH again. Add the new one first."
+    [ "$(cut -f4 <<<"$line")" != yes ] || refuse_code ssh.session-key "that is the key your current SSH session used. Log in with another key first, then remove this one."
     comment=$(cut -f3 <<<"$line"); type=$(cut -f2 <<<"$line")
     danger="Whoever has the private key of '$comment' ($type) can no longer log in as $adm once the server is rebuilt. Make sure you can still get in with another key." ;;
 esac
 
 if [ "$verb" = start ]; then
   if [ -n "$danger" ] && [ "$confirm" != remove ]; then refuse_code confirm.missing "type the word to confirm: remove"; fi
-  if ! out=$(HS_CALLER=${HS_CALLER:-ui} bash "$sshkey" "$action" "$arg" --yes 2>&1); then refuse "$(lastline <<<"$out")"; fi
+  if ! out=$(HS_CALLER=${HS_CALLER:-ui} bash "$sshkey" "$action" "$arg" --yes 2>&1); then refuse_code ssh.failed "$(lastline <<<"$out")"; fi
   printf 'status\tdone\nnote\tIt is in machine.toml. %s\n' "$(effect_rebuild)"
   exit 0
 fi
