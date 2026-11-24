@@ -1,0 +1,17 @@
+# The config options of this capability (kind = "include" anchors in config/schema.toml put them back in file order).
+
+[[item]]
+kind = "option"
+key = "edgeWatchSites"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-watcher"
+default = '[ ]'
+doc = '''
+# Public addresses the outside watcher must see answer (any answer but "none" or a 5xx counts). No admin pages here.
+# The two push addresses (the home server's heartbeat topic to watch, and the topic to alarm on) are secrets:
+# `hs config set heartbeatUrl ...` and `hs config set notifyUrl ...` (files in /var/lib/hs, never in the repository).'''
+value = '''
+edgeWatchSites = ["https://example.org", "https://wiki.example.org"]'''
