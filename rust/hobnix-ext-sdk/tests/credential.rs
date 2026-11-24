@@ -1,4 +1,5 @@
 //! One credential per provider (hobnix/core#1135): each row reads only its own file. One test only: it sets $CREDENTIALS_DIRECTORY for the process.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
 use hobnix_ext_sdk::{integrations, service};
 
 #[test]

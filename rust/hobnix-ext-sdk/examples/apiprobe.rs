@@ -5,6 +5,7 @@
 //!
 //!   cargo build --example apiprobe
 //!   cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
+#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
 use hobnix_ext_sdk::command::{run, Failure, Request, Success};
 use hobnix_ext_sdk::http::Client;
 use hobnix_ext_sdk::integrations;

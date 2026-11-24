@@ -284,6 +284,7 @@ pub fn run_with(
     }
 }
 
+#[allow(clippy::print_stderr)] // the one error line on stderr is part of the extension protocol
 fn die(reason: &str) -> u8 {
     eprintln!("hobnix-ext-sdk: {reason}");
     1

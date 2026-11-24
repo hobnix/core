@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
 use std::process::Command;
 
 fn hobnix(args: &[&str]) -> std::process::Output {

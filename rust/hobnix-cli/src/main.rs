@@ -1,4 +1,5 @@
 //! Adapter of the strangler: the only place that writes to the terminal.
+#![allow(clippy::print_stdout, clippy::print_stderr)] // contract output (hs sys lines) is this crate's job
 
 use hobnix_core::log::{self, Level};
 use hobnix_core::Error;

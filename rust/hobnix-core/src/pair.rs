@@ -100,6 +100,8 @@ pub struct Keys {
 fn expand(norm: &str, info: &str) -> [u8; 32] {
     let h = Hkdf::<Sha256>::new(None, norm.as_bytes());
     let mut out = [0u8; 32];
+    // HKDF-SHA256 cannot fail for a 32 byte output (the limit is 8160 bytes)
+    #[allow(clippy::expect_used)]
     h.expand(info.as_bytes(), &mut out)
         .expect("32 bytes are a valid HKDF length");
     out
@@ -367,7 +369,9 @@ impl<'a> Store<'a> {
             )));
         }
         let code = new_code(rng)?;
-        let keys = derive(&normalize(&code).expect("a new code is valid"));
+        let norm =
+            normalize(&code).ok_or_else(|| Error::Failed("the new code is not valid".into()))?;
+        let keys = derive(&norm);
         let made = self.update(|st, now| {
             if st.codes.len() >= MAX_OPEN {
                 return Err(Error::Refused(format!(

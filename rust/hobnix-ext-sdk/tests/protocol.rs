@@ -1,4 +1,5 @@
 //! The SDK against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
 
 use std::io::{Cursor, Write};
 use std::sync::{Arc, Mutex};
