@@ -849,16 +849,27 @@ impl Store {
     }
 
     /// `error`: name why an ended job ended (ADR 0018: input_timeout, input_rejected). Only a record that ended; state and exit stay.
-    pub fn set_error(&self, id: &str, category: &str, message: &str) -> Result<()> {
+    /// `code` (ADR 0028) is the catalogue code of the refusal that ended the job; absent when none is known.
+    pub fn set_error(
+        &self,
+        id: &str,
+        category: &str,
+        message: &str,
+        code: Option<&str>,
+    ) -> Result<()> {
         self.locked(id, || {
             let mut rec = self.load(id)?;
             if rec.is_active() {
                 return Err(failed("job has not ended"));
             }
+            let mut extra = serde_json::Map::new();
+            if let Some(c) = code.filter(|c| !c.is_empty()) {
+                extra.insert("code".to_string(), serde_json::Value::String(c.to_string()));
+            }
             rec.error = Some(ErrorInfo {
                 category: category.to_string(),
                 message: message.to_string(),
-                ..Default::default()
+                extra,
             });
             self.save(&rec)
         })
@@ -1590,15 +1601,18 @@ mod tests {
         let store = tmp.store();
         let id = mk(&store, "hs-job-x-1");
         assert!(
-            store.set_error(&id, "c", "m").is_err(),
+            store.set_error(&id, "c", "m", None).is_err(),
             "an active job has not ended"
         );
         store.run(&id).unwrap();
         store.finish(&id, 2).unwrap();
-        store.set_error(&id, "input_timeout", "no answer").unwrap();
+        store
+            .set_error(&id, "input_timeout", "no answer", Some("job.busy"))
+            .unwrap();
         store.set_result(&id, r#"{"b": "2", "a": 1}"#).unwrap();
         let text = read(&store, &id);
         assert!(text.contains("\"category\": \"input_timeout\""));
+        assert!(text.contains("\"code\": \"job.busy\""));
         assert!(text.contains("\"state\": \"failed\""));
         assert!(
             text.find("\"b\"") < text.find("\"a\""),

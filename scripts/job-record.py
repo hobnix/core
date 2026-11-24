@@ -324,6 +324,8 @@ def cmd_error(a):
         if rec.get("state") in ACTIVE:
             raise Fail("job has not ended")
         rec["error"] = {"category": a.category, "message": a.message}
+        if a.code:   # ADR 0028: the catalogue code of the refusal that ended the job
+            rec["error"]["code"] = a.code
         save(rec)
 
 
@@ -508,7 +510,7 @@ def main():
     s = sub.add_parser("get"); s.add_argument("id"); s.set_defaults(fn=cmd_get)
     s = sub.add_parser("reconcile"); s.set_defaults(fn=cmd_reconcile)
     s = sub.add_parser("error"); s.add_argument("id"); s.add_argument("--category", required=True)
-    s.add_argument("--message", default=""); s.set_defaults(fn=cmd_error)
+    s.add_argument("--message", default=""); s.add_argument("--code", default=""); s.set_defaults(fn=cmd_error)
     s = sub.add_parser("result"); s.add_argument("id"); s.add_argument("--json", required=True); s.set_defaults(fn=cmd_result)
     s = sub.add_parser("find-unit"); s.add_argument("unit"); s.set_defaults(fn=cmd_find_unit)
     s = sub.add_parser("cancel"); s.add_argument("id"); s.add_argument("--by", default="")

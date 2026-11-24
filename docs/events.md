@@ -55,7 +55,7 @@ The payload is optional extra data for programs. Rules:
 | `job.queued` | info | none | a job was accepted and waits |
 | `job.running` | info | `key` | a job started |
 | `job.ok` | info | `key` | a job finished successfully |
-| `job.failed` | error | `exit`, `key` | a job failed |
+| `job.failed` | error | `exit`, `key`, `code` | a job failed |
 | `job.skipped` | info | none | a job found the same work already running and ended without doing it |
 | `job.cancelled` | info | none | a job was stopped on purpose |
 | `job.interrupted` | warn | none | a job was running when the server restarted |

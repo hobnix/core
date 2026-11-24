@@ -237,10 +237,15 @@ pub fn run(args: &[String]) -> Result<u8> {
             store.set_key(id, key)?;
         }
         "error" => {
-            let p = parse(rest, &["--category", "--message"])?;
+            let p = parse(rest, &["--category", "--message", "--code"])?;
             let id = &exact::<1>(&p)?[0];
             let category = p.opt("--category").ok_or_else(bad)?;
-            store.set_error(id, category, p.opt("--message").unwrap_or(""))?;
+            store.set_error(
+                id,
+                category,
+                p.opt("--message").unwrap_or(""),
+                p.opt("--code"),
+            )?;
         }
         "result" => {
             let p = parse(rest, &["--json"])?;

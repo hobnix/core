@@ -64,6 +64,10 @@ hs_job_record() {
       return 0 ;;
     *) _hs_job_record_write "$@"; return ;;
   esac
+  local code="" cf="${HS_JOBS_DIR:-/var/lib/hs/jobs}/$id.code"   # the code of the refusal that ended the job (refuse_code, ADR 0028); gone on every finish path
+  if [ "$cmd" = finish ] && [[ "$id" =~ ^[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]+-[a-z]{4}$ ]] && [ -f "$cf" ] && [ ! -L "$cf" ]; then
+    code=$(head -n1 "$cf" 2>/dev/null | tr -cd 'a-z0-9.-'); rm -f "$cf"
+  fi
   if [ "$cmd" = finish ] && _hs_job_record_write get "$id" 2>/dev/null | grep -Eq '"state": *"skipped"'; then
     return 0   # skipped stays skipped (exit 0): no job.ok, no second end
   fi
@@ -92,7 +96,12 @@ hs_job_record() {
     resume) event_emit job.resumed "$id" "job got its answer" || true ;;
     finish)
       if [ "${3:-1}" = 0 ]; then _hs_job_key_arg; event_emit job.ok "$id" "job finished" ${_HS_KEYARG[@]+"${_HS_KEYARG[@]}"} || true
-      else event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)}" || true; fi ;;
+      else
+        if [ -n "$code" ]; then
+          _hs_job_record_write_or_python error "$id" --category exit --message "exit status ${3:-1}" --code "$code" >/dev/null 2>&1 || code=
+        fi
+        event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)${code:+,\"code\":\"$code\"}}" || true
+      fi ;;
     reconcile)
       while IFS=$'	' read -r line _ text; do
         [ -z "$line" ] || event_emit job.interrupted "$line" "${text:-job} did not finish" || true
@@ -140,7 +149,8 @@ hs_job() {
   systemd-run --quiet --unit="$unit" --description="$desc" \
     --property="OnFailure=hs-notify-failure@$unit.service" \
     -E HS_CALLER=job -E "HS_JOB_UNIT=$unit" -E HS_LANG=en -E "PATH=$PATH" ${extra[@]+"${extra[@]}"} \
-    bash -c 'd=$1; shift   # $0 = scripts dir, $1 = description, the rest = the command
+    bash -c 'HS_JOB_PID=$$; export HS_JOB_PID   # refuse_code: only the job'"'"'s own script names the job'"'"'s code
+             d=$1; shift   # $0 = scripts dir, $1 = description, the rest = the command
              . "$0/lib/job.sh"   # hs_job_record
              [ -z "${HS_JOB_ID:-}" ] || hs_job_record run "$HS_JOB_ID" 2>/dev/null || true
              "$@"; rc=$?
