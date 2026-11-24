@@ -4,8 +4,9 @@ use std::io::{Cursor, Write};
 use std::sync::{Arc, Mutex};
 
 use hobnix_ext_sdk::command::{self, ErrorCode, Failure, Success};
-use hobnix_ext_sdk::service::{self, Ctx, EventRow, Health, Init, Service};
-use hobnix_ext_sdk::{Event, LogLevel};
+use hobnix_ext_sdk::service::{self, EventRow, Health, Init, Service};
+use hobnix_ext_sdk::testing::{Call, FakeCtx};
+use hobnix_ext_sdk::{Ctx, Event, LogLevel};
 use serde_json::{json, Value};
 
 #[derive(Clone, Default)]
@@ -37,7 +38,7 @@ fn request(command: &[&str], argv: &[&str]) -> String {
 
 fn call<F>(input: &str, h: F) -> (u8, Vec<Value>)
 where
-    F: FnOnce(&command::Request, &command::Ctx) -> Result<Success, Failure>,
+    F: FnOnce(&command::Request, &dyn Ctx) -> Result<Success, Failure>,
 {
     let buf = Buf::default();
     let code = command::run_with(&mut Cursor::new(input.as_bytes().to_vec()), buf.clone(), h);
@@ -149,11 +150,11 @@ struct Probe {
     started: Option<String>,
 }
 impl Service for Probe {
-    fn start(&mut self, init: &Init, _: &Ctx) -> Result<(), String> {
+    fn start(&mut self, init: &Init, _: &dyn Ctx) -> Result<(), String> {
         self.started = Some(format!("{} {:?}", init.name, init.subscribe));
         Ok(())
     }
-    fn on_event(&mut self, ev: &EventRow, ctx: &Ctx) -> Result<(), String> {
+    fn on_event(&mut self, ev: &EventRow, ctx: &dyn Ctx) -> Result<(), String> {
         self.events.push(ev.id);
         if ev.subject == "bad" {
             return Err("cannot".into());
@@ -161,7 +162,7 @@ impl Service for Probe {
         ctx.emit(&Event::new("pkg.demo.seen", &ev.subject))
             .map_err(|e| e.to_string())
     }
-    fn tick(&mut self, ctx: &Ctx) -> Health {
+    fn tick(&mut self, ctx: &dyn Ctx) -> Health {
         ctx.snapshot("t", json!({"n": self.events.len()})).unwrap();
         Health::ok()
     }
@@ -250,7 +251,7 @@ fn service_writes_nothing_when_init_is_wrong() {
 fn service_degraded_health_and_topic_checks() {
     struct Sick;
     impl Service for Sick {
-        fn tick(&mut self, ctx: &Ctx) -> Health {
+        fn tick(&mut self, ctx: &dyn Ctx) -> Health {
             assert!(ctx.snapshot("Bad Topic", json!(1)).is_err());
             assert!(ctx.snapshot("big", json!("x".repeat(300 << 10))).is_err());
             Health::degraded("device gone")
@@ -273,7 +274,7 @@ fn service_degraded_health_and_topic_checks() {
 fn service_rollup_message_and_credential() {
     struct Roll;
     impl Service for Roll {
-        fn tick(&mut self, ctx: &Ctx) -> Health {
+        fn tick(&mut self, ctx: &dyn Ctx) -> Health {
             ctx.rollup("pkg.t.watch", "anna", 2.0, 90.5).unwrap();
             assert!(ctx.rollup("pkg.t.watch", "a b", 1.0, 0.0).is_err());
             assert!(ctx.rollup("pkg.t.watch", "-time", 1.0, 0.0).is_err());
@@ -299,4 +300,39 @@ fn service_rollup_message_and_credential() {
     {
         assert!(service::credential("Bad Name").is_none());
     }
+}
+
+// ---- Ctx as a trait ----
+
+fn greet(req: &command::Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
+    let failed = |e: std::io::Error| Failure::failed(e.to_string());
+    ctx.progress(Some(0.5), "half").map_err(failed)?;
+    ctx.emit(&Event::new("pkg.demo.greeted", &req.argv[0]))
+        .map_err(failed)?;
+    Ok(Success::text("done"))
+}
+
+#[test]
+fn a_handler_runs_against_the_fake_and_the_wire_alike() {
+    let req = command::Request {
+        id: "0123456789abcdef".into(),
+        command: vec!["greet".into()],
+        argv: vec!["Ada".into()],
+        lang: command::Lang::En,
+        caller: command::Caller::Cli,
+        timeout_ms: 1000,
+    };
+    let fake = FakeCtx::new();
+    assert_eq!(greet(&req, &fake).unwrap(), Success::text("done"));
+    assert_eq!(
+        fake.calls(),
+        [
+            Call::Progress(Some(0.5), "half".into()),
+            Call::Emit(Event::new("pkg.demo.greeted", "Ada"))
+        ]
+    );
+    let (code, out) = call(&request(&["greet"], &["Ada"]), greet);
+    assert_eq!(code, 0);
+    let types: Vec<_> = out.iter().map(|m| m["type"].as_str().unwrap()).collect();
+    assert_eq!(types, ["progress", "event", "result"]);
 }

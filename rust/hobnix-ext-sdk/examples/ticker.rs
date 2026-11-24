@@ -2,7 +2,8 @@
 //!
 //!   cargo build --example ticker
 //!   python3 ../../scripts/lib/ext_service.py run --name ticker --health-interval 1 --run-for 3 -- target/debug/examples/ticker
-use hobnix_ext_sdk::service::{run, Ctx, EventRow, Health, Init, Service};
+use hobnix_ext_sdk::service::{run, EventRow, Health, Init, Service};
+use hobnix_ext_sdk::Ctx;
 use serde_json::json;
 use std::process::ExitCode;
 
@@ -13,19 +14,19 @@ struct Ticker {
 }
 
 impl Service for Ticker {
-    fn start(&mut self, init: &Init, _ctx: &Ctx) -> Result<(), String> {
+    fn start(&mut self, init: &Init, _ctx: &dyn Ctx) -> Result<(), String> {
         eprintln!(
             "ticker starting as {} (subscribed to {:?})",
             init.name, init.subscribe
         );
         Ok(())
     }
-    fn on_event(&mut self, _event: &EventRow, _ctx: &Ctx) -> Result<(), String> {
+    fn on_event(&mut self, _event: &EventRow, _ctx: &dyn Ctx) -> Result<(), String> {
         // idempotent enough for an example: a repeated event only counts twice
         self.seen += 1;
         Ok(())
     }
-    fn tick(&mut self, ctx: &Ctx) -> Health {
+    fn tick(&mut self, ctx: &dyn Ctx) -> Health {
         self.ticks += 1;
         match ctx.snapshot(
             "ticks",

@@ -6,6 +6,9 @@
 //! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot`/`rollup` out
 //!   (docs/adr/0011-extension-service-lifecycle.md, docs/api/ext-service-v1.schema.json).
 //!
+//! [`Ctx`] is what a handler asks of the host (credential, integrations, emit, log, progress). It is a trait: [`command::run`] and
+//! [`service::run`] hand the handler a `&dyn Ctx`, and [`testing::FakeCtx`] stands in for it in a test.
+//!
 //! Helpers for a service that talks to an integration: [`http`] (blocking client, plain http only, no TLS), [`integrations`] (the
 //! `hs pkg integrations` listing as typed rows) and [`service::credential`] (the key from `$CREDENTIALS_DIRECTORY`).
 //!
@@ -17,11 +20,14 @@
 //! A service must not call `hs`: what it needs from the core arrives as protocol data.
 
 pub mod command;
+mod ctx;
 pub mod http;
 pub mod integrations;
 mod proto;
 pub mod service;
+pub mod testing;
 
+pub use ctx::Ctx;
 pub use proto::{EventLevel, LogLevel, MAX_LINE, VERSION};
 
 /// A message the extension asks the core to write to the event log (`event` in a command, `emit` in a service).

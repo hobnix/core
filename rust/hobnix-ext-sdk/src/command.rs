@@ -10,16 +10,21 @@
 //!     })
 //! }
 //! ```
+//!
+//! The handler gets a `&dyn Ctx` (a trait object, not a type parameter: a closure cannot be generic over its argument, so a generic
+//! `run` would force every handler into a named generic fn, and the dynamic call costs nothing next to the write of a line).
 
 use std::io::{self, BufRead, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::integrations::Integration;
 use crate::proto::{cut, one_line, read_line, Line, Out};
-use crate::{Event, LogLevel, VERSION};
+use crate::{Ctx, Event, LogLevel, VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -129,28 +134,35 @@ impl Success {
     }
 }
 
-/// Handle for the messages an extension may send before its result. Write failures are returned, not hidden; a call that has no
-/// use for them can ignore the result.
-pub struct Ctx {
+/// The stdin/stdout side of [`Ctx`] for a command: `progress`, `log` and `event` lines on stdout.
+struct StdioCtx {
     out: Out,
 }
 
-impl Ctx {
-    /// `fraction` is clamped to 0..=1; `text` is cut to 200 characters.
-    pub fn progress(&self, fraction: Option<f64>, text: &str) -> io::Result<()> {
+impl Ctx for StdioCtx {
+    fn credential(&self, name: &str, provider: &str) -> Option<String> {
+        crate::service::credential_for(name, provider)
+    }
+    fn integrations(&self) -> &[Integration] {
+        &[]
+    }
+    fn emit(&self, ev: &Event) -> io::Result<()> {
+        self.out.event("event", ev)
+    }
+    fn log(&self, level: LogLevel, text: &str) -> io::Result<()> {
+        self.out.log(level, text)
+    }
+    fn progress(&self, fraction: Option<f64>, text: &str) -> io::Result<()> {
         let mut f = json!({"text": cut(text, 200)});
         if let Some(x) = fraction.filter(|x| x.is_finite()) {
             f["fraction"] = json!(x.clamp(0.0, 1.0));
         }
         self.out.typed("progress", f)
     }
-    /// `text` is cut to 1000 characters. Not for secrets.
-    pub fn log(&self, level: LogLevel, text: &str) -> io::Result<()> {
-        self.out.log(level, text)
-    }
-    /// Ask the core to write an event. Fails with `InvalidInput` for a kind that is not `pkg.<package>.<kind>`.
-    pub fn event(&self, ev: &Event) -> io::Result<()> {
-        self.out.event("event", ev)
+    fn shared(&self) -> Arc<dyn Ctx> {
+        Arc::new(StdioCtx {
+            out: self.out.clone(),
+        })
     }
 }
 
@@ -158,7 +170,7 @@ impl Ctx {
 /// A panic in the handler becomes `failed`.
 pub fn run<F>(handler: F) -> ExitCode
 where
-    F: FnOnce(&Request, &Ctx) -> Result<Success, Failure>,
+    F: FnOnce(&Request, &dyn Ctx) -> Result<Success, Failure>,
 {
     let stdin = io::stdin();
     let code = run_with(&mut stdin.lock(), io::stdout(), handler);
@@ -168,7 +180,7 @@ where
 /// [`run`] over any reader and writer (for tests). Returns the exit code.
 pub fn run_with<F>(input: &mut impl BufRead, output: impl Write + Send + 'static, handler: F) -> u8
 where
-    F: FnOnce(&Request, &Ctx) -> Result<Success, Failure>,
+    F: FnOnce(&Request, &dyn Ctx) -> Result<Success, Failure>,
 {
     let out = Out::new(output);
     let line = match read_line(input) {
@@ -206,8 +218,8 @@ where
             )
         }
     };
-    let ctx = Ctx { out: out.clone() };
-    let outcome = catch_unwind(AssertUnwindSafe(|| handler(&req, &ctx)))
+    let ctx = StdioCtx { out: out.clone() };
+    let outcome = catch_unwind(AssertUnwindSafe(|| handler(&req, &ctx as &dyn Ctx)))
         .unwrap_or_else(|_| Err(Failure::failed("the extension crashed")));
     match outcome {
         Ok(s) => {
