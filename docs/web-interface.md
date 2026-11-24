@@ -358,8 +358,7 @@ the `docs/` folder of the repository.
 ## What only works in the terminal
 
 Some things stay in the terminal on purpose: setting up the backup disk (`hs backup init`, it erases a disk), restoring
-the whole system, the per-instance backup rules (`hs backup ct <name> paths|include|exclude|reset`), the restore of one instance with its paths (`hs backup restore ct <name>`), restoring items from the file manager's trash, the recipe `domain`, creating the vault (`hs vault init`), offering a share to another server (`hs remote offer`, it shows a
-password once), the sign-in to the reverse proxy, anything that asks questions, and the `machine.toml` keys the Settings page does not offer
+the whole system, the per-instance backup rules (`hs backup ct <name> paths|include|exclude|reset`), the restore of one instance with its paths (`hs backup restore ct <name>`), restoring items from the file manager's trash, the recipe `domain`, creating the vault (`hs vault init`), the sign-in to the reverse proxy, anything that asks questions, and the `machine.toml` keys the Settings page does not offer
 (for example `sshKeys`, `hostName`, addresses).
 
 ## Live state

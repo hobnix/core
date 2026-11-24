@@ -299,42 +299,82 @@ sudo hs share repair
 ## Share a folder with another server
 
 Two servers can show each other a folder **read-only**, for example so a media server can play the other's films. Nothing is copied, and the
-other server's folder is not part of your pool, parity or backup. If the other server is off, the folder is empty. Not tested on hardware yet.
+other server's folder is not part of your pool, parity or backup. If the other server is off, the folder is empty. Pairing needs the
+vault of both servers open (`hs unlock`) and the domain of the giving server up. Not tested on hardware yet.
 
-On the **giving** server (the one whose files are shown):
+You never type a password: the giving server makes a **code** (16 letters and digits, shown as `K7QX-9M2D-T4PW-3HNC`), the receiving server
+types it, and the login travels inside the answer, encrypted with a key derived from the code. The code works **once** and lives **10
+minutes** (`--minutes N` for 1 to 60). It is shown only once and not stored. In the web interface the pages are Shares > Remote.
 
-```bash
-sudo hs remote offer media --peer cousin
-```
-
-`cousin` is the name of the other person (lower case, digits, `-`). The output holds the line for the other side and a one-time password;
-pass both on by a safe route, not by mail. On the **receiving** server:
+On the **giving** server (the one whose files are shown), in the web interface open Shares > Remote and choose **Give access**; or:
 
 ```bash
-sudo hs remote add alpha alpha.local media --user remote-cousin --domain EXAMPLE
+sudo hs remote offer media --code
 ```
 
-The command asks for the password; the share appears under `/mnt/remote/alpha/media` (check with `hs remote list`). To use it in a media
-container:
+The box shows the code with the address of this server (`<name>.local:8480`). Add `--peer cousin` to name the other server yourself; without
+it the other server names itself. Give the code to the other person by a safe route. To see or end open codes:
+
+```bash
+sudo hs remote codes
+```
+
+On the **receiving** server, choose **Add remote share** and type the code (or `CODE@address`); or:
+
+```bash
+sudo hs remote add --code --server alpha.local:8480
+```
+
+It asks for the code (never on the command line; `--stdin` reads one line). The share appears under `/mnt/remote/<server>/<share>` (check
+with `hs remote list`). The dialog of the giving server turns into "<server> connected".
+
+**Check the key.** Both sides show the SSH host key fingerprint of the other server ("Connected to alpha, key ..."). Compare it with the
+screen of the other server: it shows that the code reached the server you meant.
+
+To use the share in a media container:
 
 ```bash
 sudo hs remote attach alpha jellyfin
 ```
 
 In the media server add the library folder `/media-alpha/media/...`, switch off "save metadata into media folders" and rescan on a schedule
-(live monitoring does not work over SMB). Take it away again:
+(live monitoring does not work over SMB).
+
+**Reconnect** (a new password for a server you already use): on the giving server choose **New code...** on the row, then on the receiving
+server **Reconnect...**; or:
 
 ```bash
-sudo hs remote detach alpha jellyfin
+sudo hs remote offer media --code --peer cousin
+```
+
+```bash
+sudo hs remote add --code --reconnect alpha
+```
+
+A reconnect works only for the same address and the same key as before. **Take back** (giving server, the login is deleted when no share is
+left) and **Stop using** (receiving server, the other server's files stay untouched):
+
+```bash
+sudo hs remote revoke cousin media
 ```
 
 ```bash
 sudo hs remote remove alpha
 ```
 
-On the giving side `hs remote revoke cousin` withdraws access and deletes the login; `hs remote offer ... --new-password` sets a new password.
-The login `remote-<name>` is a domain user in "Domain Users": do not give that group to a share it must not see. While the vault is locked
-(after a reboot, before `hs unlock`) nothing is mounted.
+`hs remote detach alpha jellyfin` takes the folder from a container again. The login `remote-<name>` is a domain user in "Domain Users": do
+not give that group to a share it must not see. While the vault is locked (after a reboot, before `hs unlock`) nothing is mounted.
+
+**The other direction.** The receiving server can also start: `hs remote receive` shows a code; on the giving server type it with
+`hs remote send media --peer alpha --code --server alpha.local:8480`. Only the commands exist; the web interface has no form for it.
+
+**Fallback by hand.** Without a code: `sudo hs remote offer media --peer cousin` prints the login and a password (shown once), and the other
+side runs `sudo hs remote add alpha alpha.local media --user remote-cousin --domain EXAMPLE` and types the password. In the web interface this
+is **Enter a login by hand** in Add remote share.
+
+**Node link (not usable yet).** If the other server is in your node list, `--server <node name>` sends the request over the node link
+instead of HTTP. The node's forced command needs `hs` to run without a sudo password, which a default install does not allow, so it
+refuses ("node link cannot reach the pairing service"); use the address.
 
 ## Check that it worked
 
@@ -359,6 +399,10 @@ The login `remote-<name>` is a domain user in "Domain Users": do not give that g
 | New share is open to everyone instead of locked | it could not be restricted at creation | [Close an open share](#close-an-open-share) |
 | Windows says "network path not found" though the server runs | Windows tries an old saved login | `cmdkey /delete:HOMESERVER`, `net use * /delete /y`, connect again |
 | Login refused although the password is right | Windows is already connected to the same server name as another user | `net use * /delete /y`, connect again |
+| Remote share: "The other server does not know that code" (`code.unknown`) | wrong, already used or expired, or that server name is already taken by another server | make a new code; for a name in use, remove it, or use New code and Reconnect |
+| Remote share: "Too many wrong codes from here" (`code.rate`) | five wrong codes in a minute from this address | wait a minute, then type it again |
+| Remote share: "cannot make the access now" (`code.unavailable`) | the giving server has no domain controller or its storage is locked | `hs unlock`, start the domain controller, make a new code |
+| `hs remote add --code`: "The vault is closed" | the login cannot be saved | `hs unlock` |
 | Nobody can sign in any more | the domain controller is not running | `incus list dc1`, `incus start dc1`; a second controller prevents this |
 
 To look closer: `incus exec dc1 -- systemctl status samba-ad-dc --no-pager`, `incus exec dc1 -- samba-tool user list` and `sudo smbstatus`
