@@ -1,19 +1,52 @@
 # Build, sign and publish the package index of a package repository (docs/PLAN-registry.md "CI", hobnix/core#1069). Reusable: hobnix/official and
 # hobnix/community each carry a short caller (on push to main, daily, workflow_dispatch). UNVERIFIED: this workflow has never run.
 #
-# 1. `build` (no secret, any branch, also pull requests): validates the repository, builds index.json and the resized assets with
-#    `pkg.py index build`, validates the result, uploads it as an artifact.
-# 2. `sign` (main only, environment `index-signing` of the CALLING repository, which the owner restricts to the main branch): the only job that sees
-#    the signing key. The key is written to a file (umask 077, in a temporary directory that is removed at the end) by the step that receives
-#    the secret, and `pkg.py index sign --key-file` gets the file name: the key is never an argument and never in the environment of a later step
-#    (the secret is only in the env of the one step that writes the file; GitHub offers no other way to hand a secret to a job). The signature
-#    is verified against config/trusted-keys/<repo>.allowed_signers of the core before anything is published, so a wrong key fails here.
-# 3. `publish` uploads index.json, index.json.sig and assets/ to GitHub Pages. Pages holds only these, never package contents.
+# 1. `build` (this workflow; no secret, any branch, also pull requests): validates the repository, builds index.json and the resized assets with
+#    `pkg.py index build`, validates the result, uploads it as the artifact `index` (the directory `site`: index.json, assets/).
+# 2. `sign` and `publish` are jobs of the CALLER, not of this workflow: the environment secret INDEX_SIGNING_KEY did not reach the jobs of a
+#    reusable workflow (hobnix/official run 45365647291: empty, although the environment has it). The logic stays in core: the composite action
+#    .github/actions/index-sign signs, verifies against config/trusted-keys/<repo>.allowed_signers and removes the key file.
 #
 # The serial: the run is given the serial of the index on Pages (--prev) plus 1; it only goes up (a lower serial is refused by clients).
-# First run (hobnix/official, 2026-11-24): `sign` got an empty secret because of the `workflow_call.secrets` entry that was here (removed, see below).
-# Whether the environment secret then reaches the job is the next thing the run shows. Still open: the Pages URL layout
-# packages.hobnix.dev/<repo>/index.json (one repository per Pages site means one site per caller).
+# Still open: the Pages URL layout packages.hobnix.dev/<repo>/index.json (one repository per Pages site means one site per caller).
+#
+# The CALLER (copy-paste; use the same core SHA in `uses:` and in `ref:`; the environment index-signing is restricted to main by the owner):
+#
+#   on: {push: {branches: [main]}, pull_request: {}, schedule: [{cron: "17 4 * * *"}], workflow_dispatch: {}}
+#   permissions:
+#     contents: read
+#   jobs:
+#     build:
+#       uses: hobnix/core/.github/workflows/package-index.yml@<core-sha>
+#       with:
+#         repo_id: official
+#         core_ref: <core-sha>
+#         pages_url: https://packages.hobnix.dev/official
+#     sign:
+#       needs: build
+#       if: github.ref == 'refs/heads/main'
+#       runs-on: ubuntu-latest
+#       environment: index-signing
+#       steps:
+#         - uses: actions/checkout@v5
+#           with: {repository: hobnix/core, ref: <core-sha>, path: core}
+#         - uses: actions/download-artifact@v4
+#           with: {name: index, path: site}
+#         - uses: ./core/.github/actions/index-sign
+#           with:
+#             key: ${{ secrets.INDEX_SIGNING_KEY }}
+#             repo_id: official
+#         - uses: actions/upload-pages-artifact@v3
+#           with: {path: site}
+#     publish:
+#       needs: sign
+#       runs-on: ubuntu-latest
+#       permissions: {pages: write, id-token: write}
+#       environment: {name: github-pages}
+#       steps:
+#         - uses: actions/deploy-pages@v4
+#
+# UNVERIFIED: neither this workflow nor the action has run in this shape.
 name: package-index
 on:
   workflow_call:
@@ -30,9 +63,7 @@ on:
         description: "where the published index lives, to read the last serial (empty = the first index, serial 1)"
         type: string
         default: ""
-    # No `secrets:` block on purpose. The signing key is an ENVIRONMENT secret (environment index-signing of the calling repository), read by the
-    # `sign` job through its own `environment:`. A `workflow_call.secrets` entry that the caller does not pass arrives as an EMPTY value and hides
-    # the environment secret: the first run on hobnix/official failed exactly so ("INDEX_SIGNING_KEY is not set"). A caller must not pass the key.
+    # No `secrets:` here: this workflow never sees the signing key (see the header).
 
 permissions:
   contents: read
@@ -67,48 +98,3 @@ jobs:
           name: index
           path: site
           if-no-files-found: error
-
-  sign:
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: index-signing
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          repository: hobnix/core
-          ref: ${{ inputs.core_ref }}
-          path: core
-      - uses: actions/download-artifact@v4
-        with:
-          name: index
-          path: site
-      - name: Write the key to a file (the only step that sees the secret)
-        env:
-          INDEX_SIGNING_KEY: ${{ secrets.INDEX_SIGNING_KEY }}
-        run: |
-          [ -n "$INDEX_SIGNING_KEY" ] || { echo "::error::The secret INDEX_SIGNING_KEY is not set in the environment index-signing."; exit 1; }
-          umask 077
-          mkdir -p "$RUNNER_TEMP/k"
-          printf '%s\n' "$INDEX_SIGNING_KEY" > "$RUNNER_TEMP/k/key"
-      - name: Sign and verify against the trusted key
-        env:
-          REPO_ID: ${{ inputs.repo_id }}
-        run: |
-          trap 'rm -rf "$RUNNER_TEMP/k"' EXIT
-          python3 core/scripts/pkg.py index sign site/index.json --key-file "$RUNNER_TEMP/k/key"
-          python3 core/scripts/pkg.py index verify site/index.json --signers "core/config/trusted-keys/$REPO_ID.allowed_signers"
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  publish:
-    needs: sign
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-    steps:
-      - uses: actions/deploy-pages@v4

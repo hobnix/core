@@ -1,0 +1,55 @@
+# Sign index.json with the private index key and verify it against the core's trusted keys (docs/PLAN-registry.md "CI", hobnix/core#1069).
+# UNVERIFIED: this action has never run.
+#
+# Why an action and not a job of the reusable workflow: an ENVIRONMENT secret did not reach the jobs of a reusable workflow (hobnix/official run
+# 45365647291: the value was empty although the environment has it). So the job that holds the secret lives in the CALLER, and the logic stays here.
+# A composite action cannot read `secrets`: the caller job passes the key as the input `key` (`key: ${{ secrets.INDEX_SIGNING_KEY }}`).
+#
+# The key is only in the env of the ONE step that writes the file (masked first, line by line), never in argv, never in a later step; the key file
+# lives in a temporary directory (umask 077) that an always() step removes. The caller must have checked out the core (core_dir) at the pinned ref.
+name: index-sign
+description: Sign index.json with the index key and verify it against config/trusted-keys of the core
+inputs:
+  key:
+    description: "the private key text (the caller passes its INDEX_SIGNING_KEY secret)"
+    required: true
+  repo_id:
+    description: "the repository id (official, community, ...): selects config/trusted-keys/<repo_id>.allowed_signers"
+    required: true
+  core_dir:
+    description: "where hobnix/core is checked out (scripts/pkg.py, config/trusted-keys)"
+    required: false
+    default: core
+  site_dir:
+    description: "the directory with index.json (the downloaded build artifact); index.json.sig is written next to it"
+    required: false
+    default: site
+runs:
+  using: composite
+  steps:
+    - name: Write the key to a file (the only step that sees the key)
+      shell: bash
+      env:
+        INDEX_SIGNING_KEY: ${{ inputs.key }}
+      run: |
+        # Mask first, before anything can print it; every line on its own, as GitHub masks per line.
+        while IFS= read -r line; do
+          [ -n "$line" ] && echo "::add-mask::$line"
+        done <<< "$INDEX_SIGNING_KEY"
+        [ -n "$INDEX_SIGNING_KEY" ] || { echo "::error::The input key (INDEX_SIGNING_KEY) is empty."; exit 1; }
+        umask 077
+        mkdir -p "$RUNNER_TEMP/k"
+        printf '%s\n' "$INDEX_SIGNING_KEY" > "$RUNNER_TEMP/k/key"
+    - name: Sign and verify against the trusted key
+      shell: bash
+      env:
+        REPO_ID: ${{ inputs.repo_id }}
+        CORE_DIR: ${{ inputs.core_dir }}
+        SITE_DIR: ${{ inputs.site_dir }}
+      run: |
+        python3 "$CORE_DIR/scripts/pkg.py" index sign "$SITE_DIR/index.json" --key-file "$RUNNER_TEMP/k/key"
+        python3 "$CORE_DIR/scripts/pkg.py" index verify "$SITE_DIR/index.json" --signers "$CORE_DIR/config/trusted-keys/$REPO_ID.allowed_signers"
+    - name: Remove the key file
+      if: always()
+      shell: bash
+      run: rm -rf "$RUNNER_TEMP/k"
