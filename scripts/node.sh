@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: the other servers (nodes) this one can look at: list, add, remove, show, make the key, read a node's status
 # help.de: die anderen Server (Knoten), die dieser ansehen kann: anzeigen, hinzufügen, entfernen, Schlüssel anlegen, den Status eines Knotens lesen
-# args: list | --list | show <name> | --show <name> | --keyline <name> | add <name> <host> [--kind peer|vps|edge] [--port N] | remove <name> [--yes] | key <name> [--new] [--yes] | status <name> | --status <name>
+# args: --pair <name> (stdin) | list | --list | show <name> | --show <name> | --keyline <name> | add <name> <host> [--kind peer|vps|edge] [--port N] | remove <name> [--yes] | key <name> [--new] [--yes] | status <name> | --status <name>
 # This server is the main node and is not in the registry. A remote node is a row of /var/lib/hs/nodes.tsv
 # (name, kind, host, port, added; tab separated, no empty field). The main node PULLS: it runs ssh with a key of its own for that node, and the node accepts
 # the key only through a forced command that knows fixed words (scripts/node-remote.sh: `status`). Nothing here gives a node control of this server.
@@ -16,6 +16,8 @@
 #   server's owner puts the line), line (the PUBLIC half with the options of the forced command; the private key is never printed). Exit 1: unknown node.
 # --status <name> (hs sys node status): the status document of the node, ONE JSON object on stdout (exit 1 and a message on stderr when the node
 #   does not answer, the key is missing or the vault is closed). Only the word `status` is ever sent.
+# --pair <name>: the one other word, `pair` (remote shares by code, docs/PLAN-remote-shares.md): the claim request on standard input goes to the node, its answer
+#   (the box, or the refusal) comes back on stdout, the exit code is the node's (0 answered, 1 refused, 3 the node cannot reach its pairing service, 2 and more: no answer). No code is in it, only the derived id.
 # Test knobs: HS_STATE_DIR, HS_MACHINE_FILE, HS_SETTINGS_DIR, HS_SSH (stand-in for ssh), HS_NOW, HS_VAULT_DIR.
 set -euo pipefail
 here=$(dirname "$0")
@@ -29,7 +31,7 @@ state=${HS_STATE_DIR:-/var/lib/hs}
 nodes=$state/nodes.tsv
 ssh_bin=${HS_SSH:-ssh}
 # the words this server ever sends to a node (the receiving side checks again); step 1: status only
-NODE_WORDS="status"
+NODE_WORDS="status pair"
 
 usage() {
   say "usage: hs node list"
@@ -243,6 +245,17 @@ cmd_status_json() {   # the raw document, for the interface
   printf '%s\n' "$out"
 }
 
+cmd_pair() {   # the claim request on stdin, the answer of the node on stdout; exit 0 answered, 1 refused, 3 node cannot reach its pairing service, 2 no answer
+  load_node "$1"
+  [ "$n_kind" = peer ] || { echo "Node $1 is not another home server." >&2; exit 2; }
+  [ "$(key_state "$n_key")" = ok ] || { echo "There is no usable key for node $1." >&2; exit 2; }
+  ssh_cmd pair
+  local out rc=0
+  out=$("${cmd[@]}" 2>/dev/null | head -c 65536; exit "${PIPESTATUS[0]}") || rc=$?
+  printf '%s\n' "$out"
+  case "$rc" in 0|1|3) exit "$rc" ;; *) exit 2 ;; esac
+}
+
 cmd_status_people() {
   local doc
   doc=$(cmd_status_json "$1" 2>&1) || { fail "$(t 'Node %s: %s' "$1" "$doc")"; }
@@ -278,5 +291,6 @@ case "$sub" in
   status) [ $# -eq 1 ] || usage; cmd_status_people "$1" ;;
   --keyline) [ $# -eq 1 ] || usage; cmd_keyline "$1" ;;
   --status) [ $# -eq 1 ] || usage; cmd_status_json "$1" ;;
+  --pair) [ $# -eq 1 ] || usage; cmd_pair "$1" ;;
   *) usage ;;
 esac

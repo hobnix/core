@@ -7,3 +7,4 @@ health/list
 health/info
 disk/marks
 share/parity/refused
+remote/codes

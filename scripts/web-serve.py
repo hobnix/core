@@ -1167,6 +1167,7 @@ READS = {
     ("users", "groups"): {"kind": "tsv", "ttl": 30, "topic": "users-groups"},
     ("vault", "list"): {"kind": "tsv", "ttl": 60, "topic": "vault-list"},
     ("remote", "list"): {"kind": "tsv", "ttl": 30, "topic": "remote-list"},
+    ("remote", "codes"): {"kind": "tsv", "ttl": 5, "topic": "remote-list"},      # the open pairing codes: share, server, seconds left (never a code)
     ("unifi", "networks"): {"kind": "tsv", "ttl": 60, "topic": "unifi-networks"},
     ("unifi", "clients"): {"kind": "tsv", "ttl": 30, "topic": "unifi-clients"},
     ("ports", "list"): {"kind": "tsv", "ttl": 60, "topic": "ports-list"},
@@ -1447,7 +1448,13 @@ CHANGES = {
     # the services and their routes on the reverse proxy (services-change.sh): apply (red when a route goes public, changes or goes away), adopt, import, forget one
     # shares between two homeservers (peer-change.sh): the password of an added share is one line on stdin; `offer` answers with the new password in the
     # start answer (key `secret`), once: it is never a job, so no job log keeps it, and the "web change" log line names the arguments only
-    "peers": [{"fixed": [r"^offer$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--new-password": (None, False)}},
+    # pairing by code (docs/PLAN-remote-shares.md): code <share> and receive-code answer in `secret` lines (code, address, expires_in) like offer; add-code and
+    # send-code take the code as ONE LINE on stdin (it may carry @host), never in the arguments
+    "peers": [{"fixed": [r"^code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--minutes": (r"^[0-9]{1,2}$", False)}},
+              {"fixed": [r"^receive-code$"], "opts": {"--minutes": (r"^[0-9]{1,2}$", False)}},
+              {"fixed": [r"^add-code$"], "opts": {"--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False), "--reconnect": (r"^[a-z0-9][a-z0-9-]{0,19}$", False)}, "stdin": True},
+              {"fixed": [r"^send-code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False)}, "need": ["--peer"], "stdin": True},
+              {"fixed": [r"^offer$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--new-password": (None, False)}},
 {"fixed": [r"^add$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"],
                "opts": {"--user": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", False), "--domain": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", False)}, "stdin": True},
               [r"^(remove|revoke)$", r"^[a-z0-9][a-z0-9-]{0,19}$"],
@@ -3098,6 +3105,37 @@ def make_handler(app):
                 return False
             return self.headers.get("X-Forwarded-Proto", "").strip().lower() != "http"
 
+        def _claim_source_ok(self, ip):
+            """The claim door is for servers on the same network: loopback, RFC 1918, link-local, IPv6 ULA, the tailnet (100.64.0.0/10, fd7a:115c:a1e0::/48)."""
+            try:
+                a = ipaddress.ip_address(ip.split("%")[0])
+            except ValueError:
+                return False
+            if a.version == 6 and a.ipv4_mapped:
+                a = a.ipv4_mapped
+            # an explicit list: Python's is_private also takes Teredo, 64:ff9b:1::/48 and other ranges that are no home network
+            nets = ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fe80::/10", "fc00::/7",
+                    "100.64.0.0/10", "fd7a:115c:a1e0::/48")
+            return any(a in ipaddress.ip_network(n) for n in nets)
+
+        def _pair_door(self, path, raw):
+            """POST /api/remote/claim and /api/remote/push: no session (the code is the credential), a source check, one refusal shape
+            ({"v":1,"error":"code.unknown|code.rate|code.unavailable"}). The body goes to hs sys remote claim|accept on stdin as it came (it is the
+            associated data of the box). Nothing about the code or the answer is logged."""
+            ip = self._client()
+            word = "claim" if path.endswith("/claim") else "accept"
+            if not self._claim_source_ok(ip) or raw is None:
+                return self._json(404, {"v": 1, "error": "code.unknown"})
+            rc, out = _run([cfg.hs, "sys", "remote", word, "--source", ip], stdin=raw, timeout=40)
+            try:
+                body = json.loads(out)
+            except ValueError:
+                return self._json(503, {"v": 1, "error": "code.unavailable"})
+            if rc == 0:
+                return self._json(200, body)
+            status = {"code.unknown": 404, "code.rate": 429}.get(body.get("error") if isinstance(body, dict) else None, 503)
+            return self._json(status, {"v": 1, "error": {404: "code.unknown", 429: "code.rate"}.get(status, "code.unavailable")})
+
         def _client(self):
             """The address the throttle counts. Behind the local proxy (tailscale serve) every request comes from 127.0.0.1: then the proxy's X-Forwarded-For names the client."""
             ip = self.client_address[0]
@@ -3594,6 +3632,8 @@ def make_handler(app):
                 return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
+            if path in ("/api/remote/claim", "/api/remote/push"):      # a server that types a code of this one; no session, no Origin (not a browser)
+                return self._pair_door(path, raw)
             if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/events/subscribe", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "
