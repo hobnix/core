@@ -81,11 +81,13 @@
 #               url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
 #               git init -q mirror
 #               git -C mirror fetch -q "$url" pins:refs/heads/pins || true   # first: the bundle is thin (needs the previous tip); no branch on the first run
-#               git -C mirror fetch -q ../pins/pins.bundle pins:refs/heads/pins
-#               git -C mirror push -q "$url" "$(cat pins/pins.commit):refs/heads/pins"
+#               if [ -f pins/pins.bundle ]; then      # no bundle: the tree did not change, the commit is on `pins` already
+#                 git -C mirror fetch -q ../pins/pins.bundle pins:refs/heads/pins
+#                 git -C mirror push -q "$url" "$(cat pins/pins.commit):refs/heads/pins"
+#               fi
 #
 #     `publish` MUST list `needs: [sign, mirror]` (servers must never get an index whose commit is not on `pins` yet). A push that is not a fast-forward is refused (the first run creates the branch). When the tree did not change there is no new bundle; the job
-#     then has nothing to push and `pins.bundle` is absent from the artifact (skip with `if: hashFiles('pins/pins.bundle') != ''`).
+#     then has nothing to push and `pins.bundle` is absent from the artifact (the snippet skips the fetch and push then).
 #
 # USER STEP in hobnix/community: a pull request runs its OWN copy of the caller workflow and of policy.toml, so .github/ and policy.toml need a
 # CODEOWNERS entry (maintainers only) with required review. `index diff` uses the base policy.toml; `assemble` on main uses the merged one.

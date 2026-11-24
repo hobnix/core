@@ -800,8 +800,10 @@ MANIFEST_FIELDS = ("kind", "source", "path", "commit", "tree", "license", "maint
 
 def _clean(text: object, limit: int = 300) -> str:
     """Untrusted text made safe to print: control and format characters (escape sequences, bidi overrides) become \\xNN, long text is cut."""
-    # `#` and `[` too: the runner reads `##[warning]...` as a command anywhere in a line (`::` only at a line start, see _quote)
-    t = "".join(c if c.isprintable() and c not in "#[" else f"\\x{ord(c):02x}" for c in str(text))
+    t = "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in str(text))
+    # the runner reads `##[warning]...` and `##vso[...]` as a command anywhere in a line (`::` only at a line start, see _quote): no `##` survives,
+    # a single `#` (a shebang, a comment) stays readable
+    t = t.replace("##", "#\\x23")
     return t if len(t) <= limit else t[:limit] + "..."
 
 
