@@ -16,6 +16,9 @@ The mapping (what systemd gives, nothing more):
                          (fs.write also /etc, /boot, /nix); /var/lib/hs/ext, /var/lib/hs/ext-svc and /var/lib/hs/<package name> stay grantable Not limited: the network.
   fs.write:<path>        ReadWritePaths=-<path>
   fs.read:<path>         ReadOnlyPaths=-<path>     (the file system is read only under ProtectSystem=strict; this lists what is meant to be read)
+  hardening              ProtectKernelTunables/Modules/Logs, ProtectControlGroups, ProtectClock, ProtectHostname, ProtectProc=invisible, ProcSubset=pid,
+                         RestrictNamespaces, RestrictRealtime, RestrictSUIDSGID, LockPersonality, SystemCallArchitectures=native,
+                         SystemCallFilter=@system-service, RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 (HARDEN); no IPAddressAllow/Deny
   devices:gpu            PrivateDevices=no, DevicePolicy=closed, DeviceAllow=char-drm rw (only the declared device classes)
   net:<x>                nothing: declared only (D6); written as a comment
   everything else        nothing (web.*, events.*, host, secrets are not systemd's business)
@@ -28,6 +31,12 @@ import sys
 STATE = "/var/lib/hs/ext-svc"      # the bridge (scripts/lib/ext_service.py) keeps its state here
 PATH = re.compile(r"^/[A-Za-z0-9._/-]+$")
 DEVICES = {"gpu": ["char-drm rw"]}
+# Hardening that no declared permission needs to be off (ADR 0031 decision 5, without the dynamic user). Unix sockets (the bridge pipe, incus, the
+# journal) stay: AF_UNIX; net is not filtered here (a firewall decision), so AF_INET and AF_INET6 stay. MemoryDenyWriteExecute stays off (Python).
+HARDEN = ["ProtectKernelTunables=yes", "ProtectKernelModules=yes", "ProtectKernelLogs=yes", "ProtectControlGroups=yes", "ProtectClock=yes",
+          "ProtectHostname=yes", "ProtectProc=invisible", "ProcSubset=pid", "RestrictNamespaces=yes", "RestrictRealtime=yes",
+          "RestrictSUIDSGID=yes", "LockPersonality=yes", "SystemCallArchitectures=native", "SystemCallFilter=@system-service",
+          "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6"]
 # Secrets: a grant (fs.read or fs.write) that is, lies below or contains one of these is refused (#947). The unit hides them too (properties()).
 # /var/lib/hs-vault is the vault (unlocked keys); /run/hs-ext-cred holds the short-lived key copies of the other services (ext_service.py): a service runs as
 # root, so only InaccessiblePaths keeps it out of them
@@ -97,6 +106,7 @@ def properties(perms, name=None):
         elif key == "net":
             net = arg
     out = ["ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet="]
+    out += HARDEN
     if devs:
         out += ["PrivateDevices=no", "DevicePolicy=closed"]
         out += ["DeviceAllow=" + d for g in devs for d in DEVICES[g]]

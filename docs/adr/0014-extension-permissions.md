@@ -95,6 +95,7 @@ service could not emit, roll up, read an integration key or even start under the
 | From the package | systemd property |
 | --- | --- |
 | always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` |
+| always (hardening, ADR 0031 decision 5) | `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectControlGroups`, `ProtectClock`, `ProtectHostname` (all `yes`), `ProtectProc=invisible`, `ProcSubset=pid`, `RestrictNamespaces`, `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality` (`yes`), `SystemCallArchitectures=native`, `SystemCallFilter=@system-service`, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` (unix sockets and the network stay: `net` is not filtered, no `IPAddressAllow`) |
 | `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
