@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: index build|validate|sign|verify|tree | --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -103,6 +103,20 @@ case "${1:-list}" in
   validate)
     if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
       while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
+      exit 1
+    fi ;;
+  index)    # the signed package index of a repository: what CI builds (pkg.py index, lib/pkg_index.py); build|validate|sign|verify|tree
+    shift
+    sub=${1:-}
+    case "$sub" in
+      build|validate|sign|verify|tree) ;;
+      *) say "usage: hs pkg index build <checkout> --repo <id> --out <dir> | validate <index.json> | sign <index.json> --key-file <file> | verify <index.json> --signers <file> | tree <folder>"; exit 1 ;;
+    esac
+    if out=$(py index "$@" 2>&1); then
+      while IFS=$'\t' read -r k v; do [ -z "$k" ] || kv "$k" "${v:-}"; done <<<"$out"
+      ok "$(t 'Index %s done.' "$sub")"
+    else
+      while IFS= read -r l; do [ -z "$l" ] || warn "${l#error	}"; done <<<"$out"
       exit 1
     fi ;;
   new)

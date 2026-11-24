@@ -3,6 +3,8 @@ paths:
   - "scripts/recipes/**"
   - "scripts/recipe*.sh"
   - "scripts/pkg*"
+  - "scripts/lib/pkg_index.py"
+  - "tests/pkg-index.sh"
   - "scripts/dev/release.sh"
   - "tests/release.sh"
   - "scripts/ext.sh"
@@ -38,3 +40,5 @@ Loaded when you touch the files above (path-scoped rule). The root CLAUDE.md has
   breaking Tailscale access).
 
 - Posters (extension `posters`, off by default): `hs ext posters generate` (old word `hs generate poster` is a legacy row for one release; guided, capabilities/posters/generate-poster-guided.sh) over the system command `hs sys ext posters generate` (generate-poster.sh, never asks, key<TAB>value lines) over capabilities/posters/poster.py (Pillow, `python3.withPackages` in configuration.nix; Inter fonts from recipes/files/matrix-card/fonts). Eyebrow and title required, colour and seed random (the colour derived from the seed, so a seed is reproducible). capabilities/posters/guide.md, tests/generate-poster.sh; not run on the server yet.
+
+- **Package index** (docs/PLAN-registry.md "Built: the index format", hobnix/core#1069): `hs pkg index build|validate|sign|verify|tree` (scripts/lib/pkg_index.py) builds `index.json` from package.toml and assets/, signs it with an SSH signature (namespace `hobnix-index`, key only as a file), checks serial and schema; reusable workflow `.github/workflows/package-index.yml` (never run yet). The client side (`hs pkg` reading the index) is a later step. Test: tests/pkg-index.sh.
