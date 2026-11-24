@@ -258,7 +258,8 @@ cat > "$STUB/git" <<'STUBEOF'
 #!/bin/sh
 case "$1" in fetch|clone)
   [ -n "$STUB_HANG" ] && exec sleep 30
-  echo "$*" >> "${STUB_LOG:-/dev/null}";;
+  case "$*" in "fetch --quiet origin "[0-9a-f]*) [ -n "$STUB_HANGID" ] && exec sleep 30;; esac
+  echo "$*" >> "${STUB_LOG:-/dev/null}"; echo "$GIT_HTTP_LOW_SPEED_LIMIT|$GIT_HTTP_LOW_SPEED_TIME|$GIT_SSH_COMMAND" >> "${STUB_ENVLOG:-/dev/null}";;
 esac
 exec REALGIT_PATH "$@"
 STUBEOF
@@ -310,6 +311,51 @@ check "the clone was fetched once (plus one fetch by id)" test "$(grep -c -- '--
 check_out "the other package is available" "^hub${tab}shots" $PKG available
 check "the unfetchable one is not" bash -c "! $PKG available | grep -q '${tab}demo${tab}'"
 check_out "show gives the reason" "demo is not available.*cannot be fetched" $PKG show demo
+check "the clone is fetched without a terminal prompt and with a low-speed limit" bash -c "env PATH='$STUB:$PATH' STUB_ENVLOG='$WORK/env.log' $PKG fetch hub >/dev/null 2>&1; grep -q '^1000|60|ssh .*ConnectTimeout' '$WORK/env.log'"
+check "a git ssh command of the person is left alone" bash -c "env PATH='$STUB:$PATH' STUB_ENVLOG='$WORK/env2.log' GIT_SSH_COMMAND=mine $PKG fetch hub >/dev/null 2>&1; grep -q '|mine\$' '$WORK/env2.log'"
+
+echo "-- an installed package whose new commit cannot be fetched is still known"
+git -C "$R" rev-parse HEAD > "$WORK/head.sha"
+python3 - "$OUT/index.json" "$(cat "$WORK/head.sha")" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1])); d["packages"]["demo"]["commit"] = sys.argv[2]; json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PYEOF
+$IDX sign "$OUT/index.json" --key-file "$WORK/good" >/dev/null
+export HS_STATE_DIR=$WORK/state9; mkdir -p "$HS_STATE_DIR"
+$PKG repo add hub "$R" --key "$WORK/signers" --index "$OUT/index.json" >/dev/null
+$PKG fetch hub >/dev/null; $PKG install shots >/dev/null
+python3 - "$OUT/index.json" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1])); d["serial"] += 1
+d["packages"]["shots"]["commit"] = "e" * 40; d["packages"]["shots"]["version"] = "1.2.0"
+json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PYEOF
+$IDX sign "$OUT/index.json" --key-file "$WORK/good" >/dev/null
+check_out "fetch is still ok (exit 0 row)" "^hub${tab}serial-8${tab}-${tab}ok" $PKG fetch hub
+check_out "market shows the installed copy as current with the note" "^shots${tab}recipe${tab}hub${tab}1[.]2[.]0${tab}1[.]1[.]0${tab}current${tab}no${tab}generic${tab}.*update not available.*could not be fetched" $PKG market
+check "and not as an orphan" bash -c "! $PKG market | grep -q 'orphan'"
+check "every market row has nine fields" bash -c "$PKG market | awk -F'\t' 'NF!=9{bad=1} END{exit bad}'"
+check_out "update gives the reason" "could not be fetched" $PKG update shots --yes
+check "available does not offer it" bash -c "! $PKG available | grep -q shots"
+rm -rf "$HS_STATE_DIR/packages/current/shots"
+$PKG install --core > "$WORK/core.out" 2> "$WORK/core.err"; rc=$?
+check "install --core fails when a package cannot be had" test "$rc" != 0
+check_out "and names it" "shots: .*could not be fetched" cat "$WORK/core.err"
+
+echo "-- fetches of commits by id share one time budget"
+python3 - "$OUT/index.json" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1])); d["serial"] += 1
+d["packages"]["demo"]["commit"] = "a" * 40; d["packages"]["shots"]["commit"] = "b" * 40
+json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PYEOF
+$IDX sign "$OUT/index.json" --key-file "$WORK/good" >/dev/null
+SECONDS=0
+env PATH="$STUB:$PATH" STUB_HANGID=1 HS_PKG_GIT_TIMEOUT=3 timeout 60 $PKG fetch hub > /dev/null 2> "$WORK/b.err"
+check "two hanging fetches by id end within one budget" test "$SECONDS" -lt 6
+check_out "both packages are recorded" "demo is not available.*shots is not available|shots is not available.*demo is not available" tr '\n' ' ' < "$WORK/b.err"
+check_out "the one that got no time says it is tried again" "tries again" cat "$WORK/b.err"
+
 export HS_STATE_DIR=$S1
 
 echo "-- a missing key file is a refusal, not a traceback"

@@ -75,7 +75,9 @@ REPO_NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 MAX_INDEX = 20 * 1024 * 1024
 CACHE_KEEP_SECONDS = 600   # prune leaves a cached folder alone that was created or read this recently
 GIT_TIMEOUT = 180          # seconds for one git call (as HS_INSTALL_FETCH_TIMEOUT in scripts/lib/checkout.sh)
-LOCK_WAIT = 240           # seconds a fetch waits for another one (a git call under the lock ends after GIT_TIMEOUT)
+# The longest a fetch holds the lock: the index (two loads of 30 s at most) + clone + fetch (2 x GIT_TIMEOUT) + all fetches of commits by id together
+# (one more GIT_TIMEOUT, see fetch_index) = 3 x GIT_TIMEOUT + 60 s. A fetch or install that waits for the lock waits that long (HS_PKG_LOCK_WAIT sets it).
+LOCK_FACTOR = 3
 GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -88,14 +90,31 @@ class Refused(Exception):
         self.code = code
 
 
-def git_run(args, cwd=None, input=None):
+def git_limit():
+    try:
+        return float(os.environ.get("HS_PKG_GIT_TIMEOUT") or GIT_TIMEOUT)
+    except ValueError:
+        return GIT_TIMEOUT
+
+
+def ssh_configured():
+    """the person set core.sshCommand in a git configuration: ours is not put over it"""
+    if not hasattr(ssh_configured, "v"):
+        r = subprocess.run(["git", "config", "--get", "core.sshCommand"], capture_output=True)
+        ssh_configured.v = r.returncode == 0 and bool(r.stdout.strip())
+    return ssh_configured.v
+
+
+def git_run(args, cwd=None, input=None, limit=None):
     """run git without a terminal prompt (like scripts/lib/checkout.sh) and with a time limit (HS_PKG_GIT_TIMEOUT, default 180 s): a stalled remote
     is killed with its helpers, so a lock held around it is always released. -> CompletedProcess; Refused on a timeout"""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="true")
-    try:
-        limit = float(os.environ.get("HS_PKG_GIT_TIMEOUT") or GIT_TIMEOUT)
-    except ValueError:
-        limit = GIT_TIMEOUT
+    # a fetch that outlives its caller (the caller was killed) ends by itself: it is its own session, so no signal of the caller reaches it
+    env.setdefault("GIT_HTTP_LOW_SPEED_LIMIT", "1000")
+    env.setdefault("GIT_HTTP_LOW_SPEED_TIME", "60")
+    if "GIT_SSH_COMMAND" not in env and "GIT_SSH" not in env and not ssh_configured():
+        env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+    limit = git_limit() if limit is None else limit
     p = subprocess.Popen(["git", *args], cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          start_new_session=hasattr(os, "killpg"))
     try:
@@ -120,9 +139,9 @@ def git(*args, cwd=None, input=None):
     return r.stdout
 
 
-def git_ok(*args, cwd=None):
+def git_ok(*args, cwd=None, limit=None):
     try:
-        return git_run(args, cwd=cwd).returncode == 0
+        return git_run(args, cwd=cwd, limit=limit).returncode == 0
     except Refused:
         return False
 
@@ -331,9 +350,9 @@ class Repos:
         try:
             if fcntl:
                 try:
-                    wait = float(os.environ.get("HS_PKG_LOCK_WAIT") or LOCK_WAIT)
+                    wait = float(os.environ.get("HS_PKG_LOCK_WAIT") or LOCK_FACTOR * git_limit() + 60)
                 except ValueError:
-                    wait = LOCK_WAIT
+                    wait = LOCK_FACTOR * git_limit() + 60
                 end = time.monotonic() + wait
                 while True:
                     try:
@@ -359,13 +378,16 @@ class Repos:
             self.fetch(r)       # once per run: the clone and the commits the index names, so reads of the web never run git clone or fetch
             d = self.clone_dir(name)
             missing = {}
+            end = time.monotonic() + git_limit()        # all fetches by id together: the lock is held for a known time at most
             for pname, e in doc["packages"].items():
                 sha = e["commit"]
                 if git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
                     continue
-                git_ok("fetch", "--quiet", "origin", sha, cwd=d)      # a commit no branch or tag reaches any more is fetched by its id
+                left = end - time.monotonic()
+                if left > 0:    # a commit no branch or tag reaches any more is fetched by its id
+                    git_ok("fetch", "--quiet", "origin", sha, cwd=d, limit=left)
                 if not git_ok("cat-file", "-e", sha + "^{commit}", cwd=d):
-                    missing[pname] = [sha, "the commit %s cannot be fetched from %s" % (sha[:12], r["url"])]
+                    missing[pname] = [sha, "the commit %s cannot be fetched from %s%s" % (sha[:12], r["url"], "" if left > 0 else " (time used up; the next fetch tries again)")]
             self.write_unfetchable(name, missing)
             for pname, (sha, why) in sorted(missing.items()):
                 print("warning: %s: %s is not available: %s" % (name, pname, why), file=sys.stderr)
@@ -460,14 +482,18 @@ class Repos:
         """v<version>-<8 of the commit><8 of the tree hash>: a plan made for this tag is only ever installed as these files (the tag shape of the web job allows it)"""
         return "v%s-%s%s" % (entry["version"], entry["commit"][:8], entry["tree"][7:15])
 
-    def index_entries(self, r):
-        """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry"""
+    def index_entries(self, r, with_unavailable=False):
+        """{package: entry} of an index repository: the index entry plus what the rest of the code reads from a release entry. A package whose
+        commit could not be fetched is left out, or (with_unavailable) kept with `_unavailable` = the reason: never offered, but still known"""
         out = {}
         bad = self.unfetchable(r["name"])
         for n, e in self.read_index(r)["packages"].items():
+            extra = {}
             if n in bad and bad[n][0] == e["commit"]:
-                continue        # its commit could not be fetched: not available (choose says why)
-            out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""))
+                if not with_unavailable:
+                    continue
+                extra = {"_unavailable": "its commit could not be fetched: %s" % bad[n][1]}
+            out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""), **extra)
         return out
 
     def ensure_commit(self, r, sha, fetch=True):
@@ -623,13 +649,14 @@ class Repos:
                 out.append((name, "", "", str(e)))
         return out
 
-    def catalog(self):
-        """{package name: [(repo, entry, tag, commit)]} from the cached clones, newest verified tag each"""
+    def catalog(self, with_unavailable=False):
+        """{package name: [(repo, entry, tag, commit)]} from the cached clones, newest verified tag each; with_unavailable also lists the
+        packages whose commit could not be fetched (entry["_unavailable"] = why): for what must know an installed copy, never for an offer"""
         cat = {}
         for name, r in self.all().items():
             try:
                 if r.get("index"):
-                    for pname, entry in self.index_entries(r).items():
+                    for pname, entry in self.index_entries(r, with_unavailable).items():
                         cat.setdefault(pname, []).append((name, entry, self.index_tag(entry), entry["commit"]))
                     continue
                 t, c = self.verified_tag(r)
@@ -946,7 +973,7 @@ class Repos:
         dropped repo, commit and tag) gets the repository that lists the package when exactly one does"""
         have = dict(self.pkg.installed().get(name, {}))
         if "repo" not in have and os.path.isdir(os.path.join(self.state, "current", name)):
-            repos = [c[0] for c in self.catalog().get(name, [])]
+            repos = [c[0] for c in self.catalog(True).get(name, [])]
             if len(repos) == 1:
                 have["repo"] = repos[0]
         if "repo" not in have:
@@ -1115,9 +1142,11 @@ class Repos:
         return data
 
     def choose_installed(self, name, repo):
-        cat = [c for c in self.catalog().get(name, []) if c[0] == repo]
+        cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
         if not cat:
             raise Refused("%s is not in %s any more" % (name, repo))
+        if cat[0][1].get("_unavailable"):
+            raise Refused("%s: %s" % (name, cat[0][1]["_unavailable"]))
         return cat[0]
 
 
@@ -1173,12 +1202,18 @@ def run(pkg, cmd, rest):
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
             seen = set()
-            for pname, rows in sorted(R.catalog().items()):
+            for pname, rows in sorted(R.catalog(True).items()):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
                     if os.path.isdir(os.path.join(cur, pname)):
                         inst = str(have.get(pname, {}).get("version", "?"))
+                    if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
+                        if inst != "-":
+                            seen.add(pname)
+                            print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
+                                             e.get("audience", "generic"), ("%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])).replace("	", " ")]))
+                        continue
                     if inst == "-":
                         state = "new"
                     elif inst == ver:
@@ -1213,9 +1248,13 @@ def run(pkg, cmd, rest):
             # recorded before packages came from a repository); there: its folder in current/ or a built-in one
             applied = pkg.installed()
             builtin = {m.get("name") for p, m in pkg.manifests() if "/current/" not in p.replace("\\", "/")}
-            for pname, rows in sorted(R.catalog().items()):
+            for pname, rows in sorted(R.catalog(True).items()):
                 there = os.path.isdir(os.path.join(R.state, "current", pname)) or pname in builtin
                 if there or not (rows[0][1].get("core") or pname in applied):
+                    continue
+                if rows[0][1].get("_unavailable"):       # a core package that cannot be had is a failure, not a silent skip
+                    bad += 1
+                    print("%s: %s" % (pname, rows[0][1]["_unavailable"]), file=sys.stderr)
                     continue
                 try:
                     v, r_name, tag = R.install(pname, rows[0][0])
