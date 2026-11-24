@@ -40,5 +40,10 @@ def options():
     return {i["key"]: i.get("store", "machine") for i in _items()}
 
 
+def specs():
+    """{key: item} of every option: type, pattern, choices, min, max as the schema says them"""
+    return {i["key"]: i for i in _items()}
+
+
 def secrets():
     return {i["key"] for i in _items() if i.get("secret") is True}

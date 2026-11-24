@@ -1290,6 +1290,23 @@ def run(pkg, cmd, rest):
                 print("reason\t%s" % " ".join(str(e).split()))
                 return 1
             print("\n".join(lines))
+        elif cmd == "blueprint":     # blueprint list [lang] | show <name> [lang] | record <name>: lib/pkg_blueprint.py (hs blueprint, hs sys blueprint)
+            sys.path.insert(0, os.path.join(pkg.HERE, "lib"))
+            import pkg_blueprint
+            sub = rest[0] if rest else ""
+            if sub == "list":
+                rows = pkg_blueprint.listing(R, pkg, rest[1] if len(rest) > 1 else "en")
+                if rows:
+                    print("\n".join(rows))
+            elif sub == "show" and len(rest) > 1:
+                lines, bad = pkg_blueprint.show(R, pkg, rest[1], rest[2] if len(rest) > 2 else "en")
+                print("\n".join(lines) if not bad else "\n".join("error\t" + b for b in bad))
+                return 1 if bad else 0
+            elif sub == "record" and len(rest) > 1:
+                pkg_blueprint.record(R, pkg, rest[1])
+            else:
+                print("usage: blueprint list [lang] | show <name> [lang] | record <name>", file=sys.stderr)
+                return 2
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
