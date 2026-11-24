@@ -92,7 +92,14 @@ hs_job_record() {
     resume) event_emit job.resumed "$id" "job got its answer" || true ;;
     finish)
       if [ "${3:-1}" = 0 ]; then _hs_job_key_arg; event_emit job.ok "$id" "job finished" ${_HS_KEYARG[@]+"${_HS_KEYARG[@]}"} || true
-      else event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)}" || true; fi ;;
+      else
+        local code="" cf="${HS_JOBS_DIR:-/var/lib/hs/jobs}/$id.code"   # the code of the refusal that ended the job (refuse_code, ADR 0028)
+        if [ -f "$cf" ]; then
+          code=$(head -n1 "$cf" 2>/dev/null | tr -cd 'a-z0-9.-'); rm -f "$cf"
+          [ -z "$code" ] || _hs_job_record_write_or_python error "$id" --category exit --message "exit status ${3:-1}" --code "$code" >/dev/null 2>&1 || code=
+        fi
+        event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)${code:+,\"code\":\"$code\"}}" || true
+      fi ;;
     reconcile)
       while IFS=$'	' read -r line _ text; do
         [ -z "$line" ] || event_emit job.interrupted "$line" "${text:-job} did not finish" || true

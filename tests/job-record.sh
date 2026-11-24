@@ -61,6 +61,17 @@ check "finish 3 is failed" "failed" "$(jf "$id2" state)"
 check "failed error category" "exit" "$(jf "$id2" error.category)"
 check "failed error message" "exit status 3" "$(jf "$id2" error.message)"
 check "empty initiator is null" "null" "$(jf "$id2" initiator)"
+# a failed job ends on refuse_code (ADR 0028): the record's error gets the code, the shape of the row stays
+check "a failure without a code has no error.code" "null" "$(jf "$id2" error.code)"
+id3=$($W new --slug refused --desc "refused one" --unit u --source web --initiator "")
+$W run "$id3"
+( HS_JOB_ID=$id3 bash -c '. "$1/scripts/lib/refuse-code.sh"; refuse_code name.invalid "bad" >/dev/null' _ "$here" )
+check "refuse_code leaves the code for the job" "name.invalid" "$(cat "$HS_JOBS_DIR/$id3.code")"
+( . "$here/scripts/lib/job.sh"; HS_JOB_RECORD=python hs_job_record finish "$id3" 1 >/dev/null 2>&1 )
+check "the failed record carries the code" "name.invalid" "$(jf "$id3" error.code)"
+check "the failed record keeps its category" "exit" "$(jf "$id3" error.category)"
+check "the code file is gone" "0" "$(ls "$HS_JOBS_DIR"/*.code 2>/dev/null | wc -l)"
+check "the code is in the catalogue" "name.invalid" "$(python3 "$here/scripts/errors-doc-gen.py" codes | grep -xF name.invalid)"
 check "ids differ" "1" "$([ "$id" != "$id2" ] && echo 1 || echo 0)"
 
 

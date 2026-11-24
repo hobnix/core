@@ -7437,7 +7437,7 @@
      }
     ],
     "x-hs-described": false,
-    "description": "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
+    "description": "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error ({category, message}, and code, the catalogue code of docs/errors.md, when a refusal ended the job), result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null.",
     "responses": {
      "0": {
       "description": "ok",

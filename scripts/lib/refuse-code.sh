@@ -13,5 +13,7 @@ refuse_code() {
   printf 'status\trefused\nreason\t%s\n' "${text:-${cat_text:-The server did not do this.}}"
   [ "$fix" = - ] || printf 'fix\t%s\n' "$fix"
   printf 'code\t%s\n' "$code"
+  # a job that ends on this refusal: its record gets the code (hs_job_record finish reads the file; best effort, never changes the output or the exit)
+  [ -z "${HS_JOB_ID:-}" ] || printf '%s\n' "$code" >"${HS_JOBS_DIR:-/var/lib/hs/jobs}/$HS_JOB_ID.code" 2>/dev/null || true
   exit 1
 }
