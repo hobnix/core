@@ -661,7 +661,7 @@ pub fn claim(
                 "remote.claimed",
                 server,
                 "info",
-                &json!({"server": server, "share": entry.share, "fingerprint": fp}),
+                &json!({"server": server, "share": entry.share, "fingerprint": fp, "host": inner.host}),
             );
             Reply {
                 error: None,
@@ -705,7 +705,7 @@ pub fn accept(store: &Store, host: &dyn Host, body: &[u8], source: &str) -> Repl
                 "remote.claimed",
                 &inner.server,
                 "info",
-                &json!({"server": inner.server, "share": inner.share}),
+                &json!({"server": inner.server, "share": inner.share, "host": inner.host}),
             );
             Reply {
                 error: None,

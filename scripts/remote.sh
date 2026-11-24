@@ -82,8 +82,9 @@ gen_password() { local p; p=$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n');
 write_cred() {   # write_cred <peer> <login> <domain>; password on stdin (one line)
   local f pw; f=$(cred_file "$1")
   IFS= read -r pw || pw=""
-  [ -n "$pw" ] || fail "No password."
-  secret_prepare "remote-$1.cred" "$state" || fail_fix "The vault is closed." "hs unlock"
+  # exit 4 = the credentials could not be saved (callers read exit 1 as "the name is taken")
+  [ -n "$pw" ] || { warn "No password." >&2; exit 4; }
+  secret_prepare "remote-$1.cred" "$state" || { warn "The vault is closed (hs unlock)." >&2; exit 4; }
   ( umask 077
     { printf 'username=%s\n' "$2"; printf 'password=%s\n' "$pw"; [ -z "$3" ] || printf 'domain=%s\n' "$3"; } > "$f" )
   chmod 600 "$f"
@@ -308,11 +309,19 @@ add_code() {   # add --code [--server <name|host>] [--reconnect <server>] [--std
     local want shost; want=$(rows "$MOUNTS" | awk -F'\t' -v p="$reconnect" '$1 == p { print $2; exit }'); shost=${srv%:*}
     [ "$reconnect" = "$p" ] || fail "$(t "The answer comes from '%s', not from '%s'. Not changed." "$p" "$reconnect")"
     [ -n "$want" ] || fail "$(t "Nothing is mounted from '%s': use hs remote add --code without --reconnect." "$reconnect")"
-    if [ "$h" != "$want" ] || { ! is_node "$srv" && [ "${shost,,}" != "${want,,}" ]; }; then
+    local addr_ok=false nh
+    if is_node "$srv"; then   # a node link proves only that node X answered: X must be the server itself (its name) or live at the stored host
+      nh=$(bash "$node_sh" --list 2>/dev/null | awk -F'\t' -v n="$srv" '$1 == n { print $3; exit }')
+      { [ "$srv" = "$reconnect" ] || [ "${nh,,}" = "${want,,}" ]; } && addr_ok=true
+    else [ "${shost,,}" = "${want,,}" ] && addr_ok=true; fi
+    if [ "$h" != "$want" ] || ! $addr_ok; then
       fail_fix "$(t "A reconnect must reach the address stored for %s (%s); the code points to %s and the answer says %s. Nothing is changed. If the server moved, remove it first." "$p" "$want" "$srv" "$h")" "hs remote remove $p"
     fi
   fi
-  printf '%s\n' "$pw" | setup_mount "$p" "$h" "$s" "$l" "$d" "$fp" "${reconnect:+reconnect}" \
+  local smrc=0
+  printf '%s\n' "$pw" | setup_mount "$p" "$h" "$s" "$l" "$d" "$fp" "${reconnect:+reconnect}" || smrc=$?
+  [ "$smrc" -ne 4 ] || fail "The login could not be saved (is the vault open? hs unlock). Nothing is changed."
+  [ "$smrc" -eq 0 ] \
     || fail_fix "$(t "'%s' is already mounted here and the answer does not prove it is the same server. Nothing is changed. To renew it, use a code of that server with --reconnect %s; for a different server, remove it first." "$p" "$p")" "hs remote remove $p"
   ok "$(t 'Connected to %s, key %s' "$p" "$fp")"
   note "$(t 'Compare the key with the screen of %s.' "$p")"
@@ -568,7 +577,9 @@ EOF
     need_root
     if vault_configured && ! vault_is_open; then exit 3; fi
     rc=0; setup_mount "$1" "$2" "$3" "$4" "$5" "$6" new || rc=$?   # a pushed share never reuses a name: the sender's box proves nothing
-    exit "$rc" ;;
+    [ "$rc" -eq 0 ] || exit "$rc"
+    note "$(t 'Mounted %s from %s as %s (pushed by that server).' "$3" "$2" "$1")"
+    exit 0 ;;
 
   mount-all)   # the timer: mount what is configured and not mounted; never fails the unit because a peer is off
     [ -n "$(rows "$MOUNTS")" ] || exit 0

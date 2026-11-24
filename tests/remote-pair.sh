@@ -166,6 +166,22 @@ out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code11=$(a
 out=$(printf '%s\n' "$code11@evil.local:8480" | srv "$B" beta add --code --stdin --reconnect alpha 2>&1) && fail "a reconnect followed a code that points to another host" || pass "the address the code points to must be the stored host"
 check_eq "the credentials file is unchanged (address of the code)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
 check_eq "the rows are unchanged (address of the code)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
+echo "-- a node link proves only that node X answered: node carol (not alpha, not at alpha's host) cannot renew alpha"
+cat > "$WORK/node2.sh" <<EOT
+#!/usr/bin/env bash
+case "\$1" in
+  --list) printf 'carol\tpeer\tcarol.host\t22\tfile\tok\nalpha\tpeer\talpha.local\t22\tfile\tok\n' ;;
+  --pair) resp=\$($WORK/curl.sh http://x/api/remote/claim); body=\${resp%\$'\n'*}; printf '%s\n' "\$body"; [ "\${resp##*\$'\n'}" = 200 ] ;;
+esac
+EOT
+chmod +x "$WORK/node2.sh"
+credbefore=$(cat "$B/state/remote-alpha.cred"); rowsbefore=$(cat "$B/state/remote-mounts")
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code12=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code12" | HS_NODE=$WORK/node2.sh srv "$B" beta add --code --stdin --server carol --reconnect alpha 2>&1) && fail "an unrelated node renewed alpha" || pass "a node that is not alpha and not at alpha's host is refused"
+check_eq "the credentials file is unchanged (node)" "$credbefore" "$(cat "$B/state/remote-alpha.cred")"
+check_eq "the rows are unchanged (node)" "$rowsbefore" "$(cat "$B/state/remote-mounts")"
+out=$(srv "$A" alpha offer media --code --peer beta --plain --yes) && code13=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
+out=$(printf '%s\n' "$code13" | HS_NODE=$WORK/node2.sh srv "$B" beta add --code --stdin --server alpha --reconnect alpha 2>&1) && pass "the node named alpha renews alpha" || fail "node alpha: $out"
 echo "-- send: a second share for a server that has access gets an accurate error"
 out=$(srv "$B" beta receive --plain --yes) && rcode3=$(awk -F'\t' '$2 == "code" { print $3 }' <<<"$out")
 out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send to an existing name worked" || pass "send refuses it"
