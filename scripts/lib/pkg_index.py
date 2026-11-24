@@ -191,6 +191,11 @@ def entry_of(checkout, path, extra, commit, yanked, assets_dir):
             meta[k] = raw.get(k) or m.get(k)
     meta["tags"] = [str(x) for x in raw.get("tags", [])]
     needs = list(m.get("needs", [])) if m.get("kind") == "recipe" else []
+    if m.get("kind") == "blueprint":
+        # the package list in order, so the marketplace shows it without the folder; `docker` stands for the [docker] table
+        bp = m.get("blueprint", {}) if isinstance(m.get("blueprint"), dict) else {}
+        needs = [str(x) for k in ("capabilities", "extensions", "recipes") for x in (bp.get(k) if isinstance(bp.get(k), list) else [])]
+        needs += ["docker"] if isinstance(m.get("docker"), dict) else []
     needs += [x for x in m.get("requires", []) if x not in needs] if isinstance(m.get("requires"), list) else []
     assets = build_assets(folder, assets_dir) if assets_dir else {}
     meta["icon"] = assets.get("icon")

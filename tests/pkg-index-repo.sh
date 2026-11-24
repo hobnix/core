@@ -20,6 +20,18 @@ OUT=$WORK/pub; mkdir -p "$OUT"
 release() {   # release <version> [serial] [key]: package.toml + run.sh at that version committed, the index built from it and signed
   printf 'name = "demo"\nversion = "%s"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$1" > "$R/recipes/demo/package.toml"
   printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho demo %s\n' "$1" > "$R/recipes/demo/run.sh"
+  mkdir -p "$R/blueprints/bp"   # a blueprint in the same repository: listed in the index, never installed
+  printf 'name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=1"
+roles = ["homeserver"]
+[blueprint]
+recipes = ["demo"]
+[docker]
+manager = "webui"
+' > "$R/blueprints/bp/package.toml"
   git add -A && git commit -q -m "demo $1"
   publish "${2:-1}" "${3:-$WORK/good}"
 }
@@ -51,6 +63,10 @@ echo "-- install"
 check_out "install says where it came from" "demo 1[.]0[.]0 from hub" $PKG install demo
 check_out "installed.toml has the commit" 'commit = "[0-9a-f]{40}"' cat "$HS_STATE_DIR/packages/installed.toml"
 check "the package is in current/" test -f "$HS_STATE_DIR/packages/current/demo/package.toml"
+check_eq "the index entry of a blueprint lists its packages as needs" "['demo', 'docker']" "$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['packages']['bp']['needs'])" "$OUT/index.json")"
+check_out "a blueprint is not installed: it is applied" "bp is a blueprint: hs blueprint apply bp" $PKG install bp
+check_out "and the refusal carries its code" "pkg[.]blueprint" $PKG install bp
+check "nothing of it is in current/" test ! -e "$HS_STATE_DIR/packages/current/bp"
 
 echo "-- a crash in the swap keeps the old pair readable"
 mv "$HS_STATE_DIR/packages/index/hub/live" "$HS_STATE_DIR/packages/index/hub/.old"

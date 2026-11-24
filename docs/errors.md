@@ -80,6 +80,14 @@ No app of that name exists.
 - Text: No such app was found.
 - Fix: none
 
+### pkg.blueprint
+
+hs pkg install was asked for a blueprint, which is applied and never installed.
+
+- Layer: script
+- Text: This is a blueprint: apply it instead of installing it.
+- Fix: `hs blueprint apply <name>`
+
 ### name.invalid
 
 A name is not in the allowed form.

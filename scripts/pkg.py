@@ -134,6 +134,16 @@ def _load_pkg_binary():
 pkg_binary = _load_pkg_binary()
 
 
+def _load_pkg_blueprint():
+    spec = importlib.util.spec_from_file_location("pkg_blueprint", os.path.join(HERE, "lib", "pkg_blueprint.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_blueprint = _load_pkg_blueprint()
+
+
 def _load_pkg_integrations():
     spec = importlib.util.spec_from_file_location("pkg_integrations", os.path.join(HERE, "lib", "pkg_integrations.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -161,7 +171,7 @@ def capability_toml(folder):
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-KINDS = ("recipe", "extension", "capability")
+KINDS = ("recipe", "extension", "capability", "blueprint")
 CAP_TYPES = ("feature", "provider")
 CAP_LISTS = ("requires", "provides", "needs", "variants", "implied_by")
 NIX_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.nix$")
@@ -423,7 +433,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
     if not SEMVER.match(str(m.get("version", ""))):
         bad("version is not semver (1.2.3)")
     if m.get("kind") not in KINDS:
-        bad("kind is not recipe, extension or capability")
+        bad("kind is not recipe, extension, capability or blueprint")
     if not m.get("title"):
         bad("title missing")
     rq = REQUIRES.match(str(m.get("requires_core", "")))
@@ -478,6 +488,9 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
                 bad(f"question {a.get('key')}: label missing")
     elif m.get("kind") == "capability":
         for t in capability_problems(m, path):
+            bad(t)
+    elif m.get("kind") == "blueprint":
+        for t in pkg_blueprint.manifest_problems(m):
             bad(t)
     elif path and not os.path.isfile(os.path.join(os.path.dirname(path), "capability.toml")):
         bad("an extension needs its capability.toml beside package.toml")
@@ -655,6 +668,8 @@ def repo_check(folder, warnings=None, release=False):
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path), release)]
         out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
+        if m.get("kind") == "blueprint":
+            out += [f"{name}: {t}" for t in pkg_blueprint.manifest_problems(m)]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
         warnings += [f"{name}: {t}" for t in warns]
