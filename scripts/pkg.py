@@ -21,7 +21,7 @@
   pkg.py perms <name>                                     the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
   pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
   pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
-  pkg.py index tree|build|validate|sign|verify ...         the signed package index index.json of a repository (lib/pkg_index.py; CI builds and signs it)
+  pkg.py index tree|build|validate|sign|verify|assemble|pin ...  the signed package index index.json of a repository (lib/pkg_index.py; CI builds and signs it)
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
 
 Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work is `git`, signatures are SSH signatures on release tags:
@@ -701,10 +701,13 @@ def licence_problems(folder, warnings):
     (`publish = "index"` in index.toml) is held to it; a licence file that is absent is a warning, one that says the wrong thing is an error."""
     try:
         with open(os.path.join(folder, "index.toml"), "rb") as f:
-            if tomllib.load(f).get("publish") != "index":
-                return []
+            idx = tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return []
+    if idx.get("publish") != "index":
+        return []
+    if idx.get("licences") == "per-package":
+        return per_package_licence_problems(folder, idx, warnings)
     out = []
     for rel, word, name in (("LICENSE", "GNU AFFERO GENERAL PUBLIC LICENSE", "AGPL-3.0"), ("recipes/LICENSE", "MIT License", "MIT")):
         if rel.startswith("recipes/") and not os.path.isdir(os.path.join(folder, "recipes")):
@@ -717,6 +720,26 @@ def licence_problems(folder, warnings):
             continue
         if word.lower() not in text.lower():
             out.append(f"{rel}: is not the {name} licence")
+    return out
+
+
+def per_package_licence_problems(folder, idx, warnings):
+    """A repository of other people's packages (hobnix/community, `licences = "per-package"`): no licence of its own is imposed; each package
+    folder needs a LICENSE, LICENSE.md or COPYING file (error when none and no [meta] license; a warning when only the meta field names it)."""
+    out = []
+    for name, e in sorted(idx.get("package", {}).items()):
+        path = os.path.join(folder, str(e.get("path", "")))
+        if any(os.path.isfile(os.path.join(path, n)) for n in ("LICENSE", "LICENSE.md", "COPYING")):
+            continue
+        try:
+            with open(os.path.join(path, "package.toml"), "rb") as f:
+                meta = tomllib.load(f).get("meta", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            continue    # reported by the package check
+        if isinstance(meta, dict) and meta.get("license"):
+            warnings.append(f"{name}: has no licence file, only [meta] license")
+        else:
+            out.append(f"{name}: has neither a LICENSE file nor [meta] license")
     return out
 
 
