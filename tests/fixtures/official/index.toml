@@ -1,0 +1,20 @@
+# Fixture of a one-repository official checkout (hobnix/official): recipes/, extensions/, capabilities/ in one index.
+publish = "index"
+
+[package.fx]
+path = "recipes/fx"
+version = "1.0.0"
+kind = "recipe"
+requires_core = ">=1"
+
+[package.fx2]
+path = "extensions/fx2"
+version = "0.1.0"
+kind = "extension"
+requires_core = ">=1"
+
+[package.fixcap]
+path = "capabilities/fixcap"
+version = "0.1.0"
+kind = "capability"
+requires_core = ">=1"

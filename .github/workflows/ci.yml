@@ -53,8 +53,8 @@ jobs:
             # rust: the Cargo workspace, the scripts it stands in for, or this workflow
             # pkg: what the package repositories are checked against (the core's helpers and libraries, the package folders and their tests)
             # capmx: the Nix interface capability packages build against (decision O9 of docs/PLAN-capabilities-repo.md); the matrix runs with --vendor then
-            echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/nix-matrix\.sh)$' || capmx=false
-            echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
+            echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/(nix-matrix|official-ref)\.sh)$' || capmx=false
+            echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|scripts/dev/(official-ref|core-names-check)|tests/(core-names|official-ref|profile-core-only|fixtures/official)|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
             echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
           fi
           # shellcheck: a pull request checks the shell files it changed (the empty list: nothing to check); everything else checks every file
@@ -168,73 +168,42 @@ jobs:
           if [ "$NAMES" != all ]; then for n in $NAMES; do only+=(--only "$n"); done; fi
           HS_TEST_CI=1 bash tests/run-all.sh --jobs 2 --shard ${{ matrix.shard }}/${{ strategy.job-total }} "${only[@]}"
 
-  # The default package repositories checked against this core: manifests, indexes and their own tests. A core change that breaks a package is
-  # seen here, before a release (docs/PLAN-packages.md, "Compatibility and CI across repositories"). recipes and extensions: the branch of the same name, else latest main.
-  # hobnix/capabilities (docs/PLAN-capabilities-repo.md Q5): the branch of the same name if it exists, else `develop`; a release pull request
-  # (into main) and a v* tag use its newest tag (scripts/dev/caps-ref.sh). The job logs the commit it used.
+  # hobnix/official checked against this core (hobnix/core#1074, docs/PLAN-packages.md): manifests, index and its own tests, one checkout. A core change
+  # that breaks a package is seen here, before a release. Ref: the branch of the same name if it exists there (a core change that needs a package
+  # change ships both), else `main` (what servers get; never develop); a release pull request (into main) and a v* tag use `main`
+  # (scripts/dev/official-ref.sh). The job logs the commit it used. The old recipes/extensions/capabilities repositories are not checked any more:
+  # they are frozen (D5); the packages the core refers to by name must be in official (scripts/dev/core-names-check.py, D4).
   packages:
     needs: changes
     if: needs.changes.outputs.pkg == 'true' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # recipes and extensions: the branch of the same name if it exists there (a core change that needs a package change ships both), else the default branch
-      - name: Choose the refs of hobnix/recipes and hobnix/extensions
-        id: pkgref
-        env:
-          HEAD_REF: ${{ github.head_ref || github.ref_name }}
-        run: |
-          for r in recipes extensions; do
-            ref=
-            if git ls-remote --exit-code --heads "https://github.com/hobnix/$r.git" "$HEAD_REF" >/dev/null 2>&1; then ref=$HEAD_REF; fi
-            echo "$r=$ref" >> "$GITHUB_OUTPUT"
-          done
-      - uses: actions/checkout@v5
-        with:
-          repository: hobnix/recipes
-          ref: ${{ steps.pkgref.outputs.recipes }}
-          path: pkgs/recipes
-      - uses: actions/checkout@v5
-        with:
-          repository: hobnix/extensions
-          ref: ${{ steps.pkgref.outputs.extensions }}
-          path: pkgs/extensions
-      - name: Choose the ref of hobnix/capabilities
-        id: capref
+      - name: Choose the ref of hobnix/official
+        id: offref
         env:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
           RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
-          HS_CAPS_URL: https://github.com/hobnix/capabilities.git   # until the checkout below is hobnix/official (hobnix/core#1074 step C3)
-        run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
+        run: echo "ref=$(bash scripts/dev/official-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         with:
-          repository: hobnix/capabilities
-          ref: ${{ steps.capref.outputs.ref }}
-          path: pkgs/capabilities
-      - name: hobnix/capabilities has nothing released yet
-        # a release before the repository has a tag and content on main: check against develop instead of failing on an empty checkout
+          repository: hobnix/official
+          ref: ${{ steps.offref.outputs.ref }}
+          path: pkgs/official
+      - name: Manifests and index
         run: |
-          if [ ! -f pkgs/capabilities/index.toml ]; then
-            echo "::notice::hobnix/capabilities ${{ steps.capref.outputs.ref }} has no index.toml (nothing released yet): using develop"
-            git -C pkgs/capabilities fetch -q --depth 1 origin develop
-            git -C pkgs/capabilities checkout -q FETCH_HEAD
-          fi
-      - name: Manifests and indexes
-        run: |
-          echo "hobnix/capabilities: ${{ steps.capref.outputs.ref }} at $(git -C pkgs/capabilities rev-parse HEAD)"
-          mkdir -p pkgs/tree pkgs/captree
-          ln -s "$PWD/pkgs/recipes/recipes" pkgs/tree/packages
-          ln -s "$PWD/pkgs/extensions/extensions" pkgs/tree/capabilities
-          ln -s "$PWD/pkgs/capabilities/capabilities" pkgs/captree/capabilities
+          echo "hobnix/official: ${{ steps.offref.outputs.ref }} at $(git -C pkgs/official rev-parse HEAD)"
+          mkdir -p pkgs/tree
+          ln -s "$PWD/pkgs/official/recipes" pkgs/tree/packages
+          ln -s "$PWD/pkgs/official/extensions" pkgs/tree/capabilities
           HS_PACKAGES_ROOT="$PWD/pkgs/tree" python3 -I scripts/pkg.py validate
-          HS_PACKAGES_ROOT="$PWD/pkgs/captree" python3 -I scripts/pkg.py validate
-          python3 -I scripts/pkg.py repo-check pkgs/recipes
-          python3 -I scripts/pkg.py repo-check pkgs/extensions
-          python3 -I scripts/pkg.py repo-check pkgs/capabilities
-      - name: The tests of the three repositories against this core
+          python3 -I scripts/pkg.py repo-check pkgs/official
+      - name: The names the core refers to are in official
+        run: python3 -I scripts/dev/core-names-check.py pkgs/official
+      - name: The tests of hobnix/official against this core
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq jq python3-pil
-          for r in recipes extensions capabilities; do HS_CORE="$PWD" HS_TEST_CI=1 bash pkgs/$r/tests/run-all.sh || exit 1; done
+          HS_CORE="$PWD" HS_TEST_CI=1 bash pkgs/official/tests/run-all.sh
 
   nixos:
     needs: changes
@@ -291,42 +260,33 @@ jobs:
           bash scripts/dev/nix-matrix.sh
       # Capability packages (docs/PLAN-capabilities-repo.md Q5, decision O9): the same matrix with every package that has a Nix module vendored into
       # the checkout (`pkg.py vendor`, no --impure). First the fixture of this repository (tests/fixtures/capabilities/hello-nix), then
-      # hobnix/capabilities: the branch of the same name if it exists, else `develop`; a release pull request (into main) and a v* tag use its
-      # newest tag (what stable servers get). Runs when the pull request touches the Nix interface (the `changes` job), always for a release pull
+      # hobnix/official: the branch of the same name if it exists, else `main`; a release pull request (into main) and a v* tag use its
+      # `main` (what stable servers get). Runs when the pull request touches the Nix interface (the `changes` job), always for a release pull
       # request, a tag and the runs that are not pull requests.
       - name: Capability matrix with the fixture package (--vendor)
         if: needs.changes.outputs.capmx == 'true' || github.base_ref == 'main'
         run: |
           rm -f machine.toml hardware-configuration.nix
           bash scripts/dev/nix-matrix.sh --vendor tests/fixtures/capabilities
-      - name: Choose the ref of hobnix/capabilities
-        id: capref
+      - name: Choose the ref of hobnix/official
+        id: offref
         if: needs.changes.outputs.capmx == 'true' || github.base_ref == 'main'
         env:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
           RELEASE: ${{ github.base_ref == 'main' || startsWith(github.ref, 'refs/tags/') }}
-          HS_CAPS_URL: https://github.com/hobnix/capabilities.git   # until the checkout below is hobnix/official (hobnix/core#1074 step C3)
-        run: echo "ref=$(bash scripts/dev/caps-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
+        run: echo "ref=$(bash scripts/dev/official-ref.sh "$HEAD_REF" "$RELEASE")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
-        if: steps.capref.outputs.ref != ''
+        if: steps.offref.outputs.ref != ''
         with:
-          repository: hobnix/capabilities
-          ref: ${{ steps.capref.outputs.ref }}
-          path: pkgs/capabilities
-      - name: hobnix/capabilities has nothing released yet
-        if: steps.capref.outputs.ref != ''
+          repository: hobnix/official
+          ref: ${{ steps.offref.outputs.ref }}
+          path: pkgs/official
+      - name: Capability matrix with hobnix/official (--vendor)
+        if: steps.offref.outputs.ref != ''
         run: |
-          if [ ! -f pkgs/capabilities/index.toml ]; then
-            echo "::notice::hobnix/capabilities ${{ steps.capref.outputs.ref }} has no index.toml (nothing released yet): using develop"
-            git -C pkgs/capabilities fetch -q --depth 1 origin develop
-            git -C pkgs/capabilities checkout -q FETCH_HEAD
-          fi
-      - name: Capability matrix with hobnix/capabilities (--vendor)
-        if: steps.capref.outputs.ref != ''
-        run: |
-          echo "hobnix/capabilities: ${{ steps.capref.outputs.ref }} at $(git -C pkgs/capabilities rev-parse HEAD)"
+          echo "hobnix/official: ${{ steps.offref.outputs.ref }} at $(git -C pkgs/official rev-parse HEAD)"
           rm -f machine.toml hardware-configuration.nix
-          bash scripts/dev/nix-matrix.sh --vendor pkgs/capabilities
+          bash scripts/dev/nix-matrix.sh --vendor pkgs/official
       - name: Installer ISO evaluates (installer/iso.nix; the image itself is built on a release tag)
         run: bash scripts/dev/build-iso.sh --eval
 
