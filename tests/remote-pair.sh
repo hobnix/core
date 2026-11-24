@@ -106,6 +106,13 @@ mkserver "$WORK/c" beta   # another server that also calls itself beta: another 
 printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ x\n' > "$WORK/c/hostkey.pub"
 out=$(printf '%s\n' "$code3@$addr" | srv "$WORK/c" beta add --code --stdin 2>&1) && fail "a taken name was given away" || pass "the second beta is refused"
 
+echo "-- HOBNIX_LOG=debug: a log line on stderr stays out of the request and the answer (issue 1174)"
+out=$(srv "$A" alpha offer media --code --plain --yes) && codeg=$(awk -F'	' '$2 == "code" { print $3 }' <<<"$out")
+mkserver "$WORK/g" gamma
+out=$(printf '%s
+' "$codeg@$addr" | HOBNIX_LOG=debug FAKE_SRC=10.0.0.88 srv "$WORK/g" gamma add --code --stdin 2>&1) && pass "add --code works at the debug log level" || fail "add --code at debug: $out"
+echo "$out" | grep -q "$codeg" && fail "the code showed up in the debug output" || pass "no code in the debug output"
+
 echo "-- list keeps its shape"
 l=$(srv "$B" beta list); echo "$l" | grep -q "^mount${T}alpha${T}media${T}alpha.local${T}" && pass "hs remote list: mount line unchanged" || fail "list: $l"
 l=$(srv "$A" alpha list); echo "$l" | grep -q "^offer${T}beta${T}media${T}remote-beta${T}given$" && pass "hs remote list: offer line unchanged" || fail "list: $l"
@@ -215,7 +222,7 @@ out=$(srv "$B" beta receive --plain --yes) && rcode3=$(awk -F'\t' '$2 == "code" 
 out=$(printf '%s\n' "$rcode3@beta.local:8480" | srv "$A" alpha send docs --peer beta --code --stdin --yes 2>&1) && fail "send to an existing name worked" || pass "send refuses it"
 echo "$out" | grep -q "has an access from this server already" && pass "the error says why" || fail "error text: $out"
 echo "-- no secret in argv of the programs (the code goes on stdin)"
-grep -n 'pair request\|pair open\|pair push\|pair check' "$SCRIPTS/remote.sh" | grep -v '|' | grep -q . && fail "a pair call without stdin pipe" || pass "every pair call reads the code from a pipe"
+grep -n 'pair request\|pair open\|pair push\|pair check\|pair_body \(request\|open\|push\)' "$SCRIPTS/remote.sh" | grep -v '|' | grep -q . && fail "a pair call without stdin pipe" || pass "every pair call reads the code from a pipe"
 
 # ---- what follows: the regressions of the review of the backend, the burn, the error names, and the leak check (issue 1155)
 export HS_STATE_DB=$WORK/state.db   # the events of the rest of this file land here
