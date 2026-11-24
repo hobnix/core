@@ -91,7 +91,7 @@ case "$action" in code|receive-code|add-code|send-code)
     add-code)
       printf 'heading\tuse the code of another server\n'
       printf 'step\tclaim the share with the code, save the login in the vault and mount it read only\n'
-      printf 'note\tRead only. Not part of /bulk, the parity or the backup.\n' ;;
+      printf 'note\tRead only. Not part of the share storage, the parity or the backup.\n' ;;
     send-code)
       printf 'heading\tgive %s to the server that made the code\n' "$a"
       printf 'step\tmake the login remote-%s, which can read this share and nothing else, and hand it over\n' "$peer" ;;

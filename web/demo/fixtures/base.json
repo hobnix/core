@@ -439,6 +439,7 @@
   "users/groups": [],
   "vault/list": [],
   "remote/list": [],
+  "remote/codes": [],
   "unifi/networks": [],
   "unifi/clients": [],
   "ports/list": [],
