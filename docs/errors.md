@@ -344,6 +344,22 @@ The old path of a state folder could not be made a link to the new folder.
 - Text: The server could not link the data folder of this extension. Nothing was deleted.
 - Fix: `see docs/extensions-sdk.md, "If something goes wrong"`
 
+### ext.dynamic-write
+
+A service or confined command declares fs.write outside /var/lib/hs/<its name>.
+
+- Layer: script
+- Text: This extension wants to write outside its own folder; its service does not start.
+- Fix: none
+
+### ext.dynamic-read
+
+A service or confined command declares fs.read of the state of the server or of another extension.
+
+- Layer: script
+- Text: This extension wants to read data that is not its own; its service does not start.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.
