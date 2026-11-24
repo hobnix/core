@@ -62,7 +62,12 @@ One `index.json` per repository, built and signed by CI on every merge to the ma
 Not tested on hardware yet; the signing workflow has never run on GitHub.
 
 - **Entry fields** beyond the example above: `path` (the package folder in the repository, so a server can fetch it), `yanked_reason`
-  (optional), `renamed_from` (optional list). `meta.icon` and `meta.background` are `null` when the package has none.
+  (optional), `renamed_from` (optional list), `binaries` (optional, see below). `meta.icon` and `meta.background` are `null` when the package has none.
+- **`binaries`** (hobnix/core#1129): for a package whose manifest has `[[binary]]` rows, a list `[{bin, target, sha256, size}]` read from the manifest
+  (`size` of the file in the folder when it is there; a row not built yet is left out). **Informational only**, inside the signed document so the
+  signature covers it, so a client can say "contains a prebuilt program (x86_64)" before it downloads anything. Install and update never use it: they
+  check the manifest `sha256` and the tree hash. A package without `[[binary]]` has no field, and an index without it stays valid. The builder side
+  (`pkg_index.py validate`, `verify`) refuses a row with a bad shape; a client (`validate` without strict) ignores a malformed or unknown field.
 - **Source:** the entries come from `index.toml` (paths, `core`) when the repository has one, else from `package.toml` files under `packages/`,
   `recipes/`, `extensions/`, `capabilities/`, `blueprints/`. `meta` is the `[meta]` table of package.toml (`author`, `license`, `homepage`,
   `tags`, `changes`) plus `title` and `title_de`. `needs` is `needs` of a recipe plus `requires` of a capability.

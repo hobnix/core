@@ -32,6 +32,36 @@ check_out "an expired index only warns" 'expired' $IDX validate "$J" --now 2027-
 check "build takes serial from --prev" $IDX build "$R" --repo official --out "$WORK/out2" --prev "$J" --commit $C --skip-assets
 check_out "prev + 1" '"serial": 6' cat "$WORK/out2/index.json"
 
+echo "-- binaries (informational)"
+SHA=$(printf 'x' | sha256sum | cut -d' ' -f1)
+mkdir -p "$R/extensions/ext/bin"; printf 'x' > "$R/extensions/ext/bin/prog"
+printf '[[binary]]
+path = "bin/prog"
+sha256 = "%s"
+bin = "prog"
+target = "x86_64-unknown-linux-musl"
+' "$SHA" >> "$R/extensions/ext/package.toml"
+$IDX build "$R" --repo official --out "$WORK/outb" --serial 6 --commit $C --skip-assets >/dev/null
+BJ=$WORK/outb/index.json
+check "an index with binaries validates" $IDX validate "$BJ"
+check_eq "a package with [[binary]] gets the field" "prog x86_64-unknown-linux-musl $SHA 1" "$(python3 -c "import json; b=json.load(open('$BJ'))['packages']['ext']['binaries'][0]; print(b['bin'],b['target'],b['sha256'],b['size'])")"
+check_eq "a package without [[binary]] has no field" "no" "$(python3 -c "import json; print('yes' if 'binaries' in json.load(open('$BJ'))['packages']['demo'] else 'no')")"
+check "an index without the field is valid (older indexes)" $IDX validate "$J"
+python3 -c "import json; d=json.load(open('$BJ')); d['packages']['ext']['binaries'][0]['sha256']='XYZ'; json.dump(d,open('$WORK/badb.json','w'))"
+if $IDX validate "$WORK/badb.json" >/dev/null 2>&1; then fail "a binaries row with a bad sha256 is refused"; else pass "a binaries row with a bad sha256 is refused"; fi
+check_eq "a client (non-strict validate) ignores a malformed field" "" "$(python3 -I -c "
+import importlib.util as u
+s=u.spec_from_file_location('pi','$SCRIPTS/lib/pkg_index.py'); m=u.module_from_spec(s); s.loader.exec_module(m)
+import json; print('; '.join(m.validate(json.load(open('$WORK/badb.json')))))")"
+check "install and update never read the field" test "$(grep -c "binaries" "$SCRIPTS/pkg_repo.py")" = 0
+rm -rf "$R/extensions/ext/bin"
+printf 'name = "ext"
+version = "0.1.0"
+kind = "extension"
+title = "Ext"
+requires_core = ">=1"
+' > "$R/extensions/ext/package.toml"
+
 echo "-- yanked"
 printf '[[yanked]]\nname = "demo"\nversion = "1.2.0"\nreason = "broken"\n' > "$R/yanked.toml"
 $IDX build "$R" --repo official --out "$WORK/out3" --serial 6 --commit $C --skip-assets >/dev/null
