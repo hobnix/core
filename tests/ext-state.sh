@@ -35,7 +35,7 @@ echo "-- both folders exist: refuse, change nothing"
 setup; mkdir -p "$R/hs/posters" "$R/ext/posters"; echo a > "$R/hs/posters/a"; echo b > "$R/ext/posters/b"
 before=$(tree "$R")
 if out=$($ES prepare posters 2>&1); then fail "both exist was accepted: $out"; else
-  case $out in "state_conflict: both $R/hs/posters and $R/ext/posters exist; nothing was moved") pass "refused and names both folders";; *) fail "text: $out";; esac; fi
+  case $out in "ext.state-conflict: both $R/hs/posters and $R/ext/posters exist; nothing was moved") pass "refused and names both folders";; *) fail "text: $out";; esac; fi
 check_eq "nothing changed on disk" "$before" "$(tree "$R")"
 setup; mkdir -p "$R/hs/posters" "$R/private/hs-ext/posters"; echo a > "$R/hs/posters/a"; before=$(tree "$R")
 if $ES prepare posters >/dev/null 2>&1; then fail "old and private folder accepted"; else pass "old and private folder: refused"; fi
@@ -43,9 +43,9 @@ check_eq "nothing changed on disk (private)" "$before" "$(tree "$R")"
 
 echo "-- other states of the old path"
 setup; echo x > "$R/hs/posters"
-if out=$($ES prepare posters 2>&1); then fail "a file was accepted"; else case $out in "state_conflict: $R/hs/posters is not a folder") pass "a file is refused";; *) fail "text: $out";; esac; fi
+if out=$($ES prepare posters 2>&1); then fail "a file was accepted"; else case $out in "ext.state-conflict: $R/hs/posters is not a folder") pass "a file is refused";; *) fail "text: $out";; esac; fi
 setup; ln -s /elsewhere "$R/hs/posters"
-if out=$($ES prepare posters 2>&1); then fail "a wrong link was accepted"; else case $out in "state_conflict: $R/hs/posters is a link to /elsewhere, not $R/ext/posters") pass "a link to somewhere else is refused";; *) fail "text: $out";; esac; fi
+if out=$($ES prepare posters 2>&1); then fail "a wrong link was accepted"; else case $out in "ext.state-conflict: $R/hs/posters is a link to /elsewhere, not $R/ext/posters") pass "a link to somewhere else is refused";; *) fail "text: $out";; esac; fi
 check_eq "and left alone" "/elsewhere" "$(readlink "$R/hs/posters")"
 setup; mkdir -p "$R/ext/posters"; ln -s "$R/ext/posters" "$R/hs/posters"
 check_eq "the right link already there: ok" "ok	-" "$($ES prepare posters 2>&1)"
@@ -73,7 +73,7 @@ os.rename = boom
 print(ext_state.prepare("posters"))
 PY
 )
-case $out in "(None, '"*"state_move_failed: "*"is on another file system than "*"; nothing was moved')") pass "EXDEV is refused, no copy";; *) fail "EXDEV: $out";; esac
+case $out in "(None, '"*"ext.state-move-failed: "*"is on another file system than "*"; nothing was moved')") pass "EXDEV is refused, no copy";; *) fail "EXDEV: $out";; esac
 check_eq "EXDEV changed nothing" "$before" "$(tree "$R")"
 
 echo "-- repair"
@@ -82,6 +82,30 @@ check_eq "an own-owned top: nothing to change" "ok	0" "$($ES repair posters 2>&1
 setup; mkdir -p "$R/elsewhere"; ln -s "$R/elsewhere" "$R/ext/posters"
 if out=$($ES repair posters 2>&1); then fail "a folder outside the private root was repaired"; else case $out in *"not $R/private/hs-ext/posters"*) pass "repair refuses a folder outside the private root";; *) fail "text: $out";; esac; fi
 setup; check_eq "repair of a service without state is ok" "ok	0" "$($ES repair posters 2>&1)"
+
+echo "-- names of the core's own folders"
+setup
+for core in jobs packages disks vault vault-binds backup-rules state settings apps ext ext-svc nodes iso hs-ext private; do
+  mkdir -p "$R/hs/$core"; echo keep > "$R/hs/$core/f"; before=$(tree "$R")
+  if out=$($ES prepare "$core" 2>&1); then fail "core name $core accepted"; else
+    case $out in "ext.state-reserved: "*) pass "$core refused before any change";; *) fail "$core text: $out";; esac; fi
+  check_eq "$core: nothing changed" "$before" "$(tree "$R")"
+done
+check_eq "posters stays allowed" "fresh	-" "$($ES prepare posters 2>&1)"
+check_eq "media-hub stays allowed" "fresh	-" "$($ES prepare media-hub 2>&1)"
+check_eq "the same for link and repair (refused)" "1 1" "$($ES link jobs >/dev/null 2>&1; echo -n "$? "; $ES repair jobs >/dev/null 2>&1; echo $?)"
+nl=$(printf 'posters\n')
+if python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import ext_state; sys.exit(0 if ext_state.prepare("posters\n")[1] is None else 1)' "$SCRIPTS/lib"; then fail "a name with a newline passed"; else pass "a name with a trailing newline is refused"; fi
+
+echo "-- only the private folder exists and the old folder too: the message names the folder that exists"
+setup; mkdir -p "$R/hs/posters" "$R/private/hs-ext/posters"
+out=$($ES prepare posters 2>&1)
+case $out in *"$R/private/hs-ext/posters exist"*) pass "names the private folder";; *) fail "text: $out";; esac
+
+echo "-- every code the module prints is in the catalogue"
+emitted=$(grep -oE 'ext\.state-[a-z-]+' "$SCRIPTS/lib/ext_state.py" | sort -u)
+for c in $emitted; do check "$c is in error-codes.tsv" grep -q "^$c	" "$SCRIPTS/lib/error-codes.tsv"; done
+check "at least four codes were found" test "$(echo "$emitted" | wc -l)" -ge 4
 
 echo "-- the host backup lists the new paths"
 check "backup.sh host_files has /var/lib/hs-ext and /var/lib/private/hs-ext" grep -Eq '"\$STATE" /var/lib/hs-ext /var/lib/private/hs-ext' "$ROOT/scripts/backup.sh"

@@ -310,7 +310,7 @@ The old and the new state folder of a service both exist, or the old path is a w
 
 - Layer: script
 - Text: This extension has its data in two places and the server does not know which one to use; its service does not start. Nothing was changed.
-- Fix: `see the guide`
+- Fix: `see docs/extensions-sdk.md, "If something goes wrong"`
 
 ### ext.state-move-failed
 
@@ -318,7 +318,23 @@ The state folder of a service cannot be moved because /var/lib/hs is on another 
 
 - Layer: script
 - Text: The data of this extension cannot be moved to its new folder; its service does not start. Nothing was changed.
-- Fix: `see the guide`
+- Fix: `see docs/extensions-sdk.md, "If something goes wrong"`
+
+### ext.state-reserved
+
+A package has the name of a folder the server itself keeps in /var/lib/hs (nothing is moved).
+
+- Layer: script
+- Text: This extension has a name the server uses for its own data; its service does not start. Nothing was changed.
+- Fix: `see docs/extensions-sdk.md, "If something goes wrong"`
+
+### ext.state-link-failed
+
+The old path of a state folder could not be made a link to the new folder.
+
+- Layer: script
+- Text: The server could not link the data folder of this extension. Nothing was deleted.
+- Fix: `see docs/extensions-sdk.md, "If something goes wrong"`
 
 <!-- END generated -->
 

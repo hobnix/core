@@ -175,6 +175,10 @@ An app can offer an API key through `[integrations.<name>]` in its `package.toml
 | Python: `No module named ext_sdk` | `python3 -I` does not search the script's folder | add `$HS_SCRIPTS/lib` to `sys.path` as shown above |
 | Shell: `jq: command not found` | the helper needs jq | install `jq` on the server |
 | the call ends with `timeout` | it ran past its limit | answer sooner or raise `timeout:<seconds>` in `commands.tsv` |
+| `ext.state-conflict`: both folders exist | the data of a service is in `/var/lib/hs/<name>` and in `/var/lib/hs-ext/<name>` | look at both, keep the one you need, move the other one away yourself, then start the service; the server never merges or deletes. Not tested on hardware yet. |
+| `ext.state-move-failed` | `/var/lib/hs` is on another file system than `/var/lib/hs-ext` | put both on one file system; the server never copies the data. Not tested on hardware yet. |
+| `ext.state-link-failed` | the server could not make `/var/lib/hs/<name>` a link | check that `/var/lib/hs` is writable and has free inodes; no data was deleted |
+| `ext.state-reserved` | the package has the name of a folder of the server itself | rename the package |
 
 ## Next
 

@@ -12,14 +12,17 @@ ln -s "$P" "$WORK/ext/posters"
 U=64321; G=64322
 echo a > "$P/a"; echo b > "$P/sub/b"; echo victim > "$WORK/outside/f"
 ln -s "$WORK/outside/f" "$P/link"; ln -s "$WORK/outside" "$P/dirlink"
+# a folder the service swapped for a link to a folder of root (the swap is simulated by planting the link before the run)
+mkdir -p "$WORK/rootdir"; echo secret > "$WORK/rootdir/shadow"; mv "$P/sub" "$P/sub.old"; ln -s "$WORK/rootdir" "$P/sub"
 chown -h $U:$G "$P"
 out=$($ES repair posters 2>&1)
-check_eq "repair counts the entries it changed" "ok	5" "$out"
+check_eq "repair counts the entries it changed" "ok	6" "$out"
 check_eq "a root-owned file gets the owner of the top folder" "$U:$G" "$(stat -c %u:%g "$P/a")"
-check_eq "also below a sub folder" "$U:$G" "$(stat -c %u:%g "$P/sub/b")"
+check_eq "also below a sub folder" "$U:$G" "$(stat -c %u:%g "$P/sub.old/b")"
 check_eq "a link itself is changed" "$U:$G" "$(stat -c %u:%g "$P/link")"
 check_eq "the file a link points to keeps its owner" "0:0" "$(stat -c %u:%g "$WORK/outside/f")"
 check_eq "a link to a folder is not followed" "0:0" "$(stat -c %u:%g "$WORK/outside")"
+check_eq "a folder swapped for a link is not entered: what is below keeps its owner" "0:0" "$(stat -c %u:%g "$WORK/rootdir/shadow")"
 check_eq "a second run has nothing to do" "ok	0" "$($ES repair posters 2>&1)"
 chmod 0640 "$P/a"; $ES repair posters >/dev/null 2>&1
 check_eq "the mode is never changed" "640" "$(stat -c %a "$P/a")"
