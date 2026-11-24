@@ -323,7 +323,7 @@ def overlay_rows(pkgdir):
     """Rows of the installed capability packages for the overlay capabilities.tsv (same columns as the core file). A package whose manifest is
     wrong, or that shares its name with a core capability (the core wins, nothing is shadowed), makes the whole run fail with the reason."""
     core = set(manifests())
-    rows = []
+    rows, bad = [], overlay_clashes(pkgdir)
     if os.path.isdir(pkgdir):
         for name in sorted(os.listdir(pkgdir)):
             f = os.path.join(pkgdir, name, 'capability.toml')
@@ -340,6 +340,8 @@ def overlay_rows(pkgdir):
                 die('%s: name must be %s' % (f, name))
             if name in core:
                 die('%s: %s is a core capability; a package may not shadow it' % (f, name))
+            if name in bad:
+                continue
             imp = m.get('implied_by', [])
             if not isinstance(imp, list) or not all(isinstance(x, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9]*', x) for x in imp):
                 die('%s: implied_by must be a list of setting names' % f)
@@ -364,12 +366,33 @@ def _is_capability_pkg(path):
         return False
 
 
+def overlay_clashes(pkgdir):
+    """{package: reason} for every package whose option key is a key of the core schema or of another package. The core always wins; two packages
+    that share a key are both refused, so the result does not depend on the order. A refused package brings none of its options (fail closed)."""
+    core = {o['key'] for o in options(load())}
+    owners, bad = {}, {}
+    for name, items in _overlay_items(pkgdir).items():
+        for it in items:
+            owners.setdefault(it['key'], []).append(name)
+    for key, names in owners.items():
+        for n in names:
+            other = 'core' if key in core else next((q for q in names if q != n), None)
+            if other and n not in bad:
+                bad[n] = 'option %s is also defined by %s' % (key, other)
+    return bad
+
+
 def overlay_options(pkgdir):
     """Options of the installed capability packages (options.toml named by package.toml): a list of normalised dicts, sorted by package name and
-    file order. The key of an option may not exist in the core schema nor in another package, and every [[item]] carries capability = <package>:
-    anything else makes the whole run fail with the reason (install then leaves the package inactive and the previous overlay in place)."""
-    core = {o['key'] for o in options(load())}
-    out, owner = [], {}
+    file order, without the packages that overlay_clashes refuses. Every [[item]] carries capability = <package>; any other mistake makes the whole
+    run fail with the reason (install then leaves the package inactive and the previous overlay in place)."""
+    bad = overlay_clashes(pkgdir)
+    return [o for n, items in _overlay_items(pkgdir).items() if n not in bad for o in items]
+
+
+def _overlay_items(pkgdir):
+    """{package: normalised options} of every capability package that names an options.toml, sorted by package name; clashes are not looked at"""
+    out = {}
     if not os.path.isdir(pkgdir):
         return out
     for name in sorted(os.listdir(pkgdir)):
@@ -396,10 +419,6 @@ def overlay_options(pkgdir):
                 die('%s: option key must look like gatewayPort (got %r)' % (name, key))
             if it.get('capability') != name:
                 die('%s: capability must be "%s"' % (where, name))
-            if key in core:
-                die('%s: the key is an option of the core; package %s is not activated' % (where, name))
-            if key in owner:
-                die('%s: the key is also an option of package %s; package %s is not activated' % (where, owner[key], name))
             if it.get('type') not in TYPES:
                 die('%s: type must be one of %s' % (where, '|'.join(TYPES)))
             if it.get('store', 'machine') not in ('machine', 'settings'):
@@ -418,13 +437,12 @@ def overlay_options(pkgdir):
                     re.compile(it['pattern'])
                 except re.error as e:
                     die('%s: bad pattern: %s' % (where, e))
-            owner[key] = name
             row = {k: it[k] for k in OPTION_FIELDS if k in it}
             row.setdefault('store', 'machine')
             row.setdefault('settable', False)
             row.setdefault('secret', False)
             row['capability'] = name
-            out.append(row)
+            out.setdefault(name, []).append(row)
     return out
 
 
@@ -567,6 +585,9 @@ def overlay_main(rest):
         for k in retire_package(pkgdir, rest[1], out):
             print('retired ' + k)
         return 0
+    refused = overlay_clashes(pkgdir)
+    for n, why in sorted(refused.items()):
+        print('%s: %s' % (n, why), file=sys.stderr)
     files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
              ('config-keys.overlay', render_overlay_keys(pkgdir)), ('layout.overlay.json', render_overlay_layout(pkgdir))]
     core_example = opt('--example', os.path.join(ROOT, 'machine.toml.example'))
@@ -585,7 +606,7 @@ def overlay_main(rest):
     if mode == 'check':
         if stale or gone:
             print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + '\n  '.join([os.path.join(out, n) for n, _ in stale] + ([gone] if gone else [])))
-        return 1 if stale or gone else 0
+        return 1 if stale or gone or refused else 0
     if mode != 'write':
         print('overlay: write, check, list or keys', file=sys.stderr)
         return 2
@@ -605,7 +626,7 @@ def overlay_main(rest):
             f.write(w)
         os.replace(tmp, path)
         print('wrote ' + path)
-    return 0
+    return 1 if refused else 0     # the clean packages are written; the refused ones are named on stderr
 
 
 def read(path):

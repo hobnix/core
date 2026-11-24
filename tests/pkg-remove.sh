@@ -68,6 +68,12 @@ description = "d"
 ' > "$HS_STATE_DIR/packages/current/optcap/options.toml"
 check "removing a package with options" $PKGSH remove optcap --yes
 check "its key is remembered as retired" grep -q '^optcapHost	optcap	1.0.0' "$HS_STATE_DIR/generated/retired-keys.tsv"
+mk clashy capability
+printf 'options = "options.toml"\n' >> "$HS_STATE_DIR/packages/current/clashy/package.toml"
+printf '[[item]]\nkey = "language"\ncapability = "clashy"\nstore = "machine"\ntype = "string"\ndefault = "x"\ndescription = "d"\n' > "$HS_STATE_DIR/packages/current/clashy/options.toml"
+mk gone3 extension
+out=$($PKGSH remove gone3 --yes 2>&1)
+check_eq "a clash that stays installed is named, not reported as a failed refresh" "1 0" "$(printf '%s\n' "$out" | grep -c 'option language is also defined by core') $(printf '%s\n' "$out" | grep -c 'could not be refreshed')"
 rm -rf "$HS_STATE_DIR/generated"
 mk gone2 extension
 check "no overlay is created where there was none" bash -c "$PKGSH remove gone2 --yes && test ! -e '$HS_STATE_DIR/generated'"

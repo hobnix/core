@@ -244,8 +244,15 @@ case "${1:-list}" in
     # a package that brought options or a capability row leaves none behind (ADR 0017 rule 16): the generated overlay is rewritten
     # without it, but only where an overlay exists already (nothing is created for a server that never had a capability package)
     if [ -f "$st/generated/capabilities.tsv" ]; then
-      PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay write --packages "$st/packages/current" --out "$st/generated" >/dev/null \
-        || warn "$(t 'The generated capability list could not be refreshed.')"
+      # exit 1 with only "<pkg>: option <key> is also defined by <x>" lines = the files were written, a package that clashes is left out
+      if ! errs=$(PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay write --packages "$st/packages/current" --out "$st/generated" 2>&1 >/dev/null); then
+        errs=$(printf '%s\n' "$errs" | tr -d '\r')
+        if [ -n "$errs" ] && ! printf '%s\n' "$errs" | grep -qv ': option .* is also defined by '; then
+          while IFS= read -r l; do note "$l"; done <<< "$errs"
+        else
+          warn "$(t 'The generated capability list could not be refreshed.')"
+        fi
+      fi
     fi
     ok "$(t 'Package %s removed.' "$name")"
     # the package's own service is off already (it had to be off); the ones that used an integration it offered restart without it
