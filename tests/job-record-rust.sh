@@ -231,4 +231,22 @@ export HS_UPTIME_FILE=$WORK/missing
 same "reconcile without an uptime file" reconcile
 rm -rf "$py" "$rs"
 same "reconcile without a directory" reconcile
+echo "-- an old binary (up to v0.12.0) that rejects error, result and skip: the shell falls back to Python"
+# TODO(remove with the fallback in scripts/lib/job.sh, the release after the one that ships #1192)
+cat > "$WORK/oldbin" <<OLD
+#!/usr/bin/env bash
+case "\$2" in error|result|skip) echo "hobnix: bad arguments" >&2; exit 1 ;; esac
+exec "$bin" "\$@"
+OLD
+chmod +x "$WORK/oldbin"
+old=$WORK/old; mkdir -p "$old"
+oldrun() { ( export HS_JOBS_DIR=$old HOBNIX_BIN=$WORK/oldbin HS_JOB_NOBUMP=1; unset HS_JOB_RECORD _HS_JOB_RECORD_USE
+  . "$root/scripts/lib/job.sh"; hs_job_record "$@" ); }
+oid=$(oldrun new --slug oldb --desc "old binary" --unit hs-job-oldb-1)
+oldrun run "$oid"; oldrun finish "$oid" 3
+oldrun error "$oid" --category input_timeout --message "no answer" && pass "old binary: error falls back" || fail "old binary: error"
+oldrun result "$oid" --json '{"a": "1"}' && pass "old binary: result falls back" || fail "old binary: result"
+grep -q '"category": "input_timeout"' "$old/$oid.json" && grep -q '"a": "1"' "$old/$oid.json" && pass "old binary: record has error and result" || fail "old binary: record wrong"
+sid=$(oldrun new --slug olds --desc "skip" --unit hs-job-olds-1)
+oldrun skip "$sid" "Already running" && grep -q '"state": "skipped"' "$old/$sid.json" && pass "old binary: skip ends as skipped" || fail "old binary: skip"
 finish

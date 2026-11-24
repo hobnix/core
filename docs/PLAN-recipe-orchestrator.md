@@ -66,5 +66,5 @@ orchestration stops the sub-job too. The folder is removed on every way out; the
 ## Not built / open
 
 - Recipes are not converted yet (`# phases:` headers, `ask_q` instead of `read`); until then a run is one sub-job and asks only through `setting` and the fixed address.
-- The Rust job-record writer does not know `error` (`hs_job_record error` falls back to the Python writer, like `uncancel`).
+- The Rust job-record writer knows `error`, `result` and `skip` (#1192). `hs_job_record` keeps a shell fallback to the Python writer for one release, for a binary up to v0.12.0 (like `uncancel`).
 - No inotify: the step polls twice a second. Waiting jobs are not re-asked after a reboot (the folder is on tmpfs; the job is `interrupted`).
