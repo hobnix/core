@@ -1,4 +1,4 @@
 date  = "2026-11-24"
 type  = "change"
 title = "The host backup also covers the new state folders of extensions"
-body  = """The backup of the server's own files now also includes /var/lib/ext-hs and /var/lib/private/ext-hs, where extension services will keep their data when they run as their own user. The folders do not exist yet, so nothing changes in your snapshots until a later release moves the data there. Snapshot and backup retention are unchanged."""
+body  = """The backup of the server's own files now also includes /var/lib/hs-ext and /var/lib/private/hs-ext, where extension services will keep their data when they run as their own user. The folders do not exist yet, so nothing changes in your snapshots until a later release moves the data there. Snapshot and backup retention are unchanged."""
