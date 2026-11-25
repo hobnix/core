@@ -25,7 +25,7 @@ import tomllib
 
 SDK = "hobnix-ext-sdk"
 SDK_URLS = ("https://github.com/hobnix/core", "https://github.com/hobnix/core.git")
-SDK_TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
+SDK_TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?")
 TARGETS = ("x86_64-unknown-linux-musl",)
 HOST_ARCHS = ("x86_64", "amd64")
 KEYS = {"path", "sha256", "bin", "target"}
@@ -214,7 +214,7 @@ def sdk_pin_problems(folder):
             ok = (not label.startswith("patch.") and isinstance(dep, dict) and str(dep.get("git", "")) in SDK_URLS
                   and SDK_TAG.fullmatch(str(dep.get("tag", ""))) and not {"rev", "branch", "path"} & set(dep))
             if not ok:
-                out.append(("binary.sdk-pin", "Cargo.toml [%s]: a release takes %s from %s by tag = \"vX.Y.Z\" (a core release tag; a rev, "
+                out.append(("binary.sdk-pin", "Cargo.toml [%s]: a release takes %s from %s by tag = \"vX.Y.Z\" (a core release tag, or a beta tag vX.Y.Z-beta.N; a rev, "
                             "branch, path or patch is for develop only)" % (label, SDK, SDK_URLS[0])))
     return out
 
