@@ -1,5 +1,6 @@
 // What the plan dialog asks to be typed and what it sends with Start. Pure functions, no Svelte.
 import { offersRebuild } from './effect.js';
+import { boundArgs } from './pkgbind.js';
 
 // these start a job that rebuilds the server itself: nothing is saved and waiting, so no "Rebuild now" and the dialog closes
 const SELF_REBUILD = ['system', 'blueprint', 'pkg/bundle'];
@@ -14,7 +15,7 @@ export const allTyped = (names, typed) => names.every((n, i) => typed[i] === n);
 export function startRequest(area, args, p, typed) {
   const n = typedNames(area, p).length;
   const confirm = n ? typed[0] ?? '' : '';
-  if (area !== 'blueprint') return { args: [...args], confirm };
+  if (area !== 'blueprint') return { args: boundArgs(area, args, p), confirm };     // a package update also carries --tag and --seen
   const more = typed.slice(1, n).flatMap((t) => ['--confirm', t]);
   return { args: [...args, ...(p?.tag ? ['--tag', p.tag] : []), ...more], confirm };
 }

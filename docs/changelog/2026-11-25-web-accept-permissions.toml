@@ -1,0 +1,6 @@
+date  = "2026-11-25"
+type  = "fix"
+title = "The web interface can accept the new permissions of a package update"
+body  = """The Update button of the Marketplace now lists each permission the new release asks for and has you type the package name. No terminal is needed. If the release changed since you read the plan, the update is refused and you read the plan again.
+
+"Update selected" and automatic updates never accept new permissions: update such a package with its own button. Not tested on hardware yet."""

@@ -78,6 +78,8 @@ GIT_TIMEOUT = 180          # seconds for one git call (as HS_INSTALL_FETCH_TIMEO
 # The longest a fetch holds the lock: the index (two loads of 30 s at most) + clone + fetch (2 x GIT_TIMEOUT) + all fetches of commits by id together
 # (one more GIT_TIMEOUT, see fetch_index) = 3 x GIT_TIMEOUT + 60 s. A fetch or install that waits for the lock waits that long (HS_PKG_LOCK_WAIT sets it).
 LOCK_FACTOR = 3
+MAX_NEW_PERMS = 100       # more new permissions, or a longer one, cannot be shown to a person in full: the web update refuses (valid ones are far below)
+MAX_PERM_LEN = 300
 GRACE_DAYS = 7          # an expired index keeps working; the warning starts this long after `expires`
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -87,6 +89,12 @@ def clean_text(s, keep_ws=False):
     and the line and paragraph separators U+2028/U+2029 become ?. Every refusal passes through it (Refused), so install, update and
     install --core show the same text."""
     return re.sub("[\\x00-\\x08\\x0b-\\x1f\\x7f-\\x9f\\u2028\\u2029" + ("" if keep_ws else "\\t\\n") + "]", "?", str(s))
+
+
+def tsv_row(*fields):
+    """One tab separated line of strings that may come from a package or an index: no field adds a column or a line, also not for a reader that
+    splits on CR, U+0085 or U+2028"""
+    return "\t".join(clean_text(str(f).replace("\t", " ")) for f in fields)
 
 
 class Refused(Exception):
@@ -825,8 +833,12 @@ class Repos:
         if not pkg.SEMVER.match(str(entry.get("version", ""))):
             raise Refused("%s: the version in the index is not semver" % name)
 
-    def install(self, name, repo=None, want_tag=None):
+    def install(self, name, repo=None, want_tag=None, want_commit=None, accepted=None):
+        """want_commit (an update): only the release that was shown and checked, else plan.changed. accepted (an update): the NEW permissions that
+        were accepted; the staged copy may not add any other one."""
         r_name, entry, tag, commit = self.choose(name, repo)
+        if want_commit and (tag, commit) != (want_tag, want_commit):
+            raise Refused("%s: the release changed from %s to %s while the update ran: read the plan again" % (name, want_tag, tag), "plan.changed")
         if entry.get("kind") == "blueprint":
             raise Refused("%s is a blueprint: hs blueprint apply %s" % (name, name), "pkg.blueprint")
         if want_tag and tag != want_tag:
@@ -839,7 +851,7 @@ class Repos:
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
         indexed = bool(entry.get("_index"))
-        ref = commit if indexed else tag
+        ref = commit if indexed or want_commit else tag      # a pinned update reads the commit it checked, a tag can be moved by a fetch meanwhile
         if indexed:
             self.ensure_commit(r, commit)
         self.extract(r, ref, entry["path"], tmp, entry["tree"] if indexed else None)
@@ -875,6 +887,12 @@ class Repos:
         if pm:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml permissions: %s" % (name, pm[0]))
+        if accepted is not None:
+            # the bytes that get installed, not what a plan read earlier
+            extra = [p for p in self.pkg.pkg_perms.added(self.installed_permissions(name), self.pkg.pkg_perms.of(m)) if p not in accepted]
+            if extra:
+                self.rm_quiet(tmp)
+                raise Refused("%s: it asks for permissions that were not accepted: %s; read the plan again" % (name, ", ".join(extra)), "plan.changed")
         sl = self.pkg.pkg_slots.manifest_problems(name, self.pkg.pkg_slots.doc_of(self.pkg.capability_toml(tmp), m))
         if sl:
             self.rm_quiet(tmp)
@@ -1073,8 +1091,29 @@ class Repos:
         """The permissions the release `commit` declares: (declared list or None, the ones the installed copy lacks)."""
         r_name, entry, _, _ = self.choose_installed(name, self.recorded(name)["repo"])
         raw = self.read_at(r_name, entry, commit, "package.toml")
-        new = self.pkg.pkg_perms.of(tomllib.loads(raw.decode("utf-8", "replace")))
+        try:
+            new = self.pkg.pkg_perms.of(tomllib.loads(raw.decode("utf-8", "replace")))
+        except tomllib.TOMLDecodeError as e:
+            raise Refused("%s: package.toml of the new release is not valid (%s)" % (name, e))
         return new, self.pkg.pkg_perms.added(self.installed_permissions(name), new)
+
+    def seen_key(self, name, tag, commit, fresh):
+        """What an update plan showed, as one word: the release, the installed copy and the NEW permissions. A start that sends another one is refused."""
+        facts = [name, tag, commit, self.recorded(name).get("commit", ""), sorted(fresh)]
+        return hashlib.sha256(json.dumps(facts).encode("utf-8")).hexdigest()[:32]
+
+    def update_facts(self, name):
+        """The machine lines of `update <name> --facts` (what pkg-change.sh builds its plan from): current, or tag, seen and one `perm` per NEW
+        permission. The permission texts come from a package: no control character, tab or line break reaches a line. A list that cannot be
+        shown in full is refused, never cut."""
+        res = self.diff(name)
+        if res is None:
+            return ["current"]
+        _, tag, commit, _ = res
+        fresh = self.new_permissions(name, commit)[1]
+        if len(fresh) > MAX_NEW_PERMS or any(len(p) > MAX_PERM_LEN for p in fresh):
+            raise Refused("%s: its new permissions are too many or too long to be shown in full, so it is not offered here" % name)
+        return ["tag\t%s" % tag, "seen\t%s" % self.seen_key(name, tag, commit, fresh)] + ["perm\t%s" % clean_text(p) for p in fresh]
 
     @property
     def pkg_vendor(self):
@@ -1280,6 +1319,16 @@ class Repos:
         return cat[0]
 
 
+def flag_value(rest, flag):
+    """the word after `flag`, None without the flag; the flag as the last word or before another flag is refused"""
+    if flag not in rest:
+        return None
+    i = rest.index(flag) + 1
+    if i >= len(rest) or rest[i].startswith("--"):
+        raise Refused("%s needs a value" % flag)
+    return rest[i]
+
+
 def run(pkg, cmd, rest):
     """the commands of pkg.py that need a repository; returns the exit code"""
     R = Repos(pkg)
@@ -1362,8 +1411,8 @@ def run(pkg, cmd, rest):
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
                             seen.add(pname)
-                            print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
-                                             e.get("audience", "generic"), ("%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])).replace("	", " ")]))
+                            print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
+                                          e.get("audience", "generic"), "%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])))
                         continue
                     if inst == "-":
                         state = "new"
@@ -1381,13 +1430,13 @@ def run(pkg, cmd, rest):
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
                     seen.add(pname)
-                    print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
-                                     e.get("audience", "generic"), (e.get("title") or "-").replace("	", " ")]))
+                    print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
+                                  e.get("audience", "generic"), e.get("title") or "-"))
             if os.path.isdir(cur):
                 for pname in sorted(os.listdir(cur)):
                     if pname in seen or pname.startswith("."):
                         continue
-                    print("	".join([pname, "?", have.get(pname, {}).get("repo", "-"), "-", str(have.get(pname, {}).get("version", "?")), "orphan", "no", "-", "-"]))
+                    print(tsv_row(pname, "?", have.get(pname, {}).get("repo", "-"), "-", have.get(pname, {}).get("version", "?"), "orphan", "no", "-", "-"))
         elif cmd == "install" and rest and rest[0] == "--core":
             # the packages the core refers to by name (`core = true` in the index) and the ones applied here: fetch what is neither built in nor installed yet
             bad = 0
@@ -1418,7 +1467,7 @@ def run(pkg, cmd, rest):
             return 1 if bad else 0
         elif cmd == "install":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
-            want = rest[rest.index("--tag") + 1] if "--tag" in rest else None
+            want = flag_value(rest, "--tag")
             v, r_name, tag = R.install(rest[0], repo, want)
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(R.last_permissions))
@@ -1427,18 +1476,31 @@ def run(pkg, cmd, rest):
             if R.last_permissions is None:
                 print("warning: %s" % pkg.pkg_perms.missing_text(rest[0]), file=sys.stderr)
         elif cmd == "update":
+            if "--facts" in rest:
+                print("\n".join(R.update_facts(rest[0])))
+                return 0
+            # --tag / --seen: install only what a plan showed (plan.changed otherwise)
+            want_tag, want_seen = flag_value(rest, "--tag"), flag_value(rest, "--seen")
+            moved = "%s: what the plan showed is not what an update would install now: read the plan again" % rest[0]
             res = R.diff(rest[0])
             if res is None:
+                if want_tag or want_seen:
+                    raise Refused(moved, "plan.changed")
                 print("current")
                 return 0
             old, tag, commit, text = res
-            print(text)
+            if want_tag and want_tag != tag:
+                raise Refused(moved, "plan.changed")
             new, fresh = R.new_permissions(rest[0], commit)
-            print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(new))
+            if want_seen and want_seen != R.seen_key(rest[0], tag, commit, fresh):
+                raise Refused(moved, "plan.changed")      # before the diff: the diff of another release is never shown for these words
+            # the files and the manifest come from the package: a CR or U+2028 would start a forged line for whoever splits on it (web-serve.py)
+            print(clean_text(text.replace("\r\n", "\n"), True))
+            print("permissions it declares (not enforced, it runs as root): %s" % clean_text(pkg.pkg_perms.describe(new)))
             for ln in R.confine_text(rest[0], commit):
                 print(ln)
             if fresh:
-                print("NEW permissions compared with the installed version: %s" % ", ".join(fresh))
+                print("NEW permissions compared with the installed version: %s" % clean_text(", ".join(fresh)))
                 if "--accept-permissions" not in rest:
                     if not sys.stdin.isatty():
                         raise Refused("this update asks for new permissions: read them above and run again with --accept-permissions")
@@ -1449,7 +1511,7 @@ def run(pkg, cmd, rest):
                     raise Refused("an update changes code that runs as root: read the diff above and run again with --yes")
                 if input("Install %s? [y/N] " % tag).strip().lower() not in ("y", "yes"):
                     raise Refused("not installed")
-            v, r_name, tag = R.install(rest[0], R.recorded(rest[0])["repo"])
+            v, r_name, tag = R.install(rest[0], R.recorded(rest[0])["repo"], tag, commit, set(fresh))
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
         elif cmd == "rollback":
             # rollback <name> --plan: "name TAB from TAB to" | rollback <name>: put the previous copy and lock back (the caller asked first)
@@ -1467,6 +1529,7 @@ def run(pkg, cmd, rest):
         else:
             return 2
     except Refused as e:
+        sys.stdout.flush()      # the reason comes after what was printed: pkg-change.sh reads the last line of both
         rf = os.environ.get("HS_PKG_REFUSAL")
         if e.code and rf:      # hs pkg: the script shows it through refuse_code (ADR 0028)
             with open(rf, "w", encoding="utf-8") as f:

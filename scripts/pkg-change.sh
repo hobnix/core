@@ -16,6 +16,9 @@
 #   repo-remove <name>         take an added repository out (the defaults stay); installed packages stay as they are. Red: the typed word is the name.
 # A package from a repository that was ADDED (not recipes/extensions of this project) runs as root once installed: install and update are red
 # for it, the typed word is the package name. For the default repositories the plan is the confirmation.
+# An update that asks for NEW permissions is red for every repository: one `danger` line per permission and confirm_name. An update plan also has
+# tag<TAB><release> and seen<TAB><word>: start takes them back (--tag T --seen S) and refuses with plan.changed when the release or the permissions
+# are not the shown ones. --accept-permissions reaches pkg.sh only when such a plan was started with its typed name (hobnix/core#1237).
 # plan: exit 0 = allowed, 1 = refused. Output: status ok|refused, reason<TAB><text>, heading|step|note|warn|danger|command|diff<TAB><line>,
 #   confirm_name<TAB><name>, long<TAB>yes|no (yes = it runs as a job: fetch).
 # start: the same checks, then status<TAB>done (or refused with the reason). `start fetch` reads the network for a long time, so it runs as a job:
@@ -28,6 +31,13 @@ pkg=${HS_PKG:-$here/pkg.sh}
 pkgpy="python3 -I $here/pkg.py"
 
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
+# Texts of a package or an index reach the lines below: web-serve.py also splits on CR, U+0085 and U+2028, so every one goes through clean_text
+# (scripts/pkg_repo.py). clean keep = a stream of finished lines (tabs and newlines stay); clean one = one value, made one safe line.
+clean() {
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from pkg_repo import clean_text
+sys.stdout.buffer.write(clean_text(sys.stdin.buffer.read().decode("utf-8", "replace"), sys.argv[2] == "keep").encode("utf-8"))' "$here" "$1"
+}
+refuse_clean() { printf '%s' "$1" | clean one; }   # the reason of a refusal (lib/refuse-code.sh)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: pkg-change.sh plan|start install|update|remove <name> | fetch [<repo>] | repo-add <name> <url> | repo-remove <name>" >&2; exit 1 ;; esac
@@ -41,7 +51,7 @@ if [ "$action" = check-draft ]; then
   if [ "$rc" -ne 0 ] && [ "$errs" -eq 0 ]; then refuse_code pkg.draft-unchecked "the draft could not be checked"; fi
   if [ "$errs" -gt 0 ]; then printf 'status\trefused\nreason\t%s\ncode\tpkg.draft-invalid\n' "The draft has $errs problem(s)."; else printf 'status\tok\n'; fi
   printf 'heading\tcheck a package draft\n'
-  printf '%s\n' "$out" | awk -F'\t' 'NF == 3 { printf "finding\t%s\t%s\t%s\n", $1, $2, $3 }'
+  printf '%s\n' "$out" | awk -F'\t' 'NF == 3 { printf "finding\t%s\t%s\t%s\n", $1, $2, $3 }' | clean keep
   printf 'long\tno\n'
   [ "$errs" -eq 0 ] || exit 1
   exit 0
@@ -78,7 +88,7 @@ relay_coded() {   # relay_coded <output of pkg.sh>
   printf '%s\n' "$lines"; exit 1
 }
 
-repo="" cmd=() red="" long=no
+repo="" cmd=() red="" long=no fresh=() ftag="" fseen="" wtag="" wseen=""
 case "$action" in
   install|update|remove)
     [[ "$name" =~ $word ]] || refuse_code name.invalid "not a package name (lower case letters, digits and dashes)"
@@ -99,9 +109,31 @@ case "$action" in
         [ "$state" = new ] || refuse_code pkg.installed "$name is installed already (version $inst); use update."
         cmd=(bash "$pkg" install "$name" --repo "$repo") ;;
       update)
-        [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
+        while [ $# -gt 0 ]; do
+          [ "$verb" = start ] && [ $# -ge 2 ] || refuse_code args.unexpected "unexpected extra arguments"
+          case "$1" in
+            --tag) wtag=$2; shift 2 ;;
+            --seen) wseen=$2; shift 2 ;;
+            *) refuse_code option.unknown "unknown option $1" ;;
+          esac
+        done
         [ "$inst" != - ] || refuse_code pkg.not-installed "$name is not installed from a repository; install it first."
         [ "$state" = update ] || refuse_code pkg.up-to-date "$name is up to date (version $inst)."
+        # the facts of the update as lines of the package reader (never read from the human diff); no facts, no update
+        errfile=$(mktemp "${TMPDIR:-/tmp}/hs-pkg-facts.XXXXXX")
+        rc=0; facts=$($pkgpy update "$name" --facts </dev/null 2>"$errfile") || rc=$?
+        why=$(awk '!/^code\t/ && NF { l = $0 } END { print l }' "$errfile"); rm -f "$errfile"
+        [ "$rc" -eq 0 ] || refuse_code pkg.action-failed "${why:-the new release of $name could not be read}"
+        while IFS=$'\t' read -r key val; do
+          case "$key" in
+            current) refuse_code pkg.up-to-date "$name is up to date (version $inst)." ;;
+            tag) ftag=$val ;;
+            seen) fseen=$val ;;
+            perm) fresh+=("$val") ;;
+          esac
+        done <<<"${facts//$'\r'/}"
+        [ -n "$ftag" ] && [ -n "$fseen" ] || refuse_code pkg.action-failed "the new release of $name could not be read"
+        [ "${#fresh[@]}" -eq 0 ] || red=$name
         cmd=(bash "$pkg" update "$name" --yes) ;;
       remove)
         [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
@@ -134,6 +166,14 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
+  if [ "$action" = update ]; then
+    if { [ -n "$wtag" ] && [ "$wtag" != "$ftag" ]; } || { [ -n "$wseen" ] && [ "$wseen" != "$fseen" ]; }; then
+      refuse_code plan.changed "The release or its permissions changed: the plan showed something else than an update to $ftag would do now. Read the plan again."
+    fi
+    if [ "${#fresh[@]}" -gt 0 ] && { [ -z "$wtag" ] || [ -z "$wseen" ]; }; then
+      refuse_code confirm.missing "$name asks for new permissions: update it on its own (its Update button), read them and type the name ($name)."
+    fi
+  fi
   if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse_code confirm.missing "type the name ($red) to confirm"; fi
   case "$action" in
     repo-add)
@@ -162,6 +202,11 @@ if [ "$verb" = start ]; then
       unit=$(hs_job "pkg-fetch${repo:+-$repo}" "hs pkg fetch${repo:+ $repo}" -- bash -c '"$@" </dev/null' _ "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"; exit 0 ;;
     *)
+      if [ "$action" = update ]; then
+        cmd+=(--tag "$ftag" --seen "$fseen")      # the package reader checks both again and installs exactly that commit
+        # new permissions: the plan that showed them was named (--tag and --seen above) and its name typed (red above); nothing else accepts them
+        if [ "${#fresh[@]}" -gt 0 ] && [ "$confirm" = "$name" ]; then cmd+=(--accept-permissions); fi
+      fi
       rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$? ;;
   esac
   if [ "$rc" -ne 0 ]; then
@@ -172,6 +217,7 @@ if [ "$verb" = start ]; then
   exit 0
 fi
 
+plan_lines() {
 printf 'status\tok\n'
 case "$action" in
   install)
@@ -186,11 +232,14 @@ case "$action" in
   update)
     printf 'heading\tupdate %s %s -> %s\n' "$name" "$inst" "$avail"
     printf 'step\tinstall the newer signed release; the code below changed and runs as root\n'
-    $pkgpy update "$name" </dev/null 2>/dev/null | head -n 60 | while IFS= read -r l; do printf 'diff\t%s\n' "$l"; done || true
-    if [ -n "$red" ]; then
-      printf 'danger\tThe repository %s was added by you, not by the project.\n' "$repo"
-      printf 'confirm_name\t%s\n' "$name"
-    fi ;;
+    $pkgpy update "$name" --tag "$ftag" --seen "$fseen" </dev/null 2>/dev/null | head -n 60 | while IFS= read -r l; do printf 'diff\t%s\n' "$l"; done || true
+    [ "$r_from" != added ] || printf 'danger\tThe repository %s was added by you, not by the project.\n' "$repo"
+    if [ "${#fresh[@]}" -gt 0 ]; then     # after the cut diff, one line each: never truncated
+      printf 'danger\t%s %s asks for permissions the installed version does not have. It runs as root; declared permissions are not enforced.\n' "$name" "$avail"
+      for p in "${fresh[@]}"; do printf 'danger\tNew permission: %s\n' "$p"; done
+    fi
+    [ -z "$red" ] || printf 'confirm_name\t%s\n' "$name"
+    printf 'tag\t%s\nseen\t%s\n' "$ftag" "$fseen" ;;
   remove)
     printf 'heading\tremove %s\n' "$name"
     printf 'step\tforget the installed copy of %s (version %s)\n' "$name" "$inst"
@@ -213,3 +262,5 @@ case "$action" in
 esac
 [ "${#cmd[@]}" -eq 0 ] || printf 'command\t%s\n' "${cmd[*]}"
 printf 'long\t%s\n' "$long"
+}
+plan_lines | clean keep      # every line of the plan, whatever it was made from
