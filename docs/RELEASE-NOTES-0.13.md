@@ -31,7 +31,7 @@ check on a server; an unticked box is postponed and never blocks the release. Wh
   fetch, or when the index has expired, `hs pkg list` and a banner in the web interface warn, and one push message goes out shortly before expiry.
   `hs sys pkg index` shows the state.
 - Each package in the index has the date its current version came out and up to 10 older versions with commit and checksum. Nothing installs from
-  that list yet.
+  that list yet. The versions appear once the index is rebuilt by the official release of 0.13.
 - `hs pkg install` refuses a package whose commands clash with the core or another package, whose route points at an admin page or has an invalid
   name, exposure or port, or that has a start command without its plan command. The previous copy comes back or the new one goes. `hs pkg remove`
   names every package that needs the one you remove.
@@ -92,3 +92,5 @@ pairing between two servers, and everything in a browser (permission dialog, wiz
 - Blueprints `edge` and `example-server`; the web read of the setup choice.
 - Pinning `:latest` images.
 - A multi-step recipe SDK and the plan speed work: 0.14.
+- Moving the first capability (metrics) into the `capabilities/` folder of hobnix/official (#225, epic #217) is planned for 0.14; capabilities stay in
+  the core for now.
