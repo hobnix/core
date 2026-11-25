@@ -1474,8 +1474,8 @@ CHANGES = {
     "setup": [[r"^wizard-done$"]],
     # apply a preset (preset-change.sh): fills only what is not set yet; the name is a file name in presets/ (the script checks it exists)
     "preset": [[r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"]],
-    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines)
-    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True)}}],
+    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines), --tag of the shown plan
+    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True), "--tag": (r"^v[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$", False)}}],
     # posters (poster-change.sh) are the extension "posters": area "ext/posters", declared in its manifest; the picture is served by GET /api/poster/<file>
     # the router connection (net-change.sh): the address as an option, the API key as the one line on stdin
     "net": [{"fixed": [r"^setup$"], "opts": {"--address": (r"^https?://[A-Za-z0-9._:-]{1,100}/?$", False)}, "stdin": True}],
@@ -1854,6 +1854,8 @@ def parse_change(out, rc):
         k, _, v = line.partition("\t")
         if k in ("step", "note", "warn", "danger", "section", "text"):
             d["steps"].append([k, v])
+        elif k == "blueprint" and len(v.split("\t")) == 4:
+            d["tag"] = v.split("\t")[3]       # name, repo, version, tag: the start sends the tag of the plan that was shown
         elif k == "part" and len(v.split("\t")) == 5:
             # a blueprint plan (blueprint-change.sh): n, part, name, state, text. What the job does is a step, what it leaves alone a note
             f = v.split("\t")
@@ -1887,6 +1889,8 @@ def parse_change(out, rc):
         elif k == "id":
             d["id"] = v
         elif k in ("status", "reason", "heading", "command", "confirm_name", "unit"):
+            if k == "confirm_name" and d[k] and v != d[k]:
+                d.setdefault("confirm_names", [d[k]]).append(v)     # several names to type (a blueprint plan); only then this list exists
             d[k] = v
         elif k == "code" and v:
             d["code"] = v          # ADR 0028: the stable name of a refusal, only when the script printed one
