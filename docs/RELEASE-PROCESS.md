@@ -126,7 +126,10 @@ accepts the pushed tag. The scripts and the verification logic are tested locall
 ## Package repositories (recipes, extensions, capabilities)
 
 Versions are raised by the release, not by pull requests (hobnix/core#615): a pull request touches no `version` and carries at most one label,
-`bump: minor` (a feature) or `bump: major` (a person has to act); no label means patch. Two ways to cut a release, both end in the same signed tag
+`bump: minor` (a feature), `bump: major` (a person has to act) or `bump: none` (a comment or doc edit that must not cause an update offer or a
+restart); no label means patch. A package is not bumped when every merged pull request that touched it is `bump: none` (its titles are not written to
+`[meta] changes` either); any other pull request of the package decides the level, `bump: none` never lowers it. The label has to exist in each
+package repository. Two ways to cut a release, both end in the same signed tag
 and both run `scripts/dev/release.sh`, so they cannot drift (tests: `tests/release.sh`, `tests/prepare-release.sh`):
 
 1. **Prepare.** In the checkout, on `develop`: `bash <core>/scripts/dev/prepare-release.sh --plan` shows "package, old, new, level" and the tag

@@ -4,7 +4,7 @@
 #
 #   bash <core>/scripts/dev/prepare-release.sh [--plan] [--no-push]
 #       Finds the package folders (recipes/, extensions/, capabilities/, blueprints/) that changed since the newest vX.Y.Z tag, takes the highest bump label (`bump: major`, `bump: minor`, none =
-#       patch) of the merged pull requests that touched each one, raises `version` in package.toml and index.toml (release.sh bump), runs
+#       patch; `bump: none` = no bump: a package whose merged pull requests are all `bump: none` stays as it is, with no [meta] changes) of the merged pull requests that touched each one, raises `version` in package.toml and index.toml (release.sh bump), runs
 #       `pkg.py repo-check`, pushes the branch release/prepare-<date> and opens a pull request into develop with the list
 #       "package: old -> new" and the tag level (the highest bump of the release, the input of the release workflow). The release pull
 #       request develop -> main (merge commit) follows once that one is merged.
@@ -79,7 +79,7 @@ for l in open(sys.argv[2], encoding="utf-8"):
 rank() { case $1 in major) echo 2 ;; minor) echo 1 ;; *) echo 0 ;; esac; }
 
 declare -A level=()
-bad=""
+bad="" skipped=0
 prdir=$(mktemp -d) || fail "No temporary folder."
 trap 'rm -rf "$prdir"' EXIT
 for sha in $(git rev-list --reverse "$range" -- "${dirs[@]}"); do
@@ -87,16 +87,20 @@ for sha in $(git rev-list --reverse "$range" -- "${dirs[@]}"); do
   prs=$(prs_of "$sha")
   case $(printf '%s\n' "$labs" | grep -c '^bump: ') in 0|1) ;; *) bad="$bad ${sha:0:7}" ;; esac
   l=patch
+  grep -qx 'bump: none' <<<"$labs" && l=none
   grep -qx 'bump: minor' <<<"$labs" && l=minor
   grep -qx 'bump: major' <<<"$labs" && l=major
   for dir in $(git diff-tree -m --no-commit-id --name-only -r "$sha" -- "${dirs[@]}" | sed -n 's#^\([^/]*/[^/]*\)/.*#\1#p' | sort -u); do
     [ -f "$dir/package.toml" ] || continue
+    # `bump: none` (a comment, a doc): no bump and no title from this pull request; another pull request of the package still decides
+    [ "$l" != none ] || { skipped=$((skipped + 1)); continue; }
     [ "$(rank "$l")" -ge "$(rank "${level[$dir]:-patch}")" ] && level[$dir]=$l
     # the titles go to a file per package (never argv): release-changes.py cleans them
     [ -z "$prs" ] || printf '%s\n' "$prs" >> "$prdir/${dir#*/}.jsonl"
   done
 done
 [ -z "$bad" ] || fail "Pull requests with more than one bump label ($bad ): leave one label and run this again."
+[ ${#level[@]} -gt 0 ] || [ "$skipped" -eq 0 ] || fail "Every change since $last is labelled bump: none: there is nothing to release."
 [ ${#level[@]} -gt 0 ] || fail "No package changed since $last: there is nothing to release."
 
 bump_next() {   # bump_next <x.y.z> <level>
