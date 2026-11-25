@@ -38,6 +38,24 @@ pk ctrl '' "$(row user $'ext ctrl\033[31mx' '@/run.sh')"
 # a package the core names (core = true): hs pkg install --core must apply the same rules
 pk coreclash '' "$(row sys 'sys ext coreclash start go' '@/run.sh')"
 printf 'core = true\n' >> "$R/index.toml"
+# routes the admin check cannot judge (#1226): each is refused, not skipped
+route() { printf '[app]\\ninstances = "one"\\n[app.routes.%s]\\nport = %s\\nexposure = %s' "$1" "$2" "$3"; }
+pk routeok "$(route web 8000 '"private-ok"')" ''
+pk badname "$(route Web 8000 '"public-ok"')" ''
+pk badexp "$(route web 8000 '"Public"')" ''
+pk badport "$(route web '"8000"' '"public-ok"')" ''
+pk badadmin "$(route web 8000 '"public-ok"')"'\nadmin = "true"' ''
+pk badtable '[app]\nroutes = "web"' ''
+pk badapp 'app = "routes"' ''
+# a trailing newline in a route name: a `$` anchor would let it through
+pk badnl "$(route '"web\\n"' 8000 '"public-ok"')" ''
+check "its manifest really holds the TOML escape for a newline" grep -qF '[app.routes."web\n"]' recipes/badnl/package.toml
+# a route name with U+2028 (TOML escape)
+pk sep "$(route '"a\\u2028b"' 8000 '"public-ok"')" ''
+check "its manifest really holds the TOML escape for U+2028" grep -qF 'a\u2028b' recipes/sep/package.toml
+# a row that uses a core first word (a recipe may only use ext <name>)
+pk coreword '' "$(row user 'backup now' '@/run.sh')"
+pk coresys '' "$(row sys 'sys backup now' '@/run.sh')"
 git add -A && git commit -q -m pkgs && git -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m rel
 cd "$ROOT" || exit 1
 $PKGSH repo add test "$R" --key "$WORK/signers" --confirm-name test >/dev/null 2>&1
@@ -63,6 +81,37 @@ check_out "an admin page is never public" "admin page is never public" bash -c "
 check "no control character reaches the output or the machine lines" bash -c "! { $PKGSH install ctrl 2>&1; } | LC_ALL=C grep -q \$'\\033'"
 check_out "a refused plan twin leaves the start row refused too" "twin" bash -c "$PKGSH install twin 2>&1; true"
 
+echo "-- a route the admin check cannot judge is refused (#1226)"
+check "a valid route installs" $PKGSH install routeok
+for p in badname badexp badport badadmin badtable badapp badnl sep; do
+  check "$p: install fails" bash -c "! $PKGSH install $p >/dev/null 2>&1"
+  check "$p: nothing is left in current/" test ! -e "$HS_STATE_DIR/packages/current/$p"
+  check "$p: nothing is recorded as installed" bash -c "! grep -q 'package.$p\]' '$HS_STATE_DIR/packages/installed.toml'"
+done
+check_out "the bad route name is named" "a route is a lower case name" bash -c "$PKGSH install badname 2>&1; true"
+check_out "and carries the code" "^code${tab}pkg.rows" bash -c "$PKGSH install badname 2>&1; true"
+check_out "the bad exposure is named" "exposure is not never-public" bash -c "$PKGSH install badexp 2>&1; true"
+usep=$'\xe2\x80\xa8'
+out=$($PKGSH install sep 2>&1 || true)
+check_out "the U+2028 route is refused for its name" "a route is a lower case name" echo "$out"
+check "no U+2028 reaches the output of an install" test "${out#*"$usep"}" = "$out"
+
+echo "-- a row that uses a core first word is refused"
+for p in coreword coresys; do
+  check "$p: install fails" bash -c "! $PKGSH install $p >/dev/null 2>&1"
+  check "$p: nothing is left in current/" test ! -e "$HS_STATE_DIR/packages/current/$p"
+  check "$p: nothing is recorded as installed" bash -c "! grep -q 'package.$p\]' '$HS_STATE_DIR/packages/installed.toml'"
+done
+check_out "the user row is named" "row backup now: a user row must be: ext coreword" bash -c "$PKGSH install coreword 2>&1; true"
+check_out "the sys row is named" "row sys backup now: a sys row must be: sys ext coresys" bash -c "$PKGSH install coresys 2>&1; true"
+# also a capability package of a default repository, which may own words: never a word of the core
+C=$WORK/own/own; mkdir -p "$C"
+printf 'name = "own"\nkind = "capability"\nwords = ["backup"]\n' > "$C/package.toml"
+row user 'backup now' '@/x.sh' > "$C/commands.tsv"
+printf 'name = "test"\n' > "$WORK/default-repos.toml"
+check_out "an owned word that the core uses is refused" "the word backup is also a core command" \
+  env HS_PACKAGE_REPOS_FILE="$WORK/default-repos.toml" bash "$SCRIPTS/lib/pkg-stage-check.sh" own "$C" test
+
 echo "-- hs pkg install --core applies the same rules"
 $PKGSH install --core >/dev/null 2>&1 || true
 check "a core package with a refused row is not kept" test ! -e "$HS_STATE_DIR/packages/current/coreclash"
@@ -84,6 +133,20 @@ check_out "the old version is still installed" 'version = "1.0.0"' cat "$HS_STAT
 check "its events were not written" test ! -e "$HS_STATE_DIR/pkg-events/upd.tsv"
 check "no previous copy was made" test ! -e "$HS_STATE_DIR/packages/previous"
 check "nothing half staged is left" bash -c "! ls -a '$HS_STATE_DIR/packages/current' | grep -q '^[.]new-'"
+
+echo "-- an update to a bad route changes nothing"
+cd "$R" || exit 1
+sed -i '/^\[package.routeok\]/{n;s/1.0.0/2.0.0/}' index.toml
+sed -i 's/^version = "1.0.0"/version = "2.0.0"/; s/^\[app\.routes\.web\]/[app.routes."a\\u2028b"]/' recipes/routeok/package.toml
+check "the new manifest holds the TOML escape for U+2028" grep -qF 'a\u2028b' recipes/routeok/package.toml
+git add -A && git commit -q -m route && git -c user.signingkey="$WORK/good.pub" tag -s v3.0.0 -m rel3
+cd "$ROOT" || exit 1
+$PKGSH fetch test >/dev/null 2>&1
+rc=0; out=$($PKGSH update routeok --yes 2>&1) || rc=$?
+check "the update is refused" test "$rc" -ne 0
+check_out "for its route" "a route is a lower case name" echo "$out"
+check "no U+2028 reaches the output of an update" test "${out#*"$usep"}" = "$out"
+check_out "the old version is still installed" 'version = "1.0.0"' cat "$HS_STATE_DIR/packages/current/routeok/package.toml"
 
 echo "-- the loader, without an install"
 D=$WORK/pk; mkdir -p "$D/one"

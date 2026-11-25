@@ -127,7 +127,7 @@ def _store(m, folder, bad):
                 bad(f"{k} must be one paragraph of at most {MAX_TEXT} characters")
     if "icon" in m:
         ic = m["icon"]
-        if not isinstance(ic, str) or not (ICON_NAME.match(ic) or ICON_FILE.match(ic)):
+        if not isinstance(ic, str) or not (ICON_NAME.fullmatch(ic) or ICON_FILE.fullmatch(ic)):
             bad('icon must be a Phosphor name like "ph:image" or a file name ending in .svg in the package')
         elif ic.endswith(".svg") and folder:
             p = _file_in(folder, ic)
@@ -149,9 +149,9 @@ def _store(m, folder, bad):
             bad("category is not one of config/package-categories.toml (" + " ".join(cats) + ")")
     if "upstream" in m:
         u = m["upstream"]
-        if not isinstance(u, str) or not re.match(r"^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s]*)?$", u):
+        if not isinstance(u, str) or not re.fullmatch(r"^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s]*)?$", u):
             bad("upstream must be an https:// address")
-    if "app_version" in m and (not isinstance(m["app_version"], str) or not APP_VERSION.match(m["app_version"])):
+    if "app_version" in m and (not isinstance(m["app_version"], str) or not APP_VERSION.fullmatch(m["app_version"])):
         bad("app_version must be a short version text (letters, digits, . _ + ~ -)")
     if "screenshots" in m:
         s = m["screenshots"]
@@ -161,7 +161,7 @@ def _store(m, folder, bad):
             bad(f"at most {MAX_SHOTS} screenshots")
         else:
             for x in s:
-                if not PICTURE.match(x) or ".." in x.split("/") or x.startswith("/"):
+                if not PICTURE.fullmatch(x) or ".." in x.split("/") or x.startswith("/"):
                     bad(f"screenshot {x!r}: a relative png or webp path inside the package")
                 elif folder:
                     p = _file_in(folder, x)
@@ -203,7 +203,7 @@ def _contract(name, m, bad):
             bad(f"[app.health] check {chk} needs a port (1 to 65535)")
         if chk == "container" and ("port" in h or "path" in h):
             bad("[app.health] port and path belong to tcp or http")
-        if "path" in h and (chk != "http" or not isinstance(h["path"], str) or not re.match(r"^/[A-Za-z0-9._~/%?=&-]*$", h["path"])):
+        if "path" in h and (chk != "http" or not isinstance(h["path"], str) or not re.fullmatch(r"^/[A-Za-z0-9._~/%?=&-]*$", h["path"])):
             bad("[app.health] path is for check http and starts with /")
         if "timeout" in h and not _is_int(h["timeout"], 1, 60):
             bad("[app.health] timeout is 1 to 60 seconds")
@@ -218,7 +218,7 @@ def _contract(name, m, bad):
         if paths and (mode != "paths" or not _strs(paths) or any(not p.startswith("/") or ".." in p.split("/") for p in paths)):
             bad("[app.backup] paths: absolute paths inside the instance, only with mode paths")
         d = b.get("dump", "-")
-        if d != "-" and (not isinstance(d, str) or not DUMP_KIND.match(d)):
+        if d != "-" and (not isinstance(d, str) or not DUMP_KIND.fullmatch(d)):
             bad('[app.backup] dump is a dump kind name or "-"')
     routes = app.get("routes")
     if routes is not None:
@@ -228,7 +228,7 @@ def _contract(name, m, bad):
             names = [k for k in routes if k != "default"]
             for rn in names:
                 rt = routes[rn]
-                if not ROUTE_NAME.match(rn) or not isinstance(rt, dict):
+                if not ROUTE_NAME.fullmatch(rn) or not isinstance(rt, dict):
                     bad(f"[app.routes] {_t(rn)}: a route is a lower case name with a table {{ port, scheme, exposure }}")
                     continue
                 for k in sorted(set(rt) - ROUTE_KEYS):
@@ -289,7 +289,7 @@ def check(m, folder=None, core=False):
     name = str(m.get("name", "?"))
     kind = m.get("kind")
     if uses_app(m):
-        rq = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
+        rq = re.fullmatch(r"^>=(\d+)$", str(m.get("requires_core", "")))
         if rq and int(rq.group(1)) < API_LEVEL:
             bad(f"app contract and store fields need requires_core \">={API_LEVEL}\" (this manifest says {m.get('requires_core')})")
         if kind not in ("recipe", "extension", "blueprint"):
@@ -301,7 +301,7 @@ def check(m, folder=None, core=False):
     # strictness (D9): the five core recipes and a package that carries store fields must be complete; for the rest it is a warning
     store_carrier = any(k in m for k in STORE_KEYS)
     miss = []
-    rq9 = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
+    rq9 = re.fullmatch(r"^>=(\d+)$", str(m.get("requires_core", "")))
     # a recipe written before level 9 cannot be required to carry what level 9 introduced: it gets a warning until it raises requires_core
     strict = core and bool(rq9) and int(rq9.group(1)) >= API_LEVEL
     if kind == "recipe":
