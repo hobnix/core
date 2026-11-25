@@ -296,6 +296,14 @@ A compiled program, or a non-script service exec, is started from a package with
 - Text: This package starts a program that has no declared hash.
 - Fix: none
 
+### binary.sdk-pin
+
+repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z).
+
+- Layer: script
+- Text: This package is not ready for a release: its extension SDK is not pinned to a core release.
+- Fix: none
+
 ### code.unknown
 
 A pairing code is not known: wrong, already used, expired, or the server name is taken by another server (one answer for all of them, POST /api/remote/claim).
