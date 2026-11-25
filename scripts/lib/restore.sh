@@ -25,6 +25,8 @@ for s in sorted(json.load(sys.stdin), key=lambda s: s["time"]):
 }
 
 restore_fetch() {   # restore_fetch <repo> <passfile> <snapshot|latest> <dir>: the settings of the host snapshot below <dir>
+  # `<snapshot>:<subfolder>` would move everything: only latest or a hex id goes to restic
+  [[ "$3" =~ ^(latest|[0-9a-f]{8,64})$ ]] || return 1
   restic -r "$1" --password-file "$2" --no-lock restore "$3" --tag host --target "$4" \
     --include /etc/nixos/machine.toml --include /etc/nixos/machine.nix \
     --include /var/lib/hs --include /var/lib/private/hs-ext --include /var/lib/hs-ext --include '/etc/ssh/ssh_host_*' >/dev/null 2>&1

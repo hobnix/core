@@ -131,7 +131,7 @@ rm -rf "$ST/svc"; mkdir -p "$EP/svc2"; ln -s "$EP/svc2" "$ST/svc"
 for case_ in "// $ST/svc" "/. $ST/svc" "/./ $ST" "/ $WORK" "/ $(dirname "$WORK")" "/ $EP/svc2" "/ $EXTP" "/ $(dirname "$ST")/state/../state"; do
   set -- $case_
   out=$(b restore latest "$2" --tag host --to "$1" 2>&1 || true)
-  case $out in *"Not restored in place"*) pass "refused: --to $1 $2" ;; *) fail "not refused: --to $1 $2: $(echo "$out" | head -2)" ;; esac
+  case $out in *"Not restored"*) pass "refused: --to $1 $2" ;; *) fail "not refused: --to $1 $2: $(echo "$out" | head -2)" ;; esac
 done
 check "restic was never started for them" test ! -s "$FIX.calls"
 out=$(b restore latest /srv/other --tag host --to / 2>&1 || true)

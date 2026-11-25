@@ -79,9 +79,7 @@ def put(src, top, rel, stamp):
         os.makedirs(os.path.dirname(top), 0o755, exist_ok=True)
         os.mkdir(top, 0o700)
     owner = os.stat(top)
-    with open(src, "rb") as f:
-        data = f.read()
-        mode = stat.S_IMODE(os.fstat(f.fileno()).st_mode)
+    mode = stat.S_IMODE(os.stat(src).st_mode)
     fd = walk(top, dirs, True, owner)
     tmp = ".restore-%d-%s" % (os.getpid(), name)
     try:
@@ -96,8 +94,12 @@ def put(src, top, rel, stamp):
             os.rename(name, "%s.before-restore-%s" % (name, stamp), src_dir_fd=fd, dst_dir_fd=fd)
         w = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
         try:
-            with os.fdopen(w, "wb", closefd=False) as wf:
-                wf.write(data)
+            with os.fdopen(w, "wb", closefd=False) as wf, open(src, "rb") as f:
+                while True:
+                    chunk = f.read(1 << 20)
+                    if not chunk:
+                        break
+                    wf.write(chunk)
             os.fchown(w, owner.st_uid, owner.st_gid)
             os.fchmod(w, mode)
         finally:
