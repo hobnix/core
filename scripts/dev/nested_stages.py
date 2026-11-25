@@ -354,7 +354,14 @@ def confine_dynamic():
         step("run", "test -e /var/lib/private/hs-ext/confinefx/f && test \"$(stat -c %u /var/lib/private/hs-ext/confinefx/f)\" != 0", what="the state file is there and systemd took it from root (on disk it is nobody, 65534: the dynamic uid is only the idmapped view in the unit)"),
         step("run", "mkdir -p /var/lib/hs/confinegx && echo other > /var/lib/hs/confinegx/f && python3 -I %s prepare confinegx" % es, what="a second extension with state"),
         step("run", "! cfd 'cat /var/lib/hs-ext/confinegx/f' && ! cfd 'ls /var/lib/private/hs-ext/confinegx' && ! cfd 'cat /proc/1/environ'", timeout=120,
-             what="the unit cannot read another extension's state (nv: no extra hiding is needed) and does not see other processes"),
+             what="before the first start of the other extension (prepare only: the folder must be 0700 already) the unit cannot read its state and does not see other processes"),
+        step("run", "test \"$(stat -c %a /var/lib/hs-ext/confinegx)\" = 700", what="the moved folder of the other extension is 0700 right after prepare"),
+        step("run", "python3 -I %s props --dynamic --name confinegx -- fs.write:/var/lib/hs/confinegx | grep -v '^#' > /tmp/confine-dyn-g.props "
+                    "&& a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine-dyn-g.props; "
+                    "systemd-run --wait --collect --quiet -E PATH=/run/current-system/sw/bin \"${a[@]}\" sh -c 'test -r /var/lib/hs-ext/confinegx/f'" % ec,
+             timeout=60, what="the other extension starts once (systemd takes its folder over) and reads its own state"),
+        step("run", "! cfd 'cat /var/lib/hs-ext/confinegx/f' && ! cfd 'ls /var/lib/private/hs-ext/confinegx'", timeout=120,
+             what="after that first start the unit of the first extension still cannot read it (nobody 0700)"),
         step("run", "cfd 'echo more >> /var/lib/hs-ext/confinefx/f'", timeout=60, what="and it can still write its own state"),
         step("run", "echo cred > /tmp/confine-cred && a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine-dyn.props; "
                     "systemd-run --wait --collect --quiet -E PATH=/run/current-system/sw/bin \"${a[@]}\" -p LoadCredential=k:/tmp/confine-cred sh -c 'test \"$(cat \"$CREDENTIALS_DIRECTORY/k\")\" = cred'",
