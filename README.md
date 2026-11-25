@@ -26,8 +26,8 @@ them over by itself (`hs pkg repo migrate`, also run by `hs update`). Design: [d
 ## How packages reach a server
 
 - Each repository publishes a signed `index.json`. The server checks the signature and the hash of each package folder; neither the host
-  of the index nor the git host is trusted. The address of the default repository is in `config/package-repos.toml` (today a GitHub Pages
-  address; `packages.hobnix.dev` is planned, see PLAN-registry).
+  of the index nor the git host is trusted. The default repository is served from `packages.hobnix.dev` (live, signed). Servers on v0.12 keep the old
+  rows in `config/package-repos.toml` until they update. See PLAN-registry.
 - `hs pkg fetch` reads the indexes, `hs pkg available` shows what they offer, `hs pkg install <name>` installs one, `hs pkg list` and
   `hs pkg updates` show what is installed and what is newer. `hs pkg repo add <name> <url> --key <allowed_signers file>` adds a
   third-party repository.
@@ -40,7 +40,7 @@ Not tested on hardware yet: the whole path from the signed index to an installed
 
 ## Install and use
 
-- First install: [docs/install.md](docs/install.md).
+- First install, or moving an existing `/etc/nixos` into a repository: [docs/install.md](docs/install.md).
 - Daily work: change `machine.toml`, then `hs update` to pull and rebuild, or `hs rebuild` to apply local changes only.
 - `hs help` lists every command (`scripts/lib/registry.tsv` is the one list). `hs` alone opens the full-screen interface.
 
