@@ -19,6 +19,23 @@ check on a server; an unticked box is postponed and never blocks the release. Wh
 - **Update from v0.12:** a v0.12 server keeps its old recipes and extensions repository rows until it runs `hs update`, which moves them to official.
   The first update may not refresh the index: the daily timer does that, so run `hs pkg refresh` if the index looks old.
 
+## New in v0.13.0-beta.2
+
+Web interface only (design: [PLAN-workloads](PLAN-workloads.md)). Seen only in the demo in a browser, and not every page. None of it has run on a
+real server. Not tested on hardware yet.
+
+- **Apps & VMs** is one list of containers, virtual machines and Docker apps. It replaces the pages Instances and Docker. It has the columns
+  Provider (Incus, Docker) and Type (Container, Virtual machine), filters for both and a search. The system container `docker` holds the Docker apps
+  under it. Today's page "Installed" is now **App catalog** and is still where apps are installed.
+- **Every Docker app has its own page** with Overview, Compose (the editor) and Logs. The quick look of the Docker page is gone; delete is in the
+  row menu and on the app page. The columns Images and Managed are on the app page.
+- **Breadcrumbs are links** and come from the tree on the left. The tree marks the parents of the open page and shows a temporary row for an open
+  disk, share, user, instance or Docker app.
+- **Pickers fill sooner:** after unlock the lists behind the share, user, disk and instance fields are read first, and a read that is already
+  running is not started again. The speed on a server was not measured.
+- Fixed: after sign-out, a read that was still running can no longer show its answer to the next user.
+- Old addresses of the Instances and Docker pages redirect to the new ones (kept until 0.15).
+
 ## What is new
 
 ### Package registry
