@@ -469,3 +469,16 @@ fm.no-room	Am Ziel ist nicht genug Platz.
 fm.busy	Ein anderer Auftrag läuft. Versuche es noch einmal, wenn er fertig ist.
 fm.write-off	Der Dateimanager ist schreibgeschützt.
 fm.state-unwritable	Der Dateimanager kann seinen Zustand nicht speichern.
+vault.value-missing	Der Option fehlt ein Wert.
+vault.args-unexpected	Diese Aktion nimmt keine Namen entgegen.
+vault.name-invalid	Das ist kein Name eines Geheimnisses.
+vault.closed-already	Der Tresor ist schon geschlossen.
+vault.missing	Auf diesem Server gibt es keinen Tresor.
+docker.failed	Der Schritt ist fehlgeschlagen.
+fm.location-unknown	Diesen Ort gibt es nicht.
+fm.storage-locked	Der verschlüsselte Speicher ist gesperrt: Entsperre ihn zuerst.
+fm.no-array	Dieser Server hat keine Datenplatten eines Verbunds.
+fm.no-cache	Auf diesem Server gibt es keinen Upload-Cache.
+fm.share-unknown	Diese Freigabe gibt es nicht.
+fm.location-unusable	Der Ort kann gerade nicht verwendet werden.
+fm.same-files	Beide Seiten zeigen dieselben Dateien.

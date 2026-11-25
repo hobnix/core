@@ -481,4 +481,21 @@ check_eq "mount start exit 0" 0 "$rc"
 echo "$out" | grep -qx "status${T}started" && pass "mount start: started" || fail "mount start: $out"
 grep -qF "manage-ct docker --add-storage shares media /shares/media --as 1000:1000 OWNER=docker" "$MLOG" && pass "mount start: the owner's pass, the default user" || fail "mount start: $(cat "$MLOG")"
 
+echo "-- docker-setup relays the refusal of docker.sh: a coded one keeps its code"
+RS=$(mktemp)
+cat >"$RS" <<'STUB'
+#!/usr/bin/env bash
+case "${STUB_MODE:-}" in
+  coded) printf 'status\trefused\nreason\tThe vault is closed.\nfix\ths vault open\ncode\tvault.locked\n'; exit 1 ;;
+  *) printf '  ✗ Something broke.\n    Fix: hs x\n'; exit 1 ;;
+esac
+STUB
+chmod +x "$RS"
+rc=0; out=$(HS_DOCKER_SCRIPT=$RS STUB_MODE=coded bash "$SCRIPTS/docker-setup.sh" plan mount media --path /shares/media </dev/null 2>&1) || rc=$?
+check_eq "coded child refusal: exit 1" 1 "$rc"
+echo "$out" | grep -qx "code${T}vault.locked" && echo "$out" | grep -qx "reason${T}The vault is closed." && echo "$out" | grep -qx "fix${T}hs vault open" && pass "the code, reason and fix are kept" || fail "coded relay: $out"
+rc=0; out=$(HS_DOCKER_SCRIPT=$RS STUB_MODE=plain bash "$SCRIPTS/docker-setup.sh" plan mount media --path /shares/media </dev/null 2>&1) || rc=$?
+echo "$out" | grep -qx "code${T}docker.failed" && echo "$out" | grep -qx "reason${T}Something broke." && pass "a plain child failure gets docker.failed with its line" || fail "plain relay: $out"
+rm -f "$RS"
+
 finish

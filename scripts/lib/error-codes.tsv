@@ -477,3 +477,16 @@ fm.no-room	script	The target has not enough free room.	There is not enough room 
 fm.busy	script	Another job works on the location or holds the lock of the pool.	Another job is running. Try again when it is done.	-
 fm.write-off	script	The file manager is read only until writing is allowed.	The file manager is read only.	-
 fm.state-unwritable	script	The state folder of the file manager is not writable.	The file manager cannot write its state.	-
+vault.value-missing	script	An option was given without its value.	The option needs a value.	-
+vault.args-unexpected	script	A secret name was given to an action that takes none.	This action takes no names.	-
+vault.name-invalid	script	The name is not a name of a secret.	That is not a name of a secret.	-
+vault.closed-already	script	Close was asked for a vault that is closed.	The vault is closed already.	-
+vault.missing	script	The server has no vault.	There is no vault on this server.	hs vault init
+docker.failed	script	A step of hs docker failed and gave no code of its own.	The step failed.	-
+fm.location-unknown	script	The id is not a location of the file manager.	There is no such location.	-
+fm.storage-locked	script	The encrypted storage is locked.	The encrypted storage is locked: unlock it first.	hs unlock
+fm.no-array	script	A disk was asked for on a server without an array.	This server has no data disks of an array.	-
+fm.no-cache	script	The upload cache was asked for on a server without one.	There is no upload cache on this server.	-
+fm.share-unknown	script	No pool holds a share of this name.	There is no such share.	-
+fm.location-unusable	script	The location exists but is not mounted.	The location cannot be used now.	-
+fm.same-files	script	Two locations show the same files.	Both sides show the same files.	-
