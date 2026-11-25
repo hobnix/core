@@ -104,7 +104,7 @@ printf '#!/bin/sh\nprintf "r3\\tR3\\toff\\nr4\\tR4\\ton\\n"\n' > "$WORK/alist.sh
 export HS_APPS_LIST=$WORK/alist.sh
 printf '[applied.media]\nrepo = "official"\nlater = "r3,r4"\n\n[applied.other]\nrepo = "official"\n' > "$HS_STATE_DIR/blueprints.toml"
 check_eq "an app that is not installed is open" open "$(state_of blueprint-media-r3)"
-check_eq "an installed one is done" done "$(state_of blueprint-media-r4)"
+check_eq "an installed one is done" "done" "$(state_of blueprint-media-r4)"
 check_eq "the open row names the command" "hs apps install r3" "$(run | awk -F'\t' '$1 == "blueprint-media-r3" { print $4 }')"
 check_eq "every row still has five fields" "" "$(run | awk -F'\t' 'NF != 5')"
 check_eq "finished stays the last row" "finished" "$(run | tail -n1 | cut -f1)"
