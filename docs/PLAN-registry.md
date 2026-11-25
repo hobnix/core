@@ -73,8 +73,19 @@ Not tested on hardware yet; the signing workflow has never run on GitHub.
 - **Source:** the entries come from `index.toml` (paths, `core`) when the repository has one, else from `package.toml` files under `packages/`,
   `recipes/`, `extensions/`, `capabilities/`, `blueprints/`. `meta` is the `[meta]` table of package.toml (`author`, `license`, `homepage`,
   `tags`, `changes`) plus `title` and `title_de`. `needs` is `needs` of a recipe plus `requires` of a capability.
-- **Yanked:** `yanked.toml` in the repository: `[[yanked]]` with `name`, `version`, `reason`. Only the current version is listed; keeping
-  the versions a rollback needs is not built yet.
+- **Yanked:** `yanked.toml` in the repository: `[[yanked]]` with `name`, `version`, `reason`. The entry is the current version; older ones
+  are in `versions` (below) and carry their yanked state from the same file.
+- **`date` and `versions`** (hobnix/core#1247, open point 3): `date` is when the current version was first published; `versions` (optional,
+  older versions only, newest first, at most 10) has rows `{version, date, path, commit, tree, requires_core, yanked}` plus optional `changes`
+  and `yanked_reason`. Built ONLY from the first-parent history of the published commit (`build --history <repository>` names the repository of a
+  community `pins` branch; otherwise the checkout's own): never copied from the previous index, which is downloaded without a signature check.
+  Per older version the newest commit that had it is hashed with `tree_hash` (same rules; a folder with a link, submodule or a `.git` name is
+  skipped, like a commit with a missing or invalid manifest); `date` is the committer date of the first commit that had it. Only versions lower
+  than the current one, only the current `path` (a renamed folder is not followed). The walk reads at most 400 commits that touched the folder
+  and one 90 s deadline covers every call of the walk; `changes` and `yanked_reason` of an older row are cut to 500 characters, a build whose index would pass 10 MiB drops older rows first (clients refuse 20 MiB), a version part has at most 9 digits, and any failure of one old commit skips it; the commands run with the same hardening as the community fetch and ignore replace refs. For the community index
+  the history is the `pins` branch, which `assemble` only ever appends to. Format stays 1: the builder side (`validate`, `verify`, `build`)
+  refuses a bad row; a client ignores unknown fields and leaves out a malformed row (`pkg_index.clean_history`). Install and update do not read
+  `versions`. No downgrade command, UI or statistics yet. Not tested on hardware yet.
 - **Tree hash** (decided here): `sha256:` over the listing `<mode> <size> <sha256 of the content> <path>
 `, files sorted by path, mode 755
   for an executable file else 644, symlinks refused. It does not depend on git, so a server computes the same hash from an archive of the commit.

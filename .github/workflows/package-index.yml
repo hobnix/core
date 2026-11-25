@@ -179,9 +179,10 @@ jobs:
               *) echo "previous index at $PAGES_URL/index.json answered HTTP $code: refusing to restart the serial"; exit 1 ;;
             esac
           fi
-          src=repo; commit=()
-          if [ "$ASSEMBLE" = true ]; then src=pins/tree; commit=(--commit "$(cat pins/pins.commit)"); fi
-          python3 core/scripts/pkg.py index build "$src" --repo "$REPO_ID" --out site "${prev[@]}" "${commit[@]}"
+          src=repo; commit=(); hist=()
+          # the version history comes from the git history of the published commit (pins branch for the community), never from the previous index
+          if [ "$ASSEMBLE" = true ]; then src=pins/tree; commit=(--commit "$(cat pins/pins.commit)"); hist=(--history pins/pins.git); fi
+          python3 core/scripts/pkg.py index build "$src" --repo "$REPO_ID" --out site "${prev[@]}" "${commit[@]}" "${hist[@]}"
           python3 core/scripts/pkg.py index validate site/index.json
       - name: Keep the pins commit (assemble only)
         if: inputs.assemble

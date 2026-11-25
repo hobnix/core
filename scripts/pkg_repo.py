@@ -517,6 +517,7 @@ class Repos:
                 if not with_unavailable:
                     continue
                 extra = {"_unavailable": "its commit could not be fetched: %s" % bad[n][1]}
+            e = self.pkg_index.clean_history(e)     # date and older versions: malformed rows are left out, nothing here installs from them
             out[n] = dict(e, _index=True, title=(e.get("meta") or {}).get("title", ""), **extra)
         return out
 
