@@ -53,7 +53,8 @@ One `index.json` per repository, built and signed by CI on every merge to the ma
 - `expires`: a client keeps working from its cache after expiry and shows a warning after a grace period of 7 days.
 - `tree` is a hash of the package folder at `commit`. The server fetches an archive of that commit from the git host and checks the hash;
   neither the index host nor the git host is trusted, only the signature and the hash.
-- Only current versions and what a rollback needs are listed. A bad version is marked `yanked`.
+- Only current versions and what a rollback needs are listed. A bad version is marked `yanked`. The planned list of older versions
+  per entry is in [PLAN-marketplace-stats](PLAN-marketplace-stats.md).
 - `meta` is built from `package.toml` and `assets/` in the package folder, reviewed and versioned with the package. CI resizes images and
   names them by content hash, so the marketplace reads only the index and the assets and the server can cache them for offline use.
 - Format changes bump `format`; a client reads every format it knows and ignores unknown fields.
