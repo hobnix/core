@@ -69,7 +69,7 @@ The bridge runs the service as a confined unit built from the permissions: `Prot
 
 ### Confinement of a command
 
-A row of `commands.tsv` with the flag `confine` runs through `systemd-run` with the same properties. It needs `protocol = [1]` and a `permissions` list. If `systemd-run` is missing, or the list is missing, the command does not run (exit 69); it never falls back to unconfined. It is partial: reading the file system, the network and calls to `hs`, `incus` and `systemctl` are not limited, and a confined command cannot write `/etc/hs`, and `fs.write` cannot name it (below `/etc` is refused).
+A row of `commands.tsv` with the flag `confine` runs through `systemd-run` with the same properties, as the unprivileged user `hsx-<name>` with the folder `/var/lib/hs/<name>` as the only place it may write (#1134). It needs `protocol = [1]` and a `permissions` list. If `systemd-run` is missing, or the list is missing, the command does not run (exit 69); it never falls back to unconfined. It also does not run if its state folder cannot be prepared (`ext.state-conflict`, `ext.state-move-failed`). It is partial: reading the file system (as far as the file modes allow) and the network are not limited, and calls to `hs`, `incus` and `systemctl` are not blocked (they get what that user may do). Not tested on hardware yet.
 
 ## Events of a package
 
@@ -190,7 +190,7 @@ What a package can and cannot do:
 | `hs ext enable` refuses with "not covered" | the manifest uses more than `permissions` | add the permission or remove the use |
 | State `failed`, event `ext.service-failed` | five failures in ten minutes | `journalctl -u hs-ext-svc@<package>`, fix, then `sudo hs ext start <package>` |
 | "The confinement of '<package>' could not be written" | a `fs.*` path is not allowed | use an absolute path without `..` |
-| A confined command exits 69 | no `systemd-run`, or no `permissions` list | add `permissions = [...]` to the manifest |
+| A confined command exits 69 | no `systemd-run`, no `permissions` list, an `fs.write` outside `/var/lib/hs/<name>`, or a state folder that cannot be prepared | the message names the reason; add or correct `permissions = [...]` in the manifest |
 | A service cannot write a folder | the folder is not in `fs.write` | add `fs.write:<path>` and run `sudo hs ext start <package>` |
 | "emit ... dropped" in the journal | the kind is outside `events.emit`, or more than 50 a minute | declare the kind, or send fewer events |
 

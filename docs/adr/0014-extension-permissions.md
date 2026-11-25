@@ -113,7 +113,8 @@ the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not bee
 
 ## Step 3 as built: opt-in confinement of commands (2026-11-18, docs/PLAN-extensions-access.md step 11, #239 d)
 A row of `commands.tsv` with the flag `confine` is run by the dispatcher (scripts/lib/ext_proto.py) through `systemd-run --pipe --wait` with the
-same properties as a service (`ext_confine.properties`, one mapping). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
+same properties as a service (`ext_confine.properties`, one mapping). Since #1134 that is the dynamic mapping above: the command runs as `hsx-<name>`, not
+as root, writes only `/var/lib/hs/<name>`, and the state folder is prepared first like for a service (a problem: exit 69, no run). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
 at run time no `systemd-run`, no `permissions` or a bad path means exit 69 and no run. The install and update prompts print what it covers and what it
-does not (reads, network, `hs`/`incus`/`systemctl`, secrets). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
+does not (reads as far as the file modes allow, network, `hs`/`incus`/`systemctl` are not blocked). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
 hardware yet: the real `systemd-run` was not run, and whether SIGTERM to the runner stops the transient unit (cancel, timeout) is unverified.

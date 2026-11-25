@@ -30,7 +30,7 @@ in, text out, exit status for failure). Go and Rust are not templates: copy an e
 - Nothing else goes to stdout; diagnostics go to stderr. The core prints `data` as tab-separated lines (a list of lists is one line per
   inner list, an empty cell is `-`), or `text` for a person at a terminal.
 - A call ends at its limit (30 s; a `timeout:<seconds>` flag in `commands.tsv` raises it to at most 3600). Stop on SIGTERM.
-- A row with the flag `confine` in `commands.tsv` runs through `systemd-run` with the properties of your `permissions` (writes only under `fs.write`, no new privileges, no devices unless `devices:gpu`). It needs `protocol = [1]` and a `permissions` list. It is partial: reads, the network and calls to `hs`, `incus` and `systemctl` are not limited. Not tested on hardware yet.
+- A row with the flag `confine` in `commands.tsv` runs through `systemd-run` with the properties of your `permissions`, as the unprivileged user `hsx-<name>` and not as root (no new privileges, no devices unless `devices:gpu`). It may write only `/var/lib/hs/<name>`, the folder it shares with your service; any other `fs.write` is refused (`ext.dynamic-write`, exit 69). It needs `protocol = [1]` and a `permissions` list. It is partial: reads (as far as the file modes allow) and the network are not limited, and calls to `hs`, `incus` and `systemctl` are not blocked (they get what that user may do). Not tested on hardware yet.
 
 The exact format is [docs/api/ext-protocol-v1.schema.json](api/ext-protocol-v1.schema.json); the decision is ADR 0010.
 

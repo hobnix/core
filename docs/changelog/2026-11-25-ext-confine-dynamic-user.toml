@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "change"
+title = "Confined extension commands no longer run as root"
+body  = """A command that a package marks as confined now runs as the unprivileged user of that extension and may write only the extension's own folder. A command that asks to write anywhere else is refused and does not run. Commands without the mark still run as root. Not tested on hardware yet."""

@@ -31,6 +31,16 @@ check_eq "and the next run is ok" "ok	-" "$($ES prepare posters 2>&1)"
 setup; mkdir -p "$R/private/hs-ext/posters"
 check_eq "only the private folder exists (systemd made it): linked" "linked	-" "$($ES prepare posters 2>&1)"
 
+echo "-- the bridge and a command prepare the same package at once"
+fails=0
+for _ in 1 2 3 4 5 6 7 8; do
+  setup; mkdir -p "$R/hs/posters"; echo data > "$R/hs/posters/f"
+  pids=""; for _ in 1 2 3 4; do $ES prepare posters >/dev/null 2>&1 & pids="$pids $!"; done
+  for p in $pids; do wait "$p" || fails=$((fails + 1)); done
+  [ "$(readlink "$R/hs/posters")" = "$R/ext/posters" ] && [ "$(cat "$R/ext/posters/f" 2>/dev/null)" = data ] || fails=$((fails + 100))
+done
+check_eq "all of them succeed and the data is behind the one link" 0 "$fails"
+
 echo "-- both folders exist: refuse, change nothing"
 setup; mkdir -p "$R/hs/posters" "$R/ext/posters"; echo a > "$R/hs/posters/a"; echo b > "$R/ext/posters/b"
 before=$(tree "$R")

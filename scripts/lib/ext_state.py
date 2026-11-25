@@ -77,6 +77,17 @@ def _prepare(name):
         return None, bad
     old, pub, priv, ext = _paths(name)
     os.makedirs(ext, 0o755, exist_ok=True)
+    # the bridge and a confined command may prepare the same package at once: one at a time, else the second one renames the link the first one made
+    import fcntl   # here: ext_confine loads this module too, also where there is no fcntl
+    lock = os.open(ext, os.O_RDONLY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _move(old, pub, priv, ext)
+    finally:
+        os.close(lock)
+
+
+def _move(old, pub, priv, ext):
     if os.path.islink(old):
         target = os.readlink(old)
         if target == pub:
