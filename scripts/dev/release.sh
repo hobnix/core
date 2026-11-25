@@ -65,8 +65,12 @@ valid_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 if [ "$what" = bump ]; then
   step "Raise the version of a package"
   [[ "$pkg" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "Name the package: release.sh bump <package> [patch|minor|major]"
-  dir=$repo/$pkg
-  [ -f "$dir/package.toml" ] || fail "There is no package $pkg in $repo/."
+  # hobnix/official holds several folders: the one that has the package
+  dir=""
+  for d in recipes extensions capabilities blueprints; do
+    if [ -f "$d/$pkg/package.toml" ]; then dir=$d/$pkg; break; fi
+  done
+  [ -n "$dir" ] || fail "There is no package $pkg in recipes/, extensions/, capabilities/ or blueprints/."
   branch=$(git branch --show-current)
   [ -n "$branch" ] && [ "$branch" != main ] || fail "Make a branch first (feature/<topic>); a version change goes in through a pull request."
   old=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$dir/package.toml" | head -n1)

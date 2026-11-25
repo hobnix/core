@@ -61,4 +61,19 @@ out=$(plan)
 check_eq "the bump level comes from the labels as before" "alpha	1.0.0	1.1.0	minor" "$(grep '^alpha' <<<"$out")"
 check_eq "and no tag level is printed" "0" "$(grep -c '^tag' <<<"$out")"
 check_out "the branch names origin/main, not a tag" "against origin/main" bash -c "$PR --no-push 2>&1"
+
+echo "-- several package folders in one repository (hobnix/official): a package is bumped in whichever folder it is"
+git checkout -q develop
+mkdir -p recipes/rec; printf 'name = "rec"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "T"\nrequires_core = ">=1"\npermissions = []\n' > recipes/rec/package.toml
+printf '[package.rec]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/rec"\nrequires_core = ">=1"\n' >> index.toml
+git add -A && git commit -q -m rec && git push -q origin develop:main && git fetch -q origin
+echo one > recipes/rec/note.txt; git add -A && git commit -q -m "rec one"
+change alpha three >/dev/null
+out=$(plan)
+check_eq "the recipe is planned" "rec	1.0.0	1.0.1	patch" "$(grep '^rec' <<<"$out")"
+check_eq "and the extension beside it" "alpha" "$(grep '^alpha' <<<"$out" | cut -f1)"
+git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | xargs -r git branch -D -q
+check_out "it makes the branch" "Branch release/prepare-.* made" bash -c "$PR --no-push 2>&1"
+git checkout -q "$(git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | head -n1)"
+check_eq "both folders were raised" "2" "$(git diff --name-only develop HEAD | grep -cE '^(extensions/alpha|recipes/rec)/package[.]toml$')"
 finish
