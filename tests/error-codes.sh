@@ -66,6 +66,18 @@ while IFS= read -r c; do
 done < <(awk -F'\t' '!/^#/ && $2=="script" {print $1}' "$CAT")
 if [ -z "$unused" ]; then pass "every catalogue code is used"; else fail "in scripts/lib/error-codes.tsv but emitted by no script or program (name differs?):$unused"; fi
 
+echo "-- every code has a German text"
+DE=$SCRIPTS/lib/i18n/errors.de.tsv
+de_rows=$(grep -v '^#' "$DE")
+bad=$(awk -F'\t' 'NF != 2 || $2 == ""' <<<"$de_rows")
+check_eq "every German line is a code, one tab and a text" "" "$bad"
+check_eq "no code has two German lines" "" "$(cut -f1 <<<"$de_rows" | sort | uniq -d)"
+check_eq "codes without a German text (add a line to scripts/lib/i18n/errors.de.tsv)" "" "$(comm -23 <(sort <<<"$known") <(cut -f1 <<<"$de_rows" | sort))"
+check_eq "German lines for codes the catalogue does not have" "" "$(comm -13 <(sort <<<"$known") <(cut -f1 <<<"$de_rows" | sort))"
+# a <placeholder> of the English text stays as it is in the German one
+ph=$(awk -F'\t' '/^#/ { next } NR == FNR { de[$1] = $2; next } { s = $4; while (match(s, /<[a-z]+>/)) { p = substr(s, RSTART, RLENGTH); if (!index(de[$1], p)) print $1 " " p; s = substr(s, RSTART + RLENGTH) } }' "$DE" "$CAT")
+check_eq "the placeholders are kept" "" "$ph"
+
 echo "-- report: plain refusals without a code (not a failure)"
 total=0
 while IFS=$'\t' read -r n f; do
