@@ -179,17 +179,18 @@
           {@const a = r.app}
           {@const c = r.ct}
           {#if col.key === 'name'}
-            <Row gap="2" wrap align="center" style="display:inline-flex">
+            <!-- the name stays on one line; the marks go under it, so a narrow column does not break it apart -->
+            <Row gap="2" align="center">
               {#if r.kids.length && !r.context}
                 <Button variant="ghost" class="btn-icon" icon={isOpen(r, closed) ? 'caret-down' : 'caret-right'} label="{isOpen(r, closed) ? 'Collapse' : 'Expand'} apps of {r.name}" aria-expanded={isOpen(r, closed)} onclick={() => toggle(r.name)} />
               {/if}
               <Icon name={a ? 'corners-out' : ctIcon(c)} />
               <a href={url(pathOf(r))} use:tip={r.images} onclick={(e) => pageLink(e, r)}>{r.name}</a>
               {#if c?.owner}<span role="img" aria-label="Locked by {c.owner}" use:tip={`Locked by ${c.owner}: only hs ${c.owner} disable removes it`}><Icon name="lock" /></span>{/if}
-              {#if a && filesChip(a)}{@const f = filesChip(a)}<Chip tone={f.tone} title={f.tip}>{f.text}</Chip>{/if}
               {#if r.total}<Chip>{r.total} {r.total === 1 ? 'app' : 'apps'}</Chip>{/if}
-              {#if appsHidden(r, dockerOn)}<Muted>Its apps show once it runs.</Muted>{/if}
             </Row>
+            {#if a && filesChip(a)}{@const f = filesChip(a)}<div><Chip tone={f.tone} title={f.tip}>{f.text}</Chip></div>{/if}
+            {#if appsHidden(r, dockerOn)}<div><Muted>Its apps show once it runs.</Muted></div>{/if}
           {:else if col.key === 'provider'}<Muted>{PROVIDERS[r.provider]}</Muted>
           {:else if col.key === 'type'}<Muted>{TYPES[r.type]}</Muted>
           {:else if col.key === 'state'}
