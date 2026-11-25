@@ -1,6 +1,6 @@
 // path -> page. One line per page; a page that is not listed shows the placeholder. Pages get `deck` (the shared status document) as a prop.
 import Summary from './pages/Summary.svelte';
-import Instances from './pages/Instances.svelte';
+import Workloads from './pages/Workloads.svelte';
 import Shares from './pages/Shares.svelte';
 import Health from './pages/Health.svelte';
 import Pools from './pages/Pools.svelte';
@@ -29,7 +29,6 @@ import Apps from './pages/Apps.svelte';
 import Marketplace from './pages/Marketplace.svelte';
 import PackageBuilder from './pages/PackageBuilder.svelte';
 import Services from './pages/Services.svelte';
-import Docker from './pages/Docker.svelte';
 import Registries from './pages/docker/Registries.svelte';
 import AppEditPage from './pages/docker/AppEditPage.svelte';
 import AppWizardPage from './pages/docker/AppWizardPage.svelte';
@@ -70,9 +69,8 @@ const objectPages = { pool: Pools, disk: Disk, user: User, share: Share, instanc
 
 export const routes = {
   [P.summary]: Summary,
-  [P.instances]: Instances,
   [P.storage]: StorageGroup,
-  [P.appsGroup]: Section,
+  [P.appsGroup]: Workloads,
   [P.people]: Section,
   [P.system]: SystemGroup,
   [P.backupGroup]: BackupGroup,
@@ -96,7 +94,6 @@ export const routes = {
   [P.marketplace]: Marketplace,
   [P.builder]: PackageBuilder,
   [P.services]: Services,
-  [P.docker]: Docker,
   [P.registries]: Registries,
   [P.dockerNew]: AppEditPage,
   [P.dockerWizard]: AppWizardPage,
@@ -131,7 +128,7 @@ const edgeRoutes = {
   [P.summary]: Proxy, [P.nodeHealth]: NodeHealth, [P.mail]: Proxy, [P.ports]: ProxyPorts, [P.watcher]: Proxy, [P.certificate]: Proxy, [P.tailscale]: ProxyTailscale, [P.settings]: ProxySettings,
 };
 const peerRoutes = {
-  [P.summary]: NodeSummary, [P.nodeHealth]: NodeHealth, [P.storage]: NodeFacts, [P.instances]: NodeFacts, [P.backup]: NodeFacts,
+  [P.summary]: NodeSummary, [P.nodeHealth]: NodeHealth, [P.storage]: NodeFacts, [P.peerInstances]: NodeFacts, [P.backup]: NodeFacts,
 };
 export const nodeRoutes = { vps: edgeRoutes, edge: edgeRoutes, peer: peerRoutes };
 
@@ -143,5 +140,5 @@ export function pageFor(path, kind = 'main') {
   if (kind !== 'main') return (nodeRoutes[kind] ?? peerRoutes)[path];
   const obj = objectOf(path);
   if (obj) return objectPages[obj.kind];
-  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') || /^\/apps\/[a-z][a-z0-9-]*$/.test(path) ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : path.startsWith(`${P.docker}/app/`) ? AppEditPage : undefined);
+  return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') || /^\/apps\/[a-z][a-z0-9-]*$/.test(path) ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : undefined);
 }

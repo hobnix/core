@@ -1,12 +1,12 @@
 <script>
   // One Docker app: /apps/docker-app/<name>[/<tab>]. The Object template (shell/ObjectPage.svelte) with the tabs Overview, Compose and Logs; which of them an app
-  // has follows who manages it (apps.js pageTabs: unmanaged = Overview only, Compose only for a web-managed app), the same rules as the quick look of the Docker page.
+  // has follows who manages it (apps.js pageTabs: unmanaged = Overview only, Compose only for a web-managed app), the same rules as its row in the list Apps & VMs.
   //   Overview  the facts, and the recipe in the app catalog when one set the app up
   //   Compose   the editor (AppEditPage.svelte, embedded); picking another tab with unsaved edits asks first
   //   Logs      the Compose log
   // Actions: one primary and one secondary in the header (apps.js headerActions), the rest in the More menu; Delete in the danger section. On the Compose tab the
   // editor has the primary button of the page (its Apply), so all app actions are in the menu there.
-  import { P, capabilityPath, dockerAppPagePath } from '../../paths.js';
+  import { P, capabilityPath, dockerAppPagePath, withQuery } from '../../paths.js';
   import { route, go } from '../../route.svelte.js';
   import { objectOf, objects } from '../../objects.js';
   import { poll, rows } from '../../data.svelte.js';
@@ -78,7 +78,7 @@
 <ObjectPage title={name} chip={a?.managed ?? ''} state={a ? (failure ? 'bad' : doing ? 'info' : dot(a.state)) : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : a?.state ?? ''}
             {tabs} {tab} onpick={pick} {menu} {danger} {jobs} need="app-manager"
             loading={!appsPoll.loaded || (!a && !statusPoll.loaded)} error={appsPoll.error && !appsPoll.data ? appsPoll.error.message : ''} notFound={appsPoll.loaded && statusPoll.loaded && !a}
-            notFoundTitle={off ? 'Docker is off' : 'No such Docker app'} backTo={P.docker} backLabel="All Docker apps"
+            notFoundTitle={off ? 'Docker is off' : 'No such Docker app'} backTo={withQuery(P.appsGroup, { provider: 'docker' })} backLabel="All Docker apps"
             notFoundText={off ? `Docker is off, so the app “${name}” cannot be shown. Turn Docker on under Settings, Capabilities, Docker.` : `No app called “${name}” is listed in Docker. It may have been deleted, or the docker container is stopped.`}>
   {#snippet primary()}
     {#each shown as k, i (k)}

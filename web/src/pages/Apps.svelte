@@ -22,7 +22,7 @@
   import { parseStates, parseHealth, stageActions } from './states.js';
   import { link } from './instances/ct.js';
   import { go } from '../route.svelte.js';
-  import { appPath } from '../paths.js';
+  import { P, appPath } from '../paths.js';
   import { appAction } from './apps.js';
 
   const list = poll('/api/sys/recipes/list', 30000);
@@ -64,7 +64,7 @@
   };
   const tag = (a) => (a.state === 'installed' ? (a.cts ? `in ${a.cts.split(',').join(', ')}` : 'installed') : a.state);
 
-  // Start/Stop of one instance of an app (the plan of the instance, like the Instances page); the container docker is not stopped from here
+  // Start/Stop of one instance of an app (the plan of the instance, like the Apps & VMs list); the container docker is not stopped from here
   const flipCt = (c, running) => openPlan('ct', [c, running ? 'stop' : 'start'], `${running ? 'Stop' : 'Start'} ${c}`);
   const run = (a) => (a.state === 'installed' ? openPlan('recipes', [a.name, 'run'], `${a.name}`) : openCreate(InstallDialog, { pkg: a.name }));
   // Remove one instance of an app: the plan, the data question, the typed name (step 11)
@@ -177,7 +177,7 @@
   const failedCount = $derived(bulkSummary.filter((r) => !r.ok).length);
 </script>
 
-<PageHeader title="Apps" sub={list.loaded && !list.error ? `${installed} of ${apps.length} installed · safe to run again` : 'One-command installers, safe to run again.'} />
+<PageHeader title="App catalog" sub={list.loaded && !list.error ? `${installed} of ${apps.length} installed · safe to run again` : 'One-command installers, safe to run again.'} />
 
 <PageState loading={!list.loaded} error={list.error?.message} hasData={list.data != null} empty={list.loaded && !list.error && !apps.length}
            emptyIcon="package" emptyTitle="No recipes" emptyText="This server has no app recipes." retry={() => refresh(['/api/sys/recipes/list'])}>
@@ -228,7 +228,7 @@
           <span id="app-{a.name}" class="nm" class:hl={hl === a.name}><i class="ph ph-{icons[a.name] ?? 'package'}" style="color:{on ? 'var(--accent-ink)' : 'var(--fg-3)'}"></i>{a.name}</span>
           {#if failure(a)}{@const f = failure(a)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
         {:else if col.key === 'desc'}
-          <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c)}>{c}</a>{/each}</div>{/if}
+          <span class="ds">{a.desc}</span>{#if a.cts}<div class="in">In {#each a.cts.split(',') as c, i}{i ? ', ' : ''}<a {...link(P.appsGroup, 'instances', c)}>{c}</a>{/each}</div>{/if}
         {:else if col.key === 'state'}
           {#if doing(a)}<Chip tone="info">{doing(a)}</Chip>{/if}
           {#if stageOf.get(a.name)}

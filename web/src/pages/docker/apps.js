@@ -1,4 +1,4 @@
-// Helpers for the Docker page and the Instances page: map the 10/11-field app row and group docker-list rows by parent.
+// Helpers for the list Apps & VMs, the instance page and the Docker app page: map the 10/11-field app row and group docker-list rows by parent.
 export function appOf(r) {
   if (!Array.isArray(r) || r.length < 10) return null;
   return {
@@ -39,14 +39,14 @@ export function applyOf(a) {
 // Unmanaged rows are read-only: no start, stop, restart, pull, edit
 export const isActionable = (a) => !!a && a.managed !== 'unmanaged';
 
-// The tab ids of one app (quick look and app page): the compose file is edited only for a web-managed app, an unmanaged one has neither editor nor Compose log.
+// The tab ids of one app (its page): the compose file is edited only for a web-managed app, an unmanaged one has neither editor nor Compose log.
 export function pageTabs(a) {
   if (a?.managed === 'unmanaged') return ['overview'];
   return a?.managed === 'web' ? ['overview', 'compose', 'logs'] : ['overview', 'logs'];
 }
 
 // The actions of the app page by weight: the first is the primary one of the header, the next the secondary one, the rest go into the menu.
-// Delete is not here: it is in the danger section (web-managed apps only).
+// Delete is not here: it is in the danger section of the page and last in the menu of the list (web-managed apps only).
 export function headerActions(a) {
   if (!isActionable(a)) return [];
   const power = ['exited', 'created', 'stopped'].includes(a.state) ? ['start'] : a.state === 'running' || a.state === 'partial' ? ['stop'] : [];

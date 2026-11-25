@@ -250,7 +250,7 @@
           {:else}
             <Muted>{cts.loaded ? `${volumes.length} volume${volumes.length === 1 ? '' : 's'}${volBytes ? ` · ${sizeTxt(volBytes)}` : ''} · Incus pool "default"` : 'Loading…'}</Muted>
             <Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`${P.shares}?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
-            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go(P.instances)}>Instances<i class="ph ph-caret-right"></i></Button>
+            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go(P.appsGroup)}>Apps &amp; VMs<i class="ph ph-caret-right"></i></Button>
           {/if}
         {/snippet}
       </Card>

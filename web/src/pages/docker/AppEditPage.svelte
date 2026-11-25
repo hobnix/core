@@ -1,7 +1,7 @@
 <script>
-  import { P } from '../../paths.js';
-  // The editor of one Docker app on its own page: docker-compose.yml left, the real .env text right (one column on a phone).
-  // /apps/docker/app/<app> edits a web-managed app, /apps/docker/new starts one. The read `docker app` is never cached by the server
+  import { P, dockerAppPagePath } from '../../paths.js';
+  // The editor of one Docker app: docker-compose.yml left, the real .env text right (one column on a phone).
+  // The Compose tab of the app page edits a web-managed app, /apps/docker/new (a page of its own) starts one. The read `docker app` is never cached by the server
   // (it holds the .env text): this page reads it with get() and keeps the text only in its own state, never in a store or the browser's storage.
   // Test = the plan of `docker-app app-save` with the document {compose, env}, asked without a dialog: its `finding` lines are shown at their
   // lines in the panels (editor/findings.js), the ones without a place in a banner. Save (`app-write`) writes the two files only; Apply
@@ -31,11 +31,10 @@
   let { embedded = '', ondirty = null } = $props();
 
   const NEW = P.dockerNew;
-  const PREFIX = `${P.docker}/app/`;
   const template = 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    env_file: .env\n    restart: unless-stopped\n';
 
   const isNew = $derived(!embedded && route.path === NEW);
-  const app = $derived(embedded || (isNew ? '' : decodeURIComponent(route.path.slice(PREFIX.length))));
+  const app = $derived(embedded);
   let name = $state('');
   const target = $derived(isNew ? name.trim() : app);
 
@@ -204,7 +203,8 @@
     if (applying || saving) { wasApplying = true; return; }
     if (wasApplying) {
       wasApplying = false;
-      if (isNew) go(PREFIX + encodeURIComponent(target)); else load();
+      // the list is read first, so that the page of the new app does not say that there is no such app
+      if (isNew) { const made = target; refresh(['/api/sys/docker/apps']).catch(() => {}).then(() => go(dockerAppPagePath(made, 'compose'))); } else load();
     }
   });
 

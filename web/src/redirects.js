@@ -9,7 +9,9 @@
 // A page that merges into another one (Releases into Updates) writes [key, { tab }] instead of the key.
 // D7: the table is kept for two releases (0.11 and 0.12) and removed in 0.13: REMOVE_IN is read by the test; delete the table, the
 // fixture and the test together then.
-import { P, poolPath, dockerAppPath, capabilityPath, extensionPath } from './paths.js';
+// 0.13 (docs/PLAN-workloads.md 3): Instances and Docker became the one list Apps & VMs. Its rows are here too (`/apps/docker`, `/apps/docker/app/`,
+// `/instances/ct/`) and the older ones end on the new places. A remote node is not touched at /instances: a peer's own read-only page is there.
+import { P, poolPath, dockerAppPagePath, capabilityPath, extensionPath } from './paths.js';
 
 export const REMOVE_IN = '0.13';
 
@@ -19,7 +21,7 @@ export const VPS_NODE = 'proxyserver';
 // old inner path -> place key of paths.js (or [key, query])
 export const MOVED = Object.freeze({
   '/storage':                     'storage',
-  '/instances':                   'instances',
+  '/instances':                   'appsGroup',
   '/identity':                    'people',
   '/protection':                  'backupGroup',
   '/operations':                  'system',
@@ -36,7 +38,8 @@ export const MOVED = Object.freeze({
   '/instances/apps':              'apps',
   '/instances/iso':               'iso',
   '/instances/services':          'services',
-  '/instances/docker':            'docker',
+  '/instances/docker':            ['appsGroup', { provider: 'docker' }],
+  '/apps/docker':                 ['appsGroup', { provider: 'docker' }],
   '/instances/docker/registries': 'registries',
   '/instances/docker/new':        'dockerNew',
   '/instances/docker/wizard':     'dockerWizard',
@@ -81,9 +84,12 @@ export const MOVED = Object.freeze({
 
 // old address families with a name in them: old prefix -> the new path of the same object (`rest` = what follows the prefix, still encoded)
 const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+const composeTab = (rest) => dockerAppPagePath(dec(rest.split('/')[0]), 'compose');
 export const MOVED_PREFIX = Object.freeze([
   ['/storage/pools/', (rest) => poolPath(rest)],
-  ['/instances/docker/app/', (rest) => dockerAppPath(dec(rest))],
+  ['/instances/docker/app/', (rest) => composeTab(rest)],
+  ['/apps/docker/app/', (rest) => composeTab(rest)],                                     // the old compose editor is the Compose tab of the app
+  ['/instances/ct/', (rest) => `${P.appsGroup}/instance/${rest}`],                       // name and tab stay as written
   ['/settings/capabilities/', (rest) => capabilityPath(rest)],
   ['/extensions/', (rest) => extensionPath(rest)],
   ['/docs/', (rest) => `${P.docs}/${rest}`],
@@ -108,8 +114,17 @@ export function redirect(addr, local) {
   const m = path.match(/^\/node\/([^/]+)(\/.*)?$/);
   if (m) { node = decodeURIComponent(m[1]); inner = m[2] || '/'; }
   else { inner = path || '/'; node = local; }
-  const [to, add] = moved(inner);
+  // /instances of ANOTHER node is that peer's read-only page, which did not move
+  const [to, add] = node !== local && inner === P.peerInstances ? [inner, {}] : moved(inner);
   let rest = rest0;
+  // a quick look of the old Docker list (`?sel=<app>[&tab=compose|logs]`) is the page of that app
+  if (add.provider === 'docker' && /^\?(.*&)?sel=[^&#]/.test(rest)) {
+    const hash = rest.indexOf('#');
+    const q = new URLSearchParams(hash < 0 ? rest.slice(1) : rest.slice(1, hash));
+    const app = dockerAppPagePath(q.get('sel'), ['compose', 'logs'].includes(q.get('tab')) ? q.get('tab') : '');
+    q.delete('sel'); q.delete('tab');
+    return `/node/${encodeURIComponent(node)}${app}${q.toString() ? `?${q}` : ''}${hash < 0 ? '' : rest.slice(hash)}`;
+  }
   // the Network tab Remote shares moved to the Shares page, view Remote (docs/PLAN-remote-shares.md D1)
   if (to === P.network && /^\?(.*&)?tab=remote(&|#|$)/.test(rest)) {
     const hash = rest.indexOf('#');

@@ -9,6 +9,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import Banner from '../ui/Banner.svelte';
   import Button from '../ui/Button.svelte';
+  import { P } from '../paths.js';
   import { ctOf, link } from './instances/ct.js';
   import RouterSetup from '../forms/ops/RouterSetup.svelte';
   import Table from '../shell/Table.svelte';
@@ -133,14 +134,14 @@
           {#each r.cells as c}
             <div class="cell" class:used={c.used} class:router={c.router} use:tip={c.title}>
               <span class="cn">.{c.n}</span>
-              {#if c.used}<a class="nm" {...link('/instances', 'instances', c.name)}>{c.name}</a>{:else}<span class="nm">{c.name}</span>{/if}
+              {#if c.used}<a class="nm" {...link(P.appsGroup, 'instances', c.name)}>{c.name}</a>{:else}<span class="nm">{c.name}</span>{/if}
             </div>
           {/each}
         </div>
       </div>
     {/each}
     {#if others.length}
-      <div class="note">Outside these ranges: {#each others as c, i}{i ? ', ' : ''}<a {...link('/instances', 'instances', c.name)}>{c.name}</a> ({c.address.split(' ')[0]}){/each}</div>
+      <div class="note">Outside these ranges: {#each others as c, i}{i ? ', ' : ''}<a {...link(P.appsGroup, 'instances', c.name)}>{c.name}</a> ({c.address.split(' ')[0]}){/each}</div>
     {/if}
     <div class="note">{list.loaded ? (list.error && !cts.length ? 'The instances could not be read (is the storage locked?).' : routerOff ? 'Shows instances with an address. The router could not be asked: UniFi is not set up on this server, or the key is wrong (Router tab).' : clients.loaded ? `Filled cells are instances; outlined cells are other devices the router has reserved or sees online.${elsewhere ? ` ${elsewhere} more address(es) at the router lie outside these ranges.` : ''}` : 'Loading…') : 'Loading…'}</div>
     <div><Button need="admin" size="sm" icon="push-pin" busy={jobRunning('admin', ['pin-macs'])} busyLabel="Pinning…" tooltip={'Pin the MAC address of every instance'} onclick={() => openPlan('admin', ['pin-macs'], 'Pin the MAC addresses')}>Pin MACs</Button></div>
@@ -170,7 +171,7 @@
     <Table id="dns-names" columns={dnsCols} rows={dnsNames} compact loading={!dnsRead.loaded}
            empty={dnsRead.error ? 'The names could not be read (no domain, or the domain controller is down).' : "No names under this server's name."}>
       {#snippet cell(n, col)}
-        {#if col.key === 'name'}{#if cts.some((c) => c.name === n.name.split('.')[0])}<a {...link('/instances', 'instances', n.name.split('.')[0])}>{n.name}</a>{:else}{n.name}{/if}
+        {#if col.key === 'name'}{#if cts.some((c) => c.name === n.name.split('.')[0])}<a {...link(P.appsGroup, 'instances', n.name.split('.')[0])}>{n.name}</a>{:else}{n.name}{/if}
         {:else if col.key === 'type'}<span class="kd">{n.type}</span>
         {:else}<span class="mono">{n.value}</span>{/if}
       {/snippet}
@@ -183,7 +184,7 @@
     <div class="ch"><b>Open ports</b><span class="sub">{listen.length} listening{flagged ? ` · ${flagged} to look at` : ''} · what listens on the server and in each instance · loopback-only sockets left out</span></div>
     <Table id="net-ports" columns={portCols} rows={listen} compact loading={!portsRead.loaded} empty={portsRead.error ? 'The ports could not be read.' : 'Nothing listens.'}>
       {#snippet cell(l, col)}
-        {#if col.key === 'where'}{#if cts.some((c) => c.name === l.where)}<a {...link('/instances', 'instances', l.where)}>{l.where}</a>{:else}{l.where}{/if}
+        {#if col.key === 'where'}{#if cts.some((c) => c.name === l.where)}<a {...link(P.appsGroup, 'instances', l.where)}>{l.where}</a>{:else}{l.where}{/if}
         {:else if col.key === 'port'}{l.port}/{l.proto}{l.bind && l.bind !== '-' ? ` · ${l.bind}` : ''}
         {:else if col.key === 'proc'}<span class="kd">{l.proc && l.proc !== '-' ? l.proc : '–'}</span>
         {:else}<StatusDot state={portDot(l.status)} label={l.status + (l.note && l.note !== '-' ? ` · ${l.note}` : '')} />{/if}
@@ -206,7 +207,7 @@
         {:else}<span class="mono">{n.dhcp && n.from !== '-' ? `${n.from} – ${n.to}` : 'off'}</span>{/if}
       {/snippet}
     </Table>
-    {#if routerOk}<div class="note">{Object.keys(byIp).length} address(es) reserved or online. Fixed addresses for instances are shown on the Overview tab; the instances are on the Instances page.</div>{/if}
+    {#if routerOk}<div class="note">{Object.keys(byIp).length} address(es) reserved or online. Fixed addresses for instances are shown on the Overview tab; the instances are on the Apps &amp; VMs page.</div>{/if}
   </div>
 
 {/if}

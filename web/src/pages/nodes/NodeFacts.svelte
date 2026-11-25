@@ -16,7 +16,7 @@
   const st = poll(() => `/api/sys/node/status/${encodeURIComponent(node.name)}`, 30000);
   const d = $derived(st.data);
   const f = $derived(facts(d));
-  const which = $derived(route.path === P.backup ? 'backup' : route.path === P.instances ? 'instances' : 'storage');
+  const which = $derived(route.path === P.backup ? 'backup' : route.path === P.peerInstances ? 'instances' : 'storage');
   const title = $derived({ backup: 'Backup', instances: 'Instances', storage: 'Storage' }[which]);
   const empty = $derived(d != null && !f.locked && (which === 'storage' ? !f.pools.length : which === 'instances' ? !f.instances : !f.backup));
 </script>
