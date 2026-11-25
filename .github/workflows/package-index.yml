@@ -170,7 +170,15 @@ jobs:
           ASSEMBLE: ${{ inputs.assemble }}
         run: |
           prev=()
-          if [ -n "$PAGES_URL" ] && curl -fsS "$PAGES_URL/index.json" -o prev.json; then prev=(--prev prev.json); fi
+          if [ -n "$PAGES_URL" ]; then
+            # The serial only goes up (clients refuse a lower one): only a clear 404 (first publish) may start at 1, every other failure stops the run.
+            code=$(curl -sS -L -o prev.json -w '%{http_code}' "$PAGES_URL/index.json") || { echo "cannot read the previous index at $PAGES_URL/index.json"; exit 1; }
+            case "$code" in
+              200) prev=(--prev prev.json) ;;
+              404) echo "no previous index (404): first publish, serial 1" ;;
+              *) echo "previous index at $PAGES_URL/index.json answered HTTP $code: refusing to restart the serial"; exit 1 ;;
+            esac
+          fi
           src=repo; commit=()
           if [ "$ASSEMBLE" = true ]; then src=pins/tree; commit=(--commit "$(cat pins/pins.commit)"); fi
           python3 core/scripts/pkg.py index build "$src" --repo "$REPO_ID" --out site "${prev[@]}" "${commit[@]}"
