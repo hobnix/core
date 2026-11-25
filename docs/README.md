@@ -67,6 +67,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-extensions-access](PLAN-extensions-access.md) | Design for milestone 0.8: extension protocol and SDK, enforced permissions, package events, roles and API tokens, two-factor login and single sign-on |
 | [PLAN-package-sdk](PLAN-package-sdk.md) | One SDK for packages: command protocol, permissions, lifecycle (plan, nothing built) |
 | [PLAN-rust](PLAN-rust.md) | Rust as the main language behind the `hs sys` contract, Python retired (plan, nothing built) |
+| [PLAN-core-daemon](PLAN-core-daemon.md) | One Rust core, the daemon `hobnixd`, a Rust CLI and web API, jobs, events, history and live state (plan, nothing built) |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
