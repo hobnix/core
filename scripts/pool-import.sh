@@ -50,10 +50,7 @@ done
 
 interactive() { { [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ]; } || [ -n "${HS_GUIDED_TTY:-}" ]; }
 
-refuse() {   # refuse <reason>: one line to the interface, or a failure on the terminal
-  if $machine; then printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; fi
-  fail "$1"
-}
+refuse_terminal() { $machine || fail "$1"; }   # refuse_code: on the terminal a failure, else the lines for the interface
 
 pid="" confirm_disk="" disks=() sizes=()
 
@@ -78,25 +75,25 @@ import_listing() {
 # import_check <pool> <use>: sets pid, disks, sizes and confirm_disk, or refuses (the first reason that applies)
 import_check() {
   local p=$1 u=$2 listing blocks members n state text m disk base row k l s ids line
-  pool_name_ok "$p" || refuse "the name '$p' does not fit the pool name rule (a lower case letter, then up to 11 lower case letters or digits)"
-  [ "$(pools_source)" != legacy ] || refuse "Run hs pool record first: this server has no pools line, so the pool would not be known to the system."
-  if "$zpool" list -H "$p" >/dev/null 2>&1; then refuse "$p is imported already"; fi
-  if pool_is_snapraid "$p"; then refuse "$p is the SnapRAID pool of this server"; fi
+  pool_name_ok "$p" || refuse_code name.invalid "the name '$p' does not fit the pool name rule (a lower case letter, then up to 11 lower case letters or digits)"
+  [ "$(pools_source)" != legacy ] || refuse_code pool.not-recorded "Run hs pool record first: this server has no pools line, so the pool would not be known to the system."
+  if "$zpool" list -H "$p" >/dev/null 2>&1; then refuse_code pool.already-imported "$p is imported already"; fi
+  if pool_is_snapraid "$p"; then refuse_code pool.is-array "$p is the SnapRAID pool of this server"; fi
   listing=$(import_listing || true)
   blocks=$(awk -F'\t' -v p="$p" '$1 == "B" && $2 == p' <<<"$listing")
   n=0; [ -z "$blocks" ] || n=$(wc -l <<<"$blocks" | tr -d ' ')
-  [ "$n" -gt 0 ] || refuse "no pool called $p is waiting to be imported (hs sys storage discover lists what is on the disks)"
+  [ "$n" -gt 0 ] || refuse_code pool.not-waiting "no pool called $p is waiting to be imported (hs sys storage discover lists what is on the disks)"
   if [ "$n" -gt 1 ]; then
     ids=$(cut -f3 <<<"$blocks" | paste -sd, - | sed 's/,/, /g')
-    refuse "two pools are called $p (ids $ids): import by id is not offered"
+    refuse_code pool.name-ambiguous "two pools are called $p (ids $ids): import by id is not offered"
   fi
   pid=$(cut -f3 <<<"$blocks"); state=$(cut -f4 <<<"$blocks"); text=$(cut -f5 <<<"$blocks")
   members=$(awk -F'\t' -v p="$p" '$1 == "M" && $2 == p' <<<"$listing")
   if [ "$state" != ONLINE ] || grep -qE "${tab}(UNAVAIL|FAULTED|REMOVED|OFFLINE)\$" <<<"$members"; then
-    refuse "$p is damaged (state $state): it is not imported here"
+    refuse_code pool.damaged "$p is damaged (state $state): it is not imported here"
   fi
   if grep -qE "(^|[ '\"])-f([ '\".]|\$)|another system" <<<"$text"; then
-    refuse "$p was last used by another system: export it there first (it is never forced)"
+    refuse_code pool.foreign "$p was last used by another system: export it there first (it is never forced)"
   fi
   disks=(); sizes=()
   local seen=" " rows=""
@@ -106,29 +103,29 @@ import_check() {
     case "$m" in
       "$byid"/*) ;;
       /dev/disk/by-id/*) m="$byid/${m#/dev/disk/by-id/}" ;;
-      /*) refuse "a disk of $p is not a whole disk here ($m)" ;;
+      /*) refuse_code pool.disk-not-whole "a disk of $p is not a whole disk here ($m)" ;;
       *) m="$byid/$m" ;;
     esac
     base=${m#"$byid"/}
-    case "$base" in */*|*[!0-9]*) ;; *) refuse "a disk of $p is not a whole disk here ($base)" ;; esac
-    [ -e "$m" ] || refuse "a disk of $p is not a whole disk here ($base)"
+    case "$base" in */*|*[!0-9]*) ;; *) refuse_code pool.disk-not-whole "a disk of $p is not a whole disk here ($base)" ;; esac
+    [ -e "$m" ] || refuse_code pool.disk-not-whole "a disk of $p is not a whole disk here ($base)"
     disk=$(sed -E 's/-part[0-9]+$//' <<<"$base")
     case "$seen" in *" $disk "*) continue ;; esac
     seen+="$disk "
     row=$(awk -F'\t' -v d="$disk" '$1 == d' <<<"$rows")
-    [ -n "$row" ] || refuse "$disk is not a disk this server sees, not a free disk of $p"
+    [ -n "$row" ] || refuse_code pool.disk-not-free "$disk is not a disk this server sees, not a free disk of $p"
     k=$(cut -f5 <<<"$row"); l=$(cut -f6 <<<"$row"); s=$(cut -f7 <<<"$row")
     if [ "$k" != zfs ] || [ "$l" != "$p" ] || [ "$s" != importable ]; then
-      refuse "$disk is $k $s, not a free disk of $p"
+      refuse_code pool.disk-not-free "$disk is $k $s, not a free disk of $p"
     fi
     disks+=("$disk"); sizes+=("$(numfmt --to=iec --suffix=B "$(cut -f2 <<<"$row")" 2>/dev/null || cut -f2 <<<"$row")")
   done <<<"$members"
-  [ ${#disks[@]} -gt 0 ] || refuse "no disk of $p is a whole disk here"
-  [ "$u" = data ] || refuse "importing an apps pool comes later"
-  case "$(pool_role "$p" 2>/dev/null || true)" in apps) refuse "importing an apps pool comes later" ;; esac
+  [ ${#disks[@]} -gt 0 ] || refuse_code pool.disk-not-whole "no disk of $p is a whole disk here"
+  [ "$u" = data ] || refuse_code pool.apps-unsupported "importing an apps pool comes later"
+  case "$(pool_role "$p" 2>/dev/null || true)" in apps) refuse_code pool.apps-unsupported "importing an apps pool comes later" ;; esac
   local root; root=$(pool_root "$p")
   if [ -d "$root" ] && ! pool_mounted "$p" && [ -n "$(ls -A "$root" 2>/dev/null || true)" ]; then
-    refuse "/$p already holds files on the system disk"
+    refuse_code pool.mountpoint-used "/$p already holds files on the system disk"
   fi
   # the disk to type: the first of the pool's disks in sorted order
   line=$(printf '%s\n' "${disks[@]}" | sort | head -n1)
@@ -191,7 +188,7 @@ do_import() {   # do_import <pool>: the job body
 }
 
 [ -n "$use" ] || use=data
-case "$use" in data|apps) ;; *) refuse "--use: data or apps" ;; esac
+case "$use" in data|apps) ;; *) refuse_code pool.use-invalid "--use: data or apps" ;; esac
 
 case "$mode" in
   plan)
@@ -200,11 +197,11 @@ case "$mode" in
     exit 0 ;;
   start)
     import_check "$pool" "$use"
-    if [ "$confirm_word" != "$confirm_disk" ]; then refuse "type the name to confirm: $confirm_disk"; fi
+    if [ "$confirm_word" != "$confirm_disk" ]; then refuse_code confirm.missing "type the name to confirm: $confirm_disk"; fi
     # shellcheck source=scripts/lib/job.sh
     . "$here/lib/job.sh"
     unit=$(hs_job "pool-import-$pool" "hs pool $pool import" -- bash "$here/pool-import.sh" "$pool" --use data --yes) \
-      || refuse "the job could not be started"
+      || refuse_code job.start-failed "the job could not be started"
     printf 'status\tstarted\nunit\t%s\n' "$unit"
     exit 0 ;;
 esac

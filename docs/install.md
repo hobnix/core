@@ -57,10 +57,24 @@ Write the image to the USB stick (`dd`, Rufus in DD mode or balenaEtcher), boot 
 sudo hs-install
 ```
 
-It asks for the system disk, a server name, your public SSH key, a time zone and a preset (`minimal` is the plain one). **Only the system
+It asks for the system disk, a server name, your public SSH key, a time zone and what to set up after the first boot. **Only the system
 disk is erased**, and you confirm by typing its name. Every question has an option for unattended runs (`--disk`, `--confirm-disk`,
 `--hostname`, `--key-file`, `--timezone`, `--preset`). It installs the base system, writes `machine.toml` with a generated `hostId` and
-applies the preset. Reboot, remove the stick, and continue with [First start](#first-start).
+applies the preset of the role (`minimal` on a home server). Reboot, remove the stick, and continue with [First start](#first-start).
+
+#### What to set up after the first boot
+
+The installer installs only the base system. What the server is for is only **recorded** (`/var/lib/hs/setup-choice`); nothing is fetched on
+the stick. The question offers `wizard` (choose after the first boot, the default) and `core` (only the core packages). To name a choice up
+front, give one of these options; they do not go together with each other or with `--preset`:
+
+| Option | What `sudo hs first-run` offers after the first boot |
+| --- | --- |
+| `--blueprint <name>` | that blueprint: a signed, ready-made choice (`hs blueprint list`). The name is checked against the package repository at first boot, not on the stick |
+| `--parts <a,b>` | these single parts, with what they require |
+| `--core-only` | nothing beyond the core packages |
+
+`hs first-run` shows the plan and asks before anything is installed. The web wizard does not read the record yet. Not tested on hardware yet.
 
 #### Network check
 
@@ -436,9 +450,8 @@ useless, and it is only ever printed on the console, never sent anywhere. You ar
 After the password the page leads you through the **first-run wizard** (`/setup/first-run`):
 
 1. **Account:** your administrator name, the server name (read only; a rename needs `hs config set hostName` and a rebuild) and the language of the interface.
-2. **Preset:** pick what the server is for. A preset fills in only what is not set yet and never overwrites a value. Skip keeps the minimal setup.
-3. **Optional parts:** the capability packages of the signed repositories. The ones you tick are installed with what they require, switched on and built in one background job after a plan. It needs the network; without it the step says so and **Next** moves on.
-4. **Done:** lists what is still open. Machine settings of a preset take effect with `hs rebuild`; the wizard does not start it.
+2. **What is this server for?** One of three: **Core only** (nothing more), a **blueprint** (a signed, ready-made choice; it fills in only what is not set yet, and after a plan one background job installs it, with the rebuild) or **Choose parts** (the capability packages of the signed repositories; the ticked ones are installed with what they require, switched on and built in one job after a plan). Blueprints and parts need the network; when the repositories offer none the step says so. A blueprint that needs a newer version of the server software cannot be chosen.
+3. **Done:** lists what is still open.
 
 Network and storage steps are reserved places and are not shown yet. **Finish** closes the wizard for good; the **Setup** page keeps the
 checklist (below). A server set up before the wizard existed never shows it. Not tested on hardware yet.
@@ -454,11 +467,6 @@ home network only.
 
 ## Work through the first-run checklist
 
-The first-run command asks for the default language of the web interface and a notification address (`--notify none` removes it), fetches the
-**core packages** and lists what is still open, with the command for each item. The core packages are the few apps the core refers to by name
-(`hs pkg install --core`); they come from the package repositories, so the server needs internet. If that fails, the command says so and the
-rest still runs; try again later with `hs pkg install --core`.
-
 ```bash
 hs first-run
 ```
@@ -467,6 +475,13 @@ The first-run command asks for the default language of the web interface and a n
 **core packages** and lists what is still open, with the command for each item. The core packages are the few apps the core refers to by name
 (`hs pkg install --core`); they come from the package repositories, so the server needs internet. If that fails, the command says so and the
 rest still runs; try again later with `hs pkg install --core`.
+
+It then asks **what this server is for**: only the core, one blueprint that fits the role of the server, or single parts. What you gave the
+installer comes first in the list. A blueprint is shown as a plan first and installed as one background job; it only fills what is not set
+yet. When the plan asks for a typed name (a blueprint from a repository you added, or Docker), you type it; `--yes` never does that for you.
+The same choice as options: `--blueprint <name>`, `--parts <a,b|none>` or `--core-only`. With `--yes` and no option, the choice recorded by
+the installer is carried out. Once a choice is carried out it is not offered as the default again. Without a terminal and without `--yes`
+nothing is installed. Not tested on hardware yet.
 
 | Item | What it is for | Command |
 | --- | --- | --- |
@@ -478,6 +493,7 @@ rest still runs; try again later with `hs pkg install --core`.
 | Backup disk | A disk for `hs backup` | `hs backup init <device>` |
 | Vault (secrets) | Only with a vault: the vault must be open for backup and the like | `hs unlock` |
 | Optional parts (capabilities) | Metrics, Tailscale and so on | `hs config set capabilities ...` |
+| Set up the app <name> | Only after a blueprint: an app it could not install without you (it asks a question) | `hs apps install <name>` |
 | Wildcard DNS for the gateway proxy | Only with the gateway part on: names of the proxy must resolve | `hs gateway check` |
 | Setup finished | Your own decision; the last row of the list | `hs config set setupDone true` |
 

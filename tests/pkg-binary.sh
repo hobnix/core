@@ -44,6 +44,24 @@ base "$B" bin/svc ""; rm "$B/extensions/svc/bin/svc"
 check "not built yet (empty sha256, no file) passes repo-check" $PKG repo-check "$B"
 check_out "and --release refuses it" "binary.unbuilt" python3 -I "$SCRIPTS/pkg.py" repo-check --release "$B"
 base "$B"; check "built and matching passes --release" $PKG repo-check --release "$B"
+
+echo "-- repo-check --release: the SDK pin of a crate is a core release tag (ADR 0031)"
+pin() { printf '[package]\nname = "svc"\n[dependencies]\nhobnix-ext-sdk = { %s }\n' "$1" > "$B/extensions/svc/Cargo.toml"; }
+rel() { python3 -I "$SCRIPTS/pkg.py" repo-check --release "$B" 2>&1; true; }
+git_core='git = "https://github.com/hobnix/core"'
+base "$B"; pin "$git_core, tag = \"v0.13.0\""
+check "a release tag passes --release" $PKG repo-check --release "$B"
+pin "$git_core, rev = \"0123456789012345678901234567890123456789\""
+check "a rev passes without --release" $PKG repo-check "$B"
+check_out "and --release refuses it" "binary.sdk-pin" rel
+for spec in "$git_core, branch = \"develop\"" "$git_core, tag = \"v0.13.0-beta.1\"" 'git = "https://example.org/core", tag = "v0.13.0"' 'path = "../../sdk"'; do
+  pin "$spec"; check_out "--release refuses: $spec" "binary.sdk-pin" rel
+done
+pin "$git_core, tag = \"v0.13.0\""
+printf "[patch.'https://github.com/hobnix/core']\nhobnix-ext-sdk = { path = \"x\" }\n" >> "$B/extensions/svc/Cargo.toml"
+check_out "a [patch] of the SDK is refused" "binary.sdk-pin" rel
+printf '[package]\nname = "svc"\n[dependencies]\nsdk = { package = "hobnix-ext-sdk", version = "1" }\n' > "$B/extensions/svc/Cargo.toml"
+check_out "a renamed dependency is checked too" "binary.sdk-pin" rel
 base "$B" bin/svc ""
 check_out "a file that is there with an empty sha256 is refused" "binary.hash" rc "$B"
 base "$B" bin/none "$SUM"

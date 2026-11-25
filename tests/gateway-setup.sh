@@ -160,6 +160,12 @@ check_eq "settings file put back" "no" "$(test -e "$HS_SETTINGS_DIR/proxyDomains
 out=$(HS_GATEWAY_REBUILD=$WORK/rebuild-bad bash "$G" start job-rebuild 2>&1 || true)
 grep -q "put back" <<<"$out" && pass "the job says so" || fail "job text: $out"
 
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code.$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+fresh; run plan setup --set nosuchkey=1; coded "a key that is no gateway setting" gateway.key-unknown "$out"
+run plan setup --set; coded "--set without a value" gateway.set-invalid "$out"
 echo "-- no reboot"
 check_eq "no reboot in the script" 0 "$(grep -cE '^[^#]*(reboot|shutdown)' "$G")"
 

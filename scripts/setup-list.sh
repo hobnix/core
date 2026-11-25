@@ -7,9 +7,10 @@
 #   state    done | open
 #   command  what to run in a terminal for an open item ("-" when done)
 #   page     the page of the web interface where it is done
+# An app an applied blueprint left to a person (blueprints.toml, `later`) is a row blueprint-<blueprint>-<app>, done once it is installed.
 # The last line, id "finished", is done once a person said so (runtime setting setupDone; the web interface's Setup page sets it).
 # Test knobs: HS_STATE_DIR, HS_MACHINE_FILE, HS_SETTINGS_DIR, HS_ETC_DIR, HS_POOLS_ROOT and HS_MOUNTPOINT (see lib/pools.sh: where
-# the pools are mounted and how that is checked), HS_VAULT_OPEN.
+# the pools are mounted and how that is checked), HS_VAULT_OPEN, HS_BLUEPRINTS_FILE, HS_APPS_LIST (apps-list.sh).
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/machine.sh"
@@ -59,4 +60,14 @@ row backup        "Backup disk"                "hs backup init <device>"        
 if vault_configured; then row vault "Vault (secrets)" "hs unlock" /storage/vault vault_is_open; fi
 row parts         "Optional parts (capabilities)" "hs config set capabilities ..." /settings         has_caps
 if grep -qx gateway "$etc/capabilities" 2>/dev/null; then row gateway-dns "Wildcard DNS for the gateway proxy" "hs gateway check" /instances/services bash "$here/gateway.sh" --check-wildcard; fi
+# the apps the applied blueprints left to a person; only names of the right shape are used (they come from package data)
+later=$(awk '/^\[/ { b = ""; if ($0 ~ /^\[applied\.[a-z0-9][a-z0-9-]*\]$/) b = substr($0, 10, length($0) - 10); next }
+  b != "" && /^later = "[a-z0-9,-]+"$/ { v = $0; sub(/^later = "/, "", v); sub(/"$/, "", v); n = split(v, a, ","); for (i = 1; i <= n; i++) if (a[i] != "") print b " " a[i] }' \
+  "${HS_BLUEPRINTS_FILE:-$state/blueprints.toml}" 2>/dev/null || true)
+if [ -n "$later" ]; then   # the list of apps is read only when there is something to look up
+  present=$(bash "${HS_APPS_LIST:-$here/apps-list.sh}" --list 2>/dev/null </dev/null | awk -F'\t' '$3 == "on" || $3 == "running" { print $1 }' || true)
+  while read -r bp app; do
+    row "blueprint-$bp-$app" "Set up the app $app" "hs apps install $app" /apps/marketplace grep -qxF -- "$app" <<<"$present"
+  done <<<"$later"
+fi
 row finished      "Setup finished"             "hs config set setupDone true"    /setup              bash -c '[ "$(. "$1/lib/setting.sh"; setting_get setupDone 2>/dev/null)" = true ]' _ "$here"

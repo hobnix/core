@@ -715,6 +715,7 @@ def assemble(checkout: str, out_dir: str, official_index: str | None = None, pin
              allow_local: bool = False) -> tuple[str | None, list[str]]:
     """Build the pins commit from the active manifests of `checkout`. Returns (commit id or None, problems); with problems nothing is committed.
     Writes out_dir/pins.git (the objects), out_dir/tree/ (the files, for `index build`), pins.commit and, when the tree changed, pins.bundle."""
+    out_dir = os.path.abspath(out_dir)   # git changes into the work tree for checkout-index: every path handed to it must not depend on the cwd
     policy = load_policy(checkout)
     manifests, problems = _read_manifests(checkout, policy, allow_local)
     official = _official_names(official_index)

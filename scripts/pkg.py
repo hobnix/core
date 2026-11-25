@@ -667,6 +667,8 @@ def repo_check(folder, warnings=None, release=False):
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path), release)]
+        if release:
+            out += ["%s: %s: %s" % (name, *c) for c in pkg_binary.sdk_pin_problems(os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
         if m.get("kind") == "blueprint":
             out += [f"{name}: {t}" for t in pkg_blueprint.manifest_problems(m)]

@@ -28,7 +28,7 @@ STATE_ROOT = "/var/lib/hs"
 # of these names, so a manifest cannot point key_file at them. The ONE list (tests/ext-service-reach.sh scans the code and fails when the core
 # uses a folder that is neither here nor a documented example): add a name here when the core starts to use a new folder. A prefix covers a family.
 RESERVED = frozenset("""adopting apps capabilities detached disks docs-site expiry ext generated golden iso jobs lock metrics nodes packages posters
-recovering removals removed reports runs settings src state unifi matrix-hook media-ntfy dhcp-ranges""".split())
+recovering removals removed reports runs settings src state unifi matrix-hook media-ntfy dhcp-ranges setup-choice blueprints""".split())
 RESERVED_PREFIXES = ("apps-", "backup", "remote", "node-key", "node-known", "docker", "recipe", "capabilities-", "disk", "vault", "notify", "luks", "ports",
                      "dc-ca", "machine", "last-rebuild", "live-measure", "restic", "health", "heartbeat", "migrate", "pkg-", "services", "share-",
                      "snapshots", "scrub", "selftest", "update-", "vps-", "wear-", "zoraxy", "grafana", "testlab", "ext-", "bulk-", "deck-", "event-",

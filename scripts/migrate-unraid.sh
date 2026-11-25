@@ -50,14 +50,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-refuse() {   # refuse <text>
-  if $machine; then printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; fi
-  fail "$1"
-}
+refuse_terminal() { $machine || fail "$1"; }   # refuse_code: on the terminal a failure, else the lines for the interface
 [ -n "$pool" ] || pool=$(pool_names data | sed -n 1p)   # the pool that holds the data (--pool names another one)
-[ -n "$pool" ] || refuse "no pool for data found: name one with --pool"
-[[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || refuse "invalid pool name"
-if pool_exists "$pool" && ! pool_is_snapraid "$pool"; then refuse "$pool is not a SnapRAID pool: disks from Unraid are adopted into one (a ZFS pool can not take them)"; fi
+[ -n "$pool" ] || refuse_code migrate.no-pool "no pool for data found: name one with --pool"
+[[ "$pool" =~ ^[a-z][a-z0-9_-]*$ ]] || refuse_code name.invalid "invalid pool name"
+if pool_exists "$pool" && ! pool_is_snapraid "$pool"; then refuse_code migrate.not-snapraid "$pool is not a SnapRAID pool: disks from Unraid are adopted into one (a ZFS pool can not take them)"; fi
 
 human() { numfmt --to=si --suffix=B --format='%.1f' "$1"; }
 
@@ -119,29 +116,29 @@ IFS=',' read -r -a want_par <<<"$parity"
 enc=false; max_data=0
 for id in "${want_data[@]}"; do
   [ -n "$id" ] || continue
-  [ -n "${cand_fs[$id]:-}" ] || refuse "$id is not a free disk this server sees"
+  [ -n "${cand_fs[$id]:-}" ] || refuse_code migrate.disk-not-free "$id is not a free disk this server sees"
   case "$(kind_of "$id")" in
     data) ;;
     encrypted) enc=true ;;
-    empty) refuse "$id holds no file system: it is not a data disk (is it the old parity disk? name it with --parity)" ;;
-    *) refuse "$id holds ${cand_fs[$id]}: it can not be adopted as it is (hs migrate check says more)" ;;
+    empty) refuse_code migrate.disk-unusable "$id holds no file system: it is not a data disk (is it the old parity disk? name it with --parity)" ;;
+    *) refuse_code migrate.disk-unusable "$id holds ${cand_fs[$id]}: it can not be adopted as it is (hs migrate check says more)" ;;
   esac
   role_of[$id]=data
   [ "${cand_size[$id]}" -le "$max_data" ] || max_data=${cand_size[$id]}
 done
 for id in "${want_par[@]}"; do
   [ -n "$id" ] || continue
-  [ -n "${cand_fs[$id]:-}" ] || refuse "$id is not a free disk this server sees"
-  [ -z "${role_of[$id]:-}" ] || refuse "$id is named twice"
-  [ "$(kind_of "$id")" = empty ] || refuse "$id holds ${cand_fs[$id]}: an Unraid parity disk has no file system. It is not erased; check the name"
-  [ "${cand_size[$id]}" -ge "$max_data" ] || refuse "the old parity disk $id ($(human "${cand_size[$id]}")) is smaller than the largest data disk ($(human "$max_data"))"
+  [ -n "${cand_fs[$id]:-}" ] || refuse_code migrate.disk-not-free "$id is not a free disk this server sees"
+  [ -z "${role_of[$id]:-}" ] || refuse_code migrate.disk-twice "$id is named twice"
+  [ "$(kind_of "$id")" = empty ] || refuse_code migrate.parity-not-empty "$id holds ${cand_fs[$id]}: an Unraid parity disk has no file system. It is not erased; check the name"
+  [ "${cand_size[$id]}" -ge "$max_data" ] || refuse_code migrate.disk-too-small "the old parity disk $id ($(human "${cand_size[$id]}")) is smaller than the largest data disk ($(human "$max_data"))"
   role_of[$id]=old-parity
 done
 if [ -n "$spare" ]; then
-  [ -n "${cand_fs[$spare]:-}" ] || refuse "$spare is not a free disk this server sees"
-  [ -z "${role_of[$spare]:-}" ] || refuse "$spare is also named as a data or parity disk"
-  [ "$(kind_of "$spare")" = empty ] || refuse "$spare holds ${cand_fs[$spare]}: a spare disk is erased, so it must be empty. Erase it first or take another"
-  [ "${cand_size[$spare]}" -ge "$max_data" ] || refuse "the spare disk ($(human "${cand_size[$spare]}")) is smaller than the largest data disk ($(human "$max_data"))"
+  [ -n "${cand_fs[$spare]:-}" ] || refuse_code migrate.disk-not-free "$spare is not a free disk this server sees"
+  [ -z "${role_of[$spare]:-}" ] || refuse_code migrate.disk-twice "$spare is also named as a data or parity disk"
+  [ "$(kind_of "$spare")" = empty ] || refuse_code disk.not-empty "$spare holds ${cand_fs[$spare]}: a spare disk is erased, so it must be empty. Erase it first or take another"
+  [ "${cand_size[$spare]}" -ge "$max_data" ] || refuse_code migrate.disk-too-small "the spare disk ($(human "${cand_size[$spare]}")) is smaller than the largest data disk ($(human "$max_data"))"
   role_of[$spare]=spare
 fi
 if $enc && ! $unlock && [ "$verb" != run ]; then
@@ -182,7 +179,7 @@ make_pass_files() {   # machine mode: from the one JSON line on stdin; a person 
   uf=$(mktemp "$run_dir/job-unraid-pass.XXXXXX"); sf=$(mktemp "$run_dir/job-pass.XXXXXX"); pass_files+=("$uf" "$sf")
   if $machine; then
     IFS= read -r line || line=""
-    [ -n "$line" ] || refuse "no passphrase on standard input"
+    [ -n "$line" ] || refuse_code migrate.passphrase-missing "no passphrase on standard input"
     printf '%s' "$line" | python3 -I -c '
 import json, os, sys
 raw = sys.stdin.read()
@@ -203,7 +200,7 @@ for path, val in ((sys.argv[1], u), (sys.argv[2], s)):
       printf %s "$a" > "$sf"
     fi
   fi
-  [ -s "$uf" ] || refuse "the passphrase of the Unraid disks is empty"
+  [ -s "$uf" ] || refuse_code migrate.passphrase-missing "the passphrase of the Unraid disks is empty"
   export HS_UNRAID_PASSPHRASE_FILE=$uf
   if [ -s "$sf" ]; then export HS_DISK_PASSPHRASE_FILE=$sf; else rm -f "$sf"; fi
 }

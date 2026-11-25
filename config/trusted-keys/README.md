@@ -74,3 +74,11 @@ what a server checks. The file `official.allowed_signers` holds one line, princi
   a later commit. A key that may have leaked is removed in the same commit that adds its successor.
 
 No workflow has signed with this key yet and no server has verified an index with it: **Not tested on hardware yet.**
+
+## The index key of `hobnix/community`: `community.allowed_signers`
+
+Same rules as for official (namespace `hobnix-index`, private key only in the secret `INDEX_SIGNING_KEY` of the environment `index-signing` of
+`hobnix/community`, main only), but a key of its own: a leak of one does not sign the other. One line, principal `index-ci-community`. The file
+is here before the first community index is published, because a server learns a key only through the core.
+
+No workflow has signed with this key yet and no server has verified an index with it: **Not tested on hardware yet.**

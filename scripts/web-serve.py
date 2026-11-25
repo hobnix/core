@@ -1141,7 +1141,7 @@ READS = {
     ("changes", "list"): {"kind": "tsv", "ttl": 60, "query": {"from": (r"^[0-9a-f]{7,40}$", "--from"), "since": (r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "--since")}},   # What's new
     ("parts", "pending"): {"kind": "tsv", "ttl": 15, "topic": "parts-pending"},
     ("rebuild", "pending"): {"kind": "tsv", "ttl": 15, "topic": "rebuild-pending"},
-    ("blueprint", "list"): {"kind": "tsv", "ttl": 60},                                                                   # the blueprints (first-run wizard)
+    ("blueprint", "list"): {"kind": "tsv", "ttl": 60, "topic": "blueprint-list"},                                         # the blueprints (first-run wizard)
     ("preset", "list"): {"kind": "tsv", "ttl": 60, "topic": "preset-list"},                                               # the presets (first-run wizard)
     ("net", "check"): {"kind": "tsv", "ttl": 5},                                                  # the network check rows (Network wizard)
     ("net", "nics"): {"kind": "tsv", "ttl": 15},                                                  # the physical network cards (Network wizard)
@@ -1474,8 +1474,8 @@ CHANGES = {
     "setup": [[r"^wizard-done$"]],
     # apply a preset (preset-change.sh): fills only what is not set yet; the name is a file name in presets/ (the script checks it exists)
     "preset": [[r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"]],
-    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines)
-    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True)}}],
+    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines), --tag of the shown plan
+    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True), "--tag": (r"^v[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$", False)}}],
     # posters (poster-change.sh) are the extension "posters": area "ext/posters", declared in its manifest; the picture is served by GET /api/poster/<file>
     # the router connection (net-change.sh): the address as an option, the API key as the one line on stdin
     "net": [{"fixed": [r"^setup$"], "opts": {"--address": (r"^https?://[A-Za-z0-9._:-]{1,100}/?$", False)}, "stdin": True}],
@@ -1498,7 +1498,10 @@ CHANGES = {
     # the Marketplace (pkg-change.sh): install / update / remove a package, fetch the repositories, add a repository (its public key is ONE line on stdin) or
     # remove one; a package or repository that came from an added source is red (the typed word is its name)
     "pkg": [{"fixed": [r"^install$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--repo": (r"^[a-z0-9][a-z0-9-]{0,40}$", False)}},
-            [r"^(update|remove)$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            [r"^remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            # --tag and --seen are what the update plan showed (the start refuses anything else; new permissions need both and the typed name)
+            {"fixed": [r"^update$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+             "opts": {"--tag": (r"^v[0-9]+\.[0-9]+\.[0-9]+([-.+][A-Za-z0-9.+-]{1,60})?$", False), "--seen": (r"^[0-9a-f]{32}$", False)}},
             [r"^fetch$"], [r"^fetch$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
             {"fixed": [r"^repo-add$", r"^[a-z0-9][a-z0-9-]{0,40}$", r"^(https://|ssh://git@|git@)[A-Za-z0-9._:/@~+-]{3,200}$"], "stdin": True},
             [r"^repo-remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
@@ -1854,13 +1857,19 @@ def parse_change(out, rc):
         k, _, v = line.partition("\t")
         if k in ("step", "note", "warn", "danger", "section", "text"):
             d["steps"].append([k, v])
+        elif k == "blueprint" and len(v.split("\t")) == 4:
+            d["tag"] = v.split("\t")[3]       # name, repo, version, tag: the start sends the tag of the plan that was shown
+        elif k == "part" and len(v.split("\t")) == 5:
+            # a blueprint plan (blueprint-change.sh): n, part, name, state, text. What the job does is a step, what it leaves alone a note
+            f = v.split("\t")
+            d["steps"].append(["step" if f[3] in ("set", "install", "enable") else "note", f[4]])
         elif k == "finding":
             d.setdefault("findings", []).append(v.split("	", 2))     # the Test of the Docker editor: level, where (compose:<line|path>, env:<line>, -), text
         elif k == "fix":
             d["fixes"].append(v)       # a refused plan: the command that makes it possible
         elif k == "needs":
             d["needs"].append(v)
-        elif k in ("package", "kind", "repo", "version", "tag", "commit", "title", "description"):
+        elif k in ("package", "kind", "repo", "version", "tag", "seen", "commit", "title", "description"):
             d[k] = v               # the plan of One Install (apps-change.sh)
         elif k == "creates":
             d.setdefault("creates", []).append(v)
@@ -1883,6 +1892,8 @@ def parse_change(out, rc):
         elif k == "id":
             d["id"] = v
         elif k in ("status", "reason", "heading", "command", "confirm_name", "unit"):
+            if k == "confirm_name" and d[k] and v != d[k]:
+                d.setdefault("confirm_names", [d[k]]).append(v)     # several names to type (a blueprint plan); only then this list exists
             d[k] = v
         elif k == "code" and v:
             d["code"] = v          # ADR 0028: the stable name of a refusal, only when the script printed one

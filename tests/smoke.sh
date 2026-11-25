@@ -17,6 +17,7 @@ case "$1" in
   broken) echo "oops"; exit 1 ;;
   slow) sleep 5 ;;
   one) echo "problems"; exit 1 ;;
+  ext) echo "$*" >> "${0%/*}/ran"; [ "$3" != one ] || exit 1; echo "fine" ;;
 esac
 FAKE
 printf '# kind\nuser\tgood\tx.sh\t-\th\th\t-\nuser\tbad\tx.sh\t-\th\th\t-\nuser\tbroken\tx.sh\t-\th\th\t-\nuser\tslow\tx.sh\t-\th\th\t-\nuser\tone\tx.sh\t-\th\th\t-\nuser\tshare <share> show\tx.sh\t-\th\th\t-\n' > "$WORK/registry.tsv"
@@ -68,11 +69,11 @@ printf 'name = "onpkg"
 tools = ["smartctl"]
 [[probe]]
 label = "pkg probe"
-words = "good"
+words = "ext onpkg good"
 ok = [0]
 [[probe]]
 label = "pkg one"
-words = "one"
+words = "ext onpkg one"
 ok = [0, 1]
 limit = 3
 ' > "$PK/onpkg/capability.toml"
@@ -80,9 +81,12 @@ printf 'name = "offpkg"
 tools = ["restic"]
 [[probe]]
 label = "off probe"
-words = "good"
+words = "ext offpkg good"
 ok = [0]
 ' > "$PK/offpkg/capability.toml"
+# the rows the packages bring: a probe runs only a read row of its own package
+printf 'user\text onpkg good\tx.sh\t-\th\th\ttopic:system,reads\nuser\text onpkg one\tx.sh\t-\th\th\ttopic:system,reads,capability:offpkg\n' > "$PK/onpkg/commands.tsv"
+printf 'user\text offpkg good\tx.sh\t-\th\th\ttopic:system,reads\n' > "$PK/offpkg/commands.tsv"
 printf 'onpkg
 ' > "$WORK/caps-on"
 printf '# kind
@@ -105,7 +109,53 @@ offpkg
 pl=$($PS --list 2>&1 || true)
 check_out "once it is on, the probe runs" "probe	off probe	ok" echo "$pl"
 check_out "and so does the core probe of that capability" "probe	pkg one	ok" echo "$pl"
-check_out "pkg_probes.py prints label, words, codes, limit" "pkg one	one	0 1	3" python3 "$SCRIPTS/lib/pkg_probes.py" probes "$PK/onpkg"
+check_out "pkg_probes.py prints label, words, codes, limit" "pkg one	ext onpkg one	0 1	3" python3 "$SCRIPTS/lib/pkg_probes.py" probes "$PK/onpkg"
+TAB=$(printf '\t')
+echo "-- a package probe runs only a read"
+rm -f "$WORK/ran"
+mkdir -p "$PK/evil"
+{
+  printf 'user\text evil wipe\tx.sh\t-\th\th\ttopic:system,changes\n'
+  printf 'user\text evil show\tx.sh\t-\th\th\ttopic:system,reads\n'
+  printf 'user\text evil show hard\tx.sh\t-\th\th\ttopic:system,changes\n'
+  printf 'user\text evil plain\tx.sh\t-\th\th\ttopic:system\n'
+  printf 'user\text evil drop\tx.sh\t{1}\th\th\ttopic:system,changes\n'
+  printf 'user\text evil glued\tx.sh\t--note={rest}\th\th\ttopic:system,changes\n'
+  printf 'user\text evil value <what>\tx.sh\t{rest}\th\th\ttopic:system,changes\n'
+  printf 'user\text evil keep\tx.sh\t--x {rest}\th\th\ttopic:system,changes\n'
+} > "$PK/evil/commands.tsv"
+probe() { printf '[[probe]]\nlabel = "%s"\nwords = "%s"\n' "$1" "$2"; }
+{
+  printf 'name = "evil"\n'
+  probe "changes" "ext evil wipe"
+  probe "core row" "good"
+  probe "foreign row" "ext onpkg good"
+  probe "no row" "ext evil nothing"
+  probe "longer row" "ext evil show hard"
+  probe "no flag" "ext evil plain"
+  probe "glob" "ext evil show *"
+  probe "dry run not last" "ext evil wipe --dry-run --yes"
+  probe "dry run" "ext evil wipe --dry-run"
+  probe "template drops it" "ext evil drop --dry-run"
+  probe "glued rest" "ext evil glued --dry-run"
+  probe "eaten as a value" "ext evil value --dry-run"
+  probe "template with rest" "ext evil keep --dry-run"
+  probe "own read" "ext evil show"
+  probe 'esc\u001b[31m ape' "ext evil wipe"
+} > "$PK/evil/capability.toml"
+printf 'onpkg\nevil\n' > "$WORK/caps-on"
+pl=$($PS --list 2>&1 || true)
+for l in "changes" "core row" "foreign row" "no row" "longer row" "no flag" "glob" "dry run not last" "template drops it" "glued rest" "eaten as a value"; do
+  check_out "refused: $l" "probe${TAB}$l${TAB}fail${TAB}probe $l of evil is not a read: skipped" echo "$pl"
+done
+check_out "a changes row with --dry-run last runs" "probe${TAB}dry run${TAB}ok" echo "$pl"
+check_out "a template with {rest} keeps --dry-run" "probe${TAB}template with rest${TAB}ok" echo "$pl"
+check_out "a read row of the package itself runs" "probe${TAB}own read${TAB}ok" echo "$pl"
+check_out "control characters of a label are not printed" "probe${TAB}esc\[31mape${TAB}fail" echo "$pl"
+check_eq "no refused probe reached hs" "ext evil keep --dry-run
+ext evil show
+ext evil wipe --dry-run" "$(grep 'ext evil' "$WORK/ran" | sort)"
+check_eq "a refused probe fails the run" "1" "$(HS_SMOKE_TOOLS="" $PS >/dev/null 2>&1; echo $?)"
 unset HS_PACKAGES_DIR HS_CAPABILITIES_FILE HS_CAPABILITIES_TSV HS_STATE_DIR
 
 finish

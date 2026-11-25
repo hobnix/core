@@ -27,7 +27,6 @@ scripts/health-ack.sh	1
 scripts/health-change.sh	1
 scripts/health-check.sh	5
 scripts/import-unraid.sh	2
-scripts/install-wizard.sh	1
 scripts/iso-change.sh	1
 scripts/iso.sh	1
 scripts/lib/capability.sh	3
@@ -68,7 +67,7 @@ scripts/release-channel.sh	1
 scripts/secrets.sh	2
 scripts/services.sh	4
 scripts/setup-list.sh	1
-scripts/smoke.sh	2
+scripts/smoke.sh	1
 scripts/storage-incident.sh	20
 scripts/system-change.sh	1
 scripts/system.sh	1
