@@ -74,6 +74,8 @@ die() { fail "$@" >&2; }   # the same red line as everywhere, on stderr
 
 # Paths and overrides (the HS_* variables exist for tests)
 STATE=${HS_STATE_DIR:-/var/lib/hs}
+EXT_PUB=${HS_EXT_STATE_DIR:-/var/lib/hs-ext}                  # the state of extension services (ext_state.py): the public path ...
+EXT_PRIV=${HS_PRIVATE_DIR:-/var/lib/private}/hs-ext          # ... and where systemd keeps the real folder (owner nobody, 0700)
 MNT=${HS_BACKUP_MOUNT:-/mnt/backup}
 REPO=${HS_BACKUP_REPO:-$MNT/restic}
 DEV=${HS_BACKUP_DEV:-/dev/disk/by-label/backup}
@@ -1469,6 +1471,56 @@ cmd_restore_ct() {   # hs backup restore ct <ct> [--recipe <app>] [--dry-run] [-
   if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then note "$(t 'The database dumps are in /var/backups/hs inside the container; load them with the import of the app (see its guide).')"; fi
 }
 
+# An in-place restore writes as root along the original path. Where that path leads into the state of an extension service, a link the service planted
+# would be followed (restic does not refuse it). Everything is canonicalised first (--to //, /., /./, links), then refused when the place that would be
+# written IS, CONTAINS or is BELOW a state root. Restore it into another folder (--to <folder>) and look at it, or put single files back with
+# `hs backup config restore --with-state` (state_put.py, no link followed).
+path_within() {  # path_within <path> <folder>: <path> is the folder or below it (canonical paths)
+  case "$1" in "$2"|"$2"/*) return 0 ;; esac
+  [ "$2" = / ]
+}
+# What reaches restic from the command line is checked first: the snapshot is `latest` or a hex id (restic also reads <snapshot>:<subfolder>, which
+# moves the whole restore somewhere else), the tag is a plain label, and the path is exact (below).
+snap_ok() {  # snap_ok <snapshot>
+  [[ "$1" =~ ^(latest|[0-9a-f]{8,64})$ ]]
+}
+tag_ok() {  # tag_ok <tag>: shares, host, ct:<name>, ...
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9:._-]{0,80}$ ]]
+}
+# DESIGN: restic must never write the state of an extension service. `restic restore` refuses --include together with --exclude (checked: "mutually
+# exclusive"), so the include cannot be fenced with excludes. Instead a restore IN PLACE (the target resolves to the real state roots) accepts only a path
+# restic matches exactly: absolute, canonical (no ., .., //), no glob character. A path without a leading / matches at ANY depth in restic and a glob
+# matches what it likes; both are refused there. Then the guard below refuses every exact path that is, contains or lies in service state. Service
+# state comes back only through `hs backup config restore --with-state`: restic writes it into a root-only temporary folder and
+# scripts/lib/state_put.py puts it in place without following links.
+restore_in_place() {  # restore_in_place <to>: would a restore below <to> land on the real state roots? (the same place, links resolved)
+  local r
+  for r in "$EXT_PUB" "$EXT_PRIV" "$STATE"; do
+    [ "$(realpath -m -- "$1/$r" 2>/dev/null)" = "$(realpath -m -- "$r" 2>/dev/null)" ] && return 0
+  done
+  return 1
+}
+restore_guard_state() {  # restore_guard_state <to> <path>
+  local d r st msg
+  # for EVERY target (a pattern restores what it likes below any --to): the exact full path, nothing else
+  case "$2" in
+    /*) ;;
+    *) die "$(t "Not restored: '%s' is not a full path. Use the full original path as hs backup find shows it." "$2")" ;;
+  esac
+  case "$2" in
+    *[\*\?\[\\]*|*/./*|*/../*|*//*|*/.|*/..) die "$(t "Not restored: '%s' has a pattern or a dot part. Use the exact full path." "$2")" ;;
+  esac
+  d=$(realpath -m -- "${1:-/}/${2#/}" 2>/dev/null) || die "$(t 'Not restored: the place %s could not be resolved, so it cannot be shown to be safe.' "${1:-/}/${2#/}")"
+  st=$(realpath -m -- "$STATE") || die "$(t 'Not restored: the state folder could not be resolved.')"
+  msg=$(t 'Not restored in place: %s would write into the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$d")
+  for r in "$EXT_PUB" "$EXT_PRIV" "$(dirname "$EXT_PRIV")"; do
+    r=$(realpath -m -- "$r") || die "$msg"
+    if path_within "$d" "$r" || path_within "$r" "$d"; then die "$msg"; fi
+  done
+  if path_within "$st" "$d"; then die "$msg"; fi    # the state root itself or a parent of it (a link in it leads to the service folders)
+  return 0
+}
+
 cmd_restore() {
   local snap="" path="" tag=shares to=$BULK/shares/restored keep=false
   if [ "${1:-}" = ct ]; then shift; cmd_restore_ct "$@"; return; fi
@@ -1482,7 +1534,10 @@ cmd_restore() {
     esac
   done
   [ -n "$snap" ] && [ -n "$path" ] || usage
+  snap_ok "$snap" || die "$(t "Not restored: '%s' is not a snapshot. Use latest or the id from: hs backup list" "$snap")"
+  tag_ok "$tag" || die "$(t "Not restored: '%s' is not a snapshot tag." "$tag")"
   [ -d "$to" ] || die "$(t '%s does not exist. For the default: hs share add restored' "$to")"
+  restore_guard_state "$to" "$path"
   steps 2   # a background job shows "step n of m" (#389)
   step "$(t 'Preparing the target')"
   need_repo
@@ -1516,6 +1571,27 @@ state_skip() {  # state_skip <path relative to $STATE>
     restic-password|restic-offsite-password|backup-offsite.credentials|backup-offsite.repo|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
   esac
   return 1
+}
+
+# The state of an extension service lives in a folder the service owns (ext_state.py: /var/lib/hs/<name> is a link to it). Root must never open or write
+# by name in there without refusing links: the service could plant one. Rows below such a link go through scripts/lib/state_put.py (O_NOFOLLOW).
+STATE_PUT=$(dirname "$0")/lib/state_put.py
+svc_state_row() {  # svc_state_row <absolute path>: 0 + SVC_TOP, SVC_REL for a file in the state folder of a service; 1 for any other file;
+                   # 2 for a name below the state roots that is no package name (refused: never falls through to cp, which follows links)
+  local rel name
+  case "$1" in
+    "$EXT_PRIV"/*) rel=${1#"$EXT_PRIV/"} ;;     # a snapshot taken after the move
+    "$EXT_PUB"/*)  rel=${1#"$EXT_PUB/"} ;;      # ... or before the first start (the folder is not yet in the private root)
+    "$STATE"/*)    rel=${1#"$STATE/"}           # a snapshot taken before the move: only when the live path is the link now
+                   name=${rel%%/*}
+                   [ "$name" != "$rel" ] && [ -L "$STATE/$name" ] || return 1
+                   SVC_TOP=$STATE/$name SVC_REL=${rel#*/}
+                   return 0 ;;
+    *) return 1 ;;
+  esac
+  name=${rel%%/*}
+  [ "$name" != "$rel" ] && [[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || return 2
+  SVC_TOP=$EXT_PUB/$name SVC_REL=${rel#*/}
 }
 
 cmd_config_list() {
@@ -1571,7 +1647,7 @@ cmd_config_restore() {
       --with-samba) with_samba=true ;;
       --from-disk) [ $# -gt 0 ] || usage; from_disk=$1; shift ;;
       -*) usage ;;
-      *)  snap=$a ;;
+      *)  snap_ok "$a" || die "$(t "'%s' is not a snapshot. Use latest or the id from: hs backup config" "$a")"; snap=$a ;;
     esac
   done
   if $with_samba && [ -z "$from_disk" ]; then die "$(t '--with-samba belongs to --from-disk.')"; fi
@@ -1590,7 +1666,7 @@ cmd_config_restore() {
   local inc=() f
   for f in "${CONFIG_FILES[@]}"; do inc+=(--include "$NIXOS_DIR/$f"); done
   inc+=(--include "$NIXOS_DIR/vendor")
-  $with_state && inc+=(--include "$STATE")
+  $with_state && inc+=(--include "$STATE" --include "$EXT_PRIV" --include "$EXT_PUB")
   if [ -n "$from_disk" ]; then
     inc+=(--include "$SSH_DIR/ssh_host_*")
     $with_samba && inc+=(--include "$SAMBA_DIR")
@@ -1614,6 +1690,11 @@ cmd_config_restore() {
       if state_skip "$rel"; then skipped+=("$rel"); continue; fi
       rows+=("$STATE/$rel")
     done < <(find "$tmp$STATE" -type f -print0 | sort -z)
+    # the state of extension services (snapshots taken after the move: /var/lib/hs/<name> is only a link there, the data is below these two)
+    for f in "$EXT_PRIV" "$EXT_PUB"; do
+      [ -d "$tmp$f" ] || continue
+      while IFS= read -r -d '' rel; do rows+=("${rel#"$tmp"}"); done < <(find "$tmp$f" -type f -print0 | sort -z)
+    done
   fi
   local ssh_rows=()
   if [ -n "$from_disk" ]; then
@@ -1626,7 +1707,13 @@ cmd_config_restore() {
   local plan=()
   for f in "${rows[@]}"; do
     live=$f
-    if [ ! -e "$live" ]; then state=new
+    svc_rc=0; svc_state_row "$f" || svc_rc=$?
+    if [ "$svc_rc" = 2 ]; then state=refused
+    elif [ "$svc_rc" = 0 ]; then
+      if python3 -I "$STATE_PUT" same "$tmp$f" "$SVC_TOP" "$SVC_REL"; then state=same
+      elif [ ! -e "$live" ] && [ ! -L "$live" ]; then state=new
+      else state=changed; fi
+    elif [ ! -e "$live" ]; then state=new
     elif cmp -s "$tmp$f" "$live"; then state=same
     else state=changed; fi
     case "$state" in same) same=$((same + 1)) ;; *) plan+=("$state"$'\t'"$f"); changed=$((changed + 1)) ;; esac
@@ -1671,6 +1758,12 @@ cmd_config_restore() {
   local stamp
   stamp=$(date +%Y%m%d-%H%M%S)
   for f in "${rows[@]}"; do
+    svc_rc=0; svc_state_row "$f" || svc_rc=$?
+    if [ "$svc_rc" = 2 ]; then warn "$(t '%s is not restored (it is not the state of a package)' "$f")"; continue; fi
+    if [ "$svc_rc" = 0 ]; then    # the service's own folder: no link below it is followed (state_put.py), the old file is moved aside
+      if python3 -I "$STATE_PUT" put "$tmp$f" "$SVC_TOP" "$SVC_REL" "$stamp"; then ok "$(t 'Restored %s' "$f")"; else warn "$(t '%s was not restored (a link or folder is in the way)' "$f")"; fi
+      continue
+    fi
     cmp -s "$tmp$f" "$f" 2>/dev/null && continue
     # a link into the vault: writing through it would overwrite the secret itself
     if [ -L "$f" ]; then warn "$(t '%s is a link into the vault, skipped' "$f")"; continue; fi

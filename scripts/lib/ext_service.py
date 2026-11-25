@@ -656,13 +656,13 @@ def sweep_creds(name, active=None):
 
 def confined_program(name, pkgdir, prog, creds=()):
     """(argv, None) or (None, problem): PROG as a transient systemd unit confined by the declared permissions (scripts/lib/ext_confine.py, the same
-    mapping as a confined command). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
+    mapping as a confined command), as the dynamic user hsx-<name> (#1134; svc_run prepares its state, ext_state.py). The bridge itself stays outside the sandbox: it alone writes state.db, the snapshots and the cursors, so
     `emit`, `rollup` and `snapshot` need no wider mount. creds = [(credential name, key file)]: systemd LoadCredential= reads the file as root
     before the sandbox and the service finds it in $CREDENTIALS_DIRECTORY (never argv or environment). Not tested on hardware yet."""
     spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    props, _, bad = mod.properties(declared_perms(pkgdir), name)
+    props, _, bad = mod.properties(declared_perms(pkgdir), name, dynamic=True)
     if bad:
         return None, bad
     if os.path.abspath(pkgdir).startswith(LIB_DIR + "/"):
@@ -743,12 +743,20 @@ def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
     for s in (signal.SIGTERM, signal.SIGINT):
         signal.signal(s, lambda *_: stop.set())
 
+    st = _load_lib("ext_state")
+
+    def link_state():    # a first start has no /var/lib/hs/<name> yet: root tools need the link once systemd made the folder
+        problem = st.link_after_start(name)
+        if problem:
+            print(f"ext_service.py: {name}: {problem}", file=sys.stderr)
+
     def on_state(s, why):
         d = load_state(state_dir, name)
         d.update({"state": s, "reason": why, "since": now()})
         save_state(state_dir, name, d)
         if s == "running":
             drop_creds(name)    # systemd read the credential when it started the unit; no copy stays on disk
+            link_state()
 
     subscribe = table.get("subscribe", [])
     if subscribe and not os.path.exists(cursor_path(name)):
@@ -761,6 +769,20 @@ def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
         record_failure(state_dir, name, "confine_failed", bad)
         return 69
     stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
+    # only now, after the permissions passed and the old unit is stopped: the one-time move of the state folder (a refused start moves nothing)
+    moved, bad = st.prepare(name)
+    if bad:     # fail closed: with two state folders or a failed move the service does not run, and nothing is merged or deleted
+        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+        drop_creds(name)
+        on_state("failed", bad)
+        record_failure(state_dir, name, bad.split(":")[0], bad)
+        return 69
+    if moved == "moved":
+        old, pub = st._paths(name)[:2]
+        print(f"ext_service.py: moved the state of {name} from {old} to {pub}", file=sys.stderr, flush=True)
+    bad = st.repair_owner(name)[1]    # files a root command left behind; a problem is only said
+    if bad:
+        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
     try:
         res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
                         float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir),
@@ -768,6 +790,7 @@ def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
     finally:
         stop_unit(name)
         drop_creds(name)
+        link_state()    # also after a start that failed behind systemd's folder: else a root tool could make a second /var/lib/hs/<name>
     if res["state"] == "failed":
         record_failure(state_dir, name, res["code"], res["reason"])
         return 75 if res["code"] == "start_timeout" else 1

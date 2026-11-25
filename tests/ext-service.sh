@@ -202,6 +202,78 @@ FIX_MODE=good $SR --credential "integration-media-jellyfin=jellyfin=/etc/shadow"
 check_eq "the bad credential last: exit 69 as well" 69 "$rc"
 check_eq "and no key copy stays (the copies of the cases with a good first credential are in ext-service-reach.sh)" 0 "$(find "$WORK/cred" -type f 2>/dev/null | wc -l | tr -d ' ')"
 
+echo "-- svc-run: the dynamic user's state (#1134): prepared before the start, fail closed, linked once the unit runs"
+# a fake systemd-run that records its arguments and what the old path was at that moment, and does what StateDirectory= does (private folder, public link)
+cat > "$WORK/systemd-run-state" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$RUN_LOG"
+if [ -L "$HS_STATE_DIR/fixsvc" ]; then echo link; elif [ -d "$HS_STATE_DIR/fixsvc" ]; then echo folder; else echo missing; fi > "$RUN_LOG.old"
+if [ ! -e "$HS_EXT_STATE_DIR/fixsvc" ]; then mkdir -p "$HS_PRIVATE_DIR/hs-ext/fixsvc" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/hs-ext/fixsvc" "$HS_EXT_STATE_DIR/fixsvc"; fi
+while [ "$1" != -- ]; do shift; done; shift
+exec "$@"
+SH
+chmod +x "$WORK/systemd-run-state"
+S=0
+roots() { SD=$WORK/dyn$((++S)); mkdir -p "$SD/hs" "$SD/ext" "$SD/private"; export HS_STATE_DIR=$SD/hs HS_EXT_STATE_DIR=$SD/ext HS_PRIVATE_DIR=$SD/private RUN_LOG=$SD/run.log
+  rm -f "$WORK/svcstate/fixsvc.json" "$WORK/emitted"; }
+tree() { (cd "$1" && find . -printf '%p %y %m %l\n' | sort; find . -type f -exec cksum {} + | sort); }
+untilrun() { for _ in $(seq 1 20); do grep -q '"state": *"running"' "$WORK/svcstate/fixsvc.json" 2>/dev/null && return 0; sleep 0.5; done; return 1; }
+bridge_good() {   # run the bridge until the service runs, then stop it; stderr in $SD/err, status in rc
+  HS_SYSTEMD_RUN=$WORK/systemd-run-state FIX_MODE=good $SR >/dev/null 2>"$SD/err" & local p=$!
+  untilrun || true; [ ! -L "$HS_STATE_DIR/fixsvc" ] || echo yes > "$SD/linked-while-running"
+  kill -TERM "$p"; rc=0; wait "$p" || rc=$?
+}
+refused() {   # one start that must be refused: rc is its status
+  rc=0; HS_SYSTEMD_RUN=$WORK/systemd-run-state FIX_MODE=good $SR >/dev/null 2>"$SD/err" || rc=$?
+}
+called() { [ -e "$RUN_LOG" ] && echo yes || echo no; }
+
+roots; mkdir -p "$HS_STATE_DIR/fixsvc"; echo watched > "$HS_STATE_DIR/fixsvc/watched.tsv"
+bridge_good
+check_eq "an old state folder: the service runs and stops (exit 0)" 0 "$rc"
+check_eq "the state was moved BEFORE systemd-run (the old path was a link then)" link "$(cat "$RUN_LOG.old")"
+check_eq "the data came along, the old path leads to it" watched "$(cat "$HS_STATE_DIR/fixsvc/watched.tsv")"
+check_eq "the old path is a link to the public folder" "$HS_EXT_STATE_DIR/fixsvc" "$(readlink "$HS_STATE_DIR/fixsvc")"
+check_eq "the journal says it once" 1 "$(grep -c "moved the state of fixsvc from $HS_STATE_DIR/fixsvc to $HS_EXT_STATE_DIR/fixsvc" "$SD/err")"
+check_eq "the unit is the dynamic one" 3 "$(grep -c -x -e '--property=DynamicUser=yes' -e '--property=User=hsx-fixsvc' -e '--property=StateDirectory=hs-ext/fixsvc' "$RUN_LOG")"
+check_eq "and its state is not bound (the unit finds it at /var/lib/hs-ext/fixsvc)" 0 "$(grep -c 'BindPaths=-/var/lib/hs-ext' "$RUN_LOG")"
+check_eq "the bridge state is not bound into it" 0 "$(grep -c '/var/lib/hs/ext-svc' "$RUN_LOG")"
+bridge_good
+check_eq "the next start moves nothing and says nothing" "0 0" "$rc $(grep -c 'moved the state' "$SD/err")"
+
+roots; bridge_good
+check_eq "a first start: no link before the unit (it would dangle)" missing "$(cat "$RUN_LOG.old")"
+check_eq "the link is there while the service runs" yes "$(cat "$SD/linked-while-running" 2>/dev/null)"
+check_eq "and points to the public folder" "$HS_EXT_STATE_DIR/fixsvc" "$(readlink "$HS_STATE_DIR/fixsvc")"
+roots; rc=0; HS_SYSTEMD_RUN=$WORK/systemd-run-state FIX_MODE=crash $SR >/dev/null 2>&1 || rc=$?
+check_eq "a first start that crashes still leaves the link (no second folder later)" "1 $HS_EXT_STATE_DIR/fixsvc" "$rc $(readlink "$HS_STATE_DIR/fixsvc")"
+
+roots; mkdir -p "$HS_STATE_DIR/fixsvc" "$HS_EXT_STATE_DIR/fixsvc"; echo a > "$HS_STATE_DIR/fixsvc/a"; echo b > "$HS_EXT_STATE_DIR/fixsvc/b"
+before=$(tree "$SD/hs"; tree "$SD/ext"; tree "$SD/private"); refused
+check_eq "both folders exist: exit 69, systemd-run is never called" "69 no" "$rc $(called)"
+check_eq "and the disk is untouched" "$before" "$(tree "$SD/hs"; tree "$SD/ext"; tree "$SD/private")"
+check_out "the status says failed with the reason" "^failed	ext.state-conflict: both " python3 -I "$SCRIPTS/lib/ext_service.py" status --name fixsvc --state-dir "$WORK/svcstate" --active no
+check "the journal has the reason" grep -q 'ext.state-conflict' "$SD/err"
+for _ in 2 3 4 5; do refused; done
+check_eq "the fifth refusal sends the event with the code" '{"package":"fixsvc","code":"ext.state-conflict"}' "$(sed -n 's/.*--payload //p' "$WORK/emitted")"
+
+roots; mkdir -p "$SD/victim"; echo keep > "$SD/victim/f"; ln -s "$SD/victim" "$HS_STATE_DIR/fixsvc"; before=$(tree "$SD/victim"; readlink "$HS_STATE_DIR/fixsvc"); refused
+check_eq "an old path that links somewhere else: exit 69, nothing run" "69 no" "$rc $(called)"
+check_eq "link and target are left alone" "$before" "$(tree "$SD/victim"; readlink "$HS_STATE_DIR/fixsvc")"
+roots; echo x > "$HS_STATE_DIR/fixsvc"; refused
+check_eq "an old path that is a file: exit 69, the file stays" "69 no x" "$rc $(called) $(cat "$HS_STATE_DIR/fixsvc")"
+roots; mkdir -p "$HS_STATE_DIR/fixsvc"; rm -rf "$HS_EXT_STATE_DIR"; echo not-a-folder > "$HS_EXT_STATE_DIR"; refused
+check_eq "a file system error in the preparation is a refusal, not a crash" "69 no 1" "$rc $(called) $(grep -c 'ext.state-move-failed' "$SD/err")"
+check "the old folder stays a folder" sh -c "[ -d '$HS_STATE_DIR/fixsvc' ] && [ ! -L '$HS_STATE_DIR/fixsvc' ]"
+
+roots; mkdir -p "$HS_STATE_DIR/fixsvc"; cp "$PKG/package.toml" "$WORK/fixsvc.toml.keep"
+printf 'name = "fixsvc"\npermissions = ["fs.write:/srv/a"]\n[service]\nexec = "@/run.sh"\n' > "$PKG/package.toml"
+refused
+check_eq "fs.write outside the own folder: exit 69, not run" "69 no" "$rc $(called)"
+check "with the code ext.dynamic-write" grep -q 'ext.dynamic-write' "$SD/err"
+check "and a refused permission moves nothing" sh -c "[ ! -L '$HS_STATE_DIR/fixsvc' ] && [ ! -e '$HS_EXT_STATE_DIR/fixsvc' ]"
+cp "$WORK/fixsvc.toml.keep" "$PKG/package.toml"
+
 echo "-- hs ext status|start|stop with a fake systemctl"
 EXT=$WORK/ext; mkdir -p "$EXT/pk/svcpkg" "$EXT/state"
 printf 'name = "svcpkg"\ntitle = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n[service]\nexec = "@/run.sh"\n' > "$EXT/pk/svcpkg/capability.toml"

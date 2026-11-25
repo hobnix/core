@@ -87,6 +87,57 @@ check_eq "other state files are restored" "setting" "$(cat "$ST/sub/keep" 2>/dev
 check_eq "machine.toml updated again" "new = 3" "$(cat "$NX/machine.toml")"
 check_eq "hardware-configuration.nix still untouched" "hw-live" "$(cat "$NX/hardware-configuration.nix")"
 
+echo "-- with state: the state folder of a service is the service's (links it planted are never followed)"
+mkdir -p "$FIX$ST/svc/sub" "$FIX$ST/svc/new/deeper" "$WORK/pub/svc" "$WORK/victimdir"
+echo restored > "$FIX$ST/svc/watched.tsv"; echo restored-sub > "$FIX$ST/svc/sub/f"; echo restored-deep > "$FIX$ST/svc/new/deeper/g"
+echo victim > "$WORK/victim"
+ln -s "$WORK/pub/svc" "$ST/svc"
+ln -s "$WORK/victim" "$WORK/pub/svc/watched.tsv"
+ln -s "$WORK/victimdir" "$WORK/pub/svc/sub"
+ln -s "$WORK/victimdir" "$WORK/pub/svc/new"
+out=$(b config restore --yes --with-state 2>&1)
+check_eq "the file a link pointed to is untouched" "victim" "$(cat "$WORK/victim")"
+check_eq "the folder a link pointed to got nothing" "" "$(ls "$WORK/victimdir")"
+check "the planted link at the file is replaced by the restored file" sh -c "[ ! -L '$WORK/pub/svc/watched.tsv' ] && [ \"\$(cat '$WORK/pub/svc/watched.tsv')\" = restored ]"
+check "the link replaced is kept as a link" sh -c "ls '$WORK/pub/svc' | grep -q '^watched.tsv.before-restore-' && [ -L \"\$(ls -d '$WORK/pub/svc/watched.tsv.before-restore-'*)\" ]"
+check "a link in the way of a folder is refused (still a link, nothing below it)" sh -c "[ -L '$WORK/pub/svc/sub' ] && [ -L '$WORK/pub/svc/new' ]"
+rm -f "$WORK/pub/svc/sub" "$WORK/pub/svc/new"; b config restore --yes --with-state >/dev/null 2>&1
+check_eq "without a link in the way folders are made and files restored" "restored-sub restored-deep" "$(cat "$WORK/pub/svc/sub/f") $(cat "$WORK/pub/svc/new/deeper/g")"
+check_eq "and the folders made are closed (0700)" "700" "$(stat -c %a "$WORK/pub/svc/new")"
+rm -f "$ST/svc"; rm -rf "$WORK/pub"
+
+echo "-- with state: a snapshot taken after the move keeps the data below the private root (/var/lib/hs/<name> is only a link there)"
+export HS_EXT_STATE_DIR=$WORK/ext HS_PRIVATE_DIR=$WORK/priv
+EP=$HS_PRIVATE_DIR/hs-ext
+mkdir -p "$FIX$EP/Bad_Name" "$FIX$EP/svc2/sub" "$HS_EXT_STATE_DIR"; echo bad > "$FIX$EP/Bad_Name/x"; echo after-move > "$FIX$EP/svc2/data"; echo deep > "$FIX$EP/svc2/sub/f"
+ln -s "$EP/svc2" "$FIX$HS_EXT_STATE_DIR/svc2" 2>/dev/null || true       # restic keeps the link itself; find -type f never lists it
+out=$(b config restore --yes --with-state 2>&1)
+check "a name below the private root that is no package name is refused, not copied with cp" test ! -e "$EP/Bad_Name" -a ! -e "$HS_EXT_STATE_DIR/Bad_Name"
+check_eq "a fresh install gets the service state from the private root of the snapshot" "after-move deep" "$(cat "$HS_EXT_STATE_DIR/svc2/data" 2>/dev/null) $(cat "$HS_EXT_STATE_DIR/svc2/sub/f" 2>/dev/null)"
+check_eq "and the folder is closed (0700), made the way a moved one is" "700 700" "$(stat -c %a "$HS_EXT_STATE_DIR/svc2") $(stat -c %a "$HS_EXT_STATE_DIR/svc2/sub")"
+rm -rf "$HS_EXT_STATE_DIR/svc2"; mkdir -p "$EP/svc2/sub"; ln -s "$HS_EXT_STATE_DIR/svc2" "$HS_EXT_STATE_DIR/x" 2>/dev/null; rm -f "$HS_EXT_STATE_DIR/x"
+ln -s "$EP/svc2" "$HS_EXT_STATE_DIR/svc2"
+rm -rf "$EP/svc2/sub"; ln -s "$WORK/victimdir" "$EP/svc2/sub"; ln -s "$WORK/victim" "$EP/svc2/data"
+out=$(b config restore --yes --with-state 2>&1)
+check_eq "a link planted in the live service state: the file it points to is untouched" "victim" "$(cat "$WORK/victim")"
+check_eq "and the folder it points to got nothing" "" "$(ls "$WORK/victimdir")"
+check "the planted link at the file is replaced" sh -c "[ ! -L '$EP/svc2/data' ] && [ \"\$(cat '$EP/svc2/data')\" = after-move ]"
+rm -rf "$HS_EXT_STATE_DIR" "$EP"
+
+echo "-- an in-place restore never writes into the state of a service (the target and the path are canonicalised first)"
+: > "$FIX.calls"
+EXTP=$HS_EXT_STATE_DIR; mkdir -p "$EXTP"
+rm -rf "$ST/svc"; mkdir -p "$EP/svc2"; ln -s "$EP/svc2" "$ST/svc"
+for case_ in "// $ST/svc" "/. $ST/svc" "/./ $ST" "/ $WORK" "/ $(dirname "$WORK")" "/ $EP/svc2" "/ $EXTP" "/ $(dirname "$ST")/state/../state"; do
+  set -- $case_
+  out=$(b restore latest "$2" --tag host --to "$1" 2>&1 || true)
+  case $out in *"Not restored"*) pass "refused: --to $1 $2" ;; *) fail "not refused: --to $1 $2: $(echo "$out" | head -2)" ;; esac
+done
+check "restic was never started for them" test ! -s "$FIX.calls"
+out=$(b restore latest /srv/other --tag host --to / 2>&1 || true)
+case $out in *"Not restored in place"*) fail "an unrelated path was refused" ;; *) pass "a path outside the state roots is not refused by the guard" ;; esac
+rm -rf "$EXTP" "$EP"; rm -f "$ST/svc"
+
 echo "-- from-disk: a fresh install (no password file, no state)"
 export FIXPASS=typed-pass HS_RUN_DIR=$WORK
 rm -rf "$ST" "$NX"; mkdir -p "$NX" "$ST"

@@ -100,13 +100,14 @@ service could not emit, roll up, read an integration key or even start under the
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
 | `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
-| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; mapping only, no running service uses it yet, #1134) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, `BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name>` instead of the bridge state; `devices:gpu` adds `SupplementaryGroups=render video` |
-| dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: the state bind covers it); anything else is refused with `ext.dynamic-write` |
+| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, no `BindPaths` of the state (the unit uses it at `/var/lib/hs-ext/<name>`, `$STATE_DIRECTORY`); `devices:gpu` adds `SupplementaryGroups=render video` |
+| dynamic user, `fs.read:<path>` of server state or of another extension | refused with `ext.dynamic-read` |
+| dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: its StateDirectory covers it); anything else is refused with `ext.dynamic-write` |
 | no `permissions` | the "always" row only, plus a warning |
 
-What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the file system stays readable except the secret locations
+What it does NOT cover (say so wherever confinement is mentioned): the file system stays readable (for a service, which runs as its own user `hsx-<name>` since #1134, as far as the file modes allow; Not tested on hardware yet) except the secret locations
 (since #947: `/var/lib/hs` is an empty tmpfs apart from the granted `ext`, `ext-svc` and own-name (`/var/lib/hs/<package>`) state, `/root`, `/etc/shadow`, `/etc/gshadow`, `/etc/ssh` and `/etc/nixos` are inaccessible, and an `fs.read` or `fs.write` that overlaps them, or an `fs.write` below `/etc`, `/boot` or `/nix`, is refused; everything else is only read only); the network is open whatever `net` says; `host`, `secrets`
-and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
+and `events.*` are not systemd's business; no host socket is hidden (a service reaches what its user may open); the `ext.service-failed`
 event is written by the bridge, which is no longer confined (#1130). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the units are only evaluated in CI (#1130: the transient unit, `LoadCredential` and the stop of the transient unit by the bridge were not run),
 the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
 

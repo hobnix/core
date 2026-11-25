@@ -26,6 +26,13 @@ check_eq "a folder swapped for a link is not entered: what is below keeps its ow
 check_eq "a second run has nothing to do" "ok	0" "$($ES repair posters 2>&1)"
 chmod 0640 "$P/a"; $ES repair posters >/dev/null 2>&1
 check_eq "the mode is never changed" "640" "$(stat -c %a "$P/a")"
+# a second name of a file outside (a hard link): changing its owner would give the service that file
+echo shadow > "$WORK/outside/shadow"; chmod 0600 "$WORK/outside/shadow"; ln "$WORK/outside/shadow" "$P/hard"; echo c > "$P/c"
+if out=$($ES repair posters 2>&1); then fail "a hard link was not reported: $out"; else
+  case $out in *"second hard link"*"$P/hard") pass "a hard link is reported";; *) fail "text: $out";; esac; fi
+check_eq "the file behind the hard link keeps its owner" "0:0" "$(stat -c %u:%g "$WORK/outside/shadow")"
+check_eq "and the other files are still repaired" "$U:$G" "$(stat -c %u:%g "$P/c")"
+rm -f "$P/hard"
 chown 0:0 "$P"
 check_eq "a root-owned top is left to systemd" "ok	0" "$($ES repair posters 2>&1)"
 check_eq "and nothing below it changed" "$U:$G" "$(stat -c %u:%g "$P/a")"
