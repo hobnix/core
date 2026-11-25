@@ -72,6 +72,20 @@ def prepare(name):
         return None, "ext.state-move-failed: the state folder of %r could not be prepared (%s: %s)" % (name, e.filename, e.strerror)
 
 
+def _close(folder):
+    """The top folder of a state that is about to appear under /var/lib/hs-ext becomes 0700 (root). Until the first start systemd has not taken it over
+    (it makes it nobody:0700 then), and a root-owned 0755 folder would let every other dynamic user read the state. The files inside are not touched:
+    nothing below a 0700 folder is reachable for them. Opened without following a link; a failure is a problem, nothing is moved. Returns the mode it had (a failed move puts it back)."""
+    fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        mode = stat.S_IMODE(os.fstat(fd).st_mode)
+        if mode & 0o077:
+            os.fchmod(fd, 0o700)
+        return mode
+    finally:
+        os.close(fd)
+
+
 def _prepare(name):
     bad = _bad_name(name)
     if bad:
@@ -86,9 +100,11 @@ def _prepare(name):
     if os.path.isdir(old):
         if os.path.lexists(pub) or os.path.lexists(priv):
             return None, "ext.state-conflict: both %s and %s exist; nothing was moved" % (old, pub if os.path.lexists(pub) else priv)
+        was = _close(old)
         try:
             os.rename(old, pub)
         except OSError as e:
+            os.chmod(old, was)    # a failed move changes nothing
             if e.errno == errno.EXDEV:
                 return None, "ext.state-move-failed: %s is on another file system than %s; nothing was moved" % (old, pub)
             return None, "ext.state-move-failed: %s could not be moved to %s (%s); nothing was moved" % (old, pub, e.strerror)
@@ -99,6 +115,8 @@ def _prepare(name):
     if os.path.lexists(old):
         return None, "ext.state-conflict: %s is not a folder" % old
     # old is missing: finish a move that stopped after the rename, or this is a first start
+    if os.path.isdir(pub) and not os.path.islink(pub):
+        _close(pub)    # a folder left open by an earlier version or a restore: closed before the next start
     if os.path.lexists(pub) or os.path.lexists(priv):
         os.makedirs(os.path.dirname(old), exist_ok=True)
         os.symlink(pub, old)

@@ -14,19 +14,21 @@ setup() {   # fresh roots; the private folder is where the public path points to
 tree() { (cd "$1" && find . -printf '%p %y %m %s\n' 2>/dev/null | sort; find . -type f -exec cksum {} + 2>/dev/null | sort); }
 
 echo "-- the move"
-setup; mkdir -p "$R/hs/posters/sub"; echo data > "$R/hs/posters/a.png"; echo deep > "$R/hs/posters/sub/b"; chmod 0600 "$R/hs/posters/a.png"; chmod 0750 "$R/hs/posters/sub"
+setup; mkdir -p "$R/hs/posters/sub"; chmod 0755 "$R/hs/posters"; echo data > "$R/hs/posters/a.png"; echo deep > "$R/hs/posters/sub/b"; chmod 0600 "$R/hs/posters/a.png"; chmod 0750 "$R/hs/posters/sub"
 out=$($ES prepare posters 2>&1); check_eq "a real folder is moved" "moved	-" "$out"
 check_eq "the content is intact" "data deep" "$(cat "$R/ext/posters/a.png" "$R/ext/posters/sub/b" | tr '\n' ' ' | sed 's/ $//')"
 check_eq "the old path is a link to the new folder" "$R/ext/posters" "$(readlink "$R/hs/posters")"
 check_eq "modes are kept" "600 750" "$(stat -c %a "$R/ext/posters/a.png") $(stat -c %a "$R/ext/posters/sub")"
 check_eq "the owner is kept" "$(id -u)" "$(stat -c %u "$R/ext/posters/a.png")"
+check_eq "the moved folder is closed (0700) before systemd takes it over: no group or other access" "700" "$(stat -c %a "$R/ext/posters")"
 check_eq "a second run changes nothing" "ok	-" "$($ES prepare posters 2>&1)"
 check_eq "a third run too" "ok	-" "$($ES prepare posters 2>&1)"
 
 echo "-- a crash between the rename and the link"
-setup; mkdir -p "$R/ext/posters"; echo x > "$R/ext/posters/f"
+setup; mkdir -p "$R/ext/posters"; chmod 0755 "$R/ext/posters"; echo x > "$R/ext/posters/f"
 check_eq "old missing, new present: the link is made" "linked	-" "$($ES prepare posters 2>&1)"
 check_eq "the link points to the new folder" "$R/ext/posters" "$(readlink "$R/hs/posters")"
+check_eq "an open public folder is closed too (no group or other access)" "700" "$(stat -c %a "$R/ext/posters")"
 check_eq "and the next run is ok" "ok	-" "$($ES prepare posters 2>&1)"
 setup; mkdir -p "$R/private/hs-ext/posters"
 check_eq "only the private folder exists (systemd made it): linked" "linked	-" "$($ES prepare posters 2>&1)"
