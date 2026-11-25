@@ -1,0 +1,2 @@
+# Who may sign the package index of hobnix/community (ssh-keygen allowed-signers format, namespace hobnix-index). The private key is only in the secret INDEX_SIGNING_KEY of the environment index-signing of hobnix/community (main only), separate from the official key. Rotation: add the new key, merge, let servers run hs update, switch the CI secret, remove the old line later.
+index-ci-community namespaces="hobnix-index" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICpYsNb1kRnh76GhDhtbfIZKSOgnyR7jeJlrsBG/cihS
