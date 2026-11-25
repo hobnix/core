@@ -28,6 +28,8 @@ eq('the Apps page prefetches the versions', readsFor('/node/homeserver/apps/inst
 eq('the old Apps address prefetches nothing', readsFor('/instances/apps'), []);
 
 
+eq('a Docker app page prefetches the apps, the Docker state and the recipes', readsFor('/node/hs/apps/docker-app/arr/logs'), ['/api/sys/docker/apps', '/api/sys/docker/status', '/api/sys/recipes/list']);
+
 eq('inner path strips node and query', innerPath('/node/homeserver/storage/bulk/disks?pool=bulk'), '/storage/bulk/disks');
 eq('inner path of a node root', innerPath('/node/homeserver'), '/');
 eq('inner path of a plain path', innerPath('/instances'), '/instances');

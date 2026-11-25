@@ -39,6 +39,20 @@ export function applyOf(a) {
 // Unmanaged rows are read-only: no start, stop, restart, pull, edit
 export const isActionable = (a) => !!a && a.managed !== 'unmanaged';
 
+// The tab ids of one app (quick look and app page): the compose file is edited only for a web-managed app, an unmanaged one has neither editor nor Compose log.
+export function pageTabs(a) {
+  if (a?.managed === 'unmanaged') return ['overview'];
+  return a?.managed === 'web' ? ['overview', 'compose', 'logs'] : ['overview', 'logs'];
+}
+
+// The actions of the app page by weight: the first is the primary one of the header, the next the secondary one, the rest go into the menu.
+// Delete is not here: it is in the danger section (web-managed apps only).
+export function headerActions(a) {
+  if (!isActionable(a)) return [];
+  const power = ['exited', 'created', 'stopped'].includes(a.state) ? ['start'] : a.state === 'running' || a.state === 'partial' ? ['stop'] : [];
+  return [...(applyOf(a).show ? ['apply'] : []), ...power, 'restart', 'pull', ...(a.managed === 'web' ? ['rebuild'] : [])];
+}
+
 // The revision line of `docker rev <app>` ({ text } answer of the read), '' when unknown
 export const revOf = (d) => String(d?.text ?? '').trim();
 
