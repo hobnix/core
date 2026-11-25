@@ -210,7 +210,7 @@ cat > "$CF/systemd-run" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$CF_LOG"
 if [ -L "$HS_STATE_DIR/fixconf" ]; then echo link; elif [ -d "$HS_STATE_DIR/fixconf" ]; then echo folder; else echo missing; fi > "$CF_LOG.old"
-if [ ! -e "$HS_EXT_STATE_DIR/fixconf" ]; then mkdir -p "$HS_PRIVATE_DIR/hs-ext/fixconf" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/hs-ext/fixconf" "$HS_EXT_STATE_DIR/fixconf"; fi
+if [ ! -e "$HS_EXT_STATE_DIR/fixconf" ]; then mkdir -p "$HS_PRIVATE_DIR/ext-hs/fixconf" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/ext-hs/fixconf" "$HS_EXT_STATE_DIR/fixconf"; fi
 while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
 shift
 exec "$@"
@@ -250,13 +250,13 @@ expect="--pipe
 --property=PrivateDevices=yes
 --property=DynamicUser=yes
 --property=User=hsx-fixconf
---property=StateDirectory=hs-ext/fixconf
+--property=StateDirectory=ext-hs/fixconf
 --property=StateDirectoryMode=0700
 --property=UMask=0077
 --property=ProtectProc=invisible
 --property=TemporaryFileSystem=/var/lib/hs:ro
 --property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
---property=BindPaths=-/var/lib/hs-ext/fixconf:/var/lib/hs/fixconf
+--property=BindPaths=-/var/lib/ext-hs/fixconf:/var/lib/hs/fixconf
 --property=ReadOnlyPaths=-/etc/hs
 --
 python3
@@ -300,7 +300,7 @@ check_out "the reason is said" "ext.state-conflict" printf '%s' "$err"
 fresh_state; mkdir -p "$CF/victim"; ln -s "$CF/victim" "$CF/state/fixconf"; confrun
 check_eq "a state path that links somewhere else: refused, link kept" "69 no $CF/victim" "$rc $(ran) $(readlink "$CF/state/fixconf")"
 fresh_state; mkdir -p "$CF/state/fixconf"
-for p in /srv/ok /var/lib/hs/ext-svc /var/lib/hs/other /var/lib/hs-ext/other /var/lib/private /var/lib/hs /etc; do
+for p in /srv/ok /var/lib/hs/ext-svc /var/lib/hs/other /var/lib/ext-hs/other /var/lib/private /var/lib/hs /etc; do
   confperms "\"fs.write:$p\""; confrun
   check_eq "fs.write:$p is refused (69), not run" "69 no" "$rc $(ran)"
 done
