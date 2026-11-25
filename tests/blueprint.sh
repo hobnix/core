@@ -400,4 +400,28 @@ check_eq "a tab in a setting key: every part line of the plan has 6 columns" "" 
 check_eq "and no line of its own comes out of it" 0 "$(grep -c '^confirm_name' <<<"$out")"
 check_eq "C1 and U+2028 in a field are one line with spaces" 1 "$(grep -c 'confirm_name x y z' <<<"$out")"
 
+echo "-- a blueprint without permissions (repo-check, index build, index validate)"
+BR=$WORK/bpr; mkdir -p "$BR/blueprints/bp"
+printf '[package.bp]
+version = "1.0.0"
+kind = "blueprint"
+path = "blueprints/bp"
+requires_core = ">=11"
+' > "$BR/index.toml"
+printf 'name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+recipes = []
+' > "$BR/blueprints/bp/package.toml"
+check "repo-check does not ask a blueprint for permissions" python3 -I "$SCRIPTS/pkg.py" repo-check "$BR"
+check "index build takes it" python3 -I "$SCRIPTS/lib/pkg_index.py" build "$BR" --repo official --out "$WORK/bpo" --serial 1 --skip-assets --commit 0123456789abcdef0123456789abcdef01234567
+check "index validate takes it" python3 -I "$SCRIPTS/lib/pkg_index.py" validate "$WORK/bpo/index.json"
+printf 'permissions = []
+' >> "$BR/blueprints/bp/package.toml"
+check_out "and the key stays refused in a blueprint" "permissions is not" python3 -I "$SCRIPTS/pkg.py" repo-check "$BR"
+
 finish
