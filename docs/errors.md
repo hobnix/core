@@ -296,6 +296,14 @@ A compiled program, or a non-script service exec, is started from a package with
 - Text: This package starts a program that has no declared hash.
 - Fix: none
 
+### binary.sdk-pin
+
+repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z).
+
+- Layer: script
+- Text: This package is not ready for a release: its extension SDK is not pinned to a core release.
+- Fix: none
+
 ### code.unknown
 
 A pairing code is not known: wrong, already used, expired, or the server name is taken by another server (one answer for all of them, POST /api/remote/claim).
@@ -2670,6 +2678,1094 @@ The ref or repository is not a branch, tag or commit of a Hobnix repository.
 
 - Layer: script
 - Text: That ref or repository is not accepted.
+- Fix: none
+
+### pkg.value-missing
+
+An option or the address of a repository was given without its value.
+
+- Layer: script
+- Text: A value is missing.
+- Fix: none
+
+### pkg.draft-readonly
+
+A start was asked for a package draft, which is only checked.
+
+- Layer: script
+- Text: A draft is only checked, nothing is started.
+- Fix: none
+
+### pkg.draft-unchecked
+
+The check of a package draft did not run.
+
+- Layer: script
+- Text: The draft could not be checked.
+- Fix: none
+
+### pkg.draft-invalid
+
+A package draft has problems.
+
+- Layer: script
+- Text: The draft has problems.
+- Fix: none
+
+### pkg.unknown
+
+No repository offers a package of this name.
+
+- Layer: script
+- Text: There is no such package in the repositories.
+- Fix: none
+
+### pkg.installed
+
+Install was asked for a package that is installed already.
+
+- Layer: script
+- Text: The package is installed already.
+- Fix: none
+
+### pkg.not-installed
+
+The package is not installed from a repository.
+
+- Layer: script
+- Text: The package is not installed.
+- Fix: none
+
+### pkg.up-to-date
+
+Update was asked for a package that has no newer release.
+
+- Layer: script
+- Text: The package is up to date.
+- Fix: none
+
+### pkg.core
+
+Remove was asked for a core package.
+
+- Layer: script
+- Text: A core package is not removed.
+- Fix: none
+
+### pkg.remove-refused
+
+The dry run of the removal refused it.
+
+- Layer: script
+- Text: The package cannot be removed now.
+- Fix: none
+
+### pkg.repo-unknown
+
+No repository has this name.
+
+- Layer: script
+- Text: There is no repository with this name.
+- Fix: none
+
+### pkg.repo-exists
+
+A repository of this name exists already.
+
+- Layer: script
+- Text: That name is taken already.
+- Fix: none
+
+### pkg.repo-url-invalid
+
+The address of the repository is not in an allowed form.
+
+- Layer: script
+- Text: The address of the repository is not valid.
+- Fix: none
+
+### pkg.repo-default
+
+Remove was asked for a default repository.
+
+- Layer: script
+- Text: A default repository stays.
+- Fix: none
+
+### pkg.key-invalid
+
+The public signing key of the repository is missing or is not an SSH public key.
+
+- Layer: script
+- Text: An SSH public key is needed.
+- Fix: none
+
+### pkg.repo-add-failed
+
+The repository could not be added.
+
+- Layer: script
+- Text: The repository could not be added.
+- Fix: none
+
+### pkg.repo-unreadable
+
+No signed release could be read from a new repository with the given key.
+
+- Layer: script
+- Text: No signed release could be read, so the repository was not kept.
+- Fix: none
+
+### pkg.action-failed
+
+The package command failed.
+
+- Layer: script
+- Text: The action on the package failed.
+- Fix: none
+
+### pkg.storage-locked
+
+The storage is locked, so the rebuild would refuse.
+
+- Layer: script
+- Text: The storage is locked.
+- Fix: none
+
+### pkg.no-network
+
+The step needs the network and it is down.
+
+- Layer: script
+- Text: This needs the network.
+- Fix: none
+
+### pkg.nothing-to-do
+
+Every package that was asked for is installed and on already.
+
+- Layer: script
+- Text: There is nothing to do.
+- Fix: none
+
+### pkg.require-circle
+
+Packages require each other in a circle.
+
+- Layer: script
+- Text: The packages require each other in a circle.
+- Fix: none
+
+### pkg.ambiguous
+
+A package is in more than one repository.
+
+- Layer: script
+- Text: The package is in more than one repository.
+- Fix: none
+
+### pkg.added-repo
+
+A package of an added repository is not installed together with others.
+
+- Layer: script
+- Text: Install this package from the Marketplace.
+- Fix: none
+
+### pkg.role-part
+
+A required part follows the role of the server and is not switched by hand.
+
+- Layer: script
+- Text: A required part follows the role of this server.
+- Fix: none
+
+### pkg.require-missing
+
+A required part is neither on the server nor offered by a repository.
+
+- Layer: script
+- Text: A required part is not available.
+- Fix: none
+
+### blueprint.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### blueprint.unreadable
+
+The blueprint does not exist, cannot be read or has problems.
+
+- Layer: script
+- Text: The blueprint cannot be used.
+- Fix: none
+
+### blueprint.role
+
+The blueprint is not made for the role of this server.
+
+- Layer: script
+- Text: This blueprint is for another role.
+- Fix: none
+
+### blueprint.storage-locked
+
+The storage is locked, so the rebuild would refuse.
+
+- Layer: script
+- Text: The storage is locked.
+- Fix: none
+
+### blueprint.no-network
+
+The step needs the network and it is down.
+
+- Layer: script
+- Text: This needs the network.
+- Fix: none
+
+### blueprint.docker-refused
+
+The plan to turn Docker on refused.
+
+- Layer: script
+- Text: Docker cannot be turned on.
+- Fix: none
+
+### blueprint.needs-docker
+
+An app of the blueprint needs Docker, which is off and not part of the blueprint.
+
+- Layer: script
+- Text: An app of the blueprint needs Docker.
+- Fix: none
+
+### blueprint.confirm-unknown
+
+A typed name was given that the plan does not ask for.
+
+- Layer: script
+- Text: The plan does not ask for that name.
+- Fix: none
+
+### apps.usage
+
+The command to retry, clean up or remove an app was called without its arguments.
+
+- Layer: script
+- Text: The command is missing arguments.
+- Fix: none
+
+### apps.job-only
+
+A step that only runs as a job body was called directly.
+
+- Layer: script
+- Text: This step only runs as a job.
+- Fix: none
+
+### apps.job-not-failed
+
+Retry or clean up was asked for a job that did not fail.
+
+- Layer: script
+- Text: This job did not fail.
+- Fix: none
+
+### apps.no-failed-step
+
+The job has no failed step to retry or clean up.
+
+- Layer: script
+- Text: The job has no failed step. Install again from the start.
+- Fix: none
+
+### apps.record-invalid
+
+The job record names no usable app or an unknown step.
+
+- Layer: script
+- Text: The record of the job cannot be used.
+- Fix: none
+
+### apps.other-run
+
+The app was installed by another run, so a clean-up could delete a working app.
+
+- Layer: script
+- Text: Another run installed this app. Use Remove for it.
+- Fix: none
+
+### apps.no-created-record
+
+There is no record of what the install created.
+
+- Layer: script
+- Text: There is no record of what the install created.
+- Fix: none
+
+### apps.part-owned
+
+The app belongs to a part and is removed by switching that part off.
+
+- Layer: script
+- Text: This app belongs to a part. Switch that part off.
+- Fix: none
+
+### apps.nothing-to-remove
+
+Nothing is listed for the app.
+
+- Layer: script
+- Text: There is nothing to remove.
+- Fix: none
+
+### job.id-invalid
+
+The argument is not a job id.
+
+- Layer: script
+- Text: That is not a job id.
+- Fix: none
+
+### job.record-unreadable
+
+The record of the job cannot be read.
+
+- Layer: script
+- Text: The job record cannot be read.
+- Fix: none
+
+### job.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### job.value-invalid
+
+The value of an option of an answer is not in the allowed form.
+
+- Layer: script
+- Text: A value is not valid.
+- Fix: none
+
+### job.no-question
+
+An answer was given to a job that does not ask questions.
+
+- Layer: script
+- Text: This job does not ask questions.
+- Fix: none
+
+### job.answer-forbidden
+
+Someone who neither started the run nor is an administrator tried to answer.
+
+- Layer: script
+- Text: Only the person who started this run, or an administrator, may answer.
+- Fix: none
+
+### job.answer-invalid
+
+The answer does not fit the question.
+
+- Layer: script
+- Text: The answer does not fit the question.
+- Fix: none
+
+### disk.recovering
+
+The disk is out of the pool for a recovery.
+
+- Layer: script
+- Text: The disk is out of the pool for a recovery.
+- Fix: none
+
+### disk.already-detached
+
+The disk is detached already.
+
+- Layer: script
+- Text: The disk is detached already.
+- Fix: none
+
+### disk.not-mounted
+
+The disk is not mounted.
+
+- Layer: script
+- Text: The disk is not mounted.
+- Fix: none
+
+### disk.last-data-disk
+
+No other data disk would keep the pool running.
+
+- Layer: script
+- Text: This is the last data disk of the pool in use.
+- Fix: none
+
+### disk.not-detached
+
+Attach was asked for a disk that is not detached.
+
+- Layer: script
+- Text: The disk is not detached.
+- Fix: none
+
+### disk.mount-failed
+
+The disk could not be mounted.
+
+- Layer: script
+- Text: The disk could not be mounted.
+- Fix: none
+
+### disk.value-missing
+
+An option or the thing to move was not given.
+
+- Layer: script
+- Text: A value is missing.
+- Fix: none
+
+### disk.target-invalid
+
+--to does not name a data disk.
+
+- Layer: script
+- Text: The target is a data disk.
+- Fix: none
+
+### disk.path-invalid
+
+The path on the disk is not allowed.
+
+- Layer: script
+- Text: The path is not allowed.
+- Fix: none
+
+### disk.path-missing
+
+There is no such folder or file on the disk.
+
+- Layer: script
+- Text: There is no such path on the disk.
+- Fix: none
+
+### disk.target-same
+
+The target is the disk the files are on.
+
+- Layer: script
+- Text: The target is the same disk.
+- Fix: none
+
+### disk.target-closed
+
+The target disk is closed and takes no new files.
+
+- Layer: script
+- Text: The target disk takes no new files.
+- Fix: none
+
+### disk.target-unmounted
+
+The target disk is not mounted or is out for a recovery.
+
+- Layer: script
+- Text: The target disk is not available.
+- Fix: none
+
+### disk.no-target
+
+No other data disk can take the files.
+
+- Layer: script
+- Text: No other data disk can take the files.
+- Fix: none
+
+### disk.target-full
+
+The target disk has not enough room.
+
+- Layer: script
+- Text: The target disk has not enough room.
+- Fix: none
+
+### disk.types-invalid
+
+--types is not media or all.
+
+- Layer: script
+- Text: The types are media or all.
+- Fix: none
+
+### disk.recovery-running
+
+The recovery of the disk is still running.
+
+- Layer: script
+- Text: The recovery is still running.
+- Fix: none
+
+### disk.tool-missing
+
+A program the step needs is not installed.
+
+- Layer: script
+- Text: A program this step needs is not installed.
+- Fix: none
+
+### docker.args-missing
+
+The command did not get what it needs.
+
+- Layer: script
+- Text: The command is missing arguments.
+- Fix: none
+
+### docker.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### docker.remote-read-only
+
+A remote share is read only and takes no --as.
+
+- Layer: script
+- Text: A remote share is read only.
+- Fix: none
+
+### docker.value-invalid
+
+The value of a Docker setting is not one of the allowed ones.
+
+- Layer: script
+- Text: The value is not valid.
+- Fix: none
+
+### docker.key-unknown
+
+Only the Docker settings of the setup can be set here.
+
+- Layer: script
+- Text: This setting cannot be set here.
+- Fix: none
+
+### docker.already-on
+
+Docker is on already.
+
+- Layer: script
+- Text: Docker is on already.
+- Fix: none
+
+### gateway.set-invalid
+
+--set is not key=value.
+
+- Layer: script
+- Text: --set needs key=value.
+- Fix: none
+
+### gateway.key-unknown
+
+The key is not a setting of the gateway setup.
+
+- Layer: script
+- Text: This is not a gateway setting.
+- Fix: none
+
+### gateway.key-twice
+
+A setting was given twice.
+
+- Layer: script
+- Text: A setting was given twice.
+- Fix: none
+
+### gateway.nothing-to-change
+
+No setting to change was given.
+
+- Layer: script
+- Text: There is nothing to change.
+- Fix: none
+
+### gateway.value-invalid
+
+The value does not fit the setting.
+
+- Layer: script
+- Text: The value does not fit this setting.
+- Fix: none
+
+### gateway.not-scalar
+
+The setting is a list or a table and is edited on the server.
+
+- Layer: script
+- Text: Edit this setting in machine.toml on the server.
+- Fix: none
+
+### gateway.unchanged
+
+The gateway has these values already.
+
+- Layer: script
+- Text: Nothing changes.
+- Fix: none
+
+### gateway.port-conflict
+
+The ports of the gateway clash with each other or with the server.
+
+- Layer: script
+- Text: The ports clash.
+- Fix: none
+
+### gateway.tunnel-from-missing
+
+A tunnel port is set without the address the tunnel comes from.
+
+- Layer: script
+- Text: The address the tunnel comes from is missing.
+- Fix: none
+
+### gateway.acme-invalid
+
+The certificate settings do not fit together.
+
+- Layer: script
+- Text: The certificate settings are not valid.
+- Fix: none
+
+### gateway.certificate-needed
+
+The chosen answer for unknown hosts needs a certificate.
+
+- Layer: script
+- Text: This needs a certificate.
+- Fix: none
+
+### gateway.write-failed
+
+A file of the gateway setup could not be written.
+
+- Layer: script
+- Text: A file could not be written.
+- Fix: none
+
+### gateway.check-failed
+
+The change would break machine.toml.
+
+- Layer: script
+- Text: The change would break machine.toml.
+- Fix: none
+
+### gateway.rebuild-failed
+
+The rebuild failed and the files were put back.
+
+- Layer: script
+- Text: The rebuild failed.
+- Fix: none
+
+### migrate.no-pool
+
+No pool for data was found.
+
+- Layer: script
+- Text: No pool for data was found.
+- Fix: none
+
+### migrate.not-snapraid
+
+Unraid disks are only adopted into a SnapRAID pool.
+
+- Layer: script
+- Text: This pool cannot take disks from Unraid.
+- Fix: none
+
+### migrate.disk-not-free
+
+The name is not a free disk of the server.
+
+- Layer: script
+- Text: That is not a free disk.
+- Fix: none
+
+### migrate.disk-unusable
+
+The disk holds no file system, or one that cannot be adopted.
+
+- Layer: script
+- Text: This disk cannot be adopted.
+- Fix: none
+
+### migrate.disk-twice
+
+A disk was named twice or in two roles.
+
+- Layer: script
+- Text: A disk was named twice.
+- Fix: none
+
+### migrate.parity-not-empty
+
+The disk named as old parity holds a file system.
+
+- Layer: script
+- Text: That is not an Unraid parity disk.
+- Fix: none
+
+### migrate.disk-too-small
+
+The parity or spare disk is smaller than the largest data disk.
+
+- Layer: script
+- Text: The disk is too small.
+- Fix: none
+
+### migrate.passphrase-missing
+
+The passphrase of the Unraid disks was not given.
+
+- Layer: script
+- Text: The passphrase is missing.
+- Fix: none
+
+### pool.not-recorded
+
+The server has no pools line yet.
+
+- Layer: script
+- Text: The pools of this server are not recorded yet.
+- Fix: none
+
+### pool.already-imported
+
+The pool is imported already.
+
+- Layer: script
+- Text: The pool is imported already.
+- Fix: none
+
+### pool.is-array
+
+The name is the SnapRAID pool of the server.
+
+- Layer: script
+- Text: That is the SnapRAID pool of this server.
+- Fix: none
+
+### pool.not-waiting
+
+No pool of this name waits to be imported.
+
+- Layer: script
+- Text: No such pool is waiting to be imported.
+- Fix: none
+
+### pool.name-ambiguous
+
+Two pools have the same name.
+
+- Layer: script
+- Text: Two pools have this name.
+- Fix: none
+
+### pool.damaged
+
+The pool is damaged and is not imported.
+
+- Layer: script
+- Text: The pool is damaged.
+- Fix: none
+
+### pool.foreign
+
+The pool was last used by another system and is never forced.
+
+- Layer: script
+- Text: The pool was last used by another system.
+- Fix: none
+
+### pool.disk-not-whole
+
+A disk of the pool is not a whole disk of this server.
+
+- Layer: script
+- Text: A disk of the pool is not a whole disk.
+- Fix: none
+
+### pool.disk-not-free
+
+The disk is not a free disk of the pool.
+
+- Layer: script
+- Text: That is not a free disk of the pool.
+- Fix: none
+
+### pool.apps-unsupported
+
+Importing an apps pool is not built yet.
+
+- Layer: script
+- Text: An apps pool cannot be imported yet.
+- Fix: none
+
+### pool.mountpoint-used
+
+The folder of the pool already holds files on the system disk.
+
+- Layer: script
+- Text: The folder of the pool is not empty.
+- Fix: none
+
+### pool.use-invalid
+
+--use is not data or apps.
+
+- Layer: script
+- Text: The use is data or apps.
+- Fix: none
+
+### preset.unknown
+
+No preset has this name.
+
+- Layer: script
+- Text: There is no preset with this name.
+- Fix: none
+
+### preset.apply-failed
+
+The preset could not be applied.
+
+- Layer: script
+- Text: The preset could not be applied.
+- Fix: none
+
+### preset.unreadable
+
+The preset could not be read.
+
+- Layer: script
+- Text: The preset could not be read.
+- Fix: none
+
+### fm.capability-off
+
+The file manager needs the capability storage.
+
+- Layer: script
+- Text: The file manager is not available on this server.
+- Fix: none
+
+### fm.usage
+
+The command of the file manager was called without its arguments.
+
+- Layer: script
+- Text: The command is missing arguments.
+- Fix: none
+
+### fm.path-invalid
+
+The path is not allowed or leaves the location.
+
+- Layer: script
+- Text: The path is not allowed.
+- Fix: none
+
+### fm.folder-missing
+
+There is no such folder.
+
+- Layer: script
+- Text: There is no such folder.
+- Fix: none
+
+### fm.protected
+
+The folder or file belongs to the array.
+
+- Layer: script
+- Text: This belongs to the array and cannot be used.
+- Fix: none
+
+### fm.value-missing
+
+An option or a needed argument was not given.
+
+- Layer: script
+- Text: A value is missing.
+- Fix: none
+
+### fm.value-invalid
+
+The value of an option is not in the allowed form.
+
+- Layer: script
+- Text: A value is not valid.
+- Fix: none
+
+### fm.option-misplaced
+
+The option does not belong to this operation.
+
+- Layer: script
+- Text: That option does not belong to this action.
+- Fix: none
+
+### fm.selection-invalid
+
+The selection that was sent cannot be used.
+
+- Layer: script
+- Text: The selection is not valid.
+- Fix: none
+
+### fm.nothing-selected
+
+Nothing is selected.
+
+- Layer: script
+- Text: Nothing is selected.
+- Fix: none
+
+### fm.not-in-trash
+
+The item is not in the trash, or its origin is not known.
+
+- Layer: script
+- Text: The item cannot be restored from the trash.
+- Fix: none
+
+### fm.in-trash
+
+The folder is the trash, which is changed with restore only.
+
+- Layer: script
+- Text: That is the trash. Use restore.
+- Fix: none
+
+### fm.one-location
+
+The operation works inside one location only.
+
+- Layer: script
+- Text: This works inside one location only.
+- Fix: none
+
+### fm.read-only
+
+The location does not take this change.
+
+- Layer: script
+- Text: This location cannot be changed this way.
+- Fix: none
+
+### fm.exists
+
+Something of that name exists already.
+
+- Layer: script
+- Text: That name is taken already.
+- Fix: none
+
+### fm.item-missing
+
+There is no such item.
+
+- Layer: script
+- Text: There is no such item.
+- Fix: none
+
+### fm.item-unreadable
+
+The item cannot be read.
+
+- Layer: script
+- Text: The item cannot be read.
+- Fix: none
+
+### fm.link
+
+Links are not copied or moved.
+
+- Layer: script
+- Text: Links are not copied or moved.
+- Fix: none
+
+### fm.is-share
+
+The folder is a share, which has its own rules.
+
+- Layer: script
+- Text: This is a share.
+- Fix: none
+
+### fm.target-invalid
+
+The target does not fit the selection.
+
+- Layer: script
+- Text: The target does not fit.
+- Fix: none
+
+### fm.overwrite-move
+
+Overwrite is refused together with move.
+
+- Layer: script
+- Text: Overwrite is not offered for a move.
+- Fix: none
+
+### fm.no-room
+
+The target has not enough free room.
+
+- Layer: script
+- Text: There is not enough room at the target.
+- Fix: none
+
+### fm.busy
+
+Another job works on the location or holds the lock of the pool.
+
+- Layer: script
+- Text: Another job is running. Try again when it is done.
+- Fix: none
+
+### fm.write-off
+
+The file manager is read only until writing is allowed.
+
+- Layer: script
+- Text: The file manager is read only.
+- Fix: none
+
+### fm.state-unwritable
+
+The state folder of the file manager is not writable.
+
+- Layer: script
+- Text: The file manager cannot write its state.
 - Fix: none
 
 <!-- END generated -->

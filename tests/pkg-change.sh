@@ -138,6 +138,26 @@ check_out "an orphan without recorded provenance has a remove plan" "^step${tab}
 check_out "an orphan without recorded provenance can be removed" "^status${tab}done" $C start remove corer
 check "the orphan's files are gone" test ! -e "$HS_STATE_DIR/packages/current/corer"
 check "the orphan's record is gone" bash -c "! grep -q '^\\[package.corer\\]' '$HS_STATE_DIR/packages/installed.toml'"
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code${tab}$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+coded "a bad package name" name.invalid "$($C plan install 'A b' 2>&1)"
+coded "an unknown package" pkg.unknown "$($C plan install nope 2>&1)"
+coded "an unknown repository" pkg.repo-unknown "$($C plan repo-remove nosuchrepo 2>&1)"
+echo "-- a coded refusal of pkg.sh keeps its reason and its code"
+cat > "$WORK/pkg-coded.sh" <<'STUB'
+case "$1" in
+  --market) printf 'demo\trecipe\tofficial\t1.0.0\t-\tnew\tno\tgeneric\tDemo\n' ;;
+  --repos) printf 'official\turl\tsigned\tdefault\n' ;;
+  install) printf 'some terminal output\nstatus\trefused\nreason\tdemo: its commands clash\ncode\tpkg.rows\n'; exit 1 ;;
+esac
+STUB
+out=$(HS_PKG="$WORK/pkg-coded.sh" $C start install demo 2>&1)
+check_eq "exactly the lines of pkg.sh, nothing else" "status${tab}refused|reason${tab}demo: its commands clash|code${tab}pkg.rows" "$(paste -sd'|' <<<"$out")"
+sed -i "s/^  install) .*/  install) echo 'it broke'; exit 1 ;;/" "$WORK/pkg-coded.sh"
+out=$(HS_PKG="$WORK/pkg-coded.sh" $C start install demo 2>&1)
+check_eq "a failure without a code keeps the last line as reason" "status${tab}refused|reason${tab}it broke|code${tab}pkg.action-failed" "$(paste -sd'|' <<<"$out")"
 echo "-- checking a package draft (the web package builder)"
 GOODDRAFT=$'name = "demo2"\nversion = "0.1.0"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = ">=1"\nscript = "run.sh"\n'
 check_out "a good draft is ok" "^status${tab}ok" bash -c "printf '%s' '$GOODDRAFT' | $C plan check-draft"

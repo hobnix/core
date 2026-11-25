@@ -123,8 +123,14 @@ check_eq "no confirm_name for an official blueprint without a docker name" 0 "$(
 echo "-- plan: refusals"
 run plan apply nosuch;  if [ "$rc" = 1 ] && has "No blueprint called"; then pass "unknown blueprint refused"; else fail "nosuch: $out"; fi
 run plan apply hostile
-check_eq "a hostile message is one status line and one reason line" 2 "$(printf '%s\n' "$out" | wc -l)"
+check_eq "a hostile message is one status, one reason and one code line" 3 "$(printf '%s\n' "$out" | wc -l)"
 check_eq "and no control, C1 or U+2028 byte is left in it" 0 "$(printf '%s' "$out" | LC_ALL=C grep -c -E $'\xc2[\x80-\x9f]|\xe2\x80[\xa8\xa9]|\x1b' || true)"
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code${tab}$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+run plan apply bad;     coded "a blueprint with problems" blueprint.unreadable "$out"
+run plan apply nodocker; coded "an app without Docker" blueprint.needs-docker "$out"
 run plan apply bad;     if [ "$rc" = 1 ] && has "Docker is the core capability"; then pass "a blueprint with problems is refused with them"; else fail "bad: $out"; fi
 run plan apply edge;    if [ "$rc" = 1 ] && has "role"; then pass "a role that does not fit is refused"; else fail "edge: $out"; fi
 run plan apply 'A b';   if [ "$rc" = 1 ]; then pass "a bad name is refused"; else fail "bad name: $out"; fi
@@ -386,7 +392,7 @@ open(sys.argv[2], "w", encoding="utf-8").write("\n".join("error\t" + x for x in 
 PY
 check_eq "the real reader's refusal of a tab in a key: only error lines, two columns each" "error 2" "$(awk -F'\t' '{ if ($1 != "error" || NF != 2) bad = 1; n++ } END { print (bad ? "bad" : "error"), (n ? 2 : 0) }' "$WORK/bp/realhostile")"
 run plan apply realhostile
-check_eq "a plan on that hostile manifest is refused: a status line and a reason line, nothing else" "status${tab}refused|reason" "$(printf '%s\n' "$out" | awk -F'\t' '{ printf "%s%s", (NR > 1 ? "|" : ""), ($1 == "status" ? $1 FS $2 : $1) }')"
+check_eq "a plan on that hostile manifest is refused: a status, a reason and a code line, nothing else" "status${tab}refused|reason|code" "$(printf '%s\n' "$out" | awk -F'\t' '{ printf "%s%s", (NR > 1 ? "|" : ""), ($1 == "status" ? $1 FS $2 : $1) }')"
 check_eq "and it is not a plan" 0 "$(grep -c '^part' <<<"$out")"
 # defence in depth: a stub that bypasses the reader's checks still cannot add a column or a line to the plan
 run plan apply hostile2

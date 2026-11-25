@@ -26,7 +26,7 @@ rawpool=${HS_RAW_POOL:-/mnt/bulk/pool}
 bulkmount=${HS_BULK_MOUNT:-$here/bulk-mount.sh}
 testmode=${HS_DETACH_TEST:-0}
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 ismnt() { if [ "$testmode" = 1 ]; then [ -d "$1" ]; else mountpoint -q "$1" 2>/dev/null; fi; }
 
 # marks: what is out of the pool by hand, for the interface: member, detached|recovering, since (epoch seconds)
@@ -38,32 +38,32 @@ fi
 
 verb=${1:-}; action=${2:-}; member=${3:-}
 case "$verb" in plan|start|run) ;; *) echo "usage: disk-detach.sh run|plan|start detach|attach <member>" >&2; exit 1 ;; esac
-case "$action" in detach|attach) ;; *) refuse "unknown action (detach or attach)" ;; esac
+case "$action" in detach|attach) ;; *) refuse_code action.unknown "unknown action (detach or attach)" ;; esac
 [ $# -ge 3 ] && shift 3 || shift $#
-[[ "$member" =~ ^data-[0-9]+$ ]] || refuse "that is not a data disk of the array (data-NN)"
+[[ "$member" =~ ^data-[0-9]+$ ]] || refuse_code disk.not-data-disk "that is not a data disk of the array (data-NN)"
 confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
 dir=$(disk_dir "$member")          # where a disk of the pool is mounted
 ddir=$(detached_dir "$member")     # where a detached disk is mounted
 mark=$detdir/$member
-[ ! -e "$recdir/$member" ] || refuse "$member is out of the pool for a recovery (hs sys disk start $member recover-finish gives it back)."
+[ ! -e "$recdir/$member" ] || refuse_code disk.recovering "$member is out of the pool for a recovery (hs sys disk start $member recover-finish gives it back)."
 
 if [ "$action" = detach ]; then
-  [ ! -e "$mark" ] || refuse "$member is detached already."
-  ismnt "$dir" || refuse "$member is not mounted (is the disk there and unlocked?)."
+  [ ! -e "$mark" ] || refuse_code disk.already-detached "$member is detached already."
+  ismnt "$dir" || refuse_code disk.not-mounted "$member is not mounted (is the disk there and unlocked?)."
   others=0
   for d in "$(disks_root)"/data-*; do
     n=${d##*/}; [ -d "$d" ] && [ "$n" != "$member" ] && [ ! -e "$detdir/$n" ] && [ ! -e "$recdir/$n" ] && ismnt "$d" && others=$((others + 1))
   done
-  [ "$others" -gt 0 ] || refuse "no other data disk would keep /bulk running."
+  [ "$others" -gt 0 ] || refuse_code disk.last-data-disk "no other data disk would keep /bulk running."
 else
-  [ -e "$mark" ] || refuse "$member is not detached."
+  [ -e "$mark" ] || refuse_code disk.not-detached "$member is not detached."
 fi
 
 plan_lines() {
@@ -97,7 +97,7 @@ if [ "$verb" = run ]; then
 fi
 
 # ---- start ----
-if [ "$action" = detach ] && [ "$confirm" != "$member" ]; then refuse "type the name to confirm: $member"; fi
+if [ "$action" = detach ] && [ "$confirm" != "$member" ]; then refuse_code confirm.missing "type the name to confirm: $member"; fi
 . "$here/lib/bulklock.sh"
 bulk_lock_admin 60
 mkdir -p "$detdir"
@@ -113,10 +113,10 @@ if [ "$action" = detach ]; then
     if [ "$testmode" != 1 ]; then
       if ! umount "$dir" 2>/dev/null; then
         rm -f "$mark"; bash "$bulkmount" >/dev/null 2>&1 || true
-        refuse "$member is in use (something has files open on it); nothing was changed."
+        refuse_code disk.in-use "$member is in use (something has files open on it); nothing was changed."
       fi
       mkdir -p "$ddir"
-      mount -o noatime "LABEL=bulk-$member" "$ddir" || { rm -f "$mark"; bash "$bulkmount" >/dev/null 2>&1 || true; refuse "the disk could not be mounted at $ddir; it is back in the pool."; }
+      mount -o noatime "LABEL=bulk-$member" "$ddir" || { rm -f "$mark"; bash "$bulkmount" >/dev/null 2>&1 || true; refuse_code disk.mount-failed "the disk could not be mounted at $ddir; it is back in the pool."; }
     else
       mkdir -p "$ddir"
     fi
@@ -129,11 +129,11 @@ fi
 
 # attach
 if [ "$ddir" != "$dir" ] && [ "$testmode" != 1 ]; then
-  umount "$ddir" 2>/dev/null || refuse "$member is in use (something has files open on $ddir); close them first."
+  umount "$ddir" 2>/dev/null || refuse_code disk.in-use "$member is in use (something has files open on $ddir); close them first."
   rmdir "$ddir" 2>/dev/null || true
 fi
 rm -f "$mark"
-[ "$testmode" = 1 ] || bash "$bulkmount" >/dev/null 2>&1 || refuse "the mark is gone, but the disk could not be mounted into /bulk (look at: hs pool bulk)"
+[ "$testmode" = 1 ] || bash "$bulkmount" >/dev/null 2>&1 || refuse_code disk.mount-failed "the mark is gone, but the disk could not be mounted into /bulk (look at: hs pool bulk)"
 echo "$member is back in /bulk."
 live_refresh_detach
 printf 'status\tdone\n'

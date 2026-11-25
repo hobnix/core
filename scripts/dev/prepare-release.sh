@@ -3,7 +3,7 @@
 # version by hand. Run it INSIDE the checkout, on `develop`; the workflow `prepare-release` does exactly this.
 #
 #   bash <core>/scripts/dev/prepare-release.sh [--plan] [--no-push]
-#       Finds the package folders that changed since the newest vX.Y.Z tag, takes the highest bump label (`bump: major`, `bump: minor`, none =
+#       Finds the package folders (recipes/, extensions/, capabilities/, blueprints/) that changed since the newest vX.Y.Z tag, takes the highest bump label (`bump: major`, `bump: minor`, none =
 #       patch) of the merged pull requests that touched each one, raises `version` in package.toml and index.toml (release.sh bump), runs
 #       `pkg.py repo-check`, pushes the branch release/prepare-<date> and opens a pull request into develop with the list
 #       "package: old -> new" and the tag level (the highest bump of the release, the input of the release workflow). The release pull
@@ -34,7 +34,11 @@ done
 git rev-parse --show-toplevel >/dev/null 2>&1 || fail "Run this inside the checkout of a package repository."
 cd "$(git rev-parse --show-toplevel)" || exit 1
 [ -f index.toml ] || fail "There is no index.toml here: this is not a package repository."
-if [ -d recipes ]; then repo=recipes; elif [ -d extensions ]; then repo=extensions; elif [ -d capabilities ]; then repo=capabilities; else fail "None of recipes/, extensions/, capabilities/ is here."; fi
+# every folder that holds packages: hobnix/official has several of them
+dirs=()
+for d in recipes extensions capabilities blueprints; do [ -d "$d" ] && dirs+=("$d"); done
+[ ${#dirs[@]} -gt 0 ] || fail "None of recipes/, extensions/, capabilities/, blueprints/ is here."
+repo="${dirs[*]}"
 $plan || [ "$(git branch --show-current)" = develop ] || fail "Switch to develop first: a release is prepared from develop."
 [ -z "$(git status --porcelain)" ] || fail "The tree has uncommitted changes."
 
@@ -61,15 +65,15 @@ rank() { case $1 in major) echo 2 ;; minor) echo 1 ;; *) echo 0 ;; esac; }
 
 declare -A level=()
 bad=""
-for sha in $(git rev-list --reverse "$range" -- "$repo/"); do
+for sha in $(git rev-list --reverse "$range" -- "${dirs[@]}"); do
   labs=$(labels_of "$sha" | sort -u)
   case $(printf '%s\n' "$labs" | grep -c '^bump: ') in 0|1) ;; *) bad="$bad ${sha:0:7}" ;; esac
   l=patch
   grep -qx 'bump: minor' <<<"$labs" && l=minor
   grep -qx 'bump: major' <<<"$labs" && l=major
-  for pkg in $(git diff-tree -m --no-commit-id --name-only -r "$sha" -- "$repo/" | sed -n "s#^$repo/\([^/]*\)/.*#\1#p" | sort -u); do
-    [ -f "$repo/$pkg/package.toml" ] || continue
-    [ "$(rank "$l")" -ge "$(rank "${level[$pkg]:-patch}")" ] && level[$pkg]=$l
+  for dir in $(git diff-tree -m --no-commit-id --name-only -r "$sha" -- "${dirs[@]}" | sed -n 's#^\([^/]*/[^/]*\)/.*#\1#p' | sort -u); do
+    [ -f "$dir/package.toml" ] || continue
+    [ "$(rank "$l")" -ge "$(rank "${level[$dir]:-patch}")" ] && level[$dir]=$l
   done
 done
 [ -z "$bad" ] || fail "Pull requests with more than one bump label ($bad ): leave one label and run this again."
@@ -80,13 +84,14 @@ bump_next() {   # bump_next <x.y.z> <level>
   case $2 in major) echo "$((a + 1)).0.0" ;; minor) echo "$a.$((b + 1)).0" ;; *) echo "$a.$b.$((c + 1))" ;; esac
 }
 top=patch rows=""
-for pkg in $(printf '%s\n' "${!level[@]}" | sort); do
-  old=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$repo/$pkg/package.toml" | head -n1)
+for dir in $(printf '%s\n' "${!level[@]}" | sort -t/ -k2); do
+  pkg=${dir#*/}
+  old=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$dir/package.toml" | head -n1)
   # a package whose version was already raised since the tag keeps it: nothing is raised twice
-  if [ "$(git show "$last:$repo/$pkg/package.toml" 2>/dev/null | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)" != "$old" ]; then continue; fi
-  rows="$rows$pkg	$old	$(bump_next "$old" "${level[$pkg]}")	${level[$pkg]}
+  if [ "$(git show "$last:$dir/package.toml" 2>/dev/null | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)" != "$old" ]; then continue; fi
+  rows="$rows$pkg	$old	$(bump_next "$old" "${level[$dir]}")	${level[$dir]}
 "
-  [ "$(rank "${level[$pkg]}")" -le "$(rank "$top")" ] || top=${level[$pkg]}
+  [ "$(rank "${level[$dir]}")" -le "$(rank "$top")" ] || top=${level[$dir]}
 done
 [ -n "$rows" ] || fail "Every changed package has a new version already."
 if $plan; then printf '%s' "$rows"; $index_repo || echo "tag	$top"; exit 0; fi
