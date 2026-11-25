@@ -67,6 +67,16 @@ repos() { bash "$pkg" --repos 2>/dev/null || true; }
 # one line per fact: name, kind, repo, available, installed, state, core, audience, title
 row_of() { market | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }
 repo_row() { repos | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }   # name, address, signed|unsigned, default|added
+# pkg.sh may have refused in the ADR 0028 form already (pkg_refused: status, reason, fix, code, through refuse_code): then exactly those lines
+# are the answer (its own code, not pkg.action-failed) and this exits 1. Returns when the output holds no such refusal.
+relay_coded() {   # relay_coded <output of pkg.sh>
+  local lines
+  lines=$(awk -F'\t' '$1 == "status" && $2 == "refused" { buf = $0; code = 0; next }
+    buf != "" && ($1 == "reason" || $1 == "fix" || $1 == "code") { buf = buf "\n" $0; if ($1 == "code") code = 1 }
+    END { if (code) print buf }' <<<"$1")
+  [ -n "$lines" ] || return 0
+  printf '%s\n' "$lines"; exit 1
+}
 
 repo="" cmd=() red="" long=no
 case "$action" in
@@ -155,6 +165,7 @@ if [ "$verb" = start ]; then
       rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$? ;;
   esac
   if [ "$rc" -ne 0 ]; then
+    relay_coded "$out"
     refuse_code pkg.action-failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
   fi
   printf 'status\tdone\n'
