@@ -1479,13 +1479,35 @@ path_within() {  # path_within <path> <folder>: <path> is the folder or below it
   case "$1" in "$2"|"$2"/*) return 0 ;; esac
   [ "$2" = / ]
 }
+# DESIGN: restic must never write the state of an extension service. `restic restore` refuses --include together with --exclude (checked: "mutually
+# exclusive"), so the include cannot be fenced with excludes. Instead a restore IN PLACE (the target resolves to the real state roots) accepts only a path
+# restic matches exactly: absolute, canonical (no ., .., //), no glob character. A path without a leading / matches at ANY depth in restic and a glob
+# matches what it likes; both are refused there. Then the guard below refuses every exact path that is, contains or lies in service state. Service
+# state comes back only through `hs backup config restore --with-state`: restic writes it into a root-only temporary folder and
+# scripts/lib/state_put.py puts it in place without following links.
+restore_in_place() {  # restore_in_place <to>: would a restore below <to> land on the real state roots? (the same place, links resolved)
+  local r
+  for r in "$EXT_PUB" "$EXT_PRIV" "$STATE"; do
+    [ "$(realpath -m -- "$1/$r" 2>/dev/null)" = "$(realpath -m -- "$r" 2>/dev/null)" ] && return 0
+  done
+  return 1
+}
 restore_guard_state() {  # restore_guard_state <to> <path>
   local d r st msg
-  d=$(realpath -m -- "${1:-/}/${2#/}" 2>/dev/null) || d=$1/$2
-  st=$(realpath -m -- "$STATE")
+  if restore_in_place "${1:-/}"; then
+    case "$2" in
+      /*) ;;
+      *) die "$(t "Not restored in place: '%s' is not a full path. Use the full original path, for example /bulk/shares/<share>/<file>." "$2")" ;;
+    esac
+    case "$2" in
+      *[\*\?\[\\]*|*/./*|*/../*|*//*|*/.|*/..) die "$(t "Not restored in place: '%s' has a pattern or a dot part. Use the exact full path." "$2")" ;;
+    esac
+  fi
+  d=$(realpath -m -- "${1:-/}/${2#/}" 2>/dev/null) || die "$(t 'Not restored: the place %s could not be resolved, so it cannot be shown to be safe.' "${1:-/}/${2#/}")"
+  st=$(realpath -m -- "$STATE") || die "$(t 'Not restored: the state folder could not be resolved.')"
   msg=$(t 'Not restored in place: %s would write into the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$d")
   for r in "$EXT_PUB" "$EXT_PRIV" "$(dirname "$EXT_PRIV")"; do
-    r=$(realpath -m -- "$r")
+    r=$(realpath -m -- "$r") || die "$msg"
     if path_within "$d" "$r" || path_within "$r" "$d"; then die "$msg"; fi
   done
   if path_within "$st" "$d"; then die "$msg"; fi    # the state root itself or a parent of it (a link in it leads to the service folders)
@@ -1545,7 +1567,8 @@ state_skip() {  # state_skip <path relative to $STATE>
 # The state of an extension service lives in a folder the service owns (ext_state.py: /var/lib/hs/<name> is a link to it). Root must never open or write
 # by name in there without refusing links: the service could plant one. Rows below such a link go through scripts/lib/state_put.py (O_NOFOLLOW).
 STATE_PUT=$(dirname "$0")/lib/state_put.py
-svc_state_row() {  # svc_state_row <absolute path>: sets SVC_TOP and SVC_REL when it is a file in the state folder of a service
+svc_state_row() {  # svc_state_row <absolute path>: 0 + SVC_TOP, SVC_REL for a file in the state folder of a service; 1 for any other file;
+                   # 2 for a name below the state roots that is no package name (refused: never falls through to cp, which follows links)
   local rel name
   case "$1" in
     "$EXT_PRIV"/*) rel=${1#"$EXT_PRIV/"} ;;     # a snapshot taken after the move
@@ -1558,7 +1581,7 @@ svc_state_row() {  # svc_state_row <absolute path>: sets SVC_TOP and SVC_REL whe
     *) return 1 ;;
   esac
   name=${rel%%/*}
-  [ "$name" != "$rel" ] && [[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || return 1
+  [ "$name" != "$rel" ] && [[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || return 2
   SVC_TOP=$EXT_PUB/$name SVC_REL=${rel#*/}
 }
 
@@ -1675,7 +1698,9 @@ cmd_config_restore() {
   local plan=()
   for f in "${rows[@]}"; do
     live=$f
-    if svc_state_row "$f"; then
+    svc_rc=0; svc_state_row "$f" || svc_rc=$?
+    if [ "$svc_rc" = 2 ]; then state=refused
+    elif [ "$svc_rc" = 0 ]; then
       if python3 -I "$STATE_PUT" same "$tmp$f" "$SVC_TOP" "$SVC_REL"; then state=same
       elif [ ! -e "$live" ] && [ ! -L "$live" ]; then state=new
       else state=changed; fi
@@ -1724,7 +1749,9 @@ cmd_config_restore() {
   local stamp
   stamp=$(date +%Y%m%d-%H%M%S)
   for f in "${rows[@]}"; do
-    if svc_state_row "$f"; then    # the service's own folder: no link below it is followed (state_put.py), the old file is kept as before
+    svc_rc=0; svc_state_row "$f" || svc_rc=$?
+    if [ "$svc_rc" = 2 ]; then warn "$(t '%s is not restored (it is not the state of a package)' "$f")"; continue; fi
+    if [ "$svc_rc" = 0 ]; then    # the service's own folder: no link below it is followed (state_put.py), the old file is moved aside
       if python3 -I "$STATE_PUT" put "$tmp$f" "$SVC_TOP" "$SVC_REL" "$stamp"; then ok "$(t 'Restored %s' "$f")"; else warn "$(t '%s was not restored (a link or folder is in the way)' "$f")"; fi
       continue
     fi

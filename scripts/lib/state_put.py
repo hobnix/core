@@ -7,8 +7,8 @@
 
 <top> is the state root (/var/lib/hs/<name>, a link that ONLY root can change: it is resolved once). Below it every folder is opened with O_NOFOLLOW
 relative to the descriptor of its parent; a missing folder is made (0700); a link or file where a folder should be is refused. The file is written
-to a new name (O_EXCL) and renamed over the old one: a planted link at the destination is replaced, never written through. What was there is kept
-as <file>.before-restore-<stamp> (a link is kept as a link). The owner of the new file is the owner of <top>, its mode the mode of <src>.
+to a new name (O_EXCL) and renamed over the old one: a planted link at the destination is replaced, never written through. What was there is moved
+aside as <file>.before-restore-<stamp> (renamed, never read or copied). The owner of the new file is the owner of <top>, its mode the mode of <src>.
 """
 import os
 import stat
@@ -60,10 +60,17 @@ def same(src, top, rel):
     finally:
         os.close(fd)
     with os.fdopen(f, "rb") as a:
-        if not stat.S_ISREG(os.fstat(a.fileno()).st_mode):
+        st = os.fstat(a.fileno())
+        # never read what the service made: a FIFO would hang, a sparse terabyte would fill the memory. Only a regular file of the size of <src> is compared.
+        if not stat.S_ISREG(st.st_mode) or st.st_size != os.stat(src).st_size:
             return 1
         with open(src, "rb") as b:
-            return 0 if a.read() == b.read() else 1
+            while True:
+                x, y = a.read(1 << 20), b.read(1 << 20)
+                if x != y:
+                    return 1
+                if not x:
+                    return 0
 
 
 def put(src, top, rel, stamp):
@@ -85,18 +92,8 @@ def put(src, top, rel, stamp):
         if old is not None:
             if stat.S_ISDIR(old.st_mode):
                 raise OSError(0, "%s is a folder there" % rel)
-            keep = "%s.before-restore-%s" % (name, stamp)
-            if stat.S_ISLNK(old.st_mode):
-                os.symlink(os.readlink(name, dir_fd=fd), keep, dir_fd=fd)
-            else:
-                o = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
-                try:
-                    k = os.open(keep, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
-                    with os.fdopen(k, "wb") as kf, os.fdopen(o, "rb", closefd=False) as of:
-                        kf.write(of.read())
-                        os.fchown(k, owner.st_uid, owner.st_gid)
-                finally:
-                    os.close(o)
+            # the old name is moved aside, never copied or read: whatever the service made there (a link, a FIFO, a huge file) stays as it is
+            os.rename(name, "%s.before-restore-%s" % (name, stamp), src_dir_fd=fd, dst_dir_fd=fd)
         w = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
         try:
             with os.fdopen(w, "wb", closefd=False) as wf:
