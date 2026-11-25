@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "feature"
+title = "The package index lists when a version came out and the older versions"
+body  = """Each package in the signed index now has the date its current version was first published and up to 10 older versions with their commit and checksum. Nothing installs from this list yet; it is the base for going back to an older version."""
