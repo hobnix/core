@@ -56,4 +56,54 @@ check "--parts none says it adds nothing" grep -q 'No optional parts added' <<<"
 out=$(frun --yes --language en --parts a)
 check "--parts a --yes plans then starts" bash -c "grep -n 'bundle' '$FRL' | tr '\n' ' ' | grep -q 'bundle plan a.*bundle start a'"
 check "and prints the unit" grep -q 'hs-job-demo-1' <<<"$out"
+echo "-- what the server is for (#1075): a blueprint, the recorded choice"
+cat > "$FRB" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$FRL"
+case "\$*" in
+  "sys blueprint plan apply media") printf 'status\tok\nheading\tapply\npart\t1\tapp\tr1\tinstall\tinstall r1\nnote\tOne job\033[31m does it\n' ;;
+  "sys blueprint plan apply foreign") printf 'status\tok\nheading\tapply\nconfirm_name\tforeign\n' ;;
+  "sys blueprint plan apply nope") printf 'status\trefused\nreason\tNo blueprint called nope.\n'; exit 1 ;;
+  "sys blueprint start apply media") printf 'status\tstarted\nunit\ths-job-bp-1\n' ;;
+esac
+exit 0
+STUB
+CH=$WORK/frstate/setup-choice
+record() { printf 'choice\t%s\nname\t%s\n' "$1" "$2" > "$CH"; }
+recorded() { tr '\t\n' '  ' < "$CH"; }
+rm -f "$CH"
+out=$(frun --yes --blueprint media)
+check "--blueprint --yes plans then starts" bash -c "grep 'blueprint' '$FRL' | tr '\n' ' ' | grep -q 'blueprint plan apply media.*blueprint start apply media'"
+check_out "and prints the unit" 'hs-job-bp-1' echo "$out"
+check "no record is made where the installer made none" test ! -e "$CH"
+check "no escape byte of the plan reaches the terminal" bash -c '! grep -q "$(printf "\033")\[31m" <<<"$1"' _ "$out"
+record blueprint media
+out=$(frun --yes)
+check "--yes carries out the recorded blueprint" grep -q 'blueprint start apply media' "$FRL"
+check_eq "and marks the record done" "choice done name - " "$(recorded)"
+out=$(frun --yes)
+check "a done record starts nothing" bash -c "! grep -q 'blueprint start\|bundle' '$FRL'"
+record blueprint media
+out=$(frun)
+check "without a terminal and --yes nothing is planned or started" bash -c "! grep -q 'blueprint \(plan\|start\)' '$FRL'"
+check_eq "and the record stays" "choice blueprint name media " "$(recorded)"
+out=$(frun --blueprint media)
+check "an explicit blueprint without a terminal shows the plan only" bash -c "grep -q 'blueprint plan apply media' '$FRL' && ! grep -q 'blueprint start' '$FRL'"
+out=$(frun --yes --blueprint foreign)
+check "--yes never types a name" bash -c "! grep -q 'blueprint start' '$FRL'"
+check_out "and says how to go on" 'hs blueprint apply foreign' echo "$out"
+out=$(frun --yes --blueprint nope)
+check_out "a refused plan is shown" 'No blueprint called nope' echo "$out"
+check "and nothing starts" bash -c "! grep -q 'blueprint start' '$FRL'"
+record core -
+out=$(frun --yes)
+check "a recorded core only installs no part" bash -c "! grep -q 'bundle\|blueprint' '$FRL'"
+check_eq "and is done" "choice done name - " "$(recorded)"
+record blueprint 'x;rm'
+out=$(frun --yes)
+check "a damaged record is ignored" bash -c "! grep -q 'blueprint' '$FRL'"
+out=$(frun --yes --blueprint media --core-only)
+check_out "two choices are refused" 'only one of' echo "$out"
+out=$(frun --yes --blueprint '--confirm')
+check_out "a name of the wrong shape is refused" 'not a blueprint name' echo "$out"
 finish

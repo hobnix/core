@@ -289,7 +289,12 @@ for a in ${apps[@]+"${apps[@]}"}; do
 done
 
 # the blueprint is applied when everything before the apps worked; an app that failed is in the result and is tried again by the next apply
-bash "$pkg" blueprint record "$name" >/dev/null 2>&1 || warn "$(t 'The applied blueprint could not be recorded.')"
+later=""   # the apps left to a person: setup-list.sh shows them until they are installed
+for a in ${apps[@]+"${apps[@]}"}; do
+  IFS=$'\t' read -r an ast _ <<<"$a"
+  [ "$ast" != later ] || later=${later:+$later,}$an
+done
+bash "$pkg" blueprint record "$name" "$later" >/dev/null 2>&1 || warn "$(t 'The applied blueprint could not be recorded.')"
 finish_record
 [ "$failed" = 0 ] || exit 1
 ok "Blueprint applied"
