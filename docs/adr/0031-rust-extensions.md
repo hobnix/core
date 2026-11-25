@@ -27,18 +27,18 @@ and `rollback` do not restart a running service; services run as uid 0 (#1134); 
 3. **SDK pin.** The SDK stays in the core (`rust/hobnix-ext-sdk`, the owner of the protocol). A crate pins it by git `rev` on `develop`; `repo-check --release` requires a
    core `vX.Y.Z` tag for the pin on `main`.
 4. **Service identity and state.** A service runs as a transient unit with `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters; a longer name is cut to 14 and gets
-   `_<12 hex of sha256(name)>`), `StateDirectory=hs-ext/<name>`, `UMask=0077`. `fs.write:/var/lib/hs/<own name>` is mapped onto the state directory with
-   `BindPaths=/var/lib/hs-ext/<name>:/var/lib/hs/<name>`, so the service keeps its path; any other `fs.write` is refused with the new code `ext.dynamic-write`. The first start
+   `_<12 hex of sha256(name)>`), `StateDirectory=ext-hs/<name>`, `UMask=0077`. `fs.write:/var/lib/hs/<own name>` is mapped onto the state directory with
+   `BindPaths=/var/lib/ext-hs/<name>:/var/lib/hs/<name>`, so the service keeps its path; any other `fs.write` is refused with the new code `ext.dynamic-write`. The first start
    moves an existing `/var/lib/hs/<name>` once. The same identity covers the `confine` command rows, in the same step, with a plan for both paths; that step needs its own
    hardware-test box.
 
    Built for the services and the `confine` rows (#1134), Not tested on hardware yet. The user-name cut above was corrected to the code: `_` cannot be in a package name, so a cut
-   name never equals a short one (24 characters plus `-<6 hex>` could). The old folder is moved by ONE atomic rename to `/var/lib/hs-ext/<name>` (systemd takes
-   it into `/var/lib/private/hs-ext/<name>`) and `/var/lib/hs/<name>` becomes a link, so root tools keep the old path; two folders at once, a wrong link or
+   name never equals a short one (24 characters plus `-<6 hex>` could). The old folder is moved by ONE atomic rename to `/var/lib/ext-hs/<name>` (systemd takes
+   it into `/var/lib/private/ext-hs/<name>`) and `/var/lib/hs/<name>` becomes a link, so root tools keep the old path; two folders at once, a wrong link or
    another file system refuse the start (`ext.state-conflict`, `ext.state-move-failed`) and nothing is merged, copied or deleted. Before each start, files a
    root command left behind get the service's user again (a file with a second hard link is left alone). The bridge state `/var/lib/hs/ext-svc` is no longer
-   bound into the unit, `fs.read` of server or other extensions' state is refused (`ext.dynamic-read`), and the host backup includes `/var/lib/hs-ext` and
-   `/var/lib/private/hs-ext`. Of decision 5 the unit has `ProtectProc=invisible`; `ProcSubset=pid` and the allow list `SystemCallFilter=@system-service` are
+   bound into the unit, `fs.read` of server or other extensions' state is refused (`ext.dynamic-read`), and the host backup includes `/var/lib/ext-hs` and
+   `/var/lib/private/ext-hs`. Of decision 5 the unit has `ProtectProc=invisible`; `ProcSubset=pid` and the allow list `SystemCallFilter=@system-service` are
    not set (reasons in `scripts/lib/ext_confine.py`). What systemd itself does with these lines (bind source through the link, mount order, credential,
    user) is checked only by the VM stage `confine` (step list `dynamic`), which has never run.
    A `confine` row also needs its own hardware-test box with a fixture package (no package in hobnix/official has such a row).

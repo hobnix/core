@@ -208,7 +208,7 @@ cat > "$WORK/systemd-run-state" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$RUN_LOG"
 if [ -L "$HS_STATE_DIR/fixsvc" ]; then echo link; elif [ -d "$HS_STATE_DIR/fixsvc" ]; then echo folder; else echo missing; fi > "$RUN_LOG.old"
-if [ ! -e "$HS_EXT_STATE_DIR/fixsvc" ]; then mkdir -p "$HS_PRIVATE_DIR/hs-ext/fixsvc" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/hs-ext/fixsvc" "$HS_EXT_STATE_DIR/fixsvc"; fi
+if [ ! -e "$HS_EXT_STATE_DIR/fixsvc" ]; then mkdir -p "$HS_PRIVATE_DIR/ext-hs/fixsvc" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/ext-hs/fixsvc" "$HS_EXT_STATE_DIR/fixsvc"; fi
 while [ "$1" != -- ]; do shift; done; shift
 exec "$@"
 SH
@@ -235,7 +235,7 @@ check_eq "the state was moved BEFORE systemd-run (the old path was a link then)"
 check_eq "the data came along, the old path leads to it" watched "$(cat "$HS_STATE_DIR/fixsvc/watched.tsv")"
 check_eq "the old path is a link to the public folder" "$HS_EXT_STATE_DIR/fixsvc" "$(readlink "$HS_STATE_DIR/fixsvc")"
 check_eq "the journal says it once" 1 "$(grep -c "moved the state of fixsvc from $HS_STATE_DIR/fixsvc to $HS_EXT_STATE_DIR/fixsvc" "$SD/err")"
-check_eq "the unit is the dynamic one" 4 "$(grep -c -x -e '--property=DynamicUser=yes' -e '--property=User=hsx-fixsvc' -e '--property=StateDirectory=hs-ext/fixsvc' -e '--property=BindPaths=-/var/lib/hs-ext/fixsvc:/var/lib/hs/fixsvc' "$RUN_LOG")"
+check_eq "the unit is the dynamic one" 4 "$(grep -c -x -e '--property=DynamicUser=yes' -e '--property=User=hsx-fixsvc' -e '--property=StateDirectory=ext-hs/fixsvc' -e '--property=BindPaths=-/var/lib/ext-hs/fixsvc:/var/lib/hs/fixsvc' "$RUN_LOG")"
 check_eq "the bridge state is not bound into it" 0 "$(grep -c '/var/lib/hs/ext-svc' "$RUN_LOG")"
 bridge_good
 check_eq "the next start moves nothing and says nothing" "0 0" "$rc $(grep -c 'moved the state' "$SD/err")"

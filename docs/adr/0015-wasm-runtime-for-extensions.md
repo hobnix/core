@@ -25,7 +25,7 @@ A Wasm module sees only what the host hands it. With WASI, the host chooses preo
 sockets; everything else is a host function the runtime author writes. Two consequences:
 
 - **It confines files and network without a Unix user or systemd unit.** That is the part ADR 0014 steps 2 and 3 do with `ProtectSystem=`,
-  `ReadWritePaths=`, `IPAddressAllow=` and `User=hs-ext-<name>`. Wasm makes the same grant a property of the runtime call.
+  `ReadWritePaths=`, `IPAddressAllow=` and `User=ext-hs-<name>`. Wasm makes the same grant a property of the runtime call.
 - **It does not remove the need for a broker.** An extension exists to *do something to the host*: `incus`, `systemctl`, an `hs` command, a
   secret. A module cannot run those; the runtime must expose them as host functions (or the module returns "please run X" and the core runs it).
   That layer checks `host`, `secrets` and `events.emit` against the manifest, which is exactly ADR 0014's broker. So Wasm does not replace step 3;
