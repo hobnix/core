@@ -30,7 +30,7 @@ CONFINE_FLAG = "confine"
 # What the install and update prompts say about a package that has confined commands (ADR 0014: partial, never "sandboxed").
 CONFINE_TEXT = [
     "confined commands (%s): run through systemd-run as their own unprivileged user, not as root, with the properties of the declared permissions:",
-    "  it covers: writes outside the package's own folder /var/lib/hs/<name> (any other fs.write is refused), the state of the server and of other",
+    "  it covers: writes outside the package's own state folder (declared /var/lib/hs/<name>, seen as $STATE_DIRECTORY = /var/lib/hs-ext/<name>; any other fs.write is refused), the state of the server and of other",
     "  extensions, the home folders, /tmp sharing, new privileges, capabilities, devices unless devices:gpu.",
     "  it does NOT cover: reading the file system as far as the file modes allow (fs.read lists, it does not restrict), the network (net is declared",
     "  only), and calls to hs, incus and systemctl (not blocked: they get what that user may do). Other commands of the package run as root, unconfined.",

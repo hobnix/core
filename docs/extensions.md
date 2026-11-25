@@ -69,7 +69,7 @@ The bridge runs the service as a confined unit built from the permissions: `Prot
 
 ### Confinement of a command
 
-A row of `commands.tsv` with the flag `confine` runs through `systemd-run` with the same properties, as the unprivileged user `hsx-<name>` with the folder `/var/lib/hs/<name>` as the only place it may write (#1134). It needs `protocol = [1]` and a `permissions` list. If `systemd-run` is missing, or the list is missing, the command does not run (exit 69); it never falls back to unconfined. It also does not run if its state folder cannot be prepared (`ext.state-conflict`, `ext.state-move-failed`). It is partial: reading the file system (as far as the file modes allow) and the network are not limited, and calls to `hs`, `incus` and `systemctl` are not blocked (they get what that user may do). Not tested on hardware yet.
+A row of `commands.tsv` with the flag `confine` runs through `systemd-run` with the same properties, as the unprivileged user `hsx-<name>` with its state folder as the only place it may write (inside the unit `/var/lib/hs-ext/<name>`, the variable `$STATE_DIRECTORY`; declare it as `fs.write:/var/lib/hs/<name>`) (#1134). It needs `protocol = [1]` and a `permissions` list. If `systemd-run` is missing, or the list is missing, the command does not run (exit 69); it never falls back to unconfined. It also does not run if its state folder cannot be prepared (`ext.state-conflict`, `ext.state-move-failed`). It is partial: reading the file system (as far as the file modes allow) and the network are not limited, and calls to `hs`, `incus` and `systemctl` are not blocked (they get what that user may do). Not tested on hardware yet.
 
 ## Events of a package
 
