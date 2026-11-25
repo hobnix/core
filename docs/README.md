@@ -41,6 +41,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-package-pages](PLAN-package-pages.md) | Milestone 0.12 Package Pages: declarative web pages for packages (plan, nothing built) |
 | [PLAN-packages](PLAN-packages.md) | Recipes and extensions as packages, repositories, signed releases |
 | [PLAN-registry](PLAN-registry.md) | Milestone 0.13: a signed package index with one version per package, core as framework, names, blueprints (plan, nothing built) |
+| [PLAN-marketplace-stats](PLAN-marketplace-stats.md) | Version history in the index, installing an older version, likes and opt-in install counts from our own stats service, website open button (plan, nothing built) |
 | [PLAN-package-names](PLAN-package-names.md) | Every capability, extension and recipe with its proposed name, for the retouch pass (draft) |
 | [PLAN-remote-shares](PLAN-remote-shares.md) | Remote shares move to Shares (Local, Remote views); pairing two servers with a short-lived code (plan, nothing built) |
 | [PLAN-network-map](PLAN-network-map.md) | A map of this server and its network, the pilot for the UI SDK (plan, nothing built) |
