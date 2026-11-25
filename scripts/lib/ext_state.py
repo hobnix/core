@@ -32,7 +32,7 @@ health heartbeat hs hs-ext iso jobs last-rebuild live luks machine matrix metric
 recovering remote removals removed restic scrub selftest services settings share snapshots state sync tailscale testlab vault vps
 current repos keys previous lock golden docs-site index index-cache iso-cache runs src src-old reports homepage-hide incident-paused disks-seen
 dhcp-ranges cf-dns-api-token dc-ca-key grafana-admin vps-key zoraxy-admin unifi unifi-write-networks matrix-hook media-ntfy node-known-hosts
-pkg-index-state update-channel vps-known-hosts wear-cache ext-emit ext-cursors ext-snapshots""".split())
+pkg-index-state update-channel vps-known-hosts wear-cache ext-emit ext-cursors ext-snapshots setup-choice""".split())
 RESERVED_PREFIXES = ("backup-", "bulk-", "disk-", "docker-", "health-", "heartbeat-", "live-", "luks-", "machine-", "migrate-", "notify-", "parity-",
                      "pci-", "ports-", "remote-", "restic-", "scrub-", "selftest-", "services-", "share-", "snapshots-", "stat-", "sync-", "tailscale-",
                      "testlab-", "vault-", "last-", "capabilities-", "api-", "apps-", "deck-", "ext-", "node-", "recipe-", "unifi-", "vps-", "zoraxy-",
