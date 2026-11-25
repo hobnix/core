@@ -1,0 +1,4 @@
+date = "2026-11-25"
+type = "fix"
+title = "The lists in dialogs (shares, disks, pools, instances, users) are read right after unlock"
+body = "The web interface asks for these lists first and all at once, as far as your role may read them. A list that is already being read is no longer requested a second time."

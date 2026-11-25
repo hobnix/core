@@ -1,7 +1,7 @@
 <script>
   import { P, nodePath } from '../paths.js';
   import { route, setLocalNode, go } from '../route.svelte.js';
-  import { poll, rows, prefetch, refresh } from '../data.svelte.js';
+  import { poll, rows, prefetch, refresh, touch } from '../data.svelte.js';
   import TopBar from './TopBar.svelte';
   import Tree from './Tree.svelte';
   import BottomPanel from './BottomPanel.svelte';
@@ -11,7 +11,7 @@
   import Toast from '../ui/Toast.svelte';
   import JobAsks from './JobAsks.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
-  import { readsFor } from '../readsfor.js';
+  import { readsFor, fieldReads } from '../readsfor.js';
   import { ui } from '../ui.svelte.js';
   import { canSee } from '../roles.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
@@ -59,8 +59,10 @@
   // once the deck says the storage is open: read what the main pages show first, while the browser is idle (the answers land in poll()'s cache)
   let prefetched = false;
   $effect(() => {
-    if (!deck.loaded || locked || prefetched) return;
+    if (!deck.data || locked || prefetched) return;   // no answer yet = the lock state is not known
     prefetched = true;
+    // first, all at once: what the pickers of the dialogs list (who wants one of these while it runs joins it, api.js)
+    touch(fieldReads(ui.role, ui.features.capabilities));
     // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them)
     loadPools().then(() => {
       const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,

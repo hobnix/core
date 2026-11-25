@@ -1,6 +1,6 @@
 // Polled reads. `poll('/api/sys/ct/list', 5000)` gives a reactive { data, error, loaded }. The path may be a function (or return
 // '' to pause, e.g. while a panel is collapsed). A failed read keeps the last data, so a page never flashes empty on one bad answer.
-import { get } from './api.js';
+import { get, forgetReads } from './api.js';
 import { live, STREAM_TOPICS, wantTopic } from './live.svelte.js';
 import { nextDelay } from './polldelay.js';
 export { ageOf, stateOf } from './api.js';
@@ -35,6 +35,7 @@ export async function refresh(paths) {
     await Promise.all(paths.map((p) => get(p, true).then((d) => cache.set(p, d)).catch(() => {})));
   } finally {
     sync.busy = false;
+    forgetReads();   // the polls that run again now must not join a read that began before this one was done
     sync.n++;
   }
 }
