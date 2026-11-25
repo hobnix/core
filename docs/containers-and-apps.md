@@ -479,6 +479,8 @@ An installed package is a read-only copy. A package runs as root on your server,
 hs pkg update <name>
 ```
 
+In the web interface, use **Update** on the package in the Marketplace. If the new release asks for permissions that the installed one does not have, the plan lists each of them and you type the package name to accept them. If the release changed after you read the plan, the update is refused: read the plan again. **Update selected** and automatic updates never accept new permissions; update such a package with its own button. Not tested on hardware yet.
+
 A package update does not touch a running app. For a recipe it replaces the package files; run `hs recipe <name>` to apply them.
 `hs pkg remove <name>` forgets the package files only, never a container or data. It refuses while the package is switched on (`hs ext disable <name>` first) or while another package that is on needs it, and it asks you to type the name. If the server already has a generated capability list (`/var/lib/hs/generated/`), it is rewritten without the package. See the plan first with `hs pkg remove <name> --dry-run`. Not tested on hardware yet.
 

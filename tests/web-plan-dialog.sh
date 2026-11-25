@@ -21,4 +21,8 @@ PY
 )
 [ -z "$out" ] || echo "$out"
 check_eq "PlanDialog.go() reads dialog and args before close()" "" "$out"
+check "the dialog uses planstart.js for the typed names, the start and the rebuild offer" bash -c 'for f in "typedNames(" "allTyped(" "startRequest(" "staysForRebuild(" "doStart(area, req.args, req.confirm"; do grep -qF -- "$f" "$1" || exit 1; done' _ "$ROOT/web/src/shell/PlanDialog.svelte"
+if command -v node >/dev/null 2>&1; then
+  check "typed names, start arguments and the rebuild offer (node)" node "$ROOT/tests/web-planstart.mjs"
+else skip "node is not installed"; fi
 finish

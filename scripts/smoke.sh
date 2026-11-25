@@ -14,6 +14,8 @@
 # Packages bring their own: `[[probe]]` (label, words, ok, limit) and `tools = [...]` in the capability.toml / package.toml of a package
 # that is ON are added to the lists below (scripts/lib/pkg_probes.py); the programs of storage, incus, samba, backup are the `tools` of
 # those capabilities. A core probe whose registry row says `capability:X` is skipped while X is off.
+# A package probe must name a row it declares as a read (probe_is_read below, #1072): else skipped, warned, counted as a failure.
+# This catches package mistakes, not a hostile package: the package sets the flags and the script itself.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -71,14 +73,48 @@ on_package_dirs() {
     done
   done < <(_ext_roots)
 }
+# probes carry a fifth column, the package that brought them (an empty limit is `-`: read would drop an empty tab field)
 package_lines() {   # package_lines probes|tools: what the packages that are on bring
-  local dirs
+  local dirs d
   dirs=$(on_package_dirs)
   [ -n "$dirs" ] || return 0
-  # shellcheck disable=SC2086
-  python3 "$here/lib/pkg_probes.py" "$1" $(printf '%s
-' "$dirs" | tr '
-' ' ') 2>/dev/null || true
+  if [ "$1" = probes ]; then
+    while IFS= read -r d; do
+      python3 "$here/lib/pkg_probes.py" probes "$d" 2>/dev/null |
+        awk -F'\t' -v OFS='\t' -v p="${d##*/}" '{ sub(/\r$/, ""); print $1, $2, $3, ($4 == "" ? "-" : $4), p }'
+    done <<<"$dirs"
+    return 0
+  fi
+  # shellcheck disable=SC2046,SC2086
+  python3 "$here/lib/pkg_probes.py" "$1" $(printf '%s\n' "$dirs" | tr '\n' ' ') 2>/dev/null || true
+}
+
+# May the probe of a package run? Only when the row hs would run for these words (the longest match) is a row of that same package and
+# is flagged `reads`; a row flagged `changes` only when the words end in --dry-run. The words are limited to plain characters: they are
+# split into arguments unquoted, so no glob and no backslash. Anything unclear is a no.
+probe_is_read() {   # probe_is_read <package> <words>
+  local row own flags safe='^[A-Za-z0-9 ._:=/@,+-]+$'
+  [[ $2 =~ $safe ]] || return 1
+  row=$(awk -F'\t' -v w="$2" '$1 == "user" || ($1 == "sys" && substr(w, 1, 4) == "sys ") {
+    n = split($2, p, " "); m = split(w, q, " ")
+    if (n > m || n <= bn) next
+    for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
+    bn = n; best = $0
+  } END { if (bn) print best }' <(registry_rows))
+  [ -n "$row" ] || return 1
+  own=$(registry_rows_of "$1") || return 1
+  grep -qxF -- "$row" <<<"$own" || return 1
+  flags=,$(awk -F'\t' '{ print $7 }' <<<"$row"),
+  case "$flags" in
+    # --dry-run must reach the script (build_args of hs.sh): typed after the row's words, with args `-` or a {rest} token of its own
+    *,changes,*) [[ $2 == *" --dry-run" ]] && awk -F'\t' -v w="$2" '{
+        if (split($2, p, " ") >= split(w, q, " ")) exit 1
+        if ($4 == "-") exit 0
+        n = split($4, a, " "); for (i = 1; i <= n; i++) if (a[i] == "{rest}") exit 0
+        exit 1 }' <<<"$row" ;;
+    *,reads,*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # The capability a probe belongs to: the `capability:X` flag of the longest registry row its words match (empty = none).
@@ -307,8 +343,15 @@ if $run; then
   $list || step "Read-only commands"
   probes=$(default_probes)
   [ -z "${HS_SMOKE_PROBES:-}" ] || probes=$(cat "$HS_SMOKE_PROBES")
-  while IFS=$'\t' read -r label words codes plimit; do
+  while IFS=$'\t' read -r label words codes plimit pkg; do
     [ -n "$label" ] || continue
+    [ "$plimit" != - ] || plimit=
+    if [ -n "$pkg" ]; then
+      # the label and the name are package text: printable ASCII only
+      label=$(printf '%s' "$label" | LC_ALL=C tr -cd ' -~')
+      pkg=$(printf '%s' "$pkg" | LC_ALL=C tr -cd ' -~')
+      if ! probe_is_read "$pkg" "$words"; then result probe "$label" fail "$(t 'probe %s of %s is not a read: skipped' "$label" "$pkg")"; continue; fi
+    fi
     # a command this version does not have (the list below is longer than an old checkout) is skipped
     if [ "$words" != help ] && ! in_registry "$words"; then result probe "$label" skip "$(t 'no such command in this version')"; continue; fi
     cap=$(probe_capability "$words")

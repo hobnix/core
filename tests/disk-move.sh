@@ -86,6 +86,12 @@ has "^left${T}0$" && [ ! -e "$S/Heat" ] && [ -f "$B/data-05/shares/media/movies/
 run start data-04 --path sensitive/secret/key --to data-05 --now
 [ -f "$B/data-05/sensitive/secret/key" ] && [ ! -e "$B/data-04/sensitive/secret/key" ] && pass "a single file in sensitive/ moves with its folders" || fail "file move: $out"
 
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code.$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+run plan nodisk --path shares/media; coded "a name that is no data disk" disk.not-data-disk "$out"
+run plan data-04 --path ../etc --to data-05; coded "a path with .." disk.path-invalid "$out"
 echo "-- the pieces around it"
 grep -q '^user	disk <disk> move	disk-move.sh' "$SCRIPTS/lib/registry.tsv" && grep -q '^sys	sys disk ls <member>	disk-move.sh' "$SCRIPTS/lib/registry.tsv" && pass "registry rows" || fail "registry rows"
 grep -q 'r"^move$"' "$SCRIPTS/web-serve.py" && grep -q '("disk", "ls")' "$SCRIPTS/web-serve.py" && pass "web CHANGES and READS allowlists" || fail "web allowlists"

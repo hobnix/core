@@ -56,6 +56,12 @@ run plan x;       if [ "$rc" = 1 ] && has "nothere"; then pass "plan x: refused 
 run plan y;       if [ "$rc" = 1 ] && has "in a circle"; then pass "plan y: circle refused"; else fail "plan y: $out"; fi
 run plan e;       if [ "$rc" = 1 ] && has "repository you added"; then pass "plan e: added repository refused"; else fail "plan e: $out"; fi
 run plan r;       if [ "$rc" = 1 ] && has "follows the role"; then pass "plan r: role refused"; else fail "plan r: $out"; fi
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code${tab}$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+run plan y;       coded "a circle" pkg.require-circle "$out"
+run plan nosuch;  coded "an unknown package" pkg.unknown "$out"
 run plan nosuch;  if [ "$rc" = 1 ] && has "no capability package nosuch"; then pass "plan nosuch: refused"; else fail "plan nosuch: $out"; fi
 run plan 'A,b';   if [ "$rc" = 1 ] && has "one comma list"; then pass "capital letter refused"; else fail "A,b: $out"; fi
 run plan 'a;b';   if [ "$rc" = 1 ] && has "one comma list"; then pass "semicolon refused"; else fail "a;b: $out"; fi

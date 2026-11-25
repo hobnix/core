@@ -99,3 +99,4 @@ docker-registries	docker registries	120	skip	docker	instances,system,docker	-
 parts-pending	parts pending	60	run	-	system,network	-
 rebuild-pending	rebuild pending	60	run	-	system,network,security,backup	-
 preset-list	preset list	3600	run	-	-	-
+blueprint-list	blueprint list	3600	run	-	-	-
