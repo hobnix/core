@@ -265,7 +265,7 @@
 
 <svelte:window onbeforeunload={(e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }} />
 
-<PageHeader title={isNew ? 'New app' : app} crumb="Docker" sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
+<PageHeader title={isNew ? 'New app' : app} sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
   {#snippet actions()}
     {#if !readOnly}
       <Button icon="folder-simple-plus" busy={mountRunning} busyLabel="Mounting…" disabled={loading || !editors} tooltip="Add a share to a service as a volume" onclick={() => { binding = true; }}>Bind share</Button>

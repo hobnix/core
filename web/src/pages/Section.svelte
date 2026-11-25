@@ -7,6 +7,7 @@
   import { tip } from "../ui/tooltip.svelte.js";
   import { tree } from '../nav.js';
   import Icon from '../ui/Icon.svelte';
+  import PageTrail from '../shell/PageTrail.svelte';
 
   let { deck, meta = {} } = $props();
 
@@ -28,7 +29,7 @@
 </script>
 
 <div class="page">
-  <div class="crumb">homeserver</div>
+  <PageTrail />
   <h3>{node?.label ?? 'Overview'}</h3>
 
   <div class="grid">
@@ -55,7 +56,6 @@
 
 <style>
   .page { display: flex; flex-direction: column; gap: 14px; }
-  .crumb { font-size: 11px; color: var(--color-neutral-500); }
   h3 { font-size: 20px; margin: 0; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
   .item { padding: 6px; gap: 0; }

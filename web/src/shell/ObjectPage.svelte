@@ -1,14 +1,14 @@
 <script>
   // The Object template (docs/PLAN-web-design.md 3.2): the page of ONE disk, pool, share, instance, user (0.11) and, in 0.12, package and app. Every object page is
   // this frame and fills in its content; it does not invent its own. The props are fixed in 0.11 step 1 (written down in PLAN-web-design 3.2); 0.12 reuses them.
-  //   <ObjectPage crumb="Storage > Disks" title={name} chip="zfs" state="ok" stateLabel="healthy" {tabs} {tab} onpick={(id) => go(diskPath(name, id))}
+  //   <ObjectPage title={name} chip="zfs" state="ok" stateLabel="healthy" {tabs} {tab} onpick={(id) => go(diskPath(name, id))}
   //               menu={[{ label: 'Long test', icon: 'pulse', need: 'admin', onclick }]} danger={[{ label: 'Format…', text, need: 'admin', onclick }]}
   //               links={[{ kind: 'Pool', name, href, state }]} jobs={(r) => r.description.includes(serial)} need="admin" loading={!mon.loaded} notFound={!disk} notFoundTitle="No such disk">
   //     {#snippet primary()}<Button variant="primary">Add to a pool…</Button>{/snippet}      (visible actions: ONE primary and at most ONE secondary, D4)
   //     {#snippet banners()}…{/snippet}                                                        (state banners: a running job, a failure)
   //     {#snippet children(tab)}…the body of the active tab…{/snippet}
   //   </ObjectPage>
-  // Props: crumb, title, sub | chip, state, stateLabel (the status next to the name) | tabs [{id,label}] (at most 4, the first is Overview) and tab (the active id from the
+  // Props: title, sub | chip, state, stateLabel (the status next to the name) | tabs [{id,label}] (at most 4, the first is Overview) and tab (the active id from the
   // address; unknown = Overview) and onpick(id) | menu (the More menu: items of ui/Menu, plus `need`: below the role it is greyed with the refusal) | danger (items of
   // ui/DangerZone, last on the page) | links (items of LinkedObjects, shown under the Overview) | jobs (match(record) of JobStrip; omit for no strip) and jobHref |
   // need (the role that may change the object: below it the page is read-only with a note, nothing is refused) | loading, error, notFound, notFoundTitle/notFoundText,
@@ -30,7 +30,7 @@
   import { frameTabs, activeTab, menuFor, readOnlyNote } from './objectpage.js';
 
   let {
-    crumb = '', title = '', sub = '', chip = '', state = '', stateLabel = '', tabs = [], tab = '', onpick = null, menu = [], danger = [], links = [], jobs = null,
+    title = '', sub = '', chip = '', state = '', stateLabel = '', tabs = [], tab = '', onpick = null, menu = [], danger = [], links = [], jobs = null,
     jobHref = undefined, need = 'admin', loading = false, error = '', notFound = false, notFoundTitle = 'Not found', notFoundText = '', backTo = '', backLabel = 'Back to the list',
     primary, banners, children,
   } = $props();
@@ -44,7 +44,7 @@
 <PageState {loading} {error} hasData={!loading && !notFound} empty={notFound} emptyIcon="warning-circle" emptyTitle={notFoundTitle} emptyText={notFoundText}>
   {#snippet emptyAction()}{#if backTo}<Button tooltip={backLabel} onclick={() => go(backTo)}>{backLabel}</Button>{/if}{/snippet}
   <Stack gap="6">
-    <PageHeader {title} {crumb} {sub}>
+    <PageHeader {title} {sub}>
       {#snippet actions()}
         {#if chip}<Chip>{chip}</Chip>{/if}
         {#if state}<StatusDot {state} label={stateLabel} />{/if}

@@ -56,7 +56,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title={meta?.title ?? cap} crumb="Settings · Capabilities">
+  <PageHeader title={meta?.title ?? cap}>
     {#snippet actions()}
       {#if part}
         <StatusDot state={tag.state} label={tag.label} />

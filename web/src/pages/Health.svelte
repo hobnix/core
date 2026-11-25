@@ -2,7 +2,7 @@
   import { P } from '../paths.js';
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
-  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import { areaRole } from '../roles.js';
   import AckProblem from '../forms/ops/AckProblem.svelte';
   import { go } from '../route.svelte.js';
@@ -114,7 +114,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Health" crumb="{ui.host} / Health" {sub}>
+  <PageHeader title="Health" {sub}>
     {#snippet actions()}
       <Button tooltip={'A disk failed or a pool will not open: the guided recovery'} icon="first-aid-kit" onclick={() => go(P.incident)}>Incident</Button>
       <Button need="admin" icon="bell-ringing" busy={jobRunning('admin', ['test-push'])} busyLabel="Sending…" tooltip={'Send a test message to the push address'} onclick={() => openPlan('admin', ['test-push'], 'Test push message')}>Send test push</Button>

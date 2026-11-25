@@ -84,7 +84,7 @@
   const tabs = $derived(can ? objects.share.tabs : objects.share.tabs.slice(0, 1));
 </script>
 
-<ObjectPage crumb="Storage > Shares" title={name} chip={s ? (s.volume ? 'volume' : s.kind) : ''} state={s ? (failure ? 'bad' : doing ? 'info' : '') : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : ''}
+<ObjectPage title={name} chip={s ? (s.volume ? 'volume' : s.kind) : ''} state={s ? (failure ? 'bad' : doing ? 'info' : '') : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : ''}
             {tabs} {tab} onpick={(id) => go(sharePath(name, id))} {menu} {danger} {links} {jobs} need="admin"
             loading={!m.overview.loaded} notFound={m.overview.loaded && !s} notFoundTitle="No such share" backTo={P.shares} backLabel="All shares"
             notFoundText={`No share called “${name}” exists. It may have been deleted or renamed; a deleted share’s folder is under Kept folders in the list.`}>

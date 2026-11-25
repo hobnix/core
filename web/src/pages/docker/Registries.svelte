@@ -31,7 +31,7 @@
   const add = () => openCreate(RegistryForm, { ondone: () => refresh([PATH]) });
 </script>
 
-<PageHeader title="Registries" crumb="Docker" sub="Logins for private image registries such as ghcr.io." />
+<PageHeader title="Registries" sub="Logins for private image registries such as ghcr.io." />
 
 <PageState loading={!list.loaded} error={list.error?.message} hasData={list.data != null}
            empty={list.loaded && !items.length && !list.error} emptyIcon="key" emptyTitle="No registry login" emptyText="Apps pull public images without a login. Add one for ghcr.io or another private registry."

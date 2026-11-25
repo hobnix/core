@@ -1,7 +1,7 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   import { poll, rows } from '../data.svelte.js';
-  import { openPlan, openCreate, jobRunning, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate, jobRunning } from '../ui.svelte.js';
   import { route, go } from '../route.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
@@ -101,7 +101,7 @@
   const dnsCols = [{ key: 'name', label: 'Name' }, { key: 'type', label: 'Type' }, { key: 'value', label: 'Value' }];
 </script>
 
-<PageHeader title="Network" crumb={ui.host} sub={vlan ? `Site ${vlan.name} · UniFi. Addresses, names, ports and the way in from the outside.` : 'Addresses, names, ports and the way in from the outside.'} />
+<PageHeader title="Network" sub={vlan ? `Site ${vlan.name} · UniFi. Addresses, names, ports and the way in from the outside.` : 'Addresses, names, ports and the way in from the outside.'} />
 
 <PageTabs {tabs} {tab} onpick={pick} />
 

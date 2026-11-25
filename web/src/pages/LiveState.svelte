@@ -84,7 +84,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Live state" crumb="Monitoring" sub={tr('Every live-state topic, what is stored for it, and its last error.')} />
+  <PageHeader title="Live state" sub={tr('Every live-state topic, what is stored for it, and its last error.')} />
 
   {#if !on}
     <Banner tone="info">{tr('Live state is off. Turn on the capability live-state under Settings > Capabilities to see its topics here.')}</Banner>

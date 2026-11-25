@@ -156,7 +156,7 @@
 </script>
 
 {#if !pool}
-  <PageHeader title="Pools" crumb="Storage" sub="How the disks are grouped, how full they are and whether the redundancy holds.">
+  <PageHeader title="Pools" sub="How the disks are grouped, how full they are and whether the redundancy holds.">
     {#snippet actions()}
       <Button tooltip={'A disk failed or a pool will not open: the guided recovery'} onclick={() => go(P.incident)}><i class="ph ph-first-aid-kit"></i>Incident</Button>
       {#if freeDisks.length}<Button tooltip={'Show the disks that belong to no pool'} onclick={() => go(P.disks + '?pool=none')}><i class="ph ph-hard-drive"></i>{freeDisks.length} free disk{freeDisks.length === 1 ? '' : 's'}</Button>{/if}
@@ -181,7 +181,7 @@
     {/if}
   </PageState>
 {:else}
-  <PageHeader title={pool} crumb="Storage › Pools" sub={layout ? `${layout}${members.length ? ` · ${members.length} disk${members.length === 1 ? '' : 's'}` : ''}${luks ? ' · LUKS' : ''}` : ''}>
+  <PageHeader title={pool} sub={layout ? `${layout}${members.length ? ` · ${members.length} disk${members.length === 1 ? '' : 's'}` : ''}${luks ? ' · LUKS' : ''}` : ''}>
     {#snippet actions()}
       <Button tooltip={'Back to the list of pools'} onclick={() => go(P.pools)}><i class="ph ph-caret-left"></i>All pools</Button>
       <Button need="admin" disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>

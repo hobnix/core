@@ -63,7 +63,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Hardware" crumb="Monitoring" sub="Sensors, fans and the UPS of this server.">
+  <PageHeader title="Hardware" sub="Sensors, fans and the UPS of this server.">
     {#snippet actions()}<Button need="admin" icon="fan" busy={jobRunning('admin', ['fans-clean'])} tooltip={'Run the fans at full speed for a few seconds'} onclick={() => openPlan('admin', ['fans-clean'], 'Clean the fans')}>Clean fans</Button>{/snippet}
   </PageHeader>
 

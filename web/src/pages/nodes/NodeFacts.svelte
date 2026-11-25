@@ -21,7 +21,7 @@
   const empty = $derived(d != null && !f.locked && (which === 'storage' ? !f.pools.length : which === 'instances' ? !f.instances : !f.backup));
 </script>
 
-<PageHeader {title} crumb={node.name} sub="A summary from the status document of {node.name}, read only. Last answer: {d ? since(d.time) : 'never'}." />
+<PageHeader {title} sub="A summary from the status document of {node.name}, read only. Last answer: {d ? since(d.time) : 'never'}." />
 {#if f.locked}<Banner tone="warn" icon="lock">The storage on {node.name} is locked; its pools and instances are not available until it is unlocked there.</Banner>{/if}
 <PageState loading={!st.loaded} error={st.error?.message} hasData={d != null} {empty} emptyIcon="tray" emptyTitle="The document has nothing about this" emptyText="{node.name} does not report it (yet).">
   <div class="card pad">
