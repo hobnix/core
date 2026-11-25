@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Put one file into the state folder of a service that runs as a dynamic user, as root, without ever following a link the service planted
+(ext_state.py: the folder is the service's, so every name below it is untrusted). Python stdlib only.
+
+  state_put.py same <src> <top> <rel>            exit 0 when the file at <top>/<rel> is a regular file with the content of <src>, 1 when it differs or is missing
+  state_put.py put  <src> <top> <rel> <stamp>    write <src> to <top>/<rel>; exit 0, or 2 with the reason on stderr (a problem is never silent)
+
+<top> is the state root (/var/lib/hs/<name>, a link that ONLY root can change: it is resolved once). Below it every folder is opened with O_NOFOLLOW
+relative to the descriptor of its parent; a missing folder is made (0700); a link or file where a folder should be is refused. The file is written
+to a new name (O_EXCL) and renamed over the old one: a planted link at the destination is replaced, never written through. What was there is kept
+as <file>.before-restore-<stamp> (a link is kept as a link). The owner of the new file is the owner of <top>, its mode the mode of <src>.
+"""
+import os
+import stat
+import sys
+
+DIRFLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+
+
+def walk(top, parts, make):
+    """descriptor of the folder holding the last name; raises OSError (ELOOP/ENOTDIR for a link or file in the way)"""
+    fd = os.open(os.path.realpath(top), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for p in parts:
+            try:
+                nxt = os.open(p, DIRFLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                if not make:
+                    raise
+                os.mkdir(p, 0o700, dir_fd=fd)
+                nxt = os.open(p, DIRFLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def parts_of(rel):
+    parts = [x for x in rel.split("/") if x]
+    if not parts or any(x in (".", "..") for x in parts):
+        raise OSError(0, "bad path " + rel)
+    return parts[:-1], parts[-1]
+
+
+def same(src, top, rel):
+    dirs, name = parts_of(rel)
+    try:
+        fd = walk(top, dirs, False)
+    except OSError:
+        return 1
+    try:
+        f = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    except OSError:
+        return 1
+    finally:
+        os.close(fd)
+    with os.fdopen(f, "rb") as a:
+        if not stat.S_ISREG(os.fstat(a.fileno()).st_mode):
+            return 1
+        with open(src, "rb") as b:
+            return 0 if a.read() == b.read() else 1
+
+
+def put(src, top, rel, stamp):
+    dirs, name = parts_of(rel)
+    owner = os.stat(top)
+    with open(src, "rb") as f:
+        data = f.read()
+        mode = stat.S_IMODE(os.fstat(f.fileno()).st_mode)
+    fd = walk(top, dirs, True)
+    tmp = ".restore-%d-%s" % (os.getpid(), name)
+    try:
+        try:
+            old = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            old = None
+        if old is not None:
+            if stat.S_ISDIR(old.st_mode):
+                raise OSError(0, "%s is a folder there" % rel)
+            keep = "%s.before-restore-%s" % (name, stamp)
+            if stat.S_ISLNK(old.st_mode):
+                os.symlink(os.readlink(name, dir_fd=fd), keep, dir_fd=fd)
+            else:
+                o = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                try:
+                    k = os.open(keep, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+                    with os.fdopen(k, "wb") as kf, os.fdopen(o, "rb", closefd=False) as of:
+                        kf.write(of.read())
+                        os.fchown(k, owner.st_uid, owner.st_gid)
+                finally:
+                    os.close(o)
+        w = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        try:
+            with os.fdopen(w, "wb", closefd=False) as wf:
+                wf.write(data)
+            os.fchown(w, owner.st_uid, owner.st_gid)
+            os.fchmod(w, mode)
+        finally:
+            os.close(w)
+        os.rename(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)
+    except BaseException:
+        try:
+            os.unlink(tmp, dir_fd=fd)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(fd)
+    return 0
+
+
+def main(argv):
+    try:
+        if len(argv) == 4 and argv[0] == "same":
+            return same(*argv[1:])
+        if len(argv) == 5 and argv[0] == "put":
+            return put(*argv[1:])
+    except OSError as e:
+        sys.stderr.write("state_put.py: %s: %s\n" % (argv[3] if len(argv) > 3 else "?", e.strerror or e))
+        return 2
+    sys.stderr.write(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
