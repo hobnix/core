@@ -47,6 +47,9 @@ pk badport "$(route web '"8000"' '"public-ok"')" ''
 pk badadmin "$(route web 8000 '"public-ok"')"'\nadmin = "true"' ''
 pk badtable '[app]\nroutes = "web"' ''
 pk badapp 'app = "routes"' ''
+# a trailing newline in a route name: a `$` anchor would let it through
+pk badnl "$(route '"web\\n"' 8000 '"public-ok"')" ''
+check "its manifest really holds the TOML escape for a newline" grep -qF '[app.routes."web\n"]' recipes/badnl/package.toml
 # a route name with U+2028 (TOML escape)
 pk sep "$(route '"a\\u2028b"' 8000 '"public-ok"')" ''
 check "its manifest really holds the TOML escape for U+2028" grep -qF 'a\u2028b' recipes/sep/package.toml
@@ -80,7 +83,7 @@ check_out "a refused plan twin leaves the start row refused too" "twin" bash -c 
 
 echo "-- a route the admin check cannot judge is refused (#1226)"
 check "a valid route installs" $PKGSH install routeok
-for p in badname badexp badport badadmin badtable badapp sep; do
+for p in badname badexp badport badadmin badtable badapp badnl sep; do
   check "$p: install fails" bash -c "! $PKGSH install $p >/dev/null 2>&1"
   check "$p: nothing is left in current/" test ! -e "$HS_STATE_DIR/packages/current/$p"
   check "$p: nothing is recorded as installed" bash -c "! grep -q 'package.$p\]' '$HS_STATE_DIR/packages/installed.toml'"

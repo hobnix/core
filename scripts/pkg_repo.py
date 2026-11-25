@@ -1267,7 +1267,7 @@ class Repos:
             why = self.pkg.pkg_app.svg_problem(data.decode("utf-8", "replace"))
             if why:
                 raise Refused("%s: the icon %s %s" % (name, file, why))
-        elif not self.pkg.pkg_app.PICTURE.match(file):
+        elif not self.pkg.pkg_app.PICTURE.fullmatch(file):
             raise Refused("%s: %s is not a png or webp picture" % (name, file))
         return data
 
