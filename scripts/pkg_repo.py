@@ -935,8 +935,14 @@ class Repos:
         """The staged copy before it replaces anything (#1072): manifest findings (an app route to an admin page ...) and the rows the loader
         refuses (scripts/lib/pkg-stage-check.sh, the one place that knows the row rules). -> "" or one line; fails closed when the check cannot run.
         Nothing is vendored, no event is written and the old copy stays where it is until this is empty."""
-        # only the trust rule here (an admin page is never public); the rest of the app contract is `hs pkg validate`, as before
-        found = [str(x) for x in self.pkg.pkg_app.check(m, tmp, False)[0] if "an admin page is never public" in str(x)]
+        # only the routes here (the trust rule: an admin page is never public); the rest of the app contract is `hs pkg validate`, as before.
+        # Every route finding refuses: the admin check skips a route with a bad name, exposure, port or admin value (#1226)
+        try:
+            found = [str(x) for x in self.pkg.pkg_app.check(m, tmp, False)[0] if str(x).startswith(("[app] must", "[app.routes]"))]
+            if isinstance(m.get("app"), dict) and "routes" in m["app"] and not self.pkg.pkg_app.admin_targets():
+                found.append("the list of admin pages could not be read")
+        except Exception:   # a check that cannot run is a refusal, never a pass
+            found = ["the check of its manifest could not run"]
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "pkg-stage-check.sh").replace("\\", "/")
         try:
             res = subprocess.run([os.environ.get("HS_BASH") or "bash", script, name, tmp, r_name], capture_output=True, timeout=120)

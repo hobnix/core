@@ -61,6 +61,9 @@ ports = [2283]
 gpu = false
 ```
 
+`hs pkg install` and `update` refuse the whole package (error code `pkg.rows`) when `[app]` or anything under `[app.routes]` is not valid: a
+bad route name, `exposure`, `port`, `scheme` or `admin` value is refused, never skipped. Not tested on hardware yet.
+
 An unknown key in any `[app]` table is an error. A route that is public-ok and marked `admin = true`, or whose container and port are in
 `ADMIN_TARGETS` of `scripts/services.py`, is refused: a manifest cannot make an admin page public.
 
