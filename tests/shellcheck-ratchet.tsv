@@ -68,7 +68,7 @@ scripts/release-channel.sh	1
 scripts/secrets.sh	2
 scripts/services.sh	4
 scripts/setup-list.sh	1
-scripts/smoke.sh	2
+scripts/smoke.sh	1
 scripts/storage-incident.sh	20
 scripts/system-change.sh	1
 scripts/system.sh	1
