@@ -13,20 +13,19 @@ here=$(dirname "$0")
 py=${HS_PYTHON:-python3}
 pre() { PYTHONUTF8=1 "$py" "$here/preset.py" "$@"; }
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: preset-change.sh plan|start apply <name>" >&2; exit 1 ;; esac
 [ "$action" = apply ] || refuse_code action.unknown "unknown action (apply)"
-[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "No preset called '$name'."
-meta=$(pre meta "$name" 2>/dev/null) || refuse "No preset called '$name'."
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code preset.unknown "No preset called '$name'."
+meta=$(pre meta "$name" 2>/dev/null) || refuse_code preset.unknown "No preset called '$name'."
 title=$(awk -F'\t' '$1 == "title" { print $2 }' <<<"$meta")
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 
 if [ "$verb" = start ]; then
-  HS_CALLER=ui bash "$here/preset.sh" apply "$name" --yes >/dev/null 2>&1 || refuse "the preset could not be applied"
+  HS_CALLER=ui bash "$here/preset.sh" apply "$name" --yes >/dev/null 2>&1 || refuse_code preset.apply-failed "the preset could not be applied"
   printf 'status\tdone\n'
   exit 0
 fi
@@ -45,7 +44,7 @@ plan_rows() {   # same as preset.sh plan_rows: kind<TAB>key<TAB>value<TAB>state 
   done < <(pre rows "$name")
 }
 
-rows=$(plan_rows) || refuse "the preset could not be read"
+rows=$(plan_rows) || refuse_code preset.unreadable "the preset could not be read"
 printf 'status\tok\nheading\tapply the preset %s\n' "$title"
 todo=0 machine=0
 while IFS=$'\t' read -r kind key val st; do

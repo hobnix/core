@@ -42,7 +42,8 @@ adm="$(admin_user)"
 write_on() { [ "$(setting_get fileManagerWrite 2>/dev/null || true)" = true ]; }
 WRITE_OFF_REASON="The file manager is read only until you allow it: hs config set fileManagerWrite true (web: Settings, 'Allow the file manager to copy, move and delete files'). Test it in a VM first (docs/PLAN-storage-nas.md)."
 refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
-gate() { capability_on storage || refuse "The file manager needs the capability 'storage' (role homeserver)."; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
+gate() { capability_on storage || refuse_code fm.capability-off "The file manager needs the capability 'storage' (role homeserver)."; }
 grab() { local p=$1 v; for v in ID KIND LABEL ROOT FS SIZE FREE ADD MOD REASON POOL DISK USABLE ERR AK REL TOP SNAP LOCK; do eval "$p$v=\"\${L$v}\""; done; }
 sanitize_confirm() { local s; s=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._ -' '_'); printf '%s\n' "${s:0:64}"; }
 
@@ -107,7 +108,7 @@ cmd_locations() {
 
 cmd_pair() {
   gate
-  [ $# -eq 2 ] || refuse "usage: pair <left-id> <right-id>"
+  [ $# -eq 2 ] || refuse_code fm.usage "usage: pair <left-id> <right-id>"
   fm_resolve "$1" || refuse "$LERR"
   fm_resolve "$2" || refuse "$LERR"
   local why
@@ -138,33 +139,33 @@ open_dir() {
   local p dir top
   fm_resolve "$1" || refuse "$LERR"
   [ "$LUSABLE" = yes ] || refuse "$LERR"
-  p=$(fm_clean_path "$2") || refuse "the path must not contain .. , empty parts or control characters"
+  p=$(fm_clean_path "$2") || refuse_code fm.path-invalid "the path must not contain .. , empty parts or control characters"
   dir=$LROOT${p:+/$p}
-  [ -d "$dir" ] || refuse "no such folder"
+  [ -d "$dir" ] || refuse_code fm.folder-missing "no such folder"
   real=$(readlink -f -- "$dir")
-  case "$real/" in "$LROOT"/*) ;; *) refuse "that path leaves the location" ;; esac
+  case "$real/" in "$LROOT"/*) ;; *) refuse_code fm.path-invalid "that path leaves the location" ;; esac
   rel=${real#"$LROOT"}; rel=${rel#/}
   if [ -n "$rel" ]; then
     top=${rel%%/*}
     fm_protected "" "$top"
-    [ "$PROT" != system ] || refuse "$top belongs to the array and cannot be opened"
+    [ "$PROT" != system ] || refuse_code fm.protected "$top belongs to the array and cannot be opened"
   fi
 }
 
 cmd_ls() {
   gate
-  [ $# -ge 1 ] || refuse "usage: ls <location>"
+  [ $# -ge 1 ] || refuse_code fm.usage "usage: ls <location>"
   local loc=$1 path="" cursor=0 limit=500; shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      --path)   [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
-      --cursor) [ $# -ge 2 ] || refuse "--cursor needs a value"; cursor=$2; shift 2 ;;
-      --limit)  [ $# -ge 2 ] || refuse "--limit needs a value"; limit=$2; shift 2 ;;
-      *) refuse "unknown option $1" ;;
+      --path)   [ $# -ge 2 ] || refuse_code fm.value-missing "--path needs a value"; path=$2; shift 2 ;;
+      --cursor) [ $# -ge 2 ] || refuse_code fm.value-missing "--cursor needs a value"; cursor=$2; shift 2 ;;
+      --limit)  [ $# -ge 2 ] || refuse_code fm.value-missing "--limit needs a value"; limit=$2; shift 2 ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
-  [[ $cursor =~ ^[0-9]{1,9}$ ]] || refuse "the cursor is a number"
-  [[ $limit =~ ^[0-9]{1,5}$ ]] && [ "$limit" -ge 1 ] || refuse "the limit is a number from 1"
+  [[ $cursor =~ ^[0-9]{1,9}$ ]] || refuse_code fm.value-invalid "the cursor is a number"
+  [[ $limit =~ ^[0-9]{1,5}$ ]] && [ "$limit" -ge 1 ] || refuse_code fm.value-invalid "the limit is a number from 1"
   [ "$limit" -le 2000 ] || limit=2000
   local real rel
   open_dir "$loc" "$path"
@@ -221,34 +222,34 @@ cmd_ls() {
 op="" from="" path="" to="" topath="" policy=skip verify=size parity_after=no newname="" want_conflicts=no confirm="" now=no permanent=no selfile="" jobid="" by=""
 parse_args() {
   op=${1:-}; [ $# -eq 0 ] || shift
-  case "$op" in copy|move|delete|restore|rename|mkdir) ;; *) refuse "unknown operation '$op' (copy, move, delete, restore, rename, mkdir)" ;; esac
+  case "$op" in copy|move|delete|restore|rename|mkdir) ;; *) refuse_code action.unknown "unknown operation '$op' (copy, move, delete, restore, rename, mkdir)" ;; esac
   while [ $# -gt 0 ]; do
     case "$1" in
-      --from)      [ $# -ge 2 ] || refuse "--from needs a value"; from=$2; shift 2 ;;
-      --path)      [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
-      --to)        [ $# -ge 2 ] || refuse "--to needs a value"; to=$2; shift 2 ;;
-      --to-path)   [ $# -ge 2 ] || refuse "--to-path needs a value"; topath=$2; shift 2 ;;
-      --conflict)  [ $# -ge 2 ] || refuse "--conflict needs a value"; policy=$2; shift 2 ;;
-      --verify)    [ $# -ge 2 ] || refuse "--verify needs a value"; verify=$2; shift 2 ;;
-      --newname)   [ $# -ge 2 ] || refuse "--newname needs a value"; newname=$2; shift 2 ;;
-      --confirm)   [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-      --by)        [ $# -ge 2 ] || refuse "--by needs a value"; by=$2; shift 2 ;;
-      --job-id)    [ $# -ge 2 ] || refuse "--job-id needs a value"; jobid=$2; shift 2 ;;
-      --sel-file)  [ $# -ge 2 ] || refuse "--sel-file needs a value"; selfile=$2; shift 2 ;;
+      --from)      [ $# -ge 2 ] || refuse_code fm.value-missing "--from needs a value"; from=$2; shift 2 ;;
+      --path)      [ $# -ge 2 ] || refuse_code fm.value-missing "--path needs a value"; path=$2; shift 2 ;;
+      --to)        [ $# -ge 2 ] || refuse_code fm.value-missing "--to needs a value"; to=$2; shift 2 ;;
+      --to-path)   [ $# -ge 2 ] || refuse_code fm.value-missing "--to-path needs a value"; topath=$2; shift 2 ;;
+      --conflict)  [ $# -ge 2 ] || refuse_code fm.value-missing "--conflict needs a value"; policy=$2; shift 2 ;;
+      --verify)    [ $# -ge 2 ] || refuse_code fm.value-missing "--verify needs a value"; verify=$2; shift 2 ;;
+      --newname)   [ $# -ge 2 ] || refuse_code fm.value-missing "--newname needs a value"; newname=$2; shift 2 ;;
+      --confirm)   [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+      --by)        [ $# -ge 2 ] || refuse_code fm.value-missing "--by needs a value"; by=$2; shift 2 ;;
+      --job-id)    [ $# -ge 2 ] || refuse_code fm.value-missing "--job-id needs a value"; jobid=$2; shift 2 ;;
+      --sel-file)  [ $# -ge 2 ] || refuse_code fm.value-missing "--sel-file needs a value"; selfile=$2; shift 2 ;;
       --parity-after) parity_after=yes; shift ;;
       --conflicts) want_conflicts=yes; shift ;;
       --now)       now=yes; shift ;;
       --permanent) permanent=yes; shift ;;
-      *) refuse "unknown option $1" ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
-  [ "$permanent" != yes ] || [ "$op" = delete ] || refuse "--permanent belongs to delete only"
-  case "$policy" in skip|rename|newer|overwrite) ;; *) refuse "--conflict is skip, rename, newer or overwrite" ;; esac
-  case "$verify" in size|checksum) ;; *) refuse "--verify is size or checksum" ;; esac
-  [ -n "$from" ] || refuse "--from <location> is needed"
+  [ "$permanent" != yes ] || [ "$op" = delete ] || refuse_code fm.option-misplaced "--permanent belongs to delete only"
+  case "$policy" in skip|rename|newer|overwrite) ;; *) refuse_code fm.value-invalid "--conflict is skip, rename, newer or overwrite" ;; esac
+  case "$verify" in size|checksum) ;; *) refuse_code fm.value-invalid "--verify is size or checksum" ;; esac
+  [ -n "$from" ] || refuse_code fm.value-missing "--from <location> is needed"
   by=$(printf '%s' "${by:-${HS_USER:-}}" | tr -c 'A-Za-z0-9._@-' '_')
   [ -n "$by" ] || by=${HS_CALLER:-$(id -un)}
-  [[ ${jobid:-x} =~ ^[A-Za-z0-9._-]{1,60}$ ]] || refuse "bad job id"
+  [[ ${jobid:-x} =~ ^[A-Za-z0-9._-]{1,60}$ ]] || refuse_code fm.value-invalid "bad job id"
 }
 
 valid_newname() {   # a single new name: no slash, no control characters, not . or ..
@@ -263,27 +264,27 @@ SEL=()
 read_selection() {
   local nm nm_ok src=/dev/stdin
   if [ -n "$selfile" ]; then
-    case "$selfile" in *..*) refuse "bad selection file" ;; "$fm_dir"/jobs/*.sel) ;; *) refuse "bad selection file" ;; esac     # a * also matches / : no .. may climb out of the folder
-    [ -f "$selfile" ] || refuse "the selection is gone"
+    case "$selfile" in *..*) refuse_code fm.selection-invalid "bad selection file" ;; "$fm_dir"/jobs/*.sel) ;; *) refuse_code fm.selection-invalid "bad selection file" ;; esac     # a * also matches / : no .. may climb out of the folder
+    [ -f "$selfile" ] || refuse_code fm.selection-invalid "the selection is gone"
     src=$selfile
-  elif [ -t 0 ]; then refuse "the selection comes on stdin, NUL separated"; fi
+  elif [ -t 0 ]; then refuse_code fm.selection-invalid "the selection comes on stdin, NUL separated"; fi
   while IFS= read -r -d '' nm || [ -n "$nm" ]; do
-    [ -n "$nm" ] || refuse "an empty name in the selection"
+    [ -n "$nm" ] || refuse_code fm.selection-invalid "an empty name in the selection"
     if [ "$op" = restore ]; then   # <trash folder>/<date>/<path>: the items of `trash`, with slashes
-      nm_ok=$(fm_clean_path "$nm") || refuse "'$(fm_esc "$nm")' is not an item of the trash"
-      [ "$nm_ok" = "$nm" ] && [[ $nm =~ ^([^/]+)/[0-9]{4}-[0-9]{2}-[0-9]{2}/[^/].*$ ]] && fm_is_trash_name "${BASH_REMATCH[1]}" || refuse "'$(fm_esc "$nm")' is not an item of the trash"
+      nm_ok=$(fm_clean_path "$nm") || refuse_code fm.not-in-trash "'$(fm_esc "$nm")' is not an item of the trash"
+      [ "$nm_ok" = "$nm" ] && [[ $nm =~ ^([^/]+)/[0-9]{4}-[0-9]{2}-[0-9]{2}/[^/].*$ ]] && fm_is_trash_name "${BASH_REMATCH[1]}" || refuse_code fm.not-in-trash "'$(fm_esc "$nm")' is not an item of the trash"
     else
-    case "$nm" in */*) refuse "'$nm': names in the selection are relative to --path and hold no slash" ;; .|..) refuse "'$nm' is not a name" ;; esac
+    case "$nm" in */*) refuse_code fm.selection-invalid "'$nm': names in the selection are relative to --path and hold no slash" ;; .|..) refuse_code fm.selection-invalid "'$nm' is not a name" ;; esac
     fi
-    [ "${#nm}" -le 255 ] || refuse "a name in the selection is too long"
-    if fm_badname "$nm"; then refuse "'$(fm_esc "$nm")' has control characters or is not valid UTF-8: it cannot be selected here"; fi
+    [ "${#nm}" -le 255 ] || refuse_code fm.selection-invalid "a name in the selection is too long"
+    if fm_badname "$nm"; then refuse_code fm.selection-invalid "'$(fm_esc "$nm")' has control characters or is not valid UTF-8: it cannot be selected here"; fi
     SEL+=("$nm")
   done < "$src"
-  [ "${#SEL[@]}" -le 200000 ] || refuse "too many items in one selection"
+  [ "${#SEL[@]}" -le 200000 ] || refuse_code fm.selection-invalid "too many items in one selection"
   # duplicates
   if [ "${#SEL[@]}" -gt 1 ]; then
     local dups; dups=$(printf '%s\0' "${SEL[@]}" | LC_ALL=C sort -z | uniq -zd | head -z -n1 | tr '\0' ' ') || true
-    [ -z "$dups" ] || refuse "'${dups% }' is selected twice"
+    [ -z "$dups" ] || refuse_code fm.selection-invalid "'${dups% }' is selected twice"
   fi
 }
 
@@ -325,63 +326,63 @@ do_plan() {
   fm_resolve "$from" || refuse "$LERR"
   [ "$LUSABLE" = yes ] || refuse "$LERR"
   grab S_
-  local ps; ps=$(fm_clean_path "$path") || refuse "the path must not contain .. , empty parts or control characters"
+  local ps; ps=$(fm_clean_path "$path") || refuse_code fm.path-invalid "the path must not contain .. , empty parts or control characters"
   local sdir=$S_ROOT${ps:+/$ps}
-  [ -d "$sdir" ] || refuse "there is no folder '${ps:-/}' in ${S_LABEL}"
+  [ -d "$sdir" ] || refuse_code fm.folder-missing "there is no folder '${ps:-/}' in ${S_LABEL}"
   srcdir=$(readlink -f -- "$sdir")
-  case "$srcdir/" in "$S_ROOT"/*) ;; *) refuse "that path leaves the location" ;; esac
+  case "$srcdir/" in "$S_ROOT"/*) ;; *) refuse_code fm.path-invalid "that path leaves the location" ;; esac
   srel=${srcdir#"$S_ROOT"}; srel=${srel#/}
-  if [ -n "$srel" ] && fm_is_trash_name "${srel%%/*}"; then refuse "That is the trash: put items back with restore; it is emptied after $FM_TRASH_DAYS days."; fi
+  if [ -n "$srel" ] && fm_is_trash_name "${srel%%/*}"; then refuse_code fm.in-trash "That is the trash: put items back with restore; it is emptied after $FM_TRASH_DAYS days."; fi
   fm_trash_base; tbase=$TBASE; trel=$TREL   # the trash folder lives at the root of the file system
   if [ -n "$srel" ]; then
     LTOP=$S_TOP; LKIND=$S_KIND
     fm_protected "" "${srel%%/*}"
-    [ "$PROT" != system ] || refuse "${srel%%/*} belongs to the array and cannot be used"
+    [ "$PROT" != system ] || refuse_code fm.protected "${srel%%/*} belongs to the array and cannot be used"
   fi
   has_dst=no
   case "$op" in copy|move) has_dst=yes ;; esac
 
   if [ "$op" = mkdir ]; then
     SEL=()
-    valid_newname "$newname" || refuse "--newname is one name without slash or control characters"
+    valid_newname "$newname" || refuse_code name.invalid "--newname is one name without slash or control characters"
   else
     read_selection
-    [ "${#SEL[@]}" -gt 0 ] || refuse "nothing is selected"
+    [ "${#SEL[@]}" -gt 0 ] || refuse_code fm.nothing-selected "nothing is selected"
     if [ "$op" = rename ]; then
-      [ "${#SEL[@]}" -eq 1 ] || refuse "rename takes exactly one item"
-      valid_newname "$newname" || refuse "--newname is one name without slash or control characters"
+      [ "${#SEL[@]}" -eq 1 ] || refuse_code fm.selection-invalid "rename takes exactly one item"
+      valid_newname "$newname" || refuse_code name.invalid "--newname is one name without slash or control characters"
     fi
   fi
-  [ "$has_dst" = yes ] || [ -z "$to" ] || [ "$to" = "$from" ] || refuse "$op works inside one location"
+  [ "$has_dst" = yes ] || [ -z "$to" ] || [ "$to" = "$from" ] || refuse_code fm.one-location "$op works inside one location"
 
   # permissions of the source side
   case "$op" in
-    move|delete|rename) [ "$S_MOD" = yes ] || refuse "${S_LABEL}: ${S_REASON}; it is a source only, nothing can be removed or renamed there." ;;
-    mkdir) [ "$S_ADD" = yes ] || refuse "${S_LABEL}: ${S_REASON}; no new folder can be made there." ;;
+    move|delete|rename) [ "$S_MOD" = yes ] || refuse_code fm.read-only "${S_LABEL}: ${S_REASON}; it is a source only, nothing can be removed or renamed there." ;;
+    mkdir) [ "$S_ADD" = yes ] || refuse_code fm.read-only "${S_LABEL}: ${S_REASON}; no new folder can be made there." ;;
   esac
   if [ "$op" = mkdir ] || [ "$op" = rename ]; then
-    if [ -z "$srel" ] && [ "$S_TOP" = yes ] && [ "$op" = mkdir ]; then refuse "The top of an array holds only shares and sensitive; new shares are made with hs share add."; fi
+    if [ -z "$srel" ] && [ "$S_TOP" = yes ] && [ "$op" = mkdir ]; then refuse_code fm.protected "The top of an array holds only shares and sensitive; new shares are made with hs share add."; fi
     local nn=$newname
-    if [ -e "$srcdir/$nn" ] || [ -L "$srcdir/$nn" ]; then refuse "'$nn' exists already here"; fi
+    if [ -e "$srcdir/$nn" ] || [ -L "$srcdir/$nn" ]; then refuse_code fm.exists "'$nn' exists already here"; fi
     LTOP=$S_TOP; LKIND=$S_KIND; fm_protected "$srel" "$nn"
-    [ -z "$PROT" ] || refuse "'$nn' is a name the array keeps for itself"
+    [ -z "$PROT" ] || refuse_code fm.protected "'$nn' is a name the array keeps for itself"
   fi
 
   # the items
   local nm full
   for nm in "${SEL[@]}"; do
     full=$srcdir/$nm
-    [ -e "$full" ] || [ -L "$full" ] || refuse "'$nm' does not exist in ${ps:-/}"
+    [ -e "$full" ] || [ -L "$full" ] || refuse_code fm.item-missing "'$nm' does not exist in ${ps:-/}"
     LTOP=$S_TOP; LKIND=$S_KIND; LLABEL=$S_LABEL; LREL=$S_REL; LSNAP=$S_SNAP
     fm_protected "$srel" "$nm"
     case "$PROT" in
-      array) refuse "'$nm' belongs to the array: it can be opened, but not selected, moved, renamed or deleted." ;;
-      system) refuse "'$nm' belongs to the array (system file): it cannot be selected." ;;
+      array) refuse_code fm.protected "'$nm' belongs to the array: it can be opened, but not selected, moved, renamed or deleted." ;;
+      system) refuse_code fm.protected "'$nm' belongs to the array (system file): it cannot be selected." ;;
     esac
-    if [ -L "$full" ] && [ "$has_dst" = yes ]; then refuse "'$nm' is a link: links are not copied or moved here."; fi
+    if [ -L "$full" ] && [ "$has_dst" = yes ]; then refuse_code fm.link "'$nm' is a link: links are not copied or moved here."; fi
     if fm_is_share_root "${srel:+$srel/}$nm"; then
       case "$op" in
-        delete|rename) refuse "'$nm' is a share, not a folder: use hs share ... to rename or remove it." ;;
+        delete|rename) refuse_code fm.is-share "'$nm' is a share, not a folder: use hs share ... to rename or remove it." ;;
       esac
     fi
   done
@@ -389,37 +390,37 @@ do_plan() {
   # the target
   dtdir=""; drel=""; rename_ok=no
   if [ "$has_dst" = yes ]; then
-    [ -n "$to" ] || refuse "--to <location> is needed"
+    [ -n "$to" ] || refuse_code fm.value-missing "--to <location> is needed"
     fm_resolve "$to" || refuse "$LERR"
     [ "$LUSABLE" = yes ] || refuse "$LERR"
     grab D_
     local why
     if why=$(fm_same_files "$from" "$to"); then refuse "$why"; fi
-    [ "$D_ADD" = yes ] || refuse "${D_LABEL} takes no files: ${D_REASON}."
-    local pd; pd=$(fm_clean_path "$topath") || refuse "the target path must not contain .. , empty parts or control characters"
+    [ "$D_ADD" = yes ] || refuse_code fm.read-only "${D_LABEL} takes no files: ${D_REASON}."
+    local pd; pd=$(fm_clean_path "$topath") || refuse_code fm.path-invalid "the target path must not contain .. , empty parts or control characters"
     local tdir=$D_ROOT${pd:+/$pd}
-    [ -d "$tdir" ] || refuse "there is no target folder '${pd:-/}' in ${D_LABEL}; make it first."
+    [ -d "$tdir" ] || refuse_code fm.folder-missing "there is no target folder '${pd:-/}' in ${D_LABEL}; make it first."
     dtdir=$(readlink -f -- "$tdir")
-    case "$dtdir/" in "$D_ROOT"/*) ;; *) refuse "the target path leaves the location" ;; esac
+    case "$dtdir/" in "$D_ROOT"/*) ;; *) refuse_code fm.path-invalid "the target path leaves the location" ;; esac
     drel=${dtdir#"$D_ROOT"}; drel=${drel#/}
-    if [ -z "$drel" ] && [ "$D_TOP" = yes ]; then refuse "The top of an array holds only shares and sensitive; choose a folder below one of them."; fi
+    if [ -z "$drel" ] && [ "$D_TOP" = yes ]; then refuse_code fm.protected "The top of an array holds only shares and sensitive; choose a folder below one of them."; fi
     if [ -n "$drel" ]; then
       LTOP=$D_TOP; LKIND=$D_KIND; fm_protected "" "${drel%%/*}"
-      [ "$PROT" != system ] || refuse "${drel%%/*} belongs to the array and cannot be used"
+      [ "$PROT" != system ] || refuse_code fm.protected "${drel%%/*} belongs to the array and cannot be used"
     fi
     for nm in "${SEL[@]}"; do
       if [ -d "$srcdir/$nm" ] && [ ! -L "$srcdir/$nm" ]; then
-        case "$dtdir/" in "$srcdir/$nm"/*) refuse "'$nm' cannot be put into itself." ;; esac
+        case "$dtdir/" in "$srcdir/$nm"/*) refuse_code fm.target-invalid "'$nm' cannot be put into itself." ;; esac
       fi
       LTOP=$S_TOP; LKIND=$S_KIND; LREL=$S_REL
       if fm_is_share_root "${srel:+$srel/}$nm"; then
-        [ "$S_KIND" = disk ] && [ "$D_KIND" = disk ] || refuse "'$nm' is a share folder: it can only go from one data disk to another."
+        [ "$S_KIND" = disk ] && [ "$D_KIND" = disk ] || refuse_code fm.is-share "'$nm' is a share folder: it can only go from one data disk to another."
       fi
     done
-    if [ "$op" = move ] && [ "$srcdir" = "$dtdir" ]; then refuse "The files are in that folder already."; fi
+    if [ "$op" = move ] && [ "$srcdir" = "$dtdir" ]; then refuse_code fm.target-invalid "The files are in that folder already."; fi
     if [ "$op" = move ] && [ "${HS_FM_NO_RENAME:-0}" != 1 ] && [ "$(stat -c %d -- "$srcdir")" = "$(stat -c %d -- "$dtdir")" ]; then rename_ok=yes; fi
     if [ "$op" = move ]; then
-      case "$policy" in newer|overwrite) refuse "Overwrite is refused together with move: copy first, then delete, or choose skip / rename." ;; esac
+      case "$policy" in newer|overwrite) refuse_code fm.overwrite-move "Overwrite is refused together with move: copy first, then delete, or choose skip / rename." ;; esac
     fi
   fi
 
@@ -441,7 +442,7 @@ do_plan() {
       margin=${HS_FM_MARGIN:-$([ "$D_KIND" = disk ] && echo $((10 * 1024 * 1024 * 1024)) || echo $((1024 * 1024 * 1024)))}
       need=$((bytes + margin))
       if [ "$bytes" -gt 0 ] && [ "$avail" -lt "$need" ]; then
-        refuse "${D_LABEL} has $(fm_human "$avail") free; this needs $(fm_human "$bytes") plus a margin of $(fm_human "$margin")."
+        refuse_code fm.no-room "${D_LABEL} has $(fm_human "$avail") free; this needs $(fm_human "$bytes") plus a margin of $(fm_human "$margin")."
       fi
       free_after=$((avail - bytes)); [ "$free_after" -ge 0 ] || free_after=0
     fi
@@ -484,10 +485,10 @@ do_plan() {
   [ "$has_dst" != yes ] || [ "$D_LOCK" != yes ] || lock_any=yes
 
   # who else is working
-  if claim_alive "$S_ID"; then refuse "Another file job is working on ${S_LABEL} already; wait until it is done."; fi
+  if claim_alive "$S_ID"; then refuse_code fm.busy "Another file job is working on ${S_LABEL} already; wait until it is done."; fi
   if [ "$now" != yes ] && [ "$lock_any" = yes ]; then
     if ! ( exec 9>"$bulk_lock"; flock -n 9 ) 2>/dev/null; then
-      refuse "$(lock_holder) is running and holds the bulk lock; try again when it is done."
+      refuse_code fm.busy "$(lock_holder) is running and holds the bulk lock; try again when it is done."
     fi
   fi
 
@@ -504,19 +505,19 @@ do_plan_restore() {
   fm_resolve "$from" || refuse "$LERR"
   [ "$LUSABLE" = yes ] || refuse "$LERR"
   grab S_
-  [ "$S_ADD" = yes ] || refuse "${S_LABEL}: ${S_REASON}; nothing can be put back there."
+  [ "$S_ADD" = yes ] || refuse_code fm.read-only "${S_LABEL}: ${S_REASON}; nothing can be put back there."
   fm_trash_base; tbase=$TBASE; trel=$TREL
   srcdir=$tbase; srel=""; has_dst=no; dtdir=""; drel=""; rename_ok=no
   read_selection
-  [ "${#SEL[@]}" -gt 0 ] || refuse "nothing is selected"
+  [ "${#SEL[@]}" -gt 0 ] || refuse_code fm.nothing-selected "nothing is selected"
   local nm origin fold date tp
   restore_origin=(); conflicts=0
   for nm in "${SEL[@]}"; do
-    [ -e "$srcdir/$nm" ] || [ -L "$srcdir/$nm" ] || refuse "'$nm' is not in the trash"
+    [ -e "$srcdir/$nm" ] || [ -L "$srcdir/$nm" ] || refuse_code fm.not-in-trash "'$nm' is not in the trash"
     fold=${nm%%/*}; date=${nm#*/}; date=${date%%/*}; tp=${nm#*/*/}
     origin=$(awk -F'\t' -v t="$tp" '$1 == t { print $2; exit }' "$srcdir/$fold/$date/.origin" 2>/dev/null || true)
-    [ -n "$origin" ] || refuse "'$nm' has no entry in the list of the trash, so nobody knows where it came from"
-    if [ -n "$trel" ]; then case "$origin/" in "$trel"/*) ;; *) refuse "'$nm' came from another place than ${S_LABEL}" ;; esac; fi
+    [ -n "$origin" ] || refuse_code fm.not-in-trash "'$nm' has no entry in the list of the trash, so nobody knows where it came from"
+    if [ -n "$trel" ]; then case "$origin/" in "$trel"/*) ;; *) refuse_code fm.not-in-trash "'$nm' came from another place than ${S_LABEL}" ;; esac; fi
     restore_origin+=("$origin")
     if [ -e "$tbase/$origin" ] || [ -L "$tbase/$origin" ]; then conflicts=$((conflicts + 1)); fi
   done
@@ -527,9 +528,9 @@ do_plan_restore() {
   free_after=""; confirm_name=""; long=no; lock_any=no; parity=no
   if [ "$S_SNAP" = yes ] && [ "$S_KIND" != cache ]; then parity=yes; fi
   [ "$S_LOCK" != yes ] || lock_any=yes
-  if claim_alive "$S_ID"; then refuse "Another file job is working on ${S_LABEL} already; wait until it is done."; fi
+  if claim_alive "$S_ID"; then refuse_code fm.busy "Another file job is working on ${S_LABEL} already; wait until it is done."; fi
   if [ "$now" != yes ] && [ "$lock_any" = yes ]; then
-    if ! ( exec 9>"$bulk_lock"; flock -n 9 ) 2>/dev/null; then refuse "$(lock_holder) is running and holds the pool lock; try again when it is done."; fi
+    if ! ( exec 9>"$bulk_lock"; flock -n 9 ) 2>/dev/null; then refuse_code fm.busy "$(lock_holder) is running and holds the pool lock; try again when it is done."; fi
   fi
 }
 plan_lines_restore() {
@@ -930,16 +931,16 @@ cmd_plan() {
 
 cmd_start() {
   parse_args "$@"
-  write_on || refuse "$WRITE_OFF_REASON"
+  write_on || refuse_code fm.write-off "$WRITE_OFF_REASON"
   if [ "$op" = restore ]; then do_plan_restore; else do_plan; fi
-  if [ -n "$confirm_name" ] && [ "$confirm" != "$confirm_name" ]; then refuse "type the confirmation to go on: $confirm_name"; fi
+  if [ -n "$confirm_name" ] && [ "$confirm" != "$confirm_name" ]; then refuse_code confirm.missing "type the confirmation to go on: $confirm_name"; fi
   if [ "$now" = yes ]; then
     run_job
     local rc=$?
     printf 'status\tdone\nresult\t%s\n' "$result"
     return $rc
   fi
-  mkdir -p "$fm_dir/jobs" "$fm_dir/busy" "$fm_dir/claims" 2>/dev/null || refuse "$fm_dir is not writable"
+  mkdir -p "$fm_dir/jobs" "$fm_dir/busy" "$fm_dir/claims" 2>/dev/null || refuse_code fm.state-unwritable "$fm_dir is not writable"
   chmod 700 "$fm_dir" 2>/dev/null || true
   local id sel desc unit
   id=$(date +%s)-$$-$RANDOM
@@ -963,7 +964,7 @@ cmd_start() {
     printf '%s\n' "$!" > "$fm_dir/jobs/$unit.pid"
   else
     . "$here/lib/job.sh"
-    unit=$(hs_job "fm-$op" "$desc" -- bash "$here/fm.sh" start "${args[@]}") || refuse "the job could not be started"
+    unit=$(hs_job "fm-$op" "$desc" -- bash "$here/fm.sh" start "${args[@]}") || refuse_code job.start-failed "the job could not be started"
     printf '%s\n' "$id" > "$fm_dir/jobs/$unit.alias"
   fi
   printf 'status\tdone\nunit\t%s\nid\t%s\n' "$unit" "$id"
@@ -971,12 +972,12 @@ cmd_start() {
 
 cmd_progress() {
   gate
-  [ $# -eq 1 ] || refuse "usage: progress <unit>"
+  [ $# -eq 1 ] || refuse_code fm.usage "usage: progress <unit>"
   local unit=$1 id sf pid
-  [[ $unit =~ ^[A-Za-z0-9@._-]{1,100}$ ]] || refuse "that is not a job"
+  [[ $unit =~ ^[A-Za-z0-9@._-]{1,100}$ ]] || refuse_code job.unit-invalid "that is not a job"
   unit=${unit%.service}
   if [ -f "$fm_dir/jobs/$unit.alias" ]; then id=$(cat "$fm_dir/jobs/$unit.alias"); else id=$unit; fi
-  [[ $id =~ ^[A-Za-z0-9._-]{1,60}$ ]] || refuse "that is not a job"
+  [[ $id =~ ^[A-Za-z0-9._-]{1,60}$ ]] || refuse_code job.unit-invalid "that is not a job"
   sf=$fm_dir/jobs/$id.state
   if [ ! -f "$sf" ] && [ -f "$fm_dir/jobs/$id.rec" ]; then
     # no state file (not written yet, or removed): the shared fields come from the job record
@@ -1008,7 +1009,7 @@ for k, v in (("files_done", f[0]), ("files_total", f[1]), ("bytes_done", b[0]), 
       printf 'status\tok\nfiles_done\t0\nfiles_total\t0\nbytes_done\t0\nbytes_total\t0\nspeed\t0\neta\t0\ncurrent\t\nphase\tstopped before it started\nresult\tcancelled\nskipped\t0\nfailed\t0\n'
       return 0
     fi
-    refuse "there is no file manager job '$unit'"
+    refuse_code job.unknown "there is no file manager job '$unit'"
   fi
   echo "status	ok"
   pid=$(awk -F'\t' '$1 == "pid" { print $2; exit }' "$sf")
@@ -1053,22 +1054,22 @@ for l in lines:
 # ======================================================================= du and stat
 cmd_stat() {
   gate
-  [ $# -ge 1 ] || refuse "usage: stat <location> --path P"
+  [ $# -ge 1 ] || refuse_code fm.usage "usage: stat <location> --path P"
   local loc=$1 path="" real rel name parent c; shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      --path) [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
-      *) refuse "unknown option $1" ;;
+      --path) [ $# -ge 2 ] || refuse_code fm.value-missing "--path needs a value"; path=$2; shift 2 ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
-  c=$(fm_clean_path "$path") || refuse "the path must not contain .. , empty parts or control characters"
-  [ -n "$c" ] || refuse "--path names the item"
+  c=$(fm_clean_path "$path") || refuse_code fm.path-invalid "the path must not contain .. , empty parts or control characters"
+  [ -n "$c" ] || refuse_code fm.value-missing "--path names the item"
   name=${c##*/}; parent=""; case "$c" in */*) parent=${c%/*} ;; esac
-  if fm_badname "$name"; then refuse "this name has odd characters and cannot be looked at here"; fi
+  if fm_badname "$name"; then refuse_code name.invalid "this name has odd characters and cannot be looked at here"; fi
   open_dir "$loc" "$parent"
-  [ -e "$real/$name" ] || [ -L "$real/$name" ] || refuse "no such item"
+  [ -e "$real/$name" ] || [ -L "$real/$name" ] || refuse_code fm.item-missing "no such item"
   local line typ u g uid gid m a s t
-  line=$(stat -c '%F|%U|%G|%u|%g|%a|%A|%s|%Y' -- "$real/$name" 2>/dev/null) || refuse "the item cannot be read"
+  line=$(stat -c '%F|%U|%G|%u|%g|%a|%A|%s|%Y' -- "$real/$name" 2>/dev/null) || refuse_code fm.item-unreadable "the item cannot be read"
   IFS='|' read -r typ u g uid gid m a s t <<<"$line"
   a=${a:1}   # %A starts with the type letter
   case $typ in directory) typ=d ;; "symbolic link") typ=l ;; *) typ=f ;; esac
@@ -1079,13 +1080,13 @@ cmd_stat() {
 du_key() { printf '%s' "$1:$2" | cksum | cut -d' ' -f1; }
 cmd_du() {
   gate
-  [ $# -ge 1 ] || refuse "usage: du <location> --path P"
+  [ $# -ge 1 ] || refuse_code fm.usage "usage: du <location> --path P"
   local loc=$1 path="" now=no real rel; shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      --path) [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
+      --path) [ $# -ge 2 ] || refuse_code fm.value-missing "--path needs a value"; path=$2; shift 2 ;;
       --now)  now=yes; shift ;;
-      *) refuse "unknown option $1" ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
     esac
   done
   open_dir "$loc" "$path"
@@ -1097,7 +1098,7 @@ cmd_du() {
     printf 'status\tok\ncached\tyes\nfiles\t%s\nfolders\t%s\nbytes\t%s\npartial\t%s\nmtime\t%s\ntime\t%s\n' "$cfiles" "$cdirs" "$cbytes" "$cpart" "$mt" "$ctime"
     return 0
   fi
-  mkdir -p "$ddir" 2>/dev/null || refuse "$fm_dir is not writable"
+  mkdir -p "$ddir" 2>/dev/null || refuse_code fm.state-unwritable "$fm_dir is not writable"
   if [ "$now" = yes ]; then
     # inside the job: no pool lock (a measurement changes nothing); the answer goes to the cache and is printed
     trap "rm -f -- $(printf '%q' "$run")" EXIT   # the path now: $run is local to this function and gone when the trap runs
@@ -1125,7 +1126,7 @@ cmd_du() {
   else
     . "$here/lib/job.sh"
     printf -- '-\n' > "$run"   # before the start: a quick job removes it again
-    unit=$(hs_job "fm-du" "measure the size of ${LLABEL}:/${rel}" -- nice -n 19 bash "$here/fm.sh" "${args[@]}") || { rm -f -- "$run"; refuse "the job could not be started"; }
+    unit=$(hs_job "fm-du" "measure the size of ${LLABEL}:/${rel}" -- nice -n 19 bash "$here/fm.sh" "${args[@]}") || { rm -f -- "$run"; refuse_code job.start-failed "the job could not be started"; }
     [ ! -f "$run" ] || printf '%s\n' "$unit" > "$run"
   fi
   printf 'status\tok\npending\tyes\nunit\t%s\n' "$unit"
@@ -1134,7 +1135,7 @@ cmd_du() {
 # ======================================================================= trash
 cmd_trash() {
   gate
-  [ $# -eq 1 ] || refuse "usage: trash <location>"
+  [ $# -eq 1 ] || refuse_code fm.usage "usage: trash <location>"
   fm_resolve "$1" || refuse "$LERR"
   [ "$LUSABLE" = yes ] || refuse "$LERR"
   fm_trash_base

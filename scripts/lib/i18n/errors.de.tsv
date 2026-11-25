@@ -366,3 +366,105 @@ blueprint.no-network	Dafür ist das Netzwerk nötig.
 blueprint.docker-refused	Docker kann nicht eingeschaltet werden.
 blueprint.needs-docker	Eine App des Bauplans braucht Docker.
 blueprint.confirm-unknown	Der Plan fragt nicht nach diesem Namen.
+apps.usage	Dem Befehl fehlen Argumente.
+apps.job-only	Dieser Schritt läuft nur als Auftrag.
+apps.job-not-failed	Dieser Auftrag ist nicht fehlgeschlagen.
+apps.no-failed-step	Der Auftrag hat keinen fehlgeschlagenen Schritt. Installiere noch einmal von vorne.
+apps.record-invalid	Das Protokoll des Auftrags kann nicht verwendet werden.
+apps.other-run	Ein anderer Lauf hat diese App installiert. Verwende dafür Entfernen.
+apps.no-created-record	Es ist nicht aufgezeichnet, was die Installation angelegt hat.
+apps.part-owned	Diese App gehört zu einem Teil. Schalte dieses Teil aus.
+apps.nothing-to-remove	Es gibt nichts zu entfernen.
+job.id-invalid	Das ist keine Auftragskennung.
+job.record-unreadable	Das Auftragsprotokoll kann nicht gelesen werden.
+job.value-missing	Die Option braucht einen Wert.
+job.value-invalid	Ein Wert ist nicht gültig.
+job.no-question	Dieser Auftrag stellt keine Fragen.
+job.answer-forbidden	Nur wer diesen Lauf gestartet hat oder ein Administrator darf antworten.
+job.answer-invalid	Die Antwort passt nicht zur Frage.
+disk.recovering	Die Festplatte ist für eine Wiederherstellung aus dem Pool genommen.
+disk.already-detached	Die Festplatte ist bereits abgehängt.
+disk.not-mounted	Die Festplatte ist nicht eingebunden.
+disk.last-data-disk	Das ist die letzte verwendete Datenplatte des Pools.
+disk.not-detached	Die Festplatte ist nicht abgehängt.
+disk.mount-failed	Die Festplatte konnte nicht eingebunden werden.
+disk.value-missing	Ein Wert fehlt.
+disk.target-invalid	Das Ziel ist eine Datenplatte.
+disk.path-invalid	Der Pfad ist nicht zulässig.
+disk.path-missing	Diesen Pfad gibt es auf der Festplatte nicht.
+disk.target-same	Das Ziel ist dieselbe Festplatte.
+disk.target-closed	Die Zielplatte nimmt keine neuen Dateien an.
+disk.target-unmounted	Die Zielplatte ist nicht verfügbar.
+disk.no-target	Keine andere Datenplatte kann die Dateien aufnehmen.
+disk.target-full	Auf der Zielplatte ist nicht genug Platz.
+disk.types-invalid	Die Dateiarten sind media oder all.
+disk.recovery-running	Die Wiederherstellung läuft noch.
+disk.tool-missing	Ein Programm, das dieser Schritt braucht, ist nicht installiert.
+docker.args-missing	Dem Befehl fehlen Argumente.
+docker.value-missing	Die Option braucht einen Wert.
+docker.remote-read-only	Eine Freigabe eines anderen Servers ist nur lesbar.
+docker.value-invalid	Der Wert ist nicht gültig.
+docker.key-unknown	Diese Einstellung kann hier nicht gesetzt werden.
+docker.already-on	Docker ist bereits eingeschaltet.
+gateway.set-invalid	--set braucht key=value.
+gateway.key-unknown	Das ist keine Einstellung des Gateways.
+gateway.key-twice	Eine Einstellung wurde zweimal angegeben.
+gateway.nothing-to-change	Es gibt nichts zu ändern.
+gateway.value-invalid	Der Wert passt nicht zu dieser Einstellung.
+gateway.not-scalar	Bearbeite diese Einstellung in machine.toml auf dem Server.
+gateway.unchanged	Es ändert sich nichts.
+gateway.port-conflict	Die Ports kollidieren.
+gateway.tunnel-from-missing	Die Adresse, von der der Tunnel kommt, fehlt.
+gateway.acme-invalid	Die Zertifikatseinstellungen sind nicht gültig.
+gateway.certificate-needed	Dafür ist ein Zertifikat nötig.
+gateway.write-failed	Eine Datei konnte nicht geschrieben werden.
+gateway.check-failed	Die Änderung würde machine.toml unbrauchbar machen.
+gateway.rebuild-failed	Der Neuaufbau ist fehlgeschlagen.
+migrate.no-pool	Kein Pool für Daten gefunden.
+migrate.not-snapraid	Dieser Pool kann keine Festplatten von Unraid aufnehmen.
+migrate.disk-not-free	Das ist keine freie Festplatte.
+migrate.disk-unusable	Diese Festplatte kann nicht übernommen werden.
+migrate.disk-twice	Eine Festplatte wurde zweimal angegeben.
+migrate.parity-not-empty	Das ist keine Paritätsplatte von Unraid.
+migrate.disk-too-small	Die Festplatte ist zu klein.
+migrate.passphrase-missing	Die Passphrase fehlt.
+pool.not-recorded	Die Pools dieses Servers sind noch nicht festgehalten.
+pool.already-imported	Der Pool ist bereits importiert.
+pool.is-array	Das ist der SnapRAID-Pool dieses Servers.
+pool.not-waiting	Kein solcher Pool wartet auf den Import.
+pool.name-ambiguous	Zwei Pools haben diesen Namen.
+pool.damaged	Der Pool ist beschädigt.
+pool.foreign	Der Pool wurde zuletzt von einem anderen System verwendet.
+pool.disk-not-whole	Eine Festplatte des Pools ist keine ganze Festplatte.
+pool.disk-not-free	Das ist keine freie Festplatte des Pools.
+pool.apps-unsupported	Ein Apps-Pool kann noch nicht importiert werden.
+pool.mountpoint-used	Der Ordner des Pools ist nicht leer.
+pool.use-invalid	Die Verwendung ist data oder apps.
+preset.unknown	Es gibt keine Vorlage mit diesem Namen.
+preset.apply-failed	Die Vorlage konnte nicht angewendet werden.
+preset.unreadable	Die Vorlage konnte nicht gelesen werden.
+fm.capability-off	Den Dateimanager gibt es auf diesem Server nicht.
+fm.usage	Dem Befehl fehlen Argumente.
+fm.path-invalid	Der Pfad ist nicht zulässig.
+fm.folder-missing	Diesen Ordner gibt es nicht.
+fm.protected	Das gehört zum Verbund und kann nicht verwendet werden.
+fm.value-missing	Ein Wert fehlt.
+fm.value-invalid	Ein Wert ist nicht gültig.
+fm.option-misplaced	Diese Option gehört nicht zu dieser Aktion.
+fm.selection-invalid	Die Auswahl ist nicht gültig.
+fm.nothing-selected	Nichts ist ausgewählt.
+fm.not-in-trash	Das Element kann nicht aus dem Papierkorb wiederhergestellt werden.
+fm.in-trash	Das ist der Papierkorb. Verwende Wiederherstellen.
+fm.one-location	Das geht nur innerhalb eines Ortes.
+fm.read-only	Dieser Ort kann so nicht geändert werden.
+fm.exists	Dieser Name ist bereits vergeben.
+fm.item-missing	Dieses Element gibt es nicht.
+fm.item-unreadable	Das Element kann nicht gelesen werden.
+fm.link	Verknüpfungen werden nicht kopiert oder verschoben.
+fm.is-share	Das ist eine Freigabe.
+fm.target-invalid	Das Ziel passt nicht.
+fm.overwrite-move	Beim Verschieben gibt es kein Überschreiben.
+fm.no-room	Am Ziel ist nicht genug Platz.
+fm.busy	Ein anderer Auftrag läuft. Versuche es noch einmal, wenn er fertig ist.
+fm.write-off	Der Dateimanager ist schreibgeschützt.
+fm.state-unwritable	Der Dateimanager kann seinen Zustand nicht speichern.
