@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "change"
+title = "The package index is read from packages.hobnix.dev"
+body  = """The official package index now comes from https://packages.hobnix.dev/official/index.json. The old address redirects to it, so servers that have not updated keep working. The signature is unchanged, so trust does not change."""

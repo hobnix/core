@@ -499,7 +499,7 @@ A repository that publishes a signed index is added with `--index <address>` (th
 ### Where the index comes from
 
 The signed index of `official` is read from the address in `config/package-repos.toml` (`index`, today
-`https://hobnix.github.io/official/index.json`). The signature is over the content, so the host that serves it can change without a trust change.
+`https://packages.hobnix.dev/official/index.json`). The signature is over the content, so the host that serves it can change without a trust change.
 A timer, `hs-pkg-refresh`, fetches it once a day (at a random time within six hours, and 15 minutes after boot). `hs update` does the same. When the
 index changed, the update count in the top bar and the Marketplace read again without a reload; when it could not be fetched, the reason is kept.
 Fetch it by hand with `hs pkg refresh`, and read the state with `hs sys pkg index` (`last_ok`, `last_try`, `error`, `expires`; times are epoch seconds,
