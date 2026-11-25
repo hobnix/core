@@ -337,7 +337,7 @@ print("NONE=" + repr(R.confine_text("nothere", None)))
 PY
 )
 check_out "the prompt names the confined row" 'confined commands \(ext fixconf go\)' printf '%s' "$PRM"
-check_out "it says what is covered" "it covers: writes outside the package.s own folder" printf '%s' "$PRM"
+check_out "it says what is covered" "it covers: writes outside the package.s own state folder" printf '%s' "$PRM"
 check_out "it says the confined command is not root" "unprivileged user, not as root" printf '%s' "$PRM"
 check_out "it says what is not covered: reads, network, hs and incus" "it does NOT cover: reading the file system.*the network.*incus" bash -c "printf '%s' \"\$0\" | tr '\n' ' '" "$PRM"
 check_out "it says the other commands run as root, unconfined" "run as root, unconfined" printf '%s' "$PRM"
