@@ -2672,6 +2672,278 @@ The ref or repository is not a branch, tag or commit of a Hobnix repository.
 - Text: That ref or repository is not accepted.
 - Fix: none
 
+### pkg.value-missing
+
+An option or the address of a repository was given without its value.
+
+- Layer: script
+- Text: A value is missing.
+- Fix: none
+
+### pkg.draft-readonly
+
+A start was asked for a package draft, which is only checked.
+
+- Layer: script
+- Text: A draft is only checked, nothing is started.
+- Fix: none
+
+### pkg.draft-unchecked
+
+The check of a package draft did not run.
+
+- Layer: script
+- Text: The draft could not be checked.
+- Fix: none
+
+### pkg.draft-invalid
+
+A package draft has problems.
+
+- Layer: script
+- Text: The draft has problems.
+- Fix: none
+
+### pkg.unknown
+
+No repository offers a package of this name.
+
+- Layer: script
+- Text: There is no such package in the repositories.
+- Fix: none
+
+### pkg.installed
+
+Install was asked for a package that is installed already.
+
+- Layer: script
+- Text: The package is installed already.
+- Fix: none
+
+### pkg.not-installed
+
+The package is not installed from a repository.
+
+- Layer: script
+- Text: The package is not installed.
+- Fix: none
+
+### pkg.up-to-date
+
+Update was asked for a package that has no newer release.
+
+- Layer: script
+- Text: The package is up to date.
+- Fix: none
+
+### pkg.core
+
+Remove was asked for a core package.
+
+- Layer: script
+- Text: A core package is not removed.
+- Fix: none
+
+### pkg.remove-refused
+
+The dry run of the removal refused it.
+
+- Layer: script
+- Text: The package cannot be removed now.
+- Fix: none
+
+### pkg.repo-unknown
+
+No repository has this name.
+
+- Layer: script
+- Text: There is no repository with this name.
+- Fix: none
+
+### pkg.repo-exists
+
+A repository of this name exists already.
+
+- Layer: script
+- Text: That name is taken already.
+- Fix: none
+
+### pkg.repo-url-invalid
+
+The address of the repository is not in an allowed form.
+
+- Layer: script
+- Text: The address of the repository is not valid.
+- Fix: none
+
+### pkg.repo-default
+
+Remove was asked for a default repository.
+
+- Layer: script
+- Text: A default repository stays.
+- Fix: none
+
+### pkg.key-invalid
+
+The public signing key of the repository is missing or is not an SSH public key.
+
+- Layer: script
+- Text: An SSH public key is needed.
+- Fix: none
+
+### pkg.repo-add-failed
+
+The repository could not be added.
+
+- Layer: script
+- Text: The repository could not be added.
+- Fix: none
+
+### pkg.repo-unreadable
+
+No signed release could be read from a new repository with the given key.
+
+- Layer: script
+- Text: No signed release could be read, so the repository was not kept.
+- Fix: none
+
+### pkg.action-failed
+
+The package command failed.
+
+- Layer: script
+- Text: The action on the package failed.
+- Fix: none
+
+### pkg.storage-locked
+
+The storage is locked, so the rebuild would refuse.
+
+- Layer: script
+- Text: The storage is locked.
+- Fix: none
+
+### pkg.no-network
+
+The step needs the network and it is down.
+
+- Layer: script
+- Text: This needs the network.
+- Fix: none
+
+### pkg.nothing-to-do
+
+Every package that was asked for is installed and on already.
+
+- Layer: script
+- Text: There is nothing to do.
+- Fix: none
+
+### pkg.require-circle
+
+Packages require each other in a circle.
+
+- Layer: script
+- Text: The packages require each other in a circle.
+- Fix: none
+
+### pkg.ambiguous
+
+A package is in more than one repository.
+
+- Layer: script
+- Text: The package is in more than one repository.
+- Fix: none
+
+### pkg.added-repo
+
+A package of an added repository is not installed together with others.
+
+- Layer: script
+- Text: Install this package from the Marketplace.
+- Fix: none
+
+### pkg.role-part
+
+A required part follows the role of the server and is not switched by hand.
+
+- Layer: script
+- Text: A required part follows the role of this server.
+- Fix: none
+
+### pkg.require-missing
+
+A required part is neither on the server nor offered by a repository.
+
+- Layer: script
+- Text: A required part is not available.
+- Fix: none
+
+### blueprint.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### blueprint.unreadable
+
+The blueprint does not exist, cannot be read or has problems.
+
+- Layer: script
+- Text: The blueprint cannot be used.
+- Fix: none
+
+### blueprint.role
+
+The blueprint is not made for the role of this server.
+
+- Layer: script
+- Text: This blueprint is for another role.
+- Fix: none
+
+### blueprint.storage-locked
+
+The storage is locked, so the rebuild would refuse.
+
+- Layer: script
+- Text: The storage is locked.
+- Fix: none
+
+### blueprint.no-network
+
+The step needs the network and it is down.
+
+- Layer: script
+- Text: This needs the network.
+- Fix: none
+
+### blueprint.docker-refused
+
+The plan to turn Docker on refused.
+
+- Layer: script
+- Text: Docker cannot be turned on.
+- Fix: none
+
+### blueprint.needs-docker
+
+An app of the blueprint needs Docker, which is off and not part of the blueprint.
+
+- Layer: script
+- Text: An app of the blueprint needs Docker.
+- Fix: none
+
+### blueprint.confirm-unknown
+
+A typed name was given that the plan does not ask for.
+
+- Layer: script
+- Text: The plan does not ask for that name.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.
