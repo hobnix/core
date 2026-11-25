@@ -310,6 +310,12 @@ check "no refusal moved the state" sh -c "[ -d '$CF/state/fixconf' ] && [ ! -L '
 confperms '"fs.write:/var/lib/hs/fixconf"'; rc=0; HS_SYSTEMD_RUN=$CF/missing hsc sys ext fixconf rows >/dev/null 2>&1 || rc=$?
 check "without systemd-run nothing is moved either" sh -c "[ $rc = 69 ] && [ ! -L '$CF/state/fixconf' ] && [ ! -e '$CF/ext/fixconf' ]"
 
+confperms '"fs.write:/var/lib/hs/fixconf"'; fresh_state; confrun
+check_eq "a package that is not installed gets no BindReadOnlyPaths of its folder" "0" "$(grep -c '^--property=BindReadOnlyPaths' "$CF/run.log")"
+mkdir -p "$CF/state/current/fixconf"; confrun
+check_eq "an installed package gets its own folder back, read-only (the dynamic /var/lib/hs is empty)" "--property=BindReadOnlyPaths=-$CF/state/current/fixconf" "$(grep '^--property=BindReadOnlyPaths' "$CF/run.log")"
+rm -rf "$CF/state/current"
+
 echo "-- the install and update prompt says what confinement covers"
 PRM=$(python3 -I - "$SCRIPTS" <<'PY'
 import importlib.util, os, sys, tempfile

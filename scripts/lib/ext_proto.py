@@ -334,6 +334,10 @@ def confined(prog, package):
     props, _, bad = _lib_module("ext_confine").properties(perms, package, dynamic=True)
     if bad:
         return None, bad
+    root = os.environ.get("HS_STATE_DIR") or "/var/lib/hs"
+    pkgdir = os.path.abspath(os.path.join(root, "current", package))
+    if os.path.isdir(pkgdir):    # an installed package: the empty read-only /var/lib/hs of the unit hides it, so its own program comes back (as ext_service.py does)
+        props.append("BindReadOnlyPaths=-" + pkgdir)
     runner = os.environ.get("HS_SYSTEMD_RUN", "systemd-run")
     if not shutil.which(runner):
         return None, "%s is not there, so the command cannot be confined" % runner
