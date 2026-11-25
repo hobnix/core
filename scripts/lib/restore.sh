@@ -27,7 +27,7 @@ for s in sorted(json.load(sys.stdin), key=lambda s: s["time"]):
 restore_fetch() {   # restore_fetch <repo> <passfile> <snapshot|latest> <dir>: the settings of the host snapshot below <dir>
   restic -r "$1" --password-file "$2" --no-lock restore "$3" --tag host --target "$4" \
     --include /etc/nixos/machine.toml --include /etc/nixos/machine.nix \
-    --include /var/lib/hs --include '/etc/ssh/ssh_host_*' >/dev/null 2>&1
+    --include /var/lib/hs --include /var/lib/private/hs-ext --include /var/lib/hs-ext --include '/etc/ssh/ssh_host_*' >/dev/null 2>&1
 }
 
 restore_files() {   # restore_files <dir>: the files restore_apply would put in place, one per line (path as on the new system)
@@ -39,13 +39,30 @@ restore_files() {   # restore_files <dir>: the files restore_apply would put in 
       restore_skip "$rel" || echo "/var/lib/hs/$rel"
     done < <(find "$d/var/lib/hs" -type f -print0 | sort -z)
   fi
+  # the state of extension services (ext_state.py): below the private root since the move, below /var/lib/hs-ext before the first start
+  for f in /var/lib/private/hs-ext /var/lib/hs-ext; do
+    [ -d "$d$f" ] || continue
+    while IFS= read -r -d '' rel; do echo "${rel#"$d"}"; done < <(find "$d$f" -type f -print0 | sort -z)
+  done
   for f in "$d"/etc/ssh/ssh_host_*; do [ -f "$f" ] && echo "/etc/ssh/${f##*/}"; done
   return 0
 }
 
 restore_apply() {   # restore_apply <dir> <target root>: copy the files of restore_files into the new system, keeping modes
-  local d=$1 t=$2 f p c
+  local d=$1 t=$2 f p c rel name put
+  put=$(dirname "${BASH_SOURCE[0]}")/state_put.py
   while IFS= read -r f; do
+    case "$f" in
+      /var/lib/private/hs-ext/*|/var/lib/hs-ext/*)    # service state: never cp (it follows links); state_put.py opens every folder with O_NOFOLLOW
+        rel=${f#/var/lib/private/hs-ext/}; [ "$rel" != "$f" ] || rel=${f#/var/lib/hs-ext/}
+        name=${rel%%/*}
+        if [ "$name" != "$rel" ] && [[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]]; then
+          python3 -I "$put" put "$d$f" "$t/var/lib/hs-ext/$name" "${rel#*/}" restore || warn "$f was not restored"
+        else
+          warn "$f is not the state of a package, skipped"
+        fi
+        continue ;;
+    esac
     # parent folders get explicit modes: the result must not depend on the caller's umask (sshd needs a readable /etc/ssh)
     p=""
     for c in $(dirname "$f" | tr / ' '); do   # top down, one folder at a time

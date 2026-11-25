@@ -109,9 +109,10 @@ rm -f "$ST/svc"; rm -rf "$WORK/pub"
 echo "-- with state: a snapshot taken after the move keeps the data below the private root (/var/lib/hs/<name> is only a link there)"
 export HS_EXT_STATE_DIR=$WORK/ext HS_PRIVATE_DIR=$WORK/priv
 EP=$HS_PRIVATE_DIR/hs-ext
-mkdir -p "$FIX$EP/svc2/sub" "$HS_EXT_STATE_DIR"; echo after-move > "$FIX$EP/svc2/data"; echo deep > "$FIX$EP/svc2/sub/f"
+mkdir -p "$FIX$EP/Bad_Name" "$FIX$EP/svc2/sub" "$HS_EXT_STATE_DIR"; echo bad > "$FIX$EP/Bad_Name/x"; echo after-move > "$FIX$EP/svc2/data"; echo deep > "$FIX$EP/svc2/sub/f"
 ln -s "$EP/svc2" "$FIX$HS_EXT_STATE_DIR/svc2" 2>/dev/null || true       # restic keeps the link itself; find -type f never lists it
 out=$(b config restore --yes --with-state 2>&1)
+check "a name below the private root that is no package name is refused, not copied with cp" test ! -e "$EP/Bad_Name" -a ! -e "$HS_EXT_STATE_DIR/Bad_Name"
 check_eq "a fresh install gets the service state from the private root of the snapshot" "after-move deep" "$(cat "$HS_EXT_STATE_DIR/svc2/data" 2>/dev/null) $(cat "$HS_EXT_STATE_DIR/svc2/sub/f" 2>/dev/null)"
 check_eq "and the folder is closed (0700), made the way a moved one is" "700 700" "$(stat -c %a "$HS_EXT_STATE_DIR/svc2") $(stat -c %a "$HS_EXT_STATE_DIR/svc2/sub")"
 rm -rf "$HS_EXT_STATE_DIR/svc2"; mkdir -p "$EP/svc2/sub"; ln -s "$HS_EXT_STATE_DIR/svc2" "$HS_EXT_STATE_DIR/x" 2>/dev/null; rm -f "$HS_EXT_STATE_DIR/x"
