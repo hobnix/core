@@ -1479,6 +1479,14 @@ path_within() {  # path_within <path> <folder>: <path> is the folder or below it
   case "$1" in "$2"|"$2"/*) return 0 ;; esac
   [ "$2" = / ]
 }
+# What reaches restic from the command line is checked first: the snapshot is `latest` or a hex id (restic also reads <snapshot>:<subfolder>, which
+# moves the whole restore somewhere else), the tag is a plain label, and the path is exact (below).
+snap_ok() {  # snap_ok <snapshot>
+  [[ "$1" =~ ^(latest|[0-9a-f]{8,64})$ ]]
+}
+tag_ok() {  # tag_ok <tag>: shares, host, ct:<name>, ...
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9:._-]{0,80}$ ]]
+}
 # DESIGN: restic must never write the state of an extension service. `restic restore` refuses --include together with --exclude (checked: "mutually
 # exclusive"), so the include cannot be fenced with excludes. Instead a restore IN PLACE (the target resolves to the real state roots) accepts only a path
 # restic matches exactly: absolute, canonical (no ., .., //), no glob character. A path without a leading / matches at ANY depth in restic and a glob
@@ -1494,15 +1502,14 @@ restore_in_place() {  # restore_in_place <to>: would a restore below <to> land o
 }
 restore_guard_state() {  # restore_guard_state <to> <path>
   local d r st msg
-  if restore_in_place "${1:-/}"; then
-    case "$2" in
-      /*) ;;
-      *) die "$(t "Not restored in place: '%s' is not a full path. Use the full original path, for example /bulk/shares/<share>/<file>." "$2")" ;;
-    esac
-    case "$2" in
-      *[\*\?\[\\]*|*/./*|*/../*|*//*|*/.|*/..) die "$(t "Not restored in place: '%s' has a pattern or a dot part. Use the exact full path." "$2")" ;;
-    esac
-  fi
+  # for EVERY target (a pattern restores what it likes below any --to): the exact full path, nothing else
+  case "$2" in
+    /*) ;;
+    *) die "$(t "Not restored: '%s' is not a full path. Use the full original path, for example /bulk/shares/<share>/<file>." "$2")" ;;
+  esac
+  case "$2" in
+    *[\*\?\[\\]*|*/./*|*/../*|*//*|*/.|*/..) die "$(t "Not restored: '%s' has a pattern or a dot part. Use the exact full path." "$2")" ;;
+  esac
   d=$(realpath -m -- "${1:-/}/${2#/}" 2>/dev/null) || die "$(t 'Not restored: the place %s could not be resolved, so it cannot be shown to be safe.' "${1:-/}/${2#/}")"
   st=$(realpath -m -- "$STATE") || die "$(t 'Not restored: the state folder could not be resolved.')"
   msg=$(t 'Not restored in place: %s would write into the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$d")
@@ -1527,6 +1534,8 @@ cmd_restore() {
     esac
   done
   [ -n "$snap" ] && [ -n "$path" ] || usage
+  snap_ok "$snap" || die "$(t "Not restored: '%s' is not a snapshot. Use latest or the id from: hs backup list" "$snap")"
+  tag_ok "$tag" || die "$(t "Not restored: '%s' is not a snapshot tag." "$tag")"
   [ -d "$to" ] || die "$(t '%s does not exist. For the default: hs share add restored' "$to")"
   restore_guard_state "$to" "$path"
   steps 2   # a background job shows "step n of m" (#389)
@@ -1638,7 +1647,7 @@ cmd_config_restore() {
       --with-samba) with_samba=true ;;
       --from-disk) [ $# -gt 0 ] || usage; from_disk=$1; shift ;;
       -*) usage ;;
-      *)  snap=$a ;;
+      *)  snap_ok "$a" || die "$(t "'%s' is not a snapshot. Use latest or the id from: hs backup config" "$a")"; snap=$a ;;
     esac
   done
   if $with_samba && [ -z "$from_disk" ]; then die "$(t '--with-samba belongs to --from-disk.')"; fi
