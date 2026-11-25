@@ -662,7 +662,7 @@ def repo_check(folder, warnings=None, release=False):
         if not SEMVER.match(str(e.get("version", ""))):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
-        if pkg_perms.undeclared(m):
+        if pkg_perms.undeclared(m) and m.get("kind") != "blueprint":     # a blueprint installs nothing itself and may not carry the key
             out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
