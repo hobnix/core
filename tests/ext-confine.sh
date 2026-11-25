@@ -200,15 +200,17 @@ for n in fixconf fixplain; do
   printf 'name = "%s"\ntitle = "t"\ntitle_de = "t"\nkind = "feature"\nrequires = []\nprovides = []\nneeds = []\nextension = true\n' "$n" > "$CF/pk/$n/capability.toml"
 done
 pt='name = "%s"\nversion = "1.0.0"\nkind = "capability"\nrequires_core = ">=10"\nprotocol = [1]\n%s\n'
-printf "$pt" fixconf 'permissions = ["fs.write:/srv/ok", "fs.read:/etc/hs", "net:lan"]' | tee "$CF/pk/fixconf/package.toml" > "$CF/root/capabilities/fixconf/package.toml"
+printf "$pt" fixconf 'permissions = ["fs.write:/var/lib/hs/fixconf", "fs.read:/etc/hs", "net:lan"]' | tee "$CF/pk/fixconf/package.toml" > "$CF/root/capabilities/fixconf/package.toml"
 printf "$pt" fixplain 'permissions = ["fs.write:/srv/ok"]' | tee "$CF/pk/fixplain/package.toml" > "$CF/root/capabilities/fixplain/package.toml"
 row() { printf '%s\t%s\t@/ext.py\t-\tx\tx\t%s\n' sys "$1" "$2"; }
 { row "sys ext fixconf rows" confine; row "sys ext fixconf echo" -; } > "$CF/pk/fixconf/commands.tsv"
 row "sys ext fixplain rows" - > "$CF/pk/fixplain/commands.tsv"
-# a fake systemd-run: records its arguments, then runs what follows the --
+# a fake systemd-run: records its arguments (and what the old state path was then), does what StateDirectory= does, then runs what follows the --
 cat > "$CF/systemd-run" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$CF_LOG"
+if [ -L "$HS_STATE_DIR/fixconf" ]; then echo link; elif [ -d "$HS_STATE_DIR/fixconf" ]; then echo folder; else echo missing; fi > "$CF_LOG.old"
+if [ ! -e "$HS_EXT_STATE_DIR/fixconf" ]; then mkdir -p "$HS_PRIVATE_DIR/hs-ext/fixconf" "$HS_EXT_STATE_DIR"; ln -s "$HS_PRIVATE_DIR/hs-ext/fixconf" "$HS_EXT_STATE_DIR/fixconf"; fi
 while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
 shift
 exec "$@"
@@ -216,7 +218,7 @@ SH
 chmod +x "$CF/systemd-run"
 printf 'fixconf\nfixplain\n' > "$CF/caps"; printf 'hostName = "t"\n' > "$CF/machine.toml"
 hsc() { CF_LOG=$CF/run.log HS_SYSTEMD_RUN=${HS_SYSTEMD_RUN:-$CF/systemd-run} HS_LANG=en HS_PLAIN=1 HS_CALLER=test HS_STATE_DIR=$CF/state HS_PACKAGES_ROOT=$CF/root \
-  HS_PACKAGES_DIR=$CF/pk HS_CAPABILITIES_FILE=$CF/caps HS_MACHINE_FILE=$CF/machine.toml bash "$SCRIPTS/lib/hs.sh" "$@"; }
+  HS_EXT_STATE_DIR=$CF/ext HS_PRIVATE_DIR=$CF/private HS_PACKAGES_DIR=$CF/pk HS_CAPABILITIES_FILE=$CF/caps HS_MACHINE_FILE=$CF/machine.toml bash "$SCRIPTS/lib/hs.sh" "$@"; }
 ran() { [ -e "$CF/run.log" ] && echo yes || echo no; }   # did the fake systemd-run get called
 rm -f "$CF/run.log"
 check_eq "a confined row still answers like an unconfined one" "$(printf 'alpha\tb c\t-\nx\t3\t-')" "$(hsc sys ext fixconf rows 2>/dev/null)"
@@ -246,19 +248,23 @@ expect="--pipe
 --property=SystemCallErrorNumber=EPERM
 --property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 --property=PrivateDevices=yes
+--property=DynamicUser=yes
+--property=User=hsx-fixconf
+--property=StateDirectory=hs-ext/fixconf
+--property=StateDirectoryMode=0700
+--property=UMask=0077
+--property=ProtectProc=invisible
 --property=TemporaryFileSystem=/var/lib/hs:ro
 --property=InaccessiblePaths=-/root -/etc/shadow -/etc/gshadow -/etc/ssh -/etc/nixos -/var/lib/hs-vault -/run/hs-ext-cred
---property=ReadWritePaths=-/srv/ok
---property=BindPaths=-/var/lib/hs/ext-svc
 --property=ReadOnlyPaths=-/etc/hs
 --
 python3
 -I
 $CF/pk/fixconf/ext.py"
 check_eq "systemd-run gets exactly the properties of the declared permissions, then the program" "$expect" "$(cat "$CF/run.log")"
-want=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props -- fs.write:/srv/ok fs.read:/etc/hs net:lan)
+want=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name fixconf -- fs.write:/var/lib/hs/fixconf fs.read:/etc/hs net:lan)
 check_eq "they are the properties of the service drop-in (one mapping)" "$want" "$(grep '^--property=[A-Z]' "$CF/run.log" | grep -v KillMode | sed 's/^--property=//')"
-check_eq "and ext_confine.py dropin prints the same lines" "$want" "$(python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --name fixconf -- fs.write:/srv/ok fs.read:/etc/hs net:lan | sed '1,2d;/^#/d')"
+check_eq "and ext_confine.py dropin prints the same lines" "$want" "$(python3 -I "$SCRIPTS/lib/ext_confine.py" dropin --dynamic --name fixconf -- fs.write:/var/lib/hs/fixconf fs.read:/etc/hs net:lan | sed '1,2d;/^#/d')"
 rm -f "$CF/run.log"; rc=0; hsc sys ext fixconf echo >/dev/null 2>&1 || rc=$?
 check_eq "an unconfined row of the same package is unchanged: run directly" "0 no" "$rc $(ran)"
 hsc sys ext fixplain rows >/dev/null 2>&1 || true
@@ -272,6 +278,42 @@ check_out "and the reason is said" "does not declare permissions" printf '%s' "$
 printf 'name = "fixconf"\nversion = "1.0.0"\nkind = "capability"\nrequires_core = ">=10"\nprotocol = [1]\npermissions = ["fs.write:/srv/../etc"]\n' > "$CF/root/capabilities/fixconf/package.toml"
 rc=0; hsc sys ext fixconf rows >/dev/null 2>&1 || rc=$?
 check_eq "a bad path is refused at run time" "69 no" "$rc $(ran)"
+
+echo "-- a confined row runs as the dynamic user and shares the state folder of the package (#1134 S4): prepared first, fail closed"
+confperms() { printf "$pt" fixconf "permissions = [$1]" > "$CF/root/capabilities/fixconf/package.toml"; cp "$CF/root/capabilities/fixconf/package.toml" "$CF/pk/fixconf/package.toml"; }
+fresh_state() { rm -rf "$CF/state/fixconf" "$CF/ext" "$CF/private" "$CF/victim" "$CF/run.log" "$CF/run.log.old"; mkdir -p "$CF/state"; }
+confrun() { rc=0; err=$(hsc sys ext fixconf rows 2>&1 >/dev/null) || rc=$?; }
+tree() { (cd "$1" && find . -printf '%p %y %m %l\n' | sort; find . -type f -exec cksum {} + | sort); }
+confperms '"fs.write:/var/lib/hs/fixconf"'
+fresh_state; confrun
+check_eq "a first run: no link before systemd-run, the link afterwards" "0 missing $CF/ext/fixconf" "$rc $(cat "$CF/run.log.old") $(readlink "$CF/state/fixconf")"
+fresh_state; mkdir -p "$CF/state/fixconf"; echo data > "$CF/state/fixconf/f"; confrun
+check_eq "an old state folder is moved before systemd-run" "0 link data" "$rc $(cat "$CF/run.log.old") $(cat "$CF/state/fixconf/f")"
+check_out "and said" "moved the state of fixconf from $CF/state/fixconf to $CF/ext/fixconf" printf '%s' "$err"
+confrun; check_eq "the next run moves nothing" "0 0" "$rc $(printf '%s' "$err" | grep -c 'moved the state')"
+fresh_state; mkdir -p "$CF/state/fixconf" "$CF/ext/fixconf"; echo a > "$CF/state/fixconf/a"; echo b > "$CF/ext/fixconf/b"
+before=$(tree "$CF/state/fixconf"; tree "$CF/ext"); confrun
+check_eq "both folders: refused (69), not run" "69 no" "$rc $(ran)"
+check_eq "and nothing changed on disk" "$before" "$(tree "$CF/state/fixconf"; tree "$CF/ext")"
+check_out "the reason is said" "ext.state-conflict" printf '%s' "$err"
+fresh_state; mkdir -p "$CF/victim"; ln -s "$CF/victim" "$CF/state/fixconf"; confrun
+check_eq "a state path that links somewhere else: refused, link kept" "69 no $CF/victim" "$rc $(ran) $(readlink "$CF/state/fixconf")"
+fresh_state; mkdir -p "$CF/state/fixconf"
+for p in /srv/ok /var/lib/hs/ext-svc /var/lib/hs/other /var/lib/hs-ext/other /var/lib/private /var/lib/hs /etc; do
+  confperms "\"fs.write:$p\""; confrun
+  check_eq "fs.write:$p is refused (69), not run" "69 no" "$rc $(ran)"
+done
+confperms '"fs.read:/var/lib/hs/ext-svc"'; confrun
+check_eq "fs.read of the bridge state is refused" "69 no" "$rc $(ran)"
+check "no refusal moved the state" sh -c "[ -d '$CF/state/fixconf' ] && [ ! -L '$CF/state/fixconf' ] && [ ! -e '$CF/ext/fixconf' ]"
+confperms '"fs.write:/var/lib/hs/fixconf"'; rc=0; HS_SYSTEMD_RUN=$CF/missing hsc sys ext fixconf rows >/dev/null 2>&1 || rc=$?
+check "without systemd-run nothing is moved either" sh -c "[ $rc = 69 ] && [ ! -L '$CF/state/fixconf' ] && [ ! -e '$CF/ext/fixconf' ]"
+
+confperms '"fs.write:/var/lib/hs/fixconf"'; fresh_state; confrun
+check_eq "a package that is not installed gets no BindReadOnlyPaths of its folder" "0" "$(grep -c '^--property=BindReadOnlyPaths' "$CF/run.log")"
+mkdir -p "$CF/state/current/fixconf"; confrun
+check_eq "an installed package gets its own folder back, read-only (the dynamic /var/lib/hs is empty)" "--property=BindReadOnlyPaths=-$CF/state/current/fixconf" "$(grep '^--property=BindReadOnlyPaths' "$CF/run.log")"
+rm -rf "$CF/state/current"
 
 echo "-- the install and update prompt says what confinement covers"
 PRM=$(python3 -I - "$SCRIPTS" <<'PY'
@@ -295,13 +337,14 @@ print("NONE=" + repr(R.confine_text("nothere", None)))
 PY
 )
 check_out "the prompt names the confined row" 'confined commands \(ext fixconf go\)' printf '%s' "$PRM"
-check_out "it says what is covered" "it covers: writes outside fs.write" printf '%s' "$PRM"
+check_out "it says what is covered" "it covers: writes outside the package.s own state folder" printf '%s' "$PRM"
+check_out "it says the confined command is not root" "unprivileged user, not as root" printf '%s' "$PRM"
 check_out "it says what is not covered: reads, network, hs and incus" "it does NOT cover: reading the file system.*the network.*incus" bash -c "printf '%s' \"\$0\" | tr '\n' ' '" "$PRM"
 check_out "it says the other commands run as root, unconfined" "run as root, unconfined" printf '%s' "$PRM"
 check_out "a package without a confined row gets no extra text" 'PLAIN=\[\]' printf '%s' "$PRM"
 check_out "an uninstalled package gets none and no error" 'NONE=\[\]' printf '%s' "$PRM"
 
-# --- the dynamic mapping (#1134 slice 2): not used by a running service yet, so every check above is the old text ---
+# --- the dynamic mapping (#1134): what services and confined rows get; the checks of the `dropin` text further above are the mapping without --dynamic ---
 ECD="python3 -I $SCRIPTS/lib/ext_confine.py dropin --dynamic --name fixsvc --"
 dyn=$($ECD fs.write:/var/lib/hs/fixsvc | sed '1,2d')
 check_eq "dynamic: no line binds the bridge state" "0" "$(printf '%s\n' "$dyn" | grep -c 'ext-svc')"

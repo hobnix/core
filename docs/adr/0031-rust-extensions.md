@@ -32,7 +32,7 @@ and `rollback` do not restart a running service; services run as uid 0 (#1134); 
    moves an existing `/var/lib/hs/<name>` once. The same identity covers the `confine` command rows, in the same step, with a plan for both paths; that step needs its own
    hardware-test box.
 
-   Built for the services (#1134), Not tested on hardware yet. The user-name cut above was corrected to the code: `_` cannot be in a package name, so a cut
+   Built for the services and the `confine` rows (#1134), Not tested on hardware yet. The user-name cut above was corrected to the code: `_` cannot be in a package name, so a cut
    name never equals a short one (24 characters plus `-<6 hex>` could). The old folder is moved by ONE atomic rename to `/var/lib/hs-ext/<name>` (systemd takes
    it into `/var/lib/private/hs-ext/<name>`) and `/var/lib/hs/<name>` becomes a link, so root tools keep the old path; two folders at once, a wrong link or
    another file system refuse the start (`ext.state-conflict`, `ext.state-move-failed`) and nothing is merged, copied or deleted. Before each start, files a
@@ -41,6 +41,7 @@ and `rollback` do not restart a running service; services run as uid 0 (#1134); 
    `/var/lib/private/hs-ext`. Of decision 5 the unit has `ProtectProc=invisible`; `ProcSubset=pid` and the allow list `SystemCallFilter=@system-service` are
    not set (reasons in `scripts/lib/ext_confine.py`). What systemd itself does with these lines (bind source through the link, mount order, credential,
    user) is checked only by the VM stage `confine` (step list `dynamic`), which has never run.
+   A `confine` row also needs its own hardware-test box with a fixture package (no package in hobnix/official has such a row).
 5. **Hardening without the user.** `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectControlGroups`, `ProtectClock`, `ProtectHostname`,
    `ProtectProc=invisible`, `ProcSubset=pid`, `RestrictNamespaces`, `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality`, `SystemCallArchitectures=native`,
    `SystemCallFilter=@system-service`, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`. `devices:gpu` adds `SupplementaryGroups=render video`. Kept as today: an empty
