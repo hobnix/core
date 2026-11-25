@@ -61,7 +61,7 @@
     const startArgs = [...args];
     const name = dtitle || p.heading || 'Change';
     const ask = p.confirm_name ? confirm : '';
-    const stay = area !== 'system' && offersRebuild(p.steps);
+    const stay = area !== 'system' && area !== 'blueprint' && offersRebuild(p.steps);   // those two start a job that rebuilds itself: nothing waits
     const tkey = `start:${jobKey(area, startArgs)}`;
     const steps = p.steps ?? [];
     const again = () => openPlan(area, startArgs, dtitle);

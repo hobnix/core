@@ -436,9 +436,8 @@ useless, and it is only ever printed on the console, never sent anywhere. You ar
 After the password the page leads you through the **first-run wizard** (`/setup/first-run`):
 
 1. **Account:** your administrator name, the server name (read only; a rename needs `hs config set hostName` and a rebuild) and the language of the interface.
-2. **Preset:** pick what the server is for. A preset fills in only what is not set yet and never overwrites a value. Skip keeps the minimal setup.
-3. **Optional parts:** the capability packages of the signed repositories. The ones you tick are installed with what they require, switched on and built in one background job after a plan. It needs the network; without it the step says so and **Next** moves on.
-4. **Done:** lists what is still open. Machine settings of a preset take effect with `hs rebuild`; the wizard does not start it.
+2. **What is this server for?** One of three: **Core only** (nothing more), a **blueprint** (a signed, ready-made choice; it fills in only what is not set yet, and after a plan one background job installs it, with the rebuild) or **Choose parts** (the capability packages of the signed repositories; the ticked ones are installed with what they require, switched on and built in one job after a plan). Blueprints and parts need the network; when the repositories offer none the step says so. A blueprint that needs a newer version of the server software cannot be chosen.
+3. **Done:** lists what is still open.
 
 Network and storage steps are reserved places and are not shown yet. **Finish** closes the wizard for good; the **Setup** page keeps the
 checklist (below). A server set up before the wizard existed never shows it. Not tested on hardware yet.

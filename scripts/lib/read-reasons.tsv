@@ -54,7 +54,6 @@ state events	free query: the number of rows asked for; the events tab follows a 
 token list	free query: an admin sees all tokens, anybody else their own (the owner is part of the key); fetched when the page opens and after a change
 
 # No arguments and no topic yet: the page asks again on a timer or on demand
-blueprint list	no producer for a topic yet; the first-run wizard reads it once when the step opens
 cache state	no producer for a topic yet
 config check	no producer for a topic yet; fetched on demand by the settings page
 disk power	no topic of its own; the Disks page re-reads it with monitor-disks (sleep state and measured watts)

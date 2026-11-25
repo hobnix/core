@@ -1141,7 +1141,7 @@ READS = {
     ("changes", "list"): {"kind": "tsv", "ttl": 60, "query": {"from": (r"^[0-9a-f]{7,40}$", "--from"), "since": (r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "--since")}},   # What's new
     ("parts", "pending"): {"kind": "tsv", "ttl": 15, "topic": "parts-pending"},
     ("rebuild", "pending"): {"kind": "tsv", "ttl": 15, "topic": "rebuild-pending"},
-    ("blueprint", "list"): {"kind": "tsv", "ttl": 60},                                                                   # the blueprints (first-run wizard)
+    ("blueprint", "list"): {"kind": "tsv", "ttl": 60, "topic": "blueprint-list"},                                         # the blueprints (first-run wizard)
     ("preset", "list"): {"kind": "tsv", "ttl": 60, "topic": "preset-list"},                                               # the presets (first-run wizard)
     ("net", "check"): {"kind": "tsv", "ttl": 5},                                                  # the network check rows (Network wizard)
     ("net", "nics"): {"kind": "tsv", "ttl": 15},                                                  # the physical network cards (Network wizard)
@@ -1854,6 +1854,10 @@ def parse_change(out, rc):
         k, _, v = line.partition("\t")
         if k in ("step", "note", "warn", "danger", "section", "text"):
             d["steps"].append([k, v])
+        elif k == "part" and len(v.split("\t")) == 5:
+            # a blueprint plan (blueprint-change.sh): n, part, name, state, text. What the job does is a step, what it leaves alone a note
+            f = v.split("\t")
+            d["steps"].append(["step" if f[3] in ("set", "install", "enable") else "note", f[4]])
         elif k == "finding":
             d.setdefault("findings", []).append(v.split("	", 2))     # the Test of the Docker editor: level, where (compose:<line|path>, env:<line>, -), text
         elif k == "fix":
