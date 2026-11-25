@@ -1505,7 +1505,7 @@ restore_guard_state() {  # restore_guard_state <to> <path>
   # for EVERY target (a pattern restores what it likes below any --to): the exact full path, nothing else
   case "$2" in
     /*) ;;
-    *) die "$(t "Not restored: '%s' is not a full path. Use the full original path, for example /bulk/shares/<share>/<file>." "$2")" ;;
+    *) die "$(t "Not restored: '%s' is not a full path. Use the full original path as hs backup find shows it." "$2")" ;;
   esac
   case "$2" in
     *[\*\?\[\\]*|*/./*|*/../*|*//*|*/.|*/..) die "$(t "Not restored: '%s' has a pattern or a dot part. Use the exact full path." "$2")" ;;
