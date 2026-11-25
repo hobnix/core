@@ -230,6 +230,15 @@ class ScenarioTests(unittest.TestCase):
         ok, res = n.run_steps(n.Console(t, clock=Clock()), n.build_scenario("address", self.P))
         self.assertFalse(ok)
 
+    def test_smoke_web_check_follows_webui(self):
+        steps = n.build_scenario("smoke", self.P)
+        web = [s for s in steps if "hs-web" in s["text"]]
+        self.assertEqual(len(web), 1)
+        self.assertIn("machine.toml", web[0]["text"])   # conditional on webUi, not a bare is-active
+        self.assertIn("! systemctl is-active", web[0]["text"])   # absent when the web UI is off
+        hello = [s for s in steps if "api/hello" in s["text"]]
+        self.assertTrue(hello and "machine.toml" in hello[0]["text"])
+
     def test_the_homeserver_install_is_snapraid(self):
         old = os.environ.get("HS_NESTED_ROLE")
         try:
