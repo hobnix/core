@@ -87,6 +87,25 @@ check_eq "other state files are restored" "setting" "$(cat "$ST/sub/keep" 2>/dev
 check_eq "machine.toml updated again" "new = 3" "$(cat "$NX/machine.toml")"
 check_eq "hardware-configuration.nix still untouched" "hw-live" "$(cat "$NX/hardware-configuration.nix")"
 
+echo "-- with state: the state folder of a service is the service's (links it planted are never followed)"
+mkdir -p "$FIX$ST/svc/sub" "$FIX$ST/svc/new/deeper" "$WORK/pub/svc" "$WORK/victimdir"
+echo restored > "$FIX$ST/svc/watched.tsv"; echo restored-sub > "$FIX$ST/svc/sub/f"; echo restored-deep > "$FIX$ST/svc/new/deeper/g"
+echo victim > "$WORK/victim"
+ln -s "$WORK/pub/svc" "$ST/svc"
+ln -s "$WORK/victim" "$WORK/pub/svc/watched.tsv"
+ln -s "$WORK/victimdir" "$WORK/pub/svc/sub"
+ln -s "$WORK/victimdir" "$WORK/pub/svc/new"
+out=$(b config restore --yes --with-state 2>&1)
+check_eq "the file a link pointed to is untouched" "victim" "$(cat "$WORK/victim")"
+check_eq "the folder a link pointed to got nothing" "" "$(ls "$WORK/victimdir")"
+check "the planted link at the file is replaced by the restored file" sh -c "[ ! -L '$WORK/pub/svc/watched.tsv' ] && [ \"\$(cat '$WORK/pub/svc/watched.tsv')\" = restored ]"
+check "the link replaced is kept as a link" sh -c "ls '$WORK/pub/svc' | grep -q '^watched.tsv.before-restore-' && [ -L \"\$(ls -d '$WORK/pub/svc/watched.tsv.before-restore-'*)\" ]"
+check "a link in the way of a folder is refused (still a link, nothing below it)" sh -c "[ -L '$WORK/pub/svc/sub' ] && [ -L '$WORK/pub/svc/new' ]"
+rm -f "$WORK/pub/svc/sub" "$WORK/pub/svc/new"; b config restore --yes --with-state >/dev/null 2>&1
+check_eq "without a link in the way folders are made and files restored" "restored-sub restored-deep" "$(cat "$WORK/pub/svc/sub/f") $(cat "$WORK/pub/svc/new/deeper/g")"
+check_eq "and the folders made are closed (0700)" "700" "$(stat -c %a "$WORK/pub/svc/new")"
+rm -f "$ST/svc"; rm -rf "$WORK/pub"
+
 echo "-- from-disk: a fresh install (no password file, no state)"
 export FIXPASS=typed-pass HS_RUN_DIR=$WORK
 rm -rf "$ST" "$NX"; mkdir -p "$NX" "$ST"

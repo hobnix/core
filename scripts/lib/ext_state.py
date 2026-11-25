@@ -25,13 +25,18 @@ NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,40}")   # used with fullmatch: "$" would
 
 # What the core itself keeps directly under /var/lib/hs (read from scripts/, rust/, capabilities/, web/, configuration.nix, 2026-11-24). A package of
 # this name would get a core folder renamed away and chowned to its user (`disks` is the whole array), so prepare refuses it before any change.
+# tests/ext-state.sh scans the sources for every /var/lib/hs/<x> and fails when one is missing here (it cannot go stale: it reads the code).
 # Not the same as the list of reserved package names: the official packages (posters, media-hub) are fine and must stay allowed.
 RESERVED = frozenset("""adopting api-tokens apps apps-autoupdate backup capabilities config deck detached disks docker ext ext-svc expiry generated
 health heartbeat hs hs-ext iso jobs last-rebuild live luks machine matrix metrics migrate nodes notify packages parity pci pkg pkg-events ports private
-recovering remote removals removed restic scrub selftest services settings share snapshots state sync tailscale testlab vault vps""".split())
+recovering remote removals removed restic scrub selftest services settings share snapshots state sync tailscale testlab vault vps
+current repos keys previous lock golden docs-site index index-cache iso-cache runs src src-old reports homepage-hide incident-paused disks-seen
+dhcp-ranges cf-dns-api-token dc-ca-key grafana-admin vps-key zoraxy-admin unifi unifi-write-networks matrix-hook media-ntfy node-known-hosts
+pkg-index-state update-channel vps-known-hosts wear-cache ext-emit ext-cursors ext-snapshots""".split())
 RESERVED_PREFIXES = ("backup-", "bulk-", "disk-", "docker-", "health-", "heartbeat-", "live-", "luks-", "machine-", "migrate-", "notify-", "parity-",
                      "pci-", "ports-", "remote-", "restic-", "scrub-", "selftest-", "services-", "share-", "snapshots-", "stat-", "sync-", "tailscale-",
-                     "testlab-", "vault-", "last-", "capabilities-", "api-", "apps-", "deck-")
+                     "testlab-", "vault-", "last-", "capabilities-", "api-", "apps-", "deck-", "ext-", "node-", "recipe-", "unifi-", "vps-", "zoraxy-",
+                     "pkg-", "iso-", "wear-")
 
 
 def _bad_name(name):

@@ -1469,6 +1469,19 @@ cmd_restore_ct() {   # hs backup restore ct <ct> [--recipe <app>] [--dry-run] [-
   if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then note "$(t 'The database dumps are in /var/backups/hs inside the container; load them with the import of the app (see its guide).')"; fi
 }
 
+# An in-place restore (--to /) writes as root along the original path. Below the state of an extension service that path is the service's: a link it
+# planted would be followed. Restore it elsewhere (--to <folder>) and copy by hand, or put single files back with: hs backup config restore --with-state.
+restore_guard_state() {  # restore_guard_state <to> <path>
+  [ -z "${1%/}" ] || return 0
+  local p=${2%/} first msg
+  msg=$(t 'Not restored in place: %s is the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$p")
+  case "$p" in
+    /var/lib/hs-ext|/var/lib/hs-ext/*|/var/lib/private|/var/lib/private/*) die "$msg" ;;
+    "$STATE"/*) first=${p#"$STATE/"}; first=${first%%/*}
+                [ ! -L "$STATE/$first" ] || die "$msg" ;;
+  esac
+}
+
 cmd_restore() {
   local snap="" path="" tag=shares to=$BULK/shares/restored keep=false
   if [ "${1:-}" = ct ]; then shift; cmd_restore_ct "$@"; return; fi
@@ -1483,6 +1496,7 @@ cmd_restore() {
   done
   [ -n "$snap" ] && [ -n "$path" ] || usage
   [ -d "$to" ] || die "$(t '%s does not exist. For the default: hs share add restored' "$to")"
+  restore_guard_state "$to" "$path"
   steps 2   # a background job shows "step n of m" (#389)
   step "$(t 'Preparing the target')"
   need_repo
@@ -1516,6 +1530,17 @@ state_skip() {  # state_skip <path relative to $STATE>
     restic-password|restic-offsite-password|backup-offsite.credentials|backup-offsite.repo|vault-uuid|luks-uuids|disks|disks/*|.config-restore.*|*.before-restore-*) return 0 ;;
   esac
   return 1
+}
+
+# The state of an extension service lives in a folder the service owns (ext_state.py: /var/lib/hs/<name> is a link to it). Root must never open or write
+# by name in there without refusing links: the service could plant one. Rows below such a link go through scripts/lib/state_put.py (O_NOFOLLOW).
+STATE_PUT=$(dirname "$0")/lib/state_put.py
+svc_state_row() {  # svc_state_row <absolute path>: sets SVC_TOP and SVC_REL when it is a file below the link /var/lib/hs/<name>
+  local rel=${1#"$STATE/"} first
+  [ "$rel" != "$1" ] || return 1
+  first=${rel%%/*}
+  [ "$first" != "$rel" ] && [ -L "$STATE/$first" ] || return 1
+  SVC_TOP=$STATE/$first SVC_REL=${rel#*/}
 }
 
 cmd_config_list() {
@@ -1626,7 +1651,11 @@ cmd_config_restore() {
   local plan=()
   for f in "${rows[@]}"; do
     live=$f
-    if [ ! -e "$live" ]; then state=new
+    if svc_state_row "$f"; then
+      if python3 -I "$STATE_PUT" same "$tmp$f" "$SVC_TOP" "$SVC_REL"; then state=same
+      elif [ ! -e "$live" ] && [ ! -L "$live" ]; then state=new
+      else state=changed; fi
+    elif [ ! -e "$live" ]; then state=new
     elif cmp -s "$tmp$f" "$live"; then state=same
     else state=changed; fi
     case "$state" in same) same=$((same + 1)) ;; *) plan+=("$state"$'\t'"$f"); changed=$((changed + 1)) ;; esac
@@ -1671,6 +1700,10 @@ cmd_config_restore() {
   local stamp
   stamp=$(date +%Y%m%d-%H%M%S)
   for f in "${rows[@]}"; do
+    if svc_state_row "$f"; then    # the service's own folder: no link below it is followed (state_put.py), the old file is kept as before
+      if python3 -I "$STATE_PUT" put "$tmp$f" "$SVC_TOP" "$SVC_REL" "$stamp"; then ok "$(t 'Restored %s' "$f")"; else warn "$(t '%s was not restored (a link or folder is in the way)' "$f")"; fi
+      continue
+    fi
     cmp -s "$tmp$f" "$f" 2>/dev/null && continue
     # a link into the vault: writing through it would overwrite the secret itself
     if [ -L "$f" ]; then warn "$(t '%s is a link into the vault, skipped' "$f")"; continue; fi

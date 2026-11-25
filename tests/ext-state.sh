@@ -129,4 +129,48 @@ check "at least four codes were found" test "$(echo "$emitted" | wc -l)" -ge 4
 echo "-- the host backup lists the new paths"
 check "backup.sh host_files has /var/lib/hs-ext and /var/lib/private/hs-ext" grep -Eq '"\$STATE" /var/lib/hs-ext /var/lib/private/hs-ext' "$ROOT/scripts/backup.sh"
 
+echo "-- every folder the core keeps directly in /var/lib/hs is a reserved package name (read from the sources, so it cannot go stale)"
+out=$(python3 -I - "$ROOT" <<'PY'
+import os, re, sys
+root = sys.argv[1]
+sys.path.insert(0, os.path.join(root, "scripts", "lib"))
+import ext_state
+# names that look like a folder but are not a core one: a field name, an example, or the folder of an official package
+OK = {"code", "region", "yes", "posters", "radarr"}
+pats = [re.compile(r"/var/lib/hs/([A-Za-z0-9][A-Za-z0-9._-]*)"),
+        re.compile(r"(?:\$\{?STATE(?:_DIR)?\}?|\$\{?HS_STATE_DIR(?::-[^}]*)?\}?|\$state|\$LIB|\$HS_LIB)/([A-Za-z0-9][A-Za-z0-9._-]*)"),
+        re.compile(r"(?:state|STATE|state_dir\(\)|self\.state|STATE_DIR|LIB_DIR|lib_dir\(\)|STATE_ROOT)\s*,\s*[\"']([A-Za-z0-9][A-Za-z0-9._-]*)[\"']"),
+        re.compile(r"(?:state|STATE|state_dir\(\)|STATE_DIR|LIB_DIR)\s*\+\s*[\"']/([A-Za-z0-9][A-Za-z0-9._-]*)"),
+        re.compile(r"\{(?:state|STATE|state_dir\(\)|self\.state|STATE_DIR)\}/([A-Za-z0-9][A-Za-z0-9._-]*)")]
+found, seen = {}, 0
+for top in ("scripts", "capabilities", "configuration.nix"):
+    base = os.path.join(root, top)
+    walk = [(os.path.dirname(base), [], [top])] if os.path.isfile(base) else os.walk(base)
+    for d, dirs, files in walk:
+        dirs[:] = [x for x in dirs if x not in ("dev", "__pycache__", "node_modules")]
+        for f in files:
+            if not f.endswith((".py", ".sh", ".nix", ".rs")):
+                continue
+            seen += 1
+            for line in open(os.path.join(d, f), encoding="utf-8", errors="replace"):
+                for p in pats:
+                    for m in p.finditer(line):
+                        found.setdefault(m.group(1), os.path.join(d, f))
+missing = sorted(n for n in found if n not in OK and ext_state._bad_name(n) is None)
+print("scanned %d" % seen, "found %d" % len(found))
+for n in missing:
+    print("MISSING %s (%s)" % (n, found[n]))
+PY
+)
+check "the scan read the sources" grep -q '^scanned [0-9][0-9][0-9]' <<<"$out"
+check "no core folder of /var/lib/hs is missing in RESERVED: $(grep MISSING <<<"$out" | head -3 | tr '
+' ' ')" test -z "$(grep MISSING <<<"$out")"
+for n in current repos keys previous lock golden docs-site ext-cursors; do
+  if python3 -I -c "import sys; sys.path.insert(0, '$SCRIPTS/lib'); import ext_state; sys.exit(0 if ext_state._bad_name('$n') else 1)"; then pass "$n is refused"; else fail "$n is accepted as a package name"; fi
+done
+check "the manifest check refuses a service package with a core name" python3 -I -c "
+import sys; sys.path.insert(0, '$SCRIPTS/lib'); import pkg_protocol
+p = pkg_protocol.manifest_problems({'name': 'current', 'protocol': [1], 'requires_core': '>=99'})
+sys.exit(0 if any('current' in x and 'reserved' in x for x in p) else 1)"
+
 finish

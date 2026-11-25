@@ -15,6 +15,7 @@ D9: a manifest may use `protocol` or `[service]` only if it requires an API leve
 
 manifest_problems(m, folder=None, level=PROTOCOL_LEVEL) -> [text]; `folder` = the package folder (commands.tsv is read only then).
 """
+import importlib.util
 import os
 import re
 
@@ -150,6 +151,12 @@ def manifest_problems(m, folder=None, level=PROTOCOL_LEVEL):
     if uses and _requires(m) < level:
         out.append('%s needs requires_core = ">=%d" or higher (D9: a package that speaks the protocol states the API level it came with)'
                    % (" and ".join(uses), level))
+    if uses and isinstance(m.get("name"), str):
+        spec = importlib.util.spec_from_file_location("ext_state", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_state.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if mod._bad_name(m["name"]):    # its state folder would be a folder the core keeps in /var/lib/hs (ext_state.RESERVED): refused early
+            out.append("the name %s is reserved: a package with a service or the protocol cannot use the name of a folder the server keeps in /var/lib/hs; choose another name" % m["name"])
     if folder:
         out += timeout_problems(os.path.join(folder, "commands.tsv"))
         out += confine_problems(m, folder)
