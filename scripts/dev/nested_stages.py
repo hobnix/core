@@ -316,7 +316,7 @@ def confine(params):
     them writes inside the path (works) and outside it (must fail); then the `dynamic` list (confine_dynamic). It checks what
     systemd does with the lines, not the whole `hs ext start` chain. Not tested on hardware yet: written from the scripts, never run in a VM."""
     ec = "/etc/nixos/scripts/lib/ext_confine.py"
-    cf = ("cf() { a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine.props; systemd-run --wait --collect --quiet \"${a[@]}\" sh -c \"$1\"; }")
+    cf = ("cf() { a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine.props; systemd-run --wait --collect --quiet -E PATH=/run/current-system/sw/bin \"${a[@]}\" sh -c \"$1\"; }")
     return login_root(params) + [
         step("run", "test -f %s" % ec, what="the confinement writer is in the installed checkout"),
         step("run", "mkdir -p /srv/confine-in /srv/confine-out", what="a path the service may write and one it may not"),
@@ -336,11 +336,11 @@ def confine(params):
 def confine_dynamic():
     """Step list `dynamic` of the stage `confine` (#1134 slice 2, hobnix/core scripts/lib/ext_confine.py `--dynamic`): the properties of a package that
     declares fs.write:/var/lib/hs/confinefx, run as the dynamic user hsx-confinefx. Proves what is not verified without systemd: the BindPaths source through
-    the /var/lib/hs-ext link (else state_source() in ext_confine.py is /var/lib/private/hs-ext/<name>), the order with TemporaryFileSystem=/var/lib/hs,
-    and the uid. Must pass before the services are switched to the dynamic user. Not tested on hardware yet: never run in a VM."""
+    the state seen at /var/lib/hs-ext/<name> through StateDirectory (a BindPaths bind of it showed nobody 0700, Permission denied; VM 2026-11-25), the empty
+    /var/lib/hs next to it and the uid. Must pass before the services are switched to the dynamic user. Not tested on hardware yet: never run in a VM."""
     ec = "/etc/nixos/scripts/lib/ext_confine.py"
     es = "/etc/nixos/scripts/lib/ext_state.py"
-    cf = ("cfd() { a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine-dyn.props; systemd-run --wait --collect --quiet \"${a[@]}\" sh -c \"$1\"; }")
+    cf = ("cfd() { a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine-dyn.props; systemd-run --wait --collect --quiet -E PATH=/run/current-system/sw/bin \"${a[@]}\" sh -c \"$1\"; }")
     return [
         step("run", "mkdir -p /var/lib/hs/confinefx /var/lib/hs/ext-svc /run/hs-ext-cred /srv/confine-out && echo seed > /var/lib/hs/confinefx/f "
                     "&& echo secret > /var/lib/hs/ext-svc/s && echo secret > /run/hs-ext-cred/s", what="the state of a service as root wrote it, and two folders it must not see"),
@@ -349,15 +349,15 @@ def confine_dynamic():
         step("run", "python3 -I %s props --dynamic --name confinefx -- fs.write:/var/lib/hs/confinefx | grep -v '^#' > /tmp/confine-dyn.props" % ec,
              what="the dynamic properties, one per line"),
         step("run", cf, what="a helper that runs a command in a transient unit with those properties"),
-        step("run", "cfd 'test \"$(id -u)\" != 0 && echo more >> /var/lib/hs/confinefx/f && test \"$(wc -l < /var/lib/hs/confinefx/f)\" = 2'", timeout=60,
-             what="the unit runs as a user that is not root and reads and appends its state file"),
-        step("run", "test -e /var/lib/private/hs-ext/confinefx/f && test \"$(stat -c %U /var/lib/private/hs-ext/confinefx/f)\" != root", what="the state file is there and systemd gave it to the dynamic user"),
+        step("run", "cfd 'test \"$(id -u)\" != 0 && test \"$STATE_DIRECTORY\" = /var/lib/hs-ext/confinefx && echo more >> /var/lib/hs-ext/confinefx/f && test \"$(wc -l < /var/lib/hs-ext/confinefx/f)\" = 2 && test ! -e /var/lib/hs/confinefx'", timeout=60,
+             what="the unit runs as a user that is not root, finds its state at /var/lib/hs-ext/confinefx ($STATE_DIRECTORY), appends to the file, and the old path is not there"),
+        step("run", "test -e /var/lib/private/hs-ext/confinefx/f && test \"$(stat -c %u /var/lib/private/hs-ext/confinefx/f)\" != 0", what="the state file is there and systemd took it from root (on disk it is nobody, 65534: the dynamic uid is only the idmapped view in the unit)"),
         step("run", "mkdir -p /var/lib/hs/confinegx && echo other > /var/lib/hs/confinegx/f && python3 -I %s prepare confinegx" % es, what="a second extension with state"),
         step("run", "! cfd 'cat /var/lib/hs-ext/confinegx/f' && ! cfd 'ls /var/lib/private/hs-ext/confinegx' && ! cfd 'cat /proc/1/environ'", timeout=120,
              what="the unit cannot read another extension's state (nv: no extra hiding is needed) and does not see other processes"),
-        step("run", "cfd 'echo more >> /var/lib/hs/confinefx/f'", timeout=60, what="and it can still write its own state"),
+        step("run", "cfd 'echo more >> /var/lib/hs-ext/confinefx/f'", timeout=60, what="and it can still write its own state"),
         step("run", "echo cred > /tmp/confine-cred && a=(); while read -r l; do a+=(-p \"$l\"); done < /tmp/confine-dyn.props; "
-                    "systemd-run --wait --collect --quiet \"${a[@]}\" -p LoadCredential=k:/tmp/confine-cred sh -c 'test \"$(cat \"$CREDENTIALS_DIRECTORY/k\")\" = cred'",
+                    "systemd-run --wait --collect --quiet -E PATH=/run/current-system/sw/bin \"${a[@]}\" -p LoadCredential=k:/tmp/confine-cred sh -c 'test \"$(cat \"$CREDENTIALS_DIRECTORY/k\")\" = cred'",
              timeout=60, what="a credential (LoadCredential) is readable by the dynamic user"),
         step("run", "! cfd 'cat /var/lib/hs/ext-svc/s' && ! cfd 'cat /run/hs-ext-cred/s' && ! cfd 'ls /root'", timeout=120,
              what="the unit cannot read the bridge state, the key copies or /root"),

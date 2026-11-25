@@ -4,7 +4,8 @@
 The state of a service lives in systemd's StateDirectory: the real folder is /var/lib/private/hs-ext/<name>, /var/lib/hs-ext/<name> is the
 public path and /var/lib/hs/<name> (the old path, kept for root tools) becomes a link to it. The move is ONE atomic rename, done once, never a
 copy; two folders at once or another file system is refused and nothing on disk changes. The bridge of a service calls it before every start
-(ext_service.py svc_run). Not tested on hardware yet.
+(ext_service.py svc_run). On disk the folder is owned by nobody (65534), mode 0700 (what systemd makes for a DynamicUser; VM run 2026-11-25): only
+inside the unit, through systemd's idmapped mount at /var/lib/hs-ext/<name>, is it the dynamic user's, so the unit never binds it. Not tested on hardware yet.
 
   ext_state.py prepare <name>   the one-time move: prints "moved|linked|fresh|ok<TAB>text", or the problem on stderr and exit 1
   ext_state.py link <name>      after the unit runs: make the old path a link when it is still missing

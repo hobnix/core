@@ -27,8 +27,8 @@ and `rollback` do not restart a running service; services run as uid 0 (#1134); 
 3. **SDK pin.** The SDK stays in the core (`rust/hobnix-ext-sdk`, the owner of the protocol). A crate pins it by git `rev` on `develop`; `repo-check --release` requires a
    core `vX.Y.Z` tag for the pin on `main`.
 4. **Service identity and state.** A service runs as a transient unit with `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters; a longer name is cut to 14 and gets
-   `_<12 hex of sha256(name)>`), `StateDirectory=hs-ext/<name>`, `UMask=0077`. `fs.write:/var/lib/hs/<own name>` is mapped onto the state directory with
-   `BindPaths=/var/lib/hs-ext/<name>:/var/lib/hs/<name>`, so the service keeps its path; any other `fs.write` is refused with the new code `ext.dynamic-write`. The first start
+   `_<12 hex of sha256(name)>`), `StateDirectory=hs-ext/<name>`, `UMask=0077`. `fs.write:/var/lib/hs/<own name>` stands for the state directory; the unit finds it at
+   `/var/lib/hs-ext/<name>` (`$STATE_DIRECTORY`), not bound: with DynamicUser the folder on disk is owned by nobody (0700) and only systemd's own mount shows it to the service user (VM run, systemd 260.4), a `BindPaths=` bind gets Permission denied. The old path is not in the unit (`/var/lib/hs` is an empty tmpfs). Any other `fs.write` is refused with the new code `ext.dynamic-write`. The first start
    moves an existing `/var/lib/hs/<name>` once. The same identity covers the `confine` command rows, in the same step, with a plan for both paths; that step needs its own
    hardware-test box.
 
