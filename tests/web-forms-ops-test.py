@@ -40,6 +40,9 @@ class Changes(unittest.TestCase):
                     ["remove"], ["fetch", "a b"], ["repo-add", "friends"], ["repo-add", "friends", "file:///tmp/x"], ["repo-add", "friends", "/tmp/x"],
                     ["repo-add", "friends", "https://x y"], ["repo-add", "Friends", "https://github.com/a/b"], ["repo-remove"], ["wipe", "arr"]):
             self.assertFalse(ok("pkg", bad), bad)
+        self.assertTrue(ok("pkg", ["update", "arr", "--tag", "v1.2.0", "--seen", "0" * 32]))      # what the update plan showed
+        for bad in (["update", "arr", "--tag", "1.2"], ["update", "arr", "--seen", "x"], ["update", "arr", "--accept-permissions"], ["remove", "arr", "--tag", "v1.2.0"]):
+            self.assertFalse(ok("pkg", bad), bad)
         self.assertTrue(ok("pkg", ["repo-add", "friends", "https://github.com/someone/recipes"], stdin="ssh-ed25519 AAAAC3Nza"))   # the key is the one stdin line
         for words in (("pkg", "market"), ("pkg", "repos")):
             self.assertEqual(ws.READS[words]["kind"], "tsv", words)
