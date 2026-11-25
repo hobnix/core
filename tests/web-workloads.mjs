@@ -1,7 +1,8 @@
 // The rows of the list Apps & VMs (web/src/pages/workloads.js): building and nesting, the App column, the filters of the address, the context row of a
 // match under it, open and shut rows, and the sorting of the two levels (web/src/shell/sort.js treeRows). Plain node, no Svelte.
 import { readFileSync } from 'node:fs';
-import { buildRows, recipesOf, recipeOfApp, filtersOf, isFiltered, filterRows, isOpen, shownKids, appsHidden, portsOf } from '../web/src/pages/workloads.js';
+import { buildRows, recipesOf, recipeOfApp, filtersOf, isFiltered, filterRows, isOpen, shownKids, appsHidden, portsOf, pageState } from '../web/src/pages/workloads.js';
+import { readsFor } from '../web/src/readsfor.js';
 import { treeRows } from '../web/src/shell/sort.js';
 
 let ok = 0, bad = 0;
@@ -59,6 +60,21 @@ console.log('-- open and shut');
 const host = of(rows, 'docker');
 eq('open at first, shut when the session says so', [isOpen(host, new Set()), isOpen(host, new Set(['docker'])), shownKids(host, new Set(['docker'])).length, shownKids(host, new Set()).length], [true, false, 0, 4]);
 eq('a context row opens although it was shut', shownKids(run({ q: 'vault' })[0], new Set(['docker'])).length, 1);
+const shut = new Set(['docker']);
+eq('a row that matches itself opens too when a child matches the search', [run({ q: 'docker' })[0].context, names(shownKids(run({ q: 'docker' })[0], shut))], [false, ['docker']]);
+eq('and when a filter finds its children', shownKids(run({ type: 'container' }).find((r) => r.name === 'docker'), shut).length, 4);
+eq('without a filter, or with no matching child, it stays shut', [shownKids(of(run({}), 'docker'), shut).length, of(run({ q: '192.168.1.24 (eth0)' }), 'docker').found], [0, false]);
+
+// the two reads fail on their own
+const read = (data, error = null) => ({ data, error: error && { message: error } });
+eq('ct list fails at first, the Docker apps came: their rows show, the error is a banner', pageState(read(null, 'x'), read({ rows: [] })), { hasData: true, ctBanner: true, pageError: '' });
+eq('both fail, or ct fails without Docker: the page is the error', [pageState(read(null, 'x'), read(null, 'y')).pageError, pageState(read(null, 'x'), null)], ['x', { hasData: false, ctBanner: false, pageError: 'x' }]);
+eq('only the Docker read fails: the instances stay', pageState(read({ rows: [] }), read(null, 'y')), { hasData: true, ctBanner: false, pageError: '' });
+eq('a failed refresh of ct keeps its rows and says so', pageState(read({ rows: [] }, 'x'), read({ rows: [] })), { hasData: true, ctBanner: false, pageError: 'x' });
+
+// the prefetch asks for the Docker reads only where the page does
+const dockerReads = (caps) => readsFor('/apps', [], false, undefined, caps).filter((x) => x.includes('/docker/')).length;
+eq('Docker reads with the capability, or when the server does not say; none without it', [dockerReads(['docker']), dockerReads(null), dockerReads(['incus'])], [3, 3, 0]);
 eq('the hint: only the stopped container docker, and only with Docker', [appsHidden(host), appsHidden({ ...host, ct: ct('docker', 'container', 'stopped') }), appsHidden({ ...host, ct: ct('docker', 'container', 'stopped') }, false), appsHidden({ ...of(rows, 'win') })], [false, true, false, false]);
 
 console.log('-- sorting two levels');
@@ -73,6 +89,8 @@ console.log('-- the page and the table');
 const src = (f) => readFileSync(new URL(`../web/src/${f}`, import.meta.url), 'utf8');
 const page = src('pages/Workloads.svelte'), table = src('shell/Table.svelte');
 eq('the table draws the child rows as rows of their own', [/treeRows\(rows, columns, order, first, kids\)/.test(table), /class:child=\{depth > 0\}/.test(table), /kids=\{\(r\) => shownKids\(r, closed\)\}/.test(page)], [true, true, true]);
+eq('only the instance columns after Address give way on a narrower table', [...page.matchAll(/\{ key: '(\w+)',[^\n]*wide: true/g)].map((m) => m[1]), ['boot', 'ram', 'cpu', 'lastSnap', 'route']);
+eq('the table hides a wide column by its own width, in head and body', [/@container \(max-width: 1400px\) \{ \.wide \{ display: none; \} \}/.test(table), table.match(/class:wide=\{col\.wide\}/g)?.length], [true, 2]);
 eq('the open and shut rows are kept for the session', /sessionStorage\.setItem\('apps:closed'/.test(page), true);
 eq('the filters are written into the address, replacing the entry', /setQuery\(patch, \{ replace: true \}\)/.test(page), true);
 

@@ -69,7 +69,7 @@
       if (asked !== cacheSession()) return;   // locked or signed out meanwhile
       const pages = [P.appsGroup, '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
         P.apps, P.services, '/storage/vault', '/storage/encryption', P.hardware, P.expiry];
-      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
+      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined, ui.features.capabilities)),
         '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });

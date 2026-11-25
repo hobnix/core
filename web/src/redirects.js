@@ -9,19 +9,37 @@
 // A page that merges into another one (Releases into Updates) writes [key, { tab }] instead of the key.
 // D7: the table is kept for two releases (0.11 and 0.12) and removed in 0.13: REMOVE_IN is read by the test; delete the table, the
 // fixture and the test together then.
-// 0.13 (docs/PLAN-workloads.md 3): Instances and Docker became the one list Apps & VMs. Its rows are here too (`/apps/docker`, `/apps/docker/app/`,
-// `/instances/ct/`) and the older ones end on the new places. A remote node is not touched at /instances: a peer's own read-only page is there.
+// There are TWO tables, each with its own removal release:
+//   MOVED, MOVED_PREFIX              the tree of 0.10 (above, REMOVE_IN)
+//   MOVED_APPS, MOVED_APPS_PREFIX    the pages Instances and Docker, which became the one list Apps & VMs in 0.13 (docs/PLAN-workloads.md 3). These
+//                                    addresses were current up to 0.12: kept for 0.13 and 0.14, removed in 0.15 (APPS_REMOVE_IN). They stay when
+//                                    the first table goes.
+// An older address of the first table ends on the new places too. A remote node is not touched at /instances: a peer's own read-only page is there.
 import { P, poolPath, dockerAppPagePath, capabilityPath, extensionPath } from './paths.js';
 
-export const REMOVE_IN = '0.13';
+export const REMOVE_IN = '0.13';          // MOVED and MOVED_PREFIX
+export const APPS_REMOVE_IN = '0.15';     // MOVED_APPS and MOVED_APPS_PREFIX
 
 // the node the VPS pages belong to (kind vps)
 export const VPS_NODE = 'proxyserver';
 
+const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+const composeTab = (rest) => dockerAppPagePath(dec(rest.split('/')[0]), 'compose');   // the old compose editor is the Compose tab of the app
+
+// 0.13: the addresses of Instances and Docker (kept until APPS_REMOVE_IN)
+export const MOVED_APPS = Object.freeze({
+  '/instances':                   'appsGroup',
+  '/instances/iso':               'iso',
+  '/apps/docker':                 ['appsGroup', { provider: 'docker' }],
+});
+export const MOVED_APPS_PREFIX = Object.freeze([
+  ['/apps/docker/app/', composeTab],
+  ['/instances/ct/', (rest) => `${P.appsGroup}/instance/${rest}`],                      // name and tab stay as written
+]);
+
 // old inner path -> place key of paths.js (or [key, query])
 export const MOVED = Object.freeze({
   '/storage':                     'storage',
-  '/instances':                   'appsGroup',
   '/identity':                    'people',
   '/protection':                  'backupGroup',
   '/operations':                  'system',
@@ -36,10 +54,8 @@ export const MOVED = Object.freeze({
   '/storage/encryption':          'encryption',
   '/storage/vault':               'vault',
   '/instances/apps':              'apps',
-  '/instances/iso':               'iso',
   '/instances/services':          'services',
   '/instances/docker':            ['appsGroup', { provider: 'docker' }],
-  '/apps/docker':                 ['appsGroup', { provider: 'docker' }],
   '/instances/docker/registries': 'registries',
   '/instances/docker/new':        'dockerNew',
   '/instances/docker/wizard':     'dockerWizard',
@@ -83,13 +99,9 @@ export const MOVED = Object.freeze({
 });
 
 // old address families with a name in them: old prefix -> the new path of the same object (`rest` = what follows the prefix, still encoded)
-const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
-const composeTab = (rest) => dockerAppPagePath(dec(rest.split('/')[0]), 'compose');
 export const MOVED_PREFIX = Object.freeze([
   ['/storage/pools/', (rest) => poolPath(rest)],
-  ['/instances/docker/app/', (rest) => composeTab(rest)],
-  ['/apps/docker/app/', (rest) => composeTab(rest)],                                     // the old compose editor is the Compose tab of the app
-  ['/instances/ct/', (rest) => `${P.appsGroup}/instance/${rest}`],                       // name and tab stay as written
+  ['/instances/docker/app/', composeTab],
   ['/settings/capabilities/', (rest) => capabilityPath(rest)],
   ['/extensions/', (rest) => extensionPath(rest)],
   ['/docs/', (rest) => `${P.docs}/${rest}`],
@@ -98,11 +110,15 @@ export const MOVED_PREFIX = Object.freeze([
 // Split "/path?query#hash" into [path, rest]
 const cut = (a) => { const i = a.search(/[?#]/); return i < 0 ? [a, ''] : [a.slice(0, i), a.slice(i)]; };
 
+// the two object families without a name show nothing (and would pass for the page of an extension or recipe): the list
+const NAMELESS = /^\/apps\/(instance|docker-app)\/?$/;
+
 // An old inner path -> [its current inner path, query to add] (the same path and {} when it is not old or did not move)
 export function moved(inner) {
-  const row = MOVED[inner];
+  if (NAMELESS.test(inner)) return [P.appsGroup, {}];
+  const row = MOVED_APPS[inner] ?? MOVED[inner];
   if (row) { const [key, query] = Array.isArray(row) ? row : [row, {}]; return [P[key], query]; }
-  for (const [from, to] of MOVED_PREFIX) if (inner.startsWith(from) && inner.length > from.length) return [to(inner.slice(from.length)), {}];
+  for (const [from, to] of [...MOVED_APPS_PREFIX, ...MOVED_PREFIX]) if (inner.startsWith(from) && inner.length > from.length) return [to(inner.slice(from.length)), {}];
   return [inner, {}];
 }
 

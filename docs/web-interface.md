@@ -208,7 +208,7 @@ screen. The Disks, Shares, Apps & VMs and Users lists open no quick look. The **
 **Apps & VMs** is one list of the containers, the virtual machines and the Docker apps.
 
 - The columns are Name, **Provider** (Incus or Docker), **Type** (Container or Virtual machine), State, **App** (the recipe that set the row up; it
-  links to the app catalog) and Address (a Docker app: its address and ports). On a wide screen there are also Starts at boot, RAM, CPU, Last
+  links to the app catalog) and Address (a Docker app: its address and ports). On a wide screen (for example 1920 px; not at 1440 px with the tree open) there are also Starts at boot, RAM, CPU, Last
   snapshot and Route; they stay empty for a Docker app. A Docker app shows how many of its containers run (for example `2/3`) and keeps the marks
   for changed files, unmanaged and failed. A phone shows the name, state, address and the buttons.
 - Above the list are the filters **Provider** (only while the Docker capability is on) and **Type**, and a search over name, app, address and
@@ -230,7 +230,7 @@ Every address is `/node/<name>/<inner path>`, for example `/node/myserver/storag
 Monitoring, Marketplace and the other places of 0.10 and before) are kept in a redirect table and open the place that took over, so bookmarks and links
 in old notifications still work. The table is kept through 0.12 and is removed in 0.13: change old bookmarks before then. The old addresses of the
 pages Instances and Docker (`/instances`, `/instances/ct/<name>`, `/instances/iso`, `/apps/docker`, `/apps/docker/app/<name>`) open the new
-places.
+places. They are kept through 0.14 and are removed in 0.15.
 
 A refused change shows the code of the reason, the text and a link to the guide in the plan dialog (for a code the page does not know, the text only).
 

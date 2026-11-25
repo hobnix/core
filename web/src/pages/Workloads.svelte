@@ -23,7 +23,7 @@
   import { instanceModel, word, dot, boots, spaced, dash } from './instances/model.svelte.js';
   import { instancePath } from './instances/path.js';
   import { dockerPending, dockerFailed } from './instances/pending.js';
-  import { PROVIDERS, TYPES, buildRows, filtersOf, isFiltered, filterRows, isOpen, shownKids, appsHidden } from './workloads.js';
+  import { PROVIDERS, TYPES, buildRows, filtersOf, isFiltered, filterRows, pageState, isOpen, shownKids, appsHidden } from './workloads.js';
 
   // an older server does not say which capabilities are on: then the Docker parts show
   const dockerOn = $derived(!Array.isArray(ui.features.capabilities) || ui.features.capabilities.includes('docker'));
@@ -45,6 +45,7 @@
   const filters = $derived(filtersOf(route.query, { docker: dockerOn }));
   const shown = $derived(filterRows(all, filters));
   const loaded = $derived(m.ctl.loaded && (!dockerOn || appsPoll.loaded));
+  const state = $derived(pageState(m.ctl, dockerOn ? appsPoll : null));
   const setFilter = (patch) => setQuery(patch, { replace: true });
 
   const running = $derived(cts.filter(isRunning).length);
@@ -114,6 +115,7 @@
   ], ui.role));
 
   const routesOf = (r) => (r.kind === 'instance' ? servicesOf(r.ct, services) : []);
+  // the instance columns after Address are `wide`: they show only while the table has room, so that the row buttons need no sideways scrolling
   const columns = [
     { key: 'name', label: 'Name' },
     { key: 'provider', label: 'Provider', optional: true, value: (r) => PROVIDERS[r.provider] },
@@ -121,11 +123,11 @@
     { key: 'state', label: 'State', value: (r) => word(r.kind === 'docker' ? r.app.state : r.ct.state) },
     { key: 'app', label: 'App', optional: true, value: (r) => r.apps.join(', ') },
     { key: 'address', label: 'Address' },
-    { key: 'boot', label: 'Starts at boot', optional: true, value: (r) => (r.ct ? (boots(r.ct) ? 'yes' : 'no') : '') },
-    { key: 'ram', label: 'RAM', sort: 'num', optional: true, value: (r) => (r.ct ? sizeToBytes(r.ct.ram) : '') },
-    { key: 'cpu', label: 'CPU', sort: 'num', optional: true, value: (r) => (r.ct ? Number(r.ct.cpu) : '') },
-    { key: 'lastSnap', label: 'Last snapshot', optional: true, value: (r) => r.ct?.lastSnap ?? '' },
-    { key: 'route', label: 'Route', optional: true, value: (r) => (r.ct ? routesOf(r).length : '') },
+    { key: 'boot', label: 'Starts at boot', optional: true, wide: true, value: (r) => (r.ct ? (boots(r.ct) ? 'yes' : 'no') : '') },
+    { key: 'ram', label: 'RAM', sort: 'num', optional: true, wide: true, value: (r) => (r.ct ? sizeToBytes(r.ct.ram) : '') },
+    { key: 'cpu', label: 'CPU', sort: 'num', optional: true, wide: true, value: (r) => (r.ct ? Number(r.ct.cpu) : '') },
+    { key: 'lastSnap', label: 'Last snapshot', optional: true, wide: true, value: (r) => r.ct?.lastSnap ?? '' },
+    { key: 'route', label: 'Route', optional: true, wide: true, value: (r) => (r.ct ? routesOf(r).length : '') },
     { key: 'act', label: '', sort: false, align: 'right', width: '1%' },
   ];
   const providerOptions = [{ value: '', label: 'All' }, ...Object.entries(PROVIDERS).map(([v, label]) => ({ value: v, label }))];
@@ -160,7 +162,13 @@
   </Banner>
 {/if}
 
-<PageState loading={!m.ctl.loaded} error={m.ctl.error?.message} hasData={m.ctl.data != null} empty={loaded && !all.length && !m.ctl.error && !appsPoll.error}
+{#if state.ctBanner}
+  <Banner tone="warn">Could not read the instances: {m.ctl.error.message}
+    {#snippet action()}<Button size="sm" tooltip="Read the list again" onclick={retry}>Try again</Button>{/snippet}
+  </Banner>
+{/if}
+
+<PageState loading={!m.ctl.loaded} error={state.pageError} hasData={state.hasData} empty={loaded && !all.length && !m.ctl.error && !appsPoll.error}
            emptyIcon="cube" emptyTitle="Nothing runs here yet" emptyText="An instance is a container or a virtual machine. Create the first one, or set an app up from the app catalog."
            {retry}>
   {#snippet emptyAction()}<Button need="app-manager" variant="primary" icon="plus" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}>Create</Button>{/snippet}
@@ -181,7 +189,7 @@
           {#if col.key === 'name'}
             <!-- the name stays on one line; the marks go under it, so a narrow column does not break it apart -->
             <Row gap="2" align="center">
-              {#if r.kids.length && !r.context}
+              {#if r.kids.length && !r.found}
                 <Button variant="ghost" class="btn-icon" icon={isOpen(r, closed) ? 'caret-down' : 'caret-right'} label="{isOpen(r, closed) ? 'Collapse' : 'Expand'} apps of {r.name}" aria-expanded={isOpen(r, closed)} onclick={() => toggle(r.name)} />
               {/if}
               <Icon name={a ? 'corners-out' : ctIcon(c)} />

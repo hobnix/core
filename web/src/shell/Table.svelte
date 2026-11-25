@@ -8,8 +8,10 @@
   //     {#snippet cell(row, col)} ... {/snippet}
   //   </Table>
   //
-  // column: { key, label, sort?: 'text' | 'num' | (a, b) => number | false, value?: (row) => any, align?: 'right', width?: '120px', cls?: 'name', optional?: true }
+  // column: { key, label, sort?: 'text' | 'num' | (a, b) => number | false, value?: (row) => any, align?: 'right', width?: '120px', cls?: 'name', optional?: true, wide?: true }
   //   `optional: true` = hidden on a phone (up to 860 px), so the table keeps its important columns readable.
+  //   `wide: true` = shown only while the TABLE is wider than 1400 px (its own width, so the open tree counts): a long table keeps its main columns and the row
+  //   buttons without sideways scrolling.
   //   `sort` defaults to 'text' ('num' for numbers: sizes, counts, dates as epoch); false = not sortable. `value` is what is compared (and shown by default).
   //   A row's empty value (null, '', '-', NaN) always sorts last, whichever way the table is sorted.
   // Optional, for a list that needs more than a click (the file manager): `onrow(row, event)` also gets the click event (modifier keys); `view` ($bindable) is
@@ -47,12 +49,12 @@
   const aria = (col) => (order?.key === col.key ? (order.dir === 'asc' ? 'ascending' : 'descending') : 'none');
 </script>
 
-<div class="tablescroll">
+<div class="tablescroll" class:sized={columns.some((c) => c.wide)}>
 <table class="table" class:compact>
   <thead>
     <tr>
       {#each columns as col (col.key)}
-        <th class:opt={col.optional} style:text-align={col.align} style:width={col.width} aria-sort={col.sort === false ? undefined : aria(col)}>
+        <th class:opt={col.optional} class:wide={col.wide} style:text-align={col.align} style:width={col.width} aria-sort={col.sort === false ? undefined : aria(col)}>
           {#if col.head && headcell}
             {@render headcell(col)}
           {:else if col.sort === false || !col.label}
@@ -72,7 +74,7 @@
           data-k={key ? row[key] : i} draggable={draggable ? draggable(row) : undefined}
           tabindex={onrow && tabrows ? 0 : undefined} onclick={onrow ? (e) => onrow(row, e) : null} onkeydown={onrow && tabrows ? (e) => rowkey(e, row) : null}>
         {#each columns as col (col.key)}
-          <td style:text-align={col.align} class:opt={col.optional} class={col.cls ?? ''}>
+          <td style:text-align={col.align} class:opt={col.optional} class:wide={col.wide} class={col.cls ?? ''}>
             {#if cell}{@render cell(row, col)}{:else}{valueOf(col, row) ?? ''}{/if}
           </td>
         {/each}
@@ -101,4 +103,6 @@
   .compact td { padding-block: 4px; }
   td { vertical-align: middle; }
   @media (max-width: 860px) { .opt { display: none; } }
+  .sized { container-type: inline-size; }
+  @container (max-width: 1400px) { .wide { display: none; } }
 </style>

@@ -56,13 +56,24 @@ export function filterRows(rows, f) {
   return rows.flatMap((r) => {
     const kids = r.kids.filter((k) => matches(k, f));
     const own = matches(r, f);
-    return own || kids.length ? [{ ...r, kids, context: !own }] : [];
+    return own || kids.length ? [{ ...r, kids, context: !own, found: isFiltered(f) && kids.length > 0 }] : [];
   });
 }
 
-// A row is open at first; `closed` (names, kept for the session) are shut. A context row is always open: its child is what was looked for.
-export const isOpen = (r, closed) => r.context || !closed.has(r.name);
+// A row is open at first; `closed` (names, kept for the session) are shut. A row with a child that a filter or the search found (`found`) is always
+// open, whether the row matches itself or is only the context: its child is what was looked for.
+export const isOpen = (r, closed) => r.found || !closed.has(r.name);
 export const shownKids = (r, closed) => (isOpen(r, closed) ? r.kids : []);
 
 // the container the Docker apps run in does not run, so none of them is listed
 export const appsHidden = (r, docker = true) => docker && r.kind === 'instance' && r.name === DOCKER_HOST && !isRunning(r.ct);
+
+// What the page shows from its two reads, which fail on their own: `ct` and `docker` are { data, error } of `sys ct list` and `sys docker apps`
+// (`docker` = null without the capability). The whole page fails only when no read has data. `ctBanner` = the instances could not be read, but
+// the Docker apps are there: said above them. `pageError` = what PageState gets (no data at all, or old instance rows that could not be refreshed).
+export function pageState(ct, docker) {
+  const hasData = ct.data != null || docker?.data != null;
+  const ctBanner = !!ct.error && ct.data == null && hasData;
+  return { hasData, ctBanner, pageError: ctBanner ? '' : ct.error?.message ?? '' };
+}
+
