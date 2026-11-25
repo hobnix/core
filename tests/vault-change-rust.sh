@@ -37,6 +37,7 @@ for d in sh rs; do
   printf 'hs_job() { echo "JOB $*" >> "%s"; echo hs-job-test-1; }\n' "$WORK/$d.jobs" > "$WORK/$d/lib/job.sh"
 done
 cp "$SCRIPTS/vault-change.sh" "$WORK/sh/vault-change.sh"
+cp "$SCRIPTS/lib/refuse-code.sh" "$SCRIPTS/lib/error-codes.tsv" "$WORK/sh/lib/"
 shim "$WORK/rs/vault-change.sh"
 cases=("" "plan" "bogus|header-backup" "plan|init" "plan|bind|a|b" "start|init"
   "plan|header-backup" "plan|header-backup|extra" "plan|move" "plan|move|restic-password" "plan|move|a|b.c_d-e" "plan|move|a b" "plan|move|-x"

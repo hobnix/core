@@ -7,8 +7,36 @@ use std::io::Write;
 const USAGE: &str =
     "usage: vault-change.sh plan|start header-backup|move [<name>...]|close|secrets-fix\n";
 
+/// The error code (scripts/lib/error-codes.tsv) of a refusal and the fix its catalogue row names, as `refuse_code` in vault-change.sh
+/// prints them. Matched on the reason because hobnix-core words its refusals the same as the script.
+fn code_of(reason: &str) -> (&'static str, Option<&'static str>) {
+    if reason.starts_with("unknown action") {
+        ("action.unknown", None)
+    } else if reason.starts_with("unknown option") {
+        ("option.unknown", None)
+    } else if reason.ends_with("needs a value") {
+        ("vault.value-missing", None)
+    } else if reason == "unexpected extra arguments" {
+        ("vault.args-unexpected", None)
+    } else if reason.ends_with("is not a name of a secret") {
+        ("vault.name-invalid", None)
+    } else if reason == "The vault is closed already." {
+        ("vault.closed-already", None)
+    } else if reason.starts_with("The vault is closed") {
+        ("vault.locked", Some("hs vault open"))
+    } else if reason.starts_with("There is no vault") {
+        ("vault.missing", Some("hs vault init"))
+    } else if reason.starts_with("type the word") {
+        ("confirm.missing", None)
+    } else {
+        ("job.start-failed", None)
+    }
+}
+
 fn refused(reason: &str) -> String {
-    format!("status\trefused\nreason\t{reason}\n")
+    let (code, fix) = code_of(reason);
+    let fix = fix.map_or(String::new(), |f| format!("fix\t{f}\n"));
+    format!("status\trefused\nreason\t{reason}\n{fix}code\t{code}\n")
 }
 
 fn plan_lines(p: &Plan) -> String {
