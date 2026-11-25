@@ -102,18 +102,21 @@ export async function session() {
 
 export async function login(realm, user, password) {
   const s = await call('POST', '/api/login', { realm, user, password });
+  forgetReads();
   csrf = s.csrf;
   return s;
 }
 
 export async function setup(token, password) {
   const s = await call('POST', '/api/setup', { token, password });
+  forgetReads();
   csrf = s.csrf;
   return s;
 }
 
 export async function logout() {
   await call('POST', '/api/logout', {});
+  forgetReads();
   csrf = '';
 }
 
@@ -135,12 +138,31 @@ export async function getText(path) {
   return r.text();
 }
 
-// fresh: the refresh button; the server runs the scripts now instead of answering from what it holds
-export async function get(path, fresh = false) {
+// One running GET per address: a later caller joins it instead of asking again (the early reads after unlock, a field and a page that want the same
+// list). A request that is done, failed or aborted leaves at once, so the next caller asks anew. One older than JOIN_MS is not joined (it may never
+// be answered). forgetReads() is for every moment after which a running answer may be too old: a change, a job that ended, an event of the live
+// stream, another sign-in. Callers that wait already still get their answer.
+export const JOIN_MS = 30000;
+const reading = new Map();   // path -> { at, p }
+export const forgetReads = () => reading.clear();
+
+// fresh: the refresh button; the server runs the scripts now instead of answering from what it holds. It never joins an older request, and
+// nobody joins the older one after it
+export function get(path, fresh = false) {
+  if (fresh) { reading.delete(path); return read(path, true); }
+  const hit = reading.get(path);
+  if (hit && Date.now() - hit.at < JOIN_MS) return hit.p;
+  const entry = { at: Date.now(), p: null };
+  entry.p = read(path, false).finally(() => { if (reading.get(path) === entry) reading.delete(path); });
+  reading.set(path, entry);
+  return entry.p;
+}
+
+async function read(path, fresh) {
   try {
     return await call('GET', fresh ? path + (path.includes('?') ? '&' : '?') + 'fresh=1' : path, undefined, path);
   } catch (e) {
-    if (e.status === 401) onAuthLost();
+    if (e.status === 401) { forgetReads(); onAuthLost(); }
     throw e;
   }
 }
@@ -190,5 +212,7 @@ export const plan = (area, args, stdin, selection, signal, document) => {
 };
 export const start = (area, args, confirm, stdin, selection, document) => {
   planned.clear();
-  return call('POST', '/api/start', { area, args, ...(confirm ? { confirm } : {}), ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, undefined, CHANGE_WAIT_MS);
+  forgetReads();
+  return call('POST', '/api/start', { area, args, ...(confirm ? { confirm } : {}), ...(stdin ? { stdin } : {}), ...(selection ? { selection } : {}), ...(document !== undefined ? { document } : {}) }, undefined, undefined, CHANGE_WAIT_MS)
+    .finally(forgetReads);   // a read that began while the start was on its way may show the old state
 };

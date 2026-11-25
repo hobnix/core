@@ -7,7 +7,7 @@
 // EventSource reconnects by itself. `beat` (the server sends it when the stream is idle) feeds a watchdog (livewatch.js): a stream that went silent is reopened.
 import { LiveWatch } from './livewatch.js';
 import { TopicSet, streamQuery, newSid, createSubscriber } from './topicset.js';
-import { subscribeTopics } from './api.js';
+import { subscribeTopics, forgetReads } from './api.js';
 
 export const live = $state({ open: false, follow: false, gen: {}, topics: {}, events: [], lastId: 0, resyncs: 0 });
 // Topics that only the browser knows: the domain events of the stream are their signal (served in every mode), so a poll with one of these
@@ -25,13 +25,13 @@ export const wantTopic = (topic) => { const off = topicSet.want(topic); subscrib
 // a read that follows every topic (the Live state page)
 export const wantAllTopics = () => wantTopic('*');
 // a change that came between a read and the subscribe call: the server says the gen of each added topic; a gen the page already saw differently re-reads
-const catchUp = (gens) => { for (const [t, g] of Object.entries(gens)) if (t in live.gen && live.gen[t] !== g) live.gen[t] = g; };
+const catchUp = (gens) => { for (const [t, g] of Object.entries(gens)) if (t in live.gen && live.gen[t] !== g) { forgetReads(); live.gen[t] = g; } };
 const subscriber = createSubscriber({ set: topicSet, send: (list) => subscribeTopics(sid, list), onGens: catchUp });
 
 let es = null, watch = null, timer = null, needResync = false, sid = '', urlKey = '', broken = false;
 
 // Reads every followed topic again: the polls read live.resyncs next to live.gen[topic], so a new value runs each of them once.
-export function resyncAll() { live.resyncs += 1; }
+export function resyncAll() { forgetReads(); live.resyncs += 1; }
 
 function connect() {
   if (!sid) sid = newSid();
@@ -49,7 +49,7 @@ function connect() {
   seen('changed', (ev) => {
     try {
       const m = JSON.parse(ev.data);
-      if (m && m.topic) live.gen[m.topic] = m.gen;
+      if (m && m.topic) { forgetReads(); live.gen[m.topic] = m.gen; }   // a read that runs began before the change
     } catch { /* a broken frame is ignored */ }
   });
   seen('domain', (ev) => {
@@ -57,6 +57,7 @@ function connect() {
       const m = JSON.parse(ev.data);
       if (!m || !m.id || m.id <= live.lastId) return;
       live.lastId = m.id;
+      forgetReads();
       live.events = [...live.events, m].slice(-KEEP);
     } catch { /* a broken frame is ignored */ }
   });

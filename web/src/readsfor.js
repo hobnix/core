@@ -1,11 +1,26 @@
 // What a page reads first, by address (pure: tests/web-prefetch.mjs checks every path against the READS allowlist of scripts/web-serve.py).
 import { LEGACY_POOLS } from './pages/storage/pool.js';
 import { P } from './paths.js';
+import { roleOk } from './roles.js';
 
 const A = '/api/sys/';
 const DISKS = [`${A}monitor/disks`, `${A}disk-health/list`, `${A}state/disks`, `${A}disk/marks`];
 const SHARES = [`${A}shares/overview`, `${A}shares/deleted`, `${A}ct/list`];
 const pool = (p) => [`${A}pool/info?pool=${p}`, `${A}pool/members?pool=${p}`, `${A}monitor/disks`, `${A}disk/marks`];
+
+// The reads of the server-aware form fields (ui/ShareField, UserField, DiskField, PoolField, InstanceField): asked first, all at once, right after
+// unlock, so that a picker in a dialog has its list. [path, least role (scripts/lib/sys-roles.tsv), capability or '' = always] (tests/web-prefetch.mjs).
+const FIELD_READS = [
+  [`${A}shares/overview`, 'viewer', ''],
+  [`${A}shares/principals`, 'viewer', ''],
+  [`${A}pool/disks`, 'viewer', 'storage'],
+  [`${A}monitor/disks`, 'viewer', ''],
+  [`${A}pool/list`, 'viewer', 'storage'],
+  [`${A}ct/list`, 'viewer', 'incus'],
+  [`${A}users/list`, 'admin', 'ad'],
+];
+// `caps` = ui.features.capabilities; not a list = the server did not say, so every capability counts as on
+export const fieldReads = (role, caps) => FIELD_READS.filter(([, need, cap]) => roleOk(role, need) && (!cap || !Array.isArray(caps) || caps.includes(cap))).map(([p]) => p);
 
 // The address may carry its node and a query (/node/homeserver/storage/disks?x=1); the table below is keyed by the INNER path.
 export const innerPath = (p) => (p || '').replace(/^\/node\/[^/]+(?=\/|$)/, '').replace(/[?#].*$/, '') || '/';
