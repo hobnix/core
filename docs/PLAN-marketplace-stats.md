@@ -17,6 +17,7 @@ small service of our own, and a website that shows them and opens a package on t
 | Where likes and counts live | A stats service of our own. No GitHub Discussions, reactions or release assets |
 | Account for a like | None |
 | Counting installs | Opt-in, off by default |
+| Fetching and showing likes and counts | On by default, with an off switch |
 | Where the service runs | Developed on the owner's home server, not reachable from the internet; moved to a small VPS before anything public uses it |
 | Where the history lives | In the signed index, because it decides which code is installed |
 | Where the numbers live | In a separate, unsigned `stats.json`; they never decide anything |
@@ -130,6 +131,8 @@ version listed there, current or in `versions`. Anything else is refused and not
 - The server fetches `stats.json` together with the index refresh and keeps the last good copy. No copy: the numbers are not shown.
 - The file is untrusted input: size limit, whole numbers of zero or more, unknown fields ignored.
 - **Likes and counts never change trust, the Verified badge, what may be installed, or the default sort order.**
+- Fetching and showing is **on by default**, and Settings has a switch to turn it off. A server that fetches the file shows its address to
+  the service, as fetching the index shows it to the index host. This does not turn on counting installs.
 - Proposed config keys (in `config/schema.toml`): `packageStats` (fetch and show, on), `packageStatsReport` (count installs, off),
   `packageStatsUrl` (the address; a development server points it at the test service).
 
@@ -196,8 +199,6 @@ The issues hold the "done when" lists.
 | W2 | 1.0, with hobnix/core#489 | hobnix/core#1257: website button and the route `/marketplace/<repo>/<name>` kept through login (with hobnix/core#933) | W1 |
 
 ## Open points
-- Whether fetching `stats.json` is on by default (proposed: on). A server that fetches it shows its address to the service, as fetching the
-  index shows it to the index host.
 - Channels (open in [PLAN-registry](PLAN-registry.md)): with one index per channel, each has its own history.
 - Whether a package with a data format change can mark "do not go back past this version". Not part of the first version.
 - Which data protection duties the owner has as the operator of the service. Not checked.
