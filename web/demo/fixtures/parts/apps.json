@@ -67,6 +67,7 @@
    ["jellyfin","watch your films, series and music in the browser, on the TV and on the phone","jellyfin","installed"],
    ["navidrome","streams your music library to phones and browsers (Subsonic apps work with it)","navidrome","not installed"],
    ["ntfy","ntfy, your own server for push messages; this server's warnings are sent through it","ntfy","installed"],
+   ["radarr","finds and files your films, runs as an app in Docker","docker","installed"],
    ["seerr","a page where family and friends ask for films and series (works with Jellyfin and Plex)","seerr","not installed"],
    ["stalwart","your own mail server (SMTP, IMAP, JMAP, CalDAV/CardDAV) with a web admin page","stalwart","not installed"],
    ["sunshine","play games from the server on the TV (Moonlight), with Steam and the NVIDIA card","sunshine","parked"],

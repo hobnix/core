@@ -1,0 +1,5 @@
+date  = "2026-11-25"
+type  = "feature"
+title = "One list Apps & VMs in the web interface"
+docs  = "web-interface#apps--vms"
+body  = """The pages Instances and Docker are one list with filters for provider and type and a search; Docker apps stand under the container docker. The list has no quick look: a row opens its page. The tree has one group Apps & VMs, and the page Installed is now the App catalog. Old addresses open the new places. Not tested on hardware yet."""

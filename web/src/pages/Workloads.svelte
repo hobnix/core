@@ -180,14 +180,14 @@
           {@const c = r.ct}
           {#if col.key === 'name'}
             <Row gap="2" wrap align="center" style="display:inline-flex">
+              {#if r.kids.length && !r.context}
+                <Button variant="ghost" class="btn-icon" icon={isOpen(r, closed) ? 'caret-down' : 'caret-right'} label="{isOpen(r, closed) ? 'Collapse' : 'Expand'} apps of {r.name}" aria-expanded={isOpen(r, closed)} onclick={() => toggle(r.name)} />
+              {/if}
               <Icon name={a ? 'corners-out' : ctIcon(c)} />
               <a href={url(pathOf(r))} use:tip={r.images} onclick={(e) => pageLink(e, r)}>{r.name}</a>
               {#if c?.owner}<span role="img" aria-label="Locked by {c.owner}" use:tip={`Locked by ${c.owner}: only hs ${c.owner} disable removes it`}><Icon name="lock" /></span>{/if}
               {#if a && filesChip(a)}{@const f = filesChip(a)}<Chip tone={f.tone} title={f.tip}>{f.text}</Chip>{/if}
               {#if r.total}<Chip>{r.total} {r.total === 1 ? 'app' : 'apps'}</Chip>{/if}
-              {#if r.kids.length && !r.context}
-                <Button variant="ghost" class="btn-icon" icon={isOpen(r, closed) ? 'caret-down' : 'caret-right'} label="{isOpen(r, closed) ? 'Collapse' : 'Expand'} apps of {r.name}" aria-expanded={isOpen(r, closed)} onclick={() => toggle(r.name)} />
-              {/if}
               {#if appsHidden(r, dockerOn)}<Muted>Its apps show once it runs.</Muted>{/if}
             </Row>
           {:else if col.key === 'provider'}<Muted>{PROVIDERS[r.provider]}</Muted>
@@ -195,7 +195,7 @@
           {:else if col.key === 'state'}
             {#if doing(r)}<Muted><Icon name="circle-notch" spin /> {doing(r)}…</Muted>
             {:else if a}
-              <StatusDot state={appDot(a.state)} label={a.state} />
+              <StatusDot state={appDot(a.state)} label={word(a.state)} />
               {#if a.running === '0/0'}<span use:tip={'No containers yet: save applies when the app is started or pulled'}><Muted>–</Muted></span>{:else}<Muted>{a.running}</Muted>{/if}
             {:else}<StatusDot state={dot(c.state)} label={word(c.state)} />{/if}
             {#if failure(r)} <span use:tip={failure(r).error.what}><Chip tone="bad">failed</Chip></span>{/if}

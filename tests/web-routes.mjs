@@ -10,12 +10,12 @@ const eq = (name, got, want) => { if (JSON.stringify(got) === JSON.stringify(wan
 
 const L = 'homeserver';
 eq('/ goes to the local node', redirect('/', L), '/node/homeserver');
-eq('a node-less inner path gets the node', redirect('/instances', L), '/node/homeserver/instances');
-eq('the query is kept', redirect('/instances?x=1', L), '/node/homeserver/instances?x=1');
+eq('a node-less inner path gets the node', redirect('/storage', L), '/node/homeserver/storage');
+eq('the query is kept', redirect('/storage?x=1', L), '/node/homeserver/storage?x=1');
 eq('a query on a new address is kept as it is', redirect('/storage/disks?pool=bulk', L), '/node/homeserver/storage/disks?pool=bulk');
 eq('the settings subpages of this server only get the node', [redirect('/settings', L), redirect('/settings/general', L)], ['/node/homeserver/settings', '/node/homeserver/settings/general']);
 eq('a guide address', redirect('/docs/en/setup', L), '/node/homeserver/docs/en/setup');
-eq('a node address is left alone', redirect('/node/homeserver/instances', L), null);
+eq('a node address is left alone', redirect('/node/homeserver/apps', L), null);
 eq('the node root is left alone', redirect('/node/other', L), null);
 eq('the pages of another node are left alone', [redirect('/node/edge1/settings', L), redirect('/node/proxyserver/mail', L)], [null, null]);
 eq('without a local name nothing happens', redirect('/storage', ''), null);
@@ -32,8 +32,9 @@ eq('a Docker app page prefetches the apps, the Docker state and the recipes', re
 
 eq('inner path strips node and query', innerPath('/node/homeserver/storage/bulk/disks?pool=bulk'), '/storage/bulk/disks');
 eq('inner path of a node root', innerPath('/node/homeserver'), '/');
-eq('inner path of a plain path', innerPath('/instances'), '/instances');
-eq('readsFor takes a node address', readsFor('/node/homeserver/instances'), readsFor('/instances'));
+eq('inner path of a plain path', innerPath('/apps'), '/apps');
+eq('readsFor takes a node address', readsFor('/node/homeserver/apps'), readsFor('/apps'));
+eq('the list Apps & VMs prefetches the instances and the Docker apps', ['ct/list', 'docker/apps', 'recipes/list'].every((r) => readsFor('/apps?provider=docker').includes(`/api/sys/${r}`)), true);
 eq('readsFor takes a pool address', readsFor('/node/hs/storage/pools/fast').some((p) => p.endsWith('pool=fast')), true);
 
 // every tree path has a route (the routes table is keyed by inner path), and the nav lines the shell relies on are there

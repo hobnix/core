@@ -153,13 +153,12 @@ at once while the event stream is open; the page asks the server again every 30 
 next 100 older entries (by their number, `hs event list --before <id>`), so a long list stays fast. Filter by source, level, kind and time.
 Not tested on hardware yet.
 
-The left tree has Summary (the server itself) and eight groups. Click a group to open its page, which says in one line how the group is doing.
+The left tree has Summary (the server itself) and seven groups. Click a group to open its page, which says in one line how the group is doing.
 
 | Group | Places |
 | --- | --- |
 | Storage | Pools, Disks, Shares, Files, Encryption, Vault |
-| Instances | Instances (containers and VMs), ISO images |
-| Apps | Installed (the recipes), Docker, Marketplace (apps and extensions, the repositories, the Package builder) |
+| Apps & VMs | the list of containers, VMs and Docker apps itself; App catalog (the recipes), Marketplace (apps and extensions, the repositories, the Package builder), Docker registries, ISO images |
 | Network | Network (addresses, router networks, DNS names, open ports), Services, Network map |
 | People | Users, Groups |
 | System | Health, Events, Notifications, Hardware, Updates (with a Releases tab), Certificates, Diagnostics, Live state, Test-lab |
@@ -177,37 +176,61 @@ that run out; open problems, updates, certificates, the UPS and recent events. T
 show a card list.
 
 ### Object pages and the quick look
-A disk, a share, an instance and a user each have a page of their own, and so has a pool:
+A disk, a share, an instance, a Docker app and a user each have a page of their own, and so has a pool:
 
 | Object | Address (inner path) | Tabs |
 | --- | --- | --- |
 | Pool | `/storage/pools/<name>` | none |
 | Disk | `/storage/disks/<name>[/<tab>]` | Overview, SMART, Tests, Files |
 | Share | `/storage/shares/<name>[/<tab>]` | Overview, Access, Snapshots |
-| Instance | `/instances/ct/<name>[/<tab>]` | Overview, Config, Network, Console |
+| Instance | `/apps/instance/<name>[/<tab>]` | Overview, Config, Network, Console |
 | User | `/people/users/<name>[/<tab>]` | Overview, Groups, Access |
 | Docker app | `/apps/docker-app/<name>[/<tab>]` | Overview, Compose, Logs (see below) |
 
 A page has a header with one main action (Start or Stop, Browse files, Edit) and at most one more; the rest are under **More**, and a destructive
 action (Delete, Roll back) is in the danger section at the end and asks you to type the name. Running jobs show on the header and on the row.
 
-**Docker apps.** On the Docker list, **Open page** in the quick look leads to the page of the app. The tabs depend on who manages it: an app made in
+**Docker apps.** A Docker app has a page of its own; open it from its row in **Apps & VMs**. The tabs depend on who manages it: an app made in
 the web interface has all three, an app of a recipe (or another managed one) has Overview and Logs, and an app started by hand with `docker run` is
-read only and has Overview alone. **Overview** shows the same facts as the quick look; if a recipe set the app up, a link leads to it in the app
+read only and has Overview alone. **Overview** shows the facts of the app; if a recipe set the app up, a link leads to it in the app
 catalog. The header offers **Apply** (only when the files on disk differ from what runs), **Start** or **Stop**, **Restart**, **Pull** and
 **Rebuild**: two as buttons, the rest under **More**; each shows its plan first. **Delete** and **Delete with data** are in the danger section
 (apps made in the web interface only). **Compose** is the editor of the app (app managers and admins); on this tab all app actions are under **More**.
 Picking another tab with unsaved edits asks first. Leaving the page in another way (the tree, Back) does not ask; only closing or reloading the browser
-tab does. The editor still has its own address `/apps/docker/app/<name>`. Not tested on hardware yet.
+tab does. Not tested on hardware yet.
 
-On the Groups, Nodes, Docker and Live state lists, selecting a row opens a **quick look** over the list: the list keeps its width and columns. The address carries the row (`?sel=<name>`),
+On the Groups, Nodes and Live state lists, selecting a row opens a **quick look** over the list: the list keeps its width and columns. The address carries the row (`?sel=<name>`),
 so reload, Back and Forward and a pasted link work. Escape closes it, and **Open page** goes to the object page. On a phone the quick look covers the
-screen. The Disks, Shares, Instances and Users lists open no quick look. The **Instances** list: each row ends with an **Open instance** button (and the name is a link) next to Start/Stop and Restart. The **Disks** list: the table already shows the data and cannot scroll sideways, so each row ends with an **Open disk** button (and the name is a link) that goes to the disk page; on the Missing filter the row has a **Forget** button. The **Shares** list: each row ends with **Browse files** and **Open share** buttons (and the name is a link); the share page holds the rest. The **Users** list: each row ends with **Edit**, **Change password** and **Open user** (built-in accounts are read-only and have no Edit or password button). An address of a removed object says "not found".
+screen. The Disks, Shares, Apps & VMs and Users lists open no quick look. The **Apps & VMs** list: see the next section. The **Disks** list: the table already shows the data and cannot scroll sideways, so each row ends with an **Open disk** button (and the name is a link) that goes to the disk page; on the Missing filter the row has a **Forget** button. The **Shares** list: each row ends with **Browse files** and **Open share** buttons (and the name is a link); the share page holds the rest. The **Users** list: each row ends with **Edit**, **Change password** and **Open user** (built-in accounts are read-only and have no Edit or password button). An address of a removed object says "not found".
+
+### Apps & VMs
+
+**Apps & VMs** is one list of the containers, the virtual machines and the Docker apps.
+
+- The columns are Name, **Provider** (Incus or Docker), **Type** (Container or Virtual machine), State, **App** (the recipe that set the row up; it
+  links to the app catalog) and Address (a Docker app: its address and ports). On a wide screen there are also Starts at boot, RAM, CPU, Last
+  snapshot and Route; they stay empty for a Docker app. A Docker app shows how many of its containers run (for example `2/3`) and keeps the marks
+  for changed files, unmanaged and failed. A phone shows the name, state, address and the buttons.
+- Above the list are the filters **Provider** (only while the Docker capability is on) and **Type**, and a search over name, app, address and
+  image. All three are part of the address (`?provider=docker&type=vm&q=photo`), so Back and a copied link keep them.
+- The Docker apps stand under the container `docker`, which runs them. It is open at first; once you close it, it stays closed until you close the
+  browser tab. When a filter or the search matches an app but not `docker`, `docker` stays as a greyed row with the matching apps open under it.
+  Sorting orders the rows and, separately, the apps under `docker`. While the container is stopped its row says that the apps show once it runs.
+  Docker inside another instance is not listed.
+- An instance row ends with **Open instance**, **Start** or **Stop** and **Restart**. An app row ends with **Open app**, one action (**Apply** when
+  the files changed, else **Start** or **Stop**) and a menu with the rest; **Delete** and **Delete with data** are last in it (apps made in the web
+  interface only). An unmanaged app has only **Open app**. Every action shows its plan first.
+- The header has **Create** (an instance), **New Docker app** and a menu with **Guided Docker app** and **Update all** (updates every running
+  container). Messages about Docker (off, or on but not complete) are at the top of this page.
+
+Not tested on hardware yet.
 
 ### Addresses
 Every address is `/node/<name>/<inner path>`, for example `/node/myserver/storage/disks/sda`. The old addresses (Identity, Protection, Operations,
 Monitoring, Marketplace and the other places of 0.10 and before) are kept in a redirect table and open the place that took over, so bookmarks and links
-in old notifications still work. The table is kept through 0.12 and is removed in 0.13: change old bookmarks before then.
+in old notifications still work. The table is kept through 0.12 and is removed in 0.13: change old bookmarks before then. The old addresses of the
+pages Instances and Docker (`/instances`, `/instances/ct/<name>`, `/instances/iso`, `/apps/docker`, `/apps/docker/app/<name>`) open the new
+places.
 
 A refused change shows the code of the reason, the text and a link to the guide in the plan dialog (for a code the page does not know, the text only).
 
@@ -280,7 +303,7 @@ also when you closed the install dialog; it goes away when the question is answe
 moves. Docker start, stop and restart of an app are jobs too: the answer comes at once, the row shows pending until the job ends, and the end toast says how it went. Not tested on hardware yet.
 
 ### Install and remove apps
-The Apps page has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**
+The app catalog has one **Install** dialog for every package: plan, questions, steps, result. A failed install shows the step and offers **Retry**
 and **Remove what was created**. **Remove** keeps the data unless you choose **Delete the data** and type the name. Each app shows its stage
 (available, installed, on, running), a health mark and its app version next to the package version. Details:
 [Containers and apps](containers-and-apps.md). Not tested on hardware yet.
@@ -391,7 +414,7 @@ file details (SMART history, access lists, snapshots, directory contents) stay d
 other pool names are read directly. While storage is locked the pool and share panels keep their last value (or show "refreshing") until
 unlock refreshes them. Not tested on hardware yet.
 
-The Summary and top bar, Health, Settings, the Instances and Services pages, the Marketplace and Apps, and the Network pages (gateway status, routes
+The Summary and top bar, Health, Settings, the Apps & VMs and Services pages, the Marketplace and the app catalog, and the Network pages (gateway status, routes
 and health, DNS names, router networks and clients, open ports, remote shares) use live state too: their fixed lists come from the state database and update
 over the stream. A change from the terminal, from the web interface or from a job refreshes only the pages it can affect; a finished job refreshes
 everything. Reads that need an argument (one service, one user) and on-demand reports stay direct. Pages whose feature is off

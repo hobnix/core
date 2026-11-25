@@ -15,10 +15,11 @@ const L = 'homeserver';
 const flat = (items, out = []) => { for (const it of items) { if (it.path) out.push(it); if (it.children) flat(it.children, out); } return out; };
 const inner = (addr) => addr.replace(`/node/${L}`, '').replace(/[?#].*$/, '') || '/';
 
-// 1. the shape of D2 (c): Summary, then eight groups, Developer last and only by capability
+// 1. the shape of D2 (c) with Apps & VMs (docs/PLAN-workloads.md 3): Summary, then seven groups, Developer last and only by capability
 const groups = tree[0].children;
-eq('the groups of the node', groups.slice(0, 8).map((g) => g.label), ['Storage', 'Instances', 'Apps', 'Network', 'People', 'System', 'Backup', 'Settings']);
-eq('Developer is the last group and carries a capability', [groups[8].label, groups[8].capability, groups.length], ['Developer', DEVELOPER_CAP, 9]);
+eq('the groups of the node', groups.slice(0, 7).map((g) => g.label), ['Storage', 'Apps & VMs', 'Network', 'People', 'System', 'Backup', 'Settings']);
+eq('Apps & VMs is the list with its places under it', [groups[1].path, groups[1].children.map((c) => [c.label, c.path, c.capability ?? ''])], ['/apps', [['App catalog', '/apps/installed', ''], ['Marketplace', '/apps/marketplace', ''], ['Docker registries', '/apps/docker/registries', 'docker'], ['ISO images', '/apps/iso', 'incus']]]);
+eq('Developer is the last group and carries a capability', [groups[7].label, groups[7].capability, groups.length], ['Developer', DEVELOPER_CAP, 8]);
 eq('Hardware, Updates and Certificates are in System', ['Hardware', 'Updates', 'Certificates'].map((l) => groups.find((g) => g.label === 'System').children.some((c) => c.label === l)), [true, true, true]);
 eq('Docs and What\'s new are not tree rows, Incident is no row', [P.docs, P.whatsNew, P.incident].map((p) => flat(tree).some((i) => i.path === p)), [false, false, false]);
 eq('they are known places for titles and flags', [P.docs, P.whatsNew, P.incident, P.setup, P.nodes].map((p) => !!itemOf(p) && !!titleOf(p)), [true, true, true, true, true]);
@@ -57,14 +58,15 @@ eq('Live state and Test-lab follow their capabilities', [kids([], 'System').filt
 // 6. extension pages go into the group their `group` names (default Apps)
 const ext = (name, group) => ({ name, title: name, ...(group ? { group } : {}) });
 const where = (exts) => withExtItems(groups, exts).filter((g) => (g.children ?? []).some((c) => c.path?.startsWith('/extensions/'))).map((g) => g.label);
-eq('an extension without a group goes into Apps', where([ext('a')]), ['Apps']);
+eq('an extension without a group goes into Apps & VMs', where([ext('a')]), ['Apps & VMs']);
+eq('the groups instances and apps are both Apps & VMs', [where([ext('a', 'instances')]), where([ext('a', 'apps')])], [['Apps & VMs'], ['Apps & VMs']]);
 eq('an extension names its group', where([ext('a', 'network'), ext('b', 'backup')]), ['Network', 'Backup']);
-eq('an unknown group falls back to Apps', where([ext('a', 'nowhere')]), ['Apps']);
+eq('an unknown group falls back to Apps & VMs', where([ext('a', 'nowhere')]), ['Apps & VMs']);
 eq('no extension, no change', withExtItems(groups, []) === groups, true);
 
 // 6b. order inside a group: core places keep their order, package places follow alphabetically, `after` puts one behind a place
-const placed = (exts, group = 'apps') => withExtItems(groups, exts.map((e) => ({ ...ext(e.name, group), ...e }))).find((g) => g.label === 'Apps').children.map((c) => c.path.split('/').pop());
-const coreApps = groups.find((g) => g.label === 'Apps').children.map((c) => c.path.split('/').pop());
+const placed = (exts, group = 'apps') => withExtItems(groups, exts.map((e) => ({ ...ext(e.name, group), ...e }))).find((g) => g.label === 'Apps & VMs').children.map((c) => c.path.split('/').pop());
+const coreApps = groups.find((g) => g.label === 'Apps & VMs').children.map((c) => c.path.split('/').pop());
 eq('package places follow the core places, alphabetically', placed([{ name: 'zeta' }, { name: 'alpha' }]), [...coreApps, 'alpha', 'zeta']);
 eq('the core places keep their order', placed([{ name: 'alpha' }]).slice(0, coreApps.length), coreApps);
 eq('after puts a package right behind a place of the core', placed([{ name: 'alpha' }, { name: 'zeta', after: coreApps[0] }]), [coreApps[0], 'zeta', ...coreApps.slice(1), 'alpha']);
@@ -72,7 +74,7 @@ eq('after names another package', placed([{ name: 'alpha' }, { name: 'zeta', aft
 eq('an after that matches nothing is ignored', placed([{ name: 'alpha', after: 'nowhere' }]), [...coreApps, 'alpha']);
 eq('a package that names itself is placed once', placed([{ name: 'alpha', after: 'alpha' }]), [...coreApps, 'alpha']);
 eq('two packages in a cycle are still placed once each', placed([{ name: 'a', after: 'b' }, { name: 'b', after: 'a' }]).slice(coreApps.length).sort(), ['a', 'b']);
-eq('tabs are no third level: a package place has no children', withExtItems(groups, [ext('a')]).find((g) => g.label === 'Apps').children.find((c) => c.path === '/extensions/a').children, undefined);
+eq('tabs are no third level: a package place has no children', withExtItems(groups, [ext('a')]).find((g) => g.label === 'Apps & VMs').children.find((c) => c.path === '/extensions/a').children, undefined);
 
 // 6c. role of an action, template and the card state
 eq('the higher role wins', [maxRole('viewer', 'admin'), maxRole('app-manager', undefined, 'viewer'), maxRole(), maxRole('nonsense', 'app-manager')], ['admin', 'app-manager', 'viewer', 'app-manager']);

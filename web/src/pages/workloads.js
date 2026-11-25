@@ -1,7 +1,7 @@
 // The rows of the list Apps & VMs (pages/Workloads.svelte): containers and VMs (`sys ct list`) with the Docker apps (`sys docker apps`) nested under
 // the container they run in, the filters of the address, and which rows show (docs/PLAN-workloads.md 3). Plain JS so that node can test it
 // (tests/web-workloads.mjs).
-import { isVm, isRunning } from './instances/ct.js';
+import { isVm, isRunning } from './instances/kind.js';
 
 export const PROVIDERS = { incus: 'Incus', docker: 'Docker' };
 export const TYPES = { container: 'Container', vm: 'Virtual machine' };
