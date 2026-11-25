@@ -6,6 +6,8 @@
   // Test = the plan of `docker-app app-save` with the document {compose, env}, asked without a dialog: its `finding` lines are shown at their
   // lines in the panels (editor/findings.js), the ones without a place in a banner. Save (`app-write`) writes the two files only; Apply
   // (`app-save`) writes them and recreates the app. Both run the Test first and open the plan dialog only when it found no error.
+  // The Compose tab of the app page (DockerApp.svelte) shows it too: `embedded` is then the app's name (no page header, the buttons are a row of their own),
+  // and `ondirty(bool)` tells that page whether there are unsaved edits.
   import { onMount } from 'svelte';
   import { get, plan } from '../../api.js';
   import { poll, rows, refresh } from '../../data.svelte.js';
@@ -16,7 +18,7 @@
   import PageHeader from '../../shell/PageHeader.svelte';
   import Banner from '../../ui/Banner.svelte';
   import Button from '../../ui/Button.svelte';
-  import { Field, TextInput, Textarea, Muted } from '../../ui/index.js';
+  import { Field, TextInput, Textarea, Muted, Row } from '../../ui/index.js';
   import { appOf, revOf, diskChanged } from './apps.js';
   import BindShare from '../../forms/docker/BindShare.svelte';
   import { ls } from '../../files/api.js';
@@ -26,12 +28,14 @@
   import { convert } from '../../editor/dockerrun.js';
   import { takeHandoff } from '../../editor/wizard.js';
 
+  let { embedded = '', ondirty = null } = $props();
+
   const NEW = P.dockerNew;
   const PREFIX = `${P.docker}/app/`;
   const template = 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    env_file: .env\n    restart: unless-stopped\n';
 
-  const isNew = $derived(route.path === NEW);
-  const app = $derived(isNew ? '' : decodeURIComponent(route.path.slice(PREFIX.length)));
+  const isNew = $derived(!embedded && route.path === NEW);
+  const app = $derived(embedded || (isNew ? '' : decodeURIComponent(route.path.slice(PREFIX.length))));
   let name = $state('');
   const target = $derived(isNew ? name.trim() : app);
 
@@ -149,6 +153,9 @@
     }
   }
 
+  $effect(() => { ondirty?.(dirty); });
+  $effect(() => () => ondirty?.(false));
+
   // CodeMirror is loaded when this page opens (its own chunk: the main bundle stays small)
   onMount(() => {
     let gone = false;
@@ -265,16 +272,24 @@
 
 <svelte:window onbeforeunload={(e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }} />
 
-<PageHeader title={isNew ? 'New app' : app} sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
-  {#snippet actions()}
-    {#if !readOnly}
-      <Button icon="folder-simple-plus" busy={mountRunning} busyLabel="Mounting…" disabled={loading || !editors} tooltip="Add a share to a service as a volume" onclick={() => { binding = true; }}>Bind share</Button>
-      <Button icon="list-checks" busy={testing} busyLabel="Testing…" disabled={!canApply || testing} tooltip={canApply ? 'Check both files without changing anything' : 'Name the app first'} onclick={test}>Test</Button>
-      <Button icon="floppy-disk" busy={saving} busyLabel="Saving…" disabled={!canApply || testing || applying} tooltip={canApply ? 'Test, then write both files; the app keeps running as it is' : 'Name the app first'} onclick={save}>Save</Button>
-      <Button variant="primary" icon="check-circle" busy={applying} busyLabel="Applying…" disabled={!canApply || testing || saving} tooltip={canApply ? 'Test, then save both files and recreate the app' : 'Name the app first'} onclick={apply}>Apply</Button>
-    {/if}
-  {/snippet}
-</PageHeader>
+{#snippet editActions()}
+  {#if !readOnly}
+    <span class="edit-actions" style="display:contents">
+    <Button icon="folder-simple-plus" busy={mountRunning} busyLabel="Mounting…" disabled={loading || !editors} tooltip="Add a share to a service as a volume" onclick={() => { binding = true; }}>Bind share</Button>
+    <Button icon="list-checks" busy={testing} busyLabel="Testing…" disabled={!canApply || testing} tooltip={canApply ? 'Check both files without changing anything' : 'Name the app first'} onclick={test}>Test</Button>
+    <Button icon="floppy-disk" busy={saving} busyLabel="Saving…" disabled={!canApply || testing || applying} tooltip={canApply ? 'Test, then write both files; the app keeps running as it is' : 'Name the app first'} onclick={save}>Save</Button>
+    <Button variant="primary" icon="check-circle" busy={applying} busyLabel="Applying…" disabled={!canApply || testing || saving} tooltip={canApply ? 'Test, then save both files and recreate the app' : 'Name the app first'} onclick={apply}>Apply</Button>
+    </span>
+  {/if}
+{/snippet}
+
+{#if embedded}
+  <Row gap="2" wrap>{@render editActions()}</Row>
+{:else}
+  <PageHeader title={isNew ? 'New app' : app} sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
+    {#snippet actions()}{@render editActions()}{/snippet}
+  </PageHeader>
+{/if}
 
 {#if loadError}<Banner tone="bad">{loadError}</Banner>{/if}
 {#if readOnly}<Banner tone="info">This app is not managed by the web interface (it is {managed}), so it can be read here but not changed.</Banner>{/if}

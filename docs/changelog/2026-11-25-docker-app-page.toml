@@ -1,0 +1,5 @@
+date  = "2026-11-25"
+type  = "feature"
+title = "Every Docker app has a page of its own in the web interface"
+docs  = "web-interface#object-pages-and-the-quick-look"
+body  = """Open page in the quick look of the Docker list leads to it. It has the facts and actions of the app, the compose editor for apps made in the web interface, and the log. An app of a recipe links to the app catalog. Not tested on hardware yet."""
