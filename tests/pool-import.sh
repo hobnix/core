@@ -66,7 +66,8 @@ run() {   # run <args...>: stdout in $out, exit code in $rc
 reason() {   # reason <what> <expected reason>: the last run was refused with exactly that reason
   check_eq "$1: exit 1" 1 "$rc"
   check_eq "$1: reason" "status${T}refused
-reason${T}$2" "$out"
+reason${T}$2" "$(grep -v "^code${T}" <<<"$out")"
+  check_match "$1: a code line" "^code${T}[a-z][a-z0-9.-]*$" "$out"
 }
 
 echo "-- the plan"
@@ -230,6 +231,14 @@ rc=0; out=$(printf 'ata-A\nn\n' | HS_GUIDED_TTY=1 timeout 30 bash "$PI" tank 2>&
 check_eq "the disk name and no job: imports" 0 "$rc"
 check_eq "the disk name and no job: imported by id" 1 "$(grep -c "^zpool import -N -d $WORK/byid 11111111111111111\$" "$LOG")"
 
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code.$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+reset ok; run plan Tank; coded "a bad pool name" name.invalid "$out"
+rc=0; out=$(HS_GUIDED_TTY=1 HS_PLAIN=1 timeout 30 bash "$PI" Tank 2>&1 </dev/null) || rc=$?
+check_eq "on a terminal the same refusal is a failure, without lines for the interface" "1 0" "$rc $(grep -cE "^(status|reason|code)${T}" <<<"$out")"
+check_match "and it shows the reason" "does not fit the pool name rule" "$out"
 echo "-- the script"
 check_eq "no -f option anywhere in pool-import.sh" 0 "$(grep -cE 'import[^#]* -f( |$)|--force' "$PI")"
 bash -n "$PI" && pass "bash -n" || fail "bash -n"

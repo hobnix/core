@@ -37,12 +37,12 @@ gw_default() {
   esac
 }
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: gateway-setup.sh plan|start setup --set <key>=<value>... [--confirm <port>]" >&2; exit 1 ;; esac
-[ "$action" = setup ] || [ "$action" = job-rebuild ] || refuse "unknown action (setup)"
-[ "$action" != job-rebuild ] || [ "$verb" = start ] || refuse "unknown action (setup)"   # job-rebuild is what the background job runs, never a plan
+[ "$action" = setup ] || [ "$action" = job-rebuild ] || refuse_code action.unknown "unknown action (setup)"
+[ "$action" != job-rebuild ] || [ "$verb" = start ] || refuse_code action.unknown "unknown action (setup)"   # job-rebuild is what the background job runs, never a plan
 shift 2
 
 machine=$(machine_file)
@@ -76,17 +76,17 @@ confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --set)
-      [ $# -ge 2 ] || refuse "--set needs key=value"
-      [[ "$2" == *=* ]] || refuse "--set needs key=value"
+      [ $# -ge 2 ] || refuse_code gateway.set-invalid "--set needs key=value"
+      [[ "$2" == *=* ]] || refuse_code gateway.set-invalid "--set needs key=value"
       k=${2%%=*}
-      case " $GW_KEYS " in *" $k "*) ;; *) refuse "'$k' is not part of the gateway setup." ;; esac
-      [ -z "${new[$k]+x}" ] || refuse "'$k' is given twice."
+      case " $GW_KEYS " in *" $k "*) ;; *) refuse_code gateway.key-unknown "'$k' is not part of the gateway setup." ;; esac
+      [ -z "${new[$k]+x}" ] || refuse_code gateway.key-twice "'$k' is given twice."
       new[$k]=${2#*=}; order+=("$k"); shift 2 ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    *) refuse "unexpected argument '$1'" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    *) refuse_code args.unexpected "unexpected argument '$1'" ;;
   esac
 done
-[ ${#order[@]} -gt 0 ] || refuse "Nothing to change: give at least one --set key=value."
+[ ${#order[@]} -gt 0 ] || refuse_code gateway.nothing-to-change "Nothing to change: give at least one --set key=value."
 
 py=${HS_PYTHON:-python3}; command -v "$py" >/dev/null 2>&1 || py=python
 list=$(bash "$here/config-read.sh" list 2>/dev/null || true)
@@ -107,29 +107,29 @@ for k in $GW_KEYS; do old[$k]=$(cur "$k"); val[$k]=${old[$k]}; done
 for k in "${order[@]}"; do
   v=${new[$k]}
   type=$(col "$k" 5)
-  [ -n "$type" ] || refuse "'$k' is not an option of machine.toml.example."
+  [ -n "$type" ] || refuse_code gateway.key-unknown "'$k' is not an option of machine.toml.example."
   if [ -z "$v" ]; then
     off[$k]=1; val[$k]=$(gw_default "$k"); continue
   fi
   case "$type" in
-    bool) case "$v" in true|false) toml[$k]=$v ;; *) refuse "'$k' must be true or false." ;; esac ;;
+    bool) case "$v" in true|false) toml[$k]=$v ;; *) refuse_code gateway.value-invalid "'$k' must be true or false." ;; esac ;;
     number)
-      [[ "$v" =~ ^[0-9]{1,6}$ ]] || refuse "'$k' must be a whole number."
+      [[ "$v" =~ ^[0-9]{1,6}$ ]] || refuse_code gateway.value-invalid "'$k' must be a whole number."
       toml[$k]=$v ;;
     string)
-      [[ "$v" != *[\"\\]* ]] || refuse "Quotes and backslashes are not allowed in a value."
+      [[ "$v" != *[\"\\]* ]] || refuse_code gateway.value-invalid "Quotes and backslashes are not allowed in a value."
       toml[$k]="\"$v\"" ;;
-    *) refuse "'$k' is a list or table: edit machine.toml on the server." ;;
+    *) refuse_code gateway.not-scalar "'$k' is a list or table: edit machine.toml on the server." ;;
   esac
   rule=$(PYTHONUTF8=1 "$py" "$here/schema-gen.py" rule "$k" 2>/dev/null || true)
   r_choices=$(cut -f2 <<<"$rule"); r_min=$(cut -f3 <<<"$rule"); r_pattern=$(cut -f4 <<<"$rule"); r_hint=$(cut -f5 <<<"$rule")
-  if [ -n "${r_choices:-}" ]; then case " $r_choices " in *" $v "*) ;; *) refuse "'$k' must be one of: $r_choices." ;; esac; fi
-  if [ -n "${r_min:-}" ] && [ "$v" -lt "$r_min" ] 2>/dev/null; then refuse "'$k' must be $r_min or more."; fi
-  if [ -n "${r_pattern:-}" ] && ! grep -Eq -- "$r_pattern" <<<"$v"; then refuse "'$k' must be ${r_hint:-valid}."; fi
+  if [ -n "${r_choices:-}" ]; then case " $r_choices " in *" $v "*) ;; *) refuse_code gateway.value-invalid "'$k' must be one of: $r_choices." ;; esac; fi
+  if [ -n "${r_min:-}" ] && [ "$v" -lt "$r_min" ] 2>/dev/null; then refuse_code gateway.value-invalid "'$k' must be $r_min or more."; fi
+  if [ -n "${r_pattern:-}" ] && ! grep -Eq -- "$r_pattern" <<<"$v"; then refuse_code gateway.value-invalid "'$k' must be ${r_hint:-valid}."; fi
   val[$k]=$v
 done
 for k in gatewayTunnelPort gatewayPublicHttps gatewayPublicHttp; do
-  [ "${val[$k]}" -le 65535 ] 2>/dev/null || refuse "$k = ${val[$k]} is not a port (0 to 65535)."
+  [ "${val[$k]}" -le 65535 ] 2>/dev/null || refuse_code gateway.value-invalid "$k = ${val[$k]} is not a port (0 to 65535)."
 done
 
 # the keys that really change; machine.toml needed for the ones stored there
@@ -137,9 +137,9 @@ changed=()
 for k in "${order[@]}"; do
   [ "${val[$k]}" != "${old[$k]}" ] || continue
   changed+=("$k")
-  if [ "$(col "$k" 8)" != settings ]; then [ -f "$machine" ] || refuse "There is no machine.toml on this server."; fi
+  if [ "$(col "$k" 8)" != settings ]; then [ -f "$machine" ] || refuse_code config.no-machine-toml "There is no machine.toml on this server."; fi
 done
-[ ${#changed[@]} -gt 0 ] || refuse "Nothing changes: the gateway has these values already."
+[ ${#changed[@]} -gt 0 ] || refuse_code gateway.unchanged "Nothing changes: the gateway has these values already."
 
 # ---- the assertions of capabilities/gateway/module.nix ------------------------------------------
 pubS=${val[gatewayPublicHttps]}; pubH=${val[gatewayPublicHttp]}; tun=${val[gatewayTunnelPort]}
@@ -149,32 +149,32 @@ webUi=$(machine_get webUi 2>/dev/null || true); webUi=${webUi:-false}      # con
 webTs=$(machine_get webTailscale 2>/dev/null || true); webTs=${webTs:-false}
 in_list() { local x=$1; shift; local y; for y in "$@"; do [ "$x" = "$y" ] && return 0; done; return 1; }
 if [ "$webUi" = true ]; then
-  in_list "$webPort" 80 443 "$pubS" "$pubH" && [ "$webPort" != 0 ] && refuse "The gateway proxy owns port 80 (and the public ports); the web interface needs its own port: webPort = 8480."
+  in_list "$webPort" 80 443 "$pubS" "$pubH" && [ "$webPort" != 0 ] && refuse_code gateway.port-conflict "The gateway proxy owns port 80 (and the public ports); the web interface needs its own port: webPort = 8480."
 fi
-[ "$pubS" = 0 ] || ! in_list "$pubS" 80 22 139 445 8443 9740 "$webPort" || refuse "gatewayPublicHttps = $pubS is a port the server already uses; suggested 443 (or 4443 behind a router that translates ports)."
-[ "$pubH" = 0 ] || ! in_list "$pubH" 443 22 139 445 8443 9740 "$webPort" || refuse "gatewayPublicHttp = $pubH is a port the server already uses; suggested 80 (or 8008 behind a router that translates ports)."
+[ "$pubS" = 0 ] || ! in_list "$pubS" 80 22 139 445 8443 9740 "$webPort" || refuse_code gateway.port-conflict "gatewayPublicHttps = $pubS is a port the server already uses; suggested 443 (or 4443 behind a router that translates ports)."
+[ "$pubH" = 0 ] || ! in_list "$pubH" 443 22 139 445 8443 9740 "$webPort" || refuse_code gateway.port-conflict "gatewayPublicHttp = $pubH is a port the server already uses; suggested 80 (or 8008 behind a router that translates ports)."
 if [ "$pubS" = 443 ] && [ "$webUi" = true ] && [ "$webTs" = true ]; then
-  refuse "gatewayPublicHttps = 443 clashes with webTailscale (tailscale serve holds 443): set webTailscale = false, or use another port behind a router that translates ports."
+  refuse_code gateway.port-conflict "gatewayPublicHttps = 443 clashes with webTailscale (tailscale serve holds 443): set webTailscale = false, or use another port behind a router that translates ports."
 fi
 if [ "$tun" != 0 ] && [ -f "$machine" ]; then   # tunFrom empty is only fine with the incus capability (the container on the internal link)
   . "$here/lib/capability.sh"
   from=$(machine_get_json gatewayTunnelFrom 2>/dev/null || true)
   case "${from//[[:space:]]/}" in
-    ""|"[]") capability_on incus || refuse "gatewayTunnelPort is set but gatewayTunnelFrom is empty: set gatewayTunnelFrom in machine.toml to the address of the cloudflared container, e.g. [ \"10.99.0.2/32\" ] (with the incus capability on, an empty list means the container on the internal link)." ;;
+    ""|"[]") capability_on incus || refuse_code gateway.tunnel-from-missing "gatewayTunnelPort is set but gatewayTunnelFrom is empty: set gatewayTunnelFrom in machine.toml to the address of the cloudflared container, e.g. [ \"10.99.0.2/32\" ] (with the incus capability on, an empty list means the container on the internal link)." ;;
   esac
 fi
-{ [ "$pubS" != "$pubH" ] || [ "$pubS" = 0 ]; } || refuse "gatewayPublicHttps and gatewayPublicHttp must be different ports."
-[ "$tun" = 0 ] || ! in_list "$tun" 80 443 22 139 445 8443 9740 "$webPort" "$pubS" "$pubH" || refuse "gatewayTunnelPort = $tun is a port the server already uses; suggested 8081."
-{ [ -z "$email" ] || [ "$pubS" != 0 ]; } || refuse "gatewayAcmeEmail needs gatewayPublicHttps = 443 (the router forwards 443 to this server)."
-{ [ -z "$email" ] || [[ "$email" =~ ^[^@\ ]+@[^@\ ]+\.[^@\ ]+$ ]]; } || refuse "gatewayAcmeEmail is not an e-mail address."
+{ [ "$pubS" != "$pubH" ] || [ "$pubS" = 0 ]; } || refuse_code gateway.port-conflict "gatewayPublicHttps and gatewayPublicHttp must be different ports."
+[ "$tun" = 0 ] || ! in_list "$tun" 80 443 22 139 445 8443 9740 "$webPort" "$pubS" "$pubH" || refuse_code gateway.port-conflict "gatewayTunnelPort = $tun is a port the server already uses; suggested 8081."
+{ [ -z "$email" ] || [ "$pubS" != 0 ]; } || refuse_code gateway.acme-invalid "gatewayAcmeEmail needs gatewayPublicHttps = 443 (the router forwards 443 to this server)."
+{ [ -z "$email" ] || [[ "$email" =~ ^[^@\ ]+@[^@\ ]+\.[^@\ ]+$ ]]; } || refuse_code gateway.acme-invalid "gatewayAcmeEmail is not an e-mail address."
 challenge=${val[gatewayAcmeChallenge]}; provider=${val[gatewayAcmeDnsProvider]}
-{ [ "$challenge" = tls-alpn ] || [ "$challenge" = dns ]; } || refuse "gatewayAcmeChallenge must be tls-alpn or dns."
-{ [ "$challenge" != dns ] || [ "$provider" = cloudflare ]; } || refuse "gatewayAcmeChallenge = dns needs gatewayAcmeDnsProvider = cloudflare."
-{ [ "$challenge" != dns ] || [ -n "$email" ]; } || refuse "gatewayAcmeChallenge = dns needs gatewayAcmeEmail (a Let's Encrypt account)."
-{ [ "$challenge" != dns ] || [ "$pubS" != 0 ]; } || refuse "gatewayAcmeChallenge = dns needs gatewayPublicHttps (a public port for the certificate)."
-{ [ "$provider" = cloudflare ] || [ "$challenge" != dns ]; } || refuse "gatewayAcmeDnsProvider = $provider is not supported; use cloudflare."
+{ [ "$challenge" = tls-alpn ] || [ "$challenge" = dns ]; } || refuse_code gateway.acme-invalid "gatewayAcmeChallenge must be tls-alpn or dns."
+{ [ "$challenge" != dns ] || [ "$provider" = cloudflare ]; } || refuse_code gateway.acme-invalid "gatewayAcmeChallenge = dns needs gatewayAcmeDnsProvider = cloudflare."
+{ [ "$challenge" != dns ] || [ -n "$email" ]; } || refuse_code gateway.acme-invalid "gatewayAcmeChallenge = dns needs gatewayAcmeEmail (a Let's Encrypt account)."
+{ [ "$challenge" != dns ] || [ "$pubS" != 0 ]; } || refuse_code gateway.acme-invalid "gatewayAcmeChallenge = dns needs gatewayPublicHttps (a public port for the certificate)."
+{ [ "$provider" = cloudflare ] || [ "$challenge" != dns ]; } || refuse_code gateway.acme-invalid "gatewayAcmeDnsProvider = $provider is not supported; use cloudflare."
 acme=false; { [ -n "$email" ] && [ "$pubS" != 0 ]; } && acme=true
-{ [ "$unkPublic" = drop ] || [ "$pubS" = 0 ] || $acme; } || refuse "gatewayUnknownHostPublic = \"404\" on the public HTTPS port needs a certificate (gatewayAcmeEmail); use \"drop\" for now."
+{ [ "$unkPublic" = drop ] || [ "$pubS" = 0 ] || $acme; } || refuse_code gateway.certificate-needed "gatewayUnknownHostPublic = \"404\" on the public HTTPS port needs a certificate (gatewayAcmeEmail); use \"drop\" for now."
 
 # ---- the confirmation word: an opened port or a changed tunnel port ------------------------------
 opened=()      # warn lines
@@ -191,7 +191,7 @@ elif is_changed gatewayTunnelPort; then
 fi
 
 if [ "$verb" = start ]; then
-  [ -z "$word" ] || [ "$confirm" = "$word" ] || refuse "type the port to confirm: $word"
+  [ -z "$word" ] || [ "$confirm" = "$word" ] || refuse_code confirm.missing "type the port to confirm: $word"
 fi
 
 # ---- plan -----------------------------------------------------------------------------------------
@@ -217,7 +217,7 @@ fi
 # ---- start ----------------------------------------------------------------------------------------
 # a job that runs already holds the .before copy: never overwrite it
 if "${HS_SYSTEMCTL:-systemctl}" list-units 'hs-job-gateway-setup-*.service' --state=active,activating --no-legend --no-pager 2>/dev/null | grep -q .; then
-  refuse "A gateway setup is still being applied (hs job running). Wait until it has finished."
+  refuse_code job.busy "A gateway setup is still being applied (hs job running). Wait until it has finished."
 fi
 rm -rf "$before"; mkdir -p "$before/settings" "$before/settings-absent"
 [ ! -f "$machine" ] || cp -p "$machine" "$before/machine.toml"
@@ -237,19 +237,19 @@ for k in "${changed[@]}"; do
   fi
   [ -z "$bad" ] || break
 done
-if [ -n "$bad" ]; then restore_before; refuse "$bad could not be written (the files were put back)."; fi
+if [ -n "$bad" ]; then restore_before; refuse_code gateway.write-failed "$bad could not be written (the files were put back)."; fi
 check=${HS_CONFIG_CHECK:-$here/config-read.sh}
 if [ -n "${HS_CONFIG_CHECK:-}" ]; then bash "$check" >/dev/null 2>&1 || bad=1; else bash "$check" check >/dev/null 2>&1 || bad=1; fi
 if [ -n "$bad" ]; then
   restore_before
-  refuse "machine.toml would have problems after that change (hs config check); it was put back."
+  refuse_code gateway.check-failed "machine.toml would have problems after that change (hs config check); it was put back."
 fi
 
 if [ "${HS_GATEWAY_NO_JOB:-}" = 1 ]; then
-  bash "$(cd "$here" && pwd)/gateway-setup.sh" start job-rebuild >/dev/null 2>&1 || refuse "the rebuild failed (the files were put back)"
+  bash "$(cd "$here" && pwd)/gateway-setup.sh" start job-rebuild >/dev/null 2>&1 || refuse_code gateway.rebuild-failed "the rebuild failed (the files were put back)"
   printf 'status\tdone\n'
   exit 0
 fi
 . "$here/lib/job.sh"
-unit=$(hs_job gateway-setup "apply the gateway setup (hs rebuild)" -- bash "$(cd "$here" && pwd)/gateway-setup.sh" start job-rebuild) || { restore_before; refuse "the job could not be started"; }
+unit=$(hs_job gateway-setup "apply the gateway setup (hs rebuild)" -- bash "$(cd "$here" && pwd)/gateway-setup.sh" start job-rebuild) || { restore_before; refuse_code job.start-failed "the job could not be started"; }
 printf 'status\tstarted\nunit\t%s\n' "$unit"

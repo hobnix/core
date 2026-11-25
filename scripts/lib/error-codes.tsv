@@ -373,3 +373,106 @@ blueprint.no-network	script	The step needs the network and it is down.	This need
 blueprint.docker-refused	script	The plan to turn Docker on refused.	Docker cannot be turned on.	-
 blueprint.needs-docker	script	An app of the blueprint needs Docker, which is off and not part of the blueprint.	An app of the blueprint needs Docker.	-
 blueprint.confirm-unknown	script	A typed name was given that the plan does not ask for.	The plan does not ask for that name.	-
+# rest: apps. job. disk. docker. gateway. migrate. pool. preset. fm. (#1127)
+apps.usage	script	The command to retry, clean up or remove an app was called without its arguments.	The command is missing arguments.	-
+apps.job-only	script	A step that only runs as a job body was called directly.	This step only runs as a job.	-
+apps.job-not-failed	script	Retry or clean up was asked for a job that did not fail.	This job did not fail.	-
+apps.no-failed-step	script	The job has no failed step to retry or clean up.	The job has no failed step. Install again from the start.	-
+apps.record-invalid	script	The job record names no usable app or an unknown step.	The record of the job cannot be used.	-
+apps.other-run	script	The app was installed by another run, so a clean-up could delete a working app.	Another run installed this app. Use Remove for it.	-
+apps.no-created-record	script	There is no record of what the install created.	There is no record of what the install created.	-
+apps.part-owned	script	The app belongs to a part and is removed by switching that part off.	This app belongs to a part. Switch that part off.	-
+apps.nothing-to-remove	script	Nothing is listed for the app.	There is nothing to remove.	-
+job.id-invalid	script	The argument is not a job id.	That is not a job id.	-
+job.record-unreadable	script	The record of the job cannot be read.	The job record cannot be read.	-
+job.value-missing	script	An option was given without its value.	The option needs a value.	-
+job.value-invalid	script	The value of an option of an answer is not in the allowed form.	A value is not valid.	-
+job.no-question	script	An answer was given to a job that does not ask questions.	This job does not ask questions.	-
+job.answer-forbidden	script	Someone who neither started the run nor is an administrator tried to answer.	Only the person who started this run, or an administrator, may answer.	-
+job.answer-invalid	script	The answer does not fit the question.	The answer does not fit the question.	-
+disk.recovering	script	The disk is out of the pool for a recovery.	The disk is out of the pool for a recovery.	-
+disk.already-detached	script	The disk is detached already.	The disk is detached already.	-
+disk.not-mounted	script	The disk is not mounted.	The disk is not mounted.	-
+disk.last-data-disk	script	No other data disk would keep the pool running.	This is the last data disk of the pool in use.	-
+disk.not-detached	script	Attach was asked for a disk that is not detached.	The disk is not detached.	-
+disk.mount-failed	script	The disk could not be mounted.	The disk could not be mounted.	-
+disk.value-missing	script	An option or the thing to move was not given.	A value is missing.	-
+disk.target-invalid	script	--to does not name a data disk.	The target is a data disk.	-
+disk.path-invalid	script	The path on the disk is not allowed.	The path is not allowed.	-
+disk.path-missing	script	There is no such folder or file on the disk.	There is no such path on the disk.	-
+disk.target-same	script	The target is the disk the files are on.	The target is the same disk.	-
+disk.target-closed	script	The target disk is closed and takes no new files.	The target disk takes no new files.	-
+disk.target-unmounted	script	The target disk is not mounted or is out for a recovery.	The target disk is not available.	-
+disk.no-target	script	No other data disk can take the files.	No other data disk can take the files.	-
+disk.target-full	script	The target disk has not enough room.	The target disk has not enough room.	-
+disk.types-invalid	script	--types is not media or all.	The types are media or all.	-
+disk.recovery-running	script	The recovery of the disk is still running.	The recovery is still running.	-
+disk.tool-missing	script	A program the step needs is not installed.	A program this step needs is not installed.	-
+docker.args-missing	script	The command did not get what it needs.	The command is missing arguments.	-
+docker.value-missing	script	An option was given without its value.	The option needs a value.	-
+docker.remote-read-only	script	A remote share is read only and takes no --as.	A remote share is read only.	-
+docker.value-invalid	script	The value of a Docker setting is not one of the allowed ones.	The value is not valid.	-
+docker.key-unknown	script	Only the Docker settings of the setup can be set here.	This setting cannot be set here.	-
+docker.already-on	script	Docker is on already.	Docker is on already.	-
+gateway.set-invalid	script	--set is not key=value.	--set needs key=value.	-
+gateway.key-unknown	script	The key is not a setting of the gateway setup.	This is not a gateway setting.	-
+gateway.key-twice	script	A setting was given twice.	A setting was given twice.	-
+gateway.nothing-to-change	script	No setting to change was given.	There is nothing to change.	-
+gateway.value-invalid	script	The value does not fit the setting.	The value does not fit this setting.	-
+gateway.not-scalar	script	The setting is a list or a table and is edited on the server.	Edit this setting in machine.toml on the server.	-
+gateway.unchanged	script	The gateway has these values already.	Nothing changes.	-
+gateway.port-conflict	script	The ports of the gateway clash with each other or with the server.	The ports clash.	-
+gateway.tunnel-from-missing	script	A tunnel port is set without the address the tunnel comes from.	The address the tunnel comes from is missing.	-
+gateway.acme-invalid	script	The certificate settings do not fit together.	The certificate settings are not valid.	-
+gateway.certificate-needed	script	The chosen answer for unknown hosts needs a certificate.	This needs a certificate.	-
+gateway.write-failed	script	A file of the gateway setup could not be written.	A file could not be written.	-
+gateway.check-failed	script	The change would break machine.toml.	The change would break machine.toml.	-
+gateway.rebuild-failed	script	The rebuild failed and the files were put back.	The rebuild failed.	-
+migrate.no-pool	script	No pool for data was found.	No pool for data was found.	-
+migrate.not-snapraid	script	Unraid disks are only adopted into a SnapRAID pool.	This pool cannot take disks from Unraid.	-
+migrate.disk-not-free	script	The name is not a free disk of the server.	That is not a free disk.	-
+migrate.disk-unusable	script	The disk holds no file system, or one that cannot be adopted.	This disk cannot be adopted.	-
+migrate.disk-twice	script	A disk was named twice or in two roles.	A disk was named twice.	-
+migrate.parity-not-empty	script	The disk named as old parity holds a file system.	That is not an Unraid parity disk.	-
+migrate.disk-too-small	script	The parity or spare disk is smaller than the largest data disk.	The disk is too small.	-
+migrate.passphrase-missing	script	The passphrase of the Unraid disks was not given.	The passphrase is missing.	-
+pool.not-recorded	script	The server has no pools line yet.	The pools of this server are not recorded yet.	-
+pool.already-imported	script	The pool is imported already.	The pool is imported already.	-
+pool.is-array	script	The name is the SnapRAID pool of the server.	That is the SnapRAID pool of this server.	-
+pool.not-waiting	script	No pool of this name waits to be imported.	No such pool is waiting to be imported.	-
+pool.name-ambiguous	script	Two pools have the same name.	Two pools have this name.	-
+pool.damaged	script	The pool is damaged and is not imported.	The pool is damaged.	-
+pool.foreign	script	The pool was last used by another system and is never forced.	The pool was last used by another system.	-
+pool.disk-not-whole	script	A disk of the pool is not a whole disk of this server.	A disk of the pool is not a whole disk.	-
+pool.disk-not-free	script	The disk is not a free disk of the pool.	That is not a free disk of the pool.	-
+pool.apps-unsupported	script	Importing an apps pool is not built yet.	An apps pool cannot be imported yet.	-
+pool.mountpoint-used	script	The folder of the pool already holds files on the system disk.	The folder of the pool is not empty.	-
+pool.use-invalid	script	--use is not data or apps.	The use is data or apps.	-
+preset.unknown	script	No preset has this name.	There is no preset with this name.	-
+preset.apply-failed	script	The preset could not be applied.	The preset could not be applied.	-
+preset.unreadable	script	The preset could not be read.	The preset could not be read.	-
+fm.capability-off	script	The file manager needs the capability storage.	The file manager is not available on this server.	-
+fm.usage	script	The command of the file manager was called without its arguments.	The command is missing arguments.	-
+fm.path-invalid	script	The path is not allowed or leaves the location.	The path is not allowed.	-
+fm.folder-missing	script	There is no such folder.	There is no such folder.	-
+fm.protected	script	The folder or file belongs to the array.	This belongs to the array and cannot be used.	-
+fm.value-missing	script	An option or a needed argument was not given.	A value is missing.	-
+fm.value-invalid	script	The value of an option is not in the allowed form.	A value is not valid.	-
+fm.option-misplaced	script	The option does not belong to this operation.	That option does not belong to this action.	-
+fm.selection-invalid	script	The selection that was sent cannot be used.	The selection is not valid.	-
+fm.nothing-selected	script	Nothing is selected.	Nothing is selected.	-
+fm.not-in-trash	script	The item is not in the trash, or its origin is not known.	The item cannot be restored from the trash.	-
+fm.in-trash	script	The folder is the trash, which is changed with restore only.	That is the trash. Use restore.	-
+fm.one-location	script	The operation works inside one location only.	This works inside one location only.	-
+fm.read-only	script	The location does not take this change.	This location cannot be changed this way.	-
+fm.exists	script	Something of that name exists already.	That name is taken already.	-
+fm.item-missing	script	There is no such item.	There is no such item.	-
+fm.item-unreadable	script	The item cannot be read.	The item cannot be read.	-
+fm.link	script	Links are not copied or moved.	Links are not copied or moved.	-
+fm.is-share	script	The folder is a share, which has its own rules.	This is a share.	-
+fm.target-invalid	script	The target does not fit the selection.	The target does not fit.	-
+fm.overwrite-move	script	Overwrite is refused together with move.	Overwrite is not offered for a move.	-
+fm.no-room	script	The target has not enough free room.	There is not enough room at the target.	-
+fm.busy	script	Another job works on the location or holds the lock of the pool.	Another job is running. Try again when it is done.	-
+fm.write-off	script	The file manager is read only until writing is allowed.	The file manager is read only.	-
+fm.state-unwritable	script	The state folder of the file manager is not writable.	The file manager cannot write its state.	-

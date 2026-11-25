@@ -33,25 +33,25 @@ bulkmount=${HS_BULK_MOUNT:-$here/bulk-mount.sh}
 recdir=$state/recovering
 testmode=${HS_RECOVER_TEST:-0}
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1 B"; }
 
 verb=${1:-}; member=${2:-}
 case "$verb" in plan|start|finish|run) ;; *) echo "usage: disk-recover.sh run|plan|start|finish <member> [--to <member>] [--types media|all]" >&2; exit 1 ;; esac
 [ $# -ge 2 ] && shift 2 || shift $#
-[[ "$member" =~ ^data-[0-9]+$ ]] || refuse "that is not a data disk of the array (data-NN)"
+[[ "$member" =~ ^data-[0-9]+$ ]] || refuse_code disk.not-data-disk "that is not a data disk of the array (data-NN)"
 to="" types=media confirm="" now=no
 while [ $# -gt 0 ]; do
   case "$1" in
-    --to)      [ $# -ge 2 ] || refuse "--to needs a value"; to=$2; shift 2 ;;
-    --types)   [ $# -ge 2 ] || refuse "--types needs a value"; types=$2; shift 2 ;;
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --to)      [ $# -ge 2 ] || refuse_code disk.value-missing "--to needs a value"; to=$2; shift 2 ;;
+    --types)   [ $# -ge 2 ] || refuse_code disk.value-missing "--types needs a value"; types=$2; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     --now)     now=yes; shift ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ -z "$to" ] || [[ "$to" =~ ^data-[0-9]+$ ]] || refuse "--to is a data disk (data-NN)"
-case "$types" in media|all) ;; *) refuse "--types is media or all" ;; esac
+[ -z "$to" ] || [[ "$to" =~ ^data-[0-9]+$ ]] || refuse_code disk.target-invalid "--to is a data disk (data-NN)"
+case "$types" in media|all) ;; *) refuse_code disk.types-invalid "--types is media or all" ;; esac
 
 dir=$base/$member
 find_dev() {   # the file system device of the member, mounted or not (the label is bulk-<member>)
@@ -68,14 +68,14 @@ media_types="jpg png gif tif bmp mkv mov riff mpg asf flac ogg mp3 pdf zip rar 7
 
 # ---- finish: give the disk back to the pool ----
 if [ "$verb" = finish ]; then
-  is_out || refuse "$member is not out of the pool for a recovery."
+  is_out || refuse_code disk.not-recovering "$member is not out of the pool for a recovery."
   . "$here/lib/bulklock.sh"
   exec 9>"$bulk_lock"
-  flock -n 9 || refuse "the recovery of $member is still running."
+  flock -n 9 || refuse_code disk.recovery-running "the recovery of $member is still running."
   dev=$(find_dev)
   rm -f "$recdir/$member"
   [ "$testmode" = 1 ] || { [ -z "$dev" ] || blockdev --setrw "$dev" 2>/dev/null || true; }
-  [ "$testmode" = 1 ] || bash "$bulkmount" >/dev/null 2>&1 || refuse "the disk is free again but could not be mounted (hs sys disk start $member recover-finish again, or look at hs pool bulk)"
+  [ "$testmode" = 1 ] || bash "$bulkmount" >/dev/null 2>&1 || refuse_code disk.mount-failed "the disk is free again but could not be mounted (hs sys disk start $member recover-finish again, or look at hs pool bulk)"
   echo "$member is back in the pool."
   live_refresh_recover
   printf 'status\tdone\n'
@@ -84,8 +84,8 @@ fi
 
 # ---- the checks every verb makes ----
 dev=$(find_dev)
-[ -n "$dev" ] && [ -e "$dev" ] || refuse "The disk $member was not found. An encrypted disk has to be unlocked first (hs unlock)."
-command -v "$photorec" >/dev/null 2>&1 || refuse "photorec is not installed (package testdisk)."
+[ -n "$dev" ] && [ -e "$dev" ] || refuse_code disk.unknown "The disk $member was not found. An encrypted disk has to be unlocked first (hs unlock)."
+command -v "$photorec" >/dev/null 2>&1 || refuse_code disk.tool-missing "photorec is not installed (package testdisk)."
 fstype=$(blkid -o value -s TYPE "$dev" 2>/dev/null || true)
 devsize=$(size_of "$dev")
 mounted=no; ismnt "$dir" && mounted=yes
@@ -106,14 +106,14 @@ for d in "$base"/data-*; do
   a=$(avail_of "$d"); [ "${a:-0}" -gt "$best" ] && { best=$a; pick=$n; }
 done
 if [ -n "$to" ]; then
-  [ "$to" != "$member" ] || refuse "the files cannot go onto the disk they are searched on."
-  [ -n "$pick" ] || refuse "$to is not mounted, or it is out for a recovery itself."
+  [ "$to" != "$member" ] || refuse_code disk.target-same "the files cannot go onto the disk they are searched on."
+  [ -n "$pick" ] || refuse_code disk.target-unmounted "$to is not mounted, or it is out for a recovery itself."
 else
-  [ -n "$pick" ] || refuse "no other data disk is mounted to take the files."
+  [ -n "$pick" ] || refuse_code disk.no-target "no other data disk is mounted to take the files."
 fi
 to=$pick; tdir=$base/$to
-[ "$best" -ge $((10 * 1024 * 1024 * 1024)) ] || refuse "$to has only $(human "$best") free (at least 10 GiB are needed)."
-if [ "$(findmnt -no SOURCE "$tdir" 2>/dev/null || true)" = "$dev" ]; then refuse "$to is the same disk."; fi
+[ "$best" -ge $((10 * 1024 * 1024 * 1024)) ] || refuse_code disk.target-full "$to has only $(human "$best") free (at least 10 GiB are needed)."
+if [ "$(findmnt -no SOURCE "$tdir" 2>/dev/null || true)" = "$dev" ]; then refuse_code disk.target-same "$to is the same disk."; fi
 out=$tdir/shares/recovered
 
 hours=$(( devsize / 150000000 / 3600 + 1 ))   # reading at about 150 MB/s, a rough guide
@@ -156,10 +156,10 @@ if [ "$verb" = plan ] || [ "$verb" = run ]; then
 fi
 
 # ---- start ----
-[ "$confirm" = "$member" ] || refuse "type the name to confirm: $member"
+[ "$confirm" = "$member" ] || refuse_code confirm.missing "type the name to confirm: $member"
 if [ "$now" != yes ]; then
   . "$here/lib/job.sh"
-  unit=$(hs_job "disk-recover-$member" "recover deleted files from $member" -- bash "$here/disk-recover.sh" start "$member" --to "$to" --types "$types" --confirm "$confirm" --now) || refuse "the job could not be started"
+  unit=$(hs_job "disk-recover-$member" "recover deleted files from $member" -- bash "$here/disk-recover.sh" start "$member" --to "$to" --types "$types" --confirm "$confirm" --now) || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

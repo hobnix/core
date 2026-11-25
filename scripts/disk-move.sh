@@ -22,7 +22,7 @@ closed_file=${HS_BULK_CLOSED:-$state/bulk-closed}
 recdir=$state/recovering
 testmode=${HS_MOVE_TEST:-0}
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1 B"; }
 ismnt() { if [ "$testmode" = 1 ]; then [ -d "$1" ]; else mountpoint -q "$1" 2>/dev/null; fi; }
 avail_of() { df -B1 --output=avail "$1" 2>/dev/null | tail -n1 | tr -d ' '; }
@@ -31,28 +31,28 @@ is_closed() { grep -qx "$1" "$closed_file" 2>/dev/null; }
 verb=${1:-}; member=${2:-}
 case "$verb" in plan|start|ls|run) ;; *) echo "usage: disk-move.sh run|plan|start|ls <member> ..." >&2; exit 1 ;; esac
 [ $# -ge 2 ] && shift 2 || shift $#
-[[ "$member" =~ ^data-[0-9]+$ ]] || refuse "that is not a data disk of the array (data-NN)"
+[[ "$member" =~ ^data-[0-9]+$ ]] || refuse_code disk.not-data-disk "that is not a data disk of the array (data-NN)"
 path="" to="" now=no
 if [ "$verb" = run ] && [ $# -ge 1 ] && [[ "$1" != --* ]]; then path=$1; shift; fi
 while [ $# -gt 0 ]; do
   case "$1" in
-    --path) [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
-    --to)   [ $# -ge 2 ] || refuse "--to needs a value"; to=$2; shift 2 ;;
+    --path) [ $# -ge 2 ] || refuse_code disk.value-missing "--path needs a value"; path=$2; shift 2 ;;
+    --to)   [ $# -ge 2 ] || refuse_code disk.value-missing "--to needs a value"; to=$2; shift 2 ;;
     --now)  now=yes; shift ;;
-    *) refuse "unknown option $1" ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ -z "$to" ] || [[ "$to" =~ ^data-[0-9]+$ ]] || refuse "--to is a data disk (data-NN)"
+[ -z "$to" ] || [[ "$to" =~ ^data-[0-9]+$ ]] || refuse_code disk.target-invalid "--to is a data disk (data-NN)"
 path=${path%/}
 if [ -n "$path" ]; then
-  [[ "$path" != *[[:cntrl:]]* ]] || refuse "the path has a control character"
-  case "/$path/" in */../*|*//*|*/./*) refuse "the path must not contain .. or empty parts" ;; esac
-  [ "${path:0:1}" != / ] || refuse "the path is relative to the disk (shares/...)"
+  [[ "$path" != *[[:cntrl:]]* ]] || refuse_code disk.path-invalid "the path has a control character"
+  case "/$path/" in */../*|*//*|*/./*) refuse_code disk.path-invalid "the path must not contain .. or empty parts" ;; esac
+  [ "${path:0:1}" != / ] || refuse_code disk.path-invalid "the path is relative to the disk (shares/...)"
 fi
 
 mdir=$base/$member
-ismnt "$mdir" || refuse "$member is not mounted (is it out for a recovery, or missing?)."
-[ ! -e "$recdir/$member" ] || refuse "$member is out of the pool for a recovery."
+ismnt "$mdir" || refuse_code disk.not-mounted "$member is not mounted (is it out for a recovery, or missing?)."
+[ ! -e "$recdir/$member" ] || refuse_code disk.recovering "$member is out of the pool for a recovery."
 
 # ---- ls: one level of a disk for the interface ----
 if [ "$verb" = ls ]; then
@@ -60,22 +60,22 @@ if [ "$verb" = ls ]; then
     for t in shares sensitive; do [ -d "$mdir/$t" ] && printf 'd\t\t%s\n' "$t"; done
     exit 0
   fi
-  case "$path" in shares|shares/*|sensitive|sensitive/*) ;; *) refuse "only shares/ and sensitive/ can be listed" ;; esac
+  case "$path" in shares|shares/*|sensitive|sensitive/*) ;; *) refuse_code disk.path-invalid "only shares/ and sensitive/ can be listed" ;; esac
   dir=$mdir/$path
-  [ -d "$dir" ] && [ ! -L "$dir" ] || refuse "no such folder on $member"
+  [ -d "$dir" ] && [ ! -L "$dir" ] || refuse_code disk.path-missing "no such folder on $member"
   find "$dir" -mindepth 1 -maxdepth 1 ! -type l -printf '%y\t%s\t%f\n' 2>/dev/null | LC_ALL=C sort -t$'\t' -k1,1 -k3,3 \
     | awk -F'\t' 'BEGIN { OFS = "\t" } $3 !~ /[[:cntrl:]]/ && NR <= 500 { print ($1 == "d" ? "d" : "f"), ($1 == "d" ? "" : $2), $3 }'
   exit 0
 fi
 
 # ---- the checks of plan / start / run ----
-[ -n "$path" ] || refuse "say what to move: --path shares/<folder>"
-case "$path" in shares/*|sensitive/*) ;; *) refuse "only folders and files below shares/ or sensitive/ can be moved" ;; esac
+[ -n "$path" ] || refuse_code disk.value-missing "say what to move: --path shares/<folder>"
+case "$path" in shares/*|sensitive/*) ;; *) refuse_code disk.path-invalid "only folders and files below shares/ or sensitive/ can be moved" ;; esac
 src=$mdir/$path
-[ -e "$src" ] || refuse "there is no $path on $member"
-[ ! -L "$src" ] || refuse "$path is a link"
+[ -e "$src" ] || refuse_code disk.path-missing "there is no $path on $member"
+[ ! -L "$src" ] || refuse_code disk.path-invalid "$path is a link"
 real=$(readlink -f "$src"); rootreal=$(readlink -f "$mdir")
-case "$real/" in "$rootreal"/*) ;; *) refuse "$path is not on $member" ;; esac
+case "$real/" in "$rootreal"/*) ;; *) refuse_code disk.path-invalid "$path is not on $member" ;; esac
 
 size=$(timeout 60 du -sb "$src" 2>/dev/null | cut -f1 || true); size=${size:-0}
 need=$((size + 10 * 1024 * 1024 * 1024))
@@ -92,14 +92,14 @@ for d in "$base"/data-*; do
   a=$(avail_of "$d"); [ "${a:-0}" -gt "$best" ] && { best=$a; pick=$n; }
 done
 if [ -n "$to" ]; then
-  [ "$to" != "$member" ] || refuse "the target is the disk the files are on."
-  is_closed "$to" && refuse "$to is closed: it takes no new files. Open it first (hs pool bulk open $to)."
-  [ -n "$pick" ] || refuse "$to is not mounted, or it is out for a recovery."
+  [ "$to" != "$member" ] || refuse_code disk.target-same "the target is the disk the files are on."
+  is_closed "$to" && refuse_code disk.target-closed "$to is closed: it takes no new files. Open it first (hs pool bulk open $to)."
+  [ -n "$pick" ] || refuse_code disk.target-unmounted "$to is not mounted, or it is out for a recovery."
 else
-  [ -n "$pick" ] || refuse "no other open data disk is mounted to take the files."
+  [ -n "$pick" ] || refuse_code disk.no-target "no other open data disk is mounted to take the files."
 fi
 to=$pick; tdir=$base/$to
-[ "$best" -ge "$need" ] || refuse "$to has $(human "$best") free; moving $(human "$size") needs that plus 10 GiB of room."
+[ "$best" -ge "$need" ] || refuse_code disk.target-full "$to has $(human "$best") free; moving $(human "$size") needs that plus 10 GiB of room."
 dst=$tdir/$path
 
 plan_lines() {
@@ -128,7 +128,7 @@ fi
 # ---- start ----
 if [ "$now" != yes ]; then
   . "$here/lib/job.sh"
-  unit=$(hs_job "disk-move-$member" "move $path from $member to $to" -- bash "$here/disk-move.sh" start "$member" --path "$path" --to "$to" --now) || refuse "the job could not be started"
+  unit=$(hs_job "disk-move-$member" "move $path from $member to $to" -- bash "$here/disk-move.sh" start "$member" --path "$path" --to "$to" --now) || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

@@ -18,22 +18,22 @@
 # Test knobs: HS_STATE_DIR, HS_INCUS, HS_SERVICES, HS_SERVICES_DIR, HS_UNIFI, HS_SHARE_DELETE, HS_JOB_LIB.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; inst=${3:-}
-case "$verb" in plan|start|run) ;; *) refuse "usage: plan|start remove <instance>" ;; esac
-[ "$action" = remove ] || refuse "unknown action (remove)"
-[[ "$inst" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "not an instance name (lower case letters, digits and dashes)"
+case "$verb" in plan|start|run) ;; *) refuse_code apps.usage "usage: plan|start remove <instance>" ;; esac
+[ "$action" = remove ] || refuse_code action.unknown "unknown action (remove)"
+[[ "$inst" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "not an instance name (lower case letters, digits and dashes)"
 shift 3 || true
 confirm="" confirm_data="" delete_data=no by=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --delete-data)  delete_data=yes; shift ;;
-    --confirm)      [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    --confirm-data) [ $# -ge 2 ] || refuse "--confirm-data needs a value"; confirm_data=$2; shift 2 ;;
-    --by)           [ $# -ge 2 ] || refuse "--by needs a user name"; by=$2; shift 2 ;;
-    --role)         [ $# -ge 2 ] || refuse "--role needs a role"; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --confirm)      [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --confirm-data) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm-data needs a value"; confirm_data=$2; shift 2 ;;
+    --by)           [ $# -ge 2 ] || refuse_code apps.by-invalid "--by needs a user name"; by=$2; shift 2 ;;
+    --role)         [ $# -ge 2 ] || refuse_code apps.role-invalid "--role needs a role"; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
@@ -48,13 +48,13 @@ led=$(created_file "$inst")
 # ── what is there: the ledger (written by the install) or, for an older app, what can be told without guessing ──
 have_ct=no; "$incus" info "$inst" >/dev/null 2>&1 && have_ct=yes
 desc=${HS_SERVICES_DIR:-$st/services.d}/$inst.toml
-[ -f "$led" ] || [ "$have_ct" = yes ] || refuse "There is no app called $inst (no instance and no record of one)."
+[ -f "$led" ] || [ "$have_ct" = yes ] || refuse_code app.unknown "There is no app called $inst (no instance and no record of one)."
 if [ "$have_ct" = yes ]; then
   owner=$("$incus" config get "$inst" user.hs.managed_by 2>/dev/null || true)
-  [ -z "$owner" ] || refuse "$inst belongs to the part $owner and is not removed here: switch that part off."
+  [ -z "$owner" ] || refuse_code apps.part-owned "$inst belongs to the part $owner and is not removed here: switch that part off."
 fi
 source=ledger; [ -f "$led" ] || source=discovered
-[ "$source" = ledger ] || [ "$delete_data" = no ] || refuse "$inst has no record of what its install created: nothing beyond the instance and its service description is known, so there is no data to delete. Remove it with the data kept."
+[ "$source" = ledger ] || [ "$delete_data" = no ] || refuse_code apps.no-created-record "$inst has no record of what its install created: nothing beyond the instance and its service description is known, so there is no data to delete. Remove it with the data kept."
 
 # the package: the instance itself or, for a second instance (<package>-<word>), the package it was made from
 pkg=-
@@ -104,7 +104,7 @@ for f in ${keyfiles[@]+"${keyfiles[@]}"}; do
     kf+=("$real"); lines+=${lines:+$'\n'}$(printf 'keyfile\t%s\t-\tthere\tremove\tthe key file %s (the API key the app handed out; deleted, never shown)' "$real" "$f")
   fi
 done
-[ -n "$lines" ] || refuse "Nothing is listed for $inst: nothing to remove."
+[ -n "$lines" ] || refuse_code apps.nothing-to-remove "Nothing is listed for $inst: nothing to remove."
 
 if [ "$verb" = run ]; then
   HS_PLAIN=1 step "Remove $inst"
@@ -126,12 +126,12 @@ if [ "$verb" = run ]; then
 fi
 
 if [ "$verb" = start ]; then
-  [ "$confirm" = "$inst" ] || refuse "type the name ($inst) to confirm"
-  [ "$delete_data" = no ] || [ "$confirm_data" = "$inst" ] || refuse "deleting the data needs the name again: type $inst a second time"
+  [ "$confirm" = "$inst" ] || refuse_code confirm.missing "type the name ($inst) to confirm"
+  [ "$delete_data" = no ] || [ "$confirm_data" = "$inst" ] || refuse_code confirm.missing "deleting the data needs the name again: type $inst a second time"
   . "${HS_JOB_LIB:-$here/lib/job.sh}"
   export HS_JOB_ENV=${HS_JOB_ENV:-} HS_JOB_KIND=orchestration HS_JOB_INITIATOR=${by:-${SUDO_USER:-${USER:-}}}
   dargs=(); [ "$delete_data" = no ] || dargs=(--delete-data)
-  unit=$(hs_job "app-remove-$inst" "hs apps remove $inst" -- bash "$here/apps-remove.sh" run remove "$inst" ${dargs[@]+"${dargs[@]}"}) || refuse "the job could not be started"
+  unit=$(hs_job "app-remove-$inst" "hs apps remove $inst" -- bash "$here/apps-remove.sh" run remove "$inst" ${dargs[@]+"${dargs[@]}"}) || refuse_code job.start-failed "the job could not be started"
   jid=$(hs_job_record find-unit "$unit" 2>/dev/null) || jid=""
   printf 'status\tstarted\nunit\t%s\njob\t%s\n' "$unit" "${jid:--}"
   exit 0
