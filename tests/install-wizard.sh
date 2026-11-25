@@ -36,6 +36,32 @@ check_out "hostId is a new 8-digit hex value (no CHANGEME)" '^"[0-9a-f]{8}"$' ec
 check "the preset was applied (runtime setting written)" test -f "$T/var/lib/hs/settings/backupNewShares"
 check_eq "a new home server gets an empty pools line" "{}" "$(get pools)"
 
+echo "-- the setup choice for the first boot (#1075)"
+rec() { tr '\t\n' '  ' < "$1/var/lib/hs/setup-choice" 2>/dev/null; }
+check_eq "nothing asked for: the wizard chooses" "choice wizard name - " "$(rec "$T")"
+sc() {   # sc <target> <options...>
+  local tg=$1; shift; $W --disk sda --hostname choicebox --key "$KEY" --target "$tg" --repo "$REPO" "$@" 2>&1
+}
+out=$(sc "$WORK/c1" --blueprint media-server)
+check_eq "--blueprint is recorded" "choice blueprint name media-server " "$(rec "$WORK/c1")"
+check_out "and the plan names it" "After the first boot .*blueprint media-server" echo "$out"
+check_out "the last note says first-run offers it" "sudo hs first-run offers what you chose" echo "$out"
+sc "$WORK/c2" --parts metrics,tailscale >/dev/null || true
+check_eq "--parts is recorded" "choice parts name metrics,tailscale " "$(rec "$WORK/c2")"
+sc "$WORK/c3" --core-only >/dev/null || true
+check_eq "--core-only is recorded" "choice core name - " "$(rec "$WORK/c3")"
+out=$(sc "$WORK/c4" --core-only --blueprint a || true)
+check_out "two choices are refused" "only one of --blueprint" echo "$out"
+out=$(sc "$WORK/c4" --core-only --preset minimal || true)
+check_out "a preset and a choice are refused" "preset does not go together" echo "$out"
+for bad in 'Bad' '../x' 'a;b' "$(printf 'a\nchoice\tcore')"; do
+  out=$(sc "$WORK/c4" --blueprint "$bad" || true)
+  check_out "a blueprint name of the wrong shape is refused" "not a blueprint name" echo "$out"
+done
+out=$(sc "$WORK/c4" --parts 'a,,b' || true)
+check_out "a parts list of the wrong shape is refused" "separated by commas" echo "$out"
+check "a refusal writes nothing" test ! -e "$WORK/c4"
+
 echo "-- the bulk type"
 T2=$WORK/target-snapraid
 $W --disk sda --hostname myserver --key "$KEY" --preset minimal --bulk-type snapraid --target "$T2" --repo "$REPO" >/dev/null 2>&1 || true

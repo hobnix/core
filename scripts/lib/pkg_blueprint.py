@@ -8,7 +8,7 @@ show(R, pkg, name, lang) -> (lines, problems)   the blueprint and the packages i
   part<TAB>capabilities|extensions|recipes<TAB>name<TAB>state (capabilities `-`; extensions new|installed; recipes `ok` or `later:<why>`: input terminal,
   a secret ask, an ask without default or answer, or a repository the user added), from<TAB>recipe<TAB>repo, needs<TAB>recipe<TAB>csv|-, docker<TAB>manager<TAB>size|-, answer<TAB>recipe<TAB>KEY<TAB>value
 listing(R, pkg, lang) -> [row]   name, repo, version, roles, packages (in order), state new|applied|update|waits, title (tab separated, - = empty)
-record(R, pkg, name)             writes [applied.<name>] to blueprints.toml (HS_BLUEPRINTS_FILE, else <HS_STATE_DIR or /var/lib/hs>/blueprints.toml), atomically
+record(R, pkg, name, later)      writes [applied.<name>] (later: the apps left to a person, csv, read by setup-list.sh) to blueprints.toml (HS_BLUEPRINTS_FILE, else <HS_STATE_DIR or /var/lib/hs>/blueprints.toml), atomically
 R is a pkg_repo.Repos, pkg the module pkg.py. A blueprint may name packages of its own repository and of `official`, no other.
 """
 import datetime
@@ -379,12 +379,15 @@ def _applied():
         return {}
 
 
-def record(R, pkg, name):
+def record(R, pkg, name, later=""):
     repo, _entry, _tag, commit, m = _one(R, name)
     if m.get("kind") != "blueprint":
         raise ValueError("%s is not a blueprint." % name)
     have = _applied()
     have[name] = {"repo": repo, "version": str(m.get("version", "")), "commit": commit, "applied": datetime.date.today().isoformat()}
+    waiting = [x for x in later.split(",") if NAME.match(x)]
+    if waiting:
+        have[name]["later"] = ",".join(waiting)
     path = _applied_file()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".blueprints.")
