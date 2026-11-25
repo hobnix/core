@@ -12,7 +12,10 @@
 #       A repository that publishes a signed index (`publish = "index"` at the top of index.toml, hobnix/official) has no tags: the
 #       reference is origin/main (HS_RELEASE_REMOTE replaces origin) and no tag level is printed or put in the pull request. A pull request with both bump labels is refused.
 #
-# Where the labels come from: `gh api repos/<repo>/commits/<sha>/pulls`; HS_PREPARE_LABELS=<file> (lines "<sha><TAB><label>") replaces that in tests.
+#       Each bumped package also gets `[meta] changes` = the titles of the merged pull requests that touched it (scripts/dev/release-changes.py cleans
+#       them: titles are untrusted text); no pull request found leaves the field alone. The owner edits the text in the release pull request.
+#
+# Where the labels come from: `gh api repos/<repo>/commits/<sha>/pulls`; HS_PREPARE_LABELS=<file> (lines "<sha><TAB><label>") replaces that in tests; HS_PREPARE_TITLES=<file> (JSON lines {sha, number, title}) replaces the pull request titles.
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -25,7 +28,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --plan) plan=true ;;
     --no-push) push=false ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "Unknown argument: $1 (see --help)" ;;
   esac
   shift
@@ -61,12 +64,27 @@ labels_of() {   # labels_of <sha>: the bump labels of the pull requests that bro
   out=$(gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[].labels[].name') || fail "gh api failed for commit ${1:0:7} (login, rate limit?): without the labels a bump: major would be lost."
   grep '^bump: ' <<<"$out" || true
 }
+prs_of() {   # prs_of <sha>: the merged pull requests of the commit as JSON lines {"number","title"}; empty (and a note) when they cannot be read
+  if [ -n "${HS_PREPARE_TITLES:-}" ]; then
+    python3 -I -c 'import json,sys
+for l in open(sys.argv[2], encoding="utf-8"):
+    try: o = json.loads(l)
+    except ValueError: continue
+    if isinstance(o, dict) and o.get("sha") == sys.argv[1] and o.get("base", "develop") == "develop": print(json.dumps({"number": o.get("number"), "title": o.get("title")}))' "$1" "$HS_PREPARE_TITLES"
+    return 0
+  fi
+  gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[] | select(.merged_at != null and .base.ref == "develop") | {number, title}' 2>/dev/null || note "The pull requests of commit ${1:0:7} could not be read: [meta] changes stays as it is." >&2
+  return 0
+}
 rank() { case $1 in major) echo 2 ;; minor) echo 1 ;; *) echo 0 ;; esac; }
 
 declare -A level=()
 bad=""
+prdir=$(mktemp -d) || fail "No temporary folder."
+trap 'rm -rf "$prdir"' EXIT
 for sha in $(git rev-list --reverse "$range" -- "${dirs[@]}"); do
   labs=$(labels_of "$sha" | sort -u)
+  prs=$(prs_of "$sha")
   case $(printf '%s\n' "$labs" | grep -c '^bump: ') in 0|1) ;; *) bad="$bad ${sha:0:7}" ;; esac
   l=patch
   grep -qx 'bump: minor' <<<"$labs" && l=minor
@@ -74,6 +92,8 @@ for sha in $(git rev-list --reverse "$range" -- "${dirs[@]}"); do
   for dir in $(git diff-tree -m --no-commit-id --name-only -r "$sha" -- "${dirs[@]}" | sed -n 's#^\([^/]*/[^/]*\)/.*#\1#p' | sort -u); do
     [ -f "$dir/package.toml" ] || continue
     [ "$(rank "$l")" -ge "$(rank "${level[$dir]:-patch}")" ] && level[$dir]=$l
+    # the titles go to a file per package (never argv): release-changes.py cleans them
+    [ -z "$prs" ] || printf '%s\n' "$prs" >> "$prdir/${dir#*/}.jsonl"
   done
 done
 [ -z "$bad" ] || fail "Pull requests with more than one bump label ($bad ): leave one label and run this again."
@@ -107,6 +127,14 @@ while IFS=$'\t' read -r pkg old new lv; do
   [ -n "$pkg" ] || continue
   bash "$here/release.sh" bump "$pkg" "$lv" --no-push >/dev/null || fail "release.sh bump $pkg failed; the branch $branch holds what was done."
   ok "$pkg: $old -> $new ($lv)"
+  # [meta] changes from the titles of the merged pull requests, into the bump commit; no pull request found keeps the field
+  if [ -s "$prdir/$pkg.jsonl" ]; then
+    pdir=$(ls -d ./*/"$pkg" 2>/dev/null | head -n1)
+    res=$(python3 -I "$here/release-changes.py" "$pdir/package.toml" < "$prdir/$pkg.jsonl") || { warn "$pkg: [meta] changes was not written (see above); the old text stays, edit it by hand."; res=kept; }
+    if [ "$res" = written ] && ! git diff --quiet -- "$pdir/package.toml"; then
+      git add -- "$pdir/package.toml" && git commit -q --amend --no-edit || fail "Could not commit [meta] changes of $pkg."
+    fi
+  fi
   body="$body
 - $pkg: $old -> $new"
 done <<<"$rows"
