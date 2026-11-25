@@ -134,4 +134,37 @@ grep -e "\"sha\": \"$x\"" -e "\"sha\": \"$y\"" "$WORK/titles" | grep -v "\"base\
 for l in sys.stdin: o=json.loads(l); print(json.dumps({"number":o["number"],"title":o["title"]}))' > "$WORK/again"
 python3 -I "$SCRIPTS/dev/release-changes.py" extensions/alpha/package.toml < "$WORK/again" >/dev/null
 check_eq "the same input again writes the same text" "$before" "$(meta alpha changes)"
+
+echo "-- bump: none"
+git init -q --bare "$WORK/remote4.git"
+R4=$WORK/repo4; mkdir -p "$R4"; cd "$R4" || exit 1
+git init -q -b develop . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
+git remote add origin "$WORK/remote4.git"
+mkpkg alpha 1.0.0; mkpkg beta 2.3.4; mkpkg gamma 0.1.0; mkpkg delta 0.2.0
+git add -A && git commit -q -m first && git tag v1.0.0
+a1=$(change alpha one); a2=$(change alpha two)      # none + none
+b1=$(change beta one); b2=$(change beta two)        # none + no label (patch)
+g1=$(change gamma one); g2=$(change gamma two)      # none + minor
+d1=$(change delta one)                              # only none, and the only change that is not alone
+printf '%s\tbump: none\n%s\tbump: none\n%s\tbump: none\n%s\tbump: none\n%s\tbump: minor\n%s\tbump: none\n' "$a1" "$a2" "$b1" "$g1" "$g2" "$d1" > "$WORK/labels"
+python3 -I - "$a1" "$b1" "$b2" > "$WORK/titles" <<'PY'
+import json, sys
+for sha, n, t in zip(sys.argv[1:], (1, 2, 3), ("Comment in alpha", "Comment in beta", "Real fix in beta")):
+    print(json.dumps({"sha": sha, "number": n, "title": t, "base": "develop"}))
+PY
+export HS_PREPARE_TITLES=$WORK/titles
+out=$(plan)
+check_eq "only none pull requests: no bump" "0" "$(grep -c '^alpha' <<<"$out")"
+check_eq "a package of only none pull requests is not planned at all" "0" "$(grep -c '^delta' <<<"$out")"
+check_eq "none plus an unlabelled pull request is patch" "beta	2.3.4	2.3.5	patch" "$(grep '^beta' <<<"$out")"
+check_eq "none plus minor is minor" "gamma	0.1.0	0.2.0	minor" "$(grep '^gamma' <<<"$out")"
+check_out "the branch is made" "Branch release/prepare-.* made" bash -c "$PR --no-push 2>&1"
+git checkout -q "$(git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | head -n1)"
+check_eq "only the two bumped packages get a commit" "2" "$(git rev-list --count develop..HEAD)"
+check_eq "alpha keeps its version and has no changes text" "1.0.0|0" "$(sed -n 's/^version = "\(.*\)"$/\1/p' extensions/alpha/package.toml)|$(grep -c '^changes' extensions/alpha/package.toml)"
+check_eq "beta lists only the pull request that is not none" "1" "$(grep -c 'Real fix in beta' extensions/beta/package.toml)"
+check_eq "and not the none one" "0" "$(grep -c 'Comment in beta' extensions/beta/package.toml)"
+git checkout -q develop
+for l in "$a1" "$a2" "$b1" "$b2" "$g1" "$g2" "$d1"; do printf '%s\tbump: none\n' "$l"; done > "$WORK/labels"
+check_out "every change none: nothing to release" "nothing to release" plan
 finish
