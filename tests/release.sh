@@ -81,7 +81,8 @@ mkpkg() {   # mkpkg <name>: a package folder and its index block at version 1.0.
   mkdir -p "recipes/$1"; sed "s/demo/$1/" recipes/demo/package.toml > "recipes/$1/package.toml"; cp recipes/demo/run.sh "recipes/$1/run.sh"
   printf '\n[package.%s]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/%s"\nrequires_core = ">=1"\n' "$1" "$1" >> index.toml
 }
-for n in chg same both pkgonly gone; do mkpkg "$n"; done
+for n in chg same both pkgonly gone cmt doc inl del; do mkpkg "$n"; done
+echo "text" > recipes/doc/guide.md; echo "x = 1 # c" > recipes/inl/extra.conf
 mkdir -p tests docs; echo t > tests/a.txt
 git add -A && git commit -q -m base && git tag base
 git checkout -q -b feature/unbumped
@@ -91,6 +92,10 @@ echo x >> recipes/both/run.sh                         # changed, only package.to
 sed -i 's/^version = "1.0.0"/version = "1.0.1"/' recipes/both/package.toml
 echo x >> recipes/pkgonly/run.sh                      # changed, only index.toml raised: listed
 sed -i '/^\[package.pkgonly\]/,/^version/s/^version = .*/version = "1.0.1"/' index.toml
+sed -i '1i # a header comment' recipes/cmt/package.toml; sed -i '1i # note' recipes/cmt/run.sh   # comment lines only: not listed
+echo more >> recipes/doc/guide.md                     # a guide only: not listed
+echo "x = 1" > recipes/inl/extra.conf                 # a trailing comment dropped: listed
+git rm -q recipes/del/run.sh                          # a deleted file: listed
 git rm -rq recipes/gone                               # removed: not listed
 sed -i '/^\[package.gone\]/,/^$/d;/^\[package.gone\]/,$d' index.toml
 mkpkg fresh                                           # new since the tag: not listed
@@ -98,10 +103,10 @@ echo y >> tests/a.txt; echo y > docs/b.md             # outside the package fold
 git add -A && git commit -q -m changes
 out=$($PKG repo-unbumped base . 2>&1); rc=$?
 check_eq "exit 1 when a package is unbumped" "1" "$rc"
-check_eq "exactly chg, both and pkgonly are listed" "both chg pkgonly" "$(printf '%s\n' "$out" | cut -d: -f1 | sort | paste -sd' ' -)"
-check_eq "one line per package" "3" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
+check_eq "exactly chg, both, del, inl and pkgonly are listed" "both chg del inl pkgonly" "$(printf '%s\n' "$out" | cut -d: -f1 | sort | paste -sd' ' -)"
+check_eq "one line per package" "5" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
 git checkout -q -b feature/fixed
-for n in chg both pkgonly; do
+for n in chg both pkgonly del inl; do
   sed -i 's/^version = ".*"/version = "1.2.0"/' "recipes/$n/package.toml"
   sed -i "/^\[package.$n\]/,/^version/s/^version = .*/version = \"1.2.0\"/" index.toml
 done
