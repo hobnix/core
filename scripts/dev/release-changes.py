@@ -24,7 +24,7 @@ SKIP = re.compile(r"^prepare release\b", re.I)
 
 def clean(title):
     out = "".join(" " if unicodedata.category(c)[0] in "CZ" or c.isspace() else c for c in title)
-    out = DROP.sub("", out)
+    out = DROP.sub("", out).replace("&", " and ")
     out = re.sub(r" +", " ", out).strip(" -+!>")
     if len(out) > TITLE_MAX:
         out = out[:TITLE_MAX - 3].rstrip() + "..."
@@ -57,25 +57,30 @@ def text_of(lines):
 
 
 def put(src, value):
-    """src with `[meta] changes = <value>` set; a multi-line old value is replaced whole."""
+    """src with `[meta] changes = <value>` set (the file's line ending is kept); a multi-line old value is replaced whole.
+    Raises ValueError for a layout it does not edit (`meta = {...}` inline)."""
+    eol = "\r\n" if "\r\n" in src else "\n"
     line = "changes = " + json.dumps(value, ensure_ascii=False)
-    rows = src.split("\n")
-    meta = next((i for i, r in enumerate(rows) if re.fullmatch(r"\[meta\][ \t]*(#.*)?", r)), None)
+    rows = src.replace("\r\n", "\n").split("\n")
+    if any(re.match(r"[ \t]*meta[ \t]*=", r) for r in rows):
+        raise ValueError("[meta] is an inline table or dotted keys: edit changes by hand")
+    meta = next((i for i, r in enumerate(rows) if re.fullmatch(r"[ \t]*\[meta\][ \t]*(#.*)?", r)), None)
     if meta is None:
-        return src.rstrip("\n") + "\n\n[meta]\n" + line + "\n"
-    end = next((i for i in range(meta + 1, len(rows)) if rows[i].startswith("[")), len(rows))
-    i = next((i for i in range(meta + 1, end) if re.match(r"changes[ \t]*=", rows[i])), None)
+        rows = "\n".join(rows).rstrip("\n").split("\n") + ["", "[meta]", line, ""]
+        return eol.join(rows)
+    end = next((i for i in range(meta + 1, len(rows)) if rows[i].lstrip().startswith("[")), len(rows))
+    i = next((i for i in range(meta + 1, end) if re.match(r"[ \t]*changes[ \t]*=", rows[i])), None)
     if i is None:
         rows.insert(meta + 1, line)
     else:
         j = i + 1
-        for q in ('"""', "'''"):
-            if re.match(r"changes[ \t]*=[ \t]*" + q, rows[i]) and rows[i].count(q) < 2:
+        for q in ('"""', "\'\'\'"):
+            if re.match(r"[ \t]*changes[ \t]*=[ \t]*" + q, rows[i]) and rows[i].count(q) < 2:
                 while j < len(rows) and q not in rows[j]:
                     j += 1
                 j += 1
         rows[i:j] = [line]
-    return "\n".join(rows)
+    return eol.join(rows)
 
 
 def main(argv):
@@ -92,12 +97,12 @@ def main(argv):
         before = tomllib.loads(old)
         new = put(old, value)
         after = tomllib.loads(new)
-    except (tomllib.TOMLDecodeError, UnicodeError) as e:
+    except (tomllib.TOMLDecodeError, UnicodeError, ValueError) as e:
         print(f"{argv[1]}: {e}", file=sys.stderr)
         return 1
-    want = json.loads(json.dumps(before))
+    want = json.loads(json.dumps(before, default=str))
     want.setdefault("meta", {})["changes"] = value
-    if json.loads(json.dumps(after)) != want:
+    if json.loads(json.dumps(after, default=str)) != want:
         print(f"{argv[1]}: the new text would change more than [meta] changes: left as it was", file=sys.stderr)
         return 1
     if new != old:

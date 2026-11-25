@@ -70,10 +70,10 @@ prs_of() {   # prs_of <sha>: the merged pull requests of the commit as JSON line
 for l in open(sys.argv[2], encoding="utf-8"):
     try: o = json.loads(l)
     except ValueError: continue
-    if isinstance(o, dict) and o.get("sha") == sys.argv[1]: print(json.dumps({"number": o.get("number"), "title": o.get("title")}))' "$1" "$HS_PREPARE_TITLES"
+    if isinstance(o, dict) and o.get("sha") == sys.argv[1] and o.get("base", "develop") == "develop": print(json.dumps({"number": o.get("number"), "title": o.get("title")}))' "$1" "$HS_PREPARE_TITLES"
     return 0
   fi
-  gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[] | select(.merged_at != null) | {number, title}' 2>/dev/null || note "The pull requests of commit ${1:0:7} could not be read: [meta] changes stays as it is." >&2
+  gh api "repos/{owner}/{repo}/commits/$1/pulls" --jq '.[] | select(.merged_at != null and .base.ref == "develop") | {number, title}' 2>/dev/null || note "The pull requests of commit ${1:0:7} could not be read: [meta] changes stays as it is." >&2
   return 0
 }
 rank() { case $1 in major) echo 2 ;; minor) echo 1 ;; *) echo 0 ;; esac; }
@@ -130,7 +130,7 @@ while IFS=$'\t' read -r pkg old new lv; do
   # [meta] changes from the titles of the merged pull requests, into the bump commit; no pull request found keeps the field
   if [ -s "$prdir/$pkg.jsonl" ]; then
     pdir=$(ls -d ./*/"$pkg" 2>/dev/null | head -n1)
-    res=$(python3 -I "$here/release-changes.py" "$pdir/package.toml" < "$prdir/$pkg.jsonl") || fail "release-changes.py failed for $pkg; the branch $branch holds what was done."
+    res=$(python3 -I "$here/release-changes.py" "$pdir/package.toml" < "$prdir/$pkg.jsonl") || { warn "$pkg: [meta] changes was not written (see above); the old text stays, edit it by hand."; res=kept; }
     if [ "$res" = written ] && ! git diff --quiet -- "$pdir/package.toml"; then
       git add -- "$pdir/package.toml" && git commit -q --amend --no-edit || fail "Could not commit [meta] changes of $pkg."
     fi

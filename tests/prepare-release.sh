@@ -84,19 +84,27 @@ git init -q -b develop . && git config user.email t@t && git config user.name t 
 git remote add origin "$WORK/remote3.git"
 mkpkg alpha 1.0.0; mkpkg beta 2.3.4; mkpkg gamma 0.1.0; mkpkg delta 0.2.0
 printf '[meta]\nauthor = "A"\nchanges = "old text"\ntags = ["t"]\n' >> extensions/delta/package.toml
+mkpkg eps 0.3.0; mkpkg zeta 0.4.0; mkpkg eta 0.5.0; mkpkg theta 0.6.0
+printf '[meta]\r\nauthor = "A"\r\n' >> extensions/eps/package.toml
+printf '  [meta]\n  author = "A"\n' >> extensions/zeta/package.toml
+printf 'meta = { author = "A", changes = "old inline" }\n' >> extensions/eta/package.toml
+printf '[meta]\nauthor = "A"\nbuilt = 2020-01-02\n' >> extensions/theta/package.toml
 git add -A && git commit -q -m first && git tag v1.0.0
 x=$(change alpha one)
 echo two >> extensions/alpha/note.txt; echo two >> extensions/beta/note.txt; git add -A && git commit -q -m both; y=$(git rev-parse HEAD)
 z=$(change beta three); change gamma one >/dev/null; d=$(change delta one)
+e=$(change eps one); zz=$(change zeta one); h=$(change eta one); th=$(change theta one)
 : > "$WORK/labels"
-python3 -I - "$x" "$y" "$z" "$d" > "$WORK/titles" <<'PY'
+python3 -I - "$x" "$y" "$z" "$d" "$e" "$zz" "$h" "$th" > "$WORK/titles" <<'PY'
 import json, sys
-x, y, z, d = sys.argv[1:]
+x, y, z, d, e, zz, h, th = sys.argv[1:]
 hostile = 'evil"\nchanges = "pwned"\n[web]\nx=1 @octocat   \u0085 \x1b[31m `code` [link](http://e) \\ end'
 rows = [(x, 1, hostile), (x, 1, hostile), (y, 2, "Add the shared thing"), (z, 3, "Fix beta"), (d, 4, "@everyone " + "x" * 400)]
 rows += [(z, n, "many %d" % n) for n in range(10, 40)]
+rows += [(e, 5, "Crlf title"), (zz, 6, "Indented title"), (h, 7, "Inline title"), (th, 8, "Date title"), (x, 9, "Entities &commat;x &#64;y")]
+rows.append((x, 99, "Back merge of main"))
 for sha, n, t in rows:
-    print(json.dumps({"sha": sha, "number": n, "title": t}))
+    print(json.dumps({"sha": sha, "number": n, "title": t, "base": "main" if n == 99 else "develop"}))
 PY
 export HS_PREPARE_TITLES=$WORK/titles
 check_out "it makes the branch" "Branch release/prepare-.* made" bash -c "$PR --no-push 2>&1"
@@ -108,15 +116,21 @@ check_eq "the hostile title adds no key and no table" "name,version,kind,title,r
 check_eq "no @, backtick, bracket, backslash, control or line separator is left" "0" "$(printf '%s' "$a" | python3 -I -c 'import sys,unicodedata; s=sys.stdin.read(); print(sum(1 for c in s if c in "@`[]\\<>" or (unicodedata.category(c)[0] in "CZ" and c != " ")))')"
 check_eq "it is one line" "1" "$(grep -c '^changes = ' extensions/alpha/package.toml)"
 check_eq "a pull request that came twice is listed once" "1" "$(grep -o 'evil' <<<"$a" | wc -l)"
-check_eq "one commit per package still" "4" "$(git rev-list --count develop..HEAD)"
+check_eq "one commit per package still" "8" "$(git rev-list --count develop..HEAD)"
 check_eq "a package of several pull requests lists them" "1" "$(meta beta changes | grep -c 'Add the shared thing; Fix beta')"
 check_eq "the count is bounded" "1" "$(meta beta changes | grep -c 'and [0-9]* more')"
 check_eq "the length is bounded" "ok" "$([ "$(meta beta changes | wc -c)" -le 1001 ] && [ "$(meta delta changes | wc -c)" -le 105 ] && echo ok)"
 check_eq "a package without a pull request keeps the field" "-" "$(meta gamma changes)"
 check_eq "an old changes value is replaced, the rest stays" "A|['t']" "$(meta delta author)|$(meta delta tags)"
 check_eq "@everyone pings nobody" "0" "$(meta delta changes | grep -c '@')"
+check_eq "a pull request into main is not listed" "0" "$(meta alpha changes | grep -c 'Back merge')"
+check_eq "no HTML entity can be spelled" "0" "$(meta alpha changes | grep -cE '&[#a-z0-9]+;')"
+check_eq "a CRLF file gets the line, one [meta], every line still CRLF" "Crlf title|1|0" "$(meta eps changes)|$(grep -c '^\[meta\]' extensions/eps/package.toml)|$(grep -vc $'\r$' extensions/eps/package.toml)"
+check_eq "an indented [meta] header works" "Indented title" "$(meta zeta changes)"
+check_eq "a date value does not crash it" "Date title" "$(meta theta changes)"
+check_eq "an inline meta table keeps its text, the run goes on" "old inline" "$(meta eta changes)"
 before=$(meta alpha changes)
-grep -e "\"sha\": \"$x\"" -e "\"sha\": \"$y\"" "$WORK/titles" | python3 -I -c 'import sys,json
+grep -e "\"sha\": \"$x\"" -e "\"sha\": \"$y\"" "$WORK/titles" | grep -v "\"base\": \"main\"" | python3 -I -c 'import sys,json
 for l in sys.stdin: o=json.loads(l); print(json.dumps({"number":o["number"],"title":o["title"]}))' > "$WORK/again"
 python3 -I "$SCRIPTS/dev/release-changes.py" extensions/alpha/package.toml < "$WORK/again" >/dev/null
 check_eq "the same input again writes the same text" "$before" "$(meta alpha changes)"
