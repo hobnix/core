@@ -39,7 +39,7 @@ case "\$1" in
   blueprint)
     case "\$2" in
       show) f="$WORK/bp/\$3"; [ -f "\$f" ] || { printf 'error\tNo blueprint called %s.\n' "\$3"; exit 1; }; cat "\$f"; grep -q '^error' "\$f" && exit 1 || exit 0 ;;
-      record) echo "record \$3" >> "$LOG"; echo "[applied.\$3]" > "$WORK/applied.toml" ;;
+      record) echo "record \$3 \$4" >> "$LOG"; echo "[applied.\$3]" > "$WORK/applied.toml" ;;
       list) printf 'media\tofficial\t1.0.0\thomeserver\ta,r1,docker\tnew\tMedia server\n' ;;
     esac ;;
   install) echo "install \$2" >> "$LOG"; [ "\$2" != "\${FAIL_INSTALL:-}" ] ;;
@@ -169,6 +169,7 @@ check_eq "a set value is not overwritten" '"UTC"' "$(python3 "$SCRIPTS/machine-t
 check_eq "a missing one is set (gpu)" '"nvidia"' "$(python3 "$SCRIPTS/machine-toml.py" get "$HS_MACHINE_FILE" gpu --json)"
 check_eq "a missing setting is set" true "$(cat "$HS_SETTINGS_DIR/backupNewShares")"
 check "the applied blueprint is recorded" grep -q "^record media" "$LOG"
+check "with the apps left to a person" grep -q "^record media .*r3" "$LOG"
 check "the result names every part" grep -q '"config":"done".*"app:r1":"done".*"app:r3":"later' "$WORK/result.json"
 echo yes > "$WORK/docker.on"; : > "$LOG"
 printf 'r1\trecipe\trunning\t-\n' > "$WORK/apps.tsv"

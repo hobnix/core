@@ -131,6 +131,21 @@ class Changes(unittest.TestCase):
         self.assertEqual(d["secret"], {"login": "remote-bob", "domain": "HOME", "host": "me.local", "password": "Pw-Aa1"})
         self.assertNotIn("secret", ws.parse_change("status\tdone\n", 0))
 
+    def test_blueprint_plan_parts_are_shown(self):
+        d = ws.parse_change("status\tok\npart\t1\tconfig\ttimeZone\tkept\ttimeZone is set already and is kept\npart\t2\tparts\ta\tinstall\tinstall a\nnote\tOne job\nconfirm_name\tmedia\n", 0)
+        self.assertEqual(d["steps"], [["note", "timeZone is set already and is kept"], ["step", "install a"], ["note", "One job"]])
+        self.assertEqual(d["confirm_name"], "media")
+        self.assertEqual(ws.parse_change("status\tok\npart\tshort\n", 0)["steps"], [])
+        self.assertNotIn("confirm_names", d)
+
+    def test_blueprint_tag_and_names(self):
+        d = ws.parse_change("status\tok\nblueprint\tmedia\tmine\t1.0.0\tv1.0.0\nconfirm_name\tmedia\nconfirm_name\tdocker\n", 0)
+        self.assertEqual((d["tag"], d["confirm_names"]), ("v1.0.0", ["media", "docker"]))
+        body = {"area": "blueprint", "args": ["apply", "media", "--tag", "v1.0.0", "--confirm", "docker"], "confirm": "media"}
+        self.assertIsNotNone(ws.validate_change(body))
+        self.assertIsNone(ws.validate_change(dict(body, args=["apply", "media", "--tag", "latest"])))
+        self.assertIsNone(ws.validate_change(dict(body, args=["apply", "media", "--tag", "v1.0.0", "--tag", "v2.0.0"])))
+
     def test_secret_lines_of_a_code(self):
         d = ws.parse_change("status\tdone\nsecret\tcode\tK7QXQ9M2DT4PW3HN\nsecret\taddress\talpha.local:8480\nsecret\texpires_in\t600\nsecret\tother\tx\n", 0)
         self.assertEqual(d["secret"], {"code": "K7QXQ9M2DT4PW3HN", "address": "alpha.local:8480", "expires_in": "600"})

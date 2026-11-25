@@ -5,8 +5,9 @@
 . "$(dirname "$0")/lib.sh"
 d=$ROOT/web/src/shell
 # the dialog sends the bound args, built before close(), and asks for the typed name whenever the plan has a confirm_name
-check "the dialog binds the start to the shown plan" grep -q 'const sent = boundArgs(area, startArgs, p);' "$d/PlanDialog.svelte"
-check "and sends those args" grep -q 'doStart(area, sent, ' "$d/PlanDialog.svelte"
+check "the dialog builds its start with planstart.js" grep -q 'const req = startRequest(area, startArgs, p, typed);' "$d/PlanDialog.svelte"
+check "and sends those args and that word" grep -q 'doStart(area, req.args, req.confirm, ' "$d/PlanDialog.svelte"
+check "planstart.js binds a package update to the shown plan" grep -q 'args: boundArgs(area, args, p), confirm' "$d/planstart.js"
 check "it draws a danger line" grep -q "kind === 'danger'" "$d/PlanSteps.svelte"
 if have node; then
   check "pkgbind.js (node)" node "$ROOT/tests/web-pkg-accept.mjs"

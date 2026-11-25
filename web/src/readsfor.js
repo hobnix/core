@@ -70,7 +70,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case P.system: return [`${A}health/list`, `${A}system/updates`, `${A}dc/state`, `${A}ups/status`, `${A}event/list?n=100`];
     case P.settings: return [`${A}config/list`];
     case P.setup: return [`${A}setup/list`];
-    case P.firstRun: return [`${A}preset/list`, `${A}parts/list`, `${A}setup/list`];
+    case P.firstRun: return [`${A}blueprint/list`, `${A}parts/list`, `${A}setup/list`];
     case P.nodes: return [`${A}node/list`];
     default: return [];
   }
