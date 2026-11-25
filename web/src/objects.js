@@ -9,6 +9,9 @@ export const objects = {
   disk: { label: 'Disk', list: P.disks, base: `${P.disks}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'smart', label: 'SMART' }, { id: 'tests', label: 'Tests' }, { id: 'files', label: 'Files' }] },
   user: { label: 'User', list: P.users, base: `${P.users}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'groups', label: 'Groups' }, { id: 'access', label: 'Access' }] },
   instance: { label: 'Instance', list: P.instances, base: `${P.instances}/ct/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'config', label: 'Config' }, { id: 'network', label: 'Network' }, { id: 'console', label: 'Console' }] },
+  // a Docker app (compose project) in the container docker; its name may be the name of an instance, so the kind is in the address. Its list is the Docker page.
+  // Which tabs one app has depends on who manages it (pages/docker/apps.js pageTabs).
+  'docker-app': { label: 'Docker app', list: P.docker, base: `${P.appsGroup}/docker-app/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'compose', label: 'Compose' }, { id: 'logs', label: 'Logs' }] },
   share: { label: 'Share', list: P.shares, base: `${P.shares}/`, tabs: [{ id: 'overview', label: 'Overview' }, { id: 'access', label: 'Access' }, { id: 'snapshots', label: 'Snapshots' }] },
 };
 

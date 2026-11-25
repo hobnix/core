@@ -55,7 +55,7 @@
     {#if note}<Banner tone="info">{note}</Banner>{/if}
     {@render banners?.()}
     {#if jobs}<JobStrip match={jobs} {...(jobHref ? { href: jobHref } : {})} />{/if}
-    {#if list.length > 1}<PageTabs tabs={list} tab={active} onpick={(id) => onpick?.(id)} />{/if}
+    {#if list.length > 1}<PageTabs controlled tabs={list} tab={active} onpick={(id) => onpick?.(id)} />{/if}
     <Stack gap="6">{@render children?.(active)}</Stack>
     {#if active === 'overview' || list.length < 2}<LinkedObjects items={links} />{/if}
     <DangerZone actions={danger} />
