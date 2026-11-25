@@ -14,7 +14,7 @@ C="bash $SCRIPTS/pkg-change.sh"
 PKG="python3 -I $SCRIPTS/pkg.py"
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/good" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/signers"
-R=$WORK/repo; mkdir -p "$R/recipes/demo"; cd "$R"
+R=$WORK/repo; mkdir -p "$R/recipes/demo"; cd "$R" || exit 1
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
 release() {   # release <tag> <version> <permissions line or empty>
   printf 'name = "demo"\nversion = "%s"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n%b\n' "$2" "$3" > "$R/recipes/demo/package.toml"
@@ -27,7 +27,7 @@ release() {   # release <tag> <version> <permissions line or empty>
 publish() { (cd "$R" && release "$@"); $PKG fetch test >/dev/null; }
 # the test repository counts as a default one (official), so that the only reason for a typed name is the permissions
 release v1.0.0 1.0.0 'permissions = ["host:incus"]'
-cd "$ROOT"
+cd "$ROOT" || exit 1
 $PKG repo add test "$R" --key "$WORK/signers" >/dev/null
 $PKG fetch test >/dev/null
 $PKG install demo >/dev/null 2>&1
@@ -133,6 +133,36 @@ check_eq "web-serve reads the real fields, nothing forged" "ok demo v1.5.0 32 3"
 check_eq "web-serve allows --tag/--seen on update only" "True False False True" "$(sed -n 2p <<<"$parsed" | tr -d '\r')"
 tag=$(field tag "$p"); seen=$(field seen "$p")
 check_out "installing them is still refused by the manifest check" "control characters" bash -c "$C start update demo --tag $tag --seen $seen --confirm demo; true"
+
+echo "-- the diff of a plan is that of the release its words name"
+check_eq "another seen: no diff is printed" 0 "$($PKG update demo --tag v1.5.0 --seen 00000000000000000000000000000000 </dev/null 2>/dev/null | wc -l | tr -d ' ')"
+check_out "pkg-change passes both words to the diff call" 'update "\$name" --tag "\$ftag" --seen "\$fseen" </dev/null 2>/dev/null' cat "$SCRIPTS/pkg-change.sh"
+check_out "--tag without a value: a clean refusal" "^--tag needs a value" bash -c "$PKG update demo --tag 2>&1; true"
+check_out "--seen before another flag: a clean refusal" "^--seen needs a value" bash -c "$PKG update demo --seen --yes 2>&1; true"
+
+echo "-- hostile index and market texts"
+(cd "$R" && mkdir -p recipes/evil && printf 'name = "evil"\nversion = "1.0.0"\nkind = "recipe"\ntitle = "Evil"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' > recipes/evil/package.toml && echo 'echo evil' > recipes/evil/run.sh &&
+  release v1.5.1 1.5.1 'permissions = ["host:incus"]' &&
+  printf '[package.evil]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/evil"\nrequires_core = ">=1"\ntitle = "T\\u2028status\\tdone\\rdanger\\tfake\\u0085confirm_name\\tx"\naudience = "a\\u2028status\\tdone\\nb"\n' >> index.toml &&
+  git add -A && git commit -q -m evil && git -c user.signingkey="$WORK/good.pub" tag -s v1.5.2 -m evil)
+$PKG fetch test >/dev/null
+# lines as web-serve.py counts them (str.splitlines), and the columns of each
+pylines() { python3 -c 'import sys; print(sys.argv[1] if False else "\n".join("%d %s" % (len(l.split("\t")), l) for l in sys.stdin.buffer.read().decode("utf-8").replace("\r\n", "\n").rstrip("\n").splitlines()))'; }
+m=$($PKG market | pylines | tr -d '\r')
+check_eq "market: one line of 9 columns for each of the two packages" "2 2" "$(wc -l <<<"$m" | tr -d ' ') $(grep -c '^9 ' <<<"$m" || true)"
+p=$($C plan install evil | pylines | tr -d '\r')
+check_eq "install plan: one status line, the real one" "2 status${tab}ok" "$(grep -E "^[0-9]+ status$tab" <<<"$p")"
+check_eq "no forged danger or confirm_name line" 0 "$(grep -cE "^[0-9]+ (danger${tab}fake|confirm_name${tab}x)" <<<"$p" || true)"
+# a stand-in market that did not clean anything: the plan cleans its own lines
+cat > "$WORK/dirty.sh" <<'EOF'
+case "$1" in
+  --market) printf 'evil\trecipe\ttest\t1.0.0\t-\tnew\tno\tgeneric\tT\xe2\x80\xa8status\tdone\rdanger\tfake\xc2\x85confirm_name\tx\n' ;;
+  --repos) printf 'test\tx\tsigned\tdefault\n' ;;
+esac
+EOF
+p=$(HS_PKG=$WORK/dirty.sh $C plan install evil | pylines | tr -d '\r')
+check_eq "plan of a dirty market row: one status line" "2 status${tab}ok" "$(grep -E "^[0-9]+ status$tab" <<<"$p")"
+check_eq "and nothing forged" 0 "$(grep -cE "^[0-9]+ (danger${tab}fake|confirm_name${tab}x)" <<<"$p" || true)"
 
 echo "-- a list that cannot be shown in full is refused, never cut"
 publish v1.6.0 1.6.0 "permissions = [\"fs.read:/srv/$(printf 'a%.0s' $(seq 1 400))\"]"

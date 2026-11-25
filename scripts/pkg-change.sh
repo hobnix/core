@@ -31,6 +31,13 @@ pkg=${HS_PKG:-$here/pkg.sh}
 pkgpy="python3 -I $here/pkg.py"
 
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
+# Texts of a package or an index reach the lines below: web-serve.py also splits on CR, U+0085 and U+2028, so every one goes through clean_text
+# (scripts/pkg_repo.py). clean keep = a stream of finished lines (tabs and newlines stay); clean one = one value, made one safe line.
+clean() {
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from pkg_repo import clean_text
+sys.stdout.buffer.write(clean_text(sys.stdin.buffer.read().decode("utf-8", "replace"), sys.argv[2] == "keep").encode("utf-8"))' "$here" "$1"
+}
+refuse_clean() { printf '%s' "$1" | clean one; }   # the reason of a refusal (lib/refuse-code.sh)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: pkg-change.sh plan|start install|update|remove <name> | fetch [<repo>] | repo-add <name> <url> | repo-remove <name>" >&2; exit 1 ;; esac
@@ -44,7 +51,7 @@ if [ "$action" = check-draft ]; then
   if [ "$rc" -ne 0 ] && [ "$errs" -eq 0 ]; then refuse_code pkg.draft-unchecked "the draft could not be checked"; fi
   if [ "$errs" -gt 0 ]; then printf 'status\trefused\nreason\t%s\ncode\tpkg.draft-invalid\n' "The draft has $errs problem(s)."; else printf 'status\tok\n'; fi
   printf 'heading\tcheck a package draft\n'
-  printf '%s\n' "$out" | awk -F'\t' 'NF == 3 { printf "finding\t%s\t%s\t%s\n", $1, $2, $3 }'
+  printf '%s\n' "$out" | awk -F'\t' 'NF == 3 { printf "finding\t%s\t%s\t%s\n", $1, $2, $3 }' | clean keep
   printf 'long\tno\n'
   [ "$errs" -eq 0 ] || exit 1
   exit 0
@@ -210,6 +217,7 @@ if [ "$verb" = start ]; then
   exit 0
 fi
 
+plan_lines() {
 printf 'status\tok\n'
 case "$action" in
   install)
@@ -224,7 +232,7 @@ case "$action" in
   update)
     printf 'heading\tupdate %s %s -> %s\n' "$name" "$inst" "$avail"
     printf 'step\tinstall the newer signed release; the code below changed and runs as root\n'
-    $pkgpy update "$name" </dev/null 2>/dev/null | head -n 60 | while IFS= read -r l; do printf 'diff\t%s\n' "$l"; done || true
+    $pkgpy update "$name" --tag "$ftag" --seen "$fseen" </dev/null 2>/dev/null | head -n 60 | while IFS= read -r l; do printf 'diff\t%s\n' "$l"; done || true
     [ "$r_from" != added ] || printf 'danger\tThe repository %s was added by you, not by the project.\n' "$repo"
     if [ "${#fresh[@]}" -gt 0 ]; then     # after the cut diff, one line each: never truncated
       printf 'danger\t%s %s asks for permissions the installed version does not have. It runs as root; declared permissions are not enforced.\n' "$name" "$avail"
@@ -254,3 +262,5 @@ case "$action" in
 esac
 [ "${#cmd[@]}" -eq 0 ] || printf 'command\t%s\n' "${cmd[*]}"
 printf 'long\t%s\n' "$long"
+}
+plan_lines | clean keep      # every line of the plan, whatever it was made from

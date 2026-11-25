@@ -91,6 +91,12 @@ def clean_text(s, keep_ws=False):
     return re.sub("[\\x00-\\x08\\x0b-\\x1f\\x7f-\\x9f\\u2028\\u2029" + ("" if keep_ws else "\\t\\n") + "]", "?", str(s))
 
 
+def tsv_row(*fields):
+    """One tab separated line of strings that may come from a package or an index: no field adds a column or a line, also not for a reader that
+    splits on CR, U+0085 or U+2028"""
+    return "\t".join(clean_text(str(f).replace("\t", " ")) for f in fields)
+
+
 class Refused(Exception):
     """a reason shown to the person, exit 1; `code` (scripts/lib/error-codes.tsv) is printed as a machine line after it"""
 
@@ -1313,6 +1319,16 @@ class Repos:
         return cat[0]
 
 
+def flag_value(rest, flag):
+    """the word after `flag`, None without the flag; the flag as the last word or before another flag is refused"""
+    if flag not in rest:
+        return None
+    i = rest.index(flag) + 1
+    if i >= len(rest) or rest[i].startswith("--"):
+        raise Refused("%s needs a value" % flag)
+    return rest[i]
+
+
 def run(pkg, cmd, rest):
     """the commands of pkg.py that need a repository; returns the exit code"""
     R = Repos(pkg)
@@ -1395,8 +1411,8 @@ def run(pkg, cmd, rest):
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
                             seen.add(pname)
-                            print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
-                                             e.get("audience", "generic"), ("%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])).replace("	", " ")]))
+                            print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, "current", "yes" if e.get("core") else "no",
+                                          e.get("audience", "generic"), "%s (update not available: %s)" % (e.get("title") or pname, e["_unavailable"])))
                         continue
                     if inst == "-":
                         state = "new"
@@ -1414,13 +1430,13 @@ def run(pkg, cmd, rest):
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
                     seen.add(pname)
-                    print("	".join([pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
-                                     e.get("audience", "generic"), (e.get("title") or "-").replace("	", " ")]))
+                    print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
+                                  e.get("audience", "generic"), e.get("title") or "-"))
             if os.path.isdir(cur):
                 for pname in sorted(os.listdir(cur)):
                     if pname in seen or pname.startswith("."):
                         continue
-                    print("	".join([pname, "?", have.get(pname, {}).get("repo", "-"), "-", str(have.get(pname, {}).get("version", "?")), "orphan", "no", "-", "-"]))
+                    print(tsv_row(pname, "?", have.get(pname, {}).get("repo", "-"), "-", have.get(pname, {}).get("version", "?"), "orphan", "no", "-", "-"))
         elif cmd == "install" and rest and rest[0] == "--core":
             # the packages the core refers to by name (`core = true` in the index) and the ones applied here: fetch what is neither built in nor installed yet
             bad = 0
@@ -1451,7 +1467,7 @@ def run(pkg, cmd, rest):
             return 1 if bad else 0
         elif cmd == "install":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
-            want = rest[rest.index("--tag") + 1] if "--tag" in rest else None
+            want = flag_value(rest, "--tag")
             v, r_name, tag = R.install(rest[0], repo, want)
             print("%s %s from %s (%s)" % (rest[0], v, r_name, tag))
             print("permissions it declares (not enforced, it runs as root): %s" % pkg.pkg_perms.describe(R.last_permissions))
@@ -1464,8 +1480,7 @@ def run(pkg, cmd, rest):
                 print("\n".join(R.update_facts(rest[0])))
                 return 0
             # --tag / --seen: install only what a plan showed (plan.changed otherwise)
-            want_tag = rest[rest.index("--tag") + 1] if "--tag" in rest else None
-            want_seen = rest[rest.index("--seen") + 1] if "--seen" in rest else None
+            want_tag, want_seen = flag_value(rest, "--tag"), flag_value(rest, "--seen")
             moved = "%s: what the plan showed is not what an update would install now: read the plan again" % rest[0]
             res = R.diff(rest[0])
             if res is None:
@@ -1476,11 +1491,11 @@ def run(pkg, cmd, rest):
             old, tag, commit, text = res
             if want_tag and want_tag != tag:
                 raise Refused(moved, "plan.changed")
-            # the files and the manifest come from the package: a CR or U+2028 would start a forged line for whoever splits on it (web-serve.py)
-            print(clean_text(text.replace("\r\n", "\n"), True))
             new, fresh = R.new_permissions(rest[0], commit)
             if want_seen and want_seen != R.seen_key(rest[0], tag, commit, fresh):
-                raise Refused(moved, "plan.changed")
+                raise Refused(moved, "plan.changed")      # before the diff: the diff of another release is never shown for these words
+            # the files and the manifest come from the package: a CR or U+2028 would start a forged line for whoever splits on it (web-serve.py)
+            print(clean_text(text.replace("\r\n", "\n"), True))
             print("permissions it declares (not enforced, it runs as root): %s" % clean_text(pkg.pkg_perms.describe(new)))
             for ln in R.confine_text(rest[0], commit):
                 print(ln)
