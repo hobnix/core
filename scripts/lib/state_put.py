@@ -17,8 +17,9 @@ import sys
 DIRFLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
 
-def walk(top, parts, make):
-    """descriptor of the folder holding the last name; raises OSError (ELOOP/ENOTDIR for a link or file in the way)"""
+def walk(top, parts, make, owner=None):
+    """descriptor of the folder holding the last name; raises OSError (ELOOP/ENOTDIR for a link or file in the way). A folder it makes is 0700 and
+    belongs to `owner` (the owner of <top>): the service must be able to enter it (a root-owned 0700 folder would lock it out)."""
     fd = os.open(os.path.realpath(top), os.O_RDONLY | os.O_DIRECTORY)
     try:
         for p in parts:
@@ -29,6 +30,8 @@ def walk(top, parts, make):
                     raise
                 os.mkdir(p, 0o700, dir_fd=fd)
                 nxt = os.open(p, DIRFLAGS, dir_fd=fd)
+                if owner is not None:
+                    os.fchown(nxt, owner.st_uid, owner.st_gid)
             os.close(fd)
             fd = nxt
         return fd
@@ -65,11 +68,14 @@ def same(src, top, rel):
 
 def put(src, top, rel, stamp):
     dirs, name = parts_of(rel)
+    if not os.path.lexists(top):    # a fresh install: the state is made like a moved one (0700, root until systemd takes the folder over at the first start)
+        os.makedirs(os.path.dirname(top), 0o755, exist_ok=True)
+        os.mkdir(top, 0o700)
     owner = os.stat(top)
     with open(src, "rb") as f:
         data = f.read()
         mode = stat.S_IMODE(os.fstat(f.fileno()).st_mode)
-    fd = walk(top, dirs, True)
+    fd = walk(top, dirs, True, owner)
     tmp = ".restore-%d-%s" % (os.getpid(), name)
     try:
         try:
