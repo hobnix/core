@@ -41,8 +41,18 @@ adm="$(admin_user)"
 # The safety switch (runtime setting fileManagerWrite, default off): this code has never run on real disks. Browsing, pairs and plans work either way.
 write_on() { [ "$(setting_get fileManagerWrite 2>/dev/null || true)" = true ]; }
 WRITE_OFF_REASON="The file manager is read only until you allow it: hs config set fileManagerWrite true (web: Settings, 'Allow the file manager to copy, move and delete files'). Test it in a VM first (docs/PLAN-storage-nas.md)."
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
+# refuse_loc: the refusal fm_resolve left in LERR, with its code in LCODE (a literal code in each branch: tests/error-codes.sh reads them)
+refuse_loc() {
+  case $(fm_refusal_code) in
+    fm.storage-locked) refuse_code fm.storage-locked "$LERR" ;;
+    fm.no-array) refuse_code fm.no-array "$LERR" ;;
+    fm.no-cache) refuse_code fm.no-cache "$LERR" ;;
+    fm.share-unknown) refuse_code fm.share-unknown "$LERR" ;;
+    fm.location-unusable) refuse_code fm.location-unusable "$LERR" ;;
+    *) refuse_code fm.location-unknown "$LERR" ;;
+  esac
+}
 gate() { capability_on storage || refuse_code fm.capability-off "The file manager needs the capability 'storage' (role homeserver)."; }
 grab() { local p=$1 v; for v in ID KIND LABEL ROOT FS SIZE FREE ADD MOD REASON POOL DISK USABLE ERR AK REL TOP SNAP LOCK; do eval "$p$v=\"\${L$v}\""; done; }
 sanitize_confirm() { local s; s=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._ -' '_'); printf '%s\n' "${s:0:64}"; }
@@ -109,10 +119,10 @@ cmd_locations() {
 cmd_pair() {
   gate
   [ $# -eq 2 ] || refuse_code fm.usage "usage: pair <left-id> <right-id>"
-  fm_resolve "$1" || refuse "$LERR"
-  fm_resolve "$2" || refuse "$LERR"
+  fm_resolve "$1" || refuse_loc
+  fm_resolve "$2" || refuse_loc
   local why
-  if why=$(fm_same_files "$1" "$2"); then refuse "$why"; fi
+  if why=$(fm_same_files "$1" "$2"); then refuse_code fm.same-files "$why"; fi
   echo "status	ok"
 }
 
@@ -137,8 +147,8 @@ load_busy() {   # load_busy <array key>: items of live jobs
 # The caller declares `local real rel`.
 open_dir() {
   local p dir top
-  fm_resolve "$1" || refuse "$LERR"
-  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  fm_resolve "$1" || refuse_loc
+  [ "$LUSABLE" = yes ] || refuse_loc
   p=$(fm_clean_path "$2") || refuse_code fm.path-invalid "the path must not contain .. , empty parts or control characters"
   dir=$LROOT${p:+/$p}
   [ -d "$dir" ] || refuse_code fm.folder-missing "no such folder"
@@ -323,8 +333,8 @@ claim_alive() { local f pid; f=$(claim_file "$1"); [ -f "$f" ] || return 1; pid=
 
 do_plan() {
   gate
-  fm_resolve "$from" || refuse "$LERR"
-  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  fm_resolve "$from" || refuse_loc
+  [ "$LUSABLE" = yes ] || refuse_loc
   grab S_
   local ps; ps=$(fm_clean_path "$path") || refuse_code fm.path-invalid "the path must not contain .. , empty parts or control characters"
   local sdir=$S_ROOT${ps:+/$ps}
@@ -391,11 +401,11 @@ do_plan() {
   dtdir=""; drel=""; rename_ok=no
   if [ "$has_dst" = yes ]; then
     [ -n "$to" ] || refuse_code fm.value-missing "--to <location> is needed"
-    fm_resolve "$to" || refuse "$LERR"
-    [ "$LUSABLE" = yes ] || refuse "$LERR"
+    fm_resolve "$to" || refuse_loc
+    [ "$LUSABLE" = yes ] || refuse_loc
     grab D_
     local why
-    if why=$(fm_same_files "$from" "$to"); then refuse "$why"; fi
+    if why=$(fm_same_files "$from" "$to"); then refuse_code fm.same-files "$why"; fi
     [ "$D_ADD" = yes ] || refuse_code fm.read-only "${D_LABEL} takes no files: ${D_REASON}."
     local pd; pd=$(fm_clean_path "$topath") || refuse_code fm.path-invalid "the target path must not contain .. , empty parts or control characters"
     local tdir=$D_ROOT${pd:+/$pd}
@@ -502,8 +512,8 @@ do_plan() {
 # (the folder that holds the trash), so run_job scans and counts the items like any other source.
 do_plan_restore() {
   gate
-  fm_resolve "$from" || refuse "$LERR"
-  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  fm_resolve "$from" || refuse_loc
+  [ "$LUSABLE" = yes ] || refuse_loc
   grab S_
   [ "$S_ADD" = yes ] || refuse_code fm.read-only "${S_LABEL}: ${S_REASON}; nothing can be put back there."
   fm_trash_base; tbase=$TBASE; trel=$TREL
@@ -1136,8 +1146,8 @@ cmd_du() {
 cmd_trash() {
   gate
   [ $# -eq 1 ] || refuse_code fm.usage "usage: trash <location>"
-  fm_resolve "$1" || refuse "$LERR"
-  [ "$LUSABLE" = yes ] || refuse "$LERR"
+  fm_resolve "$1" || refuse_loc
+  [ "$LUSABLE" = yes ] || refuse_loc
   fm_trash_base
   local tf d fold tp o abs bytes typ age left now_day dd
   now_day=$(( $(fm_now) / 86400 ))

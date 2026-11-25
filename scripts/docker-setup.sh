@@ -19,12 +19,21 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/capability.sh"
 . "$here/lib/effect.sh"
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 docker_sh() { if [ -n "${HS_DOCKER_SCRIPT:-}" ]; then "$HS_DOCKER_SCRIPT" "$@"; else bash "$here/docker.sh" "$@"; fi; }
 last_line() {   # the reason: the last line that starts with the failure glyph (not the dim "Fix:" line under it); else the last line
   local all; all=$(cat)
   { grep '^[[:space:]]*✗' <<<"$all" || true; } | tail -n 1 | sed -e 's/^[[:space:]]*✗[[:space:]]*//' | grep . || tail -n 1 <<<"$all"
+}
+
+refuse_child() {   # refuse_child <output of the docker.sh child>: a coded refusal of the child keeps its reason, fix and code; else the failure line, code docker.failed
+  local out=$1 code
+  code=$(awk -F'\t' '$1 == "code" && $2 ~ /^[a-z][a-z0-9.-]*$/ { c = $2 } END { print c }' <<<"$out")
+  if [ -n "$code" ] && grep -qx "status$(printf '\t')refused" <<<"$out"; then
+    awk -F'\t' '$1 == "status" || $1 == "reason" || $1 == "fix" || $1 == "code"' <<<"$out"
+    exit 1
+  fi
+  refuse_code docker.failed "$(last_line <<<"$out")"
 }
 
 mapped_as() {   # the user the container docker maps onto the share owner already (raw.idmap), as uid:gid; nothing when none
@@ -54,7 +63,7 @@ mount_main() {   # mount_main <plan|start> <share|remote:peer> --path <p> [--as 
   args=(mount "$src" "$path"); [ -z "$as" ] || args+=(--as "$as")
   export HS_PLAIN=1 HS_LANG=en HS_CALLER=web
   rc=0; out=$(docker_sh "${args[@]}" --dry-run </dev/null 2>&1) || rc=$?
-  [ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+  [ "$rc" = 0 ] || refuse_child "$out"
   if [ "$verb" = plan ]; then
     printf 'status\tok\nheading\tGive Docker a folder\n'
     while IFS= read -r l; do
@@ -70,7 +79,7 @@ mount_main() {   # mount_main <plan|start> <share|remote:peer> --path <p> [--as 
     exit 0
   fi
   rc=0; out=$(docker_sh "${args[@]}" --yes --job </dev/null 2>&1) || rc=$?
-  [ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+  [ "$rc" = 0 ] || refuse_child "$out"
   unit=$(sed -n 's/^.*Started in the background: //p' <<<"$out" | head -n 1)
   printf 'status\tstarted\n'
   [ -z "$unit" ] || printf 'unit\t%s\n' "$unit"
@@ -82,7 +91,7 @@ move_main() {   # move_main <plan|start>: hs docker move-apps (the apps of /opt/
   export HS_PLAIN=1 HS_LANG=en HS_CALLER=web
   if [ "$verb" = plan ]; then
     rc=0; out=$(docker_sh move-apps --dry-run </dev/null 2>&1) || rc=$?
-    [ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+    [ "$rc" = 0 ] || refuse_child "$out"
     printf 'status	ok
 heading	Move the apps into the share apps
 '
@@ -102,7 +111,7 @@ long	yes
     exit 0
   fi
   rc=0; out=$(docker_sh move-apps --yes --confirm docker --job </dev/null 2>&1) || rc=$?
-  [ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+  [ "$rc" = 0 ] || refuse_child "$out"
   unit=$(sed -n 's/^.*Started in the background: //p' <<<"$out" | head -n 1)
   printf 'status	started
 '
@@ -141,7 +150,7 @@ args=(--manager "${manager:-webui}")
 if docker_sh --status 2>/dev/null </dev/null | grep -qx "owned$(printf '	')yes"; then refuse_code docker.already-on "Docker is on already."; fi
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=web
 rc=0; out=$(docker_sh enable --dry-run "${args[@]}" </dev/null 2>&1) || rc=$?
-[ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+[ "$rc" = 0 ] || refuse_child "$out"
 
 if [ "$verb" = plan ]; then
   printf 'status\tok\nheading\tTurn Docker on\n'
@@ -159,7 +168,7 @@ if [ "$verb" = plan ]; then
 fi
 
 rc=0; out=$(docker_sh enable --yes --job "${args[@]}" </dev/null 2>&1) || rc=$?
-[ "$rc" = 0 ] || refuse "$(last_line <<<"$out")"
+[ "$rc" = 0 ] || refuse_child "$out"
 unit=$(sed -n 's/^.*Started in the background: //p' <<<"$out" | head -n 1)
 printf 'status\tstarted\n'
 [ -z "$unit" ] || printf 'unit\t%s\n' "$unit"

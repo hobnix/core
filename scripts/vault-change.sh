@@ -20,19 +20,19 @@ here=$(dirname "$0")
 vault=${HS_VAULT:-$here/vault.sh}
 secrets=${HS_SECRETS:-$here/secrets.sh}
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: vault-change.sh plan|start header-backup|move [<name>...]|close|secrets-fix" >&2; exit 1 ;; esac
-case "$action" in header-backup|move|close|secrets-fix) ;; *) refuse "unknown action (header-backup, move, close or secrets-fix)" ;; esac
+case "$action" in header-backup|move|close|secrets-fix) ;; *) refuse_code action.unknown "unknown action (header-backup, move, close or secrets-fix)" ;; esac
 shift 2 || true
 names=() confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
-    -*) refuse "unknown option $1" ;;
-    *) [ "$action" = move ] || refuse "unexpected extra arguments"
-       [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$ ]] || refuse "'$1' is not a name of a secret"
+    --confirm) [ $# -ge 2 ] || refuse_code vault.value-missing "--confirm needs a value"; confirm=$2; shift 2 ;;
+    -*) refuse_code option.unknown "unknown option $1" ;;
+    *) [ "$action" = move ] || refuse_code vault.args-unexpected "unexpected extra arguments"
+       [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$ ]] || refuse_code vault.name-invalid "'$1' is not a name of a secret"
        names+=("$1"); shift ;;
   esac
 done
@@ -47,9 +47,9 @@ case "$action" in
   header-backup|move|close)
     case "$(state)" in
       open) ;;
-      closed) if [ "$action" = close ]; then refuse "The vault is closed already."; fi
-              refuse "The vault is closed: unlock it first (the unlock page, or hs unlock)." ;;
-      *) refuse "There is no vault on this server (hs vault init)." ;;
+      closed) if [ "$action" = close ]; then refuse_code vault.closed-already "The vault is closed already."; fi
+              refuse_code vault.locked "The vault is closed: unlock it first (the unlock page, or hs unlock)." ;;
+      *) refuse_code vault.missing "There is no vault on this server (hs vault init)." ;;
     esac ;;
 esac
 case "$action" in
@@ -71,9 +71,9 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
-  if [ "$action" = close ] && [ "$confirm" != close ]; then refuse "type the word to confirm: close"; fi
+  if [ "$action" = close ] && [ "$confirm" != close ]; then refuse_code confirm.missing "type the word to confirm: close"; fi
   . "$here/lib/job.sh"
-  unit=$(hs_job "vault-$action" "hs vault $action" -- "${cmd[@]}") || refuse "the job could not be started"
+  unit=$(hs_job "vault-$action" "hs vault $action" -- "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

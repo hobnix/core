@@ -3768,6 +3768,110 @@ The state folder of the file manager is not writable.
 - Text: The file manager cannot write its state.
 - Fix: none
 
+### vault.value-missing
+
+An option was given without its value.
+
+- Layer: script
+- Text: The option needs a value.
+- Fix: none
+
+### vault.args-unexpected
+
+A secret name was given to an action that takes none.
+
+- Layer: script
+- Text: This action takes no names.
+- Fix: none
+
+### vault.name-invalid
+
+The name is not a name of a secret.
+
+- Layer: script
+- Text: That is not a name of a secret.
+- Fix: none
+
+### vault.closed-already
+
+Close was asked for a vault that is closed.
+
+- Layer: script
+- Text: The vault is closed already.
+- Fix: none
+
+### vault.missing
+
+The server has no vault.
+
+- Layer: script
+- Text: There is no vault on this server.
+- Fix: `hs vault init`
+
+### docker.failed
+
+A step of hs docker failed and gave no code of its own.
+
+- Layer: script
+- Text: The step failed.
+- Fix: none
+
+### fm.location-unknown
+
+The id is not a location of the file manager.
+
+- Layer: script
+- Text: There is no such location.
+- Fix: none
+
+### fm.storage-locked
+
+The encrypted storage is locked.
+
+- Layer: script
+- Text: The encrypted storage is locked: unlock it first.
+- Fix: `hs unlock`
+
+### fm.no-array
+
+A disk was asked for on a server without an array.
+
+- Layer: script
+- Text: This server has no data disks of an array.
+- Fix: none
+
+### fm.no-cache
+
+The upload cache was asked for on a server without one.
+
+- Layer: script
+- Text: There is no upload cache on this server.
+- Fix: none
+
+### fm.share-unknown
+
+No pool holds a share of this name.
+
+- Layer: script
+- Text: There is no such share.
+- Fix: none
+
+### fm.location-unusable
+
+The location exists but is not mounted.
+
+- Layer: script
+- Text: The location cannot be used now.
+- Fix: none
+
+### fm.same-files
+
+Two locations show the same files.
+
+- Layer: script
+- Text: Both sides show the same files.
+- Fix: none
+
 <!-- END generated -->
 
 Not tested on hardware yet.

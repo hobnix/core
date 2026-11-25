@@ -5,7 +5,7 @@
 #                          LREASON (why not writable, or -) LPOOL LDISK LUSABLE (yes|no; LERR says why not) LAK (array key: what busy marks are keyed by)
 #                          LREL (path of the root below the array root) LTOP (the root is the top of an array: shares/ and sensitive/ are protected)
 #                          LSNAP (SnapRAID layout: a parity exists) LLOCK (touching it needs the bulk lock)
-#                          returns 1 for an unknown id or locked storage (LERR says which)
+#                          returns 1 for an unknown id or locked storage (LERR says which); LCODE is the error code of the refusal (fm.location-unknown, fm.storage-locked, fm.no-array, fm.no-cache, fm.share-unknown, fm.location-unusable)
 #   fm_same_files <a> <b>  prints the reason and returns 0 when the two locations show the same files (a pool disk and the pool view of its array)
 #   fm_clean_path <p>      the path relative to the root, no leading/trailing slash; returns 1 for .., control characters, empty parts
 #   fm_badname <name>      true when a name has control characters or is not valid UTF-8
@@ -93,19 +93,19 @@ fm_disk_asleep() {
   case $st in standby|sleeping) return 0 ;; esac
   return 1
 }
-
+fm_refusal_code() { echo "${LCODE:-fm.location-unknown}"; }   # the error code of the last refused fm_resolve
 fm_resolve() {
   local id=$1 n dir
   LID=$id; LKIND=""; LLABEL=""; LROOT=""; LFS="-"; LSIZE=0; LFREE=0; LADD=no; LMOD=no; LREASON="-"; LPOOL="-"; LDISK="-"
-  LUSABLE=yes; LERR=""; LAK=$id; LREL=""; LTOP=no; LSNAP=no; LLOCK=no
-  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:[a-z][a-z0-9]{0,11}|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; return 1; }
+  LUSABLE=yes; LERR=""; LCODE=""; LAK=$id; LREL=""; LTOP=no; LSNAP=no; LLOCK=no
+  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:[a-z][a-z0-9]{0,11}|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; LCODE=fm.location-unknown; return 1; }
   LKIND=${id%%:*}; n=${id#*:}; LLABEL=$n
-  if storage_locked; then LUSABLE=no; LERR="The encrypted storage is locked: unlock it first (hs unlock)."; LREASON="storage locked"; return 1; fi
+  if storage_locked; then LUSABLE=no; LERR="The encrypted storage is locked: unlock it first (hs unlock)."; LCODE=fm.storage-locked; LREASON="storage locked"; return 1; fi
   local sr; sr=$(fm_snapraid_pool || true)
   local unusable=""
   case $LKIND in
     disk)
-      [ -n "$sr" ] || { LERR="This server has no data disks of an array (ZFS layout)."; return 1; }
+      [ -n "$sr" ] || { LERR="This server has no data disks of an array (ZFS layout)."; LCODE=fm.no-array; return 1; }
       LDISK=$n; LPOOL=$sr; LAK=$sr; LTOP=yes; LSNAP=yes; LLOCK=yes
       dir=$(disk_dir "$n"); local mode=pool
       if fm_ismnt "$dir"; then LROOT=$dir
@@ -118,14 +118,14 @@ fm_resolve() {
         elif fm_is_closed "$n"; then LADD=no; LREASON="closed: it takes no new files (hs pool $sr open $n)"; fi
       fi ;;
     pool)
-      pool_exists "$n" || { LERR="unknown location $id"; return 1; }
+      pool_exists "$n" || { LERR="unknown location $id"; LCODE=fm.location-unknown; return 1; }
       LPOOL=$n; LAK=$n; LLABEL=$n
       [ "$(pool_role "$n")" != data ] || LTOP=yes
       [ "$n" != "$sr" ] || { LSNAP=yes; LLOCK=yes; }
       dir=$(fm_pool_dir "$n")
       if fm_ismnt "$dir"; then LROOT=$dir; LADD=yes; LMOD=yes; else unusable="The pool $n is not mounted."; LREASON="not mounted"; fi ;;
     cache)
-      [ -n "$sr" ] || { LERR="There is no upload cache on this server (ZFS layout)."; return 1; }
+      [ -n "$sr" ] || { LERR="There is no upload cache on this server (ZFS layout)."; LCODE=fm.no-cache; return 1; }
       LLOCK=yes; LLABEL="$sr cache"; dir=$(fm_cache_root)
       if fm_ismnt "$dir"; then LROOT=$dir; LADD=yes; LMOD=yes; else unusable="There is no upload cache mounted."; LREASON="not mounted"; fi ;;
     share)
@@ -146,13 +146,13 @@ fm_resolve() {
       done < <(pool_names data)
       if [ -z "$found" ]; then
         if [ -n "$unmounted" ]; then unusable="The pool is not mounted."; LREASON="not mounted"
-        else LERR="There is no share $n."; LUSABLE=no; LREASON="no such share"; return 1; fi
+        else LERR="There is no share $n."; LCODE=fm.share-unknown; LUSABLE=no; LREASON="no such share"; return 1; fi
       fi ;;
     temp)
       dir=$(fm_temp_root)/$n
       if fm_ismnt "$dir"; then LROOT=$dir; LREASON="temporary disk: a source only"; else unusable="There is no temporary disk $n."; LREASON="not mounted"; fi ;;
   esac
-  if [ -n "$unusable" ]; then LUSABLE=no; LERR=$unusable; return 0; fi
+  if [ -n "$unusable" ]; then LUSABLE=no; LERR=$unusable; LCODE=fm.location-unusable; return 0; fi
   LROOT=$(readlink -f -- "$LROOT")
   if [ "$LADD" = yes ] && fm_readonly "$LROOT"; then LADD=no; LMOD=no; LREASON="read-only mount"; fi
   fm_fill_size
