@@ -31,6 +31,7 @@ binary.missing	Das Programm, das dieses Paket nennt, ist nicht enthalten.
 binary.unreferenced	Dieses Paket enthält ein Programm, das nichts startet.
 binary.hash	Das Programm dieses Pakets ist nicht das angegebene. Es wurde nicht installiert, die alte Version bleibt.
 binary.exec	Das Programm dieses Pakets ist nicht ausführbar. Es wurde nicht installiert, die alte Version bleibt.
+binary.sdk-pin	Dieses Paket ist nicht bereit für ein Release: Sein Erweiterungs-SDK ist nicht auf ein Release des Cores festgelegt.
 binary.arch	Dieses Paket braucht einen x86_64-Server. Es wurde nicht installiert.
 binary.unbuilt	Dieses Paket hat noch kein gebautes Programm. Es kann nicht installiert werden.
 binary.runner	Dieses Paket startet sein Programm auf die falsche Weise. Es kann nicht installiert werden.
