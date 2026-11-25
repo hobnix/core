@@ -87,8 +87,10 @@ apply_blueprint() {   # the plan, the typed name or one question, then ONE backg
     for c in ${names[@]+"${names[@]}"}; do confirm_name "$c" "$(t 'the blueprint or Docker')" || { note "Nothing changed."; return 0; }; done
     [ ${#names[@]} -gt 0 ] || confirm "$(t 'Apply the blueprint %s now?' "$name")" || { note "Nothing changed."; return 0; }
   fi
+  # the tag of the plan that was shown: a blueprint that changed since then is refused
+  args=(--tag "$(awk -F'\t' '$1 == "blueprint" { print $5; exit }' <<<"$plan")")
   for c in ${names[@]+"${names[@]}"}; do args+=(--confirm "$c"); done
-  out=$(bash "$hsbin" sys blueprint start apply "$name" ${args[@]+"${args[@]}"} 2>/dev/null </dev/null | clean) || true
+  out=$(bash "$hsbin" sys blueprint start apply "$name" "${args[@]}" 2>/dev/null </dev/null | clean) || true
   unit=$(awk -F'\t' '$1 == "unit" { print $2; exit }' <<<"$out")
   if [ -n "$unit" ]; then ok "$(t 'Started as a job: hs job follow %s' "$unit")"; choice_done
   else c=$(reason_of "$out"); warn "${c:-The blueprint could not be started.}"; fi

@@ -61,10 +61,10 @@ cat > "$FRB" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "$FRL"
 case "\$*" in
-  "sys blueprint plan apply media") printf 'status\tok\nheading\tapply\npart\t1\tapp\tr1\tinstall\tinstall r1\nnote\tOne job\033[31m does it\n' ;;
+  "sys blueprint plan apply media") printf 'status\tok\nheading\tapply\nblueprint\tmedia\tofficial\t1.0.0\tv1.0.0\npart\t1\tapp\tr1\tinstall\tinstall r1\nnote\tOne job\033[31m does it\n' ;;
   "sys blueprint plan apply foreign") printf 'status\tok\nheading\tapply\nconfirm_name\tforeign\n' ;;
   "sys blueprint plan apply nope") printf 'status\trefused\nreason\tNo blueprint called nope.\n'; exit 1 ;;
-  "sys blueprint start apply media") printf 'status\tstarted\nunit\ths-job-bp-1\n' ;;
+  "sys blueprint start apply media --tag v1.0.0") printf 'status\tstarted\nunit\ths-job-bp-1\n' ;;
 esac
 exit 0
 STUB
@@ -75,6 +75,7 @@ rm -f "$CH"
 out=$(frun --yes --blueprint media)
 check "--blueprint --yes plans then starts" bash -c "grep 'blueprint' '$FRL' | tr '\n' ' ' | grep -q 'blueprint plan apply media.*blueprint start apply media'"
 check_out "and prints the unit" 'hs-job-bp-1' echo "$out"
+check "the start carries the tag of the plan, so a changed blueprint is refused" grep -qx 'sys blueprint start apply media --tag v1.0.0' "$FRL"
 check "no record is made where the installer made none" test ! -e "$CH"
 check "no escape byte of the plan reaches the terminal" bash -c '! grep -q "$(printf "\033")\[31m" <<<"$1"' _ "$out"
 record blueprint media
