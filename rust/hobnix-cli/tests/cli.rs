@@ -75,7 +75,10 @@ fn secrets_refusals_are_lines_on_stdout() {
     for (args, reason, code) in cases {
         let o = hobnix(&args);
         assert_eq!(o.status.code(), Some(1), "{args:?}");
-        assert_eq!(String::from_utf8_lossy(&o.stdout), refused_text(reason, code));
+        assert_eq!(
+            String::from_utf8_lossy(&o.stdout),
+            refused_text(reason, code)
+        );
     }
 }
 
