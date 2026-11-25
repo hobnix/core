@@ -36,7 +36,7 @@ binary.arch	script	The package ships a compiled program for x86_64 and the serve
 binary.unbuilt	script	The package declares a program that is not built yet (empty sha256, no file)	This package has no built program yet; it cannot be installed.	-
 binary.runner	script	A commands.tsv row without the flag proto names a [[binary]] program	This package starts its program the wrong way; it cannot be installed.	-
 binary.undeclared	script	A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it	This package starts a program that has no declared hash.	-
-binary.sdk-pin	script	repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z)	This package is not ready for a release: its extension SDK is not pinned to a core release.	-
+binary.sdk-pin	script	repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N)	This package is not ready for a release: its extension SDK is not pinned to a core release.	-
 code.unknown	script	A pairing code is not known: wrong, already used, expired, or the server name is taken by another server (one answer for all of them, POST /api/remote/claim)	The other server does not know that code: wrong, already used or expired.	-
 code.rate	script	Too many wrong pairing codes from one address within a minute	Too many wrong codes from here. Wait a minute and try again.	-
 code.unavailable	script	The server cannot make the access now (no domain controller, storage locked)	The other server cannot make the access now (is its storage unlocked?).	-

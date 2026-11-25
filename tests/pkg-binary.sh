@@ -51,10 +51,14 @@ rel() { python3 -I "$SCRIPTS/pkg.py" repo-check --release "$B" 2>&1; true; }
 git_core='git = "https://github.com/hobnix/core"'
 base "$B"; pin "$git_core, tag = \"v0.13.0\""
 check "a release tag passes --release" $PKG repo-check --release "$B"
+for t in v0.13.0-beta.1 v0.13.0-rc.2; do
+  pin "$git_core, tag = \"$t\""; check "a prerelease tag $t passes --release" $PKG repo-check --release "$B"
+done
+pin "$git_core, tag = \"v0.13.0\""
 pin "$git_core, rev = \"0123456789012345678901234567890123456789\""
 check "a rev passes without --release" $PKG repo-check "$B"
 check_out "and --release refuses it" "binary.sdk-pin" rel
-for spec in "$git_core, branch = \"develop\"" "$git_core, tag = \"v0.13.0-beta.1\"" 'git = "https://example.org/core", tag = "v0.13.0"' 'path = "../../sdk"'; do
+for spec in "$git_core, tag = \"v0.13.0-\"" "$git_core, tag = \"v0.13\"" "$git_core, tag = \"V0.13.0\"" "$git_core, tag = \"v0.13.0-alpha.1\"" "$git_core, branch = \"develop\"" 'git = "https://example.org/core", tag = "v0.13.0"' 'path = "../../sdk"'; do
   pin "$spec"; check_out "--release refuses: $spec" "binary.sdk-pin" rel
 done
 pin "$git_core, tag = \"v0.13.0\""
