@@ -305,9 +305,9 @@ check_out "an uninstalled package gets none and no error" 'NONE=\[\]' printf '%s
 ECD="python3 -I $SCRIPTS/lib/ext_confine.py dropin --dynamic --name fixsvc --"
 dyn=$($ECD fs.write:/var/lib/hs/fixsvc | sed '1,2d')
 check_eq "dynamic: no line binds the bridge state" "0" "$(printf '%s\n' "$dyn" | grep -c 'ext-svc')"
-check_eq "dynamic: the user and the state folder" "4" "$(printf '%s\n' "$dyn" | grep -c '^DynamicUser=yes$\|^User=hsx-fixsvc$\|^StateDirectory=hs-ext/fixsvc$\|^StateDirectoryMode=0700$')"
+check_eq "dynamic: the user and the state folder" "4" "$(printf '%s\n' "$dyn" | grep -c '^DynamicUser=yes$\|^User=hsx-fixsvc$\|^StateDirectory=ext-hs/fixsvc$\|^StateDirectoryMode=0700$')"
 check_eq "dynamic: UMask=0077" "1" "$(printf '%s\n' "$dyn" | grep -c '^UMask=0077$')"
-check_eq "dynamic: the own folder is bound from the state folder, no other bind" "1" "$(printf '%s\n' "$dyn" | grep -c '^BindPaths=-/var/lib/hs-ext/fixsvc:/var/lib/hs/fixsvc$')"
+check_eq "dynamic: the own folder is bound from the state folder, no other bind" "1" "$(printf '%s\n' "$dyn" | grep -c '^BindPaths=-/var/lib/ext-hs/fixsvc:/var/lib/hs/fixsvc$')"
 check_eq "dynamic: no ReadWritePaths for it" "0" "$(printf '%s\n' "$dyn" | grep -c '^ReadWritePaths=')"
 check_eq "dynamic: the hardening of the old mapping is kept" "$($EC fs.write:/var/lib/hs/fixsvc | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')" "$(printf '%s\n' "$dyn" | grep -v "^ProtectProc" | grep -c '^Protect\|^Restrict\|^SystemCall\|^Lock\|^NoNew\|^Capab')"
 check_eq "dynamic: without devices no extra groups" "0" "$($ECD - | grep -c SupplementaryGroups)"
@@ -329,9 +329,9 @@ u2=$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$long" -- 
 check_eq "dynamic: a 40-character name gives a 31-character user" "31" "${#u1}"
 check_eq "dynamic: ending in _ and twelve hex digits" "1" "$(printf '%s\n' "$u1" | grep -c -- '_[0-9a-f]\{12\}$')"
 check_eq "dynamic: and it is stable" "$u1" "$u2"
-rc=0; $EC fs.read:/var/lib/hs-ext/other >/dev/null 2>&1 || rc=$?
+rc=0; $EC fs.read:/var/lib/ext-hs/other >/dev/null 2>&1 || rc=$?
 check_eq "a grant may never reach another package's dynamic state folder" "1" "$rc"
-rc=0; $EC fs.write:/var/lib/private/hs-ext/other >/dev/null 2>&1 || rc=$?
+rc=0; $EC fs.write:/var/lib/private/ext-hs/other >/dev/null 2>&1 || rc=$?
 check_eq "nor the private folder behind it" "1" "$rc"
 
 check_eq "dynamic: the old 6-digit cut no longer collides (two names of the review get two users)" "2" "$(for n in media-hub-long-exten-7c910f media-hub-long-extension-name-x; do python3 -I "$SCRIPTS/lib/ext_confine.py" props --dynamic --name "$n" -- - | sed -n 's/^User=//p'; done | sort -u | wc -l | tr -d ' ')"
@@ -356,7 +356,7 @@ check_eq "dynamic: with the code ext.dynamic-read" "1" "$(printf '%s
 ' "$err" | grep -c 'ext.dynamic-read')"
 rc=0; $ECD fs.read:/var/lib/hs/ext/x >/dev/null 2>&1 || rc=$?
 check_eq "dynamic: and of /var/lib/hs/ext" "1" "$rc"
-rc=0; $ECD fs.read:/var/lib/hs-ext/other >/dev/null 2>&1 || rc=$?
+rc=0; $ECD fs.read:/var/lib/ext-hs/other >/dev/null 2>&1 || rc=$?
 check_eq "dynamic: and of another extension's state" "1" "$rc"
 check_eq "dynamic: ProtectProc=invisible" "1" "$($ECD - | grep -c '^ProtectProc=invisible$')"
 check_eq "a literal --dynamic after -- is a permission, not the mode" "0" "$(python3 -I "$SCRIPTS/lib/ext_confine.py" props --name fixsvc -- --dynamic | grep -c '^DynamicUser=')"

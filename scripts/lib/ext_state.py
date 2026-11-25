@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """State folder of an extension service that runs as a dynamic user (#1134, slice S1). Python stdlib only, root side.
 
-The state of a service lives in systemd's StateDirectory: the real folder is /var/lib/private/hs-ext/<name>, /var/lib/hs-ext/<name> is the
+The state of a service lives in systemd's StateDirectory: the real folder is /var/lib/private/ext-hs/<name>, /var/lib/ext-hs/<name> is the
 public path and /var/lib/hs/<name> (the old path, kept for root tools) becomes a link to it. The move is ONE atomic rename, done once, never a
 copy; two folders at once or another file system is refused and nothing on disk changes. The bridge of a service calls it before every start
 (ext_service.py svc_run). Not tested on hardware yet.
@@ -10,7 +10,7 @@ copy; two folders at once or another file system is refused and nothing on disk 
   ext_state.py link <name>      after the unit runs: make the old path a link when it is still missing
   ext_state.py repair <name>    give files of the state folder that a root tool made back to the owner of the top folder
 
-Knobs for tests: HS_STATE_DIR (old root, /var/lib/hs), HS_EXT_STATE_DIR (/var/lib/hs-ext), HS_PRIVATE_DIR (/var/lib/private).
+Knobs for tests: HS_STATE_DIR (old root, /var/lib/hs), HS_EXT_STATE_DIR (/var/lib/ext-hs), HS_PRIVATE_DIR (/var/lib/private).
 Problems start with a code: ext.state-conflict (both folders exist, wrong link, not a folder), ext.state-move-failed (other file system),
 ext.state-reserved (the name is a core folder), ext.state-link-failed.
 """
@@ -26,7 +26,7 @@ NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,40}")   # used with fullmatch: "$" would
 # this name would get a core folder renamed away and chowned to its user (`disks` is the whole array), so prepare refuses it before any change.
 # Not the same as the list of reserved package names: the official packages (posters, media-hub) are fine and must stay allowed.
 RESERVED = frozenset("""adopting api-tokens apps apps-autoupdate backup capabilities config deck detached disks docker ext ext-svc expiry generated
-health heartbeat hs hs-ext iso jobs last-rebuild live luks machine matrix metrics migrate nodes notify packages parity pci pkg pkg-events ports private
+health heartbeat hs hs-ext ext-hs iso jobs last-rebuild live luks machine matrix metrics migrate nodes notify packages parity pci pkg pkg-events ports private
 recovering remote removals removed restic scrub selftest services settings share snapshots state sync tailscale testlab vault vps""".split())
 RESERVED_PREFIXES = ("backup-", "bulk-", "disk-", "docker-", "health-", "heartbeat-", "live-", "luks-", "machine-", "migrate-", "notify-", "parity-",
                      "pci-", "ports-", "remote-", "restic-", "scrub-", "selftest-", "services-", "share-", "snapshots-", "stat-", "sync-", "tailscale-",
@@ -44,8 +44,8 @@ def _bad_name(name):
 
 def _paths(name):
     old = os.path.join(os.environ.get("HS_STATE_DIR", "/var/lib/hs"), name)
-    ext = os.environ.get("HS_EXT_STATE_DIR", "/var/lib/hs-ext")
-    priv = os.path.join(os.environ.get("HS_PRIVATE_DIR", "/var/lib/private"), "hs-ext", name)
+    ext = os.environ.get("HS_EXT_STATE_DIR", "/var/lib/ext-hs")
+    priv = os.path.join(os.environ.get("HS_PRIVATE_DIR", "/var/lib/private"), "ext-hs", name)
     return old, os.path.join(ext, name), priv, ext
 
 

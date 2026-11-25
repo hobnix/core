@@ -7,7 +7,7 @@ need_root
 command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
 ES="python3 -I $SCRIPTS/lib/ext_state.py"
 export HS_STATE_DIR=$WORK/hs HS_EXT_STATE_DIR=$WORK/ext HS_PRIVATE_DIR=$WORK/private
-P=$WORK/private/hs-ext/posters; mkdir -p "$P/sub" "$WORK/ext" "$WORK/hs" "$WORK/outside"
+P=$WORK/private/ext-hs/posters; mkdir -p "$P/sub" "$WORK/ext" "$WORK/hs" "$WORK/outside"
 ln -s "$P" "$WORK/ext/posters"
 U=64321; G=64322
 echo a > "$P/a"; echo b > "$P/sub/b"; echo victim > "$WORK/outside/f"
