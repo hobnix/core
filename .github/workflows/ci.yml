@@ -20,8 +20,8 @@ concurrency:
 
 jobs:
   # What did the change touch? Draft pull requests run nothing (mark one ready for review to start CI); the slow jobs run only when they can
-  # be affected. A pull request runs the tests that mention its files (scripts/dev/tests-for.sh); a push to develop or 0.2, the merge
-  # queue, a tag, the nightly run and a manual run always run everything.
+  # be affected. A pull request runs the tests that mention its files (scripts/dev/tests-for.sh); a push to develop is narrowed by the commits it
+  # brought; a push to 0.2, the merge queue, a tag, the nightly run and a manual run always run everything.
   changes:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
@@ -41,11 +41,16 @@ jobs:
           fetch-depth: 0
       - id: f
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           nix=true root=true rust=true ext=true pkg=true capmx=true
-          # only a pull request is narrowed; everything else gets the full set (the merge queue, `develop`, the nightly run)
-          [ "${{ github.event_name }}" = pull_request ] || BASE=""
+          # A pull request is narrowed by its base; a push to `develop` by the range github.event.before..sha (the commits just merged).
+          # Everything else gets the full set: the merge queue, a tag, a release branch, `main`, the nightly and manual runs, and an unknown
+          # range (a new branch has a `before` of 40 zeros; `git cat-file -e` below drops a sha the clone does not have, e.g. after a force push).
+          case "${{ github.event_name }}:${{ github.ref }}" in
+            pull_request:*|push:refs/heads/develop) ;;
+            *) BASE="" ;;
+          esac
           if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
             files=$(git diff --name-only "$BASE" HEAD)
             # nix: the system configuration and the web build (web/ is built by pkgs/hs-web.nix); root: scripts and root tests (loop devices, packages against this core)
