@@ -130,7 +130,7 @@ Versions are raised by the release, not by pull requests (hobnix/core#615): a pu
 and both run `scripts/dev/release.sh`, so they cannot drift (tests: `tests/release.sh`, `tests/prepare-release.sh`):
 
 1. **Prepare.** In the checkout, on `develop`: `bash <core>/scripts/dev/prepare-release.sh --plan` shows "package, old, new, level" and the tag
-   level; without `--plan` it raises the versions in `package.toml` and `index.toml` (one commit per package), runs `repo-check`, and opens a
+   level; without `--plan` it raises the versions in `package.toml` and `index.toml` (one signed-off commit per package, `git commit -s`, so the DCO check passes for the workflow identity too), runs `repo-check`, and opens a
    pull request into `develop`. The GitHub workflow `prepare-release` of each repository does the same (a caller of
    `hobnix/core/.github/workflows/package-prepare-release.yml`). It also writes `[meta] changes` of each bumped package from the titles of the merged
    pull requests that touched it (cleaned by `scripts/dev/release-changes.py`: titles are untrusted text, so no markdown, no `@`, bounded length and
