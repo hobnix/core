@@ -11,12 +11,11 @@
   import { FIRST_RUN_STEPS, active, clampIndex } from '../setup/steps.js';
   import AccountStep from '../setup/AccountStep.svelte';
   import StorageStep from '../setup/StorageStep.svelte';
-  import PresetStep from '../setup/PresetStep.svelte';
-  import PartsStep from '../setup/PartsStep.svelte';
+  import BlueprintStep from '../setup/BlueprintStep.svelte';
   import DoneStep from '../setup/DoneStep.svelte';
 
   // SLOTS: network (#179): one line each here when the step exists
-  const BUILT = { account: AccountStep, storage: StorageStep, preset: PresetStep, parts: PartsStep, done: DoneStep };
+  const BUILT = { account: AccountStep, storage: StorageStep, blueprint: BlueprintStep, done: DoneStep };
   const steps = active(FIRST_RUN_STEPS, Object.keys(BUILT));
   let at = $state(0);
   let user = $state('');

@@ -650,6 +650,7 @@ PENDING_TOPICS = {
     'parts-pending': (['parts', 'pending'], 60, 'run', None, {'system', 'network'}),
     'rebuild-pending': (['rebuild', 'pending'], 60, 'run', None, {'system', 'network', 'security', 'backup'}),
     'preset-list': (['preset', 'list'], 3600, 'run', None, set()),
+    'blueprint-list': (['blueprint', 'list'], 3600, 'run', None, set()),
 }
 
 
@@ -896,7 +897,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 83)
+        self.assertEqual(len(lines), 84)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)
