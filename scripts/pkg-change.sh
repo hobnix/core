@@ -27,7 +27,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 pkg=${HS_PKG:-$here/pkg.sh}
 pkgpy="python3 -I $here/pkg.py"
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
@@ -35,12 +34,12 @@ case "$verb" in plan|start) ;; *) echo "usage: pkg-change.sh plan|start install|
 case "$action" in install|update|remove|fetch|repo-add|repo-remove|check-draft) ;; *) refuse_code action.unknown "unknown action (install, update, remove, fetch, repo-add or repo-remove)" ;; esac
 shift 2 || true
 if [ "$action" = check-draft ]; then
-  [ "$verb" = plan ] || refuse "a draft is only checked (plan); nothing is started"
+  [ "$verb" = plan ] || refuse_code pkg.draft-readonly "a draft is only checked (plan); nothing is started"
   [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
   rc=0; out=$(head -c 262144 | python3 -I "$here/pkg.py" check-draft 2>/dev/null) || rc=$?
   errs=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "error"' | wc -l)
-  if [ "$rc" -ne 0 ] && [ "$errs" -eq 0 ]; then refuse "the draft could not be checked"; fi
-  if [ "$errs" -gt 0 ]; then printf 'status\trefused\nreason\t%s\n' "The draft has $errs problem(s)."; else printf 'status\tok\n'; fi
+  if [ "$rc" -ne 0 ] && [ "$errs" -eq 0 ]; then refuse_code pkg.draft-unchecked "the draft could not be checked"; fi
+  if [ "$errs" -gt 0 ]; then printf 'status\trefused\nreason\t%s\ncode\tpkg.draft-invalid\n' "The draft has $errs problem(s)."; else printf 'status\tok\n'; fi
   printf 'heading\tcheck a package draft\n'
   printf '%s\n' "$out" | awk -F'\t' 'NF == 3 { printf "finding\t%s\t%s\t%s\n", $1, $2, $3 }'
   printf 'long\tno\n'
@@ -68,13 +67,23 @@ repos() { bash "$pkg" --repos 2>/dev/null || true; }
 # one line per fact: name, kind, repo, available, installed, state, core, audience, title
 row_of() { market | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }
 repo_row() { repos | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }   # name, address, signed|unsigned, default|added
+# pkg.sh may have refused in the ADR 0028 form already (pkg_refused: status, reason, fix, code, through refuse_code): then exactly those lines
+# are the answer (its own code, not pkg.action-failed) and this exits 1. Returns when the output holds no such refusal.
+relay_coded() {   # relay_coded <output of pkg.sh>
+  local lines
+  lines=$(awk -F'\t' '$1 == "status" && $2 == "refused" { buf = $0; code = 0; next }
+    buf != "" && ($1 == "reason" || $1 == "fix" || $1 == "code") { buf = buf "\n" $0; if ($1 == "code") code = 1 }
+    END { if (code) print buf }' <<<"$1")
+  [ -n "$lines" ] || return 0
+  printf '%s\n' "$lines"; exit 1
+}
 
 repo="" cmd=() red="" long=no
 case "$action" in
   install|update|remove)
-    [[ "$name" =~ $word ]] || refuse "not a package name (lower case letters, digits and dashes)"
+    [[ "$name" =~ $word ]] || refuse_code name.invalid "not a package name (lower case letters, digits and dashes)"
     row=$(row_of "$name")
-    [ -n "$row" ] || refuse "There is no package $name in the repositories (fetch them again first)."
+    [ -n "$row" ] || refuse_code pkg.unknown "There is no package $name in the repositories (fetch them again first)."
     IFS=$'\t' read -r _ kind repo avail inst state core _ title <<<"$row"
     [ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
     r_from=$(repo_row "$repo" | cut -f4)
@@ -83,44 +92,44 @@ case "$action" in
       install)
         while [ $# -gt 0 ]; do
           case "$1" in
-            --repo) repo=${2:-}; [ -n "$repo" ] || refuse "--repo needs a name"; shift 2 ;;
+            --repo) repo=${2:-}; [ -n "$repo" ] || refuse_code pkg.value-missing "--repo needs a name"; shift 2 ;;
             *) refuse_code option.unknown "unknown option $1" ;;
           esac
         done
-        [ "$state" = new ] || refuse "$name is installed already (version $inst); use update."
+        [ "$state" = new ] || refuse_code pkg.installed "$name is installed already (version $inst); use update."
         cmd=(bash "$pkg" install "$name" --repo "$repo") ;;
       update)
         [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-        [ "$inst" != - ] || refuse "$name is not installed from a repository; install it first."
-        [ "$state" = update ] || refuse "$name is up to date (version $inst)."
+        [ "$inst" != - ] || refuse_code pkg.not-installed "$name is not installed from a repository; install it first."
+        [ "$state" = update ] || refuse_code pkg.up-to-date "$name is up to date (version $inst)."
         cmd=(bash "$pkg" update "$name" --yes) ;;
       remove)
         [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-        [ "$inst" != - ] || refuse "$name is not installed from a repository."
-        [ "$core" != yes ] || refuse "$name is a core package: other parts of the server refer to it by name, so it stays."
+        [ "$inst" != - ] || refuse_code pkg.not-installed "$name is not installed from a repository."
+        [ "$core" != yes ] || refuse_code pkg.core "$name is a core package: other parts of the server refer to it by name, so it stays."
         red=""
-        if ! why=$(bash "$pkg" remove "$name" --dry-run </dev/null 2>&1); then refuse "$(printf '%s' "$why" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | head -n 1)"; fi
+        if ! why=$(bash "$pkg" remove "$name" --dry-run </dev/null 2>&1); then refuse_code pkg.remove-refused "$(printf '%s' "$why" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | head -n 1)"; fi
         cmd=(bash "$pkg" remove "$name" --yes) ;;
     esac ;;
   fetch)
     repo=$name; name=""
     [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-    if [ -n "$repo" ]; then [[ "$repo" =~ $word ]] && [ -n "$(repo_row "$repo")" ] || refuse "There is no repository $repo."; fi
+    if [ -n "$repo" ]; then [[ "$repo" =~ $word ]] && [ -n "$(repo_row "$repo")" ] || refuse_code pkg.repo-unknown "There is no repository $repo."; fi
     long=yes
     cmd=(bash "$pkg" fetch); [ -z "$repo" ] || cmd+=("$repo") ;;
   repo-add)
     url=${1:-}; [ $# -eq 0 ] || shift
     [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
-    [[ "$name" =~ $word ]] || refuse "the repository name is a lower case word (letters, digits and dashes)"
-    [ -z "$(repo_row "$name")" ] || refuse "There is a repository called $name already."
-    [ -n "$url" ] || refuse "the address of the repository is needed"
+    [[ "$name" =~ $word ]] || refuse_code name.invalid "the repository name is a lower case word (letters, digits and dashes)"
+    [ -z "$(repo_row "$name")" ] || refuse_code pkg.repo-exists "There is a repository called $name already."
+    [ -n "$url" ] || refuse_code pkg.value-missing "the address of the repository is needed"
     if [ "${HS_PKG_ALLOW_LOCAL:-}" = 1 ]; then ok_url='^(https://|ssh://|git@|file://|/)[A-Za-z0-9._:/@~+-]{2,200}$'; else ok_url='^(https://|ssh://git@|git@)[A-Za-z0-9._:/@~+-]{3,200}$'; fi
-    [[ "$url" =~ $ok_url ]] && [[ "$url" != *..* ]] || refuse "the address must be https://..., ssh://git@... or git@host:path"
+    [[ "$url" =~ $ok_url ]] && [[ "$url" != *..* ]] || refuse_code pkg.repo-url-invalid "the address must be https://..., ssh://git@... or git@host:path"
     red=$name ;;
   repo-remove)
-    [[ "$name" =~ $word ]] || refuse "not a repository name"
-    r=$(repo_row "$name"); [ -n "$r" ] || refuse "There is no repository $name."
-    [ "$(cut -f4 <<<"$r")" = added ] || refuse "$name is one of the default repositories: those stay."
+    [[ "$name" =~ $word ]] || refuse_code name.invalid "not a repository name"
+    r=$(repo_row "$name"); [ -n "$r" ] || refuse_code pkg.repo-unknown "There is no repository $name."
+    [ "$(cut -f4 <<<"$r")" = added ] || refuse_code pkg.repo-default "$name is one of the default repositories: those stay."
     red=$name ;;
 esac
 
@@ -130,20 +139,20 @@ if [ "$verb" = start ]; then
     repo-add)
       # the signing key: one line on standard input, rebuilt as an allowed-signers line (principal, git namespace, type, key)
       IFS= read -r line || true
-      [ -n "$line" ] || refuse "the public signing key of the repository is needed"
+      [ -n "$line" ] || refuse_code pkg.key-invalid "the public signing key of the repository is needed"
       if ! [[ "$line" =~ (ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com)[[:space:]]+([A-Za-z0-9+/]{20,}={0,3}) ]]; then
-        refuse "that is not an SSH public key (it starts with ssh-ed25519 or ssh-rsa)"
+        refuse_code pkg.key-invalid "that is not an SSH public key (it starts with ssh-ed25519 or ssh-rsa)"
       fi
       keyfile=$(mktemp "${TMPDIR:-/tmp}/hs-pkg-key.XXXXXX"); trap 'rm -f "$keyfile"' EXIT
       printf 'release@%s namespaces="git" %s %s\n' "$name" "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}" > "$keyfile"
       rc=0; out=$(bash "$pkg" repo add "$name" "$url" --key "$keyfile" --confirm-name "$name" </dev/null 2>&1) || rc=$?
       if [ "$rc" -ne 0 ]; then
-        printf 'status\trefused\nreason\t%s\n' "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"; exit 1
+        refuse_code pkg.repo-add-failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
       fi
       rc=0; out=$(bash "$pkg" fetch "$name" </dev/null 2>&1) || rc=$?
       if [ "$rc" -ne 0 ] || ! market | awk -F'\t' -v r="$name" '$3 == r { f = 1 } END { exit !f }'; then
         bash "$pkg" repo remove "$name" </dev/null >/dev/null 2>&1 || true
-        printf 'status\trefused\nreason\t%s\n' "no signed release could be read from that address with that key (the repository was not kept)"; exit 1
+        refuse_code pkg.repo-unreadable "no signed release could be read from that address with that key (the repository was not kept)"
       fi
       printf 'status\tdone\n'; exit 0 ;;
     repo-remove)
@@ -156,8 +165,8 @@ if [ "$verb" = start ]; then
       rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$? ;;
   esac
   if [ "$rc" -ne 0 ]; then
-    printf 'status\trefused\nreason\t%s\n' "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
-    exit 1
+    relay_coded "$out"
+    refuse_code pkg.action-failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
   fi
   printf 'status\tdone\n'
   exit 0

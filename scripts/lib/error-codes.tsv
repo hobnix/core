@@ -338,3 +338,38 @@ testlab.value-missing	script	An option was given without its value.	The option n
 testlab.stage-invalid	script	The stage is not 1 to 6, a stage name or all.	The stage is 1 to 6, a stage name or all.	-
 testlab.off	script	The test-lab is off.	The test-lab is off.	-
 testlab.ref-refused	script	The ref or repository is not a branch, tag or commit of a Hobnix repository.	That ref or repository is not accepted.	-
+# S8: pkg. blueprint. (#1127)
+pkg.value-missing	script	An option or the address of a repository was given without its value.	A value is missing.	-
+pkg.draft-readonly	script	A start was asked for a package draft, which is only checked.	A draft is only checked, nothing is started.	-
+pkg.draft-unchecked	script	The check of a package draft did not run.	The draft could not be checked.	-
+pkg.draft-invalid	script	A package draft has problems.	The draft has problems.	-
+pkg.unknown	script	No repository offers a package of this name.	There is no such package in the repositories.	-
+pkg.installed	script	Install was asked for a package that is installed already.	The package is installed already.	-
+pkg.not-installed	script	The package is not installed from a repository.	The package is not installed.	-
+pkg.up-to-date	script	Update was asked for a package that has no newer release.	The package is up to date.	-
+pkg.core	script	Remove was asked for a core package.	A core package is not removed.	-
+pkg.remove-refused	script	The dry run of the removal refused it.	The package cannot be removed now.	-
+pkg.repo-unknown	script	No repository has this name.	There is no repository with this name.	-
+pkg.repo-exists	script	A repository of this name exists already.	That name is taken already.	-
+pkg.repo-url-invalid	script	The address of the repository is not in an allowed form.	The address of the repository is not valid.	-
+pkg.repo-default	script	Remove was asked for a default repository.	A default repository stays.	-
+pkg.key-invalid	script	The public signing key of the repository is missing or is not an SSH public key.	An SSH public key is needed.	-
+pkg.repo-add-failed	script	The repository could not be added.	The repository could not be added.	-
+pkg.repo-unreadable	script	No signed release could be read from a new repository with the given key.	No signed release could be read, so the repository was not kept.	-
+pkg.action-failed	script	The package command failed.	The action on the package failed.	-
+pkg.storage-locked	script	The storage is locked, so the rebuild would refuse.	The storage is locked.	-
+pkg.no-network	script	The step needs the network and it is down.	This needs the network.	-
+pkg.nothing-to-do	script	Every package that was asked for is installed and on already.	There is nothing to do.	-
+pkg.require-circle	script	Packages require each other in a circle.	The packages require each other in a circle.	-
+pkg.ambiguous	script	A package is in more than one repository.	The package is in more than one repository.	-
+pkg.added-repo	script	A package of an added repository is not installed together with others.	Install this package from the Marketplace.	-
+pkg.role-part	script	A required part follows the role of the server and is not switched by hand.	A required part follows the role of this server.	-
+pkg.require-missing	script	A required part is neither on the server nor offered by a repository.	A required part is not available.	-
+blueprint.value-missing	script	An option was given without its value.	The option needs a value.	-
+blueprint.unreadable	script	The blueprint does not exist, cannot be read or has problems.	The blueprint cannot be used.	-
+blueprint.role	script	The blueprint is not made for the role of this server.	This blueprint is for another role.	-
+blueprint.storage-locked	script	The storage is locked, so the rebuild would refuse.	The storage is locked.	-
+blueprint.no-network	script	The step needs the network and it is down.	This needs the network.	-
+blueprint.docker-refused	script	The plan to turn Docker on refused.	Docker cannot be turned on.	-
+blueprint.needs-docker	script	An app of the blueprint needs Docker, which is off and not part of the blueprint.	An app of the blueprint needs Docker.	-
+blueprint.confirm-unknown	script	A typed name was given that the plan does not ask for.	The plan does not ask for that name.	-

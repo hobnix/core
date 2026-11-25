@@ -10,6 +10,8 @@ refuse_code() {
   row=$(awk -F'\t' -v c="$code" '$1 == c { print $4 "\t" $5; exit }' "$_ERROR_CODES" 2>/dev/null) || row=
   cat_text=${row%%$'\t'*}
   [ -z "$row" ] || fix=${row#*$'\t'}
+  # a caller whose texts come from a package defines refuse_clean (blueprint-change.sh): it makes one safe line of the reason
+  if declare -F refuse_clean >/dev/null; then text=$(refuse_clean "$text"); fi
   printf 'status\trefused\nreason\t%s\n' "${text:-${cat_text:-The server did not do this.}}"
   [ "$fix" = - ] || printf 'fix\t%s\n' "$fix"
   printf 'code\t%s\n' "$code"

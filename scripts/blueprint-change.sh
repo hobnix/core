@@ -30,24 +30,20 @@ tab=$'\t'
 # cell: a text from the blueprint as ONE field of a plan line: control characters, tabs, C1 and U+2028/2029 become a space (defence in depth: the reader
 # lib/pkg_blueprint.py refuses such a blueprint already)
 cell() { printf '%s' "$1" | LC_ALL=C tr '\000-\037\177' ' ' | LC_ALL=C sed -E 's/\xc2[\x80-\x9f]/ /g; s/\xe2\x80[\xa8\xa9]/ /g'; }
-refuse() {
-  local r
-  r=$(cell "$1")
-  printf 'status\trefused\nreason\t%s\n' "$r"; exit 1
-}
+refuse_clean() { cell "$1"; }   # makes every coded reason one safe line, also those of lib/bundle-resolve.sh
 . "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; name=${3:-}
 case "$verb" in plan|start|run) ;; *) echo "usage: blueprint-change.sh plan|start apply <name> [--confirm <name>]..." >&2; exit 1 ;; esac
 [ "$action" = apply ] || refuse_code action.unknown "unknown action (apply)"
-[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "No blueprint called '$name'."
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "No blueprint called '$name'."
 shift 3 || true
 confirmed=(); want_tag=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --confirm) [ $# -ge 2 ] || refuse "--confirm needs a name"; confirmed+=("$2"); shift 2 ;;
-    --tag) [ $# -ge 2 ] || refuse "--tag needs a value"; want_tag=$2; shift 2 ;;
-    *) refuse "unexpected extra arguments" ;;
+    --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a name"; confirmed+=("$2"); shift 2 ;;
+    --tag) [ $# -ge 2 ] || refuse_code blueprint.value-missing "--tag needs a value"; want_tag=$2; shift 2 ;;
+    *) refuse_code args.unexpected "unexpected extra arguments" ;;
   esac
 done
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
@@ -56,19 +52,19 @@ unset HS_GUIDED_TTY
 # ── the facts: the blueprint (signed, checked), what this server has ──
 rc=0; show=$(bash "$pkg" blueprint show "$name" en 2>/dev/null </dev/null) || rc=$?
 if [ "$rc" != 0 ]; then
-  refuse "$(awk -F'\t' '$1 == "error" { printf "%s%s", (n++ ? "; " : ""), $2 }' <<<"$show")"
+  refuse_code blueprint.unreadable "$(awk -F'\t' '$1 == "error" { printf "%s%s", (n++ ? "; " : ""), $2 }' <<<"$show")"
 fi
 sv() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' <<<"$show"; }
 repo=$(sv repo); version=$(sv version); tag=$(sv tag); title=$(sv title); roles=$(sv roles); added=$(sv added)
-[ -n "$want_tag" ] && [ "$want_tag" != "$tag" ] && refuse "The blueprint is at $tag now, the plan was made for $want_tag: read the plan again."
+[ -n "$want_tag" ] && [ "$want_tag" != "$tag" ] && refuse_code plan.changed "The blueprint is at $tag now, the plan was made for $want_tag: read the plan again."
 
 role=""; if machine_has role; then role=$(machine_get role 2>/dev/null || true); fi
 if [ -n "$role" ] && ! grep -qxF -- "$role" < <(tr , '\n' <<<"$roles"); then
-  refuse "This blueprint is for the role $(sed 's/,/ or /g' <<<"$roles"); this server is $role."
+  refuse_code blueprint.role "This blueprint is for the role $(sed 's/,/ or /g' <<<"$roles"); this server is $role."
 fi
-[ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
+[ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse_code blueprint.storage-locked "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
 net_ok() { case "${HS_BUNDLE_NET:-}" in ok) return 0 ;; fail) return 1 ;; esac; . "$here/lib/netcheck.sh"; netcheck_ok >/dev/null 2>&1; }
-net_ok || refuse "This needs the network (installing reads the signed releases, the rebuild the binary cache)."
+net_ok || refuse_code blueprint.no-network "This needs the network (installing reads the signed releases, the rebuild the binary cache)."
 
 # config rows: kind<TAB>key<TAB>value<TAB>state (set|kept), as preset.sh
 cfg=""
@@ -107,7 +103,7 @@ dplan=""; dconfirm=()
 if [ -n "$dline" ] && ! $docker_on && [ "$verb" != run ]; then   # the job turns Docker on with the same words, it does not plan it again
   dargs=(--set "dockerManager=$dmanager"); [ "$dsize" = - ] || dargs+=(--set "dockerSize=$dsize")
   rc=0; dplan=$(bash "${HS_DOCKER_SETUP:-$here/docker-setup.sh}" plan setup "${dargs[@]}" 2>/dev/null </dev/null) || rc=$?
-  [ "$rc" = 0 ] || refuse "Docker cannot be turned on: $(awk -F'\t' '$1 == "reason" { print $2; exit }' <<<"$dplan")"
+  [ "$rc" = 0 ] || refuse_code blueprint.docker-refused "Docker cannot be turned on: $(awk -F'\t' '$1 == "reason" { print $2; exit }' <<<"$dplan")"
   while IFS= read -r c; do [ -z "$c" ] || dconfirm+=("$c"); done < <(awk -F'\t' '$1 == "confirm_name" { print $2 }' <<<"$dplan")
 fi
 
@@ -119,7 +115,7 @@ while IFS=$'\t' read -r _ _ n st; do
   if [ "${st%%:*}" = later ]; then apps+=("$n${tab}later${tab}${st#later:}"); continue; fi
   if grep -qxF -- "$n" <<<"$present"; then apps+=("$n${tab}present${tab}already installed"); continue; fi
   if tr , '\n' < <(awk -F'\t' -v n="$n" '$1 == "needs" && $2 == n { print $3 }' <<<"$show") | grep -qx docker && [ -z "$dline" ] && ! $docker_on; then
-    refuse "$n needs Docker: add a [docker] table to the blueprint or turn Docker on first (hs docker enable)."
+    refuse_code blueprint.needs-docker "$n needs Docker: add a [docker] table to the blueprint or turn Docker on first (hs docker enable)."
   fi
   apps+=("$n${tab}install${tab}install $n${tab}$(awk -F'\t' -v n="$n" '$1 == "from" && $2 == n { print $3; exit }' <<<"$show")")
 done < <(awk -F'\t' '$1 == "part" && $2 == "recipes"' <<<"$show")
@@ -129,11 +125,11 @@ need_names=()
 [ "$added" != yes ] || need_names+=("$name")
 need_names+=(${dconfirm[@]+"${dconfirm[@]}"})
 for c in ${confirmed[@]+"${confirmed[@]}"}; do
-  grep -qxF -- "$c" < <(printf '%s\n' ${need_names[@]+"${need_names[@]}"}) || refuse "'$c' is not a name this plan asks for."
+  grep -qxF -- "$c" < <(printf '%s\n' ${need_names[@]+"${need_names[@]}"}) || refuse_code blueprint.confirm-unknown "'$c' is not a name this plan asks for."
 done
 if [ "$verb" = start ]; then
   for c in ${need_names[@]+"${need_names[@]}"}; do
-    grep -qxF -- "$c" < <(printf '%s\n' ${confirmed[@]+"${confirmed[@]}"}) || refuse "Type the name '$c' to confirm."
+    grep -qxF -- "$c" < <(printf '%s\n' ${confirmed[@]+"${confirmed[@]}"}) || refuse_code confirm.missing "Type the name '$c' to confirm."
   done
 fi
 
@@ -190,7 +186,7 @@ if [ "$verb" = start ]; then
   # shellcheck source=scripts/lib/job.sh
   . "${HS_JOB_LIB:-$here/lib/job.sh}"
   utmp=$(mktemp)   # not a subshell: hs_job leaves the record id in HS_JOB_LAST_ID
-  hs_job "blueprint-$name" "hs blueprint apply $name" -- bash "$here/blueprint-change.sh" run apply "$name" --tag "$tag" >"$utmp" || { rm -f "$utmp"; refuse "the job could not be started"; }
+  hs_job "blueprint-$name" "hs blueprint apply $name" -- bash "$here/blueprint-change.sh" run apply "$name" --tag "$tag" >"$utmp" || { rm -f "$utmp"; refuse_code job.start-failed "the job could not be started"; }
   unit=$(cat "$utmp"); rm -f "$utmp"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   [ -z "${HS_JOB_LAST_ID:-}" ] || printf 'job\t%s\n' "$HS_JOB_LAST_ID"
