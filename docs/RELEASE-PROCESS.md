@@ -132,7 +132,9 @@ and both run `scripts/dev/release.sh`, so they cannot drift (tests: `tests/relea
 1. **Prepare.** In the checkout, on `develop`: `bash <core>/scripts/dev/prepare-release.sh --plan` shows "package, old, new, level" and the tag
    level; without `--plan` it raises the versions in `package.toml` and `index.toml` (one commit per package), runs `repo-check`, and opens a
    pull request into `develop`. The GitHub workflow `prepare-release` of each repository does the same (a caller of
-   `hobnix/core/.github/workflows/package-prepare-release.yml`). Merge it, then open the release pull request `develop` into `main` (merge commit).
+   `hobnix/core/.github/workflows/package-prepare-release.yml`). It also writes `[meta] changes` of each bumped package from the titles of the merged
+   pull requests that touched it (cleaned by `scripts/dev/release-changes.py`: titles are untrusted text, so no markdown, no `@`, bounded length and
+   count; edit the text in the pull request). Merge it, then open the release pull request `develop` into `main` (merge commit).
 2. **Tag.** On `main`: `bash <core>/scripts/dev/release.sh <patch|minor|major>` (the tag level the preparation names) with the key on your machine, or
    the workflow `release` of the repository (`package-release.yml`, environment `release`, the secret `RELEASE_SIGNING_KEY`). `--dry-run` does every
    check and stops; `--version vX.Y.Z` names the tag (the first tag of a repository).

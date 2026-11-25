@@ -76,4 +76,48 @@ git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | xargs -r g
 check_out "it makes the branch" "Branch release/prepare-.* made" bash -c "$PR --no-push 2>&1"
 git checkout -q "$(git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | head -n1)"
 check_eq "both folders were raised" "2" "$(git diff --name-only develop HEAD | grep -cE '^(extensions/alpha|recipes/rec)/package[.]toml$')"
+
+echo "-- [meta] changes from the titles of the merged pull requests (hostile titles included)"
+git init -q --bare "$WORK/remote3.git"
+R3=$WORK/repo3; mkdir -p "$R3"; cd "$R3" || exit 1
+git init -q -b develop . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
+git remote add origin "$WORK/remote3.git"
+mkpkg alpha 1.0.0; mkpkg beta 2.3.4; mkpkg gamma 0.1.0; mkpkg delta 0.2.0
+printf '[meta]\nauthor = "A"\nchanges = "old text"\ntags = ["t"]\n' >> extensions/delta/package.toml
+git add -A && git commit -q -m first && git tag v1.0.0
+x=$(change alpha one)
+echo two >> extensions/alpha/note.txt; echo two >> extensions/beta/note.txt; git add -A && git commit -q -m both; y=$(git rev-parse HEAD)
+z=$(change beta three); change gamma one >/dev/null; d=$(change delta one)
+: > "$WORK/labels"
+python3 -I - "$x" "$y" "$z" "$d" > "$WORK/titles" <<'PY'
+import json, sys
+x, y, z, d = sys.argv[1:]
+hostile = 'evil"\nchanges = "pwned"\n[web]\nx=1 @octocat   \u0085 \x1b[31m `code` [link](http://e) \\ end'
+rows = [(x, 1, hostile), (x, 1, hostile), (y, 2, "Add the shared thing"), (z, 3, "Fix beta"), (d, 4, "@everyone " + "x" * 400)]
+rows += [(z, n, "many %d" % n) for n in range(10, 40)]
+for sha, n, t in rows:
+    print(json.dumps({"sha": sha, "number": n, "title": t}))
+PY
+export HS_PREPARE_TITLES=$WORK/titles
+check_out "it makes the branch" "Branch release/prepare-.* made" bash -c "$PR --no-push 2>&1"
+git checkout -q "$(git for-each-ref --format='%(refname:short)' 'refs/heads/release/*' | head -n1)"
+meta() { python3 -I -c 'import sys,tomllib; d=tomllib.load(open(sys.argv[1],"rb")); print(d.get("meta",{}).get(sys.argv[2],"-"))' "extensions/$1/package.toml" "$2"; }
+a=$(meta alpha changes)
+check_out "alpha lists the title that touched alpha and beta" "Add the shared thing" echo "$a"
+check_eq "the hostile title adds no key and no table" "name,version,kind,title,requires_core,permissions,meta" "$(python3 -I -c 'import tomllib; print(",".join(tomllib.load(open("extensions/alpha/package.toml","rb"))))')"
+check_eq "no @, backtick, bracket, backslash, control or line separator is left" "0" "$(printf '%s' "$a" | python3 -I -c 'import sys,unicodedata; s=sys.stdin.read(); print(sum(1 for c in s if c in "@`[]\\<>" or (unicodedata.category(c)[0] in "CZ" and c != " ")))')"
+check_eq "it is one line" "1" "$(grep -c '^changes = ' extensions/alpha/package.toml)"
+check_eq "a pull request that came twice is listed once" "1" "$(grep -o 'evil' <<<"$a" | wc -l)"
+check_eq "one commit per package still" "4" "$(git rev-list --count develop..HEAD)"
+check_eq "a package of several pull requests lists them" "1" "$(meta beta changes | grep -c 'Add the shared thing; Fix beta')"
+check_eq "the count is bounded" "1" "$(meta beta changes | grep -c 'and [0-9]* more')"
+check_eq "the length is bounded" "ok" "$([ "$(meta beta changes | wc -c)" -le 1001 ] && [ "$(meta delta changes | wc -c)" -le 105 ] && echo ok)"
+check_eq "a package without a pull request keeps the field" "-" "$(meta gamma changes)"
+check_eq "an old changes value is replaced, the rest stays" "A|['t']" "$(meta delta author)|$(meta delta tags)"
+check_eq "@everyone pings nobody" "0" "$(meta delta changes | grep -c '@')"
+before=$(meta alpha changes)
+grep -e "\"sha\": \"$x\"" -e "\"sha\": \"$y\"" "$WORK/titles" | python3 -I -c 'import sys,json
+for l in sys.stdin: o=json.loads(l); print(json.dumps({"number":o["number"],"title":o["title"]}))' > "$WORK/again"
+python3 -I "$SCRIPTS/dev/release-changes.py" extensions/alpha/package.toml < "$WORK/again" >/dev/null
+check_eq "the same input again writes the same text" "$before" "$(meta alpha changes)"
 finish
