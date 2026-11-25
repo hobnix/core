@@ -20,8 +20,8 @@ The mapping (what systemd gives, nothing more):
                          RestrictNamespaces, RestrictRealtime, RestrictSUIDSGID, LockPersonality, SystemCallArchitectures=native,
                          SystemCallFilter=~@mount @swap ... (deny list, EPERM), RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK (HARDEN); no IPAddressAllow/Deny
   devices:gpu            PrivateDevices=no, DevicePolicy=closed, DeviceAllow=char-drm rw (only the declared device classes)
-  --dynamic              (what a running service gets, #1134) DynamicUser=yes, User=hsx-<name>, StateDirectory=ext-hs/<name> (0700, UMask=0077),
-                         BindPaths=-/var/lib/ext-hs/<name>:/var/lib/hs/<name> instead of the bridge state; devices:gpu adds SupplementaryGroups=render video;
+  --dynamic              (what a running service gets, #1134) DynamicUser=yes, User=hsx-<name>, StateDirectory=hs-ext/<name> (0700, UMask=0077),
+                         BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name> instead of the bridge state; devices:gpu adds SupplementaryGroups=render video;
                          fs.write only below /var/lib/hs/<name> (anything else: ext.dynamic-write), no line for it
   net:<x>                nothing: declared only (D6); written as a comment
   everything else        nothing (web.*, events.*, host, secrets are not systemd's business)
@@ -35,10 +35,7 @@ import re
 import sys
 
 STATE = "/var/lib/hs/ext-svc"      # the bridge (scripts/lib/ext_service.py) keeps its state here
-# The folder is named ext-hs, not hs-ext, on purpose: systemd sets up the mounts of a unit in the order of their paths, component by component. The
-# BindPaths source below must be mounted by systemd (StateDirectory presents the private folder to the unit user) BEFORE the bind of
-# /var/lib/hs/<name> reads it; "ext-hs" sorts before "hs", "hs-ext" after it, and the bind then saw the raw folder (owner nobody, 0700): Permission denied.
-EXT_STATE = "/var/lib/ext-hs"      # the dynamic user's view of its state: StateDirectory=ext-hs/<name> (ext_state.py moves the old folder there)
+EXT_STATE = "/var/lib/hs-ext"      # the dynamic user's view of its state: StateDirectory=hs-ext/<name> (ext_state.py moves the old folder there)
 GPU_GROUPS = "render video"        # SupplementaryGroups of a dynamic unit that declares devices:gpu
 PATH = re.compile(r"^/[A-Za-z0-9._/-]+$")
 DEVICES = {"gpu": ["char-drm rw"]}
@@ -107,7 +104,7 @@ def unit_user(name):
 
 def state_source(name):
     """Where the unit's own state folder is bound from. If the VM stage shows systemd does not resolve the link, this is the one edit:
-    /var/lib/private/ext-hs/<name>."""
+    /var/lib/private/hs-ext/<name>."""
     return "%s/%s" % (EXT_STATE, name)
 
 
@@ -170,7 +167,7 @@ def properties(perms, name=None, dynamic=False):
     else:
         out.append("PrivateDevices=yes")
     if dynamic:
-        out += ["DynamicUser=yes", "User=" + unit_user(name), "StateDirectory=ext-hs/" + name, "StateDirectoryMode=0700", "UMask=0077", "ProtectProc=invisible"]
+        out += ["DynamicUser=yes", "User=" + unit_user(name), "StateDirectory=hs-ext/" + name, "StateDirectoryMode=0700", "UMask=0077", "ProtectProc=invisible"]
         # ProtectProc=invisible: the unit cannot see the processes of other users (another extension, root). Without ProcSubset=pid (ADR 0031
         # decision 5 left it out: a tool reading /proc/meminfo). Own StateDirectory only: /var/lib/private is 0700 root and the other folders are
         # owned by other uids; whether that is enough or the VM stage needs an InaccessiblePaths is [nv] (see nested_stages.py confine_dynamic)

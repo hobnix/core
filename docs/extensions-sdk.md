@@ -94,7 +94,7 @@ For a service that talks to an integration (Jellyfin, Plex, ...) the crate has t
 `/var/lib/hs/<name>`: any other `fs.write` is refused (`ext.dynamic-write`), and so is `fs.read` of the server's state or of another extension
 (`ext.dynamic-read`); in both cases the service does not start. The files it writes are mode 0600. A root command of the same package that writes into that
 folder gives each file back to the service, with `chown -h --reference="$dir" "$file"` (`-h`: never the target of a link); the server also repairs the owners before each start. A root tool must never open or write by name in a service-owned folder without refusing links (`O_NOFOLLOW`, `open(..., dir_fd=)`, no `-L`): the service can plant a link there. A root tool must never open or write by name in a service-owned folder without refusing links (`O_NOFOLLOW`, `open(..., dir_fd=)`): the service can plant a link there. The folder lives in
-`/var/lib/private/ext-hs/<name>`; an existing `/var/lib/hs/<name>` is moved there once and stays as a link. Not tested on hardware yet.
+`/var/lib/private/hs-ext/<name>`; an existing `/var/lib/hs/<name>` is moved there once and stays as a link. Not tested on hardware yet.
 
 A service never calls `hs` (inside its confined unit `hs` cannot see the package registry); it gets what it needs through the protocol. Build, shipping and run rules of a Rust extension: ADR 0031 (docs/adr/0031-rust-extensions.md).
 
@@ -183,8 +183,8 @@ An app can offer an API key through `[integrations.<name>]` in its `package.toml
 | Python: `No module named ext_sdk` | `python3 -I` does not search the script's folder | add `$HS_SCRIPTS/lib` to `sys.path` as shown above |
 | Shell: `jq: command not found` | the helper needs jq | install `jq` on the server |
 | the call ends with `timeout` | it ran past its limit | answer sooner or raise `timeout:<seconds>` in `commands.tsv` |
-| `ext.state-conflict`: both folders exist | the data of a service is in `/var/lib/hs/<name>` and in `/var/lib/ext-hs/<name>` | look at both, keep the one you need, move the other one away yourself, then start the service; the server never merges or deletes. Not tested on hardware yet. |
-| `ext.state-move-failed` | `/var/lib/hs` is on another file system than `/var/lib/ext-hs` | put both on one file system; the server never copies the data. Not tested on hardware yet. |
+| `ext.state-conflict`: both folders exist | the data of a service is in `/var/lib/hs/<name>` and in `/var/lib/hs-ext/<name>` | look at both, keep the one you need, move the other one away yourself, then start the service; the server never merges or deletes. Not tested on hardware yet. |
+| `ext.state-move-failed` | `/var/lib/hs` is on another file system than `/var/lib/hs-ext` | put both on one file system; the server never copies the data. Not tested on hardware yet. |
 | `ext.state-link-failed` | the server could not make `/var/lib/hs/<name>` a link | check that `/var/lib/hs` is writable and has free inodes; no data was deleted |
 | `ext.state-reserved` | the package has the name of a folder of the server itself | rename the package |
 

@@ -48,7 +48,7 @@ guess when it touches network or storage. Hence: proposal only.
    `hs` as root; they could be wrapped by `systemd-run --pipe --wait -p ...` with the same properties. Enforces fs and net for real, but:
    `net` properties (IPAddressAllow, PrivateNetwork) are a network and firewall decision, and a root process can undo most of it unless the unit
    drops root (`User=` or DynamicUser), which breaks packages that call `incus` (needs the socket) or write /etc/hs.
-3. **Unprivileged user per package plus a command broker.** The package runs as `ext-hs-<name>` and asks the core for privileged things through a
+3. **Unprivileged user per package plus a command broker.** The package runs as `hs-ext-<name>` and asks the core for privileged things through a
    request channel (the "open point" of ADRs 0009 and 0010), which checks `host`, `secrets` and `events.emit` against the manifest. This is the only
    design that enforces `host` and `secrets`; it is also a rewrite of every package that today calls hs commands directly (games, posters,
    ad-selfservice, passthrough, arr) and of the shell contract.
@@ -100,7 +100,7 @@ service could not emit, roll up, read an integration key or even start under the
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
 | `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
-| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=ext-hs/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, `BindPaths=-/var/lib/ext-hs/<name>:/var/lib/hs/<name>` instead of the bridge state; `devices:gpu` adds `SupplementaryGroups=render video` |
+| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, `BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name>` instead of the bridge state; `devices:gpu` adds `SupplementaryGroups=render video` |
 | dynamic user, `fs.read:<path>` of server state or of another extension | refused with `ext.dynamic-read` |
 | dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: the state bind covers it); anything else is refused with `ext.dynamic-write` |
 | no `permissions` | the "always" row only, plus a warning |
