@@ -1,0 +1,6 @@
+date  = "2026-11-25"
+type  = "change"
+title = "Refused changes name an error code"
+body  = """When a plan or start of a change is refused, the answer now names an error code beside the English reason, and the record of a background job that ends on such a refusal keeps it. The codes are listed on the Error codes page of the docs.
+
+The catalogue also has a German text for every code. The web interface does not show these German texts yet."""
