@@ -87,7 +87,7 @@ const src = (f) => readFileSync(new URL(`../web/src/${f}`, import.meta.url), 'ut
 const shell = src('shell/Shell.svelte');
 const at = shell.indexOf('touch(fieldReads(ui.role, ui.features.capabilities))');
 check('the shell asks the picker reads right after unlock, before the idle prefetch', at > 0 && at < shell.indexOf('prefetch([...new Set('));
-check('not while locked, and not before the lock state is known', /if \(!deck\.data \|\| locked \|\| prefetched\) return;/.test(shell.slice(0, at)));
+check('not while locked, and not before the lock state is known', /lockGate\(clearPollCache, \(\) => \{/.test(shell.slice(0, at)) && /gate\(!!deck\.data, locked\)/.test(shell));
 const livejs = src('live.svelte.js');
 check('events of the live stream end the sharing', /resyncAll\(\) \{ forgetReads\(\);/.test(livejs) && /forgetReads\(\); live\.gen\[m\.topic\]/.test(livejs) && /live\.lastId = m\.id;\s+forgetReads\(\);/.test(livejs));
 check('a job that ended and a refresh end the sharing', /endToast\(t\) \{\s+forgetReads\(\);/.test(src('ui.svelte.js')) && /forgetReads\(\);[^\n]*\n\s+sync\.n\+\+/.test(src('data.svelte.js')));
