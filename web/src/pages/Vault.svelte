@@ -44,7 +44,7 @@
   ];
 </script>
 
-<PageHeader title="Vault" crumb="Storage" sub="Secrets for the server's own services, in a LUKS partition of their own.">
+<PageHeader title="Vault" sub="Secrets for the server's own services, in a LUKS partition of their own.">
   {#snippet actions()}
     <Button icon="floppy-disk" busy={rowstate.pending('secrets', ['header-backup'])} disabled={u.state !== 'open'} tooltip={'Save the LUKS header outside the vault'} onclick={() => openPlan('secrets', ['header-backup'], 'Save the LUKS header')}>Save header</Button>
     <Button icon="arrow-square-in" busy={rowstate.pending('secrets', ['move'])} disabled={u.state !== 'open'} tooltip={'Move the usual secrets into the vault'} onclick={() => openPlan('secrets', ['move'], 'Move secrets into the vault')}>Move secrets in</Button>

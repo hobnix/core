@@ -107,7 +107,7 @@
   ];
 </script>
 
-<PageHeader title="Backup" crumb="{ui.host} › Protection" sub="restic on the backup disk · 7 daily / 4 weekly / 6 monthly · the one place that decides what is in the backup">
+<PageHeader title="Backup" sub="restic on the backup disk · 7 daily / 4 weekly / 6 monthly · the one place that decides what is in the backup">
   {#snippet actions()}
     <Button need="admin" icon="seal-check" busy={rowstate.pending('backup', ['verify'])} busyLabel="Verifying…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['verify'])} onfocus={() => prefetchPlan('backup', ['verify'])} tooltip={tipWhy('Read part of the stored data and check it')} onclick={() => openPlan('backup', ['verify'], 'Verify the backup')}>Verify</Button>
     <Button need="admin" icon="broom" busy={rowstate.pending('backup', ['prune'])} busyLabel="Freeing space…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['prune'])} onfocus={() => prefetchPlan('backup', ['prune'])} tooltip={tipWhy('Give space back: delete leftovers of a failed run, apply the retention, prune')} onclick={() => openPlan('backup', ['prune'], 'Free space on the backup disk')}>Free space</Button>

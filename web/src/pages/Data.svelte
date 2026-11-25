@@ -37,7 +37,7 @@
 </script>
 
 <Stack gap="4">
-  <PageHeader title="Diagnostics" crumb="Monitoring" sub="How fresh the pages are, and what makes them slow." />
+  <PageHeader title="Diagnostics" sub="How fresh the pages are, and what makes them slow." />
 
     {#if liveDown}
       <Banner tone="bad">The live state data cannot be read. The table shows the last data; polling every 5 s until it comes back. Check <code>systemctl status hs-live</code>.</Banner>

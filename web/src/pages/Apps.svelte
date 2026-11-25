@@ -177,7 +177,7 @@
   const failedCount = $derived(bulkSummary.filter((r) => !r.ok).length);
 </script>
 
-<PageHeader title="Apps" crumb="{ui.host} › Instances" sub={list.loaded && !list.error ? `${installed} of ${apps.length} installed · safe to run again` : 'One-command installers, safe to run again.'} />
+<PageHeader title="Apps" sub={list.loaded && !list.error ? `${installed} of ${apps.length} installed · safe to run again` : 'One-command installers, safe to run again.'} />
 
 <PageState loading={!list.loaded} error={list.error?.message} hasData={list.data != null} empty={list.loaded && !list.error && !apps.length}
            emptyIcon="package" emptyTitle="No recipes" emptyText="This server has no app recipes." retry={() => refresh(['/api/sys/recipes/list'])}>

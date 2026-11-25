@@ -225,3 +225,76 @@ export function titleOf(path) {
   const obj = objectOf(path);
   return walk(tree, []) ?? walk(offTree, []) ?? (obj ? [...(titleOf(objects[obj.kind].list) ?? []), obj.id] : null);
 }
+
+// ── the trail and the marks of the tree (docs/PLAN-workloads.md 1 and 2: #1292, #1293) ─────────────
+// the items from the top of `items` down to the one `match` accepts, or null
+function chainTo(items, match) {
+  for (const it of items) {
+    if (match(it)) return [it];
+    const r = it.children && chainTo(it.children, match);
+    if (r) return [it, ...r];
+  }
+  return null;
+}
+const under = (path, base) => path.startsWith(base + '/');
+
+// The breadcrumb of an INNER path: [{ label, path }], the PARENTS of the page only: the server, the groups, the lists and, on an object page,
+// everything above the object. `server` is the node's name, `items` its tree (nodeItems; default: the static tree of this server). Summary has no
+// parent ([]); a place of `offTree` has the server and nothing more; a page that is no row hangs under the deepest row its address starts with.
+export function trailOf(path, { server = tree[0].label, items = mainTree } = {}) {
+  if (path === P.summary) return [];
+  const top = [{ label: server, path: P.summary }];
+  const trailTo = (chain) => [...top, ...(chain ?? []).map((it) => ({ label: it.label, path: it.path }))];
+  const obj = objectOf(path);
+  const list = obj && chainTo(items, (it) => it.path === objects[obj.kind].list);
+  if (list) return trailTo(list);
+  const exact = chainTo(items, (it) => it.path === path);
+  if (exact) return trailTo(exact.slice(0, -1));
+  if (offTree.some((it) => it.path === path || (it.prefix && under(path, it.path)))) return top;
+  let best = null;
+  const walk = (rows, chain) => {
+    for (const it of rows) {
+      const next = [...chain, it];
+      if (it.path && under(path, it.path) && it.path.length > (best?.at(-1).path.length ?? 0)) best = next;
+      if (it.children) walk(it.children, next);
+    }
+  };
+  walk(items, []);
+  return trailTo(best);
+}
+
+// The trail as the shell shows it. `node` is the node on screen ({ name, kind, caps, local }): a remote one has its own name and tree. This server
+// (also without a node) is named `local` and its tree has the package pages `exts`.
+export function nodeTrail(path, node, local, exts) {
+  if (node && !node.local) return trailOf(path, { server: node.name, items: nodeItems(node.kind, node.caps) });
+  return trailOf(path, { server: local, items: withExtItems(mainTree, exts) });
+}
+
+// is `rowPath` the row of the page `path`? The same address, or the same object (a tab of it has no row of its own)
+export function isRowOf(rowPath, path) {
+  if (!rowPath) return false;
+  if (rowPath === path) return true;
+  const a = objectOf(rowPath), b = objectOf(path);
+  return !!a && !!b && a.kind === b.kind && a.id === b.id;
+}
+
+// how a row shows where you are: 'current' (the open page), 'parent' (the last of the trail), 'above' (every row over that), '' (not on the way)
+export function rowMark(rowPath, path, trail) {
+  if (isRowOf(rowPath, path)) return 'current';
+  const i = trail.findIndex((c) => c.path === rowPath);
+  return i < 0 ? '' : i === trail.length - 1 ? 'parent' : 'above';
+}
+
+// An object page whose object has no row of its own gets a temporary one under the row of its list (`temp: true`, gone when the page is left).
+// An object with a permanent row (a pool) gets none. The tree is copied, never changed.
+export function withObjectRow(items, path) {
+  const obj = objectOf(path);
+  if (!obj || chainTo(items, (it) => isRowOf(it.path, path))) return items;
+  const def = objects[obj.kind];
+  const row = { label: obj.id, path: def.base + path.slice(def.base.length).split('/')[0], temp: true };
+  const walk = (rows) => rows.map((it) => {
+    if (it.path === def.list) return { ...it, children: [...(it.children ?? []), { ...row, icon: it.icon, ...(it.storage ? { storage: true } : {}) }] };
+    return it.children ? { ...it, children: walk(it.children) } : it;
+  });
+  return walk(items);
+}

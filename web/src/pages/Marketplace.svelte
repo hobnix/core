@@ -4,7 +4,7 @@
   // Reads: hs sys pkg market / repos. Changes: hs sys pkg plan|start (install, update, remove, fetch, repo-add, repo-remove); a package or repository
   // that came from a repository somebody added is red (the typed word is its name).
   import { poll, rows, refresh } from '../data.svelte.js';
-  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
   import { rowstate } from '../rowstate.svelte.js';
   import { ErrorNote } from '../ui/index.js';
@@ -138,7 +138,7 @@
   const failedCount = $derived(bulkSummary.filter((r) => !r.ok).length);
 </script>
 
-<PageHeader title="Marketplace" crumb={ui.host}
+<PageHeader title="Marketplace"
             sub={market.loaded && !market.error ? `${pkgs.length} packages from ${repos.length} repositories${updates ? ` · ${updates} update${updates > 1 ? 's' : ''}` : ''}` : 'Apps and extensions from the repositories you trust.'}>
   {#snippet actions()}
     <Button icon="arrows-clockwise" busy={rowstate.pending('pkg', ['fetch'])} busyLabel="Checking…" tooltip={'Read the repositories again and find the newest releases'} onclick={fetchAll}>Check for updates</Button>

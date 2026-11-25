@@ -62,7 +62,7 @@
   const tabs = $derived(objects['docker-app'].tabs.filter((t) => pageTabs(sel).includes(t.id)));
 </script>
 
-<PageHeader title="Docker" crumb="Instances" sub={apps.length ? `${runningCount} of ${apps.length} apps running${status.address && status.address !== '-' ? ` · ${status.address}` : ''}` : 'Apps that run in the Docker container.'} />
+<PageHeader title="Docker" sub={apps.length ? `${runningCount} of ${apps.length} apps running${status.address && status.address !== '-' ? ` · ${status.address}` : ''}` : 'Apps that run in the Docker container.'} />
 
 {#if broken.length}
   <Banner tone="bad">

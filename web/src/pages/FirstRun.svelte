@@ -47,7 +47,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="First setup" crumb={ui.host} />
+  <PageHeader title="First setup" />
   <Wizard index={clampIndex(at, steps.length)} total={steps.length} question={tr(step.question)} help={tr(step.help)} primary={tr(step.primary)} onnext={next} onback={() => { at = clampIndex(at - 1, steps.length); }}>
     {#key step.id}<Body {user} bind:save />{/key}
   </Wizard>

@@ -75,7 +75,7 @@
   ];
 </script>
 
-<PageHeader title="Services" crumb="{ui.host} › Instances" sub="What the reverse proxy publishes, and what each service wants. Public means reachable from the internet; admin pages never are.">
+<PageHeader title="Services" sub="What the reverse proxy publishes, and what each service wants. Public means reachable from the internet; admin pages never are.">
   {#snippet actions()}
     <Button need="admin" variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>
     <Button need="admin" icon="check-circle" disabled={noProxy || !todo || (routesJob && !rowstate.pending('routes', ['apply']))} busy={rowstate.pending('routes', ['apply'])} busyLabel="Applying…" tooltip={todo ? 'Make the routes the services want' : 'The proxy already matches the services'} onpointerenter={() => prefetchPlan('routes', ['apply'])} onfocus={() => prefetchPlan('routes', ['apply'])} onclick={() => openPlan('routes', ['apply'], 'Apply the routes')}>Apply{todo ? ` (${todo})` : ''}…</Button>

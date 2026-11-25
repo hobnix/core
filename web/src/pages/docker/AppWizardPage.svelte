@@ -56,7 +56,7 @@
   const secret = (k) => /PASS|TOKEN|SECRET|KEY/i.test(k);
 </script>
 
-<PageHeader title="New app" crumb="Docker" sub="Answer a few questions; the editor opens with the compose file and the .env text." />
+<PageHeader title="New app" sub="Answer a few questions; the editor opens with the compose file and the .env text." />
 
 <div class="wrap">
   <Wizard index={at} total={STEPS.length} steps={NAMES} onselect={(i) => { at = i; }} question={tr(QUESTION[step])} help={tr(HELP[step])} primary={step === 'review' ? tr('Open in editor') : tr('Next')} canNext={!errs.length} onnext={next} onback={() => { at = Math.max(0, at - 1); }}>

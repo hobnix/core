@@ -17,6 +17,7 @@
   // answers for the block samples below (GenBlock takes `data` instead of polling)
   const BLOCK_DATA = { '/api/sys/sample/copy': { rows: [['420', '1000', 'Copying photos', 'running']] }, '/api/sys/sample/done': { rows: [['10', '10', 'Backup', 'ok']] } };
   import Logo from '../ui/Logo.svelte';
+  import Breadcrumbs from '../ui/Breadcrumbs.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
     ServerField, ShareField, DiskField, PoolField, InstanceField, UserField,
@@ -79,7 +80,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Components" crumb="Developer" sub={tr('Every shared component in each of its states. A component without an entry here fails the gallery test.')}>
+  <PageHeader title="Components" sub={tr('Every shared component in each of its states. A component without an entry here fails the gallery test.')}>
     {#snippet actions()}
       <Button onclick={toggleTheme}>{theme.dark ? 'Show light' : 'Show dark'}</Button>
       <Button aria-pressed={phone} onclick={() => (phone = !phone)}>{phone ? 'Full width' : 'Phone width (375 px)'}</Button>
@@ -390,8 +391,13 @@
       <div class="cell"><small>26 / 64</small><Row><Logo /><Logo size={64} /></Row></div>
     </Entry>
 
-    <Entry from="shell" name="PageHeader" text="Breadcrumb, title, subtitle and the actions.">
-      <div class="cell wide box"><PageHeader title="Disks" crumb="Storage" sub="Every disk of this server.">{#snippet actions()}<Button variant="primary" icon="plus">Add disks</Button>{/snippet}</PageHeader></div>
+    <Entry name="Breadcrumbs" text="The parents of a page, each a link; the shell derives them from the tree.">
+      <div class="cell wide"><small>a disk page</small><Breadcrumbs items={[{ label: 'homeserver', path: '/' }, { label: 'Storage', path: '/storage' }, { label: 'Disks', path: '/storage/disks' }]} /></div>
+      <div class="cell"><small>a page with no place in the tree</small><Breadcrumbs items={[{ label: 'homeserver', path: '/' }]} /></div>
+    </Entry>
+
+    <Entry from="shell" name="PageHeader" text="Breadcrumb (derived from the tree), title, subtitle and the actions.">
+      <div class="cell wide box"><PageHeader title="Disks" sub="Every disk of this server.">{#snippet actions()}<Button variant="primary" icon="plus">Add disks</Button>{/snippet}</PageHeader></div>
     </Entry>
 
     <Entry from="shell" name="PageState" text="Loading, error with and without old data, empty, content.">

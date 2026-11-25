@@ -286,7 +286,7 @@
 {#if embedded}
   <Row gap="2" wrap>{@render editActions()}</Row>
 {:else}
-  <PageHeader title={isNew ? 'New app' : app} crumb="Docker" sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
+  <PageHeader title={isNew ? 'New app' : app} sub={isNew ? 'Write a compose file and an env file, test it, then save or apply.' : 'Edit the compose file and the env file of this app, test it, then save or apply.'}>
     {#snippet actions()}{@render editActions()}{/snippet}
   </PageHeader>
 {/if}

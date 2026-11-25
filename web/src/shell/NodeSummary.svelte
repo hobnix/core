@@ -31,7 +31,7 @@
   ]);
 </script>
 
-<PageHeader title={node.name} crumb="Servers" sub="Read only: this server only asks for the status of {node.name}.">
+<PageHeader title={node.name} sub="Read only: this server only asks for the status of {node.name}.">
   {#snippet actions()}<Chip>{node.kind}</Chip><StatusDot state={node.dot?.state ?? 'off'} label={node.dot?.title ?? 'no data'} />{/snippet}
 </PageHeader>
 

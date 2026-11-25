@@ -13,6 +13,6 @@
 </script>
 
 <Stack gap="4">
-  <PageHeader title="Extensions" crumb="Settings" sub="Packages that add pages and commands (hs ext). Off by default; one without a NixOS module is on at once." />
+  <PageHeader title="Extensions" sub="Packages that add pages and commands (hs ext). Off by default; one without a NixOS module is on at once." />
   <PartsTable id="extensions" items={extensions} loaded={partList.loaded} error={!!partList.error} empty="No extensions on this server." {pathOf} />
 </Stack>

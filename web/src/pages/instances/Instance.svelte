@@ -75,7 +75,7 @@
   const jobs = $derived((r) => !!name && new RegExp(`(^|[^\\w-])${re(name)}($|[^\\w-])`).test(r.description ?? ''));
 </script>
 
-<ObjectPage crumb="Instances" title={name} chip={c ? kindOf(c) : ''} state={c ? (failure ? 'bad' : doing ? 'info' : dot(c.state)) : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : c ? word(c.state) : ''}
+<ObjectPage title={name} chip={c ? kindOf(c) : ''} state={c ? (failure ? 'bad' : doing ? 'info' : dot(c.state)) : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : c ? word(c.state) : ''}
             tabs={objects.instance.tabs} {tab} onpick={(id) => go(instancePath(name, id))} {menu} {danger} {links} {jobs} need="app-manager"
             loading={!m.ctl.loaded} error={m.ctl.error && !m.ctl.data ? m.ctl.error.message : ''} notFound={m.ctl.loaded && !c} notFoundTitle="No such instance" backTo={P.instances} backLabel="All instances"
             notFoundText={`No instance called “${name}” exists. It may have been deleted or renamed.`}>

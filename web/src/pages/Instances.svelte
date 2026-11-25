@@ -6,7 +6,7 @@
   // the "in the backup" switch lives on Backup, this page only shows the badge.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
-  import { openPlan, openCreate, ui } from '../ui.svelte.js';
+  import { openPlan, openCreate } from '../ui.svelte.js';
   import { rowstate } from '../rowstate.svelte.js';
   import { route, go, url } from '../route.svelte.js';
   import CreateInstance from '../forms/instances/CreateInstance.svelte';
@@ -66,7 +66,7 @@
   ];
 </script>
 
-<PageHeader title="Instances" crumb={ui.host} sub={cts.length ? `${running} of ${cts.length} running` : 'Containers and virtual machines.'}>
+<PageHeader title="Instances" sub={cts.length ? `${running} of ${cts.length} running` : 'Containers and virtual machines.'}>
   {#snippet actions()}
     <Button need="app-manager" icon="arrows-clockwise" disabled={!running} busy={rowstate.pending('ct', ['all', 'update-all'])} busyLabel="Updating…" tooltip={'Snapshot, then update every running container'} onclick={() => openPlan('ct', ['all', 'update-all'], 'Update all')}>Update all</Button>
     <Button need="app-manager" variant="primary" icon="plus" tooltip={'Create a new instance (a container or VM)'} onclick={() => openCreate(CreateInstance)}>Create</Button>

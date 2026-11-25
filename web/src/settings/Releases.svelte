@@ -21,7 +21,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Releases" crumb="System" sub="Which version this server follows when it updates." />
+  <PageHeader title="Releases" sub="Which version this server follows when it updates." />
 
   {#if !m}
     <div class="muted">{show.loaded ? (show.error ? tr('The release channel could not be read.') : '') : tr('Loading…')}</div>

@@ -1,13 +1,15 @@
 <script>
   import { tip } from '../ui/tooltip.svelte.js';
   // One row of the resource tree: indent guides, caret, icon, label, chip, count, then ONE right-hand slot for a lock or a status dot. A dimmed row
-  // (storage locked) shows the lock in that slot. The row is a real link (middle click, copy address work); a plain click calls `onclick`.
+  // (storage locked) shows the lock in that slot. `active` is the open page; `mark` says where it is below: 'parent' (accent icon and a faint
+  // accent tint) or 'above' (accent icon only).
+  // The row is a real link (middle click, copy address work); a plain click calls `onclick`.
   //   <TreeRow depth={1} icon="database" label="Storage" href="/node/hs/storage" active caret="open" ontoggle={...} count="3" dot={{ state: 'ok', title: 'online' }} />
   import StatusDot from '../ui/StatusDot.svelte';
   import { tr } from "../i18n.js";
   let {
     depth = 0, caret = null, icon = '', label = '', href = '#', active = false, dim = false, strong = false, gap = false,
-    chip = '', count = '', warn = false, dot = null, lock = false, title = '', needs = '',
+    chip = '', count = '', warn = false, dot = null, lock = false, title = '', needs = '', mark = '',
     onclick = null, ontoggle = null, onhover = null,
   } = $props();
 
@@ -18,7 +20,7 @@
   }
 </script>
 
-<div class="trow" class:active class:dim class:gap class:noRole={!!needs} role="treeitem" aria-selected={active} aria-expanded={caret ? caret === 'open' : undefined} aria-level={depth + 1}>
+<div class="trow" class:active class:parent={mark === 'parent'} class:above={mark === 'above'} class:dim class:gap class:noRole={!!needs} role="treeitem" aria-selected={active} aria-expanded={caret ? caret === 'open' : undefined} aria-level={depth + 1}>
   {#each Array(depth) as _}<span class="g"></span>{/each}
   {#if caret}
     <button use:tip={caret === 'open' ? 'Collapse' : 'Expand'} class="caret" aria-label={caret === 'open' ? 'Collapse' : 'Expand'} tabindex="-1" onclick={(e) => { e.stopPropagation(); ontoggle?.(); }}>
@@ -46,7 +48,8 @@
   .trow:hover { background: var(--panel-2); }
   .trow.active { background: color-mix(in oklch, var(--accent) 17%, transparent); }
   .trow.active .tlink { color: var(--fg); font-weight: 500; }
-  .trow.active .tlink i { color: var(--accent-ink); }
+  .trow.parent { background: color-mix(in oklch, var(--accent) 7%, transparent); }
+  .trow.active .tlink i, .trow.parent .tlink i, .trow.above .tlink i { color: var(--accent-ink); }
   .trow.dim .tlink, .trow.noRole .tlink { opacity: 0.45; }
   .g { align-self: stretch; flex: none; width: 14px; margin-left: 5px; border-left: 1px solid var(--line); }
   .caret { flex: none; width: 20px; height: 24px; display: grid; place-items: center; border: 0; border-radius: var(--r); background: none; color: var(--fg-3); padding: 0; }

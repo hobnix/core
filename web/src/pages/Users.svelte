@@ -31,7 +31,7 @@
   ];
 </script>
 
-<PageHeader title="Users" crumb="Identity" sub="The accounts of the domain. Locking or deleting shows a plan first.">
+<PageHeader title="Users" sub="The accounts of the domain. Locking or deleting shows a plan first.">
   {#snippet actions()}
     <Button tooltip={'The SSH keys that may log in as adminuser'} onclick={() => openCreate(SshKeys)}><i class="ph ph-key"></i>SSH keys</Button>
     <Button variant="primary" tooltip={'Create a user'} onclick={() => openCreate(NewUser)}><i class="ph ph-plus"></i>New user</Button>

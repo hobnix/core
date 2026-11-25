@@ -181,7 +181,7 @@ Four pages are exempt from a template: **Files** (two-pane file manager, web/des
 
 | Prop | Meaning |
 |---|---|
-| `crumb`, `title`, `sub` | the `PageHeader` text (crumb is `Group > List`) |
+| `title`, `sub` | the `PageHeader` text (the breadcrumb is derived from the tree, `nav.js` `trailOf`) |
 | `chip`, `state`, `stateLabel` | the status next to the name (a `Chip` and a `StatusDot` with its word) |
 | `tabs` `[{ id, label }]`, `tab`, `onpick(id)` | at most four (`MAX_TABS`), the first is Overview with id `overview`; `tab` is the id from the address, an unknown one is Overview, not an error; one tab or none draws no tab row |
 | `primary` (snippet) | the visible actions: ONE primary and at most ONE secondary (D4). The page owns them; the frame only places them before the More menu |
