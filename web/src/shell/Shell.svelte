@@ -1,7 +1,7 @@
 <script>
   import { P, nodePath } from '../paths.js';
   import { route, setLocalNode, go } from '../route.svelte.js';
-  import { poll, rows, prefetch, refresh } from '../data.svelte.js';
+  import { poll, rows, prefetch, refresh, touch, clearPollCache, cacheSession } from '../data.svelte.js';
   import TopBar from './TopBar.svelte';
   import Tree from './Tree.svelte';
   import BottomPanel from './BottomPanel.svelte';
@@ -11,7 +11,8 @@
   import Toast from '../ui/Toast.svelte';
   import JobAsks from './JobAsks.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
-  import { readsFor } from '../readsfor.js';
+  import { readsFor, fieldReads } from '../readsfor.js';
+  import { lockGate } from '../lockgate.js';
   import { ui } from '../ui.svelte.js';
   import { canSee } from '../roles.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
@@ -56,19 +57,23 @@
   const dockerOn = $derived(Array.isArray(ui.features.capabilities) && ui.features.capabilities.includes('docker'));
   const dockerHealth = poll(() => (locked || !dockerOn ? '' : '/api/sys/docker/health'), 30000);
 
-  // once the deck says the storage is open: read what the main pages show first, while the browser is idle (the answers land in poll()'s cache)
-  let prefetched = false;
-  $effect(() => {
-    if (!deck.loaded || locked || prefetched) return;
-    prefetched = true;
-    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them)
-    loadPools().then(() => {
+  // each time the deck says the storage is open: read what the main pages show first, while the browser is idle (the answers land in poll()'s cache).
+  // A lock drops that cache, so the next unlock reads anew
+  const gate = lockGate(clearPollCache, () => {
+    // first, all at once: what the pickers of the dialogs list (who wants one of these while it runs joins it, api.js)
+    touch(fieldReads(ui.role, ui.features.capabilities));
+    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them).
+    // loadPools(true): the pool store would else keep the rows from before a lock (the read of touch() is joined)
+    const asked = cacheSession();
+    loadPools(true).then(() => {
+      if (asked !== cacheSession()) return;   // locked or signed out meanwhile
       const pages = [P.appsGroup, '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
         P.apps, P.services, '/storage/vault', '/storage/encryption', P.hardware, P.expiry];
       prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
         '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });
+  $effect(() => { gate(!!deck.data, locked); });   // no answer yet = the lock state is not known
 
   // the proxyserver node: the VPS status document (404 = proxyStatusUrl not set, 502 = not reachable); it drives the dots of its tree rows
   const prox = poll('/api/proxy/status', 15000);
