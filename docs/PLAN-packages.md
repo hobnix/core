@@ -76,6 +76,11 @@ A package (in-tree `capability.toml` or `package.toml`) says what `hs smoke` sho
 codes, default `[0]`, `limit` = seconds, optional). Read by `scripts/lib/pkg_probes.py`; a package that is off adds nothing, and a core probe
 whose registry row says `capability:X` is skipped while X is off.
 
+A package probe runs only a read (rule 4 of docs/Package-API.md "What the core refuses"): the row that `hs` would run for its `words` (the longest
+match) must be a row of the same package with the flag `reads`. On a row with the flag `changes` the `words` must end in `--dry-run`. `words` hold
+only letters, digits, spaces and `. _ : = / @ , + -`. Any other probe is not run: `hs smoke` warns and counts it as a failure. Not tested on
+hardware yet.
+
 ### `[[binary]]`: a compiled program (hobnix/core#1138)
 
 An extension written in Rust or Go ships its program inside the package folder. The table says which file it is and what its hash is, so

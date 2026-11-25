@@ -46,6 +46,9 @@ check_out "the packages that are on bring the edge probe" "hs edge health --dry-
 out=$(HS_SMOKE_TOOLS="" HS_SMOKE_PROBES=$WORK/probes bash $SCRIPTS/smoke.sh --list 2>&1); rc=$?
 check_eq "smoke with the probes of the packages that are on passes" "0" "$rc"
 check_out "and the edge probe is ok" "probe	hs edge health --dry-run	ok" echo "$out"
+# the probes as smoke collects them itself: the real edge probe passes the rule that a package probe runs only a read
+out=$(HS_SMOKE_TOOLS="" bash $SCRIPTS/smoke.sh --list 2>&1 || true)
+check_out "the real edge probe passes the read rule" "probe	hs edge health --dry-run	ok" echo "$out"
 
 echo "-- the edge health read"
 out=$($HS edge health --keys 2>&1); rc=$?

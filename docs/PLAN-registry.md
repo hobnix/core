@@ -224,6 +224,23 @@ become blueprints.
 Steps 1 to 3 solve the versioning problem; 4 to 6 are the repository layout and the community side. Step 4 is the risky one (NixOS build,
 installer) and is "Not tested on hardware yet." until it runs on a real server.
 
+## Built: packages bring their surface (hobnix/core#1072)
+
+A package (an in-tree `capability.toml` or an installed `package.toml`) brings its commands (`commands.tsv`), options (`options.toml`), checks of
+`hs smoke` (`[[probe]]`, `tools`) and web declarations. The core refuses what clashes with itself or another package. Not tested on hardware yet.
+
+- **Options:** a key the core or another package already has is refused when the overlay is written (`scripts/schema-gen.py overlay write`); the
+  whole package brings no options, and two packages that share a key are both refused.
+- **Dependents:** `hs ext disable` and `hs pkg remove` refuse while a package that is on needs this one by name, or through an interface that no
+  other package that is on provides (`scripts/lib/pkg-deps.sh`). With a second provider on, the removal passes; removing that one later is refused.
+- **Rows:** `hs pkg install` and `update` refuse the whole package when the loader refuses one of its rows, and `hs pkg validate` lists them
+  (`scripts/lib/pkg-stage-check.sh`, error code `pkg.rows`). A `start` sys row needs its `plan` row. An app route that makes an admin page public
+  is refused too.
+- **Checks of hs smoke:** a package probe runs only a read (`probe_is_read` in `scripts/smoke.sh`).
+
+The trust rules, numbered in docs/Package-API.md "What the core refuses", all fail closed. The typed name of a destructive command stays a
+review rule: the core cannot see whether a script asks for it. Later: `[[web.reads]]` for owned words (with hobnix/core#1074).
+
 ## Open points
 
 - Which capability is the pilot (`tailscale` or `metrics`; a small one with few dependants).

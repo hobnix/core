@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "change"
+title = "hs smoke runs only read checks that a package brings"
+body  = """A check that a package adds to hs smoke now runs only when it is a command of that same package which only reads, or a changing command run with --dry-run as its last word. Any other check is skipped with a warning and counted as a failure."""

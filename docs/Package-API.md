@@ -160,3 +160,17 @@ Not tested on hardware yet: only a fake `systemd-run` that records its arguments
 `kind = "blueprint"` (docs/PLAN-registry.md "Blueprints"): an ordered package list plus fill-only config, no script and no Nix. A blueprint says
 `requires_core = ">=11"`, so a core that does not know the kind (level 10 or lower) refuses it instead of installing it. Validated by
 `scripts/lib/pkg_blueprint.py`; a blueprint is applied (`hs blueprint apply`, a later release), never installed.
+
+## What the core refuses (hobnix/core#1072)
+
+All rules fail closed. Not tested on hardware yet.
+
+1. A package row never shadows a core row: a first word that a core command uses is refused, and `hs pkg install` and `update` then refuse the
+   whole package, so nothing stays half installed.
+2. A package never takes a first word or an option key that another package or the core has. A clashing option key leaves out all options of that
+   package.
+3. No public route to an admin page: an `[app.routes]` entry with `exposure = "public-ok"` on an admin page is refused at install.
+4. A `[[probe]]` of `hs smoke` runs only a read: a row of the same package with the flag `reads`, or a `changes` row when the words end in
+   `--dry-run`. Any other probe is skipped and counted as a failure.
+5. A `sys` row with the word `start` needs its twin with `plan`. Asking the person to type the name before a destructive change stays a review
+   rule.
