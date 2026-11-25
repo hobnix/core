@@ -236,7 +236,8 @@ A package (an in-tree `capability.toml` or an installed `package.toml`) brings i
 - **Rows:** `hs pkg install` and `update` refuse the whole package when the loader refuses one of its rows, and `hs pkg validate` lists them
   (`scripts/lib/pkg-stage-check.sh`, error code `pkg.rows`). A `start` sys row needs its `plan` row. An app route that makes an admin page public
   is refused too.
-- **Checks of hs smoke:** a package probe runs only a read (`probe_is_read` in `scripts/smoke.sh`).
+- **Checks of hs smoke:** a package probe must name a command declared as a read (`probe_is_read` in `scripts/smoke.sh`).
+  This catches mistakes of a package, not a hostile one: the package sets the flags and names the script itself.
 
 The trust rules, numbered in docs/Package-API.md "What the core refuses", all fail closed. The typed name of a destructive command stays a
 review rule: the core cannot see whether a script asks for it. Later: `[[web.reads]]` for owned words (with hobnix/core#1074).

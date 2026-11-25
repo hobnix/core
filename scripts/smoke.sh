@@ -14,7 +14,8 @@
 # Packages bring their own: `[[probe]]` (label, words, ok, limit) and `tools = [...]` in the capability.toml / package.toml of a package
 # that is ON are added to the lists below (scripts/lib/pkg_probes.py); the programs of storage, incus, samba, backup are the `tools` of
 # those capabilities. A core probe whose registry row says `capability:X` is skipped while X is off.
-# A package probe runs only a read (probe_is_read below, #1072): anything else is skipped with a warning and counted as a failure.
+# A package probe must name a row it declares as a read (probe_is_read below, #1072): else skipped, warned, counted as a failure.
+# This catches package mistakes, not a hostile package: the package sets the flags and the script itself.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -105,7 +106,12 @@ probe_is_read() {   # probe_is_read <package> <words>
   grep -qxF -- "$row" <<<"$own" || return 1
   flags=,$(awk -F'\t' '{ print $7 }' <<<"$row"),
   case "$flags" in
-    *,changes,*) [[ $2 == *" --dry-run" ]] ;;
+    # --dry-run must reach the script (build_args of hs.sh): typed after the row's words, with args `-` or a {rest} token of its own
+    *,changes,*) [[ $2 == *" --dry-run" ]] && awk -F'\t' -v w="$2" '{
+        if (split($2, p, " ") >= split(w, q, " ")) exit 1
+        if ($4 == "-") exit 0
+        n = split($4, a, " "); for (i = 1; i <= n; i++) if (a[i] == "{rest}") exit 0
+        exit 1 }' <<<"$row" ;;
     *,reads,*) return 0 ;;
     *) return 1 ;;
   esac

@@ -170,7 +170,8 @@ All rules fail closed. Not tested on hardware yet.
 2. A package never takes a first word or an option key that another package or the core has. A clashing option key leaves out all options of that
    package.
 3. No public route to an admin page: an `[app.routes]` entry with `exposure = "public-ok"` on an admin page is refused at install.
-4. A `[[probe]]` of `hs smoke` runs only a read: a row of the same package with the flag `reads`, or a `changes` row when the words end in
-   `--dry-run`. Any other probe is skipped and counted as a failure.
+4. A `[[probe]]` of `hs smoke` must name a row of the same package with the flag `reads`, or a `changes` row when the words end in
+   `--dry-run` and that word reaches the script (args `-` or a `{rest}` token). Any other probe is skipped and counted as a failure.
+   This does not prove that the command only reads. This catches mistakes of a package, not a hostile one: the package sets the flags and names the script itself.
 5. A `sys` row with the word `start` needs its twin with `plan`. Asking the person to type the name before a destructive change stays a review
    rule.
