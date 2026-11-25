@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "fix"
+title = "hs pkg install refuses a package with an invalid app route"
+body  = """A package whose app route has an invalid name, exposure, port or other value is now refused by hs pkg install and update. Before, such a route could pass the check that keeps admin pages from being public."""
