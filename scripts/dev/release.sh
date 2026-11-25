@@ -85,7 +85,7 @@ if [ "$what" = bump ]; then
     { print }' index.toml > index.toml.new && mv index.toml.new index.toml
   python3 -I "$core/scripts/pkg.py" repo-check . >/dev/null 2>&1 || { git checkout -- "$dir/package.toml" index.toml; fail "repo-check fails with the new version; nothing was changed."; }
   git add "$dir/package.toml" index.toml
-  git commit -q -m "$pkg: $old -> $new" || fail "The commit failed."
+  git commit -q -s -m "$pkg: $old -> $new" || fail "The commit failed."
   ok "$(t '%s: %s -> %s, committed on %s' "$pkg" "$old" "$new" "$branch")"
   if ! $push; then exit 0; fi
   git push -q -u "$remote" "$branch" || fail "The push failed."

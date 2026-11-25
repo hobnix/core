@@ -66,6 +66,7 @@ check_out "bump says what it did" "demo: 1[.]0[.]0 -> 1[.]1[.]0" rel bump demo m
 check_eq "package.toml has the new version" 'version = "1.1.0"' "$(grep '^version' recipes/demo/package.toml)"
 check_eq "index.toml has it too" 'version = "1.1.0"' "$(grep '^version' index.toml)"
 check_eq "and it is one commit" "demo: 1.0.0 -> 1.1.0" "$(git log -1 --format=%s)"
+check_out "and it carries a Signed-off-by trailer" "Signed-off-by: t <t@t>" git log -1 --format=%B
 check_out "the branch is on the remote" "feature/demo-bump" git ls-remote --heads origin
 git checkout -q -b feature/demo-nopush
 check_out "bump --no-push commits and does not push" "demo: 1[.]1[.]0 -> 1[.]1[.]1" rel bump demo patch --no-push
