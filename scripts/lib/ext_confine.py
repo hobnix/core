@@ -21,8 +21,9 @@ The mapping (what systemd gives, nothing more):
                          SystemCallFilter=~@mount @swap ... (deny list, EPERM), RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK (HARDEN); no IPAddressAllow/Deny
   devices:gpu            PrivateDevices=no, DevicePolicy=closed, DeviceAllow=char-drm rw (only the declared device classes)
   --dynamic              (what a running service gets, #1134) DynamicUser=yes, User=hsx-<name>, StateDirectory=hs-ext/<name> (0700, UMask=0077),
-                         BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name> instead of the bridge state; devices:gpu adds SupplementaryGroups=render video;
-                         fs.write only below /var/lib/hs/<name> (anything else: ext.dynamic-write), no line for it
+                         no BindPaths of the state: the unit uses it at /var/lib/hs-ext/<name> ($STATE_DIRECTORY), where systemd presents it
+                         to the dynamic user (a bind never gets that: the folder is owned by nobody on disk); devices:gpu adds
+                         SupplementaryGroups=render video; fs.write only below /var/lib/hs/<name> (anything else: ext.dynamic-write), no line for it
   net:<x>                nothing: declared only (D6); written as a comment
   everything else        nothing (web.*, events.*, host, secrets are not systemd's business)
 A package without `permissions` gets the always-part and nothing else. A path must be absolute, without "..", ".", "//" or spaces, and not "/".
@@ -102,12 +103,6 @@ def unit_user(name):
     return u
 
 
-def state_source(name):
-    """Where the unit's own state folder is bound from. If the VM stage shows systemd does not resolve the link, this is the one edit:
-    /var/lib/private/hs-ext/<name>."""
-    return "%s/%s" % (EXT_STATE, name)
-
-
 def _bad_dynamic_name(name):
     """The problem with the package name of a dynamic unit (a name of the core's own /var/lib/hs folders, ext_state.RESERVED), or None."""
     if not name:
@@ -149,7 +144,7 @@ def properties(perms, name=None, dynamic=False):
                 return None, None, ("ext.dynamic-write: fs.write:%s is not allowed for a service or confined command: it runs as its own user "
                                     "and may write only /var/lib/hs/%s" % (arg, name))
             if own:
-                continue      # the state bind covers it
+                continue      # its StateDirectory covers it (the unit finds it at /var/lib/hs-ext/<name>)
             if arg not in lst:
                 lst.append(arg)
         elif key == "devices":
@@ -176,11 +171,15 @@ def properties(perms, name=None, dynamic=False):
     # /var/lib/hs becomes an empty read-only tmpfs; only the granted paths below it are bound back in. The other secrets are made inaccessible.
     out.append("TemporaryFileSystem=/var/lib/hs:ro")
     out.append("InaccessiblePaths=" + " ".join("-" + x for x in HIDDEN if x != "/var/lib/hs"))
-    rw = ([state_source(name) + ":/var/lib/hs/" + name] if dynamic else [STATE]) + write
+    # dynamic: the state is NOT bound (systemd's StateDirectory shows it to the unit at /var/lib/hs-ext/<name> with an idmapped mount; a BindPaths= bind of
+    # the same folder shows owner nobody, mode 0700: Permission denied, VM run 2026-11-25), so there is nothing below /var/lib/hs to bind
+    rw = ([] if dynamic else [STATE]) + write
     rw_other = [x for x in write if not _under(x, "/var/lib/hs")] if dynamic else [x for x in rw if not _under(x, "/var/lib/hs")]
     if rw_other:
         out.append("ReadWritePaths=" + " ".join("-" + x for x in rw_other))
-    out.append("BindPaths=" + " ".join("-" + x for x in rw if dynamic or _under(x, "/var/lib/hs")))
+    bind = [x for x in rw if _under(x, "/var/lib/hs")]
+    if bind:
+        out.append("BindPaths=" + " ".join("-" + x for x in bind))
     ro_hs = [x for x in read if _under(x, "/var/lib/hs")]
     if ro_hs:
         out.append("BindReadOnlyPaths=" + " ".join("-" + x for x in ro_hs))

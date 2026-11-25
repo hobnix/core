@@ -100,9 +100,9 @@ service could not emit, roll up, read an integration key or even start under the
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
 | `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
-| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, `BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name>` instead of the bridge state; `devices:gpu` adds `SupplementaryGroups=render video` |
+| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, no `BindPaths` of the state (the unit uses it at `/var/lib/hs-ext/<name>`, `$STATE_DIRECTORY`); `devices:gpu` adds `SupplementaryGroups=render video` |
 | dynamic user, `fs.read:<path>` of server state or of another extension | refused with `ext.dynamic-read` |
-| dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: the state bind covers it); anything else is refused with `ext.dynamic-write` |
+| dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: its StateDirectory covers it); anything else is refused with `ext.dynamic-write` |
 | no `permissions` | the "always" row only, plus a warning |
 
 What it does NOT cover (say so wherever confinement is mentioned): the file system stays readable (for a service, which runs as its own user `hsx-<name>` since #1134, as far as the file modes allow; Not tested on hardware yet) except the secret locations
