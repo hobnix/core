@@ -74,6 +74,8 @@ die() { fail "$@" >&2; }   # the same red line as everywhere, on stderr
 
 # Paths and overrides (the HS_* variables exist for tests)
 STATE=${HS_STATE_DIR:-/var/lib/hs}
+EXT_PUB=${HS_EXT_STATE_DIR:-/var/lib/hs-ext}                  # the state of extension services (ext_state.py): the public path ...
+EXT_PRIV=${HS_PRIVATE_DIR:-/var/lib/private}/hs-ext          # ... and where systemd keeps the real folder (owner nobody, 0700)
 MNT=${HS_BACKUP_MOUNT:-/mnt/backup}
 REPO=${HS_BACKUP_REPO:-$MNT/restic}
 DEV=${HS_BACKUP_DEV:-/dev/disk/by-label/backup}
@@ -1469,17 +1471,25 @@ cmd_restore_ct() {   # hs backup restore ct <ct> [--recipe <app>] [--dry-run] [-
   if [ -n "$(dump_cmds "$DUMPS/$ct")" ]; then note "$(t 'The database dumps are in /var/backups/hs inside the container; load them with the import of the app (see its guide).')"; fi
 }
 
-# An in-place restore (--to /) writes as root along the original path. Below the state of an extension service that path is the service's: a link it
-# planted would be followed. Restore it elsewhere (--to <folder>) and copy by hand, or put single files back with: hs backup config restore --with-state.
+# An in-place restore writes as root along the original path. Where that path leads into the state of an extension service, a link the service planted
+# would be followed (restic does not refuse it). Everything is canonicalised first (--to //, /., /./, links), then refused when the place that would be
+# written IS, CONTAINS or is BELOW a state root. Restore it into another folder (--to <folder>) and look at it, or put single files back with
+# `hs backup config restore --with-state` (state_put.py, no link followed).
+path_within() {  # path_within <path> <folder>: <path> is the folder or below it (canonical paths)
+  case "$1" in "$2"|"$2"/*) return 0 ;; esac
+  [ "$2" = / ]
+}
 restore_guard_state() {  # restore_guard_state <to> <path>
-  [ -z "${1%/}" ] || return 0
-  local p=${2%/} first msg
-  msg=$(t 'Not restored in place: %s is the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$p")
-  case "$p" in
-    /var/lib/hs-ext|/var/lib/hs-ext/*|/var/lib/private|/var/lib/private/*) die "$msg" ;;
-    "$STATE"/*) first=${p#"$STATE/"}; first=${first%%/*}
-                [ ! -L "$STATE/$first" ] || die "$msg" ;;
-  esac
+  local d r st msg
+  d=$(realpath -m -- "${1:-/}/${2#/}" 2>/dev/null) || d=$1/$2
+  st=$(realpath -m -- "$STATE")
+  msg=$(t 'Not restored in place: %s would write into the state folder of an extension service, which the service can change. Restore it into another folder (--to <folder>) and look at it.' "$d")
+  for r in "$EXT_PUB" "$EXT_PRIV" "$(dirname "$EXT_PRIV")"; do
+    r=$(realpath -m -- "$r")
+    if path_within "$d" "$r" || path_within "$r" "$d"; then die "$msg"; fi
+  done
+  if path_within "$st" "$d"; then die "$msg"; fi    # the state root itself or a parent of it (a link in it leads to the service folders)
+  return 0
 }
 
 cmd_restore() {
@@ -1535,12 +1545,21 @@ state_skip() {  # state_skip <path relative to $STATE>
 # The state of an extension service lives in a folder the service owns (ext_state.py: /var/lib/hs/<name> is a link to it). Root must never open or write
 # by name in there without refusing links: the service could plant one. Rows below such a link go through scripts/lib/state_put.py (O_NOFOLLOW).
 STATE_PUT=$(dirname "$0")/lib/state_put.py
-svc_state_row() {  # svc_state_row <absolute path>: sets SVC_TOP and SVC_REL when it is a file below the link /var/lib/hs/<name>
-  local rel=${1#"$STATE/"} first
-  [ "$rel" != "$1" ] || return 1
-  first=${rel%%/*}
-  [ "$first" != "$rel" ] && [ -L "$STATE/$first" ] || return 1
-  SVC_TOP=$STATE/$first SVC_REL=${rel#*/}
+svc_state_row() {  # svc_state_row <absolute path>: sets SVC_TOP and SVC_REL when it is a file in the state folder of a service
+  local rel name
+  case "$1" in
+    "$EXT_PRIV"/*) rel=${1#"$EXT_PRIV/"} ;;     # a snapshot taken after the move
+    "$EXT_PUB"/*)  rel=${1#"$EXT_PUB/"} ;;      # ... or before the first start (the folder is not yet in the private root)
+    "$STATE"/*)    rel=${1#"$STATE/"}           # a snapshot taken before the move: only when the live path is the link now
+                   name=${rel%%/*}
+                   [ "$name" != "$rel" ] && [ -L "$STATE/$name" ] || return 1
+                   SVC_TOP=$STATE/$name SVC_REL=${rel#*/}
+                   return 0 ;;
+    *) return 1 ;;
+  esac
+  name=${rel%%/*}
+  [ "$name" != "$rel" ] && [[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || return 1
+  SVC_TOP=$EXT_PUB/$name SVC_REL=${rel#*/}
 }
 
 cmd_config_list() {
@@ -1615,7 +1634,7 @@ cmd_config_restore() {
   local inc=() f
   for f in "${CONFIG_FILES[@]}"; do inc+=(--include "$NIXOS_DIR/$f"); done
   inc+=(--include "$NIXOS_DIR/vendor")
-  $with_state && inc+=(--include "$STATE")
+  $with_state && inc+=(--include "$STATE" --include "$EXT_PRIV" --include "$EXT_PUB")
   if [ -n "$from_disk" ]; then
     inc+=(--include "$SSH_DIR/ssh_host_*")
     $with_samba && inc+=(--include "$SAMBA_DIR")
@@ -1639,6 +1658,11 @@ cmd_config_restore() {
       if state_skip "$rel"; then skipped+=("$rel"); continue; fi
       rows+=("$STATE/$rel")
     done < <(find "$tmp$STATE" -type f -print0 | sort -z)
+    # the state of extension services (snapshots taken after the move: /var/lib/hs/<name> is only a link there, the data is below these two)
+    for f in "$EXT_PRIV" "$EXT_PUB"; do
+      [ -d "$tmp$f" ] || continue
+      while IFS= read -r -d '' rel; do rows+=("${rel#"$tmp"}"); done < <(find "$tmp$f" -type f -print0 | sort -z)
+    done
   fi
   local ssh_rows=()
   if [ -n "$from_disk" ]; then
