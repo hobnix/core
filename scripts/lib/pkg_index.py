@@ -817,7 +817,7 @@ def _pins_entry(m: dict, up: dict) -> dict:
 def _official_names(location: str | None) -> set[str]:
     """Package names of the official index (a file or an https address). Required, and unreachable is a failure: the check fails closed."""
     if not location:
-        raise Problem("--official-index is required (the CI check passes https://hobnix.github.io/official/index.json)")
+        raise Problem("--official-index is required (the CI check passes https://packages.hobnix.dev/official/index.json)")
     try:
         if location.startswith("https://"):
             import urllib.request

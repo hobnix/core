@@ -7,8 +7,8 @@
 [[repo]]
 name = "official"
 url = "https://github.com/hobnix/official"
-# The host is this one line: when packages.hobnix.dev is set up (docs/PLAN-registry.md), change it to https://packages.hobnix.dev/index.json
-# (GitHub Pages redirects the old address, so servers that have not updated yet keep working). A list of addresses comes with the Rust fetch.
-index = "https://hobnix.github.io/official/index.json"
+# The host is this one line: the index is served from packages.hobnix.dev. GitHub Pages (hobnix.github.io/official) redirects the old address,
+# so servers that have not updated yet keep working. A list of addresses comes with the Rust fetch.
+index = "https://packages.hobnix.dev/official/index.json"
 replaces = ["recipes", "extensions"]
 core = ["domain", "monitoring", "ntfy", "zoraxy"]
