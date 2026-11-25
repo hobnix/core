@@ -1498,7 +1498,10 @@ CHANGES = {
     # the Marketplace (pkg-change.sh): install / update / remove a package, fetch the repositories, add a repository (its public key is ONE line on stdin) or
     # remove one; a package or repository that came from an added source is red (the typed word is its name)
     "pkg": [{"fixed": [r"^install$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--repo": (r"^[a-z0-9][a-z0-9-]{0,40}$", False)}},
-            [r"^(update|remove)$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            [r"^remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            # --tag and --seen are what the update plan showed (the start refuses anything else; new permissions need both and the typed name)
+            {"fixed": [r"^update$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+             "opts": {"--tag": (r"^v[0-9]+\.[0-9]+\.[0-9]+([-.+][A-Za-z0-9.+-]{1,60})?$", False), "--seen": (r"^[0-9a-f]{32}$", False)}},
             [r"^fetch$"], [r"^fetch$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
             {"fixed": [r"^repo-add$", r"^[a-z0-9][a-z0-9-]{0,40}$", r"^(https://|ssh://git@|git@)[A-Za-z0-9._:/@~+-]{3,200}$"], "stdin": True},
             [r"^repo-remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
@@ -1860,7 +1863,7 @@ def parse_change(out, rc):
             d["fixes"].append(v)       # a refused plan: the command that makes it possible
         elif k == "needs":
             d["needs"].append(v)
-        elif k in ("package", "kind", "repo", "version", "tag", "commit", "title", "description"):
+        elif k in ("package", "kind", "repo", "version", "tag", "seen", "commit", "title", "description"):
             d[k] = v               # the plan of One Install (apps-change.sh)
         elif k == "creates":
             d.setdefault("creates", []).append(v)

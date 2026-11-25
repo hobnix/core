@@ -6,6 +6,7 @@
   import { ui, starting, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
   import { toast, dismissToast } from '../ui/toast.svelte.js';
   import { offersRebuild, effectOf } from './effect.js';
+  import { boundArgs } from './pkgbind.js';
   import { jobKey } from '../jobkey.js';
   import { tr } from '../i18n.js';
   import PlanSteps from './PlanSteps.svelte';
@@ -61,6 +62,7 @@
     const startArgs = [...args];
     const name = dtitle || p.heading || 'Change';
     const ask = p.confirm_name ? confirm : '';
+    const sent = boundArgs(area, startArgs, p);
     const stay = area !== 'system' && offersRebuild(p.steps);
     const tkey = `start:${jobKey(area, startArgs)}`;
     const steps = p.steps ?? [];
@@ -70,7 +72,7 @@
     const pk = jobKey(area, startArgs);
     starting.keys.push(pk);
     try {
-      const r = await doStart(area, startArgs, ask, undefined, undefined, document);
+      const r = await doStart(area, sent, ask, undefined, undefined, document);
       if (r.status === 'started' && r.unit) {
         track(r.unit, name, jobKey(area, startArgs));
         toast({ key: tkey, kind: 'info', title: name, text: tr('Running in the background.'), action: () => showTab('tasks'), actionLabel: tr('Open Tasks') });

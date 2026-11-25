@@ -16,6 +16,9 @@
 #   repo-remove <name>         take an added repository out (the defaults stay); installed packages stay as they are. Red: the typed word is the name.
 # A package from a repository that was ADDED (not recipes/extensions of this project) runs as root once installed: install and update are red
 # for it, the typed word is the package name. For the default repositories the plan is the confirmation.
+# An update that asks for NEW permissions is red for every repository: one `danger` line per permission and confirm_name. An update plan also has
+# tag<TAB><release> and seen<TAB><word>: start takes them back (--tag T --seen S) and refuses with plan.changed when the release or the permissions
+# are not the shown ones. --accept-permissions reaches pkg.sh only when such a plan was started with its typed name (hobnix/core#1237).
 # plan: exit 0 = allowed, 1 = refused. Output: status ok|refused, reason<TAB><text>, heading|step|note|warn|danger|command|diff<TAB><line>,
 #   confirm_name<TAB><name>, long<TAB>yes|no (yes = it runs as a job: fetch).
 # start: the same checks, then status<TAB>done (or refused with the reason). `start fetch` reads the network for a long time, so it runs as a job:
@@ -78,7 +81,7 @@ relay_coded() {   # relay_coded <output of pkg.sh>
   printf '%s\n' "$lines"; exit 1
 }
 
-repo="" cmd=() red="" long=no
+repo="" cmd=() red="" long=no fresh=() ftag="" fseen="" wtag="" wseen=""
 case "$action" in
   install|update|remove)
     [[ "$name" =~ $word ]] || refuse_code name.invalid "not a package name (lower case letters, digits and dashes)"
@@ -99,9 +102,31 @@ case "$action" in
         [ "$state" = new ] || refuse_code pkg.installed "$name is installed already (version $inst); use update."
         cmd=(bash "$pkg" install "$name" --repo "$repo") ;;
       update)
-        [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
+        while [ $# -gt 0 ]; do
+          [ "$verb" = start ] && [ $# -ge 2 ] || refuse_code args.unexpected "unexpected extra arguments"
+          case "$1" in
+            --tag) wtag=$2; shift 2 ;;
+            --seen) wseen=$2; shift 2 ;;
+            *) refuse_code option.unknown "unknown option $1" ;;
+          esac
+        done
         [ "$inst" != - ] || refuse_code pkg.not-installed "$name is not installed from a repository; install it first."
         [ "$state" = update ] || refuse_code pkg.up-to-date "$name is up to date (version $inst)."
+        # the facts of the update as lines of the package reader (never read from the human diff); no facts, no update
+        errfile=$(mktemp "${TMPDIR:-/tmp}/hs-pkg-facts.XXXXXX")
+        rc=0; facts=$($pkgpy update "$name" --facts </dev/null 2>"$errfile") || rc=$?
+        why=$(awk '!/^code\t/ && NF { l = $0 } END { print l }' "$errfile"); rm -f "$errfile"
+        [ "$rc" -eq 0 ] || refuse_code pkg.action-failed "${why:-the new release of $name could not be read}"
+        while IFS=$'\t' read -r key val; do
+          case "$key" in
+            current) refuse_code pkg.up-to-date "$name is up to date (version $inst)." ;;
+            tag) ftag=$val ;;
+            seen) fseen=$val ;;
+            perm) fresh+=("$val") ;;
+          esac
+        done <<<"${facts//$'\r'/}"
+        [ -n "$ftag" ] && [ -n "$fseen" ] || refuse_code pkg.action-failed "the new release of $name could not be read"
+        [ "${#fresh[@]}" -eq 0 ] || red=$name
         cmd=(bash "$pkg" update "$name" --yes) ;;
       remove)
         [ $# -eq 0 ] || refuse_code args.unexpected "unexpected extra arguments"
@@ -134,6 +159,14 @@ case "$action" in
 esac
 
 if [ "$verb" = start ]; then
+  if [ "$action" = update ]; then
+    if { [ -n "$wtag" ] && [ "$wtag" != "$ftag" ]; } || { [ -n "$wseen" ] && [ "$wseen" != "$fseen" ]; }; then
+      refuse_code plan.changed "The release or its permissions changed: the plan showed something else than an update to $ftag would do now. Read the plan again."
+    fi
+    if [ "${#fresh[@]}" -gt 0 ] && { [ -z "$wtag" ] || [ -z "$wseen" ]; }; then
+      refuse_code confirm.missing "$name asks for new permissions: update it on its own (its Update button), read them and type the name ($name)."
+    fi
+  fi
   if [ -n "$red" ]; then [ "$confirm" = "$red" ] || refuse_code confirm.missing "type the name ($red) to confirm"; fi
   case "$action" in
     repo-add)
@@ -162,6 +195,11 @@ if [ "$verb" = start ]; then
       unit=$(hs_job "pkg-fetch${repo:+-$repo}" "hs pkg fetch${repo:+ $repo}" -- bash -c '"$@" </dev/null' _ "${cmd[@]}") || refuse_code job.start-failed "the job could not be started"
       printf 'status\tstarted\nunit\t%s\n' "$unit"; exit 0 ;;
     *)
+      if [ "$action" = update ]; then
+        cmd+=(--tag "$ftag" --seen "$fseen")      # the package reader checks both again and installs exactly that commit
+        # new permissions: the plan that showed them was named (--tag and --seen above) and its name typed (red above); nothing else accepts them
+        if [ "${#fresh[@]}" -gt 0 ] && [ "$confirm" = "$name" ]; then cmd+=(--accept-permissions); fi
+      fi
       rc=0; out=$("${cmd[@]}" </dev/null 2>&1) || rc=$? ;;
   esac
   if [ "$rc" -ne 0 ]; then
@@ -187,10 +225,13 @@ case "$action" in
     printf 'heading\tupdate %s %s -> %s\n' "$name" "$inst" "$avail"
     printf 'step\tinstall the newer signed release; the code below changed and runs as root\n'
     $pkgpy update "$name" </dev/null 2>/dev/null | head -n 60 | while IFS= read -r l; do printf 'diff\t%s\n' "$l"; done || true
-    if [ -n "$red" ]; then
-      printf 'danger\tThe repository %s was added by you, not by the project.\n' "$repo"
-      printf 'confirm_name\t%s\n' "$name"
-    fi ;;
+    [ "$r_from" != added ] || printf 'danger\tThe repository %s was added by you, not by the project.\n' "$repo"
+    if [ "${#fresh[@]}" -gt 0 ]; then     # after the cut diff, one line each: never truncated
+      printf 'danger\t%s %s asks for permissions the installed version does not have. It runs as root; declared permissions are not enforced.\n' "$name" "$avail"
+      for p in "${fresh[@]}"; do printf 'danger\tNew permission: %s\n' "$p"; done
+    fi
+    [ -z "$red" ] || printf 'confirm_name\t%s\n' "$name"
+    printf 'tag\t%s\nseen\t%s\n' "$ftag" "$fseen" ;;
   remove)
     printf 'heading\tremove %s\n' "$name"
     printf 'step\tforget the installed copy of %s (version %s)\n' "$name" "$inst"
