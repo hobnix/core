@@ -161,6 +161,44 @@ check_eq "the client leaves out malformed rows and keeps the good ones" "1.1.0 1
 e=m.clean_history(json.load(open('$WORK/hbad.json'))['packages']['demo'])
 print(' '.join(r['version'] for r in e['versions']), e.get('date'))")"
 check "install and update read the list only through clean_history" test "$(grep -c "\[.versions.\]\|get(.versions.)" "$SCRIPTS/pkg_repo.py")" = 0
+echo "-- hostile history never breaks a build"
+H2=$WORK/hist2; git init -q "$H2"
+H2G() { git -C "$H2" -c user.name=t -c user.email=t@t.invalid -c commit.gpgsign=false "$@"; }
+hw() {   # hw <version> <extra manifest text>: a commit of recipes/x with this manifest
+  mkdir -p "$H2/recipes/x"; printf 'name = "x"\nversion = "%s"\nkind = "recipe"\ntitle = "X"\nrequires_core = ">=1"\n%s\n' "$1" "$2" > "$H2/recipes/x/package.toml"
+  H2G add -A >/dev/null; H2G commit -q -m "$1"
+}
+hw 1.0.0 ""
+hw "1$(head -c 5000 /dev/zero | tr '\0' 0).0.0" ""
+python3 -c "print('x = ' + '[' * 100000 + ']' * 100000)" > "$WORK/deep.txt"
+hw 1.0.1 "$(cat "$WORK/deep.txt")"
+hw 1.0.2 "$(python3 -c "print('[meta]'); print('changes = \"' + 'c' * 900000 + '\"')")"
+hw 1.0.3 "[meta]
+changes = \"$(head -c 900 /dev/zero | tr '\0' d)\""
+hw 2.0.0 ""
+check "a build with a 5000-digit version, a very deep manifest and a huge changes text in the history" $IDX build "$H2" --repo official --out "$WORK/h2-out" --serial 1 --skip-assets
+check "that index validates" $IDX validate "$WORK/h2-out/index.json"
+check_eq "only the sane older versions are listed, changes cut to 500 characters" "1.0.3 1.0.2 1.0.0 500 500" "$(python3 -c "
+import json; e=json.load(open('$WORK/h2-out/index.json'))['packages']['x']
+print(' '.join(r['version'] for r in e['versions']), len(e['versions'][0]['changes']), len(e['versions'][1]['changes']))")"
+hw "1$(head -c 5000 /dev/zero | tr '\0' 0).0.0" ""
+if $IDX build "$H2" --repo official --out "$WORK/h2-out3" --serial 1 --skip-assets >/dev/null 2>&1; then fail "a 5000-digit current version is refused"; else pass "a 5000-digit current version is refused"; fi
+check_eq "the index size limit drops older rows first, the time limit and a huge committer date skip safely" "ok" "$(python3 -I -c "$PYI
+import subprocess
+m.MAX_INDEX_BUILD=os.path.getsize('$HJ/index.json')-400
+m.build('$H', 'official', '$WORK/h2-small', serial=1, commit='$TIP', assets=False)
+d=json.load(open('$WORK/h2-small/index.json'))['packages']['demo']
+assert 0<len(d.get('versions',[]))<4, d
+log=subprocess.CompletedProcess([],0,b'%s 300000000000\n' % b'a'*40,b'')
+m._git=lambda *a,**k: log
+assert m.history_of('/x','$TIP','recipes/demo','demo','1.3.0',{})==(None,[])
+seen=[]
+def slow(g,args,local=False,data=None,extra_env=None,timeout=None):
+    seen.append(timeout); raise subprocess.TimeoutExpired('git',timeout)
+m._git=slow
+assert m.history_of('/x','$TIP','recipes/demo','demo','1.3.0',{},seconds=5)==(None,[])
+assert seen and all(t is not None and t<=5 for t in seen), seen
+print('ok')")"
 else
   skip "needs git"
 fi

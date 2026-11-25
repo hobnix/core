@@ -45,7 +45,7 @@ NAMESPACE = "hobnix-index"
 KINDS = ("recipe", "extension", "capability", "blueprint")
 NAME = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 REPO = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
-SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+SEMVER = re.compile(r"^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$")   # a part has at most 9 digits: int() of a longer one is a limit of Python and a way to break a build
 REQUIRES = re.compile(r"^>=\s*([1-9]\d*)$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TREE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -195,8 +195,8 @@ def entry_of(checkout, path, extra, commit, yanked, assets_dir):
     try:
         with open(os.path.join(folder, "package.toml"), "rb") as f:
             m = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError) as e:
-        raise Problem(f"{path}/package.toml: {e}")
+    except (OSError, tomllib.TOMLDecodeError, RecursionError, MemoryError) as e:
+        raise Problem(f"{path}/package.toml: {e!r}"[:300])
     name, version = str(m.get("name")), str(m.get("version"))
     raw = m.get("meta", {}) if isinstance(m.get("meta"), dict) else {}
     meta = {"title": m.get("title", "")}
@@ -235,6 +235,9 @@ HISTORY_COMMITS = 400      # first-parent commits that touched the package folde
 HISTORY_SECONDS = 90       # time limit of the whole walk of one package (hashing included)
 HISTORY_VERSIONS = 10      # older versions in an entry
 HISTORY_MAX_FILES = 5000
+HISTORY_TEXT = 500         # characters of `changes` and `yanked_reason` in an older row
+MAX_COMMIT_TIME = 253402300799   # 9999-12-31T23:59:59Z: a later committer date is nonsense and the commit is skipped
+MAX_INDEX_BUILD = 10 * 1024 * 1024   # the client refuses 20 MiB (MAX_INDEX in pkg_repo.py); a build stays well below
 HISTORY_MAX_BYTES = 1 << 30
 ROW_KEYS = ("version", "date", "path", "commit", "tree", "requires_core", "yanked", "changes", "yanked_reason")
 
@@ -248,17 +251,20 @@ def _git_dir_of(checkout):
     return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
 
 
-def _history_git(git_dir, args):
-    # replace refs are data of the repository under test: never followed
-    return _git(git_dir, args, extra_env={"GIT_NO_REPLACE_OBJECTS": "1"})
+def _history_git(git_dir, args, end):
+    """git on the repository under test with what is left of the walk's time (one deadline for all calls). Replace refs are never followed."""
+    left = end - time.monotonic()
+    if left <= 0:
+        raise subprocess.TimeoutExpired("git", 0)
+    return _git(git_dir, args, extra_env={"GIT_NO_REPLACE_OBJECTS": "1"}, timeout=left)
 
 
-def _history_tree_hash(git_dir, commit, path, scratch):
+def _history_tree_hash(git_dir, commit, path, scratch, end):
     """tree_hash of the folder as it was in `commit`, or None when the folder is one tree_hash refuses (a link, a submodule, a odd name)."""
-    got = _history_git(git_dir, ["rev-parse", "--verify", "-q", f"{commit}:{path}"])
+    got = _history_git(git_dir, ["rev-parse", "--verify", "-q", f"{commit}:{path}"], end)
     if got.returncode != 0:
         return None
-    rows = _list_tree(git_dir, got.stdout.decode().strip())
+    rows = _list_tree(git_dir, got.stdout.decode().strip(), max(end - time.monotonic(), 0.1))
     if not rows or len(rows) > HISTORY_MAX_FILES or sum(max(r[2], 0) for r in rows) > HISTORY_MAX_BYTES:
         return None
     for mode, _oid, size, rel in rows:
@@ -268,22 +274,23 @@ def _history_tree_hash(git_dir, commit, path, scratch):
     _remove(folder)
     os.makedirs(folder)
     for mode, oid, _size, rel in rows:
-        _blob_to_file(git_dir, oid, os.path.join(folder, *rel.split("/")), mode == "100755")
+        _blob_to_file(git_dir, oid, os.path.join(folder, *rel.split("/")), mode == "100755", max(end - time.monotonic(), 0.1))
     return tree_hash(folder)
 
 
-def history_of(git_dir, tip, path, name, version, yanked):
+def history_of(git_dir, tip, path, name, version, yanked, seconds=None):
     """(date, rows) of one package from the FIRST-PARENT history of `tip` (never from a previous index: that is downloaded without a signature
     check). date: the first commit of the walk that had `version` (None when none). rows: older versions, newest first, at most HISTORY_VERSIONS:
     the newest commit that had the version, its folder hashed with tree_hash. Only the current path is followed. A commit with a missing or
-    invalid manifest and a folder tree_hash refuses is skipped. The walk is bounded by commits and time; a failure of git ends it quietly."""
+    invalid manifest and a folder tree_hash refuses is skipped. Old history never stops a build: ANY failure of one commit or one version skips
+    it. One deadline (HISTORY_SECONDS) covers every git call of the walk, so a stalled git ends it within that time."""
     if not git_dir or not COMMIT.fullmatch(str(tip)) or not isinstance(version, str) or not SEMVER.fullmatch(version):
         return None, []
-    end = time.monotonic() + HISTORY_SECONDS
+    end = time.monotonic() + (HISTORY_SECONDS if seconds is None else seconds)
     try:
         log = _history_git(git_dir, ["log", "--first-parent", "--no-renames", "--no-ext-diff", f"--max-count={HISTORY_COMMITS}",
-                                     "--format=%H %ct", tip, "--", path])
-    except (OSError, subprocess.SubprocessError):
+                                     "--format=%H %ct", tip, "--", path], end)
+    except Exception:
         return None, []
     if log.returncode != 0:
         return None, []
@@ -292,17 +299,17 @@ def history_of(git_dir, tip, path, name, version, yanked):
         if time.monotonic() > end:
             break
         c, _, ct = line.partition(" ")
-        if not COMMIT.fullmatch(c) or not ct.isdigit() or int(ct) > 1 << 40:
+        if not COMMIT.fullmatch(c) or not ct.isdigit() or not 0 <= int(ct) <= MAX_COMMIT_TIME:
             continue
         try:
-            blob = _history_git(git_dir, ["cat-file", "blob", f"{c}:{path}/package.toml"])
+            blob = _history_git(git_dir, ["cat-file", "blob", f"{c}:{path}/package.toml"], end)
             if blob.returncode != 0 or len(blob.stdout) > 1 << 20:
                 continue
             m = tomllib.loads(blob.stdout.decode())
-        except (OSError, subprocess.SubprocessError, UnicodeDecodeError, tomllib.TOMLDecodeError):
-            continue
-        v = m.get("version")
-        if m.get("name") != name or not isinstance(v, str) or not SEMVER.fullmatch(v) or not REQUIRES.match(str(m.get("requires_core", ""))):
+            v = m.get("version")
+            if m.get("name") != name or not isinstance(v, str) or not SEMVER.fullmatch(v) or not REQUIRES.match(str(m.get("requires_core", ""))):
+                continue
+        except Exception:      # a manifest that is not valid, too deep (RecursionError), too large (MemoryError) or a git that failed: skipped
             continue
         newest.setdefault(v, (c, m))
         oldest[v] = int(ct)
@@ -314,21 +321,25 @@ def history_of(git_dir, tip, path, name, version, yanked):
                 break
             c, m = newest[v]
             try:
-                tree = _history_tree_hash(git_dir, c, path, scratch)
-            except (Problem, OSError, subprocess.SubprocessError, ValueError):
-                tree = None
-            if tree is None:
+                tree = _history_tree_hash(git_dir, c, path, scratch, end)
+                if tree is None:
+                    continue
+                raw = m.get("meta", {}) if isinstance(m.get("meta"), dict) else {}
+                row = {"version": v, "date": day(v), "path": path, "commit": c, "tree": tree, "requires_core": m["requires_core"],
+                       "yanked": (name, v) in yanked}
+                changes = raw.get("changes") or m.get("changes")
+                if isinstance(changes, str):
+                    row["changes"] = changes[:HISTORY_TEXT]
+                if (name, v) in yanked and yanked[(name, v)]:
+                    row["yanked_reason"] = yanked[(name, v)][:HISTORY_TEXT]
+            except Exception:
                 continue
-            raw = m.get("meta", {}) if isinstance(m.get("meta"), dict) else {}
-            row = {"version": v, "date": day(v), "path": path, "commit": c, "tree": tree, "requires_core": m["requires_core"],
-                   "yanked": (name, v) in yanked}
-            changes = raw.get("changes") or m.get("changes")
-            if isinstance(changes, str):
-                row["changes"] = changes
-            if (name, v) in yanked and yanked[(name, v)]:
-                row["yanked_reason"] = yanked[(name, v)]
             rows.append(row)
-    return (day(version) if version in oldest else None), rows
+    try:
+        date = day(version) if version in oldest else None
+    except Exception:
+        date = None
+    return date, rows
 
 
 def _row_problems(row, e):
@@ -344,8 +355,8 @@ def _row_problems(row, e):
     if not isinstance(row.get("yanked"), bool):
         out.append("yanked is not true or false")
     for k in ("changes", "yanked_reason"):
-        if k in row and not isinstance(row[k], str):
-            out.append(f"{k} is not text")
+        if k in row and (not isinstance(row[k], str) or len(row[k]) > HISTORY_TEXT):
+            out.append(f"{k} is not text of at most {HISTORY_TEXT} characters")
     if not out and SEMVER.match(str(e.get("version", ""))) and _vkey(row["version"]) >= _vkey(e["version"]):
         out.append("version is not lower than the current one")
     return out
@@ -394,9 +405,18 @@ def build(checkout, repo, out, serial=None, prev=None, commit=None, ttl_days=14,
     bad = validate(doc, strict=True)
     if bad:
         raise Problem("; ".join(bad))
+    dump = lambda: json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+    text = dump()
+    while len(text.encode()) > MAX_INDEX_BUILD:     # older rows are the first to go (the one package with the most of them, its oldest row)
+        heavy = max((n for n in pk if pk[n].get("versions")), key=lambda n: len(json.dumps(pk[n]["versions"])), default=None)
+        if heavy is None:
+            raise Problem(f"the index is larger than {MAX_INDEX_BUILD // 1048576} MiB even without older versions (a client refuses more than 20 MiB)")
+        pk[heavy]["versions"].pop()
+        if not pk[heavy]["versions"]:
+            del pk[heavy]["versions"]
+        text = dump()
     with open(os.path.join(out, "index.json"), "w", encoding="utf-8", newline="\n") as f:
-        json.dump(doc, f, indent=1, sort_keys=True, ensure_ascii=False)
-        f.write("\n")
+        f.write(text)
     return doc
 
 
@@ -619,9 +639,9 @@ def manifest_problems(m: dict, file_name: str, policy: dict, allow_local: bool =
     return out
 
 
-def _git(git_dir: str, args: list[str], local: bool = False, data: bytes | None = None, extra_env: dict | None = None) -> subprocess.CompletedProcess:
+def _git(git_dir: str, args: list[str], local: bool = False, data: bytes | None = None, extra_env: dict | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
     argv, env = _git_command(git_dir, args, local, extra_env)
-    return subprocess.run(argv, capture_output=True, input=data, env=env, timeout=GIT_TIMEOUT)
+    return subprocess.run(argv, capture_output=True, input=data, env=env, timeout=min(timeout, GIT_TIMEOUT) if timeout else GIT_TIMEOUT)
 
 
 def _git_command(git_dir: str, args: list[str], local: bool = False, extra_env: dict | None = None) -> tuple[list[str], dict]:
@@ -634,8 +654,8 @@ def _git_command(git_dir: str, args: list[str], local: bool = False, extra_env: 
     return ["git", *[x for c in config for x in ("-c", c)], "--git-dir", git_dir, *args], env
 
 
-def _git_out(git_dir: str, args: list[str], what: str, local: bool = False, data: bytes | None = None, extra_env: dict | None = None) -> bytes:
-    r = _git(git_dir, args, local, data, extra_env)
+def _git_out(git_dir: str, args: list[str], what: str, local: bool = False, data: bytes | None = None, extra_env: dict | None = None, timeout: float | None = None) -> bytes:
+    r = _git(git_dir, args, local, data, extra_env, timeout)
     if r.returncode != 0:
         raise Problem(f"{what}: {r.stderr.decode(errors='replace').strip()[:200]}")
     return r.stdout
@@ -645,10 +665,10 @@ def _git_text(git_dir: str, args: list[str], what: str, local: bool = False, dat
     return _git_out(git_dir, args, what, local, data, extra_env).decode().strip()
 
 
-def _list_tree(git_dir: str, tree: str) -> list[tuple[str, str, int, str]]:
+def _list_tree(git_dir: str, tree: str, timeout: float | None = None) -> list[tuple[str, str, int, str]]:
     """[(mode, blob id, size, path)] of every entry below a git tree: the SAME object set that is checked, copied and hashed. A gitlink has size -1."""
     rows = []
-    for record in _git_out(git_dir, ["ls-tree", "-r", "-l", "-z", tree], "git ls-tree").split(b"\0"):
+    for record in _git_out(git_dir, ["ls-tree", "-r", "-l", "-z", tree], "git ls-tree", timeout=timeout).split(b"\0"):
         if not record:
             continue
         head, _, raw_path = record.partition(b"\t")
@@ -684,12 +704,12 @@ def tree_problems(rows: list[tuple[str, str, int, str]], policy: dict) -> list[s
     return out
 
 
-def _blob_to_file(git_dir: str, oid: str, dest: str, executable: bool) -> None:
+def _blob_to_file(git_dir: str, oid: str, dest: str, executable: bool, timeout: float | None = None) -> None:
     """Write one blob to a file without holding it in memory."""
     argv, env = _git_command(git_dir, ["cat-file", "blob", oid])
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "wb") as out:
-        done = subprocess.run(argv, stdout=out, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
+        done = subprocess.run(argv, stdout=out, stderr=subprocess.PIPE, env=env, timeout=min(timeout, GIT_TIMEOUT) if timeout else GIT_TIMEOUT)
     if done.returncode != 0:
         raise Problem(f"cannot read a file: {done.stderr.decode(errors='replace').strip()[:200]}")
     os.chmod(dest, 0o755 if executable else 0o644)

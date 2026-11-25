@@ -82,7 +82,7 @@ Not tested on hardware yet; the signing workflow has never run on GitHub.
   Per older version the newest commit that had it is hashed with `tree_hash` (same rules; a folder with a link, submodule or a `.git` name is
   skipped, like a commit with a missing or invalid manifest); `date` is the committer date of the first commit that had it. Only versions lower
   than the current one, only the current `path` (a renamed folder is not followed). The walk reads at most 400 commits that touched the folder
-  and stops after 90 seconds; the commands run with the same hardening as the community fetch and ignore replace refs. For the community index
+  and one 90 s deadline covers every call of the walk; `changes` and `yanked_reason` of an older row are cut to 500 characters, a build whose index would pass 10 MiB drops older rows first (clients refuse 20 MiB), a version part has at most 9 digits, and any failure of one old commit skips it; the commands run with the same hardening as the community fetch and ignore replace refs. For the community index
   the history is the `pins` branch, which `assemble` only ever appends to. Format stays 1: the builder side (`validate`, `verify`, `build`)
   refuses a bad row; a client ignores unknown fields and leaves out a malformed row (`pkg_index.clean_history`). Install and update do not read
   `versions`. No downgrade command, UI or statistics yet. Not tested on hardware yet.
