@@ -28,7 +28,13 @@
 
   const at = $derived(objectOf(route.path));
   const name = $derived(at?.kind === 'docker-app' ? at.id : '');
-  const a = $derived(rows(appsPoll).map(appOf).find((x) => x?.name === name) ?? null);
+  const listed = $derived(rows(appsPoll).map(appOf).find((x) => x?.name === name) ?? null);
+  // unsaved edits of the Compose tab (the editor says so). While there are any, an app that is missing from one answer of the list (around a save) keeps
+  // its last row, so the editor stays mounted and keeps the text.
+  let dirty = $state(false);
+  let last = $state.raw(null);
+  $effect(() => { if (listed) last = listed; });
+  const a = $derived(listed ?? (dirty && last?.name === name ? last : null));
   const docker = $derived(Object.fromEntries(rows(statusPoll).map((r) => [r[0], r[1]])));
   const off = $derived(!!docker.state && docker.state !== 'on');
   const tabs = $derived(objects['docker-app'].tabs.filter((t) => pageTabs(a).includes(t.id)));
@@ -60,8 +66,7 @@
   ]);
   const jobs = $derived((r) => !!name && !!r.key && r.key.startsWith(`docker-app ${name} `));
 
-  // unsaved edits of the Compose tab: another tab would drop them, so it asks first
-  let dirty = $state(false);
+  // another tab would drop unsaved edits of the Compose tab, so it asks first
   let leaving = $state('');      // the tab asked for while the editor has unsaved edits, '' = no question
   const show = (id) => go(dockerAppPagePath(name, id));
   const pick = (id) => { if (dirty && tab === 'compose' && id !== 'compose') leaving = id; else show(id); };
@@ -84,6 +89,7 @@
     {#if a}
       {#if doing}<Banner tone="info">{doing}… a job is running on this app; this page follows it.</Banner>
       {:else if failure}<ErrorNote error={failure.error} ondismiss={() => rowstate.dismiss(failure.id)} />{/if}
+      {#if !listed}<Banner tone="warn">The app is not in the Docker list right now. Your unsaved edits are still here.</Banner>{/if}
       {#if !isActionable(a)}<Banner tone="info">{filesChip(a).tip}.</Banner>{/if}
       {#if off}
         <Banner tone="warn">Docker is off.
@@ -94,12 +100,11 @@
   {/snippet}
   {#snippet children(t)}
     {#if a}
-      {#if t === 'compose'}
-        {#if roleOk(ui.role, 'app-manager')}
-          <div>{#key name}<AppEditPage embedded={name} ondirty={(d) => { dirty = d; }} />{/key}</div>
-        {:else}
-          <Muted as="p">{refusal(ui.role, 'app-manager')}</Muted>
-        {/if}
+      {#if t !== 'overview' && !roleOk(ui.role, 'app-manager')}
+        <!-- the editor and the log (`docker logs`) need app-manager -->
+        <Muted as="p">{refusal(ui.role, 'app-manager')}</Muted>
+      {:else if t === 'compose'}
+        <div>{#key name}<AppEditPage embedded={name} ondirty={(d) => { dirty = d; }} />{/key}</div>
       {:else if t === 'logs'}
         <Card title="Logs">{#key name}<AppLogs app={name} />{/key}</Card>
       {:else}

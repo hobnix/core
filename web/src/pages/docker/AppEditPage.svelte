@@ -153,7 +153,7 @@
     }
   }
 
-  $effect(() => { ondirty?.(dirty && !loading); });
+  $effect(() => { ondirty?.(dirty); });
   $effect(() => () => ondirty?.(false));
 
   // CodeMirror is loaded when this page opens (its own chunk: the main bundle stays small)
