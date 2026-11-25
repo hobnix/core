@@ -90,6 +90,12 @@ For a service that talks to an integration (Jellyfin, Plex, ...) the crate has t
 
 `hobnix_ext_sdk::Ctx` is a trait: what a handler asks of the host (`credential`, `integrations`, `emit`, `log`, `progress`; a service also `rollup` and `snapshot`). `command::run` and `service::run` hand the handler a `&dyn Ctx`, so write `fn handle(req: &Request, ctx: &dyn Ctx)` and `use hobnix_ext_sdk::Ctx`. In a test, call the handler with `hobnix_ext_sdk::testing::FakeCtx`, which records every call (`calls()`) and answers `credential` and `integrations` from what the test set. `ctx.shared()` gives an `Arc<dyn Ctx>` for another thread. There is no call that runs a host command: a service never does (ADR 0031). The wire output is unchanged.
 
+**The user of a service.** A service does not run as root: it runs as its own unprivileged user `hsx-<name>` (systemd `DynamicUser`; #1134). It may write only
+`/var/lib/hs/<name>`: any other `fs.write` is refused (`ext.dynamic-write`), and so is `fs.read` of the server's state or of another extension
+(`ext.dynamic-read`); in both cases the service does not start. The files it writes are mode 0600. A root command of the same package that writes into that
+folder gives each file back to the service, with `chown --reference="$dir" "$file"`; the server also repairs the owners before each start. The folder lives in
+`/var/lib/private/hs-ext/<name>`; an existing `/var/lib/hs/<name>` is moved there once and stays as a link. Not tested on hardware yet.
+
 A service never calls `hs` (inside its confined unit `hs` cannot see the package registry); it gets what it needs through the protocol. Build, shipping and run rules of a Rust extension: ADR 0031 (docs/adr/0031-rust-extensions.md).
 
 `examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl --example apiprobe` in `rust/`. Not tested on hardware yet.

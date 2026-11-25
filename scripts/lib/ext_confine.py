@@ -20,7 +20,7 @@ The mapping (what systemd gives, nothing more):
                          RestrictNamespaces, RestrictRealtime, RestrictSUIDSGID, LockPersonality, SystemCallArchitectures=native,
                          SystemCallFilter=~@mount @swap ... (deny list, EPERM), RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK (HARDEN); no IPAddressAllow/Deny
   devices:gpu            PrivateDevices=no, DevicePolicy=closed, DeviceAllow=char-drm rw (only the declared device classes)
-  --dynamic              (not used by a running service yet, #1134) DynamicUser=yes, User=hsx-<name>, StateDirectory=hs-ext/<name> (0700, UMask=0077),
+  --dynamic              (what a running service gets, #1134) DynamicUser=yes, User=hsx-<name>, StateDirectory=hs-ext/<name> (0700, UMask=0077),
                          BindPaths=-/var/lib/hs-ext/<name>:/var/lib/hs/<name> instead of the bridge state; devices:gpu adds SupplementaryGroups=render video;
                          fs.write only below /var/lib/hs/<name> (anything else: ext.dynamic-write), no line for it
   net:<x>                nothing: declared only (D6); written as a comment
@@ -49,8 +49,8 @@ HARDEN = ["ProtectKernelTunables=yes", "ProtectKernelModules=yes", "ProtectKerne
           "SystemCallArchitectures=native", "SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete",
           "SystemCallErrorNumber=EPERM", "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK"]
 # Secrets: a grant (fs.read or fs.write) that is, lies below or contains one of these is refused (#947). The unit hides them too (properties()).
-# /var/lib/hs-vault is the vault (unlocked keys); /run/hs-ext-cred holds the short-lived key copies of the other services (ext_service.py): a service runs as
-# root, so only InaccessiblePaths keeps it out of them
+# /var/lib/hs-vault is the vault (unlocked keys); /run/hs-ext-cred holds the short-lived key copies of the other services (ext_service.py): InaccessiblePaths
+# keeps every unit out of them (also one that runs as root, a confined command)
 HIDDEN = ["/var/lib/hs", "/root", "/etc/shadow", "/etc/gshadow", "/etc/ssh", "/etc/nixos", "/var/lib/hs-vault", "/run/hs-ext-cred"]   # what the unit hides
 # a grant may never reach the state of another package (the dynamic user's folders, ADR 0031 decision 4) either; not hidden, the unit binds its own in
 SECRET = HIDDEN + ["/var/lib/private", EXT_STATE]
@@ -122,7 +122,7 @@ def properties(perms, name=None, dynamic=False):
     """([Service] property lines, [comment lines], None) or (None, None, problem). perms is None when the package declares none.
     The one mapping: the drop-in of a service and `systemd-run -p` of a confined command (ext_proto.py) both use it.
     dynamic=True (needs name): the unit runs as DynamicUser hsx-<name>; it may write only /var/lib/hs/<name> (its StateDirectory), nothing else.
-    Not used by a running service yet (#1134 slice 2)."""
+    The service unit is built with it (ext_service.py confined_program, #1134)."""
     if dynamic:
         bad = _bad_dynamic_name(name)
         if bad:

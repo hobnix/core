@@ -82,6 +82,13 @@ check_eq "an own-owned top: nothing to change" "ok	0" "$($ES repair posters 2>&1
 setup; mkdir -p "$R/elsewhere"; ln -s "$R/elsewhere" "$R/ext/posters"
 if out=$($ES repair posters 2>&1); then fail "a folder outside the private root was repaired"; else case $out in *"not $R/private/hs-ext/posters"*) pass "repair refuses a folder outside the private root";; *) fail "text: $out";; esac; fi
 setup; check_eq "repair of a service without state is ok" "ok	0" "$($ES repair posters 2>&1)"
+setup; mkdir -p "$R/ext/posters"
+check_eq "just moved (a real public folder, systemd has not taken it yet): nothing to say" "ok	0" "$($ES repair posters 2>&1)"
+setup; ln -s "$R/private/hs-ext/posters" "$R/ext/posters"
+check_eq "a public link whose folder is gone is not an error" "ok	0" "$($ES repair posters 2>&1)"
+setup; mkdir -p "$R/hs/posters"; rm -rf "$R/ext"; echo x > "$R/ext"
+if out=$($ES prepare posters 2>&1); then fail "a broken public root was accepted"; else
+  case $out in "ext.state-move-failed: "*) pass "another file system error is a problem, not a traceback";; *) fail "text: $out";; esac; fi
 
 echo "-- names of the core's own folders"
 setup

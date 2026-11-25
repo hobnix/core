@@ -3,8 +3,8 @@
 
 The state of a service lives in systemd's StateDirectory: the real folder is /var/lib/private/hs-ext/<name>, /var/lib/hs-ext/<name> is the
 public path and /var/lib/hs/<name> (the old path, kept for root tools) becomes a link to it. The move is ONE atomic rename, done once, never a
-copy; two folders at once or another file system is refused and nothing on disk changes. Nothing calls this yet (the services still run as root).
-Not tested on hardware yet.
+copy; two folders at once or another file system is refused and nothing on disk changes. The bridge of a service calls it before every start
+(ext_service.py svc_run). Not tested on hardware yet.
 
   ext_state.py prepare <name>   the one-time move: prints "moved|linked|fresh|ok<TAB>text", or the problem on stderr and exit 1
   ext_state.py link <name>      after the unit runs: make the old path a link when it is still missing
@@ -17,6 +17,7 @@ ext.state-reserved (the name is a core folder), ext.state-link-failed.
 import errno
 import os
 import re
+import stat
 import sys
 
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,40}")   # used with fullmatch: "$" would let a trailing newline pass
@@ -62,7 +63,15 @@ def _fsync_dir(path):
 
 
 def prepare(name):
-    """(status, problem): status moved, linked, fresh or ok; problem a text or None. Every step is idempotent."""
+    """(status, problem): status moved, linked, fresh or ok; problem a text or None. Every step is idempotent. Any other file system error is a
+    problem too (never an exception): the caller does not start the service."""
+    try:
+        return _prepare(name)
+    except OSError as e:
+        return None, "ext.state-move-failed: the state folder of %r could not be prepared (%s: %s)" % (name, e.filename, e.strerror)
+
+
+def _prepare(name):
     bad = _bad_name(name)
     if bad:
         return None, bad
@@ -112,20 +121,27 @@ def link_after_start(name):
 
 
 def repair_owner(name, limit=100000):
-    """(changed, problem): chown what a root tool left behind to the owner of the top folder. Never follows a link, never chmods."""
+    """(changed, problem): chown what a root tool left behind to the owner of the top folder. Never follows a link, never chmods, and never changes
+    a file that has a second name (a hard link): the other name may be outside the folder, and the service would own that file."""
     bad = _bad_name(name)
     if bad:
         return 0, bad
     _old, pub, priv, _ext = _paths(name)
-    if not os.path.lexists(pub):
-        return 0, None
+    if not os.path.lexists(pub) or (os.path.isdir(pub) and not os.path.islink(pub) and not os.path.lexists(priv)):
+        return 0, None   # no state, or just moved: systemd takes the folder into the private root (and chowns it) at the start
     real = os.path.realpath(pub)
     if real != os.path.realpath(priv):
         return 0, "ext.state-conflict: %s resolves to %s, not %s; owners not touched" % (pub, real, priv)
-    top = os.lstat(real)
+    try:
+        top = os.lstat(real)
+    except FileNotFoundError:
+        return 0, None
+    except OSError as e:
+        return 0, "repair failed on %s: %s" % (real, e.strerror)
     if top.st_uid == 0:
         return 0, None   # first start: systemd chowns the tree itself
     changed = seen = 0
+    linked = []
 
     # fwalk works on directory descriptors and does not follow links: a folder the service swaps for a link while we walk is not entered, and
     # every change is made relative to the descriptor of its folder (follow_symlinks=False), never through a path the service could redirect.
@@ -137,10 +153,15 @@ def repair_owner(name, limit=100000):
             try:
                 st = os.stat(n, dir_fd=rootfd, follow_symlinks=False)
                 if st.st_uid != top.st_uid or st.st_gid != top.st_gid:
+                    if not stat.S_ISDIR(st.st_mode) and st.st_nlink > 1:
+                        linked.append(os.path.join(root, n))
+                        continue
                     os.chown(n, top.st_uid, top.st_gid, dir_fd=rootfd, follow_symlinks=False)
                     changed += 1
             except OSError as e:
                 return changed, "repair failed on %s: %s" % (os.path.join(root, n), e.strerror)
+    if linked:
+        return changed, "repair left %d file(s) with a second hard link as they are, first: %s" % (len(linked), linked[0])
     return changed, None
 
 

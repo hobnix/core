@@ -444,7 +444,7 @@ in
   # Not started by wantedBy: `hs ext enable|start` and hs-ext-boot do that. TimeoutStopSec is above the bridge's stop (10 s + 2 s + kill).
   # Confinement (ADR 0014, #1130): this unit is the BRIDGE and is not sandboxed: it alone writes state.db (emit, rollup), the snapshots and the
   # cursors. It starts the service as a transient unit hs-ext-run-<name> (systemd-run) with the properties of scripts/lib/ext_confine.py and the
-  # keys of the declared integrations as LoadCredential=. Only what systemd gives; the service still runs as root. Not tested on hardware yet.
+  # keys of the declared integrations as LoadCredential=. The service runs as the dynamic user hsx-<name> (#1134). Not tested on hardware yet.
   systemd.services."hs-ext-svc@" = {
     description = "Service extension %i";
     unitConfig = {
