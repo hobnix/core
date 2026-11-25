@@ -36,6 +36,8 @@ export const poolPath = (name) => `${P.pools}/${name}`;
 // the page of one disk: /storage/disks/<name>[/<tab>] (D6); Overview has no tab segment
 export const diskPath = (name, tab = '') => `${P.disks}/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
 export const dockerAppPath = (name) => `${P.docker}/app/${encodeURIComponent(name)}`;
+// ^ the compose EDITOR of one Docker app; its own page is dockerAppPagePath: /apps/docker-app/<name>[/<tab>], Overview has no tab segment
+export const dockerAppPagePath = (name, tab = '') => `${P.appsGroup}/docker-app/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
 export const capabilityPath = (name) => `${P.capabilities}/${name}`;
 export const extensionPath = (name) => `/extensions/${name}`;
 // the object page of a recipe that declares [web.page] (Apps > Installed > Open)

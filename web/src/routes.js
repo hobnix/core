@@ -63,9 +63,10 @@ import Disk from './pages/disks/Disk.svelte';
 import User from './pages/identity/User.svelte';
 import Share from './pages/shares/Share.svelte';
 import Instance from './pages/instances/Instance.svelte';
+import DockerApp from './pages/docker/DockerApp.svelte';
 
 // the component of each kind in objects.js (one line per object page)
-const objectPages = { pool: Pools, disk: Disk, user: User, share: Share, instance: Instance };
+const objectPages = { pool: Pools, disk: Disk, user: User, share: Share, instance: Instance, 'docker-app': DockerApp };
 
 export const routes = {
   [P.summary]: Summary,

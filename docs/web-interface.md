@@ -186,9 +186,19 @@ A disk, a share, an instance and a user each have a page of their own, and so ha
 | Share | `/storage/shares/<name>[/<tab>]` | Overview, Access, Snapshots |
 | Instance | `/instances/ct/<name>[/<tab>]` | Overview, Config, Network, Console |
 | User | `/people/users/<name>[/<tab>]` | Overview, Groups, Access |
+| Docker app | `/apps/docker-app/<name>[/<tab>]` | Overview, Compose, Logs (see below) |
 
 A page has a header with one main action (Start or Stop, Browse files, Edit) and at most one more; the rest are under **More**, and a destructive
 action (Delete, Roll back) is in the danger section at the end and asks you to type the name. Running jobs show on the header and on the row.
+
+**Docker apps.** On the Docker list, **Open page** in the quick look leads to the page of the app. The tabs depend on who manages it: an app made in
+the web interface has all three, an app of a recipe (or another managed one) has Overview and Logs, and an app started by hand with `docker run` is
+read only and has Overview alone. **Overview** shows the same facts as the quick look; if a recipe set the app up, a link leads to it in the app
+catalog. The header offers **Apply** (only when the files on disk differ from what runs), **Start** or **Stop**, **Restart**, **Pull** and
+**Rebuild**: two as buttons, the rest under **More**; each shows its plan first. **Delete** and **Delete with data** are in the danger section
+(apps made in the web interface only). **Compose** is the editor of the app (app managers and admins); on this tab all app actions are under **More**.
+Picking another tab with unsaved edits asks first. Leaving the page in another way (the tree, Back) does not ask; only closing or reloading the browser
+tab does. The editor still has its own address `/apps/docker/app/<name>`. Not tested on hardware yet.
 
 On the Groups, Nodes, Docker and Live state lists, selecting a row opens a **quick look** over the list: the list keeps its width and columns. The address carries the row (`?sel=<name>`),
 so reload, Back and Forward and a pasted link work. Escape closes it, and **Open page** goes to the object page. On a phone the quick look covers the

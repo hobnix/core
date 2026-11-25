@@ -139,6 +139,33 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
   eq('the console tab opens the existing terminal and VM console windows', [/Terminal\.svelte/.test(src('pages/instances/ConsoleTab.svelte')), /VmConsole\.svelte/.test(src('pages/instances/ConsoleTab.svelte'))], [true, true]);
 }
 
+// ── the Docker app object (#1295): its own kind (an instance and a Docker app may share a name), the editor address stays, tabs and actions by who manages it
+{
+  const { dockerAppPagePath, dockerAppPath } = await import('../web/src/paths.js');
+  const { pageTabs, headerActions } = await import('../web/src/pages/docker/apps.js');
+  eq('a Docker app page address', [dockerAppPagePath('arr'), dockerAppPagePath('arr', 'logs'), dockerAppPagePath('a b', 'overview')], ['/apps/docker-app/arr', '/apps/docker-app/arr/logs', '/apps/docker-app/a%20b']);
+  eq('a Docker app address reads back', objectOf(dockerAppPagePath('a b', 'compose')), { kind: 'docker-app', id: 'a b', tab: 'compose' });
+  eq('the editor address and the Docker list are no objects', [objectOf(dockerAppPath('arr')), objectOf(P.docker), objectOf(P.registries)], [null, null, null]);
+  eq('the editor address is unchanged', dockerAppPath('arr'), '/apps/docker/app/arr');
+  eq('the Docker app tabs are Overview, Compose, Logs', objects['docker-app'].tabs.map((t) => t.id), ['overview', 'compose', 'logs']);
+  eq('a Docker app page is a page of the Docker item', itemOf(dockerAppPagePath('x'))?.path, P.docker);
+  eq('its title ends with the app', titleOf(dockerAppPagePath('x', 'logs')).slice(-2), ['Docker', 'x']);
+  eq('tabs by who manages it', ['web', 'recipe', 'other', 'unmanaged'].map((managed) => pageTabs({ managed })), [['overview', 'compose', 'logs'], ['overview', 'logs'], ['overview', 'logs'], ['overview']]);
+  const acts = (state, managed = 'web', files = '-') => headerActions({ state, managed, files });
+  eq('a running web app: Stop first, then Restart', acts('running'), ['stop', 'restart', 'pull', 'rebuild']);
+  eq('a stopped recipe app: Start first, no Rebuild', acts('exited', 'recipe'), ['start', 'restart', 'pull']);
+  eq('changed files: Apply is the primary action', acts('partial', 'web', 'changed').slice(0, 2), ['apply', 'stop']);
+  eq('an unmanaged app has no action, a state with no start or stop keeps Restart', [acts('running', 'unmanaged'), acts('restarting', 'other')], [[], ['restart', 'pull']]);
+  const page = src('pages/docker/DockerApp.svelte'), dl = src('pages/Docker.svelte'), ed = src('pages/docker/AppEditPage.svelte');
+  eq('the page has no visible destructive button, Delete is in the danger section for web apps only', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page), /a\?\.managed !== 'web' \? \[\]/.test(page)], [false, true, true]);
+  eq('the header shows at most two actions, none on the Compose tab', /tab === 'compose' \? \[\] : keys\.slice\(0, 2\)/.test(page), true);
+  eq('the page passes no crumb, and a missing app is a sentence with a way back', [/<ObjectPage[^>]*crumb=/.test(page), /notFound=\{/.test(page), /backTo=\{P\.docker\}/.test(page), /Docker is off/.test(page)], [false, true, true, true]);
+  eq('the editor is embedded without its page header and unsaved edits ask before another tab', [/<AppEditPage embedded=\{name\} ondirty/.test(page), /\{#if embedded\}/.test(ed), /dirty && tab === 'compose'/.test(page)], [true, true, true]);
+  eq('a recipe app links to the app catalog', /setSelection\('recipes', name\); go\(P\.apps\)/.test(page), true);
+  eq('the quick look of the Docker list has the Open page link', /<QuickLook href=\{dockerAppPagePath\(sel\.name\)\}/.test(dl), true);
+  eq('the route table knows the component', /'docker-app': DockerApp/.test(src('routes.js')), true);
+}
+
 // ── Shares list: no quick look (owner decision 2026-11-23); a row ends with Browse and "Open share" buttons
 const shl = src('pages/Shares.svelte');
 eq('Shares has no QuickLook, selection helper, Split or Drawer', [/<QuickLook|QuickLook\.svelte/.test(shl), /selection\.svelte\.js/.test(shl), /<Split|<Drawer/.test(shl)], [false, false, false]);

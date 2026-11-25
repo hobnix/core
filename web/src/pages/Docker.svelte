@@ -1,7 +1,8 @@
 <script>
-  import { P, capabilityPath, dockerAppPath } from '../paths.js';
-  // The Docker page: the apps (compose projects) that run in the locked docker container. A row opens the quick look over the list (?sel=<app>); an app has no page
-  // of its own until 0.12 (only the compose editor), so the quick look is the whole view.
+  import { P, capabilityPath, dockerAppPath, dockerAppPagePath } from '../paths.js';
+  // The Docker page: the apps (compose projects) that run in the locked docker container. A row opens the quick look over the list (?sel=<app>); "Open page" in it
+  // goes to the page of the app (docker/DockerApp.svelte).
+  import { objects } from '../objects.js';
   import { poll, rows, refresh } from '../data.svelte.js';
   import { takeSelection } from '../select.svelte.js';
   import { selected, select, close } from '../selection.svelte.js';
@@ -22,7 +23,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import Banner from '../ui/Banner.svelte';
   import AppLogs from './docker/AppLogs.svelte';
-  import { appOf, filesChip, applyOf, isActionable } from './docker/apps.js';
+  import { appOf, filesChip, applyOf, isActionable, pageTabs } from './docker/apps.js';
   import { problems } from './docker/health.js';
 
   const appsPoll = poll('/api/sys/docker/apps', 30000);
@@ -58,11 +59,7 @@
     { key: 'managed', label: 'Managed' },
     { key: 'actions', label: '', sort: false, align: 'right' },
   ];
-  const tabs = $derived(sel?.managed === 'unmanaged'
-    ? [{ id: 'overview', label: 'Overview' }]
-    : sel?.managed === 'web'
-    ? [{ id: 'overview', label: 'Overview' }, { id: 'compose', label: 'Compose' }, { id: 'logs', label: 'Logs' }]
-    : [{ id: 'overview', label: 'Overview' }, { id: 'logs', label: 'Logs' }]);
+  const tabs = $derived(objects['docker-app'].tabs.filter((t) => pageTabs(sel).includes(t.id)));
 </script>
 
 <PageHeader title="Docker" crumb="Instances" sub={apps.length ? `${runningCount} of ${apps.length} apps running${status.address && status.address !== '-' ? ` · ${status.address}` : ''}` : 'Apps that run in the Docker container.'} />
@@ -118,7 +115,7 @@
           </Table>
         </div>
         {#if sel}
-          <QuickLook title={sel.name} chip={sel.managed} state={dot(sel.state)} stateLabel={sel.state} rowKey={sel.name} {tabs} bind:tab onclose={close}>
+          <QuickLook href={dockerAppPagePath(sel.name)} title={sel.name} chip={sel.managed} state={dot(sel.state)} stateLabel={sel.state} rowKey={sel.name} {tabs} bind:tab onclose={close}>
             {#snippet children(t)}
               {#if failure(sel)}<ErrorNote error={failure(sel).error} ondismiss={() => rowstate.dismiss(failure(sel).id)} />{/if}
               {#if t === 'overview'}
