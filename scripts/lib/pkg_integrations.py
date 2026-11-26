@@ -208,15 +208,20 @@ def _port(record):
 
 def incus_instances():
     """What `incus list --format json` says (HS_INCUS; HS_INCUS_TIMEOUT seconds, default 5), [] when Incus is not there, fails, hangs or says
-    something else."""
+    something else. With HS_INTEGRATIONS_STRICT set (the watcher of a running service, ext_service.py listing_rows) these end the program with
+    exit 1 instead: "no answer" must not look like "no address" there (#1328)."""
     try:
         limit = float(os.environ.get("HS_INCUS_TIMEOUT") or INCUS_TIMEOUT)
         r = subprocess.run([os.environ.get("HS_INCUS") or "incus", "list", "--format", "json"], stdin=subprocess.DEVNULL,
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=limit, check=False)
-        data = json.loads(r.stdout.decode("utf-8")) if r.returncode == 0 else []
+        data = json.loads(r.stdout.decode("utf-8")) if r.returncode == 0 else None
     except (OSError, ValueError, subprocess.SubprocessError):
-        return []
-    return data if isinstance(data, list) else []
+        data = None
+    if isinstance(data, list):
+        return data
+    if os.environ.get("HS_INTEGRATIONS_STRICT"):
+        raise SystemExit("pkg_integrations.py: Incus did not answer with its list of instances")
+    return []
 
 
 def _table(v):

@@ -86,7 +86,10 @@ case "${1:-list}" in
     # what packages offer to each other ([integrations.<name>] in package.toml) from the packages that are there, with the state of the key file;
     # the key itself is never read here
     . "$here/lib/integration.sh"
-    on=$(integration_available)
+    # HS_INTEGRATIONS_STRICT (set only by the watcher of a running service, lib/ext_service.py): an Incus query that is needed and fails makes the
+    # listing fail, instead of leaving a provider out or its address at "-"
+    if [ -n "${HS_INTEGRATIONS_STRICT:-}" ]; then on=$(integration_available_strict "${2:-}") || exit 1
+    else on=$(integration_available); fi
     only=(); [ "$#" -lt 2 ] || only=(--only "$2")
     # shellcheck disable=SC2086
     miss=$(mktemp); trap 'rm -f "$miss"' EXIT
