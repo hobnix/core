@@ -152,4 +152,64 @@ check_eq "each of the $n template rows without {rest} refuses an extra word" "" 
 check_eq "such a row still runs without extra words" "RAN" "$(bash "$G/lib/hs.sh" ct x shell </dev/null 2>&1)"
 check_eq "a long row takes --foreground" "RAN" "$(bash "$G/lib/hs.sh" backup drill ct x --foreground </dev/null 2>&1)"
 
+echo "-- other template rows: what works today still works, an option the script honours reaches it, the rest is refused"
+# every script of a template row says what it got
+awk -F'\t' '!/^#/ && $4 ~ /\{/ && $3 !~ /^rust:/ { print $3 }' "$REG" | sort -u | while read -r script; do printf 'echo "args:$*"\n' > "$G/$script"; done
+got() { bash "$G/lib/hs.sh" "$@" </dev/null 2>/dev/null | grep '^args:' || echo refused; }
+passes() { local want=$1; shift; check_eq "hs $*" "args:$want" "$(got "$@")"; }
+nope()   { check_eq "hs $* is refused" "refused" "$(got "$@")"; }
+passes "x show"                              net ip x show
+passes "x show"                              net ip x
+nope                                         net ip x show --dryrun
+nope                                         net ip x shwo
+passes "--password ann --dry-run"            user ann passwd --dry-run
+passes "--password ann --stdin"              user ann passwd --stdin
+passes "--password ann"                      user ann passwd
+passes "--enable ann --dry-run"              user ann unlock --dry-run
+passes "--delete ann --dry-run"              user ann remove --dry-run
+passes "--delete ann"                        user ann remove
+nope                                         user ann remove --yes
+nope                                         user ann remove --dry-run --yes
+nope                                         user ann remove --dryrun
+passes "--member staff ann add --dry-run"    user ann join staff --dry-run
+passes "--member staff ann remove --dry-run" user ann leave staff --dry-run
+passes "--group-delete staff --dry-run"      group staff remove --dry-run
+nope                                         group staff remove --yes
+nope                                         user ann show --dry-run
+nope                                         group staff show extra
+passes "drill ct web --repo offsite"         backup drill ct web --repo offsite
+nope                                         backup drill ct web --repo
+nope                                         backup drill ct web --dry-run
+passes "--find word --repo offsite"          sys backup find word --repo offsite
+passes "--snapshots shares --repo offsite"   sys backup snapshots shares --repo offsite
+passes "forget S1 --yes"                     sys state forget S1
+passes "forget S1 --yes --yes"               sys state forget S1 --yes
+passes "add sda"                             sys disk event add sda
+nope                                         disk d1 detach --confirm d1
+nope                                         disk d1 attach --confirm d1
+nope                                         disk d1 recover-finish --now
+nope                                         disk d1 health --wake d1
+nope                                         disk d1 results --dry-run
+nope                                         share docs show --dry-run
+nope                                         share docs snapshots --yes
+nope                                         snapshots docs off --dry-run
+nope                                         ext enable demo --dry-run
+nope                                         ext start demo --no-block
+nope                                         pkg repo remove demo --yes
+nope                                         user ann passwd "--dry-run} {?--stdin"
+
+echo "-- every probe of hs smoke and every collected read gets through"
+awk '/^default_probes\(\)/,/^SKIP_READS=/' "$SCRIPTS/smoke.sh" > "$WORK/probes.sh"
+bad=""; n=0
+while IFS= read -r words; do
+  n=$((n + 1))
+  # shellcheck disable=SC2086
+  out=$(bash "$G/lib/hs.sh" $words </dev/null 2>&1) || true
+  case "$out" in *"does not take"*) bad="$bad$words; " ;; esac
+done < <({ grep -oE "\\\\t[a-z][^\\\\']*\\\\t[0-9]" "$WORK/probes.sh" | sed -E 's/^\\t//; s/\\t[0-9]$//'
+           grep -oE '"(share|ct|disk|sys|backup) \$first_[a-z]+[^"]*|"(sys backup rules|backup ct) \$first_ct[^"]*' "$WORK/probes.sh" | tr -d '"' | sed -E 's/\$first_[a-z]+/x/'
+           grep -v '^#' "$SCRIPTS/lib/collected-reads.tsv" | cut -f1 | sed 's/^/sys /'; } | sort -u)
+check_eq "none of the $n probe and collector words is refused" "" "$bad"
+[ "$n" -gt 60 ] && pass "the probe words were found ($n)" || fail "too few probe words found ($n)"
+
 finish

@@ -5,4 +5,4 @@ body  = """Before, hs ct <name> stop --dry-run really stopped the instance. star
 
 Now every changing hs ct <name> command takes --dry-run, and a misspelled or unknown option is refused before anything changes. hs ct <name> remove always asks you to type the name; --yes is refused there.
 
-Other commands that used to ignore extra words now refuse them too."""
+The changing hs user and hs group commands take --dry-run too. Other commands that used to ignore extra words now refuse them."""
