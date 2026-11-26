@@ -369,13 +369,13 @@ fn now_iso() -> String {
 fn random_suffix() -> String {
     let mut letters = String::new();
     let mut buf = [0u8; 32];
-    if let Ok(mut f) = fs::File::open("/dev/urandom") {
-        if f.read_exact(&mut buf).is_ok() {
-            for b in buf {
-                // 208 = 8 * 26: drop the bytes that would make some letters likelier
-                if b < 208 && letters.len() < 4 {
-                    letters.push(char::from(b'a' + b % 26));
-                }
+    if let Ok(mut f) = fs::File::open("/dev/urandom")
+        && f.read_exact(&mut buf).is_ok()
+    {
+        for b in buf {
+            // 208 = 8 * 26: drop the bytes that would make some letters likelier
+            if b < 208 && letters.len() < 4 {
+                letters.push(char::from(b'a' + b % 26));
             }
         }
     }
@@ -1021,11 +1021,11 @@ impl Store {
                 _ => rec.queued.as_deref(),
             };
             let began = pick.and_then(parse_iso);
-            if let (Some(b), Some(began)) = (boot, began) {
-                if began as f64 >= b {
-                    // started after this boot (a job may be between its record and its unit): not a restart victim
-                    return Ok(None);
-                }
+            if let (Some(b), Some(began)) = (boot, began)
+                && began as f64 >= b
+            {
+                // started after this boot (a job may be between its record and its unit): not a restart victim
+                return Ok(None);
             }
             if sys.unit_alive(rec.unit.as_deref().unwrap_or("")) {
                 return Ok(None);

@@ -1,10 +1,10 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["hobnix-core", "hobnix-cli", "hobnix-ext-sdk"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "AGPL-3.0-or-later"
 publish = false
 # The oldest rustc that must build these crates (cargo refuses an older one, clippy's incompatible_msrv flags newer std API): hobnix/official
