@@ -51,12 +51,12 @@ jobs:
             # nix: the system configuration and the web build (web/ is built by pkgs/hs-web.nix); root: scripts and root tests (loop devices, packages against this core)
             echo "$files" | grep -qvE '^(docs/|tests/|\.claude/|\.github/ISSUE_TEMPLATE/)|\.md$' || nix=false
             echo "$files" | grep -qvE '^(web/|docs/|\.claude/|\.github/ISSUE_TEMPLATE/)|\.md$' || root=false
-            # rust: the Cargo workspace, the scripts it stands in for, or this workflow
+            # rust: the Cargo workspace, the scripts it stands in for, the nixpkgs pin (its rustc is the toolchain), or this workflow
             # pkg: what the package repositories are checked against (the core's helpers and libraries, the package folders and their tests)
             # capmx: the Nix interface capability packages build against (decision O9 of docs/PLAN-capabilities-repo.md); the matrix runs with --vendor then
             echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/(nix-matrix|official-ref)\.sh)$' || capmx=false
             echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|scripts/dev/(official-ref|core-names-check)|tests/(core-names|official-ref|profile-core-only|fixtures/official)|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
-            echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
+            echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^config/nixpkgs-pin\.toml$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
             # ext: the extension crates of hobnix/official are built against the SDK (job ext-crates): only its folder, the workspace files, this workflow
             echo "$files" | grep -qE '^rust/(hobnix-ext-sdk/|Cargo\.(toml|lock)$)|^\.github/workflows/ci\.yml$' || ext=false
           fi
@@ -99,6 +99,12 @@ jobs:
         working-directory: rust
     steps:
       - uses: actions/checkout@v5
+      # rust/rust-toolchain.toml names the rustc of the nixpkgs pin (job nixos checks that); rustup >= 1.28 does not install it by itself
+      - name: The pinned toolchain
+        run: |
+          ch=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$ch" --profile minimal --component clippy,rustfmt
+          rustc --version
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -262,7 +268,8 @@ jobs:
       - name: Crates of official against this SDK
         run: |
           echo "hobnix/official: ${{ steps.offref.outputs.ref }} at $(git -C pkgs/official rev-parse HEAD)"
-          # the toolchain official pins (rustup does not install it by itself any more)
+          # the toolchain official pins (rustup does not install it by itself any more); it builds the SDK too, so it must not be older than
+          # `rust-version` in rust/Cargo.toml (cargo refuses the SDK then)
           ch=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' pkgs/official/rust-toolchain.toml)
           rustup toolchain install "$ch" --profile minimal
           sdk="$PWD/rust/hobnix-ext-sdk"
@@ -300,6 +307,9 @@ jobs:
       - uses: cachix/install-nix-action@v27
         with:
           nix_path: nixpkgs=${{ env.NIXPKGS_DIR }}
+      # servers build rust/ with the rustc of this nixpkgs; CI and developers use rust/rust-toolchain.toml: the two must be the same version
+      - name: rust/rust-toolchain.toml names the rustc of the nixpkgs pin
+        run: bash scripts/dev/nixpkgs-pin.sh toolchain-check "$NIXPKGS_DIR"
       - name: Evaluate the system configuration
         run: |
           cp machine.toml.example machine.toml

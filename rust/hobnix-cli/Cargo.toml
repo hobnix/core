@@ -3,6 +3,7 @@ name = "hobnix-cli"
 description = "Adapter: parses the hs sys words, calls hobnix-core, writes the existing lines"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 

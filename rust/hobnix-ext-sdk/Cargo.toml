@@ -3,6 +3,7 @@ name = "hobnix-ext-sdk"
 description = "Rust SDK for Hobnix extensions: the extension side of the command protocol (ADR 0010) and the service protocol (ADR 0011)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 

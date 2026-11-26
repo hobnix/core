@@ -7,6 +7,10 @@ version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 publish = false
+# The oldest rustc that must build these crates (cargo refuses an older one, clippy's incompatible_msrv flags newer std API): hobnix/official
+# builds its extensions against the SDK with its own pinned toolchain (1.94.1, its rust-toolchain.toml; CI job ext-crates checks it). The
+# toolchain of this workspace is newer (rust-toolchain.toml, the rustc of the nixpkgs pin). Raise this only together with official's pin.
+rust-version = "1.94"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -19,3 +23,8 @@ todo = "warn"
 dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
+
+# A wrapping integer is a bug in release too (debug builds check anyway). panic stays "unwind": the SDK's runners catch a panicking handler.
+[profile.release]
+overflow-checks = true
+panic = "unwind"
