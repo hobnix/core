@@ -305,7 +305,7 @@ in
       done
     '';
     # A timer that starts 60 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
-    # The history is hourly medians and a display reads the counters twice, so 60 s is plenty (#1320; deck-serve.py allows 150 s before 503).
+    # The history is hourly medians and a display reads the counters twice, so 60 s is plenty (#1320; hs-deck-api answers 503 after 150 s, HS_DECK_STALE).
   };
   systemd.timers.hs-deck-status = lib.mkIf deckApi {
     wantedBy = [ "timers.target" ];
@@ -315,6 +315,7 @@ in
     description = "Read-only status endpoint for displays (port 9740)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network.target" ];
+    environment.HS_DECK_STALE = "150";    # the status timer writes every 60 s after the last run (#1320)
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/deck-serve.py 9740 /run/hs-deck/deck.json";
       DynamicUser = true;
