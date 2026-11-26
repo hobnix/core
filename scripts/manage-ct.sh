@@ -38,12 +38,14 @@ usage() {
 dry=false
 plain=false
 yes=false
+words=false   # --hs-words: set by the `hs ct <name> ...` rows of registry.tsv; what a person typed is honoured or refused, never ignored
 args=()
 for a in "$@"; do
   case "$a" in
     --dry-run) dry=true ;;
     --plain)   plain=true ;;
     --yes)     yes=true ;;   # a background job asks nothing (the interface checked the typed name)
+    --hs-words) words=true ;;
     *)         args+=("$a") ;;
   esac
 done
@@ -56,6 +58,31 @@ run() {
   else
     "$@"
   fi
+}
+
+refuse_word() { fail "$(t "Unknown option or word: '%s'. Nothing was changed." "$1")"; }
+
+# Checks what came through the `hs ct <name>` words, before anything happens. --yes is refused: remove must not lose its typed name.
+check_words() {   # check_words <ct> <action> [<typed>...]
+  local name=$1 action=$2 a
+  shift 2
+  if $yes && [ "$action" = --delete ]; then
+    fail "$(t "'hs ct %s remove' does not take --yes: you confirm by typing the name. Nothing was changed." "$name")"
+  fi
+  ! $yes || refuse_word --yes
+  ! $plain || refuse_word --plain
+  case "$action" in
+    --start|--restart|--delete) [ $# -eq 0 ] || refuse_word "$1" ;;
+    --stop) [ "${1:-}" != --keep-off ] || shift
+            [ $# -eq 0 ] || refuse_word "$1" ;;
+    --update) for a in "$@"; do [ "$a" = --foreground ] || refuse_word "$a"; done ;;
+    --autostart) [ $# -ge 1 ] || usage; [ $# -eq 1 ] || refuse_word "$2" ;;
+    --restore|--remove-storage)
+      [ $# -ge 1 ] || usage
+      [[ "$1" != -* ]] || refuse_word "$1"
+      [ $# -eq 1 ] || refuse_word "$2" ;;
+    --set) for a in "$@"; do case "$a" in ram=*|cpu=*|disk=*|ip=*|autostart=*|docker=*) ;; *) refuse_word "$a" ;; esac; done ;;
+  esac
 }
 
 # Reserve a fixed address for an instance in UniFi and restart it so it takes it.
@@ -232,6 +259,10 @@ fi
 # ── everything else works on one existing instance ──
 ct="$1"; shift
 [ $# -ge 1 ] || usage
+if $words; then
+  check_words "$ct" "$@"
+  [ "$1" != --autostart ] || set -- --set "autostart=$2"
+fi
 incus info "$ct" >/dev/null 2>&1 || fail_fix "$(t "'%s' does not exist." "$ct")" "hs ct list"
 is_vm=false
 [ "$(incus query "/1.0/instances/$ct" | jq -r .type)" = virtual-machine ] && is_vm=true
@@ -297,9 +328,13 @@ case "$1" in
         -s|--pool)  [ $# -ge 2 ] || usage; apool="$2"; shift 2 ;;
         --readonly) readonly=true; shift ;;
         --as)       [ $# -ge 2 ] || usage; as="$2"; shift 2 ;;
-        *) usage ;;
+        *) ! $words || refuse_word "$1"; usage ;;
       esac
     done
+    if $words; then   # an option that this kind of storage would ignore
+      [ "$kind" != fast ] || [ -z "$as" ] || refuse_word --as
+      [ "$kind" = fast ] || [ -z "$apool" ] || refuse_word -s
+    fi
     [ -z "$as" ] || [[ "$as" =~ ^[0-9]+:[0-9]+$ ]] || fail "$(t "--as expects <uid>:<gid>, got '%s'" "$as")"
     [[ "$sname" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "$(t "invalid storage name '%s'" "$sname")"
     [[ "$path" == /* ]] || fail "$(t "the path in the container must start with / (got '%s')" "$path")"

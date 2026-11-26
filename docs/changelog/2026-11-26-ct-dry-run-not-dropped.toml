@@ -1,0 +1,8 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "hs ct commands no longer drop --dry-run: a dry run does not stop or change the instance any more"
+body  = """Before, hs ct <name> stop --dry-run really stopped the instance. start, restart, update and autostart had the same fault, and stop --keep-off did nothing about the start at boot.
+
+Now every changing hs ct <name> command takes --dry-run, and a misspelled or unknown option is refused before anything changes. hs ct <name> remove always asks you to type the name; --yes is refused there.
+
+Other commands that used to ignore extra words now refuse them too."""

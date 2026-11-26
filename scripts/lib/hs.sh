@@ -312,6 +312,20 @@ build_args() {
   esac
 }
 
+# A template without {rest} has no place for what is typed after the row's words: it is refused, never dropped (#1345: `stop --dry-run`
+# really stopped the instance). --foreground on a long row is honoured: it runs here.
+extra_guard() {   # extra_guard <typed after the words...>
+  case "$row_args" in *"{rest}"*) return 0 ;; *"{"*) ;; *) return 0 ;; esac
+  local x
+  for x in "$@"; do
+    case ",$row_flags,=$x" in *,long,*"=--foreground") continue ;; esac
+    . "$here/ui.sh"
+    warn "$(t "'hs %s' does not take '%s'. Nothing was run." "$typed" "$x")" >&2
+    next_step "hs help $typed" >&2
+    exit 1
+  done
+}
+
 # A long command says so first and, when confirmed on a terminal, runs as a job
 long_guard() {   # long_guard <args...>
   case ",$row_flags," in *,long,*) ;; *) return 0 ;; esac
@@ -320,6 +334,8 @@ long_guard() {   # long_guard <args...>
   local a=() x fg=0
   for x in "$@"; do   # a plan or a help text is not the long work: no offer
     case "$x" in --dry-run|-h|--help) return 0 ;; esac
+    # a --hs-words row takes only --foreground besides --dry-run: the script refuses anything else at once, not inside a job
+    case "$row_args" in *--hs-words*) [ "$x" = --foreground ] || return 0 ;; esac
   done
   for x in "$@"; do if [ "$x" = --foreground ]; then fg=1; else a+=("$x"); fi; done
   set -- ${a[@]+"${a[@]}"}
@@ -416,6 +432,7 @@ typed="${*:1:$consumed}"
 shift "$consumed"
 legacy_guard
 row_command "$row_script" "$row_flags"
+extra_guard "$@"
 sys_guard
 # system commands (hs sys ...) are for programs and timers: never the styled form, even on a terminal
 [ "$row_kind" != sys ] || export HS_PLAIN=1

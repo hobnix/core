@@ -19,9 +19,15 @@ usage() {
   say "       hs ct <ct> snapshot [label]            (without a label: a menu)"
   say "       hs ct <ct> storage [--kind fast|shares|sensitive] [--source <share>] [--name <n>] [--path </x>] [-s <apps pool>] [--readonly] [--as uid:gid] [--yes]"
   say "       hs ct <ct> ip [<address>]"
+  say "       edit, snapshot, storage and ip also take --dry-run: show the commands, change nothing"
   exit 1
 }
 
+refuse_word() { warn "$(t "Unknown option or word: '%s'. Nothing was changed." "$1")"; usage; }
+value() {   # value <option> [<value>]: an option needs a value, and another option (a typo) is not one
+  [ $# -ge 2 ] || fail "$(t 'Missing: %s (give it as an option)' "$1")"
+  [[ "$2" != -* ]] || refuse_word "$2"
+}
 interactive() { [ -t 0 ] && [ -t 1 ] && [ -z "${HS_CALLER:-}" ] || [ -n "${HS_GUIDED_TTY:-}" ]; }
 need() {   # need <what>: a value was not given and there is nobody to ask
   interactive || fail "$(t 'Missing: %s (give it as an option)' "$1")"
@@ -29,12 +35,20 @@ need() {   # need <what>: a value was not given and there is nobody to ask
 ct_exists() { "$incus" info "$1" >/dev/null 2>&1 || fail_fix "$(t "No instance called '%s'." "$1")" "hs ct list"; }
 run_plan() {   # run_plan <yes> <command...>: show it, confirm, run
   local yes=$1; shift
+  if $dry; then "$@" --dry-run; return; fi   # the script prints the commands and changes nothing: nothing to confirm
   note "$ $*"
   if [ "$yes" != true ]; then interactive || fail "Nothing is changed without --yes when there is no terminal."; confirm "Do it?" || fail "cancelled"; fi
   "$@"
 }
 
 verb=${1:-}; [ $# -eq 0 ] || shift
+dry=false
+case "$verb" in
+  edit|snapshot|storage|ip)
+    args=()
+    for a in "$@"; do if [ "$a" = --dry-run ]; then dry=true; else args+=("$a"); fi; done
+    set -- ${args[@]+"${args[@]}"} ;;
+esac
 case "$verb" in
 # ───────────────────────────────────────────────────────────────────────────── add
 add)
@@ -89,8 +103,9 @@ edit)
   ram=""; cpu=""; disk=""; auto=""; docker=""; yes=false; given=false
   while [ $# -gt 0 ]; do
     case "$1" in
-      --ram) ram=$2; given=true; shift 2 ;; --cpu) cpu=$2; given=true; shift 2 ;; --disk) disk=$2; given=true; shift 2 ;;
-      --autostart) auto=$2; given=true; shift 2 ;; --docker) docker=$2; given=true; shift 2 ;; --yes) yes=true; shift ;; *) usage ;;
+      --ram) value "$@"; ram=$2; given=true; shift 2 ;; --cpu) value "$@"; cpu=$2; given=true; shift 2 ;;
+      --disk) value "$@"; disk=$2; given=true; shift 2 ;; --autostart) value "$@"; auto=$2; given=true; shift 2 ;;
+      --docker) value "$@"; docker=$2; given=true; shift 2 ;; --yes) yes=true; shift ;; *) refuse_word "$1" ;;
     esac
   done
   if ! $given; then
@@ -119,11 +134,15 @@ snapshot)
   [ $# -ge 1 ] || usage
   ct=$1; shift; ct_exists "$ct"
   action=""; target=""; yes=false
-  if [ $# -ge 1 ] && [[ "$1" != --* ]]; then action=create; target=$1; shift; fi
+  if [ $# -ge 1 ] && [[ "$1" != -* ]]; then action=create; target=$1; shift; fi
   while [ $# -gt 0 ]; do
+    case "$1" in   # one action: a second one would silently replace the first
+      --create|--restore|--delete) [ -z "$action" ] || refuse_word "$1" ;;
+    esac
     case "$1" in
-      --create) action=create; target=${2:-}; shift; [ $# -eq 0 ] || shift ;; --restore) action=restore; target=$2; shift 2 ;;
-      --delete) action=delete; target=$2; shift 2 ;; --yes) yes=true; shift ;; *) usage ;;
+      --create) action=create; shift; if [ $# -ge 1 ] && [[ "$1" != -* ]]; then target=$1; shift; fi ;;
+      --restore) value "$@"; action=restore; target=$2; shift 2 ;;
+      --delete) value "$@"; action=delete; target=$2; shift 2 ;; --yes) yes=true; shift ;; *) refuse_word "$1" ;;
     esac
   done
   if [ -z "$action" ]; then
@@ -143,7 +162,7 @@ snapshot)
   case "$action" in
     create)  run_plan true bash "$mct" "$ct" --snapshot ${target:+"$target"} ;;
     restore) danger "Everything since this snapshot is lost, and newer snapshots are deleted (ZFS can only go back to the newest one). Attached storage is not part of a snapshot."
-             if [ "$yes" != true ]; then
+             if [ "$yes" != true ] && ! $dry; then
                interactive || fail "Nothing is changed without --yes when there is no terminal."
                confirm_name "$ct" "the instance" || fail "cancelled"
              fi
@@ -158,8 +177,9 @@ storage)
   kind=""; source_=""; sname=""; path=""; ro=false; as=""; apool=""; yes=false
   while [ $# -gt 0 ]; do
     case "$1" in
-      --kind) kind=$2; shift 2 ;; --source) source_=$2; shift 2 ;; --name) sname=$2; shift 2 ;; --path) path=$2; shift 2 ;;
-      --readonly) ro=true; shift ;; --as) as=$2; shift 2 ;; -s|--pool) apool=$2; shift 2 ;; --yes) yes=true; shift ;; *) usage ;;
+      --kind) value "$@"; kind=$2; shift 2 ;; --source) value "$@"; source_=$2; shift 2 ;; --name) value "$@"; sname=$2; shift 2 ;;
+      --path) value "$@"; path=$2; shift 2 ;; --readonly) ro=true; shift ;; --as) value "$@"; as=$2; shift 2 ;;
+      -s|--pool) value "$@"; apool=$2; shift 2 ;; --yes) yes=true; shift ;; *) refuse_word "$1" ;;
     esac
   done
   if [ -z "$kind" ]; then
@@ -170,6 +190,10 @@ storage)
     kind=${kind%% *}
   fi
   case "$kind" in fast|shares|sensitive) ;; *) usage ;; esac
+  # an option that this kind of storage would ignore is refused
+  [ "$kind" != fast ] || [ -z "$source_" ] || refuse_word --source
+  [ "$kind" != fast ] || [ -z "$as" ] || refuse_word --as
+  [ "$kind" = fast ] || [ -z "$apool" ] || refuse_word -s
   if [ -z "$sname" ]; then
     if [ "$kind" = fast ]; then need "--name"; sname=$(ask "Name of the volume:" "$ct-data")
     else
@@ -201,7 +225,10 @@ storage)
 # ───────────────────────────────────────────────────────────────────────────── ip
 ip)
   [ $# -ge 1 ] || usage
-  ct=$1; shift; ct_exists "$ct"
+  ct=$1; shift
+  [ $# -le 1 ] || refuse_word "$2"
+  [[ "${1:-}" != -* ]] || refuse_word "$1"
+  ct_exists "$ct"
   addr=${1:-}
   if [ -z "$addr" ]; then
     need "an address"
