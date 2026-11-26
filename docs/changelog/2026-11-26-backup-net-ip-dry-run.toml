@@ -5,4 +5,6 @@ body  = """Before, many hs backup commands accepted --dry-run and did the real w
 
 now, report, prune, init, restore ct and config restore keep their dry run. Every other changing hs backup command refuses --dry-run and changes nothing.
 
+Changing hs backup commands also refuse misspelled or unknown words and options: before, hs backup prune --dryrun pruned.
+
 hs net ip refuses what it does not know: a misspelled clear --dryrun no longer clears the address reservation."""

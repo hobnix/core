@@ -130,6 +130,91 @@ echo "-- without --dry-run the rule commands still work"
 run $H backup ct web reset
 check_eq "reset removes the rules" "0 changed" "$RC $([ "$(files)" != "$BEFORE" ] && echo changed)"
 
+echo "-- every changing hs backup command refuses a word or option it does not know"
+refused "prune, misspelled"             $H backup prune --dryrun
+refused "verify with a word"            $H backup verify everything
+refused "report, misspelled"            $H backup report --dryrun
+refused "now, misspelled"               $H backup now --dryrun
+refused "browse, misspelled"            $H backup browse --of
+refused "browse --off and more"         $H backup browse --off --dryrun
+refused "drill, misspelled"             $H backup drill --dryrun
+refused "drill with two numbers"        $H backup drill 3 4
+refused "drill ct, misspelled"          $H backup drill ct --dryrun
+refused "drill ct with two names"       $S drill ct web db
+refused "init, misspelled"              $S init /dev/loop0 --dryrun
+refused "init without a device"         $S init --dryrun
+refused "restore of a path, misspelled" $H backup restore latest /x --to "$HS_BULK/shares/restored" --dryrun
+refused "restore ct, misspelled"        $H backup restore ct web --yes --dryrun
+refused "config restore, misspelled"    $H backup config restore --yes --dryrun
+refused "config restore, two snapshots" $H backup config restore latest abc123 --yes
+refused "config, misspelled"            $H backup config restor --yes
+refused "offsite set, misspelled"       $H backup offsite set sftp:me@other.example:/b --dryrun
+refused "offsite set, a second address" $H backup offsite set --kind folder --path "$DATA/off2" extra
+refused "offsite now, misspelled"       $S offsite now --dryrun
+refused "offsite off, misspelled"       $S offsite off --dryrun
+refused "offsite migrate, a word"       $S offsite migrate all
+refused "offsite retention, misspelled" $S offsite retention prun
+refused "share on, misspelled"          $S docs on --dryrun
+refused "share off, a word"             $S docs off now
+refused "instance on, misspelled"       $S ct web on --dryrun
+refused "instance off, a word"          $S ct web off now
+refused "include, misspelled"           $S ct web include /c --dryrun
+refused "exclude, an option as pattern" $S ct web exclude --dryrun
+refused "reset, misspelled"             $S ct web reset --dryrun
+refused "reset of a path, misspelled"   $S ct web reset /a --dryrun
+refused "apply with a typo after a change" $S ct web apply reset=all --dryrun
+for o in --yes --machine --foreground "--repo offsite"; do
+  # shellcheck disable=SC2086
+  refused "share off $o (it would be ignored)" $S docs off $o
+done
+# shellcheck disable=SC2086
+for c in "prune --yes" "prune --repo offsite" "prune --machine" "now --repo offsite" "offsite off --yes" "report --foreground" "browse --repo offsite"; do
+  refused "$c (it would be ignored)" $S $c
+done
+refused "--repo twice"                  $S verify --repo offsite --repo local
+
+echo "-- what timers, jobs, the interface and the guides call still runs"
+accepted() {   # accepted "what" <backup.sh words...>: not refused for its words (it may fail later for want of a real disk)
+  local what=$1; shift
+  run $S "$@"
+  if grep -Eq "Unknown option or word|has no dry run|^usage:" <<<"$OUT"; then fail "$what is refused: $(head -c 200 <<<"$OUT")"; else pass "$what is taken"; fi
+}
+accepted "the nightly run"            now --scheduled
+accepted "now --foreground"           now --foreground
+accepted "verify --foreground"        verify --foreground
+accepted "verify"                     verify
+accepted "prune"                      prune
+accepted "drill 5 (timer)"            drill 5
+accepted "drill ct (timer)"           drill ct
+accepted "drill ct <name>"            drill ct web
+accepted "drill --repo offsite"       drill --repo offsite
+accepted "the monthly report"         report --scheduled
+accepted "share on (docker, web)"     docs on
+accepted "share off"                  docs off
+accepted "instance on"                ct web on
+accepted "instance off"               ct web off
+accepted "rules from the interface"   ct web apply include=/c 'exclude=*.log' reset=/a
+accepted "include"                    ct web include /c
+accepted "exclude"                    ct web exclude '*.log'
+accepted "reset of one rule"          ct web reset /a
+accepted "init job"                   init /dev/loop0 --yes
+accepted "offsite set (job)"          offsite set sftp:me@other.example:/b
+accepted "offsite set by kind"        offsite set --kind folder --path "$DATA/off2"
+accepted "offsite set --machine"      offsite set --kind folder --path "$DATA/off2" --machine
+accepted "offsite now"                offsite now
+accepted "offsite off"                offsite off
+accepted "offsite migrate"            offsite migrate
+accepted "offsite retention"          offsite retention
+accepted "offsite retention prune"    offsite retention prune
+accepted "browse"                     browse
+accepted "browse --off"               browse --off
+accepted "share restore"              restore latest /x --to "$HS_BULK/shares/restored"
+accepted "restore with tag, offsite"  restore latest /x --tag host --to "$HS_BULK/shares/restored" --keep-owner --repo offsite
+accepted "restore ct job"             restore ct web --recipe web --dry-run
+accepted "config restore"             config restore latest --with-state --yes --dry-run
+accepted "list --repo offsite"        list --repo offsite
+accepted "find --repo offsite"        find a.txt --repo offsite
+
 echo "-- hs net ip refuses what it does not know"
 refused "clear with a second word"       $H net ip web clear now
 refused "clear --yes"                    $H net ip web clear --yes

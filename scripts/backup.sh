@@ -114,6 +114,9 @@ want_off=false   # --repo offsite: every restic call of this command goes to the
 machine=false    # offsite set --machine: plain key<TAB>value lines for the web interface
 args=()
 prev=""
+repo_given=false
+yes_given=""
+foreground=false
 for a in "$@"; do
   if [ "$prev" = --repo ]; then
     prev=""
@@ -121,10 +124,11 @@ for a in "$@"; do
     continue
   fi
   case "$a" in
-    --repo) prev=--repo ;;
+    --repo) ! $repo_given || usage; repo_given=true; prev=--repo ;;
+    --foreground) foreground=true ;;   # hs passes it on without a terminal: the command runs here anyway
     --machine) machine=true ;;
     --dry-run) dry=true ;;
-    --yes)     export HS_BACKUP_YES=1 ;;   # init: the typed confirmation was asked before (the interface's review)
+    --yes)     yes_given=1; export HS_BACKUP_YES=1 ;;   # init: the typed confirmation was asked before (the interface's review)
     -h|--help) usage ;;
     *) args+=("$a") ;;
   esac
@@ -148,6 +152,73 @@ dry_ok() {   # dry_ok <command> [<word>...]: it only reads, or it looks at $dry 
 if $dry && ! dry_ok "$cmd" "$@"; then
   die "$(t "'hs backup %s' has no dry run. Nothing was changed. Run it without --dry-run to do it." "$cmd${1:+ $*}")"
   exit 1
+fi
+
+# A changing command takes only the words and options it knows: anything else is refused here, before anything happens (#1354:
+# `prune --dryrun` pruned). config restore, restore and offsite set read their own options and refuse unknown ones themselves.
+refuse_word() { die "$(t "Unknown option or word: '%s'. Nothing was changed." "$1")"; exit 1; }
+only() {   # only <the one word that may follow, or -> <word>...
+  local want=$1
+  shift
+  if [ $# -gt 0 ] && [ "$1" = "$want" ]; then shift; fi
+  [ $# -eq 0 ] || refuse_word "$1"
+}
+no_option() {   # no_option <word>...: values (a name, a path, a number): none may look like an option
+  local w
+  for w in "$@"; do [[ $w != -* ]] || refuse_word "$w"; done
+}
+check_words() {   # check_words <command> [<word>...]
+  local c=$1 w
+  shift
+  case "$c" in
+    now|report) only --scheduled "$@" ;;
+    verify|prune) only - "$@" ;;
+    browse) only --off "$@" ;;
+    drill)
+      if [ "${1:-}" = ct ]; then shift; fi
+      no_option "$@"
+      [ $# -le 1 ] || refuse_word "$2" ;;
+    init) no_option "$@"; [ $# -le 1 ] || refuse_word "$2" ;;
+    config)   # a second snapshot would silently replace the first
+      [ "${1:-}" = restore ] || return 0
+      shift
+      local snaps=0
+      while [ $# -gt 0 ]; do
+        case "$1" in --from-disk) shift ;; -*) ;; *) snaps=$((snaps + 1)); [ "$snaps" -le 1 ] || refuse_word "$1" ;; esac
+        [ $# -eq 0 ] || shift
+      done ;;
+    offsite)
+      w=${1:-}
+      [ $# -eq 0 ] || shift
+      case "$w" in
+        now|off|migrate) only - "$@" ;;
+        retention) only prune "$@" ;;
+      esac ;;
+    restore|status|list|find|--*) ;;
+    ct)   # <name> on|off|paths | include|exclude <value> | reset [<path>] | apply <change>...
+      [ $# -ge 2 ] || return 0
+      no_option "$1"
+      w=$2
+      shift 2
+      case "$w" in
+        include|exclude|reset) no_option "$@"; [ $# -le 1 ] || refuse_word "$2" ;;
+        apply) for w in "$@"; do case "$w" in include=*|exclude=*|reset=*) ;; *) refuse_word "$w" ;; esac; done ;;   # all of them first
+        *) [ $# -eq 0 ] || refuse_word "$1" ;;
+      esac ;;
+    *) [ $# -le 1 ] || refuse_word "$2" ;;   # <share> on|off
+  esac
+}
+check_words "$cmd" "$@"
+# the options taken out above, on a command that would ignore them
+if [ -n "$yes_given" ]; then
+  case "$cmd ${1:-}" in "init "*|"restore ct"|"config restore") ;; *) refuse_word --yes ;; esac
+fi
+if $machine; then [ "$cmd ${1:-}" = "offsite set" ] || refuse_word --machine; fi
+if $repo_given; then
+  case "$cmd" in restore|find|list|drill|config|verify|--find|--snapshots) ;; *) refuse_word --repo ;; esac
+fi
+if $foreground; then
+  case "$cmd" in now|drill|verify|prune) ;; *) refuse_word --foreground ;; esac
 fi
 
 # --from-disk (config restore on a fresh install): the typed passphrase is in a private temp file and the disk is read-only, so no lock is taken
@@ -902,6 +973,7 @@ offsite_set() {   # offsite set <repo> | --kind s3|rest|sftp|folder [fields]
     esac
   done
   [ -n "$typed" ] && [ -z "$kind" ] && kind=typed
+  [ -z "$typed" ] || [ "$kind" = typed ] || refuse_word "$typed"
   if [ -z "$kind" ]; then
     if [ -t 0 ] && [ -z "${HS_BACKUP_YES:-}" ]; then
       kind=$(choose "Where does the copy go?" s3 rest sftp folder typed)
