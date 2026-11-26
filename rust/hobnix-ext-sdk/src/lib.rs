@@ -1,7 +1,8 @@
 //! **Deprecated** (0.14): the SDK is now the crates `hobnix-pkg` (base), `hobnix-pkg-command` and `hobnix-pkg-service`. This crate
 //! re-exports them under the old paths for one release and is removed after it (docs/PLAN-package-sdk.md, docs/extensions-sdk.md).
 //!
-//! An extension written against 0.13 compiles unchanged: where the new API changed a signature, this crate keeps the old one and adapts.
+//! Not every extension written against 0.13 compiles unchanged: docs/extensions-sdk.md "Moving from `hobnix-ext-sdk`" lists what needs an
+//! edit. For these signatures that the new API changed, this crate keeps the old one and adapts:
 //! - [`Ctx`] is the old trait: `credential` returns `Option<String>` (the new one returns a `Secret`) and `event` is still there. Every
 //!   `hobnix_pkg::Ctx` (the runners' contexts, `testing::FakeCtx`) is one.
 //! - [`service::Service`] is the old trait with `Result<(), String>`; [`service::run`] adapts it to the new one (`hobnix_pkg::Error`).

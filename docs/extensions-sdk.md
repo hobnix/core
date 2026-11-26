@@ -91,9 +91,18 @@ A command extension depends on `hobnix-pkg` and `hobnix-pkg-command`, a service 
 (ADR 0031): `hobnix-pkg = { git = "https://github.com/hobnix/core", tag = "vX.Y.Z" }`. The examples are `rust/hobnix-pkg-command/examples/hello.rs`
 and `apiprobe.rs`, and `rust/hobnix-pkg-service/examples/ticker.rs`.
 
-**Moving from `hobnix-ext-sdk` (breaking rename in 0.14).** The crate `hobnix-ext-sdk` is deprecated: in 0.14 it re-exports the new crates under
-the old paths, so an extension of 0.13 builds unchanged, with a deprecation warning at `run`; it is removed after 0.14. A crate that pins an older
-tag or rev keeps building against that one. To move: replace the dependency by the two crates above, then
+**Moving from `hobnix-ext-sdk` (breaking change in 0.14).** The crate `hobnix-ext-sdk` is deprecated: in 0.14 it re-exports the new crates under
+the old paths and keeps the old `Ctx` and `Service` traits and the old command `Request` struct; it is removed after 0.14. A crate that pins an older
+tag or rev keeps building against that one. When you move the pin, **not every extension of 0.13 builds unchanged, also under the old name.** These
+need an edit:
+
+- A struct literal of `Event`, `Success`, `Failure`, `EventRow`, `Init` or `http::Response`: use the constructors.
+- A `match` that names every variant of `Lang`, `Caller`, `LogLevel`, `EventLevel`, `ErrorCode`, `HttpError` or `testing::Call`: add a `_` arm.
+- `row.credential()` of an integration row returns `Option<Secret>`: take the value with `key.expose()`.
+- The old `command::Request` no longer implements `Deserialize`.
+
+An extension that does none of these builds with a deprecation warning at `run`. To move to the new crates: replace the dependency by the two crates
+above, then
 
 - `hobnix_ext_sdk::command::{run, Request, Success, Failure}` becomes `hobnix_pkg_command::...`; `hobnix_ext_sdk::service::{run, Service, Init, EventRow, Health}` becomes `hobnix_pkg_service::...`; `Ctx`, `Event`, `LogLevel`, `http`, `integrations`, `testing` come from `hobnix_pkg`.
 - `Service::start` and `on_event` return `Result<(), hobnix_pkg::Error>` instead of `Result<(), String>`. `?` still works on a `Result<_, String>`, an `io::Error`, a `serde_json::Error` and an `HttpError`; `Error::with_cause(kind, "text", e)` keeps the cause, and the log line shows the whole chain.

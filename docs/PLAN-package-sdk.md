@@ -120,6 +120,9 @@ A new ADR amends ADR 0015 when this is picked up; this plan does not.
   implementation for every `hobnix_pkg::Ctx`), its own `Service` trait with `Result<(), String>` and an adapter, its own `Request` struct,
   `service::credential_for` as `String`. Its entry points are `#[deprecated]`. Its test file is the one of 0.13, unchanged but for the
   attribute; the examples of 0.13 and the crates of `hobnix/official` build against it.
+- **Decided by the owner, 2026-11-26:** the old name does not promise an unchanged build. The types it re-exports are the new ones, so some code of
+  0.13 needs an edit (the list is in [extensions-sdk](extensions-sdk.md)). Copies of the 0.13 types for one release were rejected as too much
+  throwaway code. A crate that keeps its old pin is not affected.
 
 ## Open points
 
