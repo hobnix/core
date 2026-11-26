@@ -188,28 +188,10 @@ export function fitReason(f) {
   return Object.hasOwn(SHORT, c.check) ? SHORT[c.check](c) : `needs "${c.need}"`;
 }
 
-// the filter "Fits this server": fits and fits with a note. Not stated and not checked never count as fitting.
-export const fitsServer = (f) => f?.verdict === 'fits' || f?.verdict === 'note';
-
-// what the filter leaves out of `rows`, in words ('' when nothing)
-export function hiddenByFit(rows, fit) {
-  const n = { no: 0, unstated: 0, unknown: 0, installed: 0 };
-  for (const p of rows) {
-    const f = fit.get(`${p.repo}/${p.name}`);
-    if (!fitsServer(f)) n[f ? f.verdict : p.installed ? 'installed' : 'unknown']++;
-  }
-  const words = [
-    [n.no, 'does not fit', 'do not fit'], [n.unstated, 'states neither memory nor disk', 'state neither memory nor disk'],
-    [n.unknown, 'could not be checked', 'could not be checked'], [n.installed, 'is installed', 'are installed'],
-  ].filter(([c]) => c).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`);
-  return words.length ? `Hidden: ${words.join(', ')}.` : '';
-}
-
-// search over name, title and category; `category` is an id, 'other' or 'all'; `fit` (the Map of parseFit) keeps what fits. Apps sort by name.
-export function filterRows(rows, { q = '', category = 'all', fit = null } = {}) {
+// search over name, title and category; `category` is an id, 'other' or 'all'. Apps sort by name.
+export function filterRows(rows, { q = '', category = 'all' } = {}) {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return rows.filter((p) => (category === 'all' || (category === 'other' ? !CATEGORY.has(p.category) : p.category === category))
-    && (!fit || fitsServer(fit.get(`${p.repo}/${p.name}`)))
     && words.every((w) => `${p.name} ${p.title} ${categoryLabel(p.category)}`.toLowerCase().includes(w)))
     .sort((a, b) => a.name.localeCompare(b.name) || a.repo.localeCompare(b.repo));
 }

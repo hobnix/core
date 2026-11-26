@@ -1,7 +1,7 @@
 // The Marketplace as a store (web/src/pages/market.js, #474): cards from the package reads, tabs and their counts, categories, search, the
 // buttons of a card, and that nothing a repository says becomes markup, a script address or a path outside the asset endpoint.
 import { parseCards, storeRows, rowsOf, tabsOf, categoriesOf, filterRows, cardActions, iconOf, assetUrl, safeLink, openHref, parseShow, usesOf,
-  stateLine, categoryLabel, trustOf, testedText, parseFit, fitLabel, fitText, fitReason, fitsServer, hiddenByFit, binSize, parseHistory } from '../web/src/pages/market.js';
+  stateLine, categoryLabel, trustOf, testedText, parseFit, fitLabel, fitText, fitReason, binSize, parseHistory } from '../web/src/pages/market.js';
 
 let ok = 0, bad = 0;
 const check = (name, cond, extra = '') => { if (cond) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name} ${extra}`); } };
@@ -114,7 +114,7 @@ const fit = parseFit([
   ['odd', 'official', 'perfect', 'constructor', 'great', '<b>', '-', '-'],
 ]);
 check('fit: rows join by repo and name', fit.get('official/immich').checks.length === 2 && fit.get('family/navidrome').verdict === 'fits' && !fit.has('official/navidrome'));
-check('fit: a verdict or level this page does not know is unknown, never fits', fit.get('official/odd').verdict === 'unknown' && fit.get('official/odd').checks[0].level === 'unknown' && !fitsServer(fit.get('official/odd')));
+check('fit: a verdict or level this page does not know is unknown, never fits', fit.get('official/odd').verdict === 'unknown' && fit.get('official/odd').checks[0].level === 'unknown' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
 check('fit: the verdict in words', fitLabel(fit.get('official/immich')) === 'Fits, with a note' && fitLabel(fit.get('official/big')) === 'Does not fit this server'
   && fitLabel(fit.get('official/seerr')) === 'Memory and disk not stated' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
 check('fit: with the disk not stated it only fits what is stated', fitLabel(fit.get('family/navidrome')) === 'Fits what it states');
@@ -128,11 +128,6 @@ check('fit: no graphics card, and one of another make claim nothing', fitText({ 
 check('fit: a check named like an object property is a plain unknown need', fitReason({ verdict: 'no', checks: [{ check: 'constructor', level: 'no', need: 'x' }] }) === 'needs "x"');
 check('fit: the short reason of a card', fitReason(fit.get('official/big')) === 'not enough free disk space' && fitReason(fit.get('official/immich')) === 'more memory than is free now'
   && fitReason(fit.get('official/seerr')) === '' && fitReason(fit.get('family/navidrome')) === '');
-const some = [{ repo: 'official', name: 'immich' }, { repo: 'family', name: 'navidrome' }, { repo: 'official', name: 'seerr' }, { repo: 'official', name: 'big' },
-  { repo: 'official', name: 'here', installed: true }, { repo: 'official', name: 'norow' }].map((p) => ({ title: '', category: '', installed: false, ...p }));
-check('fit filter: fits and fits with a note, never not stated', filterRows(some, { fit }).map((p) => p.name).join() === 'immich,navidrome');
-check('fit filter: says what it hides', hiddenByFit(some, fit) === 'Hidden: 1 does not fit, 1 states neither memory nor disk, 1 could not be checked, 1 is installed.');
-check('fit filter off: everything', filterRows(some, {}).length === 6);
 
 // the version list of the package page (#1251): hs sys pkg history
 const h = parseHistory([['history', 'index'], ['version', '1.2.0', '2026-11-20T09:12:00Z', 'current', 'no', '-', 'Fix the address'],

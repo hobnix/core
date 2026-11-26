@@ -2,7 +2,7 @@
   import { P, packagePath, appPath } from '../paths.js';
   // The Marketplace as a store (#474): cards of the apps first, add-ons (extensions, capabilities, blueprints) on their own tab, Installed and
   // Updates with a count, and the repositories, the package builder and the full package table on Advanced. A card opens the page of its package.
-  // An app that is not installed says whether it fits this server (#793, hs sys pkg fit), and the Apps tab can show only those that do.
+  // An app that is not installed says on its card whether it fits this server (#793, hs sys pkg fit).
   // Reads: hs sys pkg market / states / cards / fit / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
   // confirmation) and the plans of hs sys pkg (update, remove, fetch, repo-add, repo-remove) and parts (turn on/off); a package or repository that
   // came from a repository somebody added is red (the typed word is its name).
@@ -24,7 +24,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText, isApp, parseFit, fitLabel, fitReason, hiddenByFit } from './market.js';
+  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText, isApp, parseFit, fitLabel, fitReason } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
@@ -58,8 +58,6 @@
   const fitList = poll(() => (showsFit ? FIT : ''), 120000, 'pkg-market');
   const fit = $derived(parseFit(rows(fitList)));
   const fitOf = (p) => (showsFit && isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
-  const fitReady = $derived(fitList.data != null);
-  let onlyFits = $state(false);
   // what a refresh reads again
   const paths = () => (showsFit ? [...PATHS, FIT] : PATHS);
 
@@ -68,9 +66,7 @@
   const inTab = $derived(rowsOf(tab, store));
   const cats = $derived(categoriesOf(inTab));
   $effect(() => { if (!cats.some((c) => c.value === category)) category = 'all'; });
-  const filtering = $derived(showsFit && onlyFits && fitReady);
-  const cards = $derived(filterRows(inTab, { q, category, fit: filtering ? fit : null }));
-  const hidden = $derived(filtering ? hiddenByFit(inTab, fit) : '');
+  const cards = $derived(filterRows(inTab, { q, category }));
   const emptyText = { apps: 'No app is offered yet. Use Check for updates to read the repositories.', addons: 'No add-on is offered yet.',
     installed: 'Nothing is installed from a repository yet.', updates: 'Everything installed is up to date.' };
 
@@ -187,22 +183,15 @@
           {/each}
         </div>
       {/if}
-      {#if showsFit}
-        <Row gap="2">
-          <Switch bind:checked={onlyFits} label="Fits this server" disabled={!fitReady} reason={fitList.error ? 'Whether apps fit could not be checked' : 'Still comparing the apps with this server'} />
-          <span aria-hidden="true">Fits this server</span>
-        </Row>
-      {/if}
       <div class="find"><TextInput bind:value={q} type="search" placeholder={tab === 'addons' ? 'Search add-ons' : 'Search apps'} ariaLabel="Search" autocomplete="off" /></div>
     </div>
 
-    {#if hidden}<Muted as="p">{hidden}</Muted>{/if}
-    {#if showsFit && fitList.error && !fitReady}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
+    {#if showsFit && fitList.error && fitList.data == null}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
 
     {#if !inTab.length}
       <EmptyState icon={tab === 'updates' ? 'check-circle' : 'storefront'} title={tab === 'updates' ? 'No updates' : 'Nothing here yet'} text={emptyText[tab]} />
     {:else if !cards.length}
-      <EmptyState icon="magnifying-glass" title="Nothing matches" text={filtering ? 'Try another word or category, or turn off "Fits this server".' : 'Try another word or category.'} />
+      <EmptyState icon="magnifying-glass" title="Nothing matches" text="Try another word or category." />
     {:else}
       <Grid min="250" gap="4">
         {#each cards as p (p.repo + '/' + p.name)}
