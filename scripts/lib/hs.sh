@@ -326,14 +326,14 @@ build_args() {
 # rest is refused, never dropped (#1345: `stop --dry-run` really stopped the instance). --foreground on a long row is honoured: it runs here.
 extra_guard() {   # extra_guard <typed after the words...>
   case "$row_args" in *"{rest}"*) return 0 ;; *"{"*) ;; *) return 0 ;; esac
-  local x
+  local x seen=" "   # an option with a value counts once: build_args passes the first, a second would be dropped
   while [ $# -gt 0 ]; do
     x=$1; shift
     case ",$row_flags,=$x" in *,long,*"=--foreground") continue ;; esac
     if [[ $x == --* && $x != *[[:space:]{}=]* ]]; then
       case " $row_args " in
         *" {?$x} "*) continue ;;
-        *" {?$x=} "*) [ $# -eq 0 ] || { shift; continue; } ;;
+        *" {?$x=} "*) if [ $# -gt 0 ] && [[ $seen != *" $x "* ]]; then seen+="$x "; shift; continue; fi ;;
       esac
     fi
     . "$here/ui.sh"

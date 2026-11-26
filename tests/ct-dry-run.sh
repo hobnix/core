@@ -178,6 +178,8 @@ nope                                         group staff remove --yes
 nope                                         user ann show --dry-run
 nope                                         group staff show extra
 passes "drill ct web --repo offsite"         backup drill ct web --repo offsite
+nope                                         backup drill ct web --repo offsite --repo local
+nope                                         sys backup snapshots shares --repo offsite --repo offsite
 nope                                         backup drill ct web --repo
 nope                                         backup drill ct web --dry-run
 passes "--find word --repo offsite"          sys backup find word --repo offsite
