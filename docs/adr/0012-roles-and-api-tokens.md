@@ -1,6 +1,6 @@
 # 0012: Roles and API tokens: viewer, app manager, admin
 
-Status: Accepted (2026-11-10); open points on group names and token lockout answered 2026-11-18 (below). Implemented in 0.8: roles, `HS_ACTOR`, `hs token`, role-aware web interface, package roles; not tested on hardware yet. Not built: the two-factor and single sign-on parts of #462 (steps 19 and 20, held for the security review #433). Guide: docs/web-interface.md
+Status: Accepted (2026-11-10); open points on group names and token lockout answered 2026-11-18 (below). Implemented in 0.8: roles, `HS_ACTOR`, `hs token`, role-aware web interface, package roles; not tested on hardware yet. Not built: the two-factor and single sign-on parts of #462 (steps 19 and 20, held for the security review #433). Guide: docs/web-interface.md. Later: ADR 0033 and 0034 (accepted 2026-11-26, Decided items) change parts of this record, see "What changes in older records on acceptance" there. Until a step is built, this record applies as written.
 Issue: hobnix/server#257 (part of #195).
 
 ## Context

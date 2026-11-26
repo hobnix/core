@@ -1,6 +1,6 @@
 # 0034: The job system: every change is a systemd job with a record in SQLite
 
-Status: Proposed
+Status: Accepted (2026-11-26) by the owner. The **Decided** items are rules. The acceptance names no Planned item or open point: none of them is confirmed by it.
 Issue: none filed yet (milestone 0.15 "Core and Jobs", steps P0 and P2 of docs/PLAN-core-daemon.md); related #1126 (extension actions as jobs), #1219
 (recipe SDK and jobs), #1268 (remove `job-record.py`). Related: ADR 0004, 0005, 0018, 0033 (core and daemon), docs/PLAN-core-daemon-migration.md.
 
@@ -136,7 +136,7 @@ What is true today, checked in the code of the branch `0.14` on 2026-11-26:
 
 ## What changes in older records on acceptance
 
-Nothing in these records is edited by this one. On acceptance each gets a Status note that points here.
+The text of these records is not edited. Each has a Status note that points here. A change that rests on a Planned item waits until that item is confirmed.
 
 | Record | Change on acceptance |
 |---|---|

@@ -1,6 +1,6 @@
 # 0033: One Rust core, one daemon, thin front ends
 
-Status: Proposed
+Status: Accepted (2026-11-26) by the owner. The **Decided** items are rules. The acceptance names no Planned item, Proposal or open point: none of them is confirmed by it.
 Issue: none filed yet (milestone 0.15 "Core and Jobs", step P0 of docs/PLAN-core-daemon.md); the web server record #1266 moves into the same milestone
 and is written with this record or beside it. Related: ADR 0001, 0006, 0012, 0026, 0032, ADR 0034 (job system), docs/PLAN-rust.md,
 docs/PLAN-core-daemon-migration.md (the migration map).
@@ -116,7 +116,7 @@ What is true today, checked in the code of the branch `0.14` on 2026-11-26 (path
 
 ## What changes in older records on acceptance
 
-Nothing in these records is edited by this one. On acceptance each gets a Status note that points here.
+The text of these records is not edited. Each has a Status note that points here. A change that rests on a Planned item waits until that item is confirmed.
 
 | Record | Change on acceptance |
 |---|---|
