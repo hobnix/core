@@ -81,10 +81,21 @@ impl Response {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Client {
     timeout: Duration,
     headers: Vec<(String, String)>,
+}
+
+/// Header names only: a value can be the integration key.
+impl std::fmt::Debug for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(k, _)| k.as_str()).collect();
+        f.debug_struct("Client")
+            .field("timeout", &self.timeout)
+            .field("headers", &names)
+            .finish()
+    }
 }
 
 impl Default for Client {
@@ -308,6 +319,18 @@ mod tests {
         assert!(matches!(r.ok(), Err(HttpError::Status(404, _))));
         assert!(parse_response(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nab").is_err());
         assert!(parse_response(b"garbage").is_err());
+    }
+
+    #[test]
+    fn debug_does_not_show_header_values() {
+        let c = Client::new()
+            .header("X-Emby-Token", "key-4f1c9a")
+            .header("Accept-Language", "en");
+        let d = format!("{c:?}");
+        assert!(!d.contains("key-4f1c9a"), "{d}");
+        assert!(!d.contains("\"en\""), "{d}");
+        assert!(d.contains("X-Emby-Token"), "{d}");
+        assert!(d.contains("timeout"), "{d}");
     }
 
     #[test]
