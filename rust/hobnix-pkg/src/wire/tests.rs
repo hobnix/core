@@ -100,7 +100,7 @@ fn core_lines_round_trip_with_sorted_keys() {
         r#"{"package":"plex","integration":"media","source":"recipe","api_url":null,"extras":{},"key_header":null}]}"#
     );
     let event = r#"{"v":1,"type":"event","id":5,"time":1700000000,"source":"core","kind":"job.done","subject":"j1","level":"info","text":null,"payload":null}"#;
-    let event2 = r#"{"v":1,"type":"event","id":6,"time":1,"source":"pkg.x","kind":"pkg.x.y","subject":"s","level":"warn","text":"t","payload":{"b":1,"a":[2]}}"#;
+    let event2 = r#"{"v":1,"type":"event","id":6,"time":1,"source":"demo","kind":"pkg.x.y","subject":"s","level":"warn","text":"t","payload":{"b":1,"a":[2]}}"#;
     let shutdown = r#"{"v":1,"type":"shutdown","grace_ms":5000}"#;
     let init_plain =
         r#"{"v":1,"type":"init","name":"ticker","lang":"de","subscribe":[],"health_interval":1.0}"#;
