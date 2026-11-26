@@ -17,6 +17,7 @@ Every problem is (code, text); the codes are in scripts/lib/error-codes.tsv. man
 checks. install_problems(m, folder) is what hs pkg install and update run on the staged copy before it replaces the old one.
 """
 import hashlib
+import mmap
 import os
 import platform
 import re
@@ -35,6 +36,9 @@ BIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 PATH = re.compile(r"[A-Za-z0-9._/-]+")
 # the marker in front of the commands.tsv rows that the SDK's command macro builds into a program (TABLE_START, rust/hobnix-pkg-command/src/table.rs)
 TABLE_START = b"\0hobnix-commands-tsv-1\0"
+TABLE_MAX = 256 * 1024                       # the most bytes of rows a program may carry: some thousand commands
+# no row carries these (the macro refuses them in help texts): control characters (tab separates the fields) and U+2028, U+2029
+ROW_FORBIDDEN = re.compile("[\\x00-\\x08\\x0a-\\x1f\\x7f-\\x9f\\u2028\\u2029]")
 MAGIC = (b"\x7fELF", b"MZ", b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
 
 
@@ -80,6 +84,15 @@ def _inside(folder, p):
     return None
 
 
+def tsv_lines(folder):
+    """The lines of commands.tsv, split at "\n" only (a CRLF counts as one), as the loader and the SDK split them; [] without the file."""
+    try:
+        with open(os.path.join(folder, "commands.tsv"), encoding="utf-8", newline="") as f:
+            return [line.removesuffix("\r") for line in f.read().split("\n")]
+    except OSError:
+        return []
+
+
 def referenced(folder, m):
     """[(word, how)] for what commands.tsv rows (column 3) and [service] exec of this package name: how is "exec" (a service), "proto" (a row
     with the flag proto: ext_proto.py runs the program itself) or "bash" (any other row: hs.sh starts it as `bash <file>`)."""
@@ -87,15 +100,11 @@ def referenced(folder, m):
     sv = m.get("service")
     if isinstance(sv, dict) and isinstance(sv.get("exec"), str):
         out.append((sv["exec"], "exec"))
-    try:
-        with open(os.path.join(folder, "commands.tsv"), encoding="utf-8") as f:
-            for line in f.read().splitlines():
-                c = line.split("	")
-                if not line.startswith("#") and len(c) >= 3:
-                    flags = [x.strip() for x in c[6].split(",")] if len(c) >= 7 else []
-                    out.append((c[2].strip(), "proto" if "proto" in flags else "bash"))
-    except OSError:
-        pass
+    for line in tsv_lines(folder):
+        c = line.split("	")
+        if not line.startswith("#") and len(c) >= 3:
+            flags = [x.strip() for x in c[6].split(",")] if len(c) >= 7 else []
+            out.append((c[2].strip(), "proto" if "proto" in flags else "bash"))
     return out
 
 
@@ -182,35 +191,54 @@ def problems(m, folder=None, built=False):
     return out + (undeclared(folder, refs, paths) if folder else [])
 
 
+class TableError(ValueError):
+    """The program carries the marker of the command macro, but its table cannot be taken as it is."""
+
+
 def built_rows(path):
     """The commands.tsv rows that the SDK's command macro built into the program at `path` (between TABLE_START and a NUL byte), or None
-    for a program without them (rows written by hand)."""
+    for a program without the marker (rows written by hand). The file is mapped, not read into memory. Raises TableError for a table that
+    is not closed within TABLE_MAX bytes, is not UTF-8 or holds a forbidden character, for a second marker, and for a file that cannot be
+    read."""
     try:
         with open(path, "rb") as f:
-            data = f.read()
-    except OSError:
-        return None
-    start = data.find(TABLE_START)
-    end = data.find(b"\0", start + len(TABLE_START)) if start >= 0 else -1
-    if end < 0:
-        return None
+            if os.fstat(f.fileno()).st_size == 0:
+                return None
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                start = data.find(TABLE_START)
+                if start < 0:
+                    return None
+                if data.find(TABLE_START, start + 1) >= 0:
+                    raise TableError("there is more than one table (one commands! per program)")
+                first = start + len(TABLE_START)
+                end = data.find(b"\0", first, first + TABLE_MAX + 1)
+                if end < 0:
+                    raise TableError("the table has no closing NUL byte within %d bytes" % TABLE_MAX)
+                raw = data[first:end]
+    except OSError as e:
+        raise TableError("the program cannot be read (%s)" % e.strerror) from e
     try:
-        return data[start + len(TABLE_START):end].decode("utf-8").splitlines()
-    except UnicodeDecodeError:
-        return None
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise TableError("the table is not UTF-8") from e
+    rows = text.removesuffix("\n").split("\n")
+    for row in rows:
+        bad = ROW_FORBIDDEN.search(row)
+        if bad:
+            raise TableError("a row of the table holds the forbidden character U+%04X" % ord(bad.group()))
+    return rows
 
 
 def drift(folder, p, w):
-    """[(code, text)]: the rows of commands.tsv that start @/<p> differ from the rows built into the program (#1263). The program is read,
-    never run. No rows built in: nothing to compare."""
-    built = built_rows(os.path.join(folder, p))
+    """[(code, text)]: the rows of commands.tsv that start @/<p> differ from the rows built into the program (#1263), or the table in the
+    program is damaged. The program is read, never run. No marker: nothing to compare."""
+    try:
+        built = built_rows(os.path.join(folder, p))
+    except TableError as e:
+        return [("binary.table", "%s: the command table built into @/%s is not usable: %s; build the program again" % (w, p, e))]
     if built is None:
         return []
-    try:
-        with open(os.path.join(folder, "commands.tsv"), encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        lines = []
+    lines = tsv_lines(folder)
     rows = [l for l in lines if not l.startswith("#") and l.split("\t")[2:3] == ["@/" + p]]
     if rows == built:
         return []

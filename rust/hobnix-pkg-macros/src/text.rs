@@ -1,8 +1,9 @@
-//! The checks of the texts that go into a `commands.tsv` row: one tab-separated line, so no tab, line break or NUL.
+//! The checks of the texts that go into a `commands.tsv` row: one tab-separated line, so no tab, line break or other control character.
 
 use syn::{Error, LitStr, Result};
 
-/// A help text: not empty, not `-` (that means "none" in the row), no tab, line break or NUL.
+/// A help text: not empty, not `-` (that means "none" in the row), no control character (tab, line break, NUL, ESC, ...) and no line or
+/// paragraph separator (U+2028, U+2029). `hs help` prints it as it is, and `scripts/lib/pkg_binary.py` of the core refuses the same set.
 pub(crate) fn help(lit: &LitStr) -> Result<String> {
     let s = lit.value();
     if s.trim().is_empty() || s == "-" {
@@ -11,10 +12,10 @@ pub(crate) fn help(lit: &LitStr) -> Result<String> {
             "the help text must not be empty or -",
         ));
     }
-    if s.contains(['\t', '\n', '\r', '\0']) {
+    if s.contains(|c: char| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) {
         return Err(Error::new(
             lit.span(),
-            "the help text must be one line without tabs",
+            "the help text must be one line without tabs or other control characters",
         ));
     }
     Ok(s)
@@ -87,7 +88,23 @@ mod tests {
     #[test]
     fn refuses_texts_that_break_a_row() {
         assert!(help(&lit("show it")).is_ok());
-        for bad in ["", " ", "-", "a\tb", "a\nb", "a\0b"] {
+        for bad in [
+            "",
+            " ",
+            "-",
+            "a\tb",
+            "a\nb",
+            "a\rb",
+            "a\0b",
+            "a\u{1b}[31mb",
+            "a\u{b}b",
+            "a\u{c}b",
+            "a\u{1c}b",
+            "a\u{7f}b",
+            "a\u{85}b",
+            "a\u{2028}b",
+            "a\u{2029}b",
+        ] {
             assert!(help(&lit(bad)).is_err(), "{bad:?}");
         }
     }

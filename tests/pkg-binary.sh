@@ -102,6 +102,42 @@ base "$B"; with_table "$B" "${ROW/Run the program/Start the program}"
 check_out "a changed handler (other built rows) is drift" "binary.drift.*Start the program" rc "$B"
 base "$B"; with_table "$B" "$ROW"$'\n'"${ROW/svc run/svc stop}"
 check_out "a built row missing from commands.tsv is drift" "binary.drift" rc "$B"
+echo "-- a damaged or second table, and the characters no row may hold"
+raw_table() {   # raw_table <dir> <printf format> [arg...]: the program is the script plus these bytes; the hash follows
+  local p=$1/extensions/svc sum; shift
+  # shellcheck disable=SC2059   # the format is the point: it writes the bytes
+  { printf '%s' "$BODY"; printf "$@"; } > "$p/bin/svc"
+  sum=$(sha256sum "$p/bin/svc" | cut -d' ' -f1)
+  sed -i "s/^sha256 = .*/sha256 = \"$sum\"/" "$p/package.toml"
+}
+MARK='\0hobnix-commands-tsv-1\0'
+fill() { head -c "$1" /dev/zero | tr '\0' x; }
+for c in $'\033' $'\v' $'\f' $'\034' $'\r' $'\302\205' $'\342\200\250' $'\342\200\251'; do   # refused even when commands.tsv holds it too
+  hex=$(printf '%s' "$c" | od -An -tx1 | tr -d ' \n')
+  base "$B"; bad_row=${ROW/Run the program/Run${c}the program}
+  sed -i '$d' "$B/extensions/svc/commands.tsv"; printf '%s\n' "$bad_row" >> "$B/extensions/svc/commands.tsv"
+  with_table "$B" "$bad_row"
+  check_out "a built row with the bytes $hex is refused" "binary.table.*forbidden character" rc "$B"
+done
+base "$B"; with_table "$B" "$ROW"; sed -i 's#$#\r#' "$B/extensions/svc/commands.tsv"
+check "a commands.tsv with CRLF line ends still matches" $PKG repo-check "$B"
+base "$B"; raw_table "$B" "$MARK%s\n" "$ROW"
+check_out "a table without its closing NUL is refused" "binary.table.*no closing NUL" rc "$B"
+check "and repo-check fails" bash -c "! $PKG repo-check '$B'"
+base "$B"; raw_table "$B" "$MARK%s\n\377\0" "$ROW"
+check_out "a table that is not UTF-8 is refused" "binary.table.*not UTF-8" rc "$B"
+base "$B"; raw_table "$B" "$MARK%s\0" "$(fill 262145)"
+check_out "a table over the size limit is refused" "binary.table.*within 262144 bytes" rc "$B"
+base "$B"; raw_table "$B" "$MARK%s\n\0between$MARK%s\n\0" "$ROW" "$ROW"
+check_out "a second table is refused" "binary.table.*more than one table" rc "$B"
+base "$B"; raw_table "$B" 'no marker \377\0 here'
+check "a program without the marker passes" $PKG repo-check "$B"
+for edge in 4096 65536 1048576; do   # the marker lies across this offset of the file
+  base "$B"
+  raw_table "$B" "%s$MARK%s\n\0" "$(fill $((edge - ${#BODY} - 10)))" "${ROW/Run the program/Start the program}"
+  check_out "a table whose marker crosses offset $edge is found" "binary.drift.*Start the program" rc "$B"
+done
+
 base "$B"; sed -i '/^\[\[binary\]\]/,$d' "$B/extensions/svc/package.toml"
 printf '\177ELF\002\001' > "$B/extensions/svc/bin/svc"
 check_out "a compiled program started without a [[binary]] is refused" "binary.undeclared" rc "$B"

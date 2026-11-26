@@ -21,6 +21,16 @@ fn tab(_ctx: &dyn Ctx) -> Result<Success, Failure> {
     Ok(Success::text("a"))
 }
 
+#[command(name = "a", reads, help = "x", help_de = "a\u{1b}[31mred")]
+fn escape(_ctx: &dyn Ctx) -> Result<Success, Failure> {
+    Ok(Success::text("a"))
+}
+
+#[command(name = "a", reads, help = "x", sys = "two\u{2028}lines")]
+fn separator(_ctx: &dyn Ctx) -> Result<Success, Failure> {
+    Ok(Success::text("a"))
+}
+
 #[command(name = "a", reads, help = "x", timeout = 7200)]
 fn long(_ctx: &dyn Ctx) -> Result<Success, Failure> {
     Ok(Success::text("a"))

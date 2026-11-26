@@ -18,20 +18,32 @@ error: reads or changes is given twice
 14 | #[command(name = "a", reads, changes, help = "x")]
    |                              ^^^^^^^
 
-error: the help text must be one line without tabs
+error: the help text must be one line without tabs or other control characters
   --> tests/ui/command_attribute.rs:19:37
    |
 19 | #[command(name = "a", reads, help = "two\tcolumns")]
    |                                     ^^^^^^^^^^^^^^
 
-error: timeout is a number of seconds from 1 to 3600
+error: the help text must be one line without tabs or other control characters
   --> tests/ui/command_attribute.rs:24:52
    |
-24 | #[command(name = "a", reads, help = "x", timeout = 7200)]
+24 | #[command(name = "a", reads, help = "x", help_de = "a\u{1b}[31mred")]
+   |                                                    ^^^^^^^^^^^^^^^^
+
+error: the help text must be one line without tabs or other control characters
+  --> tests/ui/command_attribute.rs:29:48
+   |
+29 | #[command(name = "a", reads, help = "x", sys = "two\u{2028}lines")]
+   |                                                ^^^^^^^^^^^^^^^^^^
+
+error: timeout is a number of seconds from 1 to 3600
+  --> tests/ui/command_attribute.rs:34:52
+   |
+34 | #[command(name = "a", reads, help = "x", timeout = 7200)]
    |                                                    ^^^^
 
 error: unknown key; the keys are name, reads, changes, help, help_de, topic, timeout and sys
-  --> tests/ui/command_attribute.rs:29:42
+  --> tests/ui/command_attribute.rs:39:42
    |
-29 | #[command(name = "a", reads, help = "x", colour = "red")]
+39 | #[command(name = "a", reads, help = "x", colour = "red")]
    |                                          ^^^^^^
