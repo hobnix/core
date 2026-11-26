@@ -1,0 +1,33 @@
+# cargo-deny (docs/CODE-PRACTICES.md "Rust: dependencies"): CI job `rust` runs `cargo deny check` (EmbarkStudios/cargo-deny-action).
+# Locally: `cargo install cargo-deny --locked`, then `cargo deny check` in rust/.
+
+[graph]
+# the targets a hobnix binary or an extension is built for
+targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "aarch64-unknown-linux-gnu"]
+all-features = true
+
+[advisories]
+# RustSec database: a vulnerable or unmaintained crate fails the check; an exception goes into `ignore` with the advisory id and a reason
+version = 2
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+# The licences of the crates in Cargo.lock today; a new licence is a decision (AGPL-3.0-or-later compatible), not a line added in passing.
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Zlib", "Unicode-3.0"]
+confidence-threshold = 0.9
+# the workspace's own crates (publish = false) carry AGPL-3.0-or-later and are not checked
+private = { ignore = true }
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only; a git or other registry dependency fails until it is named here
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
