@@ -1,0 +1,5 @@
+date  = "2026-11-26"
+type  = "change"
+title = "With no page open, the server reads much less in the background"
+docs  = "web-interface#live-state"
+body  = """Live data that only a web page shows is now read when a page opens or when something changes, and otherwise every 5 to 10 minutes. Right after you open a page, a value may be a few minutes old for a moment before the new one arrives. A change made outside hobnix with no page open can show up after up to 10 minutes. The health check runs as often as before. API token clients get the stored values too, add fresh=1 for a new read."""

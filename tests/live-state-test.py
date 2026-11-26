@@ -660,7 +660,7 @@ class Cli(unittest.TestCase):
         self.assertEqual(ls.topic_info()["parts-list"]["groups"], {"system", "network"})
 
     def test_network_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in NET_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -689,7 +689,7 @@ class Cli(unittest.TestCase):
         self.assertTrue({"system", "network", "instances", "shares"} <= seen)
 
     def test_pending_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in PENDING_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -728,7 +728,7 @@ class Cli(unittest.TestCase):
         self.assertTrue({"system", "instances", "users", "shares", "disks", "security", "backup"} <= seen)
 
     def test_app_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in APP_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -792,7 +792,7 @@ class Cli(unittest.TestCase):
             self.assertIn("system", info[n]["groups"])
 
     def test_instance_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         self.assertEqual(len(INSTANCE_TOPICS), 11)
         for name, (words, iv, lock, cap, groups) in INSTANCE_TOPICS.items():
@@ -800,14 +800,14 @@ class Cli(unittest.TestCase):
             self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
 
     def test_six_column_parse(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         self.assertEqual(info["status"], {"cap": None, "groups": {"any"}})
         self.assertEqual(info["temp-disks"]["groups"], {"disks", "shares"})
         self.assertEqual(info["vault-list"]["groups"], {"security"})
         self.assertEqual(set(info), {t[0] for t in ls.topics()})
 
     def test_system_topics_info(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         self.assertEqual(set(SYSTEM_TOPICS) - set(info), set())
         self.assertEqual(info["deck"], {"cap": None, "groups": {"any"}})
         self.assertEqual(info["jobs-running"]["groups"], {"any", "jobs"})

@@ -141,6 +141,15 @@ capability gate (`incus` off = no process) are the Docker ones; the 10 s poll st
 
 Not tested on hardware yet.
 
+**Demand (D14, #1320).** Every topic whose document only a page reads has `idle:<s>` in column 9 (300 s, 600 s for slow settings):
+it runs at its interval only while a page holds a lease, else once per idle period, and at once when a page opens or a named event wakes it. A
+`@group` refresh and a wave skip an idle topic without a lease. Always on: the reads whose script holds emit or notify calls (`ALWAYS_TOPICS` in
+`tests/live-demand-test.py`). `health-next` and `health-list` must stay there: both run `health-check.sh` dry, and that writes `health-since` and
+emits `health.new` / `health.resolved`; `health-info` is named in `health-check.sh`. A failing topic keeps its own ttl in `live check` and is
+retried at its interval. The other eight hold such calls only outside the mode the topic runs (read in the code in #1320). Before a topic
+becomes idle, follow its script and the helpers it sources for events, notifications and files a timer reads. Bearer-token API clients of the web
+interface read the stored documents and write no lease. Not tested on hardware yet.
+
 ## History
 
 `liveState = "redis"` (Redis on a unix socket, the unit `hs-live`, the group `redis-hobnix`) and `liveState = "db"` (the unit `hs-live-db`, the measurement

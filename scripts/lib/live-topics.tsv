@@ -12,91 +12,91 @@
 # Column 8 (optional): ttl = seconds the entry counts as fresh (live_state.status_of); `-` or empty = 3 x interval. An entry past its ttl is still served, only marked.
 # Column 9 (optional): demand (D14) = `always` (or empty, `-`: the topic runs at its interval) or `idle:<seconds>`: the topic runs at its interval only
 # while an open page of the web interface wants it (a lease in the table `demand`, written by hs-web), else once per idle period, and at once when a
-# lease appears. Only topics for a page: SMART, free space, sizes. Never a topic that a health check, a notification or a push rule reads
-# (tests/live-demand-test.py lists them). A named event or a refresh by hook still wakes it.
+# lease appears. Every topic whose document only a page reads. Never a topic named in health-check.sh or lib/notify-rules.tsv, and never a read
+# whose script may write events or notifications (ALWAYS_TOPICS in tests/live-demand-test.py). A named event or a refresh by hook still wakes it.
 # Lock mode: mounted-pool/Samba reads skip while locked (they need services that are down); lock-aware reads run so the UI can show
 # the defined locked state. Unlock refreshes all topics immediately.
-status	status	15	run	-	any	-
-live	live status	5	run	-	any	-
+status	status	15	run	-	any	-	-	idle:300
+live	live status	5	run	-	any	-	-	idle:300
 monitor-disks	monitor disks	15	run	-	disks	-	-	idle:120
 disk-health	disk-health list	30	run	-	disks	-	-	idle:300
-disk-inventory	state disks	30	run	-	disks	-
-disk-marks	disk marks	15	run	-	disks	-
-pool-info-bulk	pool info bulk	15	skip	-	disks	-
-pool-info-fast	pool info fast	15	skip	-	disks	-
-pool-disks	pool disks	30	skip	-	disks	-
-pool-members-bulk	pool members bulk	15	skip	-	disks	-
-pool-members-fast	pool members fast	15	skip	-	disks	-
-pool-state-bulk	pool state bulk	10	run	-	disks	-
-pool-state-fast	pool state fast	10	run	-	disks	-
+disk-inventory	state disks	30	run	-	disks	-	-	idle:300
+disk-marks	disk marks	15	run	-	disks	-	-	idle:300
+pool-info-bulk	pool info bulk	15	skip	-	disks	-	-	idle:300
+pool-info-fast	pool info fast	15	skip	-	disks	-	-	idle:300
+pool-disks	pool disks	30	skip	-	disks	-	-	idle:300
+pool-members-bulk	pool members bulk	15	skip	-	disks	-	-	idle:300
+pool-members-fast	pool members fast	15	skip	-	disks	-	-	idle:300
+pool-state-bulk	pool state bulk	10	run	-	disks	-	-	idle:300
+pool-state-fast	pool state fast	10	run	-	disks	-	-	idle:300
 shares-overview	shares overview	30	skip	-	shares	-	-	idle:300
 shares-deleted	shares deleted	60	skip	-	shares	-	-	idle:600
-shares-principals	shares principals	60	skip	-	shares	-
+shares-principals	shares principals	60	skip	-	shares	-	-	idle:600
 encryption	encryption list	30	run	-	security	-
 vault-list	vault list	60	run	-	security	-
 vault-usage	vault usage	30	run	-	security	-	-	idle:300
 vault-uses	vault uses	60	run	-	security	-
-state-history	state history	30	run	-	disks	-
+state-history	state history	30	run	-	disks	-	-	idle:300
 fm-locations	fm locations	15	run	-	shares	-	-	idle:300
-temp-disks	temp-disk raw	30	run	-	disks,shares	-
-deck	deck	5	run	-	any	-
-jobs-running	jobs running	10	run	-	any,jobs	-
-jobs-list	jobs list	30	run	-	jobs,system	-
+temp-disks	temp-disk raw	30	run	-	disks,shares	-	-	idle:300
+deck	deck	5	run	-	any	-	-	idle:300
+jobs-running	jobs running	10	run	-	any,jobs	-	-	idle:300
+jobs-list	jobs list	30	run	-	jobs,system	-	-	idle:300
 health-next	health next	30	run	-	any	-
 health-list	health list	60	run	-	system	-
 health-info	health info	60	run	-	system	-
-hardware	hardware	15	run	-	system	-
+hardware	hardware	15	run	-	system	-	-	idle:300
 ups	ups status	30	run	-	system	-
-system-updates	system updates	60	skip	-	system	-
-system-config	system config	300	run	-	system,network	-
-setup-list	setup list	30	run	-	any	-
-config-list	config list	60	run	-	system,network,security,backup	-
-parts-list	parts list	60	run	-	system,network	-
-node-list	node list	30	run	-	network,system	-
-ssh-keys	ssh-key list	60	run	-	security	-
-expiry	expiry list	300	run	-	system	-
+system-updates	system updates	60	skip	-	system	-	-	idle:600
+system-config	system config	300	run	-	system,network	-	-	idle:600
+setup-list	setup list	30	run	-	any	-	-	idle:600
+config-list	config list	60	run	-	system,network,security,backup	-	-	idle:600
+parts-list	parts list	60	run	-	system,network	-	-	idle:600
+node-list	node list	30	run	-	network,system	-	-	idle:600
+ssh-keys	ssh-key list	60	run	-	security	-	-	idle:600
+expiry	expiry list	300	run	-	system	-	-	idle:600
 notify-channels	notify channels	60	run	notifications	system	-
 notify-providers	notify providers	3600	run	notifications	-	-
-ct-list	ct list	10	skip	incus	instances,shares,network	-
-netmap	netmap topology	10	skip	-	instances,network	-
-iso-list	iso list	10	skip	incus	instances	-
-ct-pools	ct pools	15	skip	incus	instances	-
-ct-profiles	ct profiles	120	skip	incus	instances,network,system	-
-services-list	services list	30	skip	-	instances,network	ct-list
-services-app	services app	30	skip	-	instances,network	ct-list
-services-routes	services routes	30	skip	-	instances,network	services-list
-services-local-routes	services local-routes	30	skip	gateway	instances,network,system	services-list
-services-tiles	services tiles	60	skip	dashboard	instances,network	services-list
-services-stats	services stats	30	skip	dashboard	network	-
-pkg-market	pkg market	120	skip	-	system,instances	-
-pkg-states	pkg states	120	skip	-	system,instances	-
-apps-list	apps list	120	skip	-	system,instances	-
-apps-health	apps health	60	skip	-	instances,system	-
-pkg-repos	pkg repos	300	run	-	system	-
+ct-list	ct list	10	skip	incus	instances,shares,network	-	-	idle:300
+netmap	netmap topology	10	skip	-	instances,network	-	-	idle:300
+iso-list	iso list	10	skip	incus	instances	-	-	idle:300
+ct-pools	ct pools	15	skip	incus	instances	-	-	idle:300
+ct-profiles	ct profiles	120	skip	incus	instances,network,system	-	-	idle:600
+services-list	services list	30	skip	-	instances,network	ct-list	-	idle:300
+services-app	services app	30	skip	-	instances,network	ct-list	-	idle:300
+services-routes	services routes	30	skip	-	instances,network	services-list	-	idle:300
+services-local-routes	services local-routes	30	skip	gateway	instances,network,system	services-list	-	idle:300
+services-tiles	services tiles	60	skip	dashboard	instances,network	services-list	-	idle:300
+services-stats	services stats	30	skip	dashboard	network	-	-	idle:300
+pkg-market	pkg market	120	skip	-	system,instances	-	-	idle:600
+pkg-states	pkg states	120	skip	-	system,instances	-	-	idle:600
+apps-list	apps list	120	skip	-	system,instances	-	-	idle:300
+apps-health	apps health	60	skip	-	instances,system	-	-	idle:300
+pkg-repos	pkg repos	300	run	-	system	-	-	idle:600
 pkg-index	pkg index	300	run	-	system	-
-recipes-list	recipes list	60	skip	incus	instances,system	-
-recipes-versions	recipes versions	60	skip	-	instances,system	-
-gateway-status	gateway status	60	skip	gateway	network,instances,system	-
-gateway-routes	gateway routes	60	skip	gateway	network,instances,system	-
-gateway-health	gateway health	300	skip	gateway	network,instances,system	-
-dns-list	dns list	300	skip	ad	network,instances,system	-
-unifi-networks	unifi networks	300	skip	network	network,system	-
-unifi-clients	unifi clients	60	skip	network	network,instances,system	-
-ports-list	ports list	120	skip	-	network,instances,system	-
-remote-list	remote list	60	skip	-	network,shares,system	-
-users-list	users list	60	skip	ad	users,shares,instances,system	-
-users-groups	users groups	60	skip	ad	users,shares,instances,system	-
-dc-state	dc state	600	skip	ad	users,security,instances,system	-
+recipes-list	recipes list	60	skip	incus	instances,system	-	-	idle:600
+recipes-versions	recipes versions	60	skip	-	instances,system	-	-	idle:600
+gateway-status	gateway status	60	skip	gateway	network,instances,system	-	-	idle:300
+gateway-routes	gateway routes	60	skip	gateway	network,instances,system	-	-	idle:600
+gateway-health	gateway health	300	skip	gateway	network,instances,system	-	-	idle:300
+dns-list	dns list	300	skip	ad	network,instances,system	-	-	idle:600
+unifi-networks	unifi networks	300	skip	network	network,system	-	-	idle:600
+unifi-clients	unifi clients	60	skip	network	network,instances,system	-	-	idle:300
+ports-list	ports list	120	skip	-	network,instances,system	-	-	idle:600
+remote-list	remote list	60	skip	-	network,shares,system	-	-	idle:600
+users-list	users list	60	skip	ad	users,shares,instances,system	-	-	idle:600
+users-groups	users groups	60	skip	ad	users,shares,instances,system	-	-	idle:600
+dc-state	dc state	600	skip	ad	users,security,instances,system	-	-	idle:600
 backup-state	backup state	30	run	backup	backup,any	-
 backup-overview	backup overview	60	skip	backup	backup,shares,instances,disks,system	-	-	idle:600
 backup-shares	backup shares	60	skip	backup	backup,shares,instances,disks,system	-	-	idle:600
-docker-list	docker list	300	skip	docker	instances,system,docker	-
-docker-apps	docker apps	300	skip	docker	instances,system,docker	-
-docker-status	docker status	60	skip	-	instances,system,docker	-
-docker-health	docker health	60	skip	-	instances,system,docker	-
-docker-containers	docker containers	120	skip	docker	instances,system,docker	-
-docker-registries	docker registries	120	skip	docker	instances,system,docker	-
-parts-pending	parts pending	60	run	-	system,network	-
-rebuild-pending	rebuild pending	60	run	-	system,network,security,backup	-
+docker-list	docker list	300	skip	docker	instances,system,docker	-	-	idle:300
+docker-apps	docker apps	300	skip	docker	instances,system,docker	-	-	idle:300
+docker-status	docker status	60	skip	-	instances,system,docker	-	-	idle:300
+docker-health	docker health	60	skip	-	instances,system,docker	-	-	idle:300
+docker-containers	docker containers	120	skip	docker	instances,system,docker	-	-	idle:300
+docker-registries	docker registries	120	skip	docker	instances,system,docker	-	-	idle:600
+parts-pending	parts pending	60	run	-	system,network	-	-	idle:600
+rebuild-pending	rebuild pending	60	run	-	system,network,security,backup	-	-	idle:600
 preset-list	preset list	3600	run	-	-	-
 blueprint-list	blueprint list	3600	run	-	-	-

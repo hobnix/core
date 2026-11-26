@@ -534,6 +534,7 @@ class Collector:
         self.busy_log = collections.deque()      # (time of the end, seconds) of every read (last window)
         self.rusage0 = _cpu_seconds()
         self.soft = set()                        # topics whose pending wake came only from the group `any` (no change of their own area)
+        self.failing = set()                     # topics whose last read failed: they are retried at their interval, also while nobody watches
         self.leases = {}                         # D14: topic -> time the lease runs out, as listen() saw the table `demand` last (`*` = every topic)
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
@@ -704,7 +705,7 @@ class Collector:
     def pace(self, topic, interval):
         """seconds between two reads of a topic: its interval, or its idle interval (live-topics.tsv column 9, D14) while nobody wants it"""
         idle = (self.info.get(topic) or {}).get("idle")
-        if idle and not self.leased(topic):
+        if idle and not self.leased(topic) and topic not in self.failing:
             return max(idle, interval)
         return interval
 
@@ -722,12 +723,14 @@ class Collector:
         with self.lock:
             old = self.db.get(topic) or {}
             if rc == 0 or out:
+                self.failing.discard(topic)
                 if old.get("err"):
                     ev.append(("live.collector-recovered", "live state '%s' reads again" % topic))
                 if old and old.get("rc") == rc and old.get("payload") == out and not old.get("err"):
                     return False
                 self.db.put(topic, out, rc, ms, src, ttl, now)
                 return True
+            self.failing.add(topic)
             text = ls.clean(err or "no output")
             if old.get("err") == text and old.get("rc") == rc:
                 log("topic %s failed (rc %s): %s" % (topic, rc, text))

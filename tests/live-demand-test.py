@@ -35,11 +35,10 @@ lc = load("live_collect_demand", "live-collect.py")
 ws = load("web_serve_demand", "web-serve.py")
 TOPICS_TSV = os.path.join(scripts, "lib", "live-topics.tsv")
 
-# What a health check, a notification or a push rule reads is never demand. The first list is the fixed part (the topics the web interface shows as
-# health, status, backup and pool state, the heartbeat, the jobs and the notification channels); the second test finds more in the files.
-HEALTH_TOPICS = ["status", "live", "deck", "health-next", "health-list", "health-info", "jobs-running", "jobs-list", "backup-state", "pool-state-bulk", "pool-state-fast",
-                 "ups", "expiry", "notify-channels", "notify-providers", "hardware", "disk-marks", "disk-inventory", "encryption", "rebuild-pending",
-                 "parts-pending", "system-updates", "dc-state", "gateway-health", "apps-health", "docker-health"]
+# Reads that keep their interval. health-next and health-list run health-check.sh dry, which writes health-since and emits health.new and
+# health.resolved; health-info is named in health-check.sh (#1320). For the others: their scripts contain emit/notify calls; read mode not verified (#1320). The second test finds more in the files.
+ALWAYS_TOPICS = ["health-next", "health-list", "health-info", "encryption", "vault-list", "vault-uses", "ups", "notify-channels", "notify-providers",
+                 "pkg-index", "backup-state"]
 CANDIDATES = ["disk-health", "monitor-disks", "shares-overview", "shares-deleted", "vault-usage", "fm-locations", "backup-overview", "backup-shares"]
 
 
@@ -51,10 +50,18 @@ class Table(unittest.TestCase):
         for t in CANDIDATES:
             self.assertTrue(self.info[t].get("idle"), t)
 
-    def test_every_health_topic_is_always(self):
-        for t in HEALTH_TOPICS:
+    def test_every_always_topic_is_always(self):
+        for t in ALWAYS_TOPICS:
             self.assertIn(t, self.info)
-            self.assertIsNone(self.info[t].get("idle"), "%s feeds a health check or a notification: it keeps its interval" % t)
+            self.assertIsNone(self.info[t].get("idle"), "%s can write events or notifications: it keeps its interval" % t)
+
+    def test_every_topic_decides(self):
+        for topic, _, interval, _ in ls.topics(TOPICS_TSV):
+            self.assertTrue(topic in ALWAYS_TOPICS or self.info[topic].get("idle") or interval >= 3600, topic)
+
+    def test_health_topics_follow_the_timer(self):
+        for t in ("health-next", "health-list", "health-info"):
+            self.assertIn(t, ls.event_topics()["health.checked"])
 
     def test_topics_named_by_the_health_check_and_the_rules_are_always(self):
         text = ""
@@ -150,6 +157,14 @@ class Pace(unittest.TestCase):
         c.leases = {"disk-health": time.time() - 1}
         self.assertEqual(c.pace("disk-health", 30), 300)
         c.lease_round()
+        self.assertEqual(c.pace("disk-health", 30), 300)
+
+    def test_a_failing_topic_is_retried_at_its_interval(self):
+        c, st = self.make()
+        st.get, st.fail, st.put = (lambda t: None), (lambda *a: None), (lambda *a: None)
+        c._store("disk-health", 1, "", "boom", time.time(), [])
+        self.assertEqual(c.pace("disk-health", 30), 30)
+        c._store("disk-health", 0, "x", "", time.time(), [])
         self.assertEqual(c.pace("disk-health", 30), 300)
 
     def test_a_table_that_cannot_be_read_keeps_the_leases_and_raises_nothing(self):
