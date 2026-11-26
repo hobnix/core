@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hs sys pkg fit (scripts/pkg-fit.sh, #793): what a package states it needs next to this server. The package reads, incus, the pool read, the
-# parts list and /proc are stand-ins. And Repos.declared (scripts/pkg_repo.py): the trailing columns of pkg cards, from a manifest nobody trusts.
+# capability file and /proc are stand-ins. And Repos.declared (scripts/pkg_repo.py): the trailing columns of pkg cards, from a manifest nobody trusts.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 have jq || { skip "needs jq"; finish; exit 0; }
@@ -36,16 +36,17 @@ row() { local IFS=$'\t'; printf '%s\n' "$*"; }
   row small family - - - - 999999 1 no
 } > "$WORK/cards"
 cat > "$WORK/pkg.sh" <<STUB
-case "\$1" in --market) cat "$WORK/market" ;; --cards) cat "$WORK/cards" ;; esac
+echo "\$1" >> "$WORK/pkg-calls"
+case "\$1" in --market-cards) cat "$WORK/market"; echo; cat "$WORK/cards" ;; esac
 STUB
 # the pool of the default profile has 100 GiB free of 200 GiB; another pool has room that must not count
 cat > "$WORK/pools.sh" <<'STUB'
 printf 'other\tzfs\tbulk\t999999999999999\t999999999999999\t/bulk/x\n'
 printf 'fastpool\tzfs\tfast\t107374182400\t214748364800\trpool/incus\n'
 STUB
-cat > "$WORK/parts.sh" <<'STUB'
-printf 'tailscale\t%s\n' "${PARTS_TS:-off}"
-STUB
+# the capability file: tailscale is off (empty) or on
+: > "$WORK/caps-off"
+echo tailscale > "$WORK/caps-on"
 echo '{"gpu":{"cards":[],"total":0}}' > "$WORK/gpu-none"
 echo '{"gpu":{"cards":[{"driver":"nvidia"}],"total":1}}' > "$WORK/gpu-nvidia"
 echo '{"gpu":{"cards":[{"driver":"i915"}],"total":1}}' > "$WORK/gpu-other"
@@ -59,9 +60,10 @@ case "\$*" in
 esac
 STUB
 chmod +x "$WORK/bin/incus"
-fit() { HS_PKG=$WORK/pkg.sh HS_CT_POOLS=$WORK/pools.sh HS_PARTS=$WORK/parts.sh HS_INCUS=${HS_INCUS:-$WORK/bin/incus} HS_PROC=${HS_PROC:-$WORK/proc} bash "$SCRIPTS/pkg-fit.sh"; }
+fit() { HS_PKG=$WORK/pkg.sh HS_CT_POOLS=$WORK/pools.sh HS_STATE_DIR=$WORK/state HS_CAPABILITIES_FILE=${CAPS:-$WORK/caps-off} HS_INCUS=${HS_INCUS:-$WORK/bin/incus} HS_PROC=${HS_PROC:-$WORK/proc} bash "$SCRIPTS/pkg-fit.sh"; }
 out=$(fit); rc=$?
 check_eq "the read succeeds" 0 "$rc"
+check_eq "the package rows are asked for once" "--market-cards" "$(cat "$WORK/pkg-calls")"
 of() { awk -F'\t' -v n="$1" -v r="${2:-official}" '$1 == n && $2 == r' <<<"$out"; }
 verdict() { of "$@" | cut -f3 | sort -u | tr '\n' ' ' | sed 's/ $//'; }
 line() { of "$1" "${3:-official}" | awk -F'\t' -v c="$2" '$4 == c { print $5 " " $6 " " $7 " " $8 }'; }
@@ -95,7 +97,7 @@ check_eq "core line" "no - - -" "$(line later core)"
 check_eq "an installed app has no line" "" "$(of there)$(of older)"
 check_eq "an add-on has no line" "" "$(of addon)"
 
-out=$(GPU_FILE=$WORK/gpu-nvidia INSTANCES=docker PARTS_TS=on fit)
+out=$(GPU_FILE=$WORK/gpu-nvidia INSTANCES=docker CAPS=$WORK/caps-on fit)
 check_eq "an NVIDIA card: fits" "fits" "$(verdict gpuapp)"
 check_eq "docker and tailscale there: fits" "fits" "$(verdict needsy)"
 out=$(GPU_FILE=$WORK/gpu-other fit)

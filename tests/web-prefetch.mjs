@@ -46,6 +46,7 @@ const parsed = parsePoolRows([['tank', 'data', 'zfs', 'online'], ['Bad', 'data',
 check('parsePoolRows drops bad rows', parsed.length === 2 && parsed[0].name === 'tank' && parsed[1].state === '-');
 check('ofRole lists the names of a role', JSON.stringify(ofRole(parsed, 'apps')) === JSON.stringify(['ssd']));
 check('an unknown page prefetches nothing', readsFor('/nowhere').length === 0);
+check('pkg fit is never prefetched: only the page that shows it reads it', !routes.concat('/apps/marketplace/official/immich').some((r) => readsFor(r).some((p) => p.includes('pkg/fit'))));
 check('the new pool address names its pool', readsFor('/node/hs/storage/pools/fast').some((p) => p.endsWith('pool=fast')) && readsFor('/storage/pools/bulk').some((p) => p.endsWith('pool=bulk')));
 const storagePages = ['/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files', '/storage/encryption', '/storage/vault'];
 check('storage prefetch lists are identical with live mode off and on', storagePages.every((r) => JSON.stringify(readsFor(r)) === JSON.stringify(readsFor(r, [], true))));

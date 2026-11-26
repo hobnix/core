@@ -1425,9 +1425,9 @@ def flag_value(rest, flag):
     return rest[i]
 
 
-def run(pkg, cmd, rest):
+def run(pkg, cmd, rest, repos=None):
     """the commands of pkg.py that need a repository; returns the exit code"""
-    R = Repos(pkg)
+    R = repos or Repos(pkg)
     try:
         if cmd == "repo":
             sub = rest[0] if rest else "list"
@@ -1494,6 +1494,12 @@ def run(pkg, cmd, rest):
         elif cmd == "history":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             print("\n".join(R.history(rest[0], repo)))
+        elif cmd == "market-cards":      # for hs sys pkg fit: both in one process (the signed index checked once), an empty line between them
+            rc = run(pkg, "market", [], R)
+            if rc:
+                return rc
+            print()
+            return run(pkg, "cards", [], R)
         elif cmd == "cards":
             lines = R.cards()
             if lines:

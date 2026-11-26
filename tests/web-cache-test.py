@@ -154,6 +154,26 @@ class Cache(unittest.TestCase):
         every = {tuple(argv): e for spec_, argv, key, e in r.warm_targets()}
         self.assertGreaterEqual(every[("net", "nics")], self.cfg.warm_idle_ttl)
 
+    def test_an_ondemand_read_is_not_warmed_not_even_after_it_was_asked_for(self):
+        r = self.reads()
+        warmed = lambda: any(argv[:2] == ["pkg", "fit"] for _s, argv, _k, _e in r.warm_targets())
+        self.assertFalse(warmed())
+        self.ask(r, "pkg/fit")
+        self.assertFalse(warmed())
+
+    def test_an_ondemand_read_is_never_answered_past_its_ttl(self):
+        r = self.reads()
+        self.ask(r, "pkg/fit")
+        self.ask(r, "pkg/fit")                           # younger than the ttl: from memory
+        self.assertEqual(len(self.fake.calls), 1)
+        key = ("pkg", "fit")
+        t, val = r.cache[key]
+        r.cache[key] = (t - 100, val)                    # past the ttl: a normal read would show this one and read again behind it
+        code, _obj, age = self.ask(r, "pkg/fit")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(self.fake.calls), 2)        # run before the answer
+        self.assertTrue(age is None or age < 60)
+
     def test_the_warm_up_reads_what_is_missing_and_stops_when_nobody_is_there(self):
         class App:
             pass

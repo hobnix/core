@@ -33,18 +33,12 @@
   const stateList = poll('/api/sys/pkg/states', 30000);
   // category, icon and tested date of each card; it changes with a fetch, so it follows the market topic
   const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
-  // does a not-installed app fit this server
-  const fitList = poll('/api/sys/pkg/fit', 120000, 'pkg-market');
   // where Open goes: the dashboard link of a service in one of the app's instances
   const svcApp = poll('/api/sys/services/app', 60000);
   const tiles = poll('/api/sys/services/tiles', 60000);
   const stageOf = $derived(parseStates(rows(stateList)));
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards', '/api/sys/pkg/fit'];
-
-  const fit = $derived(parseFit(rows(fitList)));
-  const fitOf = (p) => (isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
-  const fitReady = $derived(fitList.data != null);
-  let onlyFits = $state(false);
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const FIT = '/api/sys/pkg/fit';
 
   const store = $derived(storeRows(rows(market), parseCards(rows(cardList))));
   // name, kind, repository, available version, installed version, state, core, title (the Advanced table)
@@ -59,12 +53,22 @@
   const tab = $derived(TABS.includes(route.query.tab) ? route.query.tab : route.query.tab === 'repos' ? 'advanced' : 'apps');   // ?tab=repos: the old Repositories tab
   const pick = (id) => go(id === 'apps' ? P.marketplace : `${P.marketplace}?tab=${id}`);
 
+  // does a not-installed app fit this server: read only while the page shows it (the Apps tab with an app that is not installed)
+  const showsFit = $derived(tab === 'apps' && store.some((p) => isApp(p) && !p.installed));
+  const fitList = poll(() => (showsFit ? FIT : ''), 120000, 'pkg-market');
+  const fit = $derived(parseFit(rows(fitList)));
+  const fitOf = (p) => (showsFit && isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
+  const fitReady = $derived(fitList.data != null);
+  let onlyFits = $state(false);
+  // what a refresh reads again
+  const paths = () => (showsFit ? [...PATHS, FIT] : PATHS);
+
   let q = $state('');
   let category = $state('all');
   const inTab = $derived(rowsOf(tab, store));
   const cats = $derived(categoriesOf(inTab));
   $effect(() => { if (!cats.some((c) => c.value === category)) category = 'all'; });
-  const filtering = $derived(tab === 'apps' && onlyFits && fitReady);
+  const filtering = $derived(showsFit && onlyFits && fitReady);
   const cards = $derived(filterRows(inTab, { q, category, fit: filtering ? fit : null }));
   const hidden = $derived(filtering ? hiddenByFit(inTab, fit) : '');
   const emptyText = { apps: 'No app is offered yet. Use Check for updates to read the repositories.', addons: 'No add-on is offered yet.',
@@ -98,7 +102,7 @@
   const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
   let wasBusy = false;
   $effect(() => {
-    if (wasBusy && !busyNow) refresh(PATHS);
+    if (wasBusy && !busyNow) refresh(paths());
     wasBusy = busyNow;
   });
   // the pending word of a package row, from its job
@@ -148,7 +152,7 @@
         bulkSummary.push({ name: p.name, ok: r.ok, reason: r.reason, status: r.status });
       }
       selected = new Set();
-      await refresh(PATHS);
+      await refresh(paths());
       showSummary = true;
     } finally {
       bulkBusy = false;
@@ -174,7 +178,7 @@
 <PageTabs {tabs} {tab} onpick={pick} controlled />
 
 {#if tab !== 'advanced'}
-  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={false} retry={() => refresh(PATHS)}>
+  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={false} retry={() => refresh(paths())}>
     <div class="bar">
       {#if cats.length > 2}
         <div class="cats" role="group" aria-label="Categories">
@@ -183,7 +187,7 @@
           {/each}
         </div>
       {/if}
-      {#if tab === 'apps' && inTab.length}
+      {#if showsFit}
         <Row gap="2">
           <Switch bind:checked={onlyFits} label="Fits this server" disabled={!fitReady} reason={fitList.error ? 'Whether apps fit could not be checked' : 'Still comparing the apps with this server'} />
           <span aria-hidden="true">Fits this server</span>
@@ -193,7 +197,7 @@
     </div>
 
     {#if hidden}<Muted as="p">{hidden}</Muted>{/if}
-    {#if tab === 'apps' && fitList.error && !fitReady}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
+    {#if showsFit && fitList.error && !fitReady}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
 
     {#if !inTab.length}
       <EmptyState icon={tab === 'updates' ? 'check-circle' : 'storefront'} title={tab === 'updates' ? 'No updates' : 'Nothing here yet'} text={emptyText[tab]} />
@@ -232,7 +236,7 @@
 {:else}
   <h2 class="sect">Repositories</h2>
   <PageState loading={!repoList.loaded} error={repoList.error?.message} hasData={repoList.data != null} empty={repoList.loaded && !repoList.error && !repos.length}
-             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(PATHS)}>
+             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(paths())}>
     <div class="card tc">
       <Table id="repos" columns={repoColumns} rows={repos} key="name" loading={!repoList.loaded} empty="No repository.">
         {#snippet cell(r, col)}
@@ -255,7 +259,7 @@
 
   <h2 class="sect">All packages</h2>
   <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !pkgs.length}
-             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(PATHS)}>
+             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(paths())}>
     {#if selected.size}
       <div class="bulk">
         <span class="bulk-count">{selected.size} selected</span>

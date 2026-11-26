@@ -28,11 +28,11 @@
   const stateList = poll('/api/sys/pkg/states', 30000);
   const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
   const show = poll(() => (repo && name ? `/api/sys/pkg/show/${name}?repo=${repo}` : ''), 120000, 'pkg-market');
-  const fitList = poll('/api/sys/pkg/fit', 120000, 'pkg-market');
   const historyList = poll(() => (repo && name ? `/api/sys/pkg/history/${name}?repo=${repo}` : ''), 120000, 'pkg-market');
   const svcApp = poll('/api/sys/services/app', 60000);
   const tiles = poll('/api/sys/services/tiles', 60000);
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards', '/api/sys/pkg/fit'];
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const FIT = '/api/sys/pkg/fit';
 
   const p = $derived(storeRows(rows(market), parseCards(rows(cardList))).find((x) => x.repo === repo && x.name === name) ?? null);
   const s = $derived(parseShow(rows(show)));
@@ -40,7 +40,10 @@
   const stage = $derived(parseStates(rows(stateList)).get(name));
   // only an app that is not installed is compared with this server (an installed one already uses what it needs)
   const compared = $derived(!!p && p.kind === 'recipe' && !p.installed);
+  const fitList = poll(() => (compared ? FIT : ''), 120000, 'pkg-market');   // read only where its card is shown
   const fit = $derived(compared ? parseFit(rows(fitList)).get(`${repo}/${name}`) : undefined);
+  // what a refresh reads again
+  const paths = () => (compared ? [...PATHS, FIT] : PATHS);
   const FIT_ICON = { ok: 'check-circle', note: 'warning', no: 'prohibit', unstated: 'question', unknown: 'warning-circle' };
   const FIT_WORD = { ok: 'Fine', note: 'Note', no: 'Does not fit', unstated: 'Not stated', unknown: 'Not checked' };
   const history = $derived(parseHistory(rows(historyList)));
@@ -76,7 +79,7 @@
   const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
   let wasBusy = false;
   $effect(() => {
-    if (wasBusy && !busyNow) refresh([...PATHS, `/api/sys/pkg/show/${name}?repo=${repo}`, `/api/sys/pkg/history/${name}?repo=${repo}`]);
+    if (wasBusy && !busyNow) refresh([...paths(), `/api/sys/pkg/show/${name}?repo=${repo}`, `/api/sys/pkg/history/${name}?repo=${repo}`]);
     wasBusy = busyNow;
   });
   const failure = $derived(p ? failureOf(p) : null);
@@ -100,7 +103,7 @@
   {/snippet}
 </PageHeader>
 
-<PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !p} retry={() => refresh(PATHS)}
+<PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !p} retry={() => refresh(paths())}
            emptyIcon="storefront" emptyTitle="No such package" emptyText={`No repository offers ${name} as ${repo}. It may have been taken out, or the repository was removed.`}>
   {#snippet emptyAction()}<Button variant="primary" icon="arrow-left" onclick={() => go(P.marketplace)}>Back to the Marketplace</Button>{/snippet}
   {#if p}
@@ -143,7 +146,7 @@
             </Stack>
             <Muted as="p">The figures are what the package says of itself, compared with this server as it is now, for this app alone. They do not promise that the install works.</Muted>
           {:else}
-            <Muted as="p">{!fitList.loaded ? 'Comparing with this server…' : 'Whether it fits this server could not be checked.'}</Muted>
+            <Muted as="p">{!fitList.loaded ? 'Comparing with this server…' : `Whether it fits this server could not be checked${fitList.error?.message ? `: ${fitList.error.message}` : '.'}`}</Muted>
           {/if}
         </Card>
       {/if}

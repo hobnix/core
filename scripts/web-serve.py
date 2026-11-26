@@ -1283,8 +1283,9 @@ READS = {
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
     ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
     ("pkg", "cards"): {"kind": "tsv", "ttl": 120},   # category, icon and tested date of every package (the store cards); the page re-reads it on pkg-market
-    # does an app that is not installed fit this server (pkg-fit.sh): free memory and disk space move, so the page re-reads it with the cards
-    ("pkg", "fit"): {"kind": "tsv", "ttl": 60},
+    # does an app that is not installed fit this server (pkg-fit.sh): free memory and disk space move, so the page re-reads it with the cards.
+    # ondemand: only a page that shows it makes it run (no warm-up: idle CPU), and no answer older than the ttl is given ("free right now")
+    ("pkg", "fit"): {"kind": "tsv", "ttl": 60, "ondemand": True},
     # one package from its newest verified release (the package page); the pictures it names come from /api/pkg/asset/<repo>/<name>/<file>
     ("pkg", "show"): {"kind": "tsv", "ttl": 60, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
     # the versions the repository's index lists for one package (the package page); it changes with a fetch
@@ -2138,7 +2139,7 @@ class Reads:
                 age = time.time() - hit[0]
                 if age < ttl:
                     return hit[1][0], hit[1][1], age
-                if age < min(ttl * self.cfg.stale_factor, self.cfg.stale_max):
+                if age < min(ttl * self.cfg.stale_factor, self.cfg.stale_max) and not spec.get("ondemand"):
                     self.refresh_async(spec, argv, key)
                     return hit[1][0], hit[1][1], age
         code, obj = self.fetch(spec, argv, key)
@@ -2263,7 +2264,7 @@ class Reads:
             key = tuple(argv)
             # a resolved string topic belongs to the live collector, not the warm-up; a mapping without a match has no topic and can be warmed
             is_topic = isinstance(spec.get("topic"), str)
-            if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache"):
+            if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache") and not spec.get("ondemand"):
                 done.add(key)
                 out.append((spec, argv, key, every))
         for words in WARM:
