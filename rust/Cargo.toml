@@ -55,7 +55,7 @@ string_slice = "warn"
 exit = "warn"
 mem_forget = "warn"
 
-# A wrapping integer is a bug in release too (debug builds check anyway). panic stays "unwind": the SDK's runners catch a panicking handler.
+# A wrapping integer is a bug in release too (debug builds check anyway). panic stays "unwind": the SDK's command runner catches a panicking handler (the service runner does not).
 [profile.release]
 overflow-checks = true
 panic = "unwind"
