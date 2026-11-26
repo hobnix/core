@@ -36,9 +36,15 @@ A piece moves only when 0.14 would otherwise build it in a shape 0.15 must redo,
 | P0: two decision records and the migration map | #1308 | 0.15 starts with code; the map shows what 0.14 work must not block |
 | P1 slice: protocol message types the core can use as the host | #1309 | the SDK split (#1262) decides where the types live; later means moving them twice |
 | Async, daemon and SQLite rules in the code practices | #1307 | written before the first daemon code, not after |
+| Performance baseline: a measuring script and written steps | #1333 | the plan measures before it ports |
+| Build time and size with the 0.15 libraries | #1334 | feeds the web server record (#1266) |
+| Tests of how app start and stop behave today | #1335 | the first operation 0.15 ports end to end |
+| P1 slice: the core writes events to the database | #1336 | the base of the job system; rests on P-h, confirmed by the owner |
+
+The last four were added by the owner on 2026-11-26.
 
 **Not** moved forward: the operation model, the system access layer, locks, job records in SQLite, the daemon and `hobnix-web`. They are the
-work of milestone 0.15, and several rest on Planned items of the records that are not confirmed yet.
+work of milestone 0.15 (#1337 to #1342), and several rest on Planned items of the records that are not confirmed yet.
 
 ## What this round builds, and in which order
 
