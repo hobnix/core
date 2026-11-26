@@ -86,6 +86,22 @@ bad "a bin name with a control character is refused" "binary.shape" bin/svc "$SU
 bad "a sha256 with a trailing newline is refused" "binary.shape" bin/svc "${SUM}\n"
 base "$B"; sed -i 's#reads,proto#reads#' "$B/extensions/svc/commands.tsv"
 check_out "a row without the flag proto naming the program is refused" "binary.runner" rc "$B"
+echo "-- rows built into the program by the SDK's command macro (#1263)"
+ROW=$'user\text svc run\t@/bin/svc\trun\tRun the program\tDas Programm starten\treads,proto'
+with_table() {   # with_table <dir> <rows>: the program carries the table of the command macro (marker, rows, NUL); the hash follows
+  local p=$1/extensions/svc sum
+  { printf '%s' "$BODY"; printf '\0hobnix-commands-tsv-1\0%s\n\0tail' "$2"; } > "$p/bin/svc"
+  sum=$(sha256sum "$p/bin/svc" | cut -d' ' -f1)
+  sed -i "s/^sha256 = .*/sha256 = \"$sum\"/" "$p/package.toml"
+}
+base "$B"; with_table "$B" "$ROW"
+check "rows equal to the built ones pass" $PKG repo-check "$B"
+sed -i 's#Run the program#Run it#' "$B/extensions/svc/commands.tsv"
+check_out "a row changed by hand is drift" "binary.drift.*Run it" rc "$B"
+base "$B"; with_table "$B" "${ROW/Run the program/Start the program}"
+check_out "a changed handler (other built rows) is drift" "binary.drift.*Start the program" rc "$B"
+base "$B"; with_table "$B" "$ROW"$'\n'"${ROW/svc run/svc stop}"
+check_out "a built row missing from commands.tsv is drift" "binary.drift" rc "$B"
 base "$B"; sed -i '/^\[\[binary\]\]/,$d' "$B/extensions/svc/package.toml"
 printf '\177ELF\002\001' > "$B/extensions/svc/bin/svc"
 check_out "a compiled program started without a [[binary]] is refused" "binary.undeclared" rc "$B"

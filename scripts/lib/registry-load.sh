@@ -207,7 +207,8 @@ _ext_filter() {   # _ext_filter <name> <dir> <report 0|1>
       seen[path] = 1
       if (report == 1) next
       if (script ~ /^@\//) $3 = dir "/" substr(script, 3)
-      if (proto == 1) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
+      # a row may carry proto itself (rows of the command macro of the SDK do; pkg_binary.py asks for it): not twice
+      if (proto == 1 && $7 !~ /(^|,)proto(,|$)/) { $7 =($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
       print
     }' "$(ext_core_file)" "$2/commands.tsv"
   local rc=$?   # an awk that failed (no registry, unreadable file) is a failure of the filter, never "no rows"

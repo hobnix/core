@@ -33,6 +33,8 @@ KEYS = {"path", "sha256", "bin", "target"}
 SHA = re.compile(r"[0-9a-f]{64}")             # all three are used with fullmatch: "$" would let a trailing newline through
 BIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 PATH = re.compile(r"[A-Za-z0-9._/-]+")
+# the marker in front of the commands.tsv rows that the SDK's command macro builds into a program (TABLE_START, rust/hobnix-pkg-command/src/table.rs)
+TABLE_START = b"\0hobnix-commands-tsv-1\0"
 MAGIC = (b"\x7fELF", b"MZ", b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
 
 
@@ -175,7 +177,47 @@ def problems(m, folder=None, built=False):
             out.append((bad[0], "%s: %s" % (w, bad[1])))
         elif want and SHA.fullmatch(want) and sha256_of(os.path.join(folder, p)) != want:
             out.append(("binary.hash", "%s: the sha256 of %s is not the one in package.toml" % (w, p)))
+        if not bad:
+            out += drift(folder, p, w)
     return out + (undeclared(folder, refs, paths) if folder else [])
+
+
+def built_rows(path):
+    """The commands.tsv rows that the SDK's command macro built into the program at `path` (between TABLE_START and a NUL byte), or None
+    for a program without them (rows written by hand)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    start = data.find(TABLE_START)
+    end = data.find(b"\0", start + len(TABLE_START)) if start >= 0 else -1
+    if end < 0:
+        return None
+    try:
+        return data[start + len(TABLE_START):end].decode("utf-8").splitlines()
+    except UnicodeDecodeError:
+        return None
+
+
+def drift(folder, p, w):
+    """[(code, text)]: the rows of commands.tsv that start @/<p> differ from the rows built into the program (#1263). The program is read,
+    never run. No rows built in: nothing to compare."""
+    built = built_rows(os.path.join(folder, p))
+    if built is None:
+        return []
+    try:
+        with open(os.path.join(folder, "commands.tsv"), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    rows = [l for l in lines if not l.startswith("#") and l.split("\t")[2:3] == ["@/" + p]]
+    if rows == built:
+        return []
+    pairs = [(a, b) for a, b in zip(rows + ["-"] * len(built), built + ["-"] * len(rows)) if a != b]
+    have, want = pairs[0] if pairs else ("-", "-")
+    return [("binary.drift", "%s: the rows of commands.tsv for @/%s differ from the ones built into the program (the command macro of the SDK): "
+             "commands.tsv has %r, the program %r; write the rows of Commands::tsv() into commands.tsv" % (w, p, have, want))]
 
 
 def manifest_problems(m, folder=None, built=False):
