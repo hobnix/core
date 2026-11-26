@@ -113,10 +113,10 @@
       <Card title="Who vouches for it">
         <Row gap="2" wrap>
           {#if trust}<Chip kind="trust" level={trust} />{/if}
-          <b>{testedText(p.verified)}</b>
+          <b>{testedText(p.verified, trust)}</b>
         </Row>
         {#if vouch}<p style="margin:0;line-height:1.55">{vouch}</p>{/if}
-        <Muted as="p">Tested means: a person installed this release on a real Hobnix server (not only in an automatic test), opened it, checked that it does its main job, and then wrote the day into the index of its repository. It does not cover every setting or every kind of hardware, a later release, or an update of the app itself. Packages run as root on this server.</Muted>
+        <Muted as="p">Tested means (the official repository only): a person installed this release on a real Hobnix server (not only in an automatic test), opened it, checked that it does its main job, and then wrote the day into the index of its repository. It does not cover every setting or every kind of hardware, a later release, or an update of the app itself. Packages run as root on this server.</Muted>
       </Card>
 
       {#if show.error || s.refused}

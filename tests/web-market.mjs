@@ -100,7 +100,8 @@ check('an added repository called official is never Official', trustOf('official
 check('the official repository without signatures is not Official', trustOf('official', [{ name: 'official', signed: false, from: 'default' }]) === 'unsigned');
 check('another default repository is not Official', trustOf('recipes', [{ name: 'recipes', signed: true, from: 'default' }]) === 'community');
 check('an unknown repository: no label yet', trustOf('x', repos) === '' && trustOf('x', null) === '');
-check('tested: the day or not tested', testedText('2026-01-02') === 'Tested on a real server on 2026-01-02' && testedText('') === 'Not tested on a real server');
+check('tested: the day or not tested (official)', testedText('2026-01-02', 'official') === 'Tested on a real server on 2026-01-02' && testedText('', 'official') === 'Not tested on a real server');
+check('tested: any other repository claims nothing, even with a day', ['community', 'unsigned', ''].every((t) => testedText('2026-01-02', t) === 'No Hobnix test date' && testedText('', t) === 'No Hobnix test date'));
 
 console.log(`${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

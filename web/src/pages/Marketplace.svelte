@@ -188,8 +188,8 @@
                    kicker={p.kind === 'recipe' ? '' : kindLabel(p.kind)} status={doing(p) || stateLine(p)}>
             {#snippet meta()}
               {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
-              {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified)}`} />{/if}
-              <Muted>{testedText(p.verified)}</Muted>
+              {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified, trustOf(p.repo, repos))}`} />{/if}
+              <Muted>{testedText(p.verified, trustOf(p.repo, repos))}</Muted>
               {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
             {/snippet}
             {#snippet actions()}

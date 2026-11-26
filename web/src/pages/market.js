@@ -49,8 +49,10 @@ export function trustOf(repo, repos) {
   return r.name === OFFICIAL_REPO && r.from === 'default' ? 'official' : 'community';
 }
 
-// the tested line of a card and the page: the day from the index, or the plain "not tested"
-export const testedText = (verified) => (verified ? `Tested on a real server on ${verified}` : 'Not tested on a real server');
+// the tested line of a card and the page. Only the official signed repository has test days (the server passes no other on, hs sys pkg
+// cards): there it is the day or "not tested"; any other repository has no Hobnix test date, which says nothing either way.
+export const testedText = (verified, trust = 'official') => (trust !== 'official' ? 'No Hobnix test date'
+  : verified ? `Tested on a real server on ${verified}` : 'Not tested on a real server');
 
 // the address of a package picture (/api/pkg/asset/<repo>/<name>/<file>), '' for anything the server would refuse anyway
 export function assetUrl(repo, name, file) {

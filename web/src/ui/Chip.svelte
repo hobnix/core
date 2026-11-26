@@ -25,7 +25,7 @@
   const t = $derived(kind === 'trust' ? (TRUST[level] ?? TRUST.community) : null);
   const s = $derived(kind === 'status' ? (STATUS[state] ?? STATUS.off) : null);
   const cls = $derived(kind === 'trust' ? `trust-${level}` : kind === 'status' ? `st-${state}` : `${kind} ${tone}`);
-  const tipText = $derived(title ?? (t ? `${t.tip}. ${tested ? `Tested on a real server on ${tested}` : 'Not tested on a real server'}` : undefined));
+  const tipText = $derived(title ?? (t ? `${t.tip}${level !== 'official' ? '' : tested ? `. Tested on a real server on ${tested}` : '. Not tested on a real server'}` : undefined));
 </script>
 
 <span class="chip {cls}" {style} use:tip={tipText}>
