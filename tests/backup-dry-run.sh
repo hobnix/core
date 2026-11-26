@@ -62,6 +62,7 @@ setup() {
   : > "$HS_BACKUP_REPO/data/0a-tmp-1"
   echo 'from = "server"' > "$HS_NIXOS_DIR/machine.toml"
   # a rule file of the instance, at the place the script itself uses
+  # shellcheck source=scripts/lib/backup-rules.sh
   ( STATE=$HS_STATE_DIR; . "$SCRIPTS/lib/backup-rules.sh"; f=$(rules_file web); mkdir -p "$(dirname "$f")"; printf 'include /a\ninclude /b\n' > "$f" )
 }
 # every file and folder with its content; empty lock files are no state
