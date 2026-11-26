@@ -180,7 +180,7 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
     if url.starts_with("https://") {
         return Err(HttpError::TlsUnsupported);
     }
-    let bad = || HttpError::BadUrl(url.into());
+    let bad = || HttpError::BadUrl(redact_url(url));
     let rest = url.strip_prefix("http://").ok_or_else(bad)?;
     let (auth, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
@@ -202,6 +202,27 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
         (auth.to_string(), 80)
     };
     Ok((host, port, path.to_string()))
+}
+
+/// The URL for an error text: the query and fragment become `?***`, a userinfo part `***@` (either can carry a key).
+fn redact_url(url: &str) -> String {
+    let (base, cut) = match url.split_once(['?', '#']) {
+        Some((b, _)) => (b, "?***"),
+        None => (url, ""),
+    };
+    let (scheme, rest) = match base.split_once("://") {
+        Some((s, r)) => (format!("{s}://"), r),
+        None => (String::new(), base),
+    };
+    let (auth, path) = match rest.split_once('/') {
+        Some((a, p)) => (a, format!("/{p}")),
+        None => (rest, String::new()),
+    };
+    let auth = match auth.rsplit_once('@') {
+        Some((_, host)) => format!("***@{host}"),
+        None => auth.to_string(),
+    };
+    format!("{scheme}{auth}{path}{cut}")
 }
 
 fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
@@ -319,6 +340,27 @@ mod tests {
         assert!(matches!(r.ok(), Err(HttpError::Status(404, _))));
         assert!(parse_response(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nab").is_err());
         assert!(parse_response(b"garbage").is_err());
+    }
+
+    #[test]
+    fn bad_url_does_not_show_query_or_userinfo() {
+        for url in [
+            "http://u:pw-9d2e@h/a?api_key=key-4f1c9a",
+            "ftp://h/x?api_key=key-4f1c9a",
+            "http://h/a b?api_key=key-4f1c9a#pw-9d2e",
+            "pw-9d2e@h?api_key=key-4f1c9a",
+            "http://h:notaport/?token=key-4f1c9a",
+        ] {
+            let e = parse_url(url).unwrap_err();
+            for shown in [e.to_string(), format!("{e:?}")] {
+                assert!(!shown.contains("key-4f1c9a"), "{shown}");
+                assert!(!shown.contains("pw-9d2e"), "{shown}");
+            }
+        }
+        let e = parse_url("ftp://h:1/x?y=1").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: ftp://h:1/x?***");
+        let e = parse_url("http://u:p@h/x").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: http://***@h/x");
     }
 
     #[test]
