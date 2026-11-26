@@ -1,4 +1,4 @@
-# cargo-deny (docs/CODE-PRACTICES.md "Rust: dependencies"): CI job `rust` runs `cargo deny check` (EmbarkStudios/cargo-deny-action).
+# cargo-deny (docs/CODE-PRACTICES.md "Rust: dependencies"): CI job `rust` runs `cargo deny check` (pinned release binary).
 # Locally: `cargo install cargo-deny --locked`, then `cargo deny check` in rust/.
 
 [graph]

@@ -119,21 +119,25 @@ jobs:
         run: cargo doc --locked --no-deps --all-features
       - name: File sizes (scripts/dev/rust-size-ratchet.sh, baseline tests/rust-size-ratchet.tsv)
         run: bash ../scripts/dev/rust-size-ratchet.sh check
+      # The release binary, checked against the sha256: the repository allows no third-party action here (an action that is not allowed
+      # stops the whole workflow before any job, "startup_failure"). To update: change both values, the sha256 is on the release page.
+      - name: Get cargo-deny
+        env:
+          VERSION: 0.22.1
+          SHA256: 13f7e825e9cb811c2f8de63f29b0f45851dfb53004029f0f2501af524728364d
+        run: |
+          name="cargo-deny-$VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$name.tar.gz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$VERSION/$name.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/$name.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
       # rust/deny.toml: licences, bans and sources always fail; a new advisory only reports on a pull request (it is not the pull
       # request's fault) and fails on push and on the nightly run
       - name: cargo deny (licences, bans, sources)
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          manifest-path: rust/Cargo.toml
-          command: check bans licenses sources
-          rust-version: ${{ steps.toolchain.outputs.channel }}
+        run: cargo deny check bans licenses sources
       - name: cargo deny (advisories)
-        uses: EmbarkStudios/cargo-deny-action@v2
         continue-on-error: ${{ github.event_name == 'pull_request' }}
-        with:
-          manifest-path: rust/Cargo.toml
-          command: check advisories
-          rust-version: ${{ steps.toolchain.outputs.channel }}
+        run: cargo deny check advisories
       # an extension builds the SDK alone: serde_json without hobnix-core's preserve_order (proto.rs pins the wire lines either way)
       - name: Tests of the SDK built alone
         run: cargo test --locked -p hobnix-ext-sdk
