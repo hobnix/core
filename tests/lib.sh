@@ -122,3 +122,33 @@ finish() {
   echo "  -> $T_PASS ok, $T_FAIL failed, $T_SKIP skipped"
   [ "$T_FAIL" -eq 0 ]
 }
+
+# Ctrl-C as a terminal sends it: SIGINT to the whole process group of the command, once <file> is there. Prints the exit code (-2 = ended by
+# SIGINT). (A command a test starts in the background ignores SIGINT: python starts it in a session of its own with the signal as usual.)
+ctrl_c() {   # ctrl_c <file> <command...>
+  timeout 60 python3 - "$@" <<'PY'
+import os, signal, subprocess, sys, time
+p = subprocess.Popen(sys.argv[2:], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True, preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+for _ in range(300):
+    if os.path.exists(sys.argv[1]) and os.path.getsize(sys.argv[1]):
+        break
+    time.sleep(0.1)
+os.killpg(p.pid, signal.SIGINT)
+try:
+    print(p.wait(timeout=20))
+except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGKILL)
+    print("still running")
+PY
+}
+gone() {   # gone <file of process ids>: none of them runs any more (a zombie counts as gone)
+  local p i
+  for p in $(cat "$1"); do
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      case "$(ps -o stat= -p "$p" 2>/dev/null)" in ""|Z*) continue 2 ;; esac
+      sleep 0.2
+    done
+    return 1
+  done
+}

@@ -557,6 +557,11 @@ the core: no host, user, share or package name, no address, no secret.
 
 Before each run, wait until no job, backup, parity sync or scrub runs, and do not update or rebuild during the run. Keep the same packages and apps on
 between two runs that you compare. A run takes more than half an hour: start it inside `tmux`, so a lost SSH connection does not end it.
+Ctrl-C stops the whole run, also while a read runs, and nothing is saved.
+
+The file of `--out` appears when the run is done. If it cannot get that name then (something else has the name by now, or the file system of the
+folder has no hard links, such as FAT or exFAT), the command fails and names the file beside it that holds the result. If it cannot write a file
+there at all, it prints the result: copy it before you close the terminal. Not tested on hardware yet.
 
 **Run 1, no page open.** Close every browser tab and app that shows the web interface and wait 15 minutes. Then run this (30 minutes, then the reads).
 Not tested on hardware yet.
@@ -587,7 +592,7 @@ What you see: one line per minute, then a table of the numbers and, in run 1, a 
 | --- | --- |
 | `hs-live.*`, `hs-web.*` | CPU and memory of the service from the counters of systemd, with everything it starts. `main_process_*` is the service's own process only. After a restart during the run the CPU is `-`. |
 | `hs-live.reads_per_min`, `read_wall_s_per_s`, `stretch_max` | The collector's own numbers, the same as `hs live load` shows. |
-| `host.*` | The whole server, containers and VMs included. `tasks_started_per_min` counts processes and threads. |
+| `host.*` | The whole server, containers and VMs included. `tasks_started_per_min` counts processes and threads. `cpu_steal_cores` counts on a server that is itself a VM: CPU time its host gave to others. It is not part of `cpu_cores`. |
 | `measuring.window_cpu_cores` | What the measuring itself used while it watched. |
 | `delay.change_to_stored.*` | From a change to the new stored value, as the collector recorded it. |
 | `delay.stored_to_page.*` | From the stored value to the page showing it. Only the Live state page records this. |

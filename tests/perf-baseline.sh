@@ -37,7 +37,7 @@ c.execute("INSERT INTO live (topic, payload, updated) VALUES (\"status\", \"secr
 # /proc: the host counters, the loadavg and the two main processes
 mkproc() {   # mkproc <busy ticks> <tasks> <utime of the main processes>
   mkdir -p "$HS_PROC/4242" "$HS_PROC/4343"
-  printf 'cpu  %s 0 0 5000 0 0 0 0 0 0\nprocesses %s\n' "$1" "$2" > "$HS_PROC/stat"
+  printf 'cpu  %s 0 0 5000 0 0 0 400 0 0\nprocesses %s\n' "$1" "$2" > "$HS_PROC/stat"
   echo '1.50 1.00 0.50 1/100 999' > "$HS_PROC/loadavg"
   for p in 4242 4343; do
     printf '%s (python3 x) S 1 1 1 0 -1 0 0 0 0 0 %s 0 900 900 20 0\n' "$p" "$3" > "$HS_PROC/$p/stat"
@@ -56,7 +56,7 @@ cpu=1000000000 pid=4242
 if [ "$n" -gt 0 ]; then
   cpu=7000000000
   [ "$u" = hs-web ] && cpu=1600000000
-  sed -i 's/^cpu  [0-9]*/cpu  1600/; s/^processes .*/processes 10300/' "$w/proc/stat"
+  sed -i 's/^cpu  [0-9]*/cpu  1600/; s/ 400 0 0$/ 9400 0 0/; s/^processes .*/processes 10300/' "$w/proc/stat"
   sed -i 's/ 100 0 900 900 / 160 0 900 900 /' "$w/proc/$pid/stat"
   if [ -e "$w/restart-$u" ]; then pid=9999; fi
 fi
@@ -90,6 +90,7 @@ check_eq "memory peak of the samples" "100.0" "$(val hs-live.memory_mib_max)"
 check_eq "resident size of the main process" "20.0" "$(val hs-live.main_process_rss_mib_avg)"
 check_eq "not restarted" "no" "$(val hs-live.restarted)"
 check "busy cores of the host (600 ticks)" between "$(val host.cpu_cores)" 0.2 2.0
+check "steal time (9000 ticks) is its own line, not busy time" between "$(val host.cpu_steal_cores)" 3 31
 check "tasks started on the host (300 in the window)" between "$(val host.tasks_started_per_min)" 800 6100
 check_eq "reads per minute from the collector's file" "180.0" "$(val hs-live.reads_per_min)"
 check_eq "busy reads" "0.250" "$(val hs-live.read_wall_s_per_s)"
@@ -119,6 +120,22 @@ printf '{"time": 1000, "window": 1, "reads": 3, "busy": 0.25, "stretch": 1.5}' >
 printf '#!/bin/sh\nprintf "MainPID=0\\nMemoryCurrent=[not set]\\nCPUUsageNSec=18446744073709551615\\n"\n' > "$WORK/nothing"; chmod +x "$WORK/nothing"
 result=$(HS_SYSTEMCTL=$WORK/nothing B --minutes 1 --no-reads --list)
 check_eq "unknown stays unknown" "- - - -" "$(val hs-live.cpu_cores) $(val hs-live.memory_mib_avg) $(val hs-live.main_process_rss_mib_avg) $(val hs-live.reads_per_min)"
+
+echo "-- a systemctl that hangs is ended; no answer is no restart"
+fresh
+cat > "$WORK/hanging" <<'FAKE'
+#!/usr/bin/env bash
+w=$(dirname "$0")
+n=$(cat "$w/hang-calls" 2>/dev/null || echo 0); echo $((n + 1)) > "$w/hang-calls"
+[ "$n" -ne 2 ] || exec sleep 60      # the second question about hs-live
+exec "$w/systemctl" "$@"
+FAKE
+chmod +x "$WORK/hanging"
+SECONDS=0
+result=$(HS_SYSTEMCTL=$WORK/hanging HS_PERF_SHOW_TIMEOUT=1 B --minutes 1 --no-reads --list)
+check_eq "exit code" "0" "$?"
+check "the run did not wait for it" test "$SECONDS" -lt 40
+check_eq "hs-live is not told as restarted" "no" "$(val hs-live.restarted)"
 
 echo "-- the reads, through hs timing --split"
 cat > "$WORK/hs" <<'FAKE'
@@ -163,6 +180,86 @@ fresh
 out=$(HS_BIN=$WORK/hs HS_PERF_TOOLS=none-installed B --minutes 1)
 check_out "progress and both tables" "hs sys pool info bulk" echo "$out"
 check_out "the window in the table" "hs-live\.cpu_cores" echo "$out"
+
+echo "-- the name of --out is taken during the run"
+# the stand-in dispatcher runs after the check at the start and before the result is written
+cat > "$WORK/quiet.sh" <<'FAKE'
+if [ -n "${PLANT:-}" ] && [ ! -e "$PLANT_DONE" ]; then
+  : > "$PLANT_DONE"
+  case "$PLANT" in
+    symlink) ln -s "$PLANT_VICTIM" "$PLANT_AT" ;;
+    dangling) ln -s "$PLANT_VICTIM.none" "$PLANT_AT" ;;
+    dirlink) ln -s "$(dirname "$PLANT_VICTIM")" "$PLANT_AT" ;;
+    fifo) mkfifo "$PLANT_AT" ;;
+    file) echo theirs > "$PLANT_AT" ;;
+    gone) rm -rf "$(dirname "$PLANT_AT")" ;;
+  esac
+fi
+FAKE
+planted() {   # planted <what>: out (the output), rc, dir, kept (the files left beside the name)
+  dir=$WORK/plant-$1
+  mkdir -p "$dir/out" "$dir/else"
+  echo keep > "$dir/else/victim"
+  out=$(PLANT=$1 PLANT_AT=$dir/out/r.tsv PLANT_VICTIM=$dir/else/victim PLANT_DONE=$dir/done \
+    HS_BIN=$WORK/hs HS_PERF_TOOLS=none-installed B --minutes 0 --out "$dir/out/r.tsv" 2>&1)
+  rc=$?
+  kept=("$dir"/out/hs-perf-baseline.*)
+}
+for what in symlink dangling dirlink fifo file; do
+  planted "$what"
+  check_eq "$what: fails, and does not hang" "1" "$rc"
+  check "$what: the result is kept" grep -q '^meta\.format	1$' "${kept[0]}"
+  check_out "$what: and its place is told" "kept in $dir/out/hs-perf-baseline\." echo "$out"
+  check_eq "$what: the other file is untouched" "keep" "$(cat "$dir/else/victim")"
+  check_eq "$what: nothing is written through a link" "victim" "$(ls -A "$dir/else")"
+done
+check "the FIFO is still one" test -p "$WORK/plant-fifo/out/r.tsv"
+check "the link is still one" test -L "$WORK/plant-symlink/out/r.tsv"
+check_eq "the file stays as it was" "theirs" "$(cat "$WORK/plant-file/out/r.tsv")"
+planted gone
+check_eq "no folder any more: fails" "1" "$rc"
+check_out "and prints the result" "^meta\.format	1$" echo "$out"
+for m in 022:644 077:600; do
+  (umask "${m%:*}"; B --minutes 0 --no-reads --out "$WORK/mode-${m%:*}.tsv" >/dev/null)
+  check_eq "umask ${m%:*}: the mode of a new file" "${m#*:}" "$(stat -c %a "$WORK/mode-${m%:*}.tsv")"
+done
+check_eq "no second file after a good run" "" "$(find "$WORK" -maxdepth 1 -name 'hs-perf-baseline.*')"
+# a signal while the file gets its name: a stand-in for ln sends it
+mkdir -p "$WORK/lnbin" "$WORK/stopped"
+printf '#!/bin/sh\nkill -TERM "$PPID"\nsleep 0.3\n' > "$WORK/lnbin/ln"; chmod +x "$WORK/lnbin/ln"
+PATH="$WORK/lnbin:$PATH" B --minutes 0 --no-reads --out "$WORK/stopped/r.tsv" >/dev/null 2>&1
+check_eq "stopped while saving: ends by the signal" "143" "$?"
+check_eq "and leaves no file behind" "" "$(ls -A "$WORK/stopped")"
+: > "$WORK/quiet.sh"
+
+echo "-- Ctrl-C during a read stops the whole run"
+mkdir -p "$WORK/int-tmp" "$WORK/int-out"
+cat > "$WORK/slow-hs" <<'FAKE'
+#!/usr/bin/env bash
+w=$(dirname "$0")
+printf '%s\n' "$*" >> "$w/slow-calls"
+sleep 30 &
+echo "$! $$" > "$w/slow-pids"
+wait
+FAKE
+rc=$(TMPDIR=$WORK/int-tmp HS_BIN=$WORK/slow-hs HS_PERF_TOOLS=none-installed \
+  ctrl_c "$WORK/slow-pids" bash "$SCRIPTS/perf-baseline.sh" --minutes 0 --out "$WORK/int-out/r.tsv")
+check_eq "it ends by the interrupt" "-2" "$rc"
+check_eq "no second read is started" "1" "$(wc -l < "$WORK/slow-calls" | tr -d ' ')"
+check "the read and what it started are gone" gone "$WORK/slow-pids"
+check_eq "no temporary file is left" "" "$(ls -A "$WORK/int-tmp" "$WORK/int-out" | grep -v -e ':$' -e '^$')"
+
+cat > "$WORK/slow-state.py" <<'PY'
+import os, subprocess
+c = subprocess.Popen(["sleep", "30"])
+with open(os.path.join(os.environ["HS_STATE_DIR"], "state-pids"), "w") as f:
+    f.write("%d %d" % (c.pid, os.getpid()))
+c.wait()
+PY
+fresh
+rc=$(HS_LIVE_STATE_PY=$WORK/slow-state.py ctrl_c "$WORK/state-pids" bash "$SCRIPTS/perf-baseline.sh" --minutes 1 --no-reads --list)
+check_eq "during the read of the live state: ends by the interrupt" "-2" "$rc"
+check "and that read is gone with what it started" gone "$WORK/state-pids"
 
 echo "-- compare"
 printf 'meta.format\t1\nmeta.cores\t8\nwindow.page\tclosed\nhs-live.cpu_cores\t2.000\nread.status.exit\t1\nonly.before\t5\nzero\t0\n' > "$WORK/a.tsv"

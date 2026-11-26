@@ -4,6 +4,7 @@
 # args: [--list] [--repeat <N>] [--split] [--pause <S>] [--skip <read>]
 # Runs the read-only `hs sys ...` commands the tabs call at load time, one after the other, and prints seconds per command, slowest first.
 # Needs root like the interface (the hs wrapper asks for it). Changes nothing: only reads; `sys system report` (writes a file) and every plan/start is left out.
+# A read that takes longer than 120 s is ended. Ctrl-C ends the read that runs, with what it started, and the whole run.
 #   --list         tab separated seconds<TAB>exit<TAB>command (for tools)
 #   --repeat N     run each command N times and show the slowest of them (default 1: the first run is the one a person waits for)
 #   --split        also CPU time, and where the time goes: the dispatcher, external tools, the rest (script, shells, Python). Each command then
@@ -74,8 +75,10 @@ done
 
 now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
 
+. "$here/lib/perf-split.sh"
+perf_stop_traps
+
 if $split; then
-  . "$here/lib/perf-split.sh"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   perf_split_setup "$tmp"
@@ -93,10 +96,10 @@ for c in "${reads[@]}"; do
     if $split; then
       TIMEFORMAT='%3U %3S'
       # shellcheck disable=SC2086
-      { time HS_CALLER=ui timeout 120 bash "$hsbin" sys $c >/dev/null 2>&1 </dev/null; } 2>"$tmp/clean" || r=$?
+      { time HS_CALLER=ui perf_stoppable timeout -k 5 120 bash "$hsbin" sys $c >/dev/null 2>&1 </dev/null; } 2>"$tmp/clean" || r=$?
     else
       # shellcheck disable=SC2086
-      HS_CALLER=ui timeout 120 bash "$hsbin" sys $c >/dev/null 2>&1 </dev/null || r=$?
+      HS_CALLER=ui perf_stoppable timeout -k 5 120 bash "$hsbin" sys $c >/dev/null 2>&1 </dev/null || r=$?
     fi
     t1=$(now_ms)
     if [ $((t1 - t0)) -ge "$worst" ]; then
@@ -106,7 +109,7 @@ for c in "${reads[@]}"; do
     [ "$r" -eq 0 ] || rc=$r
     if $split; then
       # shellcheck disable=SC2086
-      HS_CALLER=ui perf_split_run "$timeout_bin" 120 "$BASH" "$hsbin" sys $c
+      HS_CALLER=ui perf_split_run "$timeout_bin" -k 5 120 "$BASH" "$hsbin" sys $c
       total_ms=$(LC_ALL=C awk -v s="$ps_total_wall" 'BEGIN { printf "%d", s * 1000 }')
       if [ "$total_ms" -gt "$slowest" ]; then
         slowest=$total_ms

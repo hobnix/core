@@ -3,6 +3,9 @@
 # args: [--minutes <N>] [--no-reads] [--latency <file.tsv>] [--out <file>] [--list]  |  --compare <before> <after> [--list]
 # Takes the numbers of docs/PLAN-core-daemon.md section 14 (issue #1333; steps: docs/operations.md). It only reads: no setting, no data and
 # no refresh of a topic; the one file it writes is the one --out names (a new file). Needs root like the reads it times.
+# --out is written at the end: into a new file with a random name in the same folder, which then gets the name asked for as a hard link, only
+# while that name is free (a link, a FIFO or a file put there during the run is not touched). If that fails, the result is kept under the random
+# name, or printed when no file could be written. Ctrl-C stops the whole run.
 # First it watches hs-live and hs-web for N minutes (default 10, 0 = not at all): systemd's CPU and memory counters, the CPU and memory of the
 # main process, the collector's own numbers (the file `hs live load` shows) and whether a page is open (a lease in the live state).
 # Processes started are counted for the WHOLE host (/proc/stat, threads too): Linux keeps no such counter for one service.
@@ -14,11 +17,12 @@
 # The result has numbers, the version and the words of the core reads: no host, user, share or package name, no address, no secret.
 #   --list   name<TAB>value, one number per line (`-` = not known); with --compare: name<TAB>before<TAB>after<TAB>change
 # Test knobs: HS_SYSTEMCTL, HS_PROC, HS_LIVE_LOAD_FILE, HS_RUN_DIR, HS_LIVE_STATE_PY, HS_PERF_MINUTE (seconds a minute lasts), HS_PERF_STEP,
-# HS_PERF_PAUSE, HS_BIN, HS_PERF_TOOLS, HS_REPO.
+# HS_PERF_PAUSE, HS_PERF_SHOW_TIMEOUT, HS_BIN, HS_PERF_TOOLS, HS_REPO.
 set -uo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/version.sh"
+. "$here/lib/perf-split.sh"   # perf_stoppable
 usage="usage: hs perf baseline [--minutes <N>] [--no-reads] [--latency <file.tsv>] [--out <file>] [--list] | --compare <before> <after> [--list]"
 
 minutes=10 reads=true latency="" out="" list=false compare=false before="" after=""
@@ -75,8 +79,8 @@ minutes=$((10#$minutes))
 # everything that can be refused is refused before the long part
 if [ -n "$out" ]; then
   [ ! -e "$out" ] && [ ! -L "$out" ] || fail "$out exists already: name a new file (nothing is overwritten)"
-  d=$(dirname "$out")
-  [ -d "$d" ] && [ -w "$d" ] || fail "no folder to write $out into"
+  out_dir=$(dirname -- "$out")
+  [ -d "$out_dir" ] && [ -w "$out_dir" ] || fail "no folder to write $out into"
 fi
 latency_rows=""
 if [ -n "$latency" ]; then
@@ -102,7 +106,8 @@ tick=$(getconf CLK_TCK 2>/dev/null || echo 100)
 units=(hs-live hs-web)
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+out_tmp=""   # the file beside --out, until the result has its final name
+trap 'rm -rf "$tmp"; [ -z "$out_tmp" ] || rm -f -- "$out_tmp"' EXIT
 res=$tmp/result
 : > "$res"
 : > "$tmp/load"
@@ -110,14 +115,15 @@ res=$tmp/result
 emit() { printf '%s\t%s\n' "$1" "${2:--}" >> "$res"; }
 calc() { LC_ALL=C awk "BEGIN { printf \"%.${2:-3}f\", $1 }"; }   # calc <expression of numbers> [decimals]
 
-svc_read() {   # svc_read <unit>: sv_cpu (ns) sv_mem (bytes) sv_pid, `-` / 0 when systemd does not say
+svc_read() {   # svc_read <unit>: sv_cpu (ns) sv_mem (bytes) sv_pid (0 = no main process), `-` when systemd does not say
   local k v
-  sv_cpu=- sv_mem=- sv_pid=0
+  sv_cpu=- sv_mem=- sv_pid=-
   while IFS='=' read -r k v; do
     v=${v%$'\r'}
     [[ "$v" =~ ^[0-9]{1,18}$ ]] || continue      # "[not set]" and the largest 64 bit number mean the same: not known
     case "$k" in CPUUsageNSec) sv_cpu=$v ;; MemoryCurrent) sv_mem=$v ;; MainPID) sv_pid=$v ;; esac
-  done < <("$systemctl" show "$1.service" -p CPUUsageNSec -p MemoryCurrent -p MainPID 2>/dev/null)
+  # --foreground: one process, no children, and Ctrl-C then reaches it
+  done < <(timeout --foreground -k 2 "${HS_PERF_SHOW_TIMEOUT:-10}" "$systemctl" show "$1.service" -p CPUUsageNSec -p MemoryCurrent -p MainPID 2>/dev/null)
 }
 main_read() {   # main_read <pid>: pr_ticks (the process itself, without what it started) pr_rss (KiB)
   local line k v f
@@ -130,11 +136,12 @@ main_read() {   # main_read <pid>: pr_ticks (the process itself, without what it
     [ "$k" != VmRSS: ] || pr_rss=$v
   done 2>/dev/null < "$proc/$1/status"
 }
-host_read() {   # ho_busy (ticks every core was busy, guests of containers and VMs included) ho_tasks (processes and threads started since boot)
+host_read() {   # ho_busy (ticks every core was busy, guests of containers and VMs included) ho_steal (ticks the host of a server that is a VM gave
+                # to others: not work of this server) ho_tasks (processes and threads started since boot)
   local k a b c f g h
-  ho_busy=- ho_tasks=-
+  ho_busy=- ho_steal=- ho_tasks=-
   while read -r k a b c _ _ f g h _; do   # cpu user nice system idle iowait irq softirq steal
-    case "$k" in cpu) ho_busy=$((a + b + c + f + g + h)) ;; processes) ho_tasks=$a ;; esac
+    case "$k" in cpu) ho_busy=$((a + b + c + f + g)) ho_steal=$((h)) ;; processes) ho_tasks=$a ;; esac
   done 2>/dev/null < "$proc/stat"
 }
 cpu_of_times() {   # cpu_of_times <file>: CPU seconds in the output of `times`. Write it in the main shell: in $(...) it would be the subshell's.
@@ -143,8 +150,11 @@ cpu_of_times() {   # cpu_of_times <file>: CPU seconds in the output of `times`. 
 
 page_samples=0 page_open=0 have_state=false
 page_read() {   # one read of the live state: is a page open now (a lease)? Keeps the document for the delay numbers.
-  local n
-  timeout 60 python3 "$state_py" inspect > "$tmp/inspect.new" 2>/dev/null || return 0
+  local n rc=0
+  perf_stop_traps   # only here: elsewhere a signal ends this script as usual, also one sent to it alone
+  perf_stoppable timeout -k 5 60 python3 "$state_py" inspect > "$tmp/inspect.new" 2>/dev/null || rc=$?
+  trap - INT TERM HUP
+  [ "$rc" -eq 0 ] || return 0
   n=$(jq -r '[.topics[] | select(.lease)] | length' "$tmp/inspect.new" 2>/dev/null) || return 0
   n=${n%$'\r'}
   [[ "$n" =~ ^[0-9]+$ ]] || return 0
@@ -180,7 +190,7 @@ if [ "$minutes" -gt 0 ]; then
     svc_read "$u"; main_read "$sv_pid"
     cpu0[$u]=$sv_cpu pid0[$u]=$sv_pid main0[$u]=$pr_ticks restarted[$u]=no mem_sum[$u]=0 mem_n[$u]=0 mem_max[$u]=0 rss_sum[$u]=0 rss_n[$u]=0
   done
-  host_read; busy0=$ho_busy tasks0=$ho_tasks
+  host_read; busy0=$ho_busy steal0=$ho_steal tasks0=$ho_tasks
   times > "$tmp/times0"
   start=${EPOCHREALTIME/[.,]/}      # microseconds
   stop=$((start + minutes * minute_s * 1000000))
@@ -197,7 +207,8 @@ if [ "$minutes" -gt 0 ]; then
     now=${EPOCHREALTIME/[.,]/}
     for u in "${units[@]}"; do
       svc_read "$u"; main_read "$sv_pid"
-      [ "$sv_pid" = "${pid0[$u]}" ] || restarted[$u]=yes
+      # a question without an answer (the time limit) is no restart
+      [ "$sv_pid" = - ] || [ "${pid0[$u]}" = - ] || [ "$sv_pid" = "${pid0[$u]}" ] || restarted[$u]=yes
       if [ "$sv_mem" != - ]; then
         kib=$((sv_mem / 1024)); mem_sum[$u]=$((mem_sum[$u] + kib)); mem_n[$u]=$((mem_n[$u] + 1))
         [ "$kib" -le "${mem_max[$u]}" ] || mem_max[$u]=$kib
@@ -232,6 +243,8 @@ if [ "$minutes" -gt 0 ]; then
   emit window.page_samples "$page_samples"
   v=-; [ "$ho_busy" = - ] || [ "$busy0" = - ] || v=$(calc "($ho_busy - $busy0) / $tick / $secs")
   emit host.cpu_cores "$v"
+  v=-; [ "$ho_steal" = - ] || [ "$steal0" = - ] || v=$(calc "($ho_steal - $steal0) / $tick / $secs")
+  emit host.cpu_steal_cores "$v"
   v=-; [ "$ho_tasks" = - ] || [ "$tasks0" = - ] || v=$(calc "($ho_tasks - $tasks0) * 60 / $secs" 0)
   emit host.tasks_started_per_min "$v"
   for u in "${units[@]}"; do
@@ -306,7 +319,18 @@ if $reads; then
 fi
 
 if [ -n "$out" ]; then
-  (set -C; cat "$res" > "$out") || fail "could not write $out"
+  # the name was free at the start, which is long ago: never open it for writing
+  mode=$(printf '%o' $((0666 & ~8#$(umask))))   # what a new file gets; mktemp alone would leave 600
+  if ! { out_tmp=$(mktemp -- "$out_dir/hs-perf-baseline.XXXXXXXX") && cat "$res" > "$out_tmp" && chmod "$mode" -- "$out_tmp"; }; then
+    cat "$res"
+    fail "could not write into the folder of $out: the result is printed above, copy it now"
+  fi
+  if ! ln -T -- "$out_tmp" "$out" 2>/dev/null; then   # fails when the name exists, whatever it is
+    kept=$out_tmp out_tmp=""
+    fail "could not save as $out (the name is taken now, or the folder allows no hard link). The result is kept in $kept"
+  fi
+  rm -f -- "$out_tmp"
+  out_tmp=""
 fi
 if $list; then cat "$res"; exit 0; fi
 

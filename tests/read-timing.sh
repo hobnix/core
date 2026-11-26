@@ -51,6 +51,28 @@ check_eq "--skip leaves reads out" "20" "$(wc -l <<<"$out" | tr -d ' ')"
 check_eq "and does not call them" "0" "$(grep -Ec '^sys (backup snapshots|ct list)$' "$WORK/calls")"
 check_eq "a read that does not exist is refused" "1" "$(T --skip nothing >/dev/null 2>&1; echo $?)"
 
+echo "-- Ctrl-C ends the read that runs, with what it started, and the whole run"
+cat > "$WORK/slow-hs" <<'FAKE'
+#!/usr/bin/env bash
+w=$(dirname "$0")
+printf '%s\n' "$*" >> "$w/slow-calls"
+sleep 30 &
+echo "$! $$" > "$w/slow-pids"
+wait
+FAKE
+for mode in plain split; do
+  opts=(--list)
+  [ "$mode" = plain ] || { opts+=(--split); [ -n "${EPOCHREALTIME:-}" ] || continue; }
+  rm -rf "$WORK/slow-calls" "$WORK/slow-pids" "$WORK/int-tmp"; mkdir "$WORK/int-tmp"
+  SECONDS=0
+  rc=$(TMPDIR=$WORK/int-tmp HS_BIN=$WORK/slow-hs HS_PERF_TOOLS=none-installed ctrl_c "$WORK/slow-pids" bash "$SCRIPTS/read-timing.sh" "${opts[@]}")
+  check_eq "$mode: it ends by the interrupt" "-2" "$rc"
+  check "$mode: at once" test "$SECONDS" -lt 15
+  check_eq "$mode: no second read is started" "1" "$(wc -l < "$WORK/slow-calls" | tr -d ' ')"
+  check "$mode: the read and what it started are gone" gone "$WORK/slow-pids"
+  check_eq "$mode: no temporary file is left" "" "$(ls -A "$WORK/int-tmp")"
+done
+
 echo "-- split: dispatcher, external tools, rest (scripts/lib/perf-split.sh)"
 if [ -z "${EPOCHREALTIME:-}" ]; then
   echo "  skip: needs bash 5"
