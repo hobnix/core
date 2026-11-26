@@ -1,16 +1,21 @@
 """The [integrations.<name>] blocks of a package.toml (hobnix/core#926, docs/PLAN-packages.md "Integrations"). Python stdlib only, no CLI.
 A package (recipe, extension or capability) says what it offers to others, so another package finds it and its local API without copy and paste:
   [integrations.media]                         <name> is any lowercase id; the core knows no names
-  api_url    = "http://{host}:7878"            the local API; {host} is the address of the instance (the consumer fills it in),
-                                                 {port} the port of its service record (services.d/<package>.toml), only http(s), no spaces
+  api_url    = "http://{host}:7878"            the local API, only http(s), no spaces. The core fills both placeholders in the rows a consumer
+                                                 gets, from the service record services.d/<package>.toml: {port} is its `port`, {host} the
+                                                 address Incus reports for the own network interface of the instance its `container` names
+                                                 (instance_address). What cannot be filled makes the field "-" (never guessed, no name lookup)
   key_file   = "/var/lib/hs/radarr/api-key"    absolute path of the API key on the server (read only through scripts/lib/secret.sh), no ".."
   key_header = "X-Api-Key"                     optional: the header the app wants the key in (default X-Api-Key)
   <any other key> = "text"                     passed through as a plain string (at most 200 chars, no control chars, no comma)
 All envelope keys are optional. A package may offer several integrations. Nothing here reads a key: rows give its path, the shell side asks
-secret_state. A package that wants a key declares `permissions = ["integration:<name>"]` (pkg_perms.py); `grant` checks it.
+secret_state. The only program run is `incus list`, once per rows() call and only when a row needs {host}. A package that wants a key declares `permissions = ["integration:<name>"]` (pkg_perms.py); `grant` checks it.
 """
+import ipaddress
+import json
 import os
 import re
+import subprocess
 import tomllib
 
 NAME = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -21,6 +26,11 @@ PLAIN = re.compile(r"^[^\x00-\x1f\x7f,]{0,200}$")
 MAX_EXTRA = 20
 PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 KNOWN = ("host", "port")
+# {host} is only filled where it is the WHOLE host of the URL: in "http://{host}.example.org" an address would become part of a name to look up
+HOST_AT = re.compile(r"^https?://\{host\}(?=[:/]|\Z)")
+INSTANCE = re.compile(r"[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?")   # an Incus instance name (fullmatch): no flag, no remote:, no path
+GUEST_ONLY = ("docker", "br-", "veth")         # interfaces made inside the instance (the docker instance has many), never chosen
+INCUS_TIMEOUT = 5.0
 
 
 STATE_ROOT = "/var/lib/hs"
@@ -182,22 +192,115 @@ def _dash(v):
     return v if v else "-"
 
 
-def service_port(services_dir, package):
-    """The port in <services_dir>/<package>.toml (the service record of the instance, written by `hs services declare`), or None."""
+def service_record(services_dir, package):
+    """<services_dir>/<package>.toml (the service record of the instance, written by `hs services declare`) as a dict, empty when it cannot be read."""
     try:
         with open(os.path.join(services_dir, package + ".toml"), "rb") as fh:
-            port = tomllib.load(fh).get("port")
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
+            return tomllib.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _port(record):
+    port = record.get("port")
     return port if isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535 else None
 
 
-def rows(manifests, on, only=None, services_dir=None, unresolved=None):
+def incus_instances():
+    """What `incus list --format json` says (HS_INCUS; HS_INCUS_TIMEOUT seconds, default 5), [] when Incus is not there, fails, hangs or says
+    something else."""
+    try:
+        limit = float(os.environ.get("HS_INCUS_TIMEOUT") or INCUS_TIMEOUT)
+        r = subprocess.run([os.environ.get("HS_INCUS") or "incus", "list", "--format", "json"], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=limit, check=False)
+        data = json.loads(r.stdout.decode("utf-8")) if r.returncode == 0 else []
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _table(v):
+    return v if isinstance(v, dict) else {}
+
+
+def _usable(text):
+    """`text` as an IP address another machine can have, or None."""
+    if not isinstance(text, str) or "%" in text:
+        return None
+    try:
+        a = ipaddress.ip_address(text)
+    except ValueError:
+        return None
+    bad = a.is_loopback or a.is_link_local or a.is_multicast or a.is_unspecified or a.is_reserved
+    return None if bad else a
+
+
+def instance_address(instances, name):
+    """The host part of a URL (IPv4, or [IPv6] when the NIC has no IPv4) for the running instance `name` in the list of incus_instances(), or
+    None. The NIC is one of the instance's own devices as Incus configures them: the only one, with several the one called eth0 (the NIC of the
+    profiles of the core, capabilities/incus/module.nix). Its interface inside the instance is found by the MAC address Incus knows for the
+    device, so the name in the guest does not matter (enp5s0 in a VM) and the Docker bridges are never candidates. Exactly one such interface
+    with a global address and exactly one address, else None. The address itself is what the instance reports about that interface."""
+    found = [i for i in instances if isinstance(i, dict) and i.get("name") == name]
+    if len(found) != 1 or str(found[0].get("status", "")).lower() != "running":
+        return None
+    inst = found[0]
+    nics = {k: v for k, v in _table(inst.get("expanded_devices")).items() if isinstance(v, dict) and v.get("type") == "nic"}
+    dev = next(iter(nics)) if len(nics) == 1 else "eth0"
+    if dev not in nics:
+        return None
+    config = _table(inst.get("expanded_config")) or _table(inst.get("config"))
+    mac = str(nics[dev].get("hwaddr") or config.get("volatile.%s.hwaddr" % dev) or "").lower()
+    if not mac:
+        return None
+    have = []    # one list of global addresses per interface with this MAC
+    for ifname, net in _table(_table(inst.get("state")).get("network")).items():
+        if ifname.startswith(GUEST_ONLY) or str(_table(net).get("hwaddr", "")).lower() != mac:
+            continue
+        addrs = [_usable(a.get("address")) for a in _table(net).get("addresses") or [] if isinstance(a, dict) and a.get("scope") == "global"]
+        addrs = [a for a in addrs if a is not None]
+        if addrs:
+            have.append(addrs)
+    if len(have) != 1:
+        return None
+    v4 = [a for a in have[0] if a.version == 4]
+    pick = v4 or have[0]
+    if len(pick) != 1:
+        return None
+    return str(pick[0]) if v4 else "[%s]" % pick[0]
+
+
+def _fill(url, record, instances):
+    """`url` with {port} and {host} filled from the service record, None when one of them cannot be. `instances` is called only for {host}."""
+    if "{port}" in url:
+        port = _port(record)
+        if port is None:
+            return None
+        url = url.replace("{port}", str(port))
+    if "{host}" in url:
+        name = record.get("container")
+        if url.count("{host}") != 1 or not HOST_AT.match(url) or not isinstance(name, str) or not INSTANCE.fullmatch(name):
+            return None
+        address = instance_address(instances(), name)
+        if address is None:
+            return None
+        url = url.replace("{host}", address)
+    return url
+
+
+def rows(manifests, on, only=None, services_dir=None, unresolved=None, query=incus_instances):
     """[[package, integration, source, api_url, key_file, extras, key_header]] of the valid blocks of the packages whose name is in `on` (recipe installed,
     extension or capability on), sorted; empty fields are "-"; extras = k=v comma list of the keys beyond the envelope.
-    {port} in api_url is filled from the service record of the package; without a record or a port the api_url is "-" (never guessed) and
-    "package/integration" is appended to `unresolved`."""
+    {port} and {host} in api_url are filled from the service record of the package (`_fill`); what cannot be filled makes the api_url "-"
+    (never guessed) and "package/integration" is appended to `unresolved`. `query` (the Incus list) runs at most once, only if a row needs it."""
     out = []
+    asked = []
+
+    def instances():
+        if not asked:
+            asked.append(query())
+        return asked[0]
+
     for _, m in manifests:
         if m.get("name") not in on or manifest_problems(m):
             continue
@@ -206,14 +309,10 @@ def rows(manifests, on, only=None, services_dir=None, unresolved=None):
                 continue
             ex = ",".join(f"{k}={b[k]}" for k in sorted(b) if k not in ENVELOPE)
             u = b.get("api_url")
-            if u and "{port}" in u:
-                port = service_port(services_dir, m["name"]) if services_dir else None
-                if port is None:
-                    u = None
-                    if unresolved is not None:
-                        unresolved.append(f"{m['name']}/{n}")
-                else:
-                    u = u.replace("{port}", str(port))
+            if u and ("{port}" in u or "{host}" in u):
+                u = _fill(u, service_record(services_dir, m["name"]) if services_dir else {}, instances)
+                if u is None and unresolved is not None:
+                    unresolved.append(f"{m['name']}/{n}")
             out.append([m["name"], n, m.get("kind", "-"), _dash(u), _dash(b.get("key_file")), _dash(ex), _dash(b.get("key_header"))])
     return sorted(out)
 

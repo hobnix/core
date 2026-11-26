@@ -90,7 +90,8 @@ case "${1:-list}" in
     only=(); [ "$#" -lt 2 ] || only=(--only "$2")
     # shellcheck disable=SC2086
     miss=$(mktemp); trap 'rm -f "$miss"' EXIT
-    # {port} in an api_url comes from the service record of the package; without one the field is "-" and the human output says so
+    # {port} and {host} in an api_url are filled from the service record of the package ({host}: the address Incus reports for its instance);
+    # what cannot be filled makes the field "-" and the human output says so
     found=$(py integrations "${only[@]}" --services "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}" --unresolved "$miss" $on)
     out=""
     while IFS=$'	' read -r n i s u f x h; do
@@ -103,7 +104,7 @@ case "${1:-list}" in
     elif [ -z "$out" ]; then note "No integrations offered."
     else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More' 'Header'; printf '%s' "$out"; } | table; fi
     if [ "$1" != "--integrations" ]; then
-      while read -r w; do [ -z "$w" ] || warn "$(t 'The port of %s is not known (no service record with a port): its API address is shown as -.' "$w")"; done <"$miss"
+      while read -r w; do [ -z "$w" ] || warn "$(t 'The API address of %s is not known (no port in its service record, or no single address of its instance: is it running?). It is shown as -.' "$w")"; done <"$miss"
     fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;

@@ -307,10 +307,10 @@ igcase "{port} is a placeholder too, also as the port of the URL" "" "{'integrat
 igcase "an unknown placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders (not {ip})" "{'integrations': {'x': {'api_url': 'http://{ip}:{port}'}}}"
 igcase "a half placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders" "{'integrations': {'x': {'api_url': 'http://{host}:80/{'}}}"
 sd=$(mktemp -d); printf 'name = "a"\nport = 8080\n' >"$sd/a.toml"; printf 'name = "b"\n' >"$sd/b.toml"
-check_eq "rows: {port} comes from the service record, a missing port gives - and is reported, {host} stays" "a:http://{host}:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
+check_eq "rows: {port} comes from the service record, a missing port gives - and is reported ({host}: tests/pkg-integrations.sh)" "a:http://app:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
 import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
-ig = {'m': {'api_url': 'http://{host}:{port}'}}
+ig = {'m': {'api_url': 'http://app:{port}'}}
 ms = [('', {'name': n, 'kind': 'recipe', 'integrations': ig}) for n in 'abc']
 miss = []
 r = m.rows(ms, {'a', 'b', 'c'}, None, '$sd', miss)
