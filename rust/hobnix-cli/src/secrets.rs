@@ -1,7 +1,7 @@
 //! `hobnix secrets plan|start ...`: reads the words, calls hobnix-core and writes the lines vault-change.sh wrote.
 
 use hobnix_core::secrets::{self, Action, Paths, Plan, SecretName, SystemHost};
-use hobnix_core::{Error, Result, EXIT_OK, EXIT_REFUSED};
+use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
 use std::io::Write;
 
 const USAGE: &str =

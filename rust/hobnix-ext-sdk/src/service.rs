@@ -8,17 +8,17 @@
 //! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (`Ctx::shared` gives a handle that moves to another thread).
 
 use std::io::{self, BufRead, Write};
-use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::command::Lang;
 use crate::integrations::Integration;
-use crate::proto::{cut, read_line, Line, Out};
+use crate::proto::{Line, Out, cut, read_line};
 use crate::{Ctx, Event, LogLevel, VERSION};
 
 /// First message from the core.
@@ -246,20 +246,22 @@ pub fn run_with(
     }
 
     let (tx, rx) = mpsc::channel();
-    thread::spawn(move || loop {
-        let msg = match read_line(&mut input) {
-            Ok(Line::Eof) | Err(_) => Msg::Eof,
-            Ok(Line::TooLong) => Msg::Bad("line longer than 1 MiB".into()),
-            Ok(Line::Text(l)) => match classify(&l) {
-                Ok(Some(m)) => m,
-                // a type this version does not know: ignored (ADR 0010 rule 3)
-                Ok(None) => continue,
-                Err(e) => Msg::Bad(e),
-            },
-        };
-        let last = !matches!(msg, Msg::Event(_));
-        if tx.send(msg).is_err() || last {
-            break;
+    thread::spawn(move || {
+        loop {
+            let msg = match read_line(&mut input) {
+                Ok(Line::Eof) | Err(_) => Msg::Eof,
+                Ok(Line::TooLong) => Msg::Bad("line longer than 1 MiB".into()),
+                Ok(Line::Text(l)) => match classify(&l) {
+                    Ok(Some(m)) => m,
+                    // a type this version does not know: ignored (ADR 0010 rule 3)
+                    Ok(None) => continue,
+                    Err(e) => Msg::Bad(e),
+                },
+            };
+            let last = !matches!(msg, Msg::Event(_));
+            if tx.send(msg).is_err() || last {
+                break;
+            }
         }
     });
 

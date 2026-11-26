@@ -1,9 +1,9 @@
 //! Pairing of remote shares by code: `hobnix remote-codes|remote-claim|remote-accept` (the rows of `hs sys remote ...`) and the internal
 //! `hobnix pair ...` that remote.sh calls. A code or a password is read from stdin and written to stdout only, never taken from an argument.
 
-use hobnix_core::pair::{self, Clock, Inner, Kind, OsRandom, Store, SystemClock, DEFAULT_MINUTES};
+use hobnix_core::pair::{self, Clock, DEFAULT_MINUTES, Inner, Kind, OsRandom, Store, SystemClock};
 use hobnix_core::pair_host::SystemHost;
-use hobnix_core::{Error, Result, EXIT_OK, EXIT_REFUSED};
+use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
 use serde_json::Value;
 use std::io::{Read, Write};
 

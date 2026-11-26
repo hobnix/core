@@ -153,7 +153,9 @@ fn job_record_life_of_a_job() {
     let rec = text(&o.stdout);
     assert!(rec.starts_with("{\n  \"id\": "), "{rec}");
     assert!(rec.contains("\"state\": \"ok\""));
-    assert!(rec.contains("\"step\": {\n    \"n\": 2,\n    \"of\": 2,\n    \"text\": \"last\"\n  }"));
+    assert!(
+        rec.contains("\"step\": {\n    \"n\": 2,\n    \"of\": 2,\n    \"text\": \"last\"\n  }")
+    );
     let o = job(&dir, &["cancel", &id, "--by", "bob", "--safe", "yes"]);
     assert_eq!(o.status.code(), Some(1));
     assert_eq!(text(&o.stderr), "hobnix: job already finished\n");

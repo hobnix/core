@@ -15,15 +15,15 @@
 //! `run` would force every handler into a named generic fn, and the dynamic call costs nothing next to the write of a line).
 
 use std::io::{self, BufRead, Write};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::integrations::Integration;
-use crate::proto::{cut, one_line, read_line, Line, Out};
+use crate::proto::{Line, Out, cut, one_line, read_line};
 use crate::{Ctx, Event, LogLevel, VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -193,7 +193,7 @@ where
                 "bad_request",
                 &format!("cannot read the request: {e}"),
                 None,
-            )
+            );
         }
     };
     let value: Value = match serde_json::from_str(&line) {
@@ -215,7 +215,7 @@ where
                 "bad_request",
                 "the first line must be a request",
                 None,
-            )
+            );
         }
     };
     let ctx = StdioCtx { out: out.clone() };

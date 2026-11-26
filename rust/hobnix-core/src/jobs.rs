@@ -1191,9 +1191,11 @@ mod tests {
         let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
         assert!(text.contains("\"key\": \"badx key\""));
         s.set_key(&id, "pool sync tank").unwrap();
-        assert!(String::from_utf8(s.get(&id).unwrap())
-            .unwrap()
-            .contains("\"key\": \"pool sync tank\""));
+        assert!(
+            String::from_utf8(s.get(&id).unwrap())
+                .unwrap()
+                .contains("\"key\": \"pool sync tank\"")
+        );
     }
 
     #[test]
@@ -1258,10 +1260,11 @@ mod tests {
                 .to_string(),
             "bad source: bogus"
         );
-        assert!(s
-            .new_record("!!!", "d", "", "cli", "", "", "")
-            .unwrap()
-            .contains("-job-"));
+        assert!(
+            s.new_record("!!!", "d", "", "cli", "", "", "")
+                .unwrap()
+                .contains("-job-")
+        );
     }
 
     #[test]
@@ -1358,11 +1361,12 @@ mod tests {
         let s = t.store();
         assert_eq!(s.load("nope").unwrap_err().to_string(), "bad job id");
         let id = "20240101-120000-gone-abcd";
-        assert!(s
-            .run(id)
-            .unwrap_err()
-            .to_string()
-            .starts_with("cannot lock record: "));
+        assert!(
+            s.run(id)
+                .unwrap_err()
+                .to_string()
+                .starts_with("cannot lock record: ")
+        );
         fs::create_dir_all(&s.dir).unwrap();
         #[cfg(unix)]
         assert_eq!(
@@ -1522,18 +1526,21 @@ mod tests {
             None,
             "no default for a secret"
         );
-        assert!(!String::from_utf8(s.get(&id).unwrap())
-            .unwrap()
-            .contains("hunter2"));
-        assert!(s
-            .wait(
+        assert!(
+            !String::from_utf8(s.get(&id).unwrap())
+                .unwrap()
+                .contains("hunter2")
+        );
+        assert!(
+            s.wait(
                 &id,
                 &Question {
                     kind: "bogus",
                     ..Default::default()
                 }
             )
-            .is_err());
+            .is_err()
+        );
         assert_eq!(s.find_unit("hs-job-w-1").unwrap(), id);
         s.resume(&id).unwrap();
         assert_eq!(s.load(&id).unwrap().waiting, None);

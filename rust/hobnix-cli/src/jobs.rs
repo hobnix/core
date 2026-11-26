@@ -5,7 +5,7 @@
 //! only ever test for zero.
 
 use hobnix_core::jobs::{Question, RealSystem, Store};
-use hobnix_core::{Error, Result, EXIT_OK, EXIT_REFUSED};
+use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
 use std::io::Write;
 
 const BAD_ARGS: &str = "bad arguments";

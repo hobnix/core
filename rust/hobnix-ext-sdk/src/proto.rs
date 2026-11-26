@@ -4,7 +4,7 @@ use std::io::{self, BufRead, Read, Write};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::Event;
 

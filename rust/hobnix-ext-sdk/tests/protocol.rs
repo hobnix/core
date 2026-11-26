@@ -8,7 +8,7 @@ use hobnix_ext_sdk::command::{self, ErrorCode, Failure, Success};
 use hobnix_ext_sdk::service::{self, EventRow, Health, Init, Service};
 use hobnix_ext_sdk::testing::{Call, FakeCtx};
 use hobnix_ext_sdk::{Ctx, Event, LogLevel};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[derive(Clone, Default)]
 struct Buf(Arc<Mutex<Vec<u8>>>);
@@ -206,16 +206,19 @@ fn service_ready_first_acks_handled_events_and_stops_on_shutdown() {
         .map(|m| m["id"].as_u64().unwrap())
         .collect();
     assert_eq!(acks, [1, 3]);
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "log" && m["level"] == "error"));
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "emit" && m["kind"] == "pkg.demo.seen"));
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "log" && m["level"] == "error")
+    );
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "emit" && m["kind"] == "pkg.demo.seen")
+    );
     assert!(out.iter().any(|m| m["type"] == "health" && m["ok"] == true));
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "snapshot" && m["topic"] == "t"));
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "snapshot" && m["topic"] == "t")
+    );
 }
 
 #[test]

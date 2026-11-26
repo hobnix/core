@@ -3,8 +3,8 @@
 //!   cargo build --example ticker
 //!   python3 ../../scripts/lib/ext_service.py run --name ticker --health-interval 1 --run-for 3 -- target/debug/examples/ticker
 #![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
-use hobnix_ext_sdk::service::{run, EventRow, Health, Init, Service};
 use hobnix_ext_sdk::Ctx;
+use hobnix_ext_sdk::service::{EventRow, Health, Init, Service, run};
 use serde_json::json;
 use std::process::ExitCode;
 
