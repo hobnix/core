@@ -10,7 +10,7 @@ A refused or failed plan or start prints `code<TAB><name>` beside `status` and `
 
 The one list is `scripts/lib/error-codes.tsv`: one line per code with the columns `code`, `layer`, `meaning`, `text` and `fix`. A script may print only a code that is listed there (`tests/error-codes.sh` fails otherwise). Add the line in the same change that adds the `refuse_code`, then run `python3 scripts/errors-doc-gen.py write`.
 
-- `run` codes are set by the web server (scripts/web-serve.py) when the script gave no status line.
+- `run` codes are set by the web server (scripts/web-serve.py): when the script gave no status line, or when the server refused a request before any script ran (`share.name-too-long`; such an answer has `error` and `code`).
 - `script` codes are printed by a change script through `refuse_code <code> [<reason>]` (scripts/lib/ui.sh): `status`, `reason` (the given text, else the text below), `fix` (when the list has one) and `code`. A plain `refuse "<text>"` means the code `refused`.
 - A code is `<area>.<what>`, lower case, digits and `-`. It never changes meaning; a rename keeps the old name as an alias for one release.
 
@@ -1159,6 +1159,14 @@ The kind of share is not shares or sensitive.
 - Layer: script
 - Text: The kind is shares or sensitive.
 - Fix: none
+
+### share.name-too-long
+
+The web server refused a change because a share name is too long (a new share: 41 characters; a share that exists: 80).
+
+- Layer: run
+- Text: The share name is too long.
+- Fix: `hs share <share> rename <new>`
 
 ### share.needs-zfs
 
