@@ -12,9 +12,9 @@
   import { rowstate } from '../rowstate.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
-  import { Button, Card, Chip, Banner, Kv, Grid, Stack, Row, Muted, Menu, EmptyState, ErrorNote, AppIcon, Screenshots } from '../ui/index.js';
+  import { Button, Card, Chip, Banner, Kv, Grid, Stack, Row, Muted, Menu, EmptyState, ErrorNote, AppIcon, Screenshots, Icon } from '../ui/index.js';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl, trustOf, testedText } from './market.js';
+  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl, trustOf, testedText, parseFit, fitLabel, fitText } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   // the two words of the address (the route only sends a path that matches routes.js PACKAGE_PAGE)
@@ -27,13 +27,20 @@
   const stateList = poll('/api/sys/pkg/states', 30000);
   const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
   const show = poll(() => (repo && name ? `/api/sys/pkg/show/${name}?repo=${repo}` : ''), 120000, 'pkg-market');
+  const fitList = poll('/api/sys/pkg/fit', 120000, 'pkg-market');
   const svcApp = poll('/api/sys/services/app', 60000);
   const tiles = poll('/api/sys/services/tiles', 60000);
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards', '/api/sys/pkg/fit'];
 
   const p = $derived(storeRows(rows(market), parseCards(rows(cardList))).find((x) => x.repo === repo && x.name === name) ?? null);
   const s = $derived(parseShow(rows(show)));
+  const unread = $derived(!!show.error || s.refused);
   const stage = $derived(parseStates(rows(stateList)).get(name));
+  // only an app that is not installed is compared with this server (an installed one already uses what it needs)
+  const compared = $derived(!!p && p.kind === 'recipe' && !p.installed);
+  const fit = $derived(compared ? parseFit(rows(fitList)).get(`${repo}/${name}`) : undefined);
+  const FIT_ICON = { ok: 'check-circle', note: 'warning', no: 'prohibit', unstated: 'question', unknown: 'warning-circle' };
+  const FIT_WORD = { ok: 'Fine', note: 'Note', no: 'Does not fit', unstated: 'Not stated', unknown: 'Not checked' };
   const repoRow = $derived(parseRepos(rows(repoList)).find((r) => r.name === repo) ?? null);
   const withPage = $derived(new Set((ui.features.extensions ?? []).filter((e) => e.kind === 'recipe').map((e) => e.name)));
   const open = $derived(p ? openHref(stage?.instances, rows(svcApp), rows(tiles)) || (withPage.has(name) ? appPath(name) : '') : '');
@@ -119,7 +126,26 @@
         <Muted as="p">Tested means (the official repository only): a person installed this release on a real Hobnix server (not only in an automatic test), opened it, checked that it does its main job, and then wrote the day into the index of its repository. It does not cover every setting or every kind of hardware, a later release, or an update of the app itself. Packages run as root on this server.</Muted>
       </Card>
 
-      {#if show.error || s.refused}
+      {#if compared}
+        <Card title="On this server">
+          {#if fit}
+            <Row gap="2" wrap><Chip kind="fit" level={fit.verdict}>{fitLabel(fit)}</Chip></Row>
+            <Stack gap="2">
+              {#each fit.checks as c, i (i)}
+                <Row gap="2" align="start">
+                  <Icon name={FIT_ICON[c.level]} label={FIT_WORD[c.level]} />
+                  <span style="min-width:0;flex:1;line-height:1.45;overflow-wrap:anywhere">{fitText(c)}</span>
+                </Row>
+              {/each}
+            </Stack>
+            <Muted as="p">The figures are what the package says of itself, compared with this server as it is now, for this app alone. They do not promise that the install works.</Muted>
+          {:else}
+            <Muted as="p">{!fitList.loaded ? 'Comparing with this server…' : 'Whether it fits this server could not be checked.'}</Muted>
+          {/if}
+        </Card>
+      {/if}
+
+      {#if unread}
         <Banner tone="warn">The details of this release could not be read{s.reason ? `: ${s.reason}` : show.error?.message ? `: ${show.error.message}` : ''}.</Banner>
       {/if}
 
@@ -130,12 +156,12 @@
       <Grid min="300" gap="4">
         <Card title="What it is">
           {#if s.description}<p style="margin:0;line-height:1.55;overflow-wrap:anywhere">{s.description}</p>
-          {:else}<Muted as="p">{show.loaded ? 'The package says nothing more about itself.' : 'Reading the release…'}</Muted>{/if}
+          {:else}<Muted as="p">{!show.loaded ? 'Reading the release…' : unread ? 'Could not be read.' : 'The package says nothing more about itself.'}</Muted>{/if}
           {#if s.upstream}<Muted as="p">Made by its own project: <a href={s.upstream} target="_blank" rel="noopener noreferrer nofollow">{s.upstream}</a></Muted>{/if}
         </Card>
         <Card title="What it needs and uses">
           {#if uses.length}<Kv items={uses} cols={1} />
-          {:else}<Muted as="p">{show.loaded ? 'Nothing beyond what it installs.' : 'Reading the release…'}</Muted>{/if}
+          {:else}<Muted as="p">{!show.loaded ? 'Reading the release…' : unread ? 'Could not be read.' : 'The package states nothing.'}</Muted>{/if}
         </Card>
         <Card title="Version and source">
           <Kv items={source} cols={1} />

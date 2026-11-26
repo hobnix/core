@@ -448,6 +448,16 @@ Not tested on hardware yet.
 In the web interface this is the **Marketplace** page: every package of every repository with its state (not installed, installed, update),
 Install / Update / Remove, and a Repositories tab to add or remove a repository. Adding a repository asks for its public signing key and for
 the repository name to be typed. Not tested on hardware yet. The commands below do the same.
+
+**Fits this server.** An app that is not installed says on its card and on its page whether it fits: the memory and disk space its package
+states are compared with what this server has. Memory is compared with what is free now and with the total, disk space with the free space
+of the storage pool where the disk of a new container goes (files on shares are not counted). The page lists each figure, and also what the
+install sets up first (Docker, Tailscale) and whether a graphics card is there when the app can use one. These are the package's own
+figures, for one app at a time: they do not promise that the install works. With ZFS the free memory can look smaller than it is, because
+the file cache counts as used, so too little free memory is a note and only more than the total is "does not fit". A package that states
+neither memory nor disk space says "Needs not stated", never "fits", and the filter **Fits this server** hides it. Not tested on hardware
+yet.
+
 ```bash
 hs pkg list
 ```

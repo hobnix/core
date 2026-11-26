@@ -2,14 +2,15 @@
   import { P, packagePath, appPath } from '../paths.js';
   // The Marketplace as a store (#474): cards of the apps first, add-ons (extensions, capabilities, blueprints) on their own tab, Installed and
   // Updates with a count, and the repositories, the package builder and the full package table on Advanced. A card opens the page of its package.
-  // Reads: hs sys pkg market / states / cards / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
+  // An app that is not installed says whether it fits this server (#793, hs sys pkg fit), and the Apps tab can show only those that do.
+  // Reads: hs sys pkg market / states / cards / fit / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
   // confirmation) and the plans of hs sys pkg (update, remove, fetch, repo-add, repo-remove) and parts (turn on/off); a package or repository that
   // came from a repository somebody added is red (the typed word is its name).
   import { poll, rows, refresh } from '../data.svelte.js';
   import { openPlan, openCreate, ui } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
   import { rowstate } from '../rowstate.svelte.js';
-  import { ErrorNote, AppTile, Grid, EmptyState } from '../ui/index.js';
+  import { ErrorNote, AppTile, Grid, EmptyState, Row } from '../ui/index.js';
   import { route, go } from '../route.svelte.js';
   import { link } from './instances/ct.js';
   import { start } from '../api.js';
@@ -23,7 +24,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText } from './market.js';
+  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText, isApp, parseFit, fitLabel, fitReason, hiddenByFit } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
@@ -32,11 +33,18 @@
   const stateList = poll('/api/sys/pkg/states', 30000);
   // category, icon and tested date of each card; it changes with a fetch, so it follows the market topic
   const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
+  // does a not-installed app fit this server
+  const fitList = poll('/api/sys/pkg/fit', 120000, 'pkg-market');
   // where Open goes: the dashboard link of a service in one of the app's instances
   const svcApp = poll('/api/sys/services/app', 60000);
   const tiles = poll('/api/sys/services/tiles', 60000);
   const stageOf = $derived(parseStates(rows(stateList)));
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards', '/api/sys/pkg/fit'];
+
+  const fit = $derived(parseFit(rows(fitList)));
+  const fitOf = (p) => (isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
+  const fitReady = $derived(fitList.data != null);
+  let onlyFits = $state(false);
 
   const store = $derived(storeRows(rows(market), parseCards(rows(cardList))));
   // name, kind, repository, available version, installed version, state, core, title (the Advanced table)
@@ -56,7 +64,9 @@
   const inTab = $derived(rowsOf(tab, store));
   const cats = $derived(categoriesOf(inTab));
   $effect(() => { if (!cats.some((c) => c.value === category)) category = 'all'; });
-  const cards = $derived(filterRows(inTab, { q, category }));
+  const filtering = $derived(tab === 'apps' && onlyFits && fitReady);
+  const cards = $derived(filterRows(inTab, { q, category, fit: filtering ? fit : null }));
+  const hidden = $derived(filtering ? hiddenByFit(inTab, fit) : '');
   const emptyText = { apps: 'No app is offered yet. Use Check for updates to read the repositories.', addons: 'No add-on is offered yet.',
     installed: 'Nothing is installed from a repository yet.', updates: 'Everything installed is up to date.' };
 
@@ -173,13 +183,22 @@
           {/each}
         </div>
       {/if}
+      {#if tab === 'apps' && inTab.length}
+        <Row gap="2">
+          <Switch bind:checked={onlyFits} label="Fits this server" disabled={!fitReady} reason={fitList.error ? 'Whether apps fit could not be checked' : 'Still comparing the apps with this server'} />
+          <span aria-hidden="true">Fits this server</span>
+        </Row>
+      {/if}
       <div class="find"><TextInput bind:value={q} type="search" placeholder={tab === 'addons' ? 'Search add-ons' : 'Search apps'} ariaLabel="Search" autocomplete="off" /></div>
     </div>
+
+    {#if hidden}<Muted as="p">{hidden}</Muted>{/if}
+    {#if tab === 'apps' && fitList.error && !fitReady}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
 
     {#if !inTab.length}
       <EmptyState icon={tab === 'updates' ? 'check-circle' : 'storefront'} title={tab === 'updates' ? 'No updates' : 'Nothing here yet'} text={emptyText[tab]} />
     {:else if !cards.length}
-      <EmptyState icon="magnifying-glass" title="Nothing matches" text="Try another word or category." />
+      <EmptyState icon="magnifying-glass" title="Nothing matches" text={filtering ? 'Try another word or category, or turn off "Fits this server".' : 'Try another word or category.'} />
     {:else}
       <Grid min="250" gap="4">
         {#each cards as p (p.repo + '/' + p.name)}
@@ -190,6 +209,13 @@
               {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
               {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified, trustOf(p.repo, repos))}`} />{/if}
               <Muted>{testedText(p.verified, trustOf(p.repo, repos))}</Muted>
+              {#if fitOf(p)}
+                {@const f = fitOf(p)}
+                <Row gap="2" wrap style="flex-basis:100%">
+                  <Chip kind="fit" level={f.verdict}>{fitLabel(f)}</Chip>
+                  {#if fitReason(f)}<Muted>{fitReason(f)}</Muted>{/if}
+                </Row>
+              {/if}
               {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
             {/snippet}
             {#snippet actions()}

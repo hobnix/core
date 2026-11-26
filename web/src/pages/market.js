@@ -106,10 +106,110 @@ export function categoriesOf(rows) {
   return out;
 }
 
-// search over name, title and category; `category` is an id, 'other' or 'all'. Apps sort by name.
-export function filterRows(rows, { q = '', category = 'all' } = {}) {
+// ═══ fits this server (#793) ═══
+// hs sys pkg fit: name, repo, verdict, check, level, need, have, total (memory and disk in bytes, - = not known), only for apps that are not
+// installed -> Map `<repo>/<name>` -> { verdict, checks: [{ check, level, need, have, total }] }. A word this page does not know is "unknown".
+const VERDICTS = ['fits', 'note', 'no', 'unstated', 'unknown'];
+const LEVELS = ['ok', 'note', 'no', 'unstated', 'unknown'];
+export function parseFit(rows) {
+  const out = new Map();
+  for (const r of rows ?? []) {
+    const key = `${r[1]}/${r[0]}`;
+    const f = out.get(key) ?? { verdict: VERDICTS.includes(r[2]) ? r[2] : 'unknown', checks: [] };
+    f.checks.push({ check: dash(r[3]), level: LEVELS.includes(r[4]) ? r[4] : 'unknown', need: dash(r[5]), have: dash(r[6]), total: dash(r[7]) });
+    out.set(key, f);
+  }
+  return out;
+}
+
+const bytesOf = (v) => (/^\d{1,18}$/.test(v) ? Number(v) : null);
+// bytes the way "What it needs and uses" counts them (1 GB = 1024 MB, like the memory limit of a container)
+export function binSize(v) {
+  if (v >= 1024 ** 4) return `${+(v / 1024 ** 4).toFixed(1)} TB`;
+  if (v >= 1024 ** 3) return `${+(v / 1024 ** 3).toFixed(1)} GB`;
+  return `${Math.round(v / 1024 ** 2)} MB`;
+}
+
+// the verdict in words. With memory or disk not stated, "fits" says that it is only about what the package states.
+export function fitLabel(f) {
+  const part = f.checks.some((c) => (c.check === 'memory' || c.check === 'disk') && c.level === 'unstated');
+  if (f.verdict === 'fits') return part ? 'Fits what it states' : 'Fits this server';
+  if (f.verdict === 'note') return part ? 'Fits what it states, with a note' : 'Fits, with a note';
+  if (f.verdict === 'no') return 'Does not fit this server';
+  if (f.verdict === 'unstated') return 'Needs not stated';
+  return 'Fit could not be checked';
+}
+
+// one check as a sentence: what the package says of itself, next to this server now
+export function fitText(c) {
+  const need = bytesOf(c.need), have = bytesOf(c.have), total = bytesOf(c.total);
+  if (c.check === 'core') return 'This release needs a newer Hobnix: update the server first.';
+  if (c.check === 'memory') {
+    if (c.level === 'unstated') return 'Memory: the package does not state how much it uses.';
+    if (c.level === 'unknown' || need === null || have === null || total === null) return 'Memory: could not be checked.';
+    if (c.level === 'no') return `Memory: it says it uses ${binSize(need)}, more than this server has in total (${binSize(total)}).`;
+    if (c.level === 'note') return `Memory: it says it uses ${binSize(need)}, more than the ${binSize(have)} free right now (${binSize(total)} in total). It may be slow or not start. With ZFS, part of the used memory is a file cache that is given back when needed.`;
+    return `Memory: it says it uses ${binSize(need)}; ${binSize(have)} of ${binSize(total)} is free right now.`;
+  }
+  if (c.check === 'disk') {
+    if (c.level === 'unstated') return 'Disk: the package does not state how much it uses.';
+    if (c.level === 'unknown' || need === null || have === null) return 'Disk: could not be checked.';
+    if (c.level === 'no') return `Disk: it says it uses ${binSize(need)}; only ${binSize(have)} is free where the disk of a new container goes.`;
+    return `Disk: it says it uses ${binSize(need)}; ${binSize(have)} is free where the disk of a new container goes.`;
+  }
+  if (c.check === 'gpu') {
+    if (c.level === 'ok') return 'Graphics card: it can use one, and this server has an NVIDIA card.';
+    if (c.have === 'other') return 'Graphics card: it can use one. This server has one that is not from NVIDIA; the package does not say whether it can use that one.';
+    if (c.have === 'none') return 'Graphics card: it can use one, and none was found on this server.';
+    return 'Graphics card: it can use one; whether this server has one could not be checked.';
+  }
+  if (c.check === 'share') return 'Share: it works with a share. It uses an existing one or makes its own; the package does not name one.';
+  if (c.check === 'docker' || c.check === 'tailscale') {
+    const name = c.check === 'docker' ? 'Docker' : 'Tailscale';
+    if (c.level === 'ok') return `${name}: it needs it, and it is set up.`;
+    if (c.have !== 'missing') return `${name}: it needs it; whether it is set up could not be checked.`;
+    return c.check === 'docker' ? 'Docker: not set up yet. The install sets it up first.' : 'Tailscale: off. The install switches it on and rebuilds the server.';
+  }
+  return `It needs "${c.need}", which this server does not know how to provide.`;
+}
+
+// the few words under the chip of a card: the first thing that is in the way, or the first note
+const SHORT = {
+  core: () => 'needs a newer Hobnix', memory: (c) => (c.level === 'no' ? 'more memory than the server has' : 'more memory than is free now'),
+  disk: () => 'not enough free disk space',
+  gpu: (c) => (c.have === 'none' ? 'no graphics card found' : c.have === 'other' ? 'graphics card may not be usable' : 'graphics card not checked'),
+  docker: (c) => (c.have === 'missing' ? 'sets up Docker first' : 'Docker not checked'),
+  tailscale: (c) => (c.have === 'missing' ? 'switches on Tailscale and rebuilds' : 'Tailscale not checked'),
+};
+export function fitReason(f) {
+  const want = f.verdict === 'no' ? ['no'] : f.verdict === 'note' ? ['note', 'unknown'] : [];
+  const c = f.checks.find((x) => want.includes(x.level));
+  if (!c) return '';
+  return Object.hasOwn(SHORT, c.check) ? SHORT[c.check](c) : `needs "${c.need}"`;
+}
+
+// the filter "Fits this server": fits and fits with a note. Not stated and not checked never count as fitting.
+export const fitsServer = (f) => f?.verdict === 'fits' || f?.verdict === 'note';
+
+// what the filter leaves out of `rows`, in words ('' when nothing)
+export function hiddenByFit(rows, fit) {
+  const n = { no: 0, unstated: 0, unknown: 0, installed: 0 };
+  for (const p of rows) {
+    const f = fit.get(`${p.repo}/${p.name}`);
+    if (!fitsServer(f)) n[f ? f.verdict : p.installed ? 'installed' : 'unknown']++;
+  }
+  const words = [
+    [n.no, 'does not fit', 'do not fit'], [n.unstated, 'does not state its needs', 'do not state their needs'],
+    [n.unknown, 'could not be checked', 'could not be checked'], [n.installed, 'is installed', 'are installed'],
+  ].filter(([c]) => c).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`);
+  return words.length ? `Hidden: ${words.join(', ')}.` : '';
+}
+
+// search over name, title and category; `category` is an id, 'other' or 'all'; `fit` (the Map of parseFit) keeps what fits. Apps sort by name.
+export function filterRows(rows, { q = '', category = 'all', fit = null } = {}) {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return rows.filter((p) => (category === 'all' || (category === 'other' ? !CATEGORY.has(p.category) : p.category === category))
+    && (!fit || fitsServer(fit.get(`${p.repo}/${p.name}`)))
     && words.every((w) => `${p.name} ${p.title} ${categoryLabel(p.category)}`.toLowerCase().includes(w)))
     .sort((a, b) => a.name.localeCompare(b.name) || a.repo.localeCompare(b.repo));
 }
