@@ -1283,6 +1283,8 @@ READS = {
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
     ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
     ("pkg", "cards"): {"kind": "tsv", "ttl": 120},   # category, icon and tested date of every package (the store cards); the page re-reads it on pkg-market
+    # does an app that is not installed fit this server (pkg-fit.sh): free memory and disk space move, so the page re-reads it with the cards
+    ("pkg", "fit"): {"kind": "tsv", "ttl": 60},
     # one package from its newest verified release (the package page); the pictures it names come from /api/pkg/asset/<repo>/<name>/<file>
     ("pkg", "show"): {"kind": "tsv", "ttl": 60, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
     ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
