@@ -582,12 +582,26 @@ def pkg_asset(hs, repo, name, file):
         hit = _pkg_assets.get(key)
     if hit and time.time() - hit[0] < 300:
         return hit[1], hit[2]
+    # at most PKG_ASSET_MAX + 1 bytes are read: a bigger answer is cut off and refused, never held in memory whole; 30 s at most
     try:
-        p = subprocess.run([hs, "sys", "pkg", "asset", name, file, "--repo", repo], capture_output=True, timeout=30, env=_command_env())
+        p = subprocess.Popen([hs, "sys", "pkg", "asset", name, file, "--repo", repo], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, env=_command_env())
     except (OSError, subprocess.SubprocessError):
         return None, b""
-    data = p.stdout
-    if p.returncode != 0 or not data or len(data) > PKG_ASSET_MAX:
+    timer = threading.Timer(30, p.kill)
+    timer.start()
+    try:
+        data = p.stdout.read(PKG_ASSET_MAX + 1)
+        if len(data) > PKG_ASSET_MAX:
+            p.kill()
+        rc = p.wait(timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        p.kill()
+        return None, b""
+    finally:
+        timer.cancel()
+        p.stdout.close()
+    if rc != 0 or not data or len(data) > PKG_ASSET_MAX:
         return None, b""
     ctype = pkg_asset_type(file, data)
     if not ctype:

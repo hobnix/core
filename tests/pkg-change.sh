@@ -77,7 +77,15 @@ check_out "market lists demo as new" "^demo${tab}recipe${tab}test${tab}1[.]0[.]0
 check_out "and the core flag of corer" "^corer${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}yes" $PKGSH --market
 # the store cards: category and icon from package.toml, the tested date only from the index entry (corer has one, demo none)
 check_out "cards: demo" "^demo${tab}test${tab}media${tab}ph:film-strip${tab}-$" $PKGSH --cards
-check_out "cards: corer and its verified date" "^corer${tab}test${tab}media${tab}ph:film-strip${tab}2026-01-02$" $PKGSH --cards
+check_out "cards: an added repository never passes its verified day on" "^corer${tab}test${tab}media${tab}ph:film-strip${tab}-$" $PKGSH --cards
+check_eq "the tested day counts only from the default, signed official repository" "True False False False" "$(python3 -I -c "
+import importlib.util as u
+s = u.spec_from_file_location('pr', '$SCRIPTS/pkg_repo.py'); m = u.module_from_spec(s); s.loader.exec_module(m)
+R = object.__new__(m.Repos)
+for rows in ({'official': {'default': True}}, {'official': {'default': False}}, {'official': {'default': True, 'unsigned': True}}, {'test': {'default': True}}):
+    R.all = lambda rows=rows: rows
+    print(R.official(next(iter(rows))), end=' ')
+" | sed 's/ $//')"
 
 echo "-- a blueprint is applied, never installed"
 check_out "plan: a blueprint is refused with its reason" "blueprint: hs blueprint apply bp" bash -c "$C plan install bp; true"
