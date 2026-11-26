@@ -7,6 +7,7 @@
   //   node unreachable  a remote node that does not answer: red banner with the likely reason and Try again; the page stays visible (its last document), greyed, no actions
   //   no such page      the placeholder (shell/Placeholder.svelte)
   // Everything else (loading, empty, error with stale data) is PageState.svelte inside the page.
+  import { setContext } from 'svelte';
   import { route, go } from '../route.svelte.js';
   import { pageFor } from '../routes.js';
   import { itemOf } from '../nav.js';
@@ -21,6 +22,7 @@
 
   // deck: the shared status document; meta: tree notes; node: { name, kind, local, state: 'ok'|'down'|'off'|'loading', why, retry } of the node on screen
   let { deck, meta, node, locked = false } = $props();
+  setContext('hs-node', () => node);   // for the breadcrumb of the page (PageTrail.svelte)
 
   const inner = $derived(route.path);
   const item = $derived(node.local ? itemOf(inner) : null);

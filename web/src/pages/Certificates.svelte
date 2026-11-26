@@ -18,7 +18,7 @@
 </script>
 
 <Stack gap="6">
-  <PageHeader title="Certificates" crumb="Identity" sub="LDAPS of the domain controller, signed by a small CA of this setup." />
+  <PageHeader title="Certificates" sub="LDAPS of the domain controller, signed by a small CA of this setup." />
 
   {#if st.loaded && st.error}
     <Banner tone="warn">The certificates could not be read. This server needs a domain (the recipe <code>domain</code>) and the controller must be running.</Banner>

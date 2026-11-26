@@ -82,7 +82,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title={title[0]} crumb={page === 'updates' ? 'System' : 'Settings'} sub={title[1]}>
+  <PageHeader title={title[0]} sub={title[1]}>
     {#snippet actions()}
       {#if page === 'updates' && utag}<StatusDot state={utag.state} label={utag.label} />{/if}
       {#if core}<Button tooltip={advanced ? 'Back to the guided questions' : 'Every key of this page as plain fields'} onclick={() => (advanced = !advanced)}>{advanced ? 'Back' : 'Advanced'}</Button>{/if}

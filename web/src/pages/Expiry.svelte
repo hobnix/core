@@ -46,7 +46,7 @@
 </script>
 
 <Stack gap="4">
-  <PageHeader title="Expiry dates" crumb="Protection" sub="The health check warns 30 and 7 days before.">
+  <PageHeader title="Expiry dates" sub="The health check warns 30 and 7 days before.">
     {#snippet actions()}<Button need="admin" variant="primary" tooltip={'Write down something that runs out'} onclick={() => openCreate(ExpiryForm)}><i class="ph ph-plus"></i>Add</Button>{/snippet}
   </PageHeader>
 

@@ -1,11 +1,26 @@
 // What a page reads first, by address (pure: tests/web-prefetch.mjs checks every path against the READS allowlist of scripts/web-serve.py).
 import { LEGACY_POOLS } from './pages/storage/pool.js';
 import { P } from './paths.js';
+import { roleOk } from './roles.js';
 
 const A = '/api/sys/';
 const DISKS = [`${A}monitor/disks`, `${A}disk-health/list`, `${A}state/disks`, `${A}disk/marks`];
 const SHARES = [`${A}shares/overview`, `${A}shares/deleted`, `${A}ct/list`];
 const pool = (p) => [`${A}pool/info?pool=${p}`, `${A}pool/members?pool=${p}`, `${A}monitor/disks`, `${A}disk/marks`];
+
+// The reads of the server-aware form fields (ui/ShareField, UserField, DiskField, PoolField, InstanceField): asked first, all at once, right after
+// unlock, so that a picker in a dialog has its list. [path, least role (scripts/lib/sys-roles.tsv), capability or '' = always] (tests/web-prefetch.mjs).
+const FIELD_READS = [
+  [`${A}shares/overview`, 'viewer', ''],
+  [`${A}shares/principals`, 'viewer', ''],
+  [`${A}pool/disks`, 'viewer', 'storage'],
+  [`${A}monitor/disks`, 'viewer', ''],
+  [`${A}pool/list`, 'viewer', 'storage'],
+  [`${A}ct/list`, 'viewer', 'incus'],
+  [`${A}users/list`, 'admin', 'ad'],
+];
+// `caps` = ui.features.capabilities; not a list = the server did not say, so every capability counts as on
+export const fieldReads = (role, caps) => FIELD_READS.filter(([, need, cap]) => roleOk(role, need) && (!cap || !Array.isArray(caps) || caps.includes(cap))).map(([p]) => p);
 
 // The address may carry its node and a query (/node/homeserver/storage/disks?x=1); the table below is keyed by the INNER path.
 export const innerPath = (p) => (p || '').replace(/^\/node\/[^/]+(?=\/|$)/, '').replace(/[?#].*$/, '') || '/';
@@ -25,21 +40,21 @@ function extReads(name, pages) {
 }
 
 // `extPages` = ui.features.extensions (the pages of the extension packages that are on); without it an extension page reads nothing first.
-// `poolList` = the pool rows (pools.rows once loaded). `liveOn` = ui.features.live. Diagnostics switches its read in live mode so the prefetch/refresh button matches the visible table.
-export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_POOLS) {
+// `poolList` = the pool rows (pools.rows once loaded). `caps` = ui.features.capabilities (not a list = not told: everything is on, as the pages do). `liveOn` = ui.features.live. Diagnostics switches its read in live mode so the prefetch/refresh button matches the visible table.
+export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_POOLS, caps = null) {
   path = innerPath(path);
   let m;
   if ((m = path.match(/^\/extensions\/([a-z][a-z0-9-]*)$/))) return extReads(m[1], extPages);
   if ((m = path.match(/^\/apps\/([a-z][a-z0-9-]*)$/)) && (extPages || []).some((p) => p.name === m[1] && p.kind === 'recipe')) return extReads(m[1], extPages);   // the page of a recipe
   if ((m = path.match(/^\/storage\/pools\/([a-z0-9-]+)$/))) return pool(m[1]);
+  if (/^\/apps\/docker-app\/[^/]+/.test(path)) return [`${A}docker/apps`, `${A}docker/status`, `${A}recipes/list`];   // the page of one Docker app
   if (/^\/storage\/disks\/[^/]+/.test(path)) return DISKS;   // the page of one disk reads what the list reads (its SMART history and tests are read by the page itself)
   if (path.startsWith('/settings/capabilities') || path === P.settingsExtensions) return [`${A}config/list`, `${A}parts/list`, `${A}parts/pending`];
   if (path === P.updates) return [`${A}config/list`, `${A}system/updates`];
   if (path.startsWith('/settings/')) return [`${A}config/list`];
   switch (path) {
     case P.summary: return [`${A}status`, `${A}monitor/disks`, `${A}setup/list`, `${A}ups/status`];
-    case P.instances: return [`${A}ct/list`, `${A}backup/overview`, `${A}services/list`, `${A}recipes/list`, `${A}docker/list`];
-    case P.docker: return [`${A}docker/apps`, `${A}docker/status`];
+    case P.appsGroup: return [`${A}ct/list`, ...(!Array.isArray(caps) || caps.includes('docker') ? [`${A}docker/apps`, `${A}docker/status`, `${A}docker/health`] : []), `${A}backup/overview`, `${A}services/list`, `${A}recipes/list`];
     case P.registries: return [`${A}docker/registries`];
     case P.network: return [`${A}ct/list`, `${A}dns/list`, `${A}ports/list`, `${A}remote/list`, `${A}unifi/clients`, `${A}unifi/networks`];
     case P.users: case P.groups: return [`${A}users/list`, `${A}users/groups`];

@@ -87,7 +87,7 @@
 
   // --- one line per fact: icon, label, value, a note, the dot, and the page that owns it (a click opens it)
   const dataPage = $derived(poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools');
-  const OWNER = $derived({ Backup: P.backup, Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': P.hardware });
+  const OWNER = $derived({ Backup: P.backup, Encryption: '/storage/encryption', Instances: P.appsGroup, 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': P.hardware });
   const facts = $derived.by(() => {
     const m = {};
     const jobs = [];
@@ -130,7 +130,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Summary" crumb={hostName} sub="What needs you on {hostName} right now.">
+  <PageHeader title="Summary" sub="What needs you on {hostName} right now.">
     {#snippet actions()}
       <Button need="admin" icon="archive" busy={jobRunning('backup', ['now'])} busyLabel="Backing up…" tooltip={locked ? 'Storage is locked' : 'Back up everything now'} disabled={locked} onpointerenter={() => prefetchPlan('backup', ['now'])} onfocus={() => prefetchPlan('backup', ['now'])} onclick={() => openPlan('backup', ['now'], 'Back up now')}>Back up now</Button>
       <Button need="admin" variant="primary" icon="arrow-circle-up" busy={jobRunning('system', ['update'])} busyLabel="Updating…" tooltip={locked ? 'Storage is locked' : 'Update the server (snapshots first; shows the plan)'} disabled={locked} onpointerenter={() => prefetchPlan('system', ['update'])} onfocus={() => prefetchPlan('system', ['update'])} onclick={() => openPlan('system', ['update'], 'Update')}>Update…</Button>

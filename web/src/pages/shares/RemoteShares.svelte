@@ -4,7 +4,7 @@
   // a row (Add remote share, Give access) are in the page header; the actions of a row are here. Remote shares are never in the pool, the
   // parity or the backup (docs/PLAN-remote-shares.md D1).
   import Table from '../../shell/Table.svelte';
-  import { StatusDot, Card, Row, Muted, Banner } from '../../ui/index.js';
+  import { StatusDot, Card, Stack, Muted, Banner } from '../../ui/index.js';
   import Button from '../../ui/Button.svelte';
   import { poll, rows } from '../../data.svelte.js';
   import { openPlan, openCreate, jobRunning } from '../../ui.svelte.js';
@@ -25,7 +25,7 @@
 
 <Banner tone="info">A remote share is a share of another server. It is not in this server’s pool, parity or backup.</Banner>
 
-<Row gap="3" style="flex-direction:column;align-items:stretch">
+<Stack gap="3">
   <Card style="padding:12px 14px;gap:8px">
     <b>Shares I use from other servers</b>
     <Table id="remote-used" columns={cols} rows={used} compact loading={!remote.loaded} empty={empty('No shares from other servers in use.')}>
@@ -55,4 +55,4 @@
       {/snippet}
     </Table>
   </Card>
-</Row>
+</Stack>

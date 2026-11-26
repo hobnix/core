@@ -1,5 +1,5 @@
 <script>
-  // The overview of a group that has no state page of its own (Instances, Apps, Network, People, Settings, Developer): one card per child page with the
+  // The overview of a group that has no state page of its own (Network, People, Settings, Developer; Apps & VMs is a list of its own, pages/Workloads.svelte): one card per child page with the
   // note the tree shows (a count or a problem chip). Storage, Backup and System have pages/GroupPage.svelte. Nothing is read here that the tree does not read.
   import { route, go } from '../route.svelte.js';
   import { lockedWhy } from '../roles.js';
@@ -7,6 +7,7 @@
   import { tip } from "../ui/tooltip.svelte.js";
   import { tree } from '../nav.js';
   import Icon from '../ui/Icon.svelte';
+  import PageTrail from '../shell/PageTrail.svelte';
 
   let { deck, meta = {} } = $props();
 
@@ -28,7 +29,7 @@
 </script>
 
 <div class="page">
-  <div class="crumb">homeserver</div>
+  <PageTrail />
   <h3>{node?.label ?? 'Overview'}</h3>
 
   <div class="grid">
@@ -55,7 +56,6 @@
 
 <style>
   .page { display: flex; flex-direction: column; gap: 14px; }
-  .crumb { font-size: 11px; color: var(--color-neutral-500); }
   h3 { font-size: 20px; margin: 0; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
   .item { padding: 6px; gap: 0; }

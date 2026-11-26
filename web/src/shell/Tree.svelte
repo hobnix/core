@@ -4,7 +4,7 @@
   import TreeNode from './TreeNode.svelte';
   import TreeRow from './TreeRow.svelte';
   import { route, go } from '../route.svelte.js';
-  import { nodeItems } from '../nav.js';
+  import { nodeItems, rowMark, trailOf, withObjectRow } from '../nav.js';
   import { P } from '../paths.js';
   import { capEntries } from '../settings/layout.js';
   import { useLayout } from '../settings/layoutstate.svelte.js';
@@ -19,6 +19,8 @@
   const isOpen = (n) => (open[n.name] ?? n.local) || route.node === n.name;
   const addr = (n) => `/node/${encodeURIComponent(n.name)}`;
   const kindChip = { main: '', vps: 'vps', edge: 'edge', peer: 'peer' };
+  // the rows on the way to the page on screen are marked (nav.js rowMark); only the node of that page has a trail
+  const trailIn = (n, items) => (route.node === n.name ? trailOf(route.path, { server: n.name, items }) : []);
 </script>
 
 <div class="tree" role="tree" aria-label="Servers and pages">
@@ -26,14 +28,18 @@
   <div class="tscroll">
     {#each nodes as n (n.name)}
       {@const items = nodeItems(n.kind, n.local ? ui.features.capabilities : n.caps, n.local ? ui.features.extensions : null, n.local ? capEntries(getLayout(), ui.features.capabilities) : [], pools.rows).filter((i) => i.path !== '/')}
+      {@const here = route.node === n.name}
+      {@const shown = n.local && here ? withObjectRow(items, route.path) : items}
+      {@const trail = trailIn(n, items)}
+      {@const mark = here ? rowMark('/', route.path, trail) : ''}
       <TreeRow icon={n.kind === 'main' ? 'hard-drives' : n.kind === 'peer' ? 'house-line' : 'globe-hemisphere-west'} label={n.name} strong gap={n !== nodes[0]}
-               href={addr(n)} active={route.node === n.name && route.path === '/'}
+               href={addr(n)} active={mark === 'current'} {mark}
                caret={items.length ? (isOpen(n) ? 'open' : 'closed') : null} ontoggle={() => (open[n.name] = !isOpen(n))}
                onclick={() => { open[n.name] = true; go(addr(n)); }}
                chip={n.local ? 'this server' : kindChip[n.kind] ?? n.kind} dot={n.dot ?? { state: 'off', title: 'no data' }} />
       {#if isOpen(n)}
-        {#each items as it (it.label + (it.path ?? ''))}
-          <TreeNode item={it} node={n.name} local={n.local} depth={1} locked={locked && n.local} {meta} />
+        {#each shown as it (it.label + (it.path ?? ''))}
+          <TreeNode item={it} node={n.name} local={n.local} depth={1} locked={locked && n.local} {meta} {trail} />
         {/each}
       {/if}
     {/each}

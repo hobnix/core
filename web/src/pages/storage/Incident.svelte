@@ -41,7 +41,7 @@
   const replace = () => openCreate(ReplaceMember, { pool: target.pool, member: target.member, snap });
 </script>
 
-<PageHeader title="Incident" crumb="Storage" sub="A degraded pool or a failing disk: what happened, what it touches, the next safe step.">
+<PageHeader title="Incident" sub="A degraded pool or a failing disk: what happened, what it touches, the next safe step.">
   {#snippet actions()}
     <Button tooltip={'Back to the pools'} onclick={() => go(P.pools)}><i class="ph ph-cylinder"></i>Pools</Button>
   {/snippet}

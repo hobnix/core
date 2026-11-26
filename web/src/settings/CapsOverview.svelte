@@ -31,7 +31,7 @@
 </script>
 
 <Stack gap="4">
-  <PageHeader title="Capabilities" crumb="Settings" sub="Optional parts of this server. Off means its pages and commands are not there. A part with a NixOS module changes at the next hs rebuild." />
+  <PageHeader title="Capabilities" sub="Optional parts of this server. Off means its pages and commands are not there. A part with a NixOS module changes at the next hs rebuild." />
   <PartsTable id="capabilities" items={plainParts} loaded={partList.loaded} error={!!partList.error} empty="No optional parts." {pathOf} />
   {#if fields.length}<Fields opts={fields} />{/if}
 </Stack>

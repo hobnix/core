@@ -14,7 +14,7 @@
   const n = $derived(d?.problems);
 </script>
 
-<PageHeader title="Health" crumb={node.name} sub="The state of {node.name} as it reports it.">
+<PageHeader title="Health" sub="The state of {node.name} as it reports it.">
   {#snippet actions()}
     {#if d}<StatusDot state={n > 0 ? 'warn' : n === 0 ? 'ok' : 'off'} label={n == null ? 'unknown' : n === 0 ? 'no problems' : `${n} problem${n === 1 ? '' : 's'}`} />{/if}
   {/snippet}

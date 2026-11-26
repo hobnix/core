@@ -22,7 +22,7 @@
     : 'Connecting to the live stream.');
 </script>
 
-<PageHeader title="Network map" crumb="{ui.host} › Monitoring" sub="How this server reaches the network: the way out, the host, its bridges, the instances and their services." />
+<PageHeader title="Network map" sub="How this server reaches the network: the way out, the host, its bridges, the instances and their services." />
 
 <PageState loading={!topo.loaded} error={topo.error?.message} hasData={topo.data != null} empty={topo.loaded && !topo.error && !graph.length}
   emptyIcon="network" emptyTitle="Nothing to draw yet" emptyText="The server did not list any network node. Check the page again in a moment."

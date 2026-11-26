@@ -7,7 +7,7 @@
   //   <GenericPage spec={...} forms={{ PcForm }} />
   //
   // spec = {
-  //   title, crumb?, sub?,
+  //   title, sub?,
   //   actions?: [{ label, icon?, primary?, danger?, plan: [area, arg, ...], planTitle? }   // opens the plan dialog (openPlan): the ONLY way a page changes anything
   //            | { label, form: 'Name' }],                                                  // opens a form of `forms` (a CreateDialog component)
   //            | { label, plan: [area, ..., '{input}'], input: { label, placeholder?, hint?, pattern?, invalid?, suggest?: { read } } }],   // asks for one value first (InputForm); {input} is it; suggest = a declared read whose first field prefills the field
@@ -67,7 +67,7 @@
 </script>
 
 <div class="gp" data-template={templateOf(spec)}>
-  <PageHeader title={spec.title} crumb={spec.crumb} sub={spec.sub}>
+  <PageHeader title={spec.title} sub={spec.sub}>
     {#snippet actions()}
       {#each spec.actions ?? [] as a, i}
         <Button need={maxRole(areaRole(a.plan?.[0]), spec.role, a.role)} variant={a.primary ? 'primary' : a.danger ? 'danger' : 'secondary'} tooltip={a.form && !forms[a.form] ? 'This change has no form in the web interface yet' : ''} disabled={a.form && !forms[a.form]} onclick={() => run(a, i)}>{#if a.icon}<i class="ph ph-{a.icon}"></i>{/if}{a.label}</Button>

@@ -4,7 +4,7 @@
   // hs sys notify plan|start add|set|remove|test change. A tick saves at once.
   import { poll, rows, refresh } from '../data.svelte.js';
   import { start } from '../api.js';
-  import { openCreate, openPlan, jobRunning, ui } from '../ui.svelte.js';
+  import { openCreate, openPlan, jobRunning } from '../ui.svelte.js';
   import ChannelForm from '../forms/ops/ChannelForm.svelte';
   import { agoShort } from '../format.js';
   import Table from '../shell/Table.svelte';
@@ -99,7 +99,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Notifications" crumb="{ui.host} / Monitoring" sub="Where messages go, and which kinds each place gets.">
+  <PageHeader title="Notifications" sub="Where messages go, and which kinds each place gets.">
     {#snippet actions()}<Button variant="primary" tooltip={!prov.loaded ? 'Loading the providers' : 'Add a push channel'} disabled={!prov.loaded} onclick={add}><i class="ph ph-plus"></i>Add channel</Button>{/snippet}
   </PageHeader>
 

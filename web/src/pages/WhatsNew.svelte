@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { poll } from '../data.svelte.js';
   import { go, url } from '../route.svelte.js';
-  import { ui } from '../ui.svelte.js';
   import { docPath } from '../docs/docs.js';
   import { changes, load, markSeen, parseChanges } from '../changes.svelte.js';
   import PageHeader from '../shell/PageHeader.svelte';
@@ -63,7 +62,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="What's new" crumb={ui.host} {sub}>
+  <PageHeader title="What's new" {sub}>
     {#snippet actions()}
       <Combobox options={MODES} bind:value={mode} label="Show changes" />
     {/snippet}

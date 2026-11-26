@@ -125,18 +125,49 @@ eq('another key does not close it', closesOnKey({ key: 'a' }, doc()), false);
 
 // ── the instance object (step 4): address (own kind segment, an instance may be called docker), tabs, the pages
 {
+  const { dockerAppPagePath } = await import('../web/src/paths.js');
   const { instancePath } = await import('../web/src/pages/instances/path.js');
-  eq('an instance page address', [instancePath('docker'), instancePath('jellyfin', 'config'), instancePath('a b', 'overview')], ['/instances/ct/docker', '/instances/ct/jellyfin/config', '/instances/ct/a%20b']);
+  eq('an instance page address', [instancePath('docker'), instancePath('jellyfin', 'config'), instancePath('a b', 'overview')], ['/apps/instance/docker', '/apps/instance/jellyfin/config', '/apps/instance/a%20b']);
   eq('an instance address reads back', objectOf(instancePath('a b', 'console')), { kind: 'instance', id: 'a b', tab: 'console' });
-  eq('the instance named docker is not the Docker page', [objectOf(instancePath('docker'))?.kind, objectOf(P.docker)], ['instance', null]);
-  eq('the other pages under /instances are no instance objects', [P.apps, P.iso, P.services, P.registries].map((p) => objectOf(p)), [null, null, null, null]);
-  eq('the instances list is not an instance object', objectOf(P.instances), null);
+  eq('the instance docker and the Docker app docker are two objects', [instancePath('docker'), dockerAppPagePath('docker')].map((p) => objectOf(p)?.kind), ['instance', 'docker-app']);
+  eq('the other pages under /apps are no instance objects', [P.apps, P.iso, P.marketplace, P.registries, P.dockerNew].map((p) => objectOf(p)), [null, null, null, null, null]);
+  eq('the list is not an object', objectOf(P.appsGroup), null);
   eq('the instance tabs are Overview, Config, Network, Console', objects.instance.tabs.map((t) => t.id), ['overview', 'config', 'network', 'console']);
-  eq('an instance page is a page of the Instances item', itemOf(instancePath('x'))?.path, P.instances);
-  const page = src('pages/instances/Instance.svelte'), il = src('pages/Instances.svelte');
+  eq('an instance page is a page of the item Apps & VMs', itemOf(instancePath('x'))?.path, P.appsGroup);
+  const page = src('pages/instances/Instance.svelte'), il = src('pages/Workloads.svelte');
   eq('the instance page has no visible destructive button, Delete is in the danger section', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page)], [false, true]);
-  eq('the instances list has no QuickLook, selection helper, Split or Drawer; a row ends with "Open instance"', [/<QuickLook|QuickLook\.svelte/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il), /label="Open instance"/.test(il), /icon="arrow-square-out"/.test(il), /go\(instancePath\(c\.name\)\)/.test(il), /<Table id="instances"[^>]*onrow/.test(il)], [false, false, false, true, true, true, false]);
+  eq('the instance page links the recipe to its row in the app catalog', [/Set up by the recipe/.test(page), /setSelection\('recipes', recipe\); go\(P\.apps\)/.test(page)], [true, true]);
+  eq('the list has no QuickLook, selection helper, Split or Drawer; a row ends with "Open instance" or "Open app"', [/<QuickLook|QuickLook\.svelte/.test(il), /selection\.svelte\.js/.test(il), /<Split|<Drawer/.test(il), /label="Open instance"/.test(il), /label="Open app"/.test(il), /icon="arrow-square-out"/.test(il), /go\(pathOf\(r\)\)/.test(il), /<Table id="workloads"[^>]*onrow/.test(il)], [false, false, false, true, true, true, true, false]);
   eq('the console tab opens the existing terminal and VM console windows', [/Terminal\.svelte/.test(src('pages/instances/ConsoleTab.svelte')), /VmConsole\.svelte/.test(src('pages/instances/ConsoleTab.svelte'))], [true, true]);
+}
+
+// ── the Docker app object (#1295): its own kind (an instance and a Docker app may share a name), tabs and actions by who manages it
+{
+  const { dockerAppPagePath } = await import('../web/src/paths.js');
+  const { pageTabs, headerActions } = await import('../web/src/pages/docker/apps.js');
+  eq('a Docker app page address', [dockerAppPagePath('arr'), dockerAppPagePath('arr', 'logs'), dockerAppPagePath('a b', 'overview')], ['/apps/docker-app/arr', '/apps/docker-app/arr/logs', '/apps/docker-app/a%20b']);
+  eq('a Docker app address reads back', objectOf(dockerAppPagePath('a b', 'compose')), { kind: 'docker-app', id: 'a b', tab: 'compose' });
+  eq('the new app, wizard and registries pages are no objects', [P.dockerNew, P.dockerWizard, P.registries].map((p) => objectOf(p)), [null, null, null]);
+  eq('the Docker app tabs are Overview, Compose, Logs', objects['docker-app'].tabs.map((t) => t.id), ['overview', 'compose', 'logs']);
+  eq('a Docker app page is a page of the item Apps & VMs', itemOf(dockerAppPagePath('x'))?.path, P.appsGroup);
+  eq('its title ends with the app', titleOf(dockerAppPagePath('x', 'logs')).slice(-2), ['Apps & VMs', 'x']);
+  eq('tabs by who manages it', ['web', 'recipe', 'other', 'unmanaged'].map((managed) => pageTabs({ managed })), [['overview', 'compose', 'logs'], ['overview', 'logs'], ['overview', 'logs'], ['overview']]);
+  const acts = (state, managed = 'web', files = '-') => headerActions({ state, managed, files });
+  eq('a running web app: Stop first, then Restart', acts('running'), ['stop', 'restart', 'pull', 'rebuild']);
+  eq('a stopped recipe app: Start first, no Rebuild', acts('exited', 'recipe'), ['start', 'restart', 'pull']);
+  eq('changed files: Apply is the primary action', acts('partial', 'web', 'changed').slice(0, 2), ['apply', 'stop']);
+  eq('an unmanaged app has no action, a state with no start or stop keeps Restart', [acts('running', 'unmanaged'), acts('restarting', 'other')], [[], ['restart', 'pull']]);
+  const page = src('pages/docker/DockerApp.svelte'), dl = src('pages/Workloads.svelte'), ed = src('pages/docker/AppEditPage.svelte');
+  eq('the page has no visible destructive button, Delete is in the danger section for web apps only', [/variant="danger"/.test(page), /label: 'Delete…'/.test(page), /a\?\.managed !== 'web' \? \[\]/.test(page)], [false, true, true]);
+  eq('the header shows at most two actions, none on the Compose tab', /tab === 'compose' \? \[\] : keys\.slice\(0, 2\)/.test(page), true);
+  eq('the page passes no crumb, and a missing app is a sentence with a way back', [/<ObjectPage[^>]*crumb=/.test(page), /notFound=\{/.test(page), /backTo=\{withQuery\(P\.appsGroup, \{ provider: 'docker' \}\)\}/.test(page), /Docker is off/.test(page)], [false, true, true, true]);
+  eq('the editor is embedded without its page header and unsaved edits ask before another tab', [/<AppEditPage embedded=\{name\} ondirty/.test(page), /\{#if embedded\}/.test(ed), /dirty && tab === 'compose'/.test(page)], [true, true, true]);
+  eq('the tab mark of an object page follows the address, so a refused pick leaves it', [/<PageTabs controlled /.test(src('shell/ObjectPage.svelte')), /if \(!controlled\) tab = t\.id/.test(src('ui/PageTabs.svelte'))], [true, true]);
+  eq('a role below app-manager gets the role as the reason on the Logs and Compose tabs', /t !== 'overview' && !roleOk\(ui\.role, 'app-manager'\)/.test(page), true);
+  eq('a dirty editor stays while the app is missing from the list', [/listed \?\? \(dirty && last\?\.name === name \? last : null\)/.test(page), /ondirty\?\.\(dirty\);/.test(ed)], [true, true]);
+  eq('a recipe app links to the app catalog', /setSelection\('recipes', name\); go\(P\.apps\)/.test(page), true);
+  eq('the list offers a Docker app the same actions: the first on the row, the rest in its menu, Delete last and for web apps only', [/headerActions\(a\)/.test(dl), /rowMenu\(acts, keys\.slice\(1\), a\)/.test(dl), /a\.managed === 'web' \? \[\{ sep: true \}, item\('delete', \{ danger: true \}\), item\('deleteData', \{ danger: true \}\)\]/.test(dl), /need: 'app-manager'/.test(dl)], [true, true, true, true]);
+  eq('the route table knows the component', /'docker-app': DockerApp/.test(src('routes.js')), true);
 }
 
 // ── Shares list: no quick look (owner decision 2026-11-23); a row ends with Browse and "Open share" buttons

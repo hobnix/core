@@ -75,7 +75,7 @@
   const keptCols = [{ key: 'name', label: 'Kept folder' }, { key: 'kind', label: 'Kind' }, { key: 'size', label: 'Size', sort: 'num' }, { key: 'disks', label: 'Where' }, { key: 'actions', label: '', sort: false, align: 'right' }];
 </script>
 
-<PageHeader title="Shares" crumb="Storage" sub={m.measured ? `Sizes measured ${m.measured}.` : 'Network shares, who may use them and what has been kept of them.'}>
+<PageHeader title="Shares" sub={m.measured ? `Sizes measured ${m.measured}.` : 'Network shares, who may use them and what has been kept of them.'}>
   {#snippet actions()}
     {#if m.hasCache}<Menu items={[{ label: 'Empty cache…', icon: 'arrow-line-down', need: 'admin', disabled: locked || rowstate.pending('admin', ['cache-mover']), reason: locked ? 'Storage is locked' : 'Already emptying', onclick: () => openPlan('admin', ['cache-mover'], 'Empty the upload cache') }]} />{/if}
     {#if view === 'remote'}

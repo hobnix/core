@@ -2,7 +2,7 @@
   import { P } from '../../paths.js';
   // The guided way to a new Docker app: image, ports, folders, variables, one question per screen (ui/Wizard.svelte, the frame the capability
   // wizards use). The last screen shows the compose file and the .env text it will hand over, as plain text, and "Open in editor" opens
-  // /instances/docker/new on exactly that text. The wizard saves and applies nothing: the editor's Test, Save and Apply do (editor/wizard.js has the logic).
+  // /apps/docker/new on exactly that text. The wizard saves and applies nothing: the editor's Test, Save and Apply do (editor/wizard.js has the logic).
   import { poll, rows } from '../../data.svelte.js';
   import { go } from '../../route.svelte.js';
   import { tr } from '../../i18n.js';
@@ -56,7 +56,7 @@
   const secret = (k) => /PASS|TOKEN|SECRET|KEY/i.test(k);
 </script>
 
-<PageHeader title="New app" crumb="Docker" sub="Answer a few questions; the editor opens with the compose file and the .env text." />
+<PageHeader title="New app" sub="Answer a few questions; the editor opens with the compose file and the .env text." />
 
 <div class="wrap">
   <Wizard index={at} total={STEPS.length} steps={NAMES} onselect={(i) => { at = i; }} question={tr(QUESTION[step])} help={tr(HELP[step])} primary={step === 'review' ? tr('Open in editor') : tr('Next')} canNext={!errs.length} onnext={next} onback={() => { at = Math.max(0, at - 1); }}>

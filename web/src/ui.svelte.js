@@ -1,5 +1,5 @@
 // State that several parts of the shell share: the open plan dialog, the bottom panel, and the tasks started from this browser.
-import { get } from './api.js';
+import { get, forgetReads } from './api.js';
 import { jobMatches } from './jobkey.js';
 import { toast } from './ui/toast.svelte.js';
 import { roleOk, areaRole, refusal } from './roles.js';
@@ -88,6 +88,7 @@ function apply(t, rows) {
 
 // The second toast of a job: how it ended, with a link to its log in Tasks (a job.* event of the stream ends the follow, nothing polls for it).
 export function endToast(t) {
+  forgetReads();   // a read that runs began while the job did
   const ok = t.state === 'ok' || t.state === 'done';
   const lost = t.state === 'unknown' || t.state === 'lost';      // no record of the unit (or the page lost the server): not the same as a failure
   toast({ key: `end:${t.unit}`, kind: ok ? 'ok' : 'bad', title: `${t.title} ${tr(ok ? 'finished' : lost ? 'ended, result unknown' : 'failed')}`,

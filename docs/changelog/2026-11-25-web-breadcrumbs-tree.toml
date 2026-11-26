@@ -1,0 +1,6 @@
+date  = "2026-11-25"
+type  = "change"
+title = "The web interface shows where you are: breadcrumbs and a marked tree"
+body  = """Every page now has the same breadcrumb, built from the tree. Each part is a link to the server, group or list above the page.
+
+The tree highlights the open page, tints the row above it and colours the icons further up. A disk, share, user or instance page gets its own row under its list while it is open. Not tested on hardware yet."""
