@@ -75,6 +75,7 @@ check_out "the same name twice is refused" "already" bash -c "echo '$GOOD' | $C 
 echo "-- the market"
 check_out "market lists demo as new" "^demo${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}no${tab}generic${tab}The demo package" $PKGSH --market
 check_out "and the core flag of corer" "^corer${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}yes" $PKGSH --market
+check_eq "history: a repository without a signed index keeps none" "history${tab}none" "$($PKGSH --history demo --repo test)"
 # the store cards: category and icon from package.toml, the tested date only from the index entry (corer has one, demo none)
 check_out "cards: demo" "^demo${tab}test${tab}media${tab}ph:film-strip${tab}-${tab}-${tab}-${tab}-${tab}no$" $PKGSH --cards
 check_out "cards: an added repository never passes its verified day on" "^corer${tab}test${tab}media${tab}ph:film-strip${tab}-${tab}-${tab}-${tab}-${tab}no$" $PKGSH --cards

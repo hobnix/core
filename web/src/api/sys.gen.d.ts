@@ -2119,6 +2119,19 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, verdict: "fits" | "note" | "no" | "unstated" | "unknown", check: "core" | "memory" | "disk" | "gpu" | "share" | "docker" | "tailscale" | "need", level: "ok" | "note" | "no" | "unstated" | "unknown", need: Field, have: Field, total: Field])[];
   };
+  "pkg.history.by_name": {
+    /** the versions of a package as its repository's signed index lists them, as data: history TAB index|none, then version TAB version, date (- = none), current|older, withdrawn yes|no, reason, changes (- = none); nothing is installed */
+    words: ["pkg", "history", "<name>"];
+    path: "/pkg/history/{name}";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { name: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "history", source: "index" | "none"]
+      | [tag: "version", version: Field, date: Field, which: "current" | "older", withdrawn: "yes" | "no", reason: Field, changes: Field])[];
+  };
   "pkg.index": {
     /** the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch */
     words: ["pkg", "index"];

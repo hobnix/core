@@ -430,6 +430,14 @@
    ["zoraxy","official","unknown","memory","unknown","-","6442450944","17179869184"],
    ["zoraxy","official","unknown","disk","unknown","-","193273528320","493921239040"]
   ],
+  "pkg/history/jellyfin": [
+   ["history","index"],
+   ["version","1.1.0","2026-11-18T09:00:00Z","current","no","-","Update Jellyfin to the newest release; fix the address of the web page"],
+   ["version","1.0.2","2026-11-02T09:00:00Z","older","no","-","Keep the library settings when the recipe runs again"],
+   ["version","1.0.1","2026-10-30T09:00:00Z","older","yes","the update removed the transcoding folder","-"],
+   ["version","1.0.0","2026-10-29T09:00:00Z","older","no","-","-"]
+  ],
+  "pkg/history": [["history","none"]],
   "pkg/show/jellyfin": [
    ["status","ok"],
    ["name","jellyfin"],

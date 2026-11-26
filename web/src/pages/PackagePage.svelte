@@ -3,6 +3,7 @@
   // (/marketplace/<repo>/<name> redirects here, docs/PLAN-marketplace-stats.md). What it is, its pictures, what it needs and uses, version,
   // source and signature, read from its newest verified release (hs sys pkg show) without installing anything. The buttons are the ones of its
   // card (Install opens the install dialog with its plan; an installed app has Open and Manage); Turn on/off and Remove are in the menu.
+  // Below them the versions the signed index lists (hs sys pkg history): day, change text, withdrawn. It installs no older version.
   // Everything shown comes from a repository and is drawn as text; the only links are http and https (market.js safeLink).
   import { P, appPath } from '../paths.js';
   import { poll, rows, refresh } from '../data.svelte.js';
@@ -14,7 +15,7 @@
   import PageState from '../shell/PageState.svelte';
   import { Button, Card, Chip, Banner, Kv, Grid, Stack, Row, Muted, Menu, EmptyState, ErrorNote, AppIcon, Screenshots, Icon } from '../ui/index.js';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl, trustOf, testedText, parseFit, fitLabel, fitText } from './market.js';
+  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl, trustOf, testedText, parseFit, fitLabel, fitText, parseHistory } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   // the two words of the address (the route only sends a path that matches routes.js PACKAGE_PAGE)
@@ -28,6 +29,7 @@
   const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
   const show = poll(() => (repo && name ? `/api/sys/pkg/show/${name}?repo=${repo}` : ''), 120000, 'pkg-market');
   const fitList = poll('/api/sys/pkg/fit', 120000, 'pkg-market');
+  const historyList = poll(() => (repo && name ? `/api/sys/pkg/history/${name}?repo=${repo}` : ''), 120000, 'pkg-market');
   const svcApp = poll('/api/sys/services/app', 60000);
   const tiles = poll('/api/sys/services/tiles', 60000);
   const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards', '/api/sys/pkg/fit'];
@@ -41,6 +43,7 @@
   const fit = $derived(compared ? parseFit(rows(fitList)).get(`${repo}/${name}`) : undefined);
   const FIT_ICON = { ok: 'check-circle', note: 'warning', no: 'prohibit', unstated: 'question', unknown: 'warning-circle' };
   const FIT_WORD = { ok: 'Fine', note: 'Note', no: 'Does not fit', unstated: 'Not stated', unknown: 'Not checked' };
+  const history = $derived(parseHistory(rows(historyList)));
   const repoRow = $derived(parseRepos(rows(repoList)).find((r) => r.name === repo) ?? null);
   const withPage = $derived(new Set((ui.features.extensions ?? []).filter((e) => e.kind === 'recipe').map((e) => e.name)));
   const open = $derived(p ? openHref(stage?.instances, rows(svcApp), rows(tiles)) || (withPage.has(name) ? appPath(name) : '') : '');
@@ -73,7 +76,7 @@
   const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
   let wasBusy = false;
   $effect(() => {
-    if (wasBusy && !busyNow) refresh([...PATHS, `/api/sys/pkg/show/${name}?repo=${repo}`]);
+    if (wasBusy && !busyNow) refresh([...PATHS, `/api/sys/pkg/show/${name}?repo=${repo}`, `/api/sys/pkg/history/${name}?repo=${repo}`]);
     wasBusy = busyNow;
   });
   const failure = $derived(p ? failureOf(p) : null);
@@ -167,6 +170,34 @@
           <Kv items={source} cols={1} />
         </Card>
       </Grid>
+
+      <Card title="Versions">
+        {#if !historyList.loaded}
+          <Muted as="p">Reading the version list…</Muted>
+        {:else if history.source === 'none'}
+          <Muted as="p">This repository has no signed index, so there is no version list here.</Muted>
+        {:else if !history.versions.length}
+          <Muted as="p">The version list could not be read{historyList.error?.message ? `: ${historyList.error.message}` : '.'}</Muted>
+        {:else}
+          <Stack gap="4">
+            {#each history.versions as v (v.version)}
+              <Stack gap="1">
+                <Row gap="2" wrap>
+                  <b>{v.version}</b>
+                  <Muted>{v.date ? `first published ${v.date}` : 'no date given'}</Muted>
+                  {#if v.current}<Chip>Newest</Chip>{/if}
+                  {#if p.installed && p.inst === v.version}<Chip kind="status" state="ok">Installed</Chip>{/if}
+                  {#if v.withdrawn}<Chip kind="status" state="bad">Withdrawn</Chip>{/if}
+                </Row>
+                {#if v.withdrawn}<span style="line-height:1.45;overflow-wrap:anywhere">{v.reason ? `Withdrawn by its repository: ${v.reason}` : 'Withdrawn by its repository, which gives no reason.'}</span>{/if}
+                {#if v.changes}<span style="line-height:1.45;overflow-wrap:anywhere">{v.changes}</span>
+                {:else}<Muted>No change text.</Muted>{/if}
+              </Stack>
+            {/each}
+          </Stack>
+          <Muted as="p">{history.versions.length === 1 ? 'The index of the repository lists no older version.' : 'These are the versions the index of the repository lists: the newest and at most 10 older ones.'} That need not be every version ever published. An older version cannot be installed from this page.</Muted>
+        {/if}
+      </Card>
     </Stack>
   {/if}
 </PageState>

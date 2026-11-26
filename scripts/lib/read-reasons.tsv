@@ -64,6 +64,7 @@ net check	no producer for a topic yet
 net nics	no producer for a topic yet
 pkg cards	no producer for a topic of its own; the Marketplace reads it again when the topic pkg-market changes (a fetch, an install), no timer while the stream is open
 pkg fit	free memory and disk space have no event of their own; the Marketplace reads it again when it opens and when the topic pkg-market changes, no timer while the stream is open
+pkg history	one package, on its page only; it changes with a fetch, so the page reads it again when the topic pkg-market changes, no timer while the stream is open
 share parity refused	no producer for a topic yet; a few lines, polled every 15 s on the Pools page
 storage discover	no producer for a topic yet
 release show	no producer for a topic yet; polled every 10 s or 60 s by the settings pages

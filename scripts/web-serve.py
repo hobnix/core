@@ -1287,6 +1287,8 @@ READS = {
     ("pkg", "fit"): {"kind": "tsv", "ttl": 60},
     # one package from its newest verified release (the package page); the pictures it names come from /api/pkg/asset/<repo>/<name>/<file>
     ("pkg", "show"): {"kind": "tsv", "ttl": 60, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
+    # the versions the repository's index lists for one package (the package page); it changes with a fetch
+    ("pkg", "history"): {"kind": "tsv", "ttl": 120, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
     ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
     ("apps", "health"): {"kind": "tsv", "ttl": 30, "topic": "apps-health"},
     ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)

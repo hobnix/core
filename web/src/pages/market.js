@@ -268,6 +268,23 @@ export function parseShow(rows) {
   return { ...o, needs: list(o.needs), ports: list(o.ports), upstream: safeLink(o.upstream), refused: o.status === 'refused' };
 }
 
+// hs sys pkg history: `history TAB index|none`, then `version` TAB version, date, current|older, withdrawn, reason, changes ->
+// { source: 'index' | 'none' | '' (not read), versions: [{ version, date, current, withdrawn, reason, changes }] }. The texts come from a
+// repository: they are drawn as text, without the invisible format characters that reorder a line. `date` keeps the day only.
+const SEMVER = /^\d{1,9}\.\d{1,9}\.\d{1,9}$/;
+const plain = (v) => dash(v).replace(/\p{Cf}/gu, '');
+export function parseHistory(rows) {
+  const o = { source: '', versions: [] };
+  for (const r of rows ?? []) {
+    if (r[0] === 'history' && (r[1] === 'index' || r[1] === 'none')) o.source = r[1];
+    else if (r[0] === 'version' && SEMVER.test(r[1] ?? '')) {
+      const day = /^(\d{4}-\d\d-\d\d)(T|$)/.exec(r[2] ?? '');
+      o.versions.push({ version: r[1], date: day ? day[1] : '', current: r[3] === 'current', withdrawn: r[4] === 'yes', reason: plain(r[5]), changes: plain(r[6]) });
+    }
+  }
+  return o;
+}
+
 // what the page lists under "What it needs and uses": [{ k, v }] without the empty ones
 export function usesOf(s) {
   const out = [];

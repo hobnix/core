@@ -449,6 +449,11 @@ In the web interface this is the **Marketplace** page: every package of every re
 Install / Update / Remove, and a Repositories tab to add or remove a repository. Adding a repository asks for its public signing key and for
 the repository name to be typed. Not tested on hardware yet. The commands below do the same.
 
+**Versions.** The page of a package lists the versions that the signed index of its repository names: the newest one and at most 10 older
+ones, each with the day it was first published, its change text, and whether the repository withdrew it (with the reason). That need not be
+every version ever published, and a repository without a signed index has no list. An older version cannot be installed from the page. The
+same data: `hs sys pkg history <name> --repo <repository>`. Not tested on hardware yet.
+
 **Fits this server.** An app that is not installed says on its card and on its page whether it fits: the memory and disk space its package
 states are compared with what this server has. Memory is compared with what is free now and with the total, disk space with the free space
 of the storage pool where the disk of a new container goes (files on shares are not counted). The page lists each figure, and also what the

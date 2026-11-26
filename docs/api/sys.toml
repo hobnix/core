@@ -236,6 +236,13 @@ columns = ["name", "repo", "verdict", "check", "level", "need", "have", "total"]
 enums = { verdict = ["fits", "note", "no", "unstated", "unknown"], check = ["core", "memory", "disk", "gpu", "share", "docker", "tailscale", "need"], level = ["ok", "note", "no", "unstated", "unknown"] }
 note = "Does an app (recipe) that is not installed yet fit this server: one row per package, repository and check; verdict is the same on all rows of a package and repository. No row for an installed app. What the package states (memory, disk, a graphics card, needs) next to the server now. need, have and total of memory and disk are bytes: memory have = available now, total = all of it; disk = free and total of the Incus storage pool of the default profile's root disk (files on shares are not counted). memory is no above the total and note above what is available; disk is no above what is free; gpu is optional and never no, have = nvidia|other|none; docker and tailscale have = present|missing, note = the install sets it up; core no = the release waits for a newer core; need no = a word of needs this server cannot provide. unstated = the package states neither memory nor disk (never fits); unknown = could not be compared. - = not known."
 
+["pkg history <name>"]
+role = "admin"
+kind = "tsv"
+records = { history = ["source"], version = ["version", "date", "which", "withdrawn", "reason", "changes"] }
+enums = { source = ["index", "none"], which = ["current", "older"], withdrawn = ["yes", "no"] }
+note = "The versions of one package as the signed index of its repository lists them: hs sys pkg history <name> [--repo R]. First line history: index, or none for a repository without a signed index (no version lines follow, which says nothing about how many versions there were). Then the newest version (current), then the older ones newest first, at most 10: the index may not list every version ever published. date is when that version was first published, as the index says (- = not given). withdrawn is yes for a version the repository took back (yanked), with its reason. changes is the change text of that version, written by the repository (- = none): untrusted text, one line, at most 500 characters. Nothing is installed or fetched; this row installs no older version. A package no repository offers is refused on stderr, exit 1."
+
 ["pkg asset <name> <file>"]
 role = "admin"
 kind = "text"

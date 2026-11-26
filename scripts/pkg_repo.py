@@ -1381,6 +1381,31 @@ class Repos:
                 out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-", *self.declared(m)))
         return out
 
+    def history(self, name, repo=None) -> list:
+        """the lines of `hs sys pkg history`: what the index says of a package's versions. `history TAB index|none` (none: a repository without a
+        signed index keeps no history), then one `version` line for the newest (current) and one per older version the index lists (at most
+        HISTORY_VERSIONS, already cleaned by index_entries), newest first: version, date (first published, - = not given), current|older,
+        withdrawn yes|no, reason, changes. Nothing is fetched and no package file is read. A withdrawn current version is listed too."""
+        rows = [c for c in self.catalog(True).get(name, []) if not repo or c[0] == repo]
+        if not rows:
+            raise Refused("no package %s in the repositories (hs pkg fetch updates them)" % name)
+        if len(rows) > 1:
+            raise Refused("%s is in %s: name one with --repo" % (name, ", ".join(c[0] for c in rows)))
+        entry = rows[0][1]
+        if not entry.get("_index"):
+            return ["history\tnone"]
+
+        def text(v) -> str:
+            return (" ".join(v.split())[:self.pkg_index.HISTORY_TEXT] if isinstance(v, str) else "") or "-"
+
+        def line(r: dict, which: str, changes) -> str:
+            yanked = bool(r.get("yanked"))
+            return tsv_row("version", r.get("version"), r.get("date") or "-", which, "yes" if yanked else "no",
+                           text(r.get("yanked_reason")) if yanked else "-", text(changes))
+        meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+        return (["history\tindex", line(entry, "current", meta.get("changes"))]
+                + [line(r, "older", r.get("changes")) for r in entry.get("versions") or []])
+
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
         if not cat:
@@ -1466,6 +1491,9 @@ def run(pkg, cmd, rest):
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
+        elif cmd == "history":
+            repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            print("\n".join(R.history(rest[0], repo)))
         elif cmd == "cards":
             lines = R.cards()
             if lines:

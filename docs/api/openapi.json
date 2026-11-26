@@ -10380,6 +10380,123 @@
     }
    }
   },
+  "/pkg/history/{name}": {
+   "get": {
+    "operationId": "pkg.history.by_name",
+    "summary": "the versions of a package as its repository's signed index lists them, as data: history TAB index|none, then version TAB version, date (- = none), current|older, withdrawn yes|no, reason, changes (- = none); nothing is installed",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "history",
+      "<name>"
+     ],
+     "script": "pkg.sh",
+     "args": "--history {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/history/<name>",
+     "kind": "tsv",
+     "ttl": 120,
+     "query": [
+      "repo"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The versions of one package as the signed index of its repository lists them: hs sys pkg history <name> [--repo R]. First line history: index, or none for a repository without a signed index (no version lines follow, which says nothing about how many versions there were). Then the newest version (current), then the older ones newest first, at most 10: the index may not list every version ever published. date is when that version was first published, as the index says (- = not given). withdrawn is yes for a version the repository took back (yanked), with its reason. changes is the change text of that version, written by the repository (- = none): untrusted text, one line, at most 500 characters. Nothing is installed or fetched; this row installs no older version. A package no repository offers is refused on stderr, exit 1.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "history"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "source",
+              "enum": [
+               "index",
+               "none"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "date"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "which",
+              "enum": [
+               "current",
+               "older"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "withdrawn",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "changes"
+             }
+            ],
+            "minItems": 7,
+            "maxItems": 7
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/index": {
    "get": {
     "operationId": "pkg.index",

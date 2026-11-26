@@ -5,7 +5,6 @@
 . "$(dirname "$0")/lib.sh"
 have jq || { skip "needs jq"; finish; exit 0; }
 export HS_LANG=en HS_PLAIN=1
-tab=$'\t'
 mkdir -p "$WORK/proc" "$WORK/bin"
 # 16 GiB in total, 8 GiB available
 printf 'MemTotal: 16777216 kB\nMemFree: 1000 kB\nMemAvailable: 8388608 kB\n' > "$WORK/proc/meminfo"

@@ -89,6 +89,14 @@ cd "$R"; release 1.1.0 2; cd "$ROOT"
 cp "$OUT/index.json" "$WORK/s2.json"; cp "$OUT/index.json.sig" "$WORK/s2.json.sig"
 check_out "fetch takes the higher serial" "^hub${tab}serial-2" $PKG fetch hub
 check_out "updates names the new version" "^demo${tab}1[.]0[.]0${tab}1[.]1[.]0" $PKG updates
+# the version list of the package page (hs sys pkg history, #1251): the newest and the older ones the index lists
+check_out "history: it comes from the index" "^history${tab}index$" $PKG history demo --repo hub
+check_out "history: the newest version, with its day" "^version${tab}1[.]1[.]0${tab}[0-9T:-]+Z${tab}current${tab}no${tab}-${tab}-$" $PKG history demo --repo hub
+check_out "history: the older one" "^version${tab}1[.]0[.]0${tab}[0-9T:-]+Z${tab}older${tab}no${tab}-${tab}-$" $PKG history demo
+check_eq "history: seven fields on every version line" "7" "$($PKG history demo | awk -F'	' '$1 == "version" { print NF }' | sort -u | tr '
+' ' ' | sed 's/ $//')"
+check "history: a package no repository offers is refused" bash -c "! $PKG history nothing 2>/dev/null"
+check "history: and so is a repository that does not offer it" bash -c "! $PKG history demo --repo other 2>/dev/null"
 check_out "update shows the diff first" "echo demo 1[.]1[.]0" $PKG update demo --yes --accept-permissions
 check_out "and installs the new version" 'version = "1.1.0"' cat "$HS_STATE_DIR/packages/installed.toml"
 

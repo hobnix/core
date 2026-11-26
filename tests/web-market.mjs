@@ -1,7 +1,7 @@
 // The Marketplace as a store (web/src/pages/market.js, #474): cards from the package reads, tabs and their counts, categories, search, the
 // buttons of a card, and that nothing a repository says becomes markup, a script address or a path outside the asset endpoint.
 import { parseCards, storeRows, rowsOf, tabsOf, categoriesOf, filterRows, cardActions, iconOf, assetUrl, safeLink, openHref, parseShow, usesOf,
-  stateLine, categoryLabel, trustOf, testedText, parseFit, fitLabel, fitText, fitReason, fitsServer, hiddenByFit, binSize } from '../web/src/pages/market.js';
+  stateLine, categoryLabel, trustOf, testedText, parseFit, fitLabel, fitText, fitReason, fitsServer, hiddenByFit, binSize, parseHistory } from '../web/src/pages/market.js';
 
 let ok = 0, bad = 0;
 const check = (name, cond, extra = '') => { if (cond) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name} ${extra}`); } };
@@ -133,6 +133,17 @@ const some = [{ repo: 'official', name: 'immich' }, { repo: 'family', name: 'nav
 check('fit filter: fits and fits with a note, never not stated', filterRows(some, { fit }).map((p) => p.name).join() === 'immich,navidrome');
 check('fit filter: says what it hides', hiddenByFit(some, fit) === 'Hidden: 1 does not fit, 1 does not state its needs, 1 could not be checked, 1 is installed.');
 check('fit filter off: everything', filterRows(some, {}).length === 6);
+
+// the version list of the package page (#1251): hs sys pkg history
+const h = parseHistory([['history', 'index'], ['version', '1.2.0', '2026-11-20T09:12:00Z', 'current', 'no', '-', 'Fix the address'],
+  ['version', '1.1.0', '-', 'older', 'yes', 'broke the database', '<img src=x onerror=alert(1)>'], ['version', '1.0.0', 'soon', 'older', 'no', '-', 'a‮b'],
+  ['version', '<b>', '-', 'older', 'no', '-', '-']]);
+check('history: the versions in the order given, a bad version number left out', h.source === 'index' && h.versions.map((v) => v.version).join() === '1.2.0,1.1.0,1.0.0');
+check('history: the day only, anything else is no date', h.versions[0].date === '2026-11-20' && h.versions[1].date === '' && h.versions[2].date === '');
+check('history: newest, withdrawn and its reason', h.versions[0].current && !h.versions[1].current && h.versions[1].withdrawn && h.versions[1].reason === 'broke the database' && !h.versions[0].withdrawn);
+check('history: change text stays text, no change text is empty', h.versions[1].changes === '<img src=x onerror=alert(1)>' && h.versions[0].reason === '');
+check('history: characters that reorder a line are taken out', h.versions[2].changes === 'ab');
+check('history: none, and nothing read', parseHistory([['history', 'none']]).source === 'none' && parseHistory(null).source === '' && parseHistory([['history', 'all']]).source === '');
 
 console.log(`${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);
