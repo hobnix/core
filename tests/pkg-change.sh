@@ -18,10 +18,10 @@ git init -q . && git config user.email t@t && git config user.name t && git conf
 release() {   # release <tag> <demo version> <key>
   for n in demo corer; do
     v=1.0.0; [ "$n" != demo ] || v=$2
-    printf 'name = "%s"\nversion = "%s"\nkind = "recipe"\ntitle = "The %s package"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$n" "$v" "$n" > "$R/recipes/$n/package.toml"
+    printf 'name = "%s"\nversion = "%s"\nkind = "recipe"\ntitle = "The %s package"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\ncategory = "media"\nicon = "ph:film-strip"\n' "$n" "$v" "$n" > "$R/recipes/$n/package.toml"
     printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho %s %s\n' "$n" "$v" > "$R/recipes/$n/run.sh"
   done
-  printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/demo"\ntitle = "The demo package"\nrequires_core = ">=1"\n\n[package.corer]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/corer"\ntitle = "The corer package"\nrequires_core = ">=1"\ncore = true\n' "$2" > "$R/index.toml"
+  printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/demo"\ntitle = "The demo package"\nrequires_core = ">=1"\n\n[package.corer]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/corer"\ntitle = "The corer package"\nrequires_core = ">=1"\ncore = true\nverified = "2026-01-02"\n' "$2" > "$R/index.toml"
   mkdir -p "$R/blueprints/bp" "$R/blueprints/bpl"   # bp says blueprint in the index; bpl lies there (kind = recipe)
   printf 'name = "bp"
 version = "1.0.0"
@@ -75,6 +75,9 @@ check_out "the same name twice is refused" "already" bash -c "echo '$GOOD' | $C 
 echo "-- the market"
 check_out "market lists demo as new" "^demo${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}no${tab}generic${tab}The demo package" $PKGSH --market
 check_out "and the core flag of corer" "^corer${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}yes" $PKGSH --market
+# the store cards: category and icon from package.toml, the tested date only from the index entry (corer has one, demo none)
+check_out "cards: demo" "^demo${tab}test${tab}media${tab}ph:film-strip${tab}-$" $PKGSH --cards
+check_out "cards: corer and its verified date" "^corer${tab}test${tab}media${tab}ph:film-strip${tab}2026-01-02$" $PKGSH --cards
 
 echo "-- a blueprint is applied, never installed"
 check_out "plan: a blueprint is refused with its reason" "blueprint: hs blueprint apply bp" bash -c "$C plan install bp; true"

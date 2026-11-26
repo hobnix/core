@@ -223,6 +223,12 @@ records = { status = ["status"], reason = ["text"], name = ["name"], kind = ["ki
 enums = { status = ["ok", "refused"], gpu = ["yes", "no"], default = ["yes", "no"], step_name = ["read", "needs", "ask", "run", "on", "rebuild", "check", "done"] }
 note = "What a package is and would ask, read from the verified clone of its newest signed release (nothing is installed): hs sys pkg show <name> [--repo R]. The tag and commit are the ones the install job must use. Absent values are -; lists are comma lists; route, ask and step lines repeat. A package that is unknown, or whose release does not verify, answers status refused and a reason, exit 1."
 
+["pkg cards"]
+role = "admin"
+kind = "tsv"
+columns = ["name", "repo", "category", "icon", "verified"]
+note = "What a store card shows beyond pkg market, one row per package and repository like pkg market. category is one id of config/package-categories.toml or -; icon is ph:<name> (a Phosphor icon) or the file name of an svg icon in the package (served by pkg asset), - = none. category and icon come from package.toml of the newest verified release; a package that cannot be read gives -. verified is the date (YYYY-MM-DD) the index entry says the release last ran on a real server, - = never; the core never writes it."
+
 ["pkg asset <name> <file>"]
 role = "admin"
 kind = "text"

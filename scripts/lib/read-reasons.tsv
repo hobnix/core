@@ -15,6 +15,7 @@ docker rev	free argument: revision line of one app, polled every 30 s while its 
 node keyline	free argument: one answer per node name, no fixed topic
 node show	free argument: one answer per node name, no fixed topic
 node status	free argument: a remote node is asked over ssh, no producer for a topic yet
+pkg show	free argument: one answer per package (and repository); the package page reads again when the topic pkg-market changes, no timer while the stream is open
 recipes asks	free argument: one answer per recipe name, fetched when the recipe dialog opens
 recipes steps	free argument: one answer per recipe name, fetched when the recipe dialog opens
 services show	free argument: one answer per service name; the form reads again when the topic services-list changes (D5 a), no timer while the stream is open
@@ -61,6 +62,7 @@ incident state	no producer for a topic yet
 logs units	no producer for a topic yet
 net check	no producer for a topic yet
 net nics	no producer for a topic yet
+pkg cards	no producer for a topic of its own; the Marketplace reads it again when the topic pkg-market changes (a fetch, an install), no timer while the stream is open
 share parity refused	no producer for a topic yet; a few lines, polled every 15 s on the Pools page
 storage discover	no producer for a topic yet
 release show	no producer for a topic yet; polled every 10 s or 60 s by the settings pages

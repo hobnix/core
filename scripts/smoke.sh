@@ -176,6 +176,7 @@ default_probes() {
     $'hs sys pkg states\tsys pkg states\t0' \
     $'hs sys pkg index	sys pkg index	0' \
     $'hs sys pkg integrations\tsys pkg integrations\t0' \
+    $'hs sys pkg cards\tsys pkg cards\t0' \
     $'hs sys pkg show\tsys pkg show hs-smoke-none\t0 1' \
     $'hs sys pkg asset\tsys pkg asset hs-smoke-none x.svg\t0 1' \
     $'hs sys apps list\tsys apps list\t0' \

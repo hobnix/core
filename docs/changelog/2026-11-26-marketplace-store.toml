@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "feature"
+title = "The Marketplace is a store: app cards, categories, search and a page per app"
+body  = """Apps > Marketplace shows the apps as cards with their icon, name and one line, filtered by category and search. Extensions and capabilities are on the tab Add-ons; Installed and Updates show a count. The repositories, the package builder and the full package table moved to the tab Advanced. Each card opens the page of its app (/apps/marketplace/<repository>/<name>, also reached as /marketplace/<repository>/<name>) with what it is, its pictures, what it needs and uses, version, source and signature. An installed app shows Open and Manage instead of Install. Installing still shows the plan first. Not tested on hardware yet."""

@@ -1311,6 +1311,30 @@ class Repos:
             raise Refused("%s: %s is not a png or webp picture" % (name, file))
         return data
 
+    VERIFIED = re.compile(r"^\d{4}-\d\d-\d\d$")
+
+    def cards(self):
+        """the lines of `hs sys pkg cards`: what a store card shows beyond pkg market, one line per package and repository (the same rows).
+        package, repo, category, icon (ph:<name> or a file of the package), verified (the date the release last ran on a real server, an optional
+        field of the index entry, - = never). category and icon come from package.toml of the verified release; one that cannot be read gives -."""
+        out = []
+        for pname, rows in sorted(self.catalog(True).items()):
+            for r_name, e, tag, commit in rows:
+                cat, icon = "-", "-"
+                path = str(e.get("path", ""))
+                if not e.get("_unavailable") and re.match(r"^[A-Za-z0-9._/-]+$", path) and ".." not in path.split("/"):
+                    try:
+                        m = tomllib.loads(self.read_at(r_name, e, commit if e.get("_index") else tag, "package.toml").decode("utf-8"))
+                    except Exception:
+                        m = {}
+                    c, i = m.get("category"), m.get("icon")
+                    cat = c if isinstance(c, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c) else "-"
+                    ok = isinstance(i, str) and (self.pkg.pkg_app.ICON_NAME.fullmatch(i) or self.pkg.pkg_app.ICON_FILE.fullmatch(i))
+                    icon = i if ok else "-"
+                v = e.get("verified")
+                out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-"))
+        return out
+
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
         if not cat:
@@ -1396,6 +1420,10 @@ def run(pkg, cmd, rest):
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
+        elif cmd == "cards":
+            lines = R.cards()
+            if lines:
+                print("\n".join(lines))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
             # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that

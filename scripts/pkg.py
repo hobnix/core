@@ -913,7 +913,7 @@ def main(argv):
                 typ = m.get("type") if m.get("type") in ("feature", "provider") else "-"
                 title = (e.get("title") or m.get("title") or "-").replace("\t", " ")
                 print("\t".join([pname, r_name, ver, inst, state, ",".join(req) or "-", typ, title]))
-    elif cmd in ("repo", "fetch", "available", "market", "blueprint", "show", "asset", "install", "update", "remove", "rollback", "rollback-candidates"):
+    elif cmd in ("repo", "fetch", "available", "market", "cards", "blueprint", "show", "asset", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

@@ -20,6 +20,8 @@ This file is the whole HTTP side of the entry page:
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
   GET  /api/poster/<file>  a poster the web interface drew ($HS_STATE_DIR/posters, name checked), session needed
+  GET  /api/pkg/asset/<repo>/<name>/<file>  the svg icon or a png/webp screenshot of a package (`hs sys pkg asset`), names checked, type checked
+                      against the bytes, at most 300 KB, sandboxed; session and the role of that row needed
   GET  /theme.css     the colour tokens derived from machine.toml `webAccent`
   GET  /favicon.svg   the logo with that accent (the ring follows light/dark)
   GET  anything else  the built frontend (web/dist), index.html for unknown paths
@@ -557,6 +559,46 @@ def _run(cmd, stdin=None, timeout=10):
 _run_plain = _run      # tests replace _run with a fake; while they do, plans go through that fake and the plan cache is off (see _change)
 
 
+def pkg_asset_type(file, data):
+    """the content type of a package picture, or None: the name says the type and the first bytes must agree (the browser never sniffs)"""
+    if file.endswith(".png"):
+        return "image/png" if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+    if file.endswith(".webp"):
+        return "image/webp" if data[:4] == b"RIFF" and data[8:12] == b"WEBP" else None
+    if file.endswith(".svg"):
+        head = data.lstrip(b"\xef\xbb\xbf \t\r\n")[:5].lower()
+        return "image/svg+xml" if head.startswith((b"<svg", b"<?xml")) else None
+    return None
+
+
+_pkg_assets = {}       # (repo, name, file) -> (time, type, bytes): a page of cards asks for every icon at once; 300 s, at most 200 kept
+_pkg_assets_lock = threading.Lock()
+
+
+def pkg_asset(hs, repo, name, file):
+    """-> (content type, bytes) of a package picture (hs sys pkg asset), (None, b"") when it is refused, too big or not the picture it says"""
+    key = (repo, name, file)
+    with _pkg_assets_lock:
+        hit = _pkg_assets.get(key)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1], hit[2]
+    try:
+        p = subprocess.run([hs, "sys", "pkg", "asset", name, file, "--repo", repo], capture_output=True, timeout=30, env=_command_env())
+    except (OSError, subprocess.SubprocessError):
+        return None, b""
+    data = p.stdout
+    if p.returncode != 0 or not data or len(data) > PKG_ASSET_MAX:
+        return None, b""
+    ctype = pkg_asset_type(file, data)
+    if not ctype:
+        return None, b""
+    with _pkg_assets_lock:
+        if len(_pkg_assets) >= 200:
+            _pkg_assets.pop(min(_pkg_assets, key=lambda k: _pkg_assets[k][0]), None)
+        _pkg_assets[key] = (time.time(), ctype, data)
+    return ctype, data
+
+
 def _client_gone(sock):
     """True when the browser closed the connection (it aborted the request): readable and a peek reads nothing. poll, not select: select
     raises for a descriptor above 1024; an error we cannot read is "not gone" (the plan runs to its end)."""
@@ -1049,6 +1091,11 @@ NAME = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,63}$"
 APP = r"^[a-z0-9][a-z0-9_-]{0,40}$"      # an app (compose project) in the Docker container; logs and files of an app may hold secrets
 UNIT = r"^hs-[A-Za-z0-9@._-]{1,80}$"
 GROUP = r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$"     # group names may hold spaces (Domain Admins); the path segment is unquoted first
+PKG_NAME = r"^[a-z][a-z0-9-]{0,40}$"      # a package and a repository (the names of scripts/lib/pkg_index.py)
+PKG_REPO = r"^[a-z][a-z0-9-]{0,40}$"
+# a picture of a package: relative, at most four folders, no segment starts with a dot (so no . or ..), svg (the icon) or png/webp (screenshots)
+PKG_ASSET = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}){0,3}\.(svg|png|webp)$"
+PKG_ASSET_MAX = 300 * 1024      # the largest screenshot pkg_repo.py serves (an icon is at most 20 KB)
 FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
 POOL_NAME = r"^[a-z][a-z0-9]{0,11}$"     # a pool name (hs pool: lower case, at most 12 characters; reserved words are refused by the scripts)
 LEGACY_POOLS = [("bulk", "data", "-", "-"), ("fast", "apps", "zfs", "-")]     # no `hs sys pool list` yet: the two fixed pools (kind - = unknown)
@@ -1221,6 +1268,9 @@ READS = {
     # the Marketplace: everything installable and the repositories it comes from (pkg-change.sh does the changes)
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
     ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
+    ("pkg", "cards"): {"kind": "tsv", "ttl": 120},   # category, icon and tested date of every package (the store cards); the page re-reads it on pkg-market
+    # one package from its newest verified release (the package page); the pictures it names come from /api/pkg/asset/<repo>/<name>/<file>
+    ("pkg", "show"): {"kind": "tsv", "ttl": 60, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
     ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
     ("apps", "health"): {"kind": "tsv", "ttl": 30, "topic": "apps-health"},
     ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
@@ -3230,6 +3280,8 @@ def make_handler(app):
                 return self._json(code, obj)
             if path.startswith("/api/poster/"):
                 return self._poster(urllib.parse.unquote(path[len("/api/poster/"):]))
+            if path.startswith("/api/pkg/asset/"):
+                return self._pkg_asset(path[len("/api/pkg/asset/"):])
             if path.startswith("/api/docs/"):
                 return self._docs(path[len("/api/docs/"):], urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path == "/api/changes/seen":
@@ -3266,6 +3318,27 @@ def make_handler(app):
             with open(full, "rb") as f:
                 data = f.read()
             self._headers(200, "image/png", len(data), (("Content-Disposition", 'inline; filename="%s"' % name), ("Cache-Control", "private, max-age=300")))
+            if self.command != "HEAD":
+                self.wfile.write(data)
+
+        def _pkg_asset(self, rest):
+            """GET /api/pkg/asset/<repo>/<name>/<file>: the svg icon or a screenshot of a package (hs sys pkg asset, the role of that row). The bytes
+            come from a repository and are not trusted: the names are checked, the size is capped, the type comes from the name and must match
+            the first bytes (nosniff), and the answer runs nothing: an svg opened on its own is sandboxed by its own CSP."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            parts = [urllib.parse.unquote(x) for x in rest.split("/")]
+            repo, name, file = (parts[0], parts[1], "/".join(parts[2:])) if len(parts) >= 3 else ("", "", "")
+            if not (re.fullmatch(PKG_REPO, repo) and re.fullmatch(PKG_NAME, name) and re.fullmatch(PKG_ASSET, file)):
+                return self._json(404, {"error": "no such picture"})
+            if not self._allowed(s, ["pkg", "asset", name, file]):
+                return
+            ctype, data = pkg_asset(cfg.hs, repo, name, file)
+            if not ctype:
+                return self._json(404, {"error": "no such picture"})
+            self._headers(200, ctype, len(data), (("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"),
+                                                  ("Content-Disposition", 'inline; filename="%s"' % file.rsplit("/", 1)[-1])))
             if self.command != "HEAD":
                 self.wfile.write(data)
 

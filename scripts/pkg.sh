@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: index build|validate|sign|verify|tree | --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: index build|validate|sign|verify|tree | --integrations [<name>] | --market | --cards | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -69,6 +69,7 @@ pkg_restart() {   # pkg_restart <service package>...
 case "${1:-list}" in
   --list) py list --all ;;
   --market) py market ;;
+  --cards) py cards ;;
   blueprint) shift; py blueprint "$@" ;;   # list [lang] | show <name> [lang] | record <name> [later]: what hs blueprint reads (lib/pkg_blueprint.py)
   --show) shift; py show "$@" ;;
   --asset) shift; py asset "$@" ;;

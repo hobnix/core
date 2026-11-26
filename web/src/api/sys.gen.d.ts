@@ -2095,6 +2095,18 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
+  "pkg.cards": {
+    /** what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index, - = never) */
+    words: ["pkg", "cards"];
+    path: "/pkg/cards";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [name: Field, repo: Field, category: Field, icon: Field, verified: Field][];
+  };
   "pkg.index": {
     /** the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch */
     words: ["pkg", "index"];
