@@ -45,6 +45,11 @@ check_eq "a bad count is refused" "1" "$(T --repeat x >/dev/null 2>&1; echo $?)"
 check_eq "an unknown option is refused" "1" "$(T --bogus >/dev/null 2>&1; echo $?)"
 check_eq "a missing value is refused" "1" "$(timeout 20 bash "$SCRIPTS/read-timing.sh" --repeat >/dev/null 2>&1; echo $?)"
 check_eq "a bad pause is refused" "1" "$(T --pause -1 >/dev/null 2>&1; echo $?)"
+: > "$WORK/calls"
+out=$(T --list --skip "backup snapshots" --skip "ct list")
+check_eq "--skip leaves reads out" "20" "$(wc -l <<<"$out" | tr -d ' ')"
+check_eq "and does not call them" "0" "$(grep -Ec '^sys (backup snapshots|ct list)$' "$WORK/calls")"
+check_eq "a read that does not exist is refused" "1" "$(T --skip nothing >/dev/null 2>&1; echo $?)"
 
 echo "-- split: dispatcher, external tools, rest (scripts/lib/perf-split.sh)"
 if [ -z "${EPOCHREALTIME:-}" ]; then

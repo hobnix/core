@@ -80,6 +80,7 @@ check_eq "the format" "1" "$(val meta.format)"
 check_eq "the load at the start" "1.50" "$(val meta.load1_at_start)"
 check_eq "no page open" "closed" "$(val window.page)"
 check "the window length" between "$(val window.seconds)" 3 20
+check_eq "the length asked for" "1" "$(val window.minutes)"
 # 6 s of CPU in a window of 3 s or a little more (a slow machine makes it longer, never shorter)
 check "the CPU of hs-live from the systemd counter" between "$(val hs-live.cpu_cores)" 0.3 2.0
 check "the CPU of hs-web" between "$(val hs-web.cpu_cores)" 0.02 0.2
@@ -93,7 +94,8 @@ check "tasks started on the host (300 in the window)" between "$(val host.tasks_
 check_eq "reads per minute from the collector's file" "180.0" "$(val hs-live.reads_per_min)"
 check_eq "busy reads" "0.250" "$(val hs-live.read_wall_s_per_s)"
 check_eq "the stretch" "1.50" "$(val hs-live.stretch_max)"
-check "its own CPU time is told" between "$(val measuring.window_cpu_cores)" 0 8
+# one read of the live state alone costs more than a thousandth of a core in so short a window
+check "its own CPU time is told" between "$(val measuring.window_cpu_cores)" 0.001 8
 check_eq "topics with a delay sample" "2" "$(val delay.change_to_stored.topics)"
 check_eq "the middle delay" "200" "$(val delay.change_to_stored.median_last_ms)"
 check_eq "the worst delay" "900" "$(val delay.change_to_stored.worst_ms)"
@@ -121,13 +123,16 @@ check_eq "unknown stays unknown" "- - - -" "$(val hs-live.cpu_cores) $(val hs-li
 echo "-- the reads, through hs timing --split"
 cat > "$WORK/hs" <<'FAKE'
 #!/usr/bin/env bash
-[ "$*" != "sys backup snapshots" ] || exit 3
+printf '%s\n' "$*" >> "$(dirname "$0")/read-calls"
+[ "$*" != "sys users list" ] || exit 3
 exec bash "$(dirname "$0")/quiet.sh"
 FAKE
 : > "$WORK/quiet.sh"
 result=$(HS_BIN=$WORK/hs HS_PERF_TOOLS=none-installed B --minutes 0 --list)
-check_eq "every read" "22 1" "$(val reads.count) $(val reads.failed)"
-check_eq "the exit status of a read" "3" "$(val read.backup_snapshots.exit)"
+check_eq "every read but one" "21 1" "$(val reads.count) $(val reads.failed)"
+check_eq "the read that mounts the backup disk is not run" "0" "$(grep -c '^sys backup snapshots$' "$WORK/read-calls")"
+check_eq "only sys reads are run" "0" "$(grep -Evc '^sys [a-z ]+$' "$WORK/read-calls")"
+check_eq "the exit status of a read" "3" "$(val read.users_list.exit)"
 check "a read's CPU time" between "$(val read.pool_info_bulk.cpu_s)" 0 30
 check "the dispatcher part" between "$(val read.pool_info_bulk.dispatcher_wall_s)" 0 30
 check_eq "no tool" "0" "$(val read.pool_info_bulk.tool_calls)"
@@ -170,6 +175,8 @@ check_eq "a number only in the second run" "- 7 -" "$(col only.after)"
 check_eq "no percent from zero" "0 4 -" "$(col zero)"
 check_eq "no percent of an exit status or the meta lines" "1 2 - 8 8 -" "$(col read.status.exit) $(col meta.cores)"
 check_out "runs that differ in the page are told" "differ in window.page" B --compare "$WORK/a.tsv" "$WORK/b.tsv"
+result=$(B --compare "$WORK/a.tsv" "$WORK/a.tsv" --list)
+check_eq "a file compared with itself" "2.000 2.000 +0.0%" "$(col hs-live.cpu_cores)"
 check_out "a wrong file is refused" "not a result of hs perf baseline" B --compare "$WORK/a.tsv" "$WORK/lat.tsv"
 
 echo "-- options"
@@ -180,6 +187,8 @@ check_eq "compare needs two files" "1" "$(B --compare "$WORK/a.tsv" >/dev/null 2
 check_eq "an unknown option" "1" "$(B --bogus >/dev/null 2>&1; echo $?)"
 
 echo "-- it changes nothing"
-check_eq "no changing word of systemctl, no refresh, no probe" "0" "$(grep -Ec 'live(\.sh)? refresh|topic-bump|live-measure\.sh|systemctl[^|]* (start|stop|restart|reload|enable|disable|set-property)' "$SCRIPTS/perf-baseline.sh" "$SCRIPTS/lib/perf-split.sh" | awk -F: '{ s += $NF } END { print s + 0 }')"
+changing='live(\.sh)? refresh|live_refresh|topic-bump|live-measure\.sh|systemctl(\}?")? (start|stop|restart|reload|enable|disable|set-property)'
+check_eq "no changing word of systemctl, no refresh, no probe" "" "$(cat "$SCRIPTS/perf-baseline.sh" "$SCRIPTS/lib/perf-split.sh" | grep -E "$changing" || true)"
+check_eq "systemctl is only asked to show" "show" "$(grep -oE '"\$systemctl" [a-z-]+' "$SCRIPTS/perf-baseline.sh" | awk '{ print $2 }' | sort -u)"
 
 finish

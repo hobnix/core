@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # the ps_ results are for the script that sources this file
 # Where the time of one read goes (hs timing --split, issue #1333); sourced by read-timing.sh. Nothing on the system changes: for the measured process
 # only, PATH gets two private folders of stand-ins that are removed afterwards.
 #   - tools/: one stand-in per external tool that is installed. It runs the real tool with the same arguments and notes its start, end and CPU time.

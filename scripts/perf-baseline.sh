@@ -6,9 +6,11 @@
 # First it watches hs-live and hs-web for N minutes (default 10, 0 = not at all): systemd's CPU and memory counters, the CPU and memory of the
 # main process, the collector's own numbers (the file `hs live load` shows) and whether a page is open (a lease in the live state).
 # Processes started are counted for the WHOLE host (/proc/stat, threads too): Linux keeps no such counter for one service.
-# Then it times the reads (`hs timing --split`, each read twice with 1 s between reads; --no-reads leaves that out).
+# Then it times the reads the pages run (`hs timing --split`, each twice with 1 s between reads; --no-reads leaves that out). Not
+# `backup snapshots`: that one mounts the backup disk and locks the backup repository.
 # --latency adds the change-to-page numbers of a result file of `sudo hs live measure` (<file>.tsv); this command starts no measurement.
-# Its own load: every 10 s two `systemctl show` and one `jq`, once a minute one read of the live state; its CPU time is in the result.
+# Its own load: every 10 s two `systemctl show` and one `jq`; a read of the live state at the start, every 5 minutes and at the end. Its CPU
+# time is in the result.
 # The result has numbers, the version and the words of the core reads: no host, user, share or package name, no address, no secret.
 #   --list   name<TAB>value, one number per line (`-` = not known); with --compare: name<TAB>before<TAB>after<TAB>change
 # Test knobs: HS_SYSTEMCTL, HS_PROC, HS_LIVE_LOAD_FILE, HS_RUN_DIR, HS_LIVE_STATE_PY, HS_PERF_MINUTE (seconds a minute lasts), HS_PERF_STEP,
@@ -47,8 +49,9 @@ if $compare; then
   rows=$(LC_ALL=C awk -F'\t' '
     function num(v) { return v ~ /^-?[0-9]+(\.[0-9]+)?$/ }
     NF < 2 { next }
+    FNR == 1 { file++ }                      # counted, not by name: a file may be compared with itself
     !($1 in seen) { seen[$1] = 1; name[++n] = $1 }
-    FILENAME == ARGV[1] { a[$1] = $2; next }
+    file == 1 { a[$1] = $2; next }
     { b[$1] = $2 }
     END {
       for (i = 1; i <= n; i++) {
@@ -58,7 +61,7 @@ if $compare; then
       }
     }' "$before" "$after")
   if $list; then printf '%s\n' "$rows"; exit 0; fi
-  for k in window.page meta.cores window.seconds; do
+  for k in window.page meta.cores window.minutes; do
     pair=$(awk -F'\t' -v k="$k" '$1 == k && $2 != $3 { print $2 " and " $3 }' <<<"$rows")
     [ -z "$pair" ] || warn "The two runs differ in $k ($pair): their numbers are not like for like"
   done
@@ -128,15 +131,14 @@ main_read() {   # main_read <pid>: pr_ticks (the process itself, without what it
   done 2>/dev/null < "$proc/$1/status"
 }
 host_read() {   # ho_busy (ticks every core was busy, guests of containers and VMs included) ho_tasks (processes and threads started since boot)
-  local k a b c d e f g h
+  local k a b c f g h
   ho_busy=- ho_tasks=-
-  while read -r k a b c d e f g h _; do
+  while read -r k a b c _ _ f g h _; do   # cpu user nice system idle iowait irq softirq steal
     case "$k" in cpu) ho_busy=$((a + b + c + f + g + h)) ;; processes) ho_tasks=$a ;; esac
   done 2>/dev/null < "$proc/stat"
 }
-self_cpu() {   # CPU seconds of this script and of what it has waited for
-  times > "$tmp/times"
-  tr ',' '.' < "$tmp/times" | LC_ALL=C awk '{ for (i = 1; i <= NF; i++) { split($i, p, /[ms]/); s += p[1] * 60 + p[2] } } END { printf "%.3f", s }'
+cpu_of_times() {   # cpu_of_times <file>: CPU seconds in the output of `times`. Write it in the main shell: in $(...) it would be the subshell's.
+  tr ',' '.' < "$1" | LC_ALL=C awk '{ for (i = 1; i <= NF; i++) { split($i, p, /[ms]/); s += p[1] * 60 + p[2] } } END { printf "%.3f", s }'
 }
 
 page_samples=0 page_open=0 have_state=false
@@ -172,18 +174,19 @@ emit meta.load1_at_start "$la"
 
 if [ "$minutes" -gt 0 ]; then
   command -v jq >/dev/null 2>&1 || fail "jq is missing"
-  $list || { step "Watch hs-live and hs-web"; note "$minutes minutes. Leave the pages as they are: all closed, or one open, for the whole run"; }
+  $list || { step "Watch hs-live and hs-web"; note "Minutes: $minutes. Leave the pages as they are for the whole run: all closed, or one open"; }
   declare -A cpu0 cpu1 pid0 main0 main1 restarted mem_sum mem_n mem_max rss_sum rss_n
   for u in "${units[@]}"; do
     svc_read "$u"; main_read "$sv_pid"
     cpu0[$u]=$sv_cpu pid0[$u]=$sv_pid main0[$u]=$pr_ticks restarted[$u]=no mem_sum[$u]=0 mem_n[$u]=0 mem_max[$u]=0 rss_sum[$u]=0 rss_n[$u]=0
   done
   host_read; busy0=$ho_busy tasks0=$ho_tasks
-  self0=$(self_cpu)
+  times > "$tmp/times0"
   start=${EPOCHREALTIME/[.,]/}      # microseconds
   stop=$((start + minutes * minute_s * 1000000))
   page_read
-  next_state=$((start + minute_s * 1000000)) next_note=1 last=false
+  state_gap=$((5 * minute_s * 1000000))      # one read of the live state starts far more processes than the rest: not often
+  next_state=$((start + state_gap)) next_note=1 last=false
   while ! $last; do
     left=$((stop - ${EPOCHREALTIME/[.,]/}))
     if [ "$left" -gt $((every * 1000000)) ]; then sleep "$every"
@@ -202,20 +205,23 @@ if [ "$minutes" -gt 0 ]; then
       [ "$pr_rss" = - ] || { rss_sum[$u]=$((rss_sum[$u] + pr_rss)); rss_n[$u]=$((rss_n[$u] + 1)); }
       cpu1[$u]=$sv_cpu main1[$u]=$pr_ticks
     done
+    if $last; then host_read; end=$now; fi      # the window ends with the last sample of the counters
     load_read $(((now - start) / 1000000)) "$last"
     if $last || [ "$now" -ge "$next_state" ]; then
       page_read
-      next_state=$((now + minute_s * 1000000))
+      next_state=$((now + state_gap))
     fi
     if ! $list && [ $(((now - start) / (minute_s * 1000000))) -ge "$next_note" ] && ! $last; then
       note "minute $next_note of $minutes"
       next_note=$((next_note + 1))
     fi
   done
-  host_read
-  self1=$(self_cpu)
-  secs=$(calc "(${EPOCHREALTIME/[.,]/} - $start) / 1000000")
+  times > "$tmp/times1"
+  self0=$(cpu_of_times "$tmp/times0")
+  self1=$(cpu_of_times "$tmp/times1")
+  secs=$(calc "($end - $start) / 1000000")
 
+  emit window.minutes "$minutes"
   emit window.seconds "$(calc "$secs" 0)"
   page=-
   if [ "$page_samples" -gt 0 ]; then
@@ -276,7 +282,8 @@ fi
 : > "$tmp/reads"
 if $reads; then
   $list || { step "Time the reads"; note "Each read runs twice, one after the other, with a pause between two reads"; }
-  HS_PLAIN=1 bash "$here/read-timing.sh" --list --split --pause "${HS_PERF_PAUSE:-1}" > "$tmp/reads" || fail "the reads could not be timed (hs timing --split)"
+  HS_PLAIN=1 bash "$here/read-timing.sh" --list --split --pause "${HS_PERF_PAUSE:-1}" --skip "backup snapshots" > "$tmp/reads" \
+    || fail "the reads could not be timed (hs timing --split)"
   LC_ALL=C awk -F'\t' '
     BEGIN {
       split("wall_s cpu_s dispatcher_wall_s dispatcher_cpu_s tools_wall_s tools_cpu_s tool_calls rest_wall_s rest_cpu_s", f, " ")
