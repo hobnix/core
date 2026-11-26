@@ -242,9 +242,10 @@ pub enum Kind {
     Receive,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
+    /// The derived key in hex: never printed (see the Debug below).
     pub key: String,
     pub kind: Kind,
     /// The share, or `-` for a code that waits for any share (a receive code).
@@ -252,6 +253,20 @@ pub struct Entry {
     /// The server name the code is bound to, or `-`.
     pub server: String,
     pub expires: u64,
+}
+
+/// Everything but the key (the id is sent anyway, the key never).
+impl std::fmt::Debug for Entry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Entry")
+            .field("id", &self.id)
+            .field("key", &"***")
+            .field("kind", &self.kind)
+            .field("share", &self.share)
+            .field("server", &self.server)
+            .field("expires", &self.expires)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -922,6 +937,29 @@ mod tests {
         assert!(open_answer(&k, b"other", &ans).is_none());
         assert!(open_answer(&derive("ABCDEFGHJKLMNPQS"), b"request", &ans).is_none());
         assert!(!ans.to_string().contains("\"a\":1"));
+    }
+
+    #[test]
+    fn debug_does_not_show_the_derived_key() {
+        let clock = FakeClock(Cell::new(1000));
+        let st = Store::new(tmp("debug"), &clock);
+        let m = st
+            .make(Kind::Offer, "media", "-", 10, &mut Counter(1))
+            .unwrap();
+        let keys = derive(&normalize(m.code.expose()).unwrap());
+        let key = hex(&keys.key);
+        let taken = st.take(Kind::Offer, &keys.id, "10.0.0.2").unwrap();
+        let Taken::Found(entry) = &taken else {
+            panic!("the code was not found");
+        };
+        assert_eq!(entry.key, key);
+        for shown in [format!("{entry:?}"), format!("{taken:?}")] {
+            assert!(!shown.contains(&key), "{shown}");
+            assert!(
+                shown.contains(&keys.id) && shown.contains("media"),
+                "{shown}"
+            );
+        }
     }
 
     #[test]
