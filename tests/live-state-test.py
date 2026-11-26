@@ -1221,6 +1221,7 @@ class ExtLive(unittest.TestCase):
         self.assertEqual(started, ["ext-demo-list"])
         c.rescan()
         self.assertEqual(started, ["ext-demo-list"])        # not twice
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@ext-demo")
         self.assertTrue(c.events["ext-demo-list"].is_set())
         self.assertTrue(c.events["status"].is_set())        # status lists the group "any": every group wakes it
