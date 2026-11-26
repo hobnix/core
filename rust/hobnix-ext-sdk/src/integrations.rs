@@ -1,5 +1,5 @@
 //! The integration listing of the core: `hs pkg integrations [--only <name>] <available package names...>` prints one tab-separated
-//! row per integration block (package, integration, source, api_url, key_file, extras, key_header); an empty field is `-`.
+//! row per integration block (`package`, `integration`, `source`, `api_url`, `key_file`, `extras`, `key_header`); an empty field is `-`.
 //! [`parse`] turns that text into typed rows. How the extension gets the text (runs `hs`, or reads a file the core wrote) is its business.
 use std::collections::BTreeMap;
 
@@ -38,17 +38,26 @@ impl Integration {
     }
 }
 
-/// Rows of `hs pkg integrations`. Lines with fewer than 6 fields are skipped (the listing had 6 columns before key_header was added,
+/// Rows of `hs pkg integrations`. Lines with fewer than 6 fields are skipped (the listing had 6 columns before `key_header` was added,
 /// so a 6-field line is accepted with `key_header` `None`); blank lines too.
 pub fn parse(text: &str) -> Vec<Integration> {
     let opt = |s: &str| (s != "-" && !s.is_empty()).then(|| s.to_string());
     text.lines()
         .filter_map(|l| {
             let f: Vec<&str> = l.split('\t').collect();
-            if f.len() < 6 {
+            let [
+                package,
+                integration,
+                source,
+                api_url,
+                key_file,
+                extras,
+                rest @ ..,
+            ] = f.as_slice()
+            else {
                 return None;
-            }
-            let extras = opt(f[5])
+            };
+            let extras = opt(extras)
                 .map(|e| {
                     e.split(',')
                         .filter_map(|kv| kv.split_once('='))
@@ -57,13 +66,13 @@ pub fn parse(text: &str) -> Vec<Integration> {
                 })
                 .unwrap_or_default();
             Some(Integration {
-                package: f[0].into(),
-                integration: f[1].into(),
-                source: f[2].into(),
-                api_url: opt(f[3]),
-                key_file: opt(f[4]),
+                package: (*package).into(),
+                integration: (*integration).into(),
+                source: (*source).into(),
+                api_url: opt(api_url),
+                key_file: opt(key_file),
                 extras,
-                key_header: f.get(6).and_then(|h| opt(h)),
+                key_header: rest.first().and_then(|h| opt(h)),
             })
         })
         .collect()

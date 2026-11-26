@@ -2,3 +2,7 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-print-in-tests = true
+allow-indexing-slicing-in-tests = true
+# docs/CODE-PRACTICES.md: aim for 40 lines (review), 60 is the limit (this lint)
+too-many-lines-threshold = 60
+excessive-nesting-threshold = 5

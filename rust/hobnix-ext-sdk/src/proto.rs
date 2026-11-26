@@ -49,7 +49,10 @@ impl Out {
             ));
         }
         line.push('\n');
-        let mut w = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        let mut w = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         w.write_all(line.as_bytes())?;
         w.flush()
     }
@@ -75,19 +78,27 @@ impl Out {
         }
         let mut f = json!({"kind": ev.kind, "subject": ev.subject});
         if let Some(t) = &ev.text {
-            f["text"] = json!(t);
+            set(&mut f, "text", json!(t));
         }
         if let Some(l) = ev.level {
-            f["level"] = json!(l);
+            set(&mut f, "level", json!(l));
         }
         if let Some(p) = &ev.payload {
-            f["payload"] = Value::Object(p.clone());
+            set(&mut f, "payload", Value::Object(p.clone()));
         }
         self.typed(ty, f)
     }
 }
 
-/// A JSON value written with the keys of every object in sorted order. The order of a `serde_json::Map` depends on how serde_json was
+/// `v[key] = value` without the index operator (it panics on a value that is neither an object nor null). The callers pass objects
+/// built with `json!({..})`; anything else stays as it is.
+pub(crate) fn set(v: &mut Value, key: &str, value: Value) {
+    if let Value::Object(m) = v {
+        m.insert(key.into(), value);
+    }
+}
+
+/// A JSON value written with the keys of every object in sorted order. The order of a `serde_json::Map` depends on how `serde_json` was
 /// built: cargo turns its `preserve_order` feature on for every crate of a build when one crate asks (hobnix-core does, in this workspace),
 /// so without this the wire lines of an extension would depend on what else is in its build. Sorted is what the SDK writes in an
 /// extension's own build anyway.
@@ -184,7 +195,7 @@ mod tests {
         }
     }
 
-    /// The bytes on the wire do not depend on serde_json's `preserve_order` (on in the workspace build through hobnix-core, off in an
+    /// The bytes on the wire do not depend on `serde_json`'s `preserve_order` (on in the workspace build through hobnix-core, off in an
     /// extension's own build): CI runs this test both ways (`cargo test` and `cargo test -p hobnix-ext-sdk`).
     #[test]
     fn wire_lines_have_sorted_keys_however_serde_json_is_built() {

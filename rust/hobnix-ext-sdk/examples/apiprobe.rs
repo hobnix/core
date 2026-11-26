@@ -3,9 +3,10 @@
 //! (`integration-<name>-<provider>`, the row's package), sends it in the row's key header and answers with the JSON of the API. Plain http only (see
 //! `hobnix_ext_sdk::http`).
 //!
-//!   cargo build --example apiprobe
-//!   cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
-#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
+//! ```sh
+//! cargo build --example apiprobe
+//! cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
+//! ```
 use hobnix_ext_sdk::Ctx;
 use hobnix_ext_sdk::command::{Failure, Request, Success, run};
 use hobnix_ext_sdk::http::Client;

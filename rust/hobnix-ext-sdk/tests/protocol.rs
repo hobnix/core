@@ -1,5 +1,8 @@
 //! The SDK against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
+#![expect(
+    clippy::unwrap_used,
+    reason = "test code: a failed unwrap is the failure"
+)]
 
 use std::io::{Cursor, Write};
 use std::sync::{Arc, Mutex};
@@ -172,7 +175,8 @@ impl Service for Probe {
 fn svc_input(lines: &[Value]) -> Cursor<Vec<u8>> {
     let mut s = String::new();
     for l in lines {
-        s += &format!("{l}\n");
+        s.push_str(&l.to_string());
+        s.push('\n');
     }
     Cursor::new(s.into_bytes())
 }
@@ -300,7 +304,7 @@ fn service_rollup_message_and_credential() {
     assert!(service::credential_for("Bad Name", "jellyfin").is_none());
     assert!(service::credential_for("media", "../x").is_none());
     assert!(service::credential_for("media", "").is_none());
-    #[allow(deprecated)]
+    #[expect(deprecated, reason = "the old one-name form is tested until it goes")]
     {
         assert!(service::credential("Bad Name").is_none());
     }
@@ -311,7 +315,7 @@ fn service_rollup_message_and_credential() {
 fn greet(req: &command::Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
     let failed = |e: std::io::Error| Failure::failed(e.to_string());
     ctx.progress(Some(0.5), "half").map_err(failed)?;
-    ctx.emit(&Event::new("pkg.demo.greeted", &req.argv[0]))
+    ctx.emit(&Event::new("pkg.demo.greeted", req.argv.first().unwrap()))
         .map_err(failed)?;
     Ok(Success::text("done"))
 }

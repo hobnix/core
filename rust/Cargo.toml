@@ -20,17 +20,35 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hobnix-core = { path = "hobnix-core" }
 
+# docs/CODE-PRACTICES.md "Rust: lints". CI runs clippy with -D warnings, so "warn" fails the build. Single restriction lints only, never
+# a whole restriction or nursery group. A file that would need a rewrite carries `#![expect(clippy::x, reason = "ratchet #1307")]`.
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+elided_lifetimes_in_paths = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+many_single_char_names = "allow"
+missing_errors_doc = "allow"
+# restriction lints, one by one
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
 todo = "warn"
+unimplemented = "warn"
 dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+indexing_slicing = "warn"
+string_slice = "warn"
+exit = "warn"
+mem_forget = "warn"
 
 # A wrapping integer is a bug in release too (debug builds check anyway). panic stays "unwind": the SDK's runners catch a panicking handler.
 [profile.release]

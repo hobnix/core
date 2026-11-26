@@ -1,9 +1,10 @@
 //! Example command extension: `hs ext hello greet [name]` and `hs ext hello count <n>`.
 //!
 //! Try it without the core, with the reference runner:
-//!   cargo build --example hello
-//!   python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
-#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
+//! ```sh
+//! cargo build --example hello
+//! python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
+//! ```
 use hobnix_ext_sdk::command::{Failure, Request, Success, run};
 use hobnix_ext_sdk::{Ctx, Event, LogLevel};
 use serde_json::json;
@@ -12,7 +13,7 @@ use std::process::ExitCode;
 fn handle(req: &Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
     match req.words().as_slice() {
         ["greet"] => {
-            let name = req.argv.first().map(String::as_str).unwrap_or("world");
+            let name = req.argv.first().map_or("world", String::as_str);
             let _ = ctx.log(LogLevel::Info, "greeting");
             let _ = ctx.event(&Event::new("pkg.hello.greeted", name));
             let greeting = format!("hello {name}");

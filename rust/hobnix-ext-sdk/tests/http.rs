@@ -1,5 +1,8 @@
 //! The HTTP client against a one-shot server on localhost.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
+#![expect(
+    clippy::unwrap_used,
+    reason = "test code: a failed unwrap is the failure"
+)]
 use hobnix_ext_sdk::http::{Client, HttpError};
 use serde_json::json;
 use std::io::{Read, Write};
@@ -16,10 +19,12 @@ fn serve(reply: &'static [u8]) -> (u16, std::thread::JoinHandle<String>) {
         let mut buf = [0u8; 4096];
         loop {
             let n = s.read(&mut buf).unwrap();
-            got.extend_from_slice(&buf[..n]);
+            got.extend_from_slice(buf.get(..n).unwrap());
             let t = String::from_utf8_lossy(&got).into_owned();
             if let Some(i) = t.find("\r\n\r\n") {
-                let len = t[..i]
+                let len = t
+                    .get(..i)
+                    .unwrap()
                     .to_ascii_lowercase()
                     .split("content-length: ")
                     .nth(1)

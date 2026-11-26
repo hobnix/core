@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 
 use crate::command::Lang;
 use crate::integrations::Integration;
-use crate::proto::{Line, Out, cut, read_line};
+use crate::proto::{Line, Out, cut, read_line, set};
 use crate::{Ctx, Event, LogLevel, VERSION};
 
 /// First message from the core.
@@ -225,14 +225,9 @@ pub fn run_with(
 ) -> u8 {
     let out = Out::new(output);
     // Before `ready` only `ready` may be written, so a failure here is reported on stderr only.
-    let init: Init = match read_line(&mut input) {
-        Ok(Line::Text(l)) => match parse(&l, "init") {
-            Ok(v) => v,
-            Err(e) => return die(&e),
-        },
-        Ok(Line::Eof) => return die("stdin closed before init"),
-        Ok(Line::TooLong) => return die("init longer than 1 MiB"),
-        Err(e) => return die(&format!("cannot read init: {e}")),
+    let init = match read_init(&mut input) {
+        Ok(init) => init,
+        Err(e) => return die(&e),
     };
     let ctx = StdioCtx {
         out: out.clone(),
@@ -245,6 +240,50 @@ pub fn run_with(
         return 1;
     }
 
+    let rx = spawn_reader(input);
+    let period = Duration::from_secs_f64((init.health_interval / 2.0).clamp(0.05, 150.0));
+    let mut next_tick = Instant::now();
+    loop {
+        if Instant::now() >= next_tick {
+            if send_health(&out, service.tick(&ctx)).is_err() {
+                return 1;
+            }
+            next_tick = Instant::now() + period;
+        }
+        match rx.recv_timeout(next_tick.saturating_duration_since(Instant::now())) {
+            Ok(Msg::Event(ev)) => match service.on_event(&ev, &ctx) {
+                Ok(()) => {
+                    if out.typed("ack", json!({"id": ev.id})).is_err() {
+                        return 1;
+                    }
+                }
+                Err(e) => {
+                    let _ = ctx.log(
+                        LogLevel::Error,
+                        &format!("event {} not handled: {e}", ev.id),
+                    );
+                }
+            },
+            Ok(Msg::Shutdown | Msg::Eof) | Err(RecvTimeoutError::Disconnected) => return 0,
+            Ok(Msg::Bad(e)) => return die(&e),
+            Err(RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
+/// The first line, which must be `init`; the error is the stderr text.
+fn read_init(input: &mut impl BufRead) -> Result<Init, String> {
+    match read_line(input) {
+        Ok(Line::Text(l)) => parse(&l, "init"),
+        Ok(Line::Eof) => Err("stdin closed before init".into()),
+        Ok(Line::TooLong) => Err("init longer than 1 MiB".into()),
+        Err(e) => Err(format!("cannot read init: {e}")),
+    }
+}
+
+/// Reads stdin on its own thread so `tick` keeps its period while no line comes. It ends after the first message that is not an
+/// event, or when the receiver is gone.
+fn spawn_reader(mut input: impl BufRead + Send + 'static) -> mpsc::Receiver<Msg> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         loop {
@@ -264,43 +303,21 @@ pub fn run_with(
             }
         }
     });
-
-    let period = Duration::from_secs_f64((init.health_interval / 2.0).clamp(0.05, 150.0));
-    let mut next_tick = Instant::now();
-    loop {
-        if Instant::now() >= next_tick {
-            let h = service.tick(&ctx);
-            let mut f = json!({"ok": h.ok});
-            if let Some(t) = h.text {
-                f["text"] = json!(cut(&t, 200));
-            }
-            if out.typed("health", f).is_err() {
-                return 1;
-            }
-            next_tick = Instant::now() + period;
-        }
-        match rx.recv_timeout(next_tick.saturating_duration_since(Instant::now())) {
-            Ok(Msg::Event(ev)) => match service.on_event(&ev, &ctx) {
-                Ok(()) => {
-                    if out.typed("ack", json!({"id": ev.id})).is_err() {
-                        return 1;
-                    }
-                }
-                Err(e) => {
-                    let _ = ctx.log(
-                        LogLevel::Error,
-                        &format!("event {} not handled: {e}", ev.id),
-                    );
-                }
-            },
-            Ok(Msg::Shutdown) | Ok(Msg::Eof) | Err(RecvTimeoutError::Disconnected) => return 0,
-            Ok(Msg::Bad(e)) => return die(&e),
-            Err(RecvTimeoutError::Timeout) => {}
-        }
-    }
+    rx
 }
 
-#[allow(clippy::print_stderr)] // the one error line on stderr is part of the extension protocol
+fn send_health(out: &Out, h: Health) -> io::Result<()> {
+    let mut f = json!({"ok": h.ok});
+    if let Some(t) = h.text {
+        set(&mut f, "text", json!(cut(&t, 200)));
+    }
+    out.typed("health", f)
+}
+
+#[expect(
+    clippy::print_stderr,
+    reason = "the one error line on stderr is part of the extension protocol"
+)]
 fn die(reason: &str) -> u8 {
     eprintln!("hobnix-ext-sdk: {reason}");
     1
@@ -308,7 +325,7 @@ fn die(reason: &str) -> u8 {
 
 fn parse<T: serde::de::DeserializeOwned>(line: &str, ty: &str) -> Result<T, String> {
     let v: Value = serde_json::from_str(line).map_err(|_| "a line that is not JSON".to_string())?;
-    if v.get("v").and_then(Value::as_u64) != Some(VERSION as u64) {
+    if v.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
         return Err("unsupported protocol version (this SDK speaks 1)".into());
     }
     if v.get("type").and_then(Value::as_str) != Some(ty) {
@@ -319,7 +336,7 @@ fn parse<T: serde::de::DeserializeOwned>(line: &str, ty: &str) -> Result<T, Stri
 
 fn classify(line: &str) -> Result<Option<Msg>, String> {
     let v: Value = serde_json::from_str(line).map_err(|_| "a line that is not JSON".to_string())?;
-    if v.get("v").and_then(Value::as_u64) != Some(VERSION as u64) {
+    if v.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
         return Err("unsupported protocol version (this SDK speaks 1)".into());
     }
     match v.get("type").and_then(Value::as_str) {

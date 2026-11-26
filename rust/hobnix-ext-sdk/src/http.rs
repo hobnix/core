@@ -112,11 +112,13 @@ impl Client {
         Self::default()
     }
     /// Timeout for the connect and for each read and write (default 10 s).
+    #[must_use]
     pub fn timeout(mut self, t: Duration) -> Self {
         self.timeout = t;
         self
     }
     /// A header sent with every request, e.g. the key header from the integration listing. A line break in it is refused when sending.
+    #[must_use]
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
@@ -157,13 +159,15 @@ impl Client {
             "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: hobnix-ext-sdk\r\nAccept: application/json\r\nConnection: close\r\n"
         );
         for (k, v) in &self.headers {
-            head.push_str(&format!("{k}: {v}\r\n"));
+            head.push_str(k);
+            head.push_str(": ");
+            head.push_str(v);
+            head.push_str("\r\n");
         }
         if let Some(b) = json_body {
-            head.push_str(&format!(
-                "Content-Type: application/json\r\nContent-Length: {}\r\n",
-                b.len()
-            ));
+            head.push_str("Content-Type: application/json\r\nContent-Length: ");
+            head.push_str(&b.len().to_string());
+            head.push_str("\r\n");
         }
         head.push_str("\r\n");
         s.write_all(head.as_bytes())?;
@@ -182,10 +186,10 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
     }
     let bad = || HttpError::BadUrl(redact_url(url));
     let rest = url.strip_prefix("http://").ok_or_else(bad)?;
-    let (auth, path) = match rest.find('/') {
-        Some(i) => (&rest[..i], &rest[i..]),
-        None => (rest, "/"),
-    };
+    let (auth, path) = rest
+        .find('/')
+        .and_then(|i| rest.split_at_checked(i))
+        .unwrap_or((rest, "/"));
     if auth.is_empty() || auth.contains('@') || path.contains(['\r', '\n', ' ']) {
         return Err(bad());
     }
@@ -235,7 +239,11 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| bad("no end of headers"))?;
-    let head = std::str::from_utf8(&raw[..end]).map_err(|_| bad("headers are not text"))?;
+    // `end` is where the four bytes were found: both parts exist
+    let (Some(head), Some(rest)) = (raw.get(..end), raw.get(end + 4..)) else {
+        return Err(bad("no end of headers"));
+    };
+    let head = std::str::from_utf8(head).map_err(|_| bad("headers are not text"))?;
     let mut lines = head.split("\r\n");
     let mut parts = lines.next().unwrap_or("").splitn(3, ' ');
     if !parts.next().is_some_and(|v| v.starts_with("HTTP/1.")) {
@@ -249,7 +257,6 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         .filter_map(|l| l.split_once(':'))
         .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string()))
         .collect();
-    let rest = &raw[end + 4..];
     let find = |n: &str| {
         headers
             .iter()
@@ -265,10 +272,7 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         if n > MAX_BODY {
             return Err(bad("body too large"));
         }
-        if rest.len() < n {
-            return Err(bad("body cut off"));
-        }
-        rest[..n].to_vec()
+        rest.get(..n).ok_or_else(|| bad("body cut off"))?.to_vec()
     } else {
         rest.to_vec()
     };
