@@ -111,6 +111,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked
+      # an extension builds the SDK alone: serde_json without hobnix-core's preserve_order (proto.rs pins the wire lines either way)
+      - name: Tests of the SDK built alone
+        run: cargo test --locked -p hobnix-ext-sdk
       - name: tests/vault-change.sh against the binary, and shell and Rust side by side (tests/vault-change-rust.sh)
         run: |
           cargo build --locked
