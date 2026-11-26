@@ -84,7 +84,7 @@ The SDK is three crates in `rust/` (0.14; docs/PLAN-package-sdk.md):
 | Crate | What it has |
 |---|---|
 | `hobnix-pkg` | `Ctx`, `Event`, `LogLevel`, `Secret`, `Error`, the wire messages of both protocols (`wire`), `integrations`, `credentials`, `http`, `testing::FakeCtx` |
-| `hobnix-pkg-command` | the command runner (`run`, `Request`, `Success`, `Failure`) |
+| `hobnix-pkg-command` | the command runner (`run`, `Request`, `Success`, `Failure`); with the feature `macros` also `#[command]`, `commands!` and `#[derive(Args)]` (from the crate `hobnix-pkg-macros`) |
 | `hobnix-pkg-service` | the service runner (`Service`, `run`, `Init`, `EventRow`, `Health`) |
 
 A command extension depends on `hobnix-pkg` and `hobnix-pkg-command`, a service on `hobnix-pkg` and `hobnix-pkg-service`, each by the same core tag
@@ -110,6 +110,38 @@ above, then
 - `ctx.event(..)` is `ctx.emit(..)`.
 - `Request`, `Init`, `EventRow`, `Event`, `Success` and `Failure` are `#[non_exhaustive]`: build them with their constructors (`Request::new(id, command, argv)`, `Init::new(..)`, `EventRow::new(..)`), not with a struct literal. `Integration` and `Health` still take a literal in 0.14.
 - An unknown `lang` or `caller` from a newer core is `Lang::Other` or `Caller::Other` instead of a `bad_request`.
+
+**Commands from code (feature `macros`).** Instead of a `match req.words()` and hand-written `commands.tsv` rows, take
+`hobnix-pkg-command = { git = "...", tag = "vX.Y.Z", features = ["macros"] }` and write each command as a function:
+
+```rust
+use hobnix_pkg_command::{Args, Commands, Ctx, Failure, Success, command, commands};
+
+#[derive(Args)]
+struct CountArgs {
+    /// a number from 1 to 10
+    n: u32,
+}
+
+#[command(name = "count", reads, help = "count to n", help_de = "zählt bis n", sys = "count to n, as data")]
+fn count(ctx: &dyn Ctx, CountArgs { n }: CountArgs) -> Result<Success, Failure> { /* ... */ }
+
+fn table() -> Commands {
+    commands!(package = "hello", script = "@/bin/hello", count)
+}
+
+fn main() -> std::process::ExitCode {
+    table().run()
+}
+```
+
+- `#[command]` keys: `name` (the command words), `reads` or `changes`, `help`, `help_de`, `topic`, `timeout` (seconds, 1 to 3600) and `sys` (the help of a `sys` row for the web interface). The function takes `(ctx)`, `(ctx, args)` or `(ctx, args, req: &Request)` and returns `Result<Success, E>` where `E` turns into a `Failure` (`hobnix_pkg::Error` does).
+- `#[derive(Args)]`: the fields are the arguments in order: required ones first, then `Option<T>`, then at most one `Vec<T>` as the last. A value that cannot be read, a missing or an extra argument is a `bad_request` with a usage line. Take the struct apart in the parameter (`CountArgs { n }: CountArgs`), or clippy's `needless_pass_by_value` asks for it.
+- `commands!` lists the functions and makes the dispatch: a command without a handler cannot exist, and an unknown command is `not_found`. Two functions with the same words do not compile.
+- `table().tsv()` gives the rows that `commands.tsv` must hold for the program (every row has the flag `proto`); `rust/hobnix-pkg-command/examples/hello_macro.rs` prints them with `--commands-tsv`. The build puts the same rows into the program, and `python3 scripts/pkg.py validate` reads them from the `[[binary]]` file, without running it, and refuses a `commands.tsv` whose rows for that program differ (`binary.drift`). On `develop` no program is committed, so add the check to `cargo test`: `table().check(include_str!("../commands.tsv"))` must be `Ok`.
+- The argument schema (`Command::args()`: names, kinds, types, help) is in the program only; no file carries it yet.
+
+Without the feature nothing changes: `run(handler)` and rows written by hand, and the macro crates are not built. Not tested on hardware yet.
 
 For a service that talks to an integration (Jellyfin, Plex, ...) `hobnix-pkg` has three helpers:
 
