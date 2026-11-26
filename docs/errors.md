@@ -2888,6 +2888,30 @@ A required part is neither on the server nor offered by a repository.
 - Text: A required part is not available.
 - Fix: none
 
+### pkg.core-too-old
+
+Install or update was asked for a package whose requires_core is above the API level of this core.
+
+- Layer: script
+- Text: The package needs a newer core: update the server first.
+- Fix: `hs update`
+
+### pkg.core-too-new
+
+Install or update was asked for a package whose requires_core_max is below the API level of this core.
+
+- Layer: script
+- Text: The package does not support this core yet: wait for a release of the package that does.
+- Fix: none
+
+### pkg.core-range
+
+The requires_core or requires_core_max of a package is not in a valid form.
+
+- Layer: script
+- Text: The package states its core range in a form this server does not accept.
+- Fix: none
+
 ### blueprint.value-missing
 
 An option was given without its value.

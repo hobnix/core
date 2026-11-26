@@ -366,6 +366,9 @@ pkg.ambiguous	script	A package is in more than one repository.	The package is in
 pkg.added-repo	script	A package of an added repository is not installed together with others.	Install this package from the Marketplace.	-
 pkg.role-part	script	A required part follows the role of the server and is not switched by hand.	A required part follows the role of this server.	-
 pkg.require-missing	script	A required part is neither on the server nor offered by a repository.	A required part is not available.	-
+pkg.core-too-old	script	Install or update was asked for a package whose requires_core is above the API level of this core.	The package needs a newer core: update the server first.	hs update
+pkg.core-too-new	script	Install or update was asked for a package whose requires_core_max is below the API level of this core.	The package does not support this core yet: wait for a release of the package that does.	-
+pkg.core-range	script	The requires_core or requires_core_max of a package is not in a valid form.	The package states its core range in a form this server does not accept.	-
 blueprint.value-missing	script	An option was given without its value.	The option needs a value.	-
 blueprint.unreadable	script	The blueprint does not exist, cannot be read or has problems.	The blueprint cannot be used.	-
 blueprint.role	script	The blueprint is not made for the role of this server.	This blueprint is for another role.	-

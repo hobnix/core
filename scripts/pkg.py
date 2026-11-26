@@ -203,6 +203,34 @@ def api_level():
         return int(f.read().split()[0])
 
 
+def core_range(m):
+    """(low, high) of a manifest or index entry: `requires_core = ">=low"` and the optional `requires_core_max = high` (an API level, inclusive;
+    None = no upper bound). None when either is malformed. The upper bound is its own key: a released core refuses a whole signed index whose
+    requires_core is not exactly ">=N", and ignores a key it does not know."""
+    rq = REQUIRES.match(str(m.get("requires_core", "")))
+    if not rq:
+        return None
+    low, high = int(rq.group(1)), m.get("requires_core_max")
+    if high is None:
+        return low, None
+    if isinstance(high, bool) or not isinstance(high, int) or high < low:
+        return None
+    return low, high
+
+
+def core_misfit(name, m, level=None):
+    """None when the API level of this core (or `level`) is in the range of `m`, else (code, text) of scripts/lib/error-codes.tsv."""
+    level = api_level() if level is None else level
+    rg = core_range(m)
+    if rg is None:
+        return ("pkg.core-range", '%s: requires_core must look like ">=1" and requires_core_max, when given, be a whole number from that level' % name)
+    if rg[0] > level:
+        return ("pkg.core-too-old", "%s needs a newer core: it works from core API level %d, this server has %d (hs update first)" % (name, rg[0], level))
+    if rg[1] is not None and rg[1] < level:
+        return ("pkg.core-too-new", "%s does not support this core yet: it works up to core API level %d, this server has %d (wait for a release of the package that does)" % (name, rg[1], level))
+    return None
+
+
 def nix_api_level():
     """The Nix interface level of this core (capabilities/nix-api-level): what a capability module may rely on from `hs.*`. Goes up only
     when a name a module may use is removed or changes meaning (docs/PLAN-capabilities-repo.md, Q3)."""
@@ -220,6 +248,9 @@ def waits_for(entry):
     rq = REQUIRES.match(str(entry.get("requires_core", "")))
     if rq and int(rq.group(1)) > api_level():
         return "core API level %s" % rq.group(1)
+    rg = core_range(entry)
+    if rg and rg[1] is not None and rg[1] < api_level():
+        return "a release for core API level %d (it works up to %d)" % (api_level(), rg[1])
     v = entry.get("requires_nix_api")
     if isinstance(v, int) and not isinstance(v, bool) and v > nix_api_level():
         return "Nix API level %d" % v
@@ -238,9 +269,26 @@ def core_check():
             continue
         if m.get("kind") != "capability" or not m.get("module"):
             continue
-        w = waits_for(m)
+        w = waits_for(dict(m, requires_core_max=None))    # an upper bound never stops an update: core_beyond() reports it
         if w:
             out.append((n, "needs %s, this core has core API level %d and Nix API level %d" % (w, api_level(), nix_api_level())))
+    return out
+
+
+def core_beyond():
+    """[(name, max)]: installed packages whose `requires_core_max` is below the API level of the core in this checkout. `hs update` names
+    them after the pull; they stay installed and on (nothing is removed or switched off), and no update of theirs is offered until a release
+    whose range takes this core (docs/PLAN-packages.md, "The core API")."""
+    out = []
+    for n in sorted(installed()):
+        try:
+            with open(os.path.join(state_dir(), "current", n, "package.toml"), "rb") as f:
+                m = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        rg = core_range(m)
+        if rg and rg[1] is not None and rg[1] < api_level():
+            out.append((n, rg[1]))
     return out
 
 
@@ -441,6 +489,11 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad('requires_core must look like ">=1"')
     elif int(rq.group(1)) > level:
         bad(f"requires_core {rq.group(1)} is above the API level {level}")
+    hi = m.get("requires_core_max")
+    if hi is not None and (isinstance(hi, bool) or not isinstance(hi, int)):
+        bad("requires_core_max must be a whole number (the highest API level the package works with)")
+    elif hi is not None and rq and hi < int(rq.group(1)):
+        bad(f"requires_core_max {hi} is below requires_core {rq.group(1)}")
     if m.get("audience", "generic") not in AUDIENCES:
         bad("audience is not generic or personal")
     if m.get("kind") == "recipe":
@@ -534,7 +587,7 @@ def draft_findings(text):
     out = []
     for t in manifest_problems(m):
         key = t.split(" ", 1)[0].rstrip(":")
-        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "audience", "script", "permissions", "icon", "category", "description", "description_de", "upstream", "app_version", "screenshots") else "-", t))
+        out.append(("error", key if key in ("name", "version", "kind", "title", "requires_core", "requires_core_max", "audience", "script", "permissions", "icon", "category", "description", "description_de", "upstream", "app_version", "screenshots") else "-", t))
     if not out:
         out.append(("warn", "-", "Checked without files: the script and its header lines, and capability.toml, are checked when the package is built (hs pkg validate)."))
     return out
@@ -689,9 +742,13 @@ def repo_check(folder, warnings=None, release=False):
             out.append(f"{name}: kind differs between index and package.toml")
         if m.get("requires_core") != e.get("requires_core"):
             out.append(f"{name}: requires_core differs between index and package.toml")
+        if m.get("requires_core_max") != e.get("requires_core_max"):
+            out.append(f"{name}: requires_core_max differs between index and package.toml")
         rq = REQUIRES.match(str(e.get("requires_core", "")))
         if not rq or int(rq.group(1)) > level:
             out.append(f"{name}: requires_core {e.get('requires_core')!r} is not usable at API level {level}")
+        elif core_range(e) is None:
+            out.append(f"{name}: requires_core_max {e.get('requires_core_max')!r} is not a whole number from requires_core")
         if not SEMVER.match(str(e.get("version", ""))):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
@@ -814,6 +871,9 @@ def main(argv):
         for n, t in found:
             print("%s	%s" % (n, t))
         return 1 if found else 0
+    elif cmd == "core-beyond":     # name TAB requires_core_max per installed package whose range ends below this core; always exit 0 (a report, not a stop)
+        for n, hi in core_beyond():
+            print("%s\t%d" % (n, hi))
     elif cmd == "nix-api":
         print(nix_api_level())
     elif cmd == "list":
