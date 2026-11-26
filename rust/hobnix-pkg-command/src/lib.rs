@@ -14,6 +14,76 @@
 //!
 //! The handler gets a `&dyn Ctx` (a trait object, not a type parameter: a closure cannot be generic over its argument, so a generic
 //! `run` would force every handler into a named generic fn, and the dynamic call costs nothing next to the write of a line).
+//!
+//! With the feature `macros`, a command is a function with the attribute [`command`], and [`commands!`] makes the dispatch and the
+//! `commands.tsv` rows from the list of them, so the rows cannot drift from the code:
+//!
+//! ```
+//! # #[cfg(feature = "macros")] mod demo {
+//! use hobnix_pkg_command::{Args, Commands, Ctx, Failure, Success, command, commands};
+//!
+//! #[derive(Args)]
+//! struct CountArgs {
+//!     /// how far to count
+//!     n: u32,
+//! }
+//!
+//! #[command(name = "count", reads, help = "count to n", help_de = "zählt bis n")]
+//! fn count(ctx: &dyn Ctx, args: CountArgs) -> Result<Success, Failure> {
+//!     let _ = ctx.progress(Some(1.0), "done");
+//!     Ok(Success::text(args.n.to_string()))
+//! }
+//!
+//! fn commands() -> Commands {
+//!     commands!(package = "demo", script = "@/bin/demo", count)
+//! }
+//!
+//! fn main() -> std::process::ExitCode {
+//!     commands().run()
+//! }
+//! # }
+//! ```
+//!
+//! A package that writes its `commands.tsv` rows by hand keeps using [`run`] and does not build the macro crates.
+
+#[cfg(feature = "macros")]
+mod args;
+#[cfg(feature = "macros")]
+mod table;
+
+#[cfg(feature = "macros")]
+pub use args::{ArgKind, ArgSpec, Args};
+/// The host side a handler talks to (re-exported from `hobnix-pkg`, so a command needs only this crate).
+pub use hobnix_pkg::Ctx;
+#[cfg(feature = "macros")]
+pub use hobnix_pkg_macros::{Args, command, commands};
+#[cfg(feature = "macros")]
+pub use table::{Command, Commands, Drift, TABLE_START};
+
+/// What the code of the macros reaches; not part of the public API.
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::args::{check_count, optional, parse_for, required, rest};
+    pub use crate::table::{Row, table, table_len};
+    pub use crate::{ArgKind, ArgSpec, Args, Command, Commands, Failure, Request, Success};
+    pub use hobnix_pkg::Ctx;
+
+    /// One argument (for `#[derive(Args)]`).
+    pub const fn arg(
+        name: &'static str,
+        kind: ArgKind,
+        type_name: &'static str,
+        help: &'static str,
+    ) -> ArgSpec {
+        ArgSpec {
+            name,
+            kind,
+            type_name,
+            help,
+        }
+    }
+}
 
 use std::io::{self, BufRead, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -25,7 +95,7 @@ use hobnix_pkg::wire::command::{
     FromCore, FromExtension, Outcome, Progress, ResultCode, ResultError,
 };
 use hobnix_pkg::wire::{self, Decoded, Log, ProtocolError, Writer};
-use hobnix_pkg::{Ctx, ErrorKind, Event, LogLevel, Secret, VERSION};
+use hobnix_pkg::{ErrorKind, Event, LogLevel, Secret, VERSION};
 use serde_json::Value;
 
 pub use hobnix_pkg::Lang;

@@ -1,0 +1,27 @@
+error: commands! needs script = "@/<path of the program>"
+  --> tests/ui/commands_list.rs:10:5
+   |
+10 |     commands!(package = "demo", a)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the macro `commands` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: script must be @/<path in the package>, as in commands.tsv
+  --> tests/ui/commands_list.rs:14:42
+   |
+14 |     commands!(package = "demo", script = "bin/demo", a)
+   |                                          ^^^^^^^^^^
+
+error: this command is listed twice
+  --> tests/ui/commands_list.rs:18:59
+   |
+18 |     commands!(package = "demo", script = "@/bin/demo", a, a)
+   |                                                           ^
+
+error: commands! needs at least one command function
+  --> tests/ui/commands_list.rs:22:5
+   |
+22 |     commands!(package = "demo", script = "@/bin/demo")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the macro `commands` (in Nightly builds, run with -Z macro-backtrace for more info)
