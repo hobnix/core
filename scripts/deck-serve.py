@@ -17,7 +17,7 @@ import time
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9740
 FILE = sys.argv[2] if len(sys.argv) > 2 else "/run/hs-deck/deck.json"
-STALE = int(os.environ.get("HS_DECK_STALE", "60"))
+STALE = int(os.environ.get("HS_DECK_STALE", "150"))  # the timer writes every 60 s after the last run (#1320)
 BIND = os.environ.get("HS_DECK_BIND", "")
 # The whitelist: four fixed paths, each one file that the hs-deck-status service wrote next to the status document
 # (disks and events are read from the state database there, with masked serials: this process never opens the database).
