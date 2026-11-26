@@ -21,3 +21,7 @@ macros = ["dep:hobnix-pkg-macros"]
 
 [dev-dependencies]
 trybuild = { workspace = true }
+
+[[example]]
+name = "hello_macro"
+required-features = ["macros"]

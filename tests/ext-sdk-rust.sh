@@ -29,6 +29,25 @@ check_out "with the code bad_request" '"code":"bad_request"' printf '%s' "$out"
 rc=0; out=$($RUN call --command nosuch -- "$EX/hello" 2>&1) || rc=$?
 check_out "an unknown command is not_found, not a protocol error" '"code":"not_found"' printf '%s' "$out"
 
+echo "-- command example written with the macros (feature macros, #1263)"
+if (cd "$ROOT/rust" && cargo build --locked -q -p hobnix-pkg-command --features macros --example hello_macro) > "$WORK/macro.log" 2>&1; then
+  rc=0; out=$($RUN call --command greet --arg Ada -- "$EX/hello_macro" 2>&1) || rc=$?
+  check_eq "greet exits 0" 0 "$rc"
+  check_out "greet answers with data" '"greeting":"hello Ada"' printf '%s' "$out"
+  rc=0; out=$($RUN call --command count --arg x -- "$EX/hello_macro" 2>&1) || rc=$?
+  check_out "an argument that is no number is bad_request with the usage" 'cannot read .x. as u32; usage: count <n>' printf '%s' "$out"
+  rc=0; out=$($RUN call --command nosuch -- "$EX/hello_macro" 2>&1) || rc=$?
+  check_out "an unknown command is not_found" '"code":"not_found"' printf '%s' "$out"
+  # the drift check of validate reads the rows from the program file (never runs it)
+  P=$WORK/hello; mkdir -p "$P/bin"; cp "$EX/hello_macro" "$P/bin/hello"
+  "$EX/hello_macro" --commands-tsv > "$P/commands.tsv"
+  drift() { python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import pkg_binary as b; print(b.drift(sys.argv[2], "bin/hello", "w"))' "$SCRIPTS/lib" "$P"; }
+  check_out "the rows the program prints are the rows validate reads from its file" '^\[\]$' drift
+  check_eq "three rows: greet, count and the sys row of count" 3 "$(wc -l < "$P/commands.tsv")"
+  sed -i 's/greet someone/greet anyone/' "$P/commands.tsv"
+  check_out "a changed row is drift" 'binary.drift' drift
+else fail "cargo build of hello_macro: $(tail -n 5 "$WORK/macro.log" | tr '\n' ' ')"; fi
+
 echo "-- service example"
 rc=0; out=$(python3 -I "$SCRIPTS/lib/ext_service.py" run --name ticker --health-interval 1 --run-for 2.5 -- "$EX/ticker" 2>&1) || rc=$?
 check_eq "the service runs and stops cleanly" 0 "$rc"
@@ -70,5 +89,9 @@ if (cd "$ROOT/rust" && rustup target list --installed 2>/dev/null) | grep -q x86
     ok_file=$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/examples/apiprobe
     check_out "the musl build is statically linked" 'statically linked|static-pie linked' sh -c "file '$ok_file'"
   else fail "musl build: $(tail -n 5 "$WORK/musl.log" | tr '\n' ' ')"; fi
+  if (cd "$ROOT/rust" && cargo build --locked -q --release --target x86_64-unknown-linux-musl -p hobnix-pkg-command --features macros --example hello_macro) > "$WORK/musl.log" 2>&1; then
+    m=$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/examples/hello_macro
+    check_out "the musl release build with the macros keeps the rows in the file" 'ext hello greet' python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import pkg_binary as b; print(b.built_rows(sys.argv[2]))' "$SCRIPTS/lib" "$m"
+  else fail "musl build of hello_macro: $(tail -n 5 "$WORK/musl.log" | tr '\n' ' ')"; fi
 else echo "  skip  target x86_64-unknown-linux-musl not installed (rustup target add)"; fi
 finish
