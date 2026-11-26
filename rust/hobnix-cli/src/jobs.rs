@@ -3,6 +3,13 @@
 //! Exit codes follow job-record.py, not the 0/1/2 scheme of the other commands: every failure is one stderr line
 //! `hobnix: <msg>` and exit 1 (`cancelled` exits 1 without a line when the job is not cancelled). The scripts that call it
 //! only ever test for zero.
+#![expect(
+    clippy::indexing_slicing,
+    clippy::string_slice,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    reason = "ratchet #1307: the argument parser of job-record.py, ported line by line; rewrite it, then drop this"
+)]
 
 use hobnix_core::jobs::{Question, RealSystem, Store};
 use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
@@ -15,7 +22,7 @@ fn bad() -> Error {
     Error::Failed(BAD_ARGS.to_string())
 }
 
-/// Python's int(): surrounding white space, a sign, digits with single underscores between them.
+/// Python's `int()`: surrounding white space, a sign, digits with single underscores between them.
 fn parse_int(s: &str) -> Result<i64> {
     let t = s.trim();
     let digits = t.strip_prefix(['+', '-']).unwrap_or(t);
@@ -148,7 +155,7 @@ fn store() -> Result<Store> {
     Ok(s)
 }
 
-pub fn run(args: &[String]) -> Result<u8> {
+pub(crate) fn run(args: &[String]) -> Result<u8> {
     // hs_job_record asks this before it trusts the binary: an older build answers "unknown subcommand" (exit 1) instead
     if args == ["--probe"] {
         println!("job-record");

@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+#[derive(Debug)]
 pub struct SystemHost {
     scripts: String,
 }
