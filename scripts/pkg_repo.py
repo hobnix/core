@@ -1407,7 +1407,10 @@ def run(pkg, cmd, rest):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
-                    if os.path.isdir(os.path.join(cur, pname)):
+                    # the copy belongs to the row of the repository it came from (a same-name package of another repository is not its
+                    # update); an entry without repo (the old `hs recipe` record) still goes with every row of the name
+                    home = have.get(pname, {}).get("repo")
+                    if os.path.isdir(os.path.join(cur, pname)) and (not home or home == r_name):
                         inst = str(have.get(pname, {}).get("version", "?"))
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
@@ -1430,7 +1433,8 @@ def run(pkg, cmd, rest):
                         state = "current"
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
-                    seen.add(pname)
+                    if inst != "-" or not os.path.isdir(os.path.join(cur, pname)):
+                        seen.add(pname)     # a copy that no row of its own repository carries is shown as an orphan below
                     title = e.get("title") or "-"
                     if inst != "-" and pname in beyond:
                         title = "%s (the installed copy does not support this core yet: it works up to core API level %d)" % (e.get("title") or pname, beyond[pname])
