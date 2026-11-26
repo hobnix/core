@@ -145,10 +145,30 @@ fn valid_name(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'))
 }
 
-fn read_credential(file: &str) -> Option<String> {
-    let dir = std::env::var_os("CREDENTIALS_DIRECTORY")?;
-    let text = std::fs::read_to_string(std::path::Path::new(&dir).join(file)).ok()?;
+/// `$CREDENTIALS_DIRECTORY`, read where a credential is asked for (the tests pass a folder to the `_in` functions instead).
+fn credentials_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("CREDENTIALS_DIRECTORY").map(std::path::PathBuf::from)
+}
+
+fn read_credential(dir: &std::path::Path, file: &str) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(file)).ok()?;
     Some(text.trim_end().to_string())
+}
+
+/// [`credential_for`] from the folder `dir`.
+pub(crate) fn credential_in(dir: &std::path::Path, name: &str, provider: &str) -> Option<String> {
+    if !valid_name(name) || !valid_name(provider) {
+        return None;
+    }
+    read_credential(dir, &format!("integration-{name}-{provider}"))
+}
+
+/// The deprecated [`credential`] from the folder `dir`.
+fn legacy_credential_in(dir: &std::path::Path, name: &str) -> Option<String> {
+    if !valid_name(name) {
+        return None;
+    }
+    read_credential(dir, &format!("integration-{name}"))
 }
 
 /// The key that the provider package `provider` holds for the integration `name` (declared as `integration:<name>` in `permissions`). The
@@ -156,20 +176,14 @@ fn read_credential(file: &str) -> Option<String> {
 /// never from argv or the environment. The provider is the `package` column of `hs pkg integrations` (or [`crate::integrations::Integration::credential`]).
 /// Trailing whitespace is cut. `None` when there is no such credential (not declared, the provider has no key, the key is locked or missing).
 pub fn credential_for(name: &str, provider: &str) -> Option<String> {
-    if !valid_name(name) || !valid_name(provider) {
-        return None;
-    }
-    read_credential(&format!("integration-{name}-{provider}"))
+    credential_in(&credentials_dir()?, name, provider)
 }
 
 /// Deprecated, goes away after the next release: the old one-name form `integration-<name>` (the first provider with a key, owner not told).
 /// Use [`credential_for`], which names the provider. Same rules as there; `None` when there is no such credential.
 #[deprecated(note = "use credential_for(name, provider): the credential is one per provider")]
 pub fn credential(name: &str) -> Option<String> {
-    if !valid_name(name) {
-        return None;
-    }
-    read_credential(&format!("integration-{name}"))
+    legacy_credential_in(&credentials_dir()?, name)
 }
 
 pub trait Service {
@@ -314,5 +328,45 @@ fn classify(line: &str) -> Result<Option<Msg>, String> {
         Some("shutdown") => Ok(Some(Msg::Shutdown)),
         // `init` twice or a type from a later minor version: not for this loop
         _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One credential per provider (hobnix/core#1135): each row reads only its own file. The folder is passed in, the environment of the
+    /// test process is not changed (tests/ext-sdk-rust.sh covers `$CREDENTIALS_DIRECTORY` end to end).
+    #[test]
+    fn one_credential_per_provider() {
+        let dir = std::env::temp_dir().join(format!("hs-sdk-cred-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("integration-media-jellyfin"), "JELLY\n").unwrap();
+        std::fs::write(dir.join("integration-media-radarr"), "RADAR \n").unwrap();
+        std::fs::write(dir.join("integration-media"), "OLD\n").unwrap();
+
+        assert_eq!(
+            credential_in(&dir, "media", "jellyfin").as_deref(),
+            Some("JELLY")
+        );
+        assert_eq!(
+            credential_in(&dir, "media", "radarr").as_deref(),
+            Some("RADAR")
+        );
+        assert!(credential_in(&dir, "media", "sonarr").is_none());
+        assert!(credential_in(&dir, "media", "../jellyfin").is_none());
+        assert!(credential_in(&dir, "", "jellyfin").is_none());
+
+        let rows = crate::integrations::parse(
+            "radarr\tmedia\trecipe\thttp://x\t/k\t-\tX-Api-Key\nsonarr\tmedia\trecipe\t-\t-\t-\t-\n",
+        );
+        assert_eq!(rows[0].credential_name(), "integration-media-radarr");
+        let of = |r: &Integration| credential_in(&dir, &r.integration, &r.package);
+        assert_eq!(of(&rows[0]).as_deref(), Some("RADAR"));
+        assert!(of(&rows[1]).is_none());
+
+        assert_eq!(legacy_credential_in(&dir, "media").as_deref(), Some("OLD"));
+        assert!(legacy_credential_in(&dir, "../media").is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
