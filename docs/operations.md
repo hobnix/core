@@ -548,6 +548,92 @@ hs sys live inspect
 The Live state page has a column Demand: `always`, `idle 5 min`, or `watched` while a page is open. A topic that rests inside its idle period shows the
 state `idle`, not `stale`. Not tested on hardware yet.
 
+## Take a performance baseline
+
+`hs perf baseline` takes the numbers of section 14 of [the core daemon plan](PLAN-core-daemon.md#14-measure-first), so you can compare two states of the
+server, for example before and after a part moves to Rust. It reads only: it changes no setting and no data and asks the collector to read nothing
+again. The one file it writes is the new file you name with `--out`. The result holds numbers, the Hobnix version and the names of the page reads of
+the core: no host, user, share or package name, no address, no secret.
+
+Before each run, wait until no job, backup, parity sync or scrub runs, and do not update or rebuild during the run. Keep the same packages and apps on
+between two runs that you compare. A run takes more than half an hour: start it inside `tmux`, so a lost SSH connection does not end it.
+
+**Run 1, no page open.** Close every browser tab and app that shows the web interface and wait 15 minutes. Then run this (30 minutes, then the reads).
+Not tested on hardware yet.
+
+```bash
+sudo hs perf baseline --minutes 30 --out /root/baseline-closed.tsv
+```
+
+**Time from a change to the open page.** Open the web interface in one tab and keep it visible. This second command is not read only: every 10 seconds
+it counts a test counter up in the state database, it writes two result files, and when it ends the collector reads the system topics once. It also adds
+some load of its own, so it does not run during a baseline. Not tested on hardware yet.
+
+```bash
+sudo hs live measure --minutes 10 --out /root/baseline-latency
+```
+
+**Run 2, one page open.** Wait 5 minutes and leave the same page open for the whole run. `--latency` copies the latency numbers of the measurement
+above into the result. `--no-reads` leaves out the reads, which run 1 already timed. Not tested on hardware yet.
+
+```bash
+sudo hs perf baseline --minutes 30 --no-reads --latency /root/baseline-latency.tsv --out /root/baseline-open.tsv
+```
+
+What you see: one line per minute, then a table of the numbers and, in run 1, a table of the reads. Check that `window.page` says `closed` in run 1 and
+`open` in run 2. `mixed` means that a page was opened or closed during the run: take it again.
+
+| Lines | Meaning |
+| --- | --- |
+| `hs-live.*`, `hs-web.*` | CPU and memory of the service from the counters of systemd, with everything it starts. `main_process_*` is the service's own process only. After a restart during the run the CPU is `-`. |
+| `hs-live.reads_per_min`, `read_wall_s_per_s`, `stretch_max` | The collector's own numbers, the same as `hs live load` shows. |
+| `host.*` | The whole server, containers and VMs included. `tasks_started_per_min` counts processes and threads. |
+| `measuring.window_cpu_cores` | What the measuring itself used while it watched. |
+| `delay.change_to_stored.*` | From a change to the new stored value, as the collector recorded it. |
+| `delay.stored_to_page.*` | From the stored value to the page showing it. Only the Live state page records this. |
+| `latency.*` | The result of `hs live measure`. It ends where the web interface sends the change; the network and the browser's drawing are not in it. |
+| `reads.*`, `read.<name>.*` | Seconds of each page read: `wall_s` and `cpu_s` of one clean run, then the parts of a second run: `dispatcher_*`, `tools_*` (external tools such as `zpool`, `incus`, `systemctl`) and `rest_*` (the script, its shells, Python, `jq`). |
+
+The delay lines count since the collector first recorded a topic, not only during the run. So `worst_ms` can stay high after the cause is gone.
+
+**The load it adds.** While it watches: two `systemctl show` and one `jq` every 10 seconds, and a read of the live state at the start, every
+5 minutes and at the end. These processes are part of `host.tasks_started_per_min`. In a count on a development computer, not on a server, one read of
+the live state started about 120 processes and threads and the rest less than 60 a minute, so less than 100 a minute over a long run. A page that was
+open only between two reads of the live state does not show in `window.page`. After the watching, 21 reads run one after
+the other, each twice, with 1 second between two reads. They are the reads the pages run, so they cost what opening those pages costs, and one that
+asks the disks can wake a sleeping disk. The read of the backup snapshots is left out, because it mounts the backup disk and locks the backup
+repository.
+
+**What it cannot measure:**
+
+- **Processes started by one service.** Linux keeps no such counter for a service, so the number is for the whole server. Compare runs on a server
+  that is otherwise quiet.
+- **CPU of a service that a tool asks** (the Incus daemon, Samba, systemd). It is part of `host.cpu_cores`, not of a read's CPU time.
+- A tool that a script calls by its full path counts as `rest`.
+- Only the page reads of the core are timed one by one, not every topic of the collector and no read of a package. They run from your shell, not from
+  the service, so a read can differ a little from the same read inside `hs-live`.
+- Build time and the size of the system are not part of it.
+
+You can also time the reads alone. Without `--skip` this includes the backup snapshots. Not tested on hardware yet.
+
+```bash
+sudo hs timing --split --skip "backup snapshots"
+```
+
+### Compare two runs
+
+Keep the files. After the change, take the same runs again into new files (a file is never overwritten), then compare run with run. Not tested on
+hardware yet.
+
+```bash
+sudo hs perf baseline --compare /root/baseline-closed.tsv /root/after-closed.tsv
+```
+
+The table shows each number before and after and the change in percent. A warning says when the two runs differ in the number of cores, in the length
+or in whether a page was open. Take one run twice without a change first: a later difference that is not clearly larger than the difference between
+those two says nothing. Compare `host.*` and the memory numbers only when the same apps ran. The files are plain lines of a name, a tab and a value, so
+you can paste them into the plan or an issue.
+
 ## Reach the server from outside
 
 Do not open ports at home. Use a private network:

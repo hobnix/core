@@ -445,7 +445,9 @@ Each has an owner and a boundary here and gets its detailed design before its mi
 
 ## 14. Measure first
 
-On a real server, before any port, and again after P3, P4 and P6. Results go into this file.
+On a real server, before any port, and again after P3, P4 and P6. Results go into this file. How to take and compare them:
+[operations](operations.md#take-a-performance-baseline) (`hs perf baseline`; build time and closure size are not part of it). It counts started
+processes only for the whole host, not for one service. Not tested on hardware yet.
 
 - `hs-live`: CPU time, processes started per minute, memory, with and without an open page.
 - Per read: wall and CPU time, split into dispatcher and script overhead against time in external tools.
