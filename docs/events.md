@@ -55,7 +55,7 @@ The payload is optional extra data for programs. Rules:
 | `job.queued` | info | none | a job was accepted and waits |
 | `job.running` | info | `key` | a job started |
 | `job.ok` | info | `key` | a job finished successfully |
-| `job.failed` | error | `exit`, `key` | a job failed |
+| `job.failed` | error | `exit`, `key`, `code` | a job failed |
 | `job.skipped` | info | none | a job found the same work already running and ended without doing it |
 | `job.cancelled` | info | none | a job was stopped on purpose |
 | `job.interrupted` | warn | none | a job was running when the server restarted |
@@ -89,6 +89,8 @@ The payload is optional extra data for programs. Rules:
 | `update.rolled-back` | warn | none | a failed update was undone, the previous generation runs again |
 | `update.rollback-skipped` | warn | none | a failed update was not rolled back, the system was left as it is |
 | `update.rollback-failed` | error | none | a failed update could not be rolled back |
+| `index.changed` | info | none | the package index was fetched and is not the one kept before (subject: the repository) |
+| `index.failed` | warn | none | the package index could not be fetched (subject: the repository, text: why); installed packages keep running |
 | `health.new` | warn | none | the health check found a problem it did not know before (subject: the problem key; once per change, not per run) |
 | `health.resolved` | info | none | a health problem is gone (subject: the problem key) |
 | `health.acked` | info | `who`, `until` | somebody acknowledged a health problem: it is no longer sent or counted (subject: the problem key; payload: who, and until: epoch second it ends by itself or -) |
@@ -110,6 +112,10 @@ The payload is optional extra data for programs. Rules:
 | `testlab.failed` | error | `ref`, `stage` | a test-lab run failed or hit an error (subject: the run id; payload: the stage that failed) |
 | `testlab.skipped` | warn | `ref`, `stage` | a test-lab run could not run on this machine (no KVM, no nested virtualization or no incus; subject: the run id) |
 | `ext.service-failed` | error | `package`, `code` | a service extension failed 5 times in 10 minutes and the unit gave up (subject: the package; payload: its name and the last failure code) |
+| `remote.code.made` | info | `share`, `server` | a pairing code for a remote share was made (subject: the share; never the code) |
+| `remote.claimed` | info | `server`, `share`, `fingerprint`, `host` | a server used a code and got (or gave) a remote share (subject: the server; never the code or the password; fingerprint on the giving side, host (the address the share is mounted from) when a share was pushed to this server) |
+| `remote.claim.refused` | warn | `why` | a pairing request was refused: unknown, used or expired code, rate limit, bad request (subject: the source address or the server) |
+| `remote.codes.burned` | warn | none | 20 wrong pairing requests in 10 minutes ended every open code |
 
 <!-- END generated -->
 

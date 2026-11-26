@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "fix"
+title = "The remote shares tables fill the page width"
+body  = """On Storage, Shares, Remote the two tables were only as wide as their content and floated in the middle of the page. They now take the full width of the page like the other views."""

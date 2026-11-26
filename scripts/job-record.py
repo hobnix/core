@@ -10,9 +10,9 @@ Never stores argv or environment, only the description the caller gives.
   run ID | wait ID --seq N --key K --label L --kind text|secret|choice [--default D --pattern P --choices a,b --error E --attempt N]
   resume ID   (waiting -> running) | step ID N OF TEXT | progress ID DONE TOTAL UNIT | finish ID EXIT | get ID
   find-unit UNIT | cancel ID --by NAME --safe yes|no | cancelled ID (exit 0 when cancelled)
-  error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected; Python writer only)
-  result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers; Python writer only)
-  key ID KEY   (the row key of a job, "apps remove nextcloud": the area and arguments the buttons of the web interface use; Python writer only)
+  error ID --category C --message M   (name why an ended job ended: input_timeout, input_rejected)
+  result ID --json OBJECT   (what a job made, for the last screen of the Install dialog: one JSON object of at most 4 KB, flat strings and numbers)
+  key ID KEY   (the row key of a job, "apps remove nextcloud": the area and arguments the buttons of the web interface use)
   reconcile   mark queued/running/waiting records whose unit is gone as interrupted (boot); never re-runs anything
 """
 import argparse
@@ -324,6 +324,8 @@ def cmd_error(a):
         if rec.get("state") in ACTIVE:
             raise Fail("job has not ended")
         rec["error"] = {"category": a.category, "message": a.message}
+        if a.code:   # ADR 0028: the catalogue code of the refusal that ended the job
+            rec["error"]["code"] = a.code
         save(rec)
 
 
@@ -508,7 +510,7 @@ def main():
     s = sub.add_parser("get"); s.add_argument("id"); s.set_defaults(fn=cmd_get)
     s = sub.add_parser("reconcile"); s.set_defaults(fn=cmd_reconcile)
     s = sub.add_parser("error"); s.add_argument("id"); s.add_argument("--category", required=True)
-    s.add_argument("--message", default=""); s.set_defaults(fn=cmd_error)
+    s.add_argument("--message", default=""); s.add_argument("--code", default=""); s.set_defaults(fn=cmd_error)
     s = sub.add_parser("result"); s.add_argument("id"); s.add_argument("--json", required=True); s.set_defaults(fn=cmd_result)
     s = sub.add_parser("find-unit"); s.add_argument("unit"); s.set_defaults(fn=cmd_find_unit)
     s = sub.add_parser("cancel"); s.add_argument("id"); s.add_argument("--by", default="")

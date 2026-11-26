@@ -26,7 +26,7 @@ shift 2 || true
 secs=8
 while [ $# -gt 0 ]; do
   case "$1" in
-    --seconds) [ "$action" = fans-clean ] || refuse "--seconds is for fans-clean"; [ $# -ge 2 ] || refuse "--seconds needs a value"; secs=$2; shift 2 ;;
+    --seconds) [ "$action" = fans-clean ] || refuse_code admin.option-misplaced "--seconds is for fans-clean"; [ $# -ge 2 ] || refuse_code admin.value-missing "--seconds needs a value"; secs=$2; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
@@ -46,10 +46,10 @@ case "$action" in
   test-push)
     nf=${HS_NOTIFY_FILE:-${HS_STATE_DIR:-/var/lib/hs}/notify-url}
     if [ ! -s "$nf" ] && [ -z "$(setting_get notifyUrl 2>/dev/null || true)" ]; then
-      refuse "There is no push address yet: set one first (hs config set notifyUrl https://ntfy.sh/<a random topic>)."
+      refuse_code admin.no-push-address "There is no push address yet: set one first (hs config set notifyUrl https://ntfy.sh/<a random topic>)."
     fi
     if [ "$verb" = start ]; then
-      bash "${HS_HEALTH:-$here/health.sh}" test </dev/null >/dev/null 2>&1 || refuse "the test message could not be sent (look at hs health)"
+      bash "${HS_HEALTH:-$here/health.sh}" test </dev/null >/dev/null 2>&1 || refuse_code admin.test-failed "the test message could not be sent (look at hs health)"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -59,7 +59,7 @@ case "$action" in
     printf 'command\ths health test\nlong\tno\n' ;;
   pin-macs)
     if [ "$verb" = start ]; then
-      bash "${HS_MAC:-$here/mac.sh}" </dev/null >/dev/null 2>&1 || refuse "the MAC addresses could not be pinned"
+      bash "${HS_MAC:-$here/mac.sh}" </dev/null >/dev/null 2>&1 || refuse_code admin.pin-failed "the MAC addresses could not be pinned"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -69,8 +69,8 @@ case "$action" in
     printf 'command\ths mac\nlong\tno\n' ;;
   cache-mover)
     bt=$(cat "${HS_BULK_TYPE_FILE:-/etc/hs/bulk-type}" 2>/dev/null || echo zfs)
-    [ "$bt" = snapraid ] || refuse "There is no upload cache: it exists only on the snapraid layout."
-    ${HS_MOUNTPOINT:-mountpoint} -q "${HS_CACHE_DIR:-/mnt/bulk/cache}" 2>/dev/null || refuse "There is no upload cache on this server (nothing mounted at /mnt/bulk/cache)."
+    [ "$bt" = snapraid ] || refuse_code admin.not-snapraid "There is no upload cache: it exists only on the snapraid layout."
+    ${HS_MOUNTPOINT:-mountpoint} -q "${HS_CACHE_DIR:-/mnt/bulk/cache}" 2>/dev/null || refuse_code admin.no-cache "There is no upload cache on this server (nothing mounted at /mnt/bulk/cache)."
     if [ "$verb" = start ]; then job cache-mover "hs cache-mover --now" bash "${HS_CACHE_MOVER:-$here/cache-mover.sh}" --now; exit 0; fi
     printf 'status\tok\nheading\tmove the upload cache to the data disks now\n'
     printf 'step\tmove the files of the SSD cache to the data disks, also those changed in the last minutes (not open ones)\n'
@@ -78,10 +78,10 @@ case "$action" in
     printf 'note\tIt runs before every parity sync anyway; do it by hand to empty a filling cache. Refused while a sync or a pool change holds the lock.\n'
     printf 'command\ths cache-mover --now\nlong\tyes\n' ;;
   fans-clean)
-    [[ "$secs" =~ ^[0-9]{1,2}$ ]] && [ "$secs" -ge 3 ] && [ "$secs" -le 30 ] || refuse "seconds must be a number between 3 and 30"
+    [[ "$secs" =~ ^[0-9]{1,2}$ ]] && [ "$secs" -ge 3 ] && [ "$secs" -le 30 ] || refuse_code admin.seconds-invalid "seconds must be a number between 3 and 30"
     found=false
     for d in "${HS_HWMON_DIR:-/sys/class/hwmon}"/hwmon*; do [ -e "$d/pwm1" ] && found=true; done
-    $found || refuse "No fan controller found (is the nct6775 driver loaded? see the Hardware page)."
+    $found || refuse_code admin.no-fan-controller "No fan controller found (is the nct6775 driver loaded? see the Hardware page)."
     if [ "$verb" = start ]; then job fans-clean "hs fans clean $secs" bash "${HS_FANS:-$here/fans.sh}" clean "$secs"; exit 0; fi
     printf 'status\tok\nheading\trun the fans at full speed for %s seconds\n' "$secs"
     printf 'step\tset every fan to 100 %% for %s seconds, then back exactly as it was\n' "$secs"

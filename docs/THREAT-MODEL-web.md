@@ -12,6 +12,7 @@ serves the Svelte frontend and wraps `hs sys ...` (reads) and `plan`/`start` (ch
 | Who | Reaches | Can do |
 | --- | --- | --- |
 | Anyone on the home network or Tailscale (no login) | `/api/hello`, the sign-in page, static files, `/theme.css`, `/api/login`, `/api/setup` (home addresses only) | read three status lines (backup age, instance count, disk warnings); try passwords (throttled) |
+| A server on the home network, Tailscale or a link-local address that holds a pairing code (no login) | `POST /api/remote/claim` and `/api/remote/push` (home, link-local, ULA and tailnet sources only; one refusal shape `code.unknown` / `code.rate` / `code.unavailable`) | with a valid one-use code (80 bits, at most 60 minutes, kept only as derived values in `/run/hs/remote-codes.json`): get READ on the one share the code is bound to for the login `remote-<name>`, or hand a share to this server. Guessing: 5 wrong tries per source and minute, 20 in 10 minutes end every open code. The password travels only inside a ChaCha20-Poly1305 box keyed from the code (docs/PLAN-remote-shares.md D4, D6) |
 | The internet | nothing: no router rule, no Zoraxy rule (`ADMIN_TARGETS` guard) | nothing |
 | A signed-in Domain Admin | every read, every change in the `CHANGES` allowlist, unlock, the browser terminal if `webTerminal` is on | **root-equivalent**: the terminal is a shell as adminuser with sudo, and changes start root commands |
 | The local `adminuser` | the same; the only way in while the storage is locked | the same |

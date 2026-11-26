@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Blueprints: a new kind of package"
+body  = """A package repository can now carry blueprints (kind = "blueprint"): an ordered list of packages plus settings that are only filled in where nothing is set yet. hs pkg validate and the repository check read them (no script, no Nix; Docker only through a [docker] table, never as a recipe). A blueprint is applied, not installed: hs pkg install refuses it with the code pkg.blueprint. Applying one comes in a later release."""

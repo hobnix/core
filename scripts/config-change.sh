@@ -46,11 +46,11 @@ case "$action" in
     export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
     unset HS_GUIDED_TTY
     if [ "$action" = sync ]; then
-      [ -f "$(machine_file)" ] || refuse "There is no machine.toml on this server."
+      [ -f "$(machine_file)" ] || refuse_code config.no-machine-toml "There is no machine.toml on this server."
       news=$(bash "$sync_sh" --list </dev/null 2>/dev/null || true)
-      [ -n "$news" ] || refuse "Nothing is new: machine.toml is in the layout of the example already."
+      [ -n "$news" ] || refuse_code config.nothing-new "Nothing is new: machine.toml is in the layout of the example already."
       if [ "$verb" = start ]; then
-        bash "$sync_sh" sync </dev/null >/dev/null 2>&1 || refuse "machine.toml could not be rewritten (it is left as it was)"
+        bash "$sync_sh" sync </dev/null >/dev/null 2>&1 || refuse_code config.rewrite-failed "machine.toml could not be rewritten (it is left as it was)"
         printf 'status\tdone\n'
         exit 0
       fi
@@ -62,10 +62,10 @@ case "$action" in
     fi
     machine=$(machine_file)
     old=${HS_MACHINE_OLD:-$(dirname "$machine")/machine.nix}
-    [ ! -f "$machine" ] || refuse "machine.toml exists already: nothing to convert."
-    [ -f "$old" ] || refuse "There is no machine.nix to convert."
+    [ ! -f "$machine" ] || refuse_code config.exists "machine.toml exists already: nothing to convert."
+    [ -f "$old" ] || refuse_code config.no-machine-nix "There is no machine.nix to convert."
     if [ "$verb" = start ]; then
-      bash "$sync_sh" migrate </dev/null >/dev/null 2>&1 || refuse "machine.nix could not be converted (it is left as it was)"
+      bash "$sync_sh" migrate </dev/null >/dev/null 2>&1 || refuse_code config.rewrite-failed "machine.nix could not be converted (it is left as it was)"
       printf 'status\tdone\n'
       exit 0
     fi
@@ -108,37 +108,37 @@ dhcp_norm() {
 # check_key <key> <value>: refuses, or sets type toml off store old for the key (the checks of set and apply)
 check_key() {
   local key=$1 value=$2 rule r_choices r_min r_pattern r_hint
-  case " $CONFIG_SETTABLE " in *" $key "*) ;; *) refuse "'$key' can not be changed from the interface (edit machine.toml on the server)." ;; esac
-  [ -f "$machine" ] || refuse "There is no machine.toml on this server."
+  case " $CONFIG_SETTABLE " in *" $key "*) ;; *) refuse_code config.not-settable "'$key' can not be changed from the interface (edit machine.toml on the server)." ;; esac
+  [ -f "$machine" ] || refuse_code config.no-machine-toml "There is no machine.toml on this server."
 
   # the type of the option, from the example (the one schema)
   # no `exit` in awk: it closes the pipe, config-read.sh gets SIGPIPE and pipefail + set -e end the script without a word
   [ -n "$list" ] || list=$(bash "$here/config-read.sh" list 2>/dev/null || true)
   type=$(awk -F'\t' -v k="$key" '$2 == k && !f { print $5; f = 1 }' <<<"$list")
-  [ -n "$type" ] || refuse "'$key' is not an option of machine.toml.example."
+  [ -n "$type" ] || refuse_code config.key-unknown "'$key' is not an option of machine.toml.example."
 
   toml=""; off=false
   # one line: a newline in a value would write a second line into machine.toml (and grep -E below checks every line)
-  [[ "$value" != *[[:cntrl:]]* ]] || refuse "A value is one line without control characters."
+  [[ "$value" != *[[:cntrl:]]* ]] || refuse_code config.value-invalid "A value is one line without control characters."
   if [ -z "$value" ]; then off=true
   else
     case "$type" in
-      bool) case "$value" in true|false) toml=$value ;; *) refuse "'$key' must be true or false." ;; esac ;;
+      bool) case "$value" in true|false) toml=$value ;; *) refuse_code config.value-invalid "'$key' must be true or false." ;; esac ;;
       number)
-        [[ "$value" =~ ^[0-9]{1,6}$ ]] || refuse "'$key' must be a whole number."
+        [[ "$value" =~ ^[0-9]{1,6}$ ]] || refuse_code config.value-invalid "'$key' must be a whole number."
         toml=$value ;;
       string)
-        [[ "$value" != *[\"\\]* ]] || refuse "Quotes and backslashes are not allowed in a value."
+        [[ "$value" != *[\"\\]* ]] || refuse_code config.value-invalid "Quotes and backslashes are not allowed in a value."
         toml="\"$value\"" ;;
       list)
-        [ "$key" = dhcpRange ] || refuse "'$key' is a list or table: edit machine.toml on the server."
+        [ "$key" = dhcpRange ] || refuse_code config.not-scalar "'$key' is a list or table: edit machine.toml on the server."
         dhcp_norm "$value"
         # leading zeros (010, 08) are read as octal by bash and rejected by TOML: write plain numbers
         [[ "$norm" =~ ^[0-9]{1,3}\ [0-9]{1,3}$ ]] && norm="$((10#${norm% *})) $((10#${norm#* }))"
         [[ "$norm" =~ ^[0-9]{1,3}\ [0-9]{1,3}$ ]] && [ "${norm% *}" -ge 1 ] && [ "${norm% *}" -lt "${norm#* }" ] && [ "${norm#* }" -le 254 ] \
-          || refuse "dhcpRange must be two numbers from 1 to 254, the first smaller, e.g. 100 199"
+          || refuse_code config.value-invalid "dhcpRange must be two numbers from 1 to 254, the first smaller, e.g. 100 199"
         toml="[${norm% *}, ${norm#* }]" ;;
-      *) refuse "'$key' is a list or table: edit machine.toml on the server." ;;
+      *) refuse_code config.not-scalar "'$key' is a list or table: edit machine.toml on the server." ;;
     esac
   fi
 
@@ -146,27 +146,27 @@ check_key() {
   if ! $off; then
     rule=$(PYTHONUTF8=1 "$py" "$here/schema-gen.py" rule "$key" 2>/dev/null || true)
     r_choices=$(cut -f2 <<<"$rule"); r_min=$(cut -f3 <<<"$rule"); r_pattern=$(cut -f4 <<<"$rule"); r_hint=$(cut -f5 <<<"$rule")
-    if [ -n "${r_choices:-}" ]; then case " $r_choices " in *" $value "*) ;; *) refuse "'$key' must be one of: $r_choices." ;; esac; fi
-    if [ -n "${r_min:-}" ] && [ "$value" -lt "$r_min" ] 2>/dev/null; then refuse "'$key' must be $r_min or more."; fi
-    if [ -n "${r_pattern:-}" ] && ! grep -Eq -- "$r_pattern" <<<"$value"; then refuse "'$key' must be ${r_hint:-valid}."; fi
+    if [ -n "${r_choices:-}" ]; then case " $r_choices " in *" $value "*) ;; *) refuse_code config.value-invalid "'$key' must be one of: $r_choices." ;; esac; fi
+    if [ -n "${r_min:-}" ] && [ "$value" -lt "$r_min" ] 2>/dev/null; then refuse_code config.value-invalid "'$key' must be $r_min or more."; fi
+    if [ -n "${r_pattern:-}" ] && ! grep -Eq -- "$r_pattern" <<<"$value"; then refuse_code config.value-invalid "'$key' must be ${r_hint:-valid}."; fi
   fi
 
   store=$(awk -F'\t' -v k="$key" '$2 == k && !f { print $8; f = 1 }' <<<"$list")
   if [ "$store" = settings ]; then
     old=$(setting_get "$key" 2>/dev/null || true)
     if $off; then
-      [ -r "$(setting_path "$key")" ] || refuse "'$key' is not set already."
+      [ -r "$(setting_path "$key")" ] || refuse_code config.not-set "'$key' is not set already."
     elif [ "$old" = "$value" ] && [ -r "$(setting_path "$key")" ]; then
-      refuse "'$key' is $value already."
+      refuse_code config.unchanged "'$key' is $value already."
     fi
   else
     old=$(machine_get "$key" 2>/dev/null || true)
     cmp=$value
     if [ "$type" = list ]; then old=$(tr '\n' ' ' <<<"$old"); old=${old% }; cmp=${toml//[\[\],]/}; fi
     if $off; then
-      machine_has "$key" || refuse "'$key' is not set already."
+      machine_has "$key" || refuse_code config.not-set "'$key' is not set already."
     elif machine_has "$key" && [ "$old" = "$cmp" ]; then
-      refuse "'$key' is $value already."
+      refuse_code config.unchanged "'$key' is $value already."
     fi
   fi
 }
@@ -179,21 +179,21 @@ check_extra() {
   local k=$1 v=$2 net bad out old_site zi
   case "$k" in
     nic)
-      [ -n "$v" ] || refuse "nic cannot be switched off."
-      [[ "$v" =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || refuse "'nic' must be a network card name such as enp3s0."
-      nic_exists "$v" || refuse "There is no network card called $v on this server (see ip link)."
-      nic_physical "$v" || refuse "$v is not a physical network card (a bridge, VLAN or tunnel)."
+      [ -n "$v" ] || refuse_code config.cannot-switch-off "nic cannot be switched off."
+      [[ "$v" =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || refuse_code config.value-invalid "'nic' must be a network card name such as enp3s0."
+      nic_exists "$v" || refuse_code config.value-invalid "There is no network card called $v on this server (see ip link)."
+      nic_physical "$v" || refuse_code config.value-invalid "$v is not a physical network card (a bridge, VLAN or tunnel)."
       xline danger "The server takes its network from $v after hs rebuild. If the cable is not in that port, the server is offline: no SSH, no web, no Tailscale. The way back is a keyboard and screen at the server: hold the space bar while it starts and pick the previous generation."
       xline confirm_name "$v"
       [ "$(nic_link "$v")" = up ] || xline warn "No cable is connected to $v right now." ;;
     smbAllow)
-      [ -n "$v" ] || refuse "smbAllow cannot be switched off."
+      [ -n "$v" ] || refuse_code config.cannot-switch-off "smbAllow cannot be switched off."
       # shellcheck disable=SC2086
       bad=$("$py" -c 'import ipaddress,sys
 for t in sys.argv[1:]:
     try: ipaddress.IPv4Network(t, strict=True)
     except ValueError: print(t); break' $v 2>/dev/null || true)
-      [ -z "$bad" ] || refuse "'$bad' is not an IPv4 address or network such as 10.10.10.0/24 (no host bits after the slash)."
+      [ -z "$bad" ] || refuse_code config.value-invalid "'$bad' is not an IPv4 address or network such as 10.10.10.0/24 (no host bits after the slash)."
       if [ -n "${HS_HOST_NET+x}" ]; then net=$HS_HOST_NET
       else
         net=$(ip -4 -o addr show br0 2>/dev/null | awk '{ print $4; exit }' || true)
@@ -221,12 +221,12 @@ print("in" if any(h.subnet_of(ipaddress.IPv4Network(t, strict=True)) for t in sy
       [ "$v" != true ] || xline warn "Everyone who can sign in to the web interface gets a shell as $adm on this server." ;;
     timeZone)
       if [ -n "$v" ]; then
-        [[ "$v" != /* && "$v" != *..* ]] || refuse "'$v' is not a time zone such as Europe/Vienna."
+        [[ "$v" != /* && "$v" != *..* ]] || refuse_code config.value-invalid "'$v' is not a time zone such as Europe/Vienna."
         zi=${HS_ZONEINFO:-}
         if [ -z "$zi" ]; then
           for zi in /etc/zoneinfo /run/current-system/sw/share/zoneinfo /usr/share/zoneinfo; do [ -d "$zi" ] && break; done
         fi
-        [ -f "$zi/$v" ] || refuse "There is no time zone called $v (see timedatectl list-timezones)."
+        [ -f "$zi/$v" ] || refuse_code config.value-invalid "There is no time zone called $v (see timedatectl list-timezones)."
       fi ;;
     shareSnapshots)
       [ "$v" != false ] || xline note "Switching snapshots off only stops the timer. Old snapshots stay on the disk but are no longer pruned." ;;
@@ -245,18 +245,18 @@ step_line() {
 
 if [ "$action" = apply ]; then
   shift 2
-  [ $# -gt 0 ] || refuse "apply needs at least one --set key=value"
+  [ $# -gt 0 ] || refuse_code config.args-invalid "apply needs at least one --set key=value"
   keys=(); offs=(); tomls=(); stores=(); vals=(); steps=(); seen=" "; n_machine=0; cmd=""
   while [ $# -gt 0 ]; do
     if [ "$1" = --confirm ]; then
       [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"
       confirm=$2; shift 2; continue
     fi
-    { [ "$1" = --set ] && [ $# -ge 2 ]; } || refuse "apply takes only --set key=value and --confirm <name>"
+    { [ "$1" = --set ] && [ $# -ge 2 ]; } || refuse_code config.args-invalid "apply takes only --set key=value and --confirm <name>"
     pair=$2; shift 2
-    case "$pair" in *=*) ;; *) refuse "'$pair' is not key=value." ;; esac
+    case "$pair" in *=*) ;; *) refuse_code config.args-invalid "'$pair' is not key=value." ;; esac
     k=${pair%%=*}; v=${pair#*=}
-    case "$seen" in *" $k "*) refuse "'$k' is given twice." ;; esac
+    case "$seen" in *" $k "*) refuse_code config.key-twice "'$k' is given twice." ;; esac
     seen="$seen$k "
     check_key "$k" "$v"
     check_extra "$k" "$v"
@@ -287,13 +287,13 @@ if [ "$action" = apply ]; then
       else machine_set "${keys[$i]}" "${tomls[$i]}" >/dev/null || ok=1; fi
       if [ "$ok" = 1 ]; then
         cp -p "$keep" "$machine"
-        refuse "machine.toml was not changed (${keys[$i]} failed${done_keys:+; written and put back:$done_keys}); no setting was written."
+        refuse_code config.write-failed "machine.toml was not changed (${keys[$i]} failed${done_keys:+; written and put back:$done_keys}); no setting was written."
       fi
       done_keys="$done_keys ${keys[$i]}"
     done
     if ! bash "$here/config-read.sh" check >/dev/null 2>&1; then
       cp -p "$keep" "$machine"
-      refuse "machine.toml would have problems after these changes (hs config check); it was put back, no setting was written."
+      refuse_code config.check-failed "machine.toml would have problems after these changes (hs config check); it was put back, no setting was written."
     fi
     # machine_set/machine_unset keep the file as it was before THEIR key; the plan promises the file as it was before all of them
     cp -p "$keep" "${HS_STATE_DIR:-/var/lib/hs}/machine.toml.before-config" 2>/dev/null || true
@@ -305,7 +305,7 @@ if [ "$action" = apply ]; then
     if [ "${offs[$i]}" = true ]; then setting_unset "${keys[$i]}" || ok=1; else setting_set "${keys[$i]}" "${vals[$i]}" || ok=1; fi
     if [ "$ok" = 1 ]; then
       [ "$n_machine" -eq 0 ] || cp -p "$keep" "$machine"
-      refuse "${keys[$i]} could not be written${written:+; already written:$written}$([ "$n_machine" -eq 0 ] || echo '; machine.toml was put back')."
+      refuse_code config.write-failed "${keys[$i]} could not be written${written:+; already written:$written}$([ "$n_machine" -eq 0 ] || echo '; machine.toml was put back')."
     fi
     written="$written ${keys[$i]}"
   done
@@ -313,7 +313,7 @@ if [ "$action" = apply ]; then
   exit 0
 fi
 
-[ $# -ge 4 ] || refuse "set needs a key and a value"
+[ $# -ge 4 ] || refuse_code config.args-invalid "set needs a key and a value"
 value=$4
 shift 4
 while [ $# -gt 0 ]; do
@@ -352,12 +352,12 @@ fi
 if [ "$verb" = start ]; then
   keep=$(mktemp); trap 'rm -f "$keep"' EXIT
   cp -p "$machine" "$keep"
-  if $off; then machine_unset "$key" >/dev/null || { cp -p "$keep" "$machine"; refuse "machine.toml was not changed."; }
-  else machine_set "$key" "$toml" >/dev/null || { cp -p "$keep" "$machine"; refuse "machine.toml was not changed."; }
+  if $off; then machine_unset "$key" >/dev/null || { cp -p "$keep" "$machine"; refuse_code config.write-failed "machine.toml was not changed."; }
+  else machine_set "$key" "$toml" >/dev/null || { cp -p "$keep" "$machine"; refuse_code config.write-failed "machine.toml was not changed."; }
   fi
   if ! bash "$here/config-read.sh" check >/dev/null 2>&1; then
     cp -p "$keep" "$machine"
-    refuse "machine.toml would have problems after that change (hs config check); it was put back."
+    refuse_code config.check-failed "machine.toml would have problems after that change (hs config check); it was put back."
   fi
   printf 'status\tdone\n'
   exit 0

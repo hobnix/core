@@ -75,7 +75,7 @@
     if (!s) return [];
     return [
       { kind: 'Pool', name: s.pool, href: poolPath(s.pool), note: dash(s.disks) },
-      ...mountedBy(s).map((x) => ({ kind: 'Instance', name: x.text, href: `${P.instances}`, note: 'opens the instance list' })),
+      ...mountedBy(s).map((x) => ({ kind: 'Instance', name: x.text, href: P.appsGroup, note: 'opens the list of apps and VMs' })),
       ...(s.volume ? [] : [{ kind: 'Pages', name: 'Files', href: filesLink({ left: `share:${s.name}` }) }, ...(s.kind === 'other' ? [] : [{ kind: 'Pages', name: 'Backup', href: P.backup, note: s.backup === 'on' ? 'in the nightly backup' : 'not in the backup' }])]),
     ];
   });
@@ -84,7 +84,7 @@
   const tabs = $derived(can ? objects.share.tabs : objects.share.tabs.slice(0, 1));
 </script>
 
-<ObjectPage crumb="Storage > Shares" title={name} chip={s ? (s.volume ? 'volume' : s.kind) : ''} state={s ? (failure ? 'bad' : doing ? 'info' : '') : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : ''}
+<ObjectPage title={name} chip={s ? (s.volume ? 'volume' : s.kind) : ''} state={s ? (failure ? 'bad' : doing ? 'info' : '') : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : ''}
             {tabs} {tab} onpick={(id) => go(sharePath(name, id))} {menu} {danger} {links} {jobs} need="admin"
             loading={!m.overview.loaded} notFound={m.overview.loaded && !s} notFoundTitle="No such share" backTo={P.shares} backLabel="All shares"
             notFoundText={`No share called “${name}” exists. It may have been deleted or renamed; a deleted share’s folder is under Kept folders in the list.`}>
@@ -121,7 +121,7 @@
         </Card>
         <Card title="Mounted by">
           {#if mountedBy(s).length}
-            <Row wrap gap="3">{#each mountedBy(s) as x}<Button size="sm" icon="cube" tooltip={`Open the instance list (${x.name})`} onclick={() => go(P.instances)}>{x.text}</Button>{/each}</Row>
+            <Row wrap gap="3">{#each mountedBy(s) as x}<Button size="sm" icon="cube" tooltip={`Open the list of apps and VMs (${x.name})`} onclick={() => go(P.appsGroup)}>{x.text}</Button>{/each}</Row>
           {:else}<Muted as="p">No instance mounts this {s.volume ? 'volume' : 'share'}.</Muted>{/if}
         </Card>
         {#if !s.volume && s.kind !== 'other' && /^data-/.test(s.disks)}<Card title="Parity"><ShareParity share={s.name} {locked} /></Card>{/if}

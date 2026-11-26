@@ -1,6 +1,6 @@
 // The pages' first reads (web/src/readsfor.js) must all be allowlisted reads of the web server (READS in scripts/web-serve.py), or the prefetch asks for nothing.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { readsFor } from '../web/src/readsfor.js';
+import { readsFor, fieldReads } from '../web/src/readsfor.js';
 import { parsePoolRows, ofRole } from '../web/src/pages/storage/pool.js';
 
 let ok = 0, bad = 0;
@@ -18,7 +18,7 @@ for (const name of readdirSync(capDir)) {
 }
 check('the allowlist was read', known.size > 50 && known.has('ct/list') && known.has('status'), String(known.size));
 
-const routes = ['/', '/instances', '/network', '/people/users', '/people/groups', '/system/certificates', '/system/hardware', '/backup/overview', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
+const routes = ['/', '/apps', '/network', '/people/users', '/people/groups', '/system/certificates', '/system/hardware', '/backup/overview', '/storage/pools', '/storage/pools/bulk', '/storage/pools/fast', '/storage/disks', '/storage/shares', '/storage/files',
   '/backup/expiry', '/system/health', '/apps/installed', '/apps/marketplace', '/network/services', '/storage/encryption', '/storage/vault',
   '/settings', '/settings/general', '/settings/capabilities', '/settings/capabilities/gateway', '/setup', '/nodes', '/system/diagnostics', '/system/updates', '/network/map', '/storage', '/backup', '/system'];
 const missing = [];
@@ -58,6 +58,28 @@ const group = (g, places) => { const own = new Set(places.flatMap((r) => readsFo
 check('the Storage group page reads only what its places read', group('/storage', ['/storage/pools', '/storage/disks', '/storage/shares', '/storage/encryption']));
 check('the Backup group page reads only what its places read', group('/backup', ['/backup/overview', '/backup/expiry']));
 check('the System group page reads only what its places read', group('/system', ['/system/health', '/system/certificates', '/system/hardware', '/system/events', '/system/updates']));
+
+// the early reads of the pickers: allowlisted, by role as scripts/lib/sys-roles.tsv says, off with their capability (live-topics.tsv; pool = storage)
+const tsv = (f) => readFileSync(new URL(`../scripts/lib/${f}`, import.meta.url), 'utf8').split(/\r?\n/).filter((l) => l && l[0] !== '#').map((l) => l.split('\t'));
+const words = (p) => p.slice('/api/sys/'.length).replaceAll('/', ' ');
+const early = fieldReads('admin', null);
+check('every early read is an allowlisted read', early.length === 7 && early.every((p) => known.has(p.slice('/api/sys/'.length))));
+const rank = ['viewer', 'app-manager', 'admin'];
+const roleOf = new Map(tsv('sys-roles.tsv').map((r) => [r[0], r[1]]));
+for (const role of rank) {
+  const want = early.filter((p) => rank.indexOf(role) >= rank.indexOf(roleOf.get(words(p)) ?? 'admin'));
+  check(`${role}: exactly the early reads the role may read`, JSON.stringify(fieldReads(role, null)) === JSON.stringify(want), JSON.stringify(fieldReads(role, null)));
+}
+check('an unknown role reads nothing early', fieldReads('', null).length === 0);
+const capOf = new Map(tsv('live-topics.tsv').map((r) => [r[1], r[4]]));
+capOf.set('pool list', 'storage');
+capOf.set('pool disks', 'storage');
+const none = fieldReads('admin', []);
+check('with no capability on, only the reads without one are early', JSON.stringify(none) === JSON.stringify(early.filter((p) => (capOf.get(words(p)) ?? '-') === '-')), JSON.stringify(none));
+for (const cap of ['storage', 'incus', 'ad']) {
+  const got = fieldReads('admin', [cap]).filter((p) => !none.includes(p));
+  check(`capability ${cap} brings its own reads`, got.length > 0 && got.every((p) => capOf.get(words(p)) === cap), JSON.stringify(got));
+}
 
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

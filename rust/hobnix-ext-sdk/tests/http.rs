@@ -1,4 +1,5 @@
 //! The HTTP client against a one-shot server on localhost.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
 use hobnix_ext_sdk::http::{Client, HttpError};
 use serde_json::json;
 use std::io::{Read, Write};

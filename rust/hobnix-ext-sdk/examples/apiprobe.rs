@@ -5,13 +5,15 @@
 //!
 //!   cargo build --example apiprobe
 //!   cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
-use hobnix_ext_sdk::command::{run, Ctx, Failure, Request, Success};
+#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
+use hobnix_ext_sdk::command::{run, Failure, Request, Success};
 use hobnix_ext_sdk::http::Client;
 use hobnix_ext_sdk::integrations;
+use hobnix_ext_sdk::Ctx;
 use std::process::ExitCode;
 use std::time::Duration;
 
-fn handle(req: &Request, _ctx: &Ctx) -> Result<Success, Failure> {
+fn handle(req: &Request, _ctx: &dyn Ctx) -> Result<Success, Failure> {
     if req.words().as_slice() != ["get"] {
         return Err(Failure::not_found("no such command"));
     }

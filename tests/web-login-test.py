@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """scripts/web-serve.py: sign-in rules, sessions, CSRF, throttle, theme. Real HTTP server on a free port, fake helpers."""
+import contextlib
 import http.client
 import importlib.util
+import io
 import json
 import os
 import tempfile
@@ -805,6 +807,193 @@ class Changes(Base):
                 continue
             for verb in ("plan", "start"):
                 self.assertTrue(any(p.startswith("sys %s %s " % (area.replace("/", " "), verb)) for p in paths), (area, verb))
+
+
+class PairDoor(Base):
+    """POST /api/remote/claim and /api/remote/push (docs/PLAN-remote-shares.md): no session, a source check, one refusal shape, nothing logged.
+    The throttle (5 failures per source per minute, 20 in 10 minutes burn every code) is the store in rust/hobnix-core/src/pair.rs, tested in
+    tests/remote-pair.sh and in cargo; here only what the door in front of it decides."""
+    BODY = {"v": 1, "id": "ab" * 16, "nonce": "AAAA", "box": "BBBB"}
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.answer = (0, json.dumps({"v": 1, "nonce": "N", "box": "B"}))
+        self.real_run = ws._run
+
+        def fake(cmd, stdin=None, timeout=10):
+            self.calls.append((cmd, stdin))
+            return self.answer
+        ws._run = fake
+        self.handler = ws.make_handler(self.app)
+
+    def tearDown(self):
+        ws._run = self.real_run
+        super().tearDown()
+
+    def door(self, path="/api/remote/claim", body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port)
+        raw = json.dumps(self.BODY if body is None else body).encode()
+        c.request("POST", path, raw, {"Content-Type": "application/json"})      # no Origin, no cookie: a server, not a browser
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, json.loads(data), r
+
+    def from_peer(self, peer, path="/api/remote/claim", xff=None, raw=b"{}"):
+        """The door as a request from `peer` would reach it (the test socket is loopback only): the real handler methods on a bare instance."""
+        h = self.handler.__new__(self.handler)
+        h.client_address = (peer, 40000)
+        h.headers = http.client.HTTPMessage()
+        if xff:
+            h.headers["X-Forwarded-For"] = xff
+        seen = []
+        h._json = lambda code, obj, extra=(): seen.append((code, obj))
+        h._pair_door(path, raw)
+        return seen[0]
+
+    def test_no_session_no_origin_and_the_body_goes_to_hs_on_stdin(self):
+        for path, word in (("/api/remote/claim", "claim"), ("/api/remote/push", "accept")):
+            self.calls.clear()
+            s, d, r = self.door(path)
+            self.assertEqual((s, d["v"]), (200, 1))
+            cmd, stdin = self.calls[0]
+            self.assertEqual(cmd, ["/nonexistent/hs", "sys", "remote", word, "--source", "127.0.0.1"])
+            self.assertEqual(json.loads(stdin), self.BODY)        # as it came: it is the associated data of the box
+            self.assertNotIn(self.BODY["id"], " ".join(cmd))      # never in argv
+            self.assertEqual(r.getheader("Cache-Control"), "no-store")
+
+    def test_the_source_check_takes_the_home_network_and_the_tailnet(self):
+        ok = ("127.0.0.1", "::1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.5", "169.254.1.1", "fe80::1", "fd12::1", "fc00::1",
+              "100.64.0.1", "100.127.255.255", "fd7a:115c:a1e0::1", "::ffff:192.168.1.5", "fe80::1%eth0")
+        no = ("8.8.8.8", "172.32.0.1", "172.15.255.255", "100.128.0.1", "100.63.255.255", "192.169.0.1", "2001::1", "2001:db8::1", "64:ff9b:1::1",
+              "::ffff:8.8.8.8", "garbage", "")
+        for ip in ok:
+            self.assertTrue(self.handler._claim_source_ok(None, ip), ip)
+        for ip in no:
+            self.assertFalse(self.handler._claim_source_ok(None, ip), ip)
+
+    def test_a_public_source_gets_the_refusal_and_hs_is_never_asked(self):
+        for path in ("/api/remote/claim", "/api/remote/push"):
+            self.assertEqual(self.from_peer("203.0.113.9", path), (404, {"v": 1, "error": "code.unknown"}))
+            self.assertEqual(self.from_peer("2001:db8::7", path), (404, {"v": 1, "error": "code.unknown"}))
+        self.assertEqual(self.calls, [])
+
+    def test_a_spoofed_forwarded_for_does_not_help_a_peer_that_is_not_the_proxy(self):
+        self.cfg.trust_proxy = True
+        self.assertEqual(self.from_peer("203.0.113.9", xff="10.0.0.5"), (404, {"v": 1, "error": "code.unknown"}))
+        self.assertEqual(self.from_peer("198.51.100.4", xff="127.0.0.1, 192.168.1.2"), (404, {"v": 1, "error": "code.unknown"}))
+        self.assertEqual(self.calls, [])
+        # behind our own proxy (loopback peer) the LAST entry counts: the one the proxy added, not what the client wrote in front of it
+        self.assertEqual(self.from_peer("127.0.0.1", xff="10.0.0.5, 8.8.8.8")[0], 404)
+        self.assertEqual(self.from_peer("127.0.0.1", xff="8.8.8.8, 10.0.0.5")[0], 200)
+        self.assertEqual(self.calls[-1][0][-1], "10.0.0.5")
+        # without trust_proxy the header is ignored even from loopback
+        self.cfg.trust_proxy = False
+        self.calls.clear()
+        self.assertEqual(self.from_peer("127.0.0.1", xff="8.8.8.8")[0], 200)
+        self.assertEqual(self.calls[-1][0][-1], "127.0.0.1")
+
+    def test_one_refusal_shape_whatever_hs_said(self):
+        shapes = (((1, '{"v":1,"error":"code.unknown"}'), 404, "code.unknown"),
+                  ((1, '{"v":1,"error":"code.rate"}'), 429, "code.rate"),
+                  ((1, '{"v":1,"error":"code.unavailable"}'), 503, "code.unavailable"),
+                  ((1, '{"v":1,"error":"something else","detail":"the share media of beta"}'), 503, "code.unavailable"),
+                  ((1, "not json"), 503, "code.unavailable"),
+                  ((127, ""), 503, "code.unavailable"),
+                  ((124, ""), 503, "code.unavailable"))
+        for answer, status, name in shapes:
+            self.answer = answer
+            s, d, _ = self.door()
+            self.assertEqual((s, d), (status, {"v": 1, "error": name}), answer)      # nothing else in the answer: no hint what was wrong
+
+    def test_a_body_that_is_too_big_is_refused_before_hs_runs(self):
+        s, d, _ = self.door(body={"v": 1, "box": "x" * 5000})
+        self.assertEqual((s, d), (404, {"v": 1, "error": "code.unknown"}))
+        self.assertEqual(self.calls, [])
+
+    def test_nothing_about_a_pairing_request_is_logged(self):
+        out, err = io.StringIO(), io.StringIO()
+        quiet = os.environ.pop("HS_WEB_QUIET", None)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.door()
+                self.answer = (1, '{"v":1,"error":"code.rate"}')
+                self.door("/api/remote/push")
+                self.from_peer("203.0.113.9")
+        finally:
+            if quiet is not None:
+                os.environ["HS_WEB_QUIET"] = quiet
+        log = out.getvalue() + err.getvalue()
+        for secret in (self.BODY["id"], self.BODY["box"], self.BODY["nonce"]):
+            self.assertNotIn(secret, log)
+
+    def test_other_paths_and_methods_stay_closed(self):
+        self.assertEqual(self.req("POST", "/api/remote/claim2", {}, origin=False)[0], 404)
+        self.assertEqual(self.req("GET", "/api/remote/claim")[0], 404)
+        self.assertEqual(self.calls, [])
+
+
+class PairStart(Base):
+    """The start answers of the pairing words: code and address come back once, never cached, never logged, never an argument or a job."""
+    CODE = "ABCD-EFGH-JKLM-NPQR"
+    ANSWER = "status\tok\nheading\tmake a code\nsecret\tcode\t%s\nsecret\taddress\talpha.local:8480\nsecret\texpires_in\t600\n" % CODE
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.answer = (0, self.ANSWER)
+        self.real_run = ws._run
+
+        def fake(cmd, stdin=None, timeout=10):
+            self.calls.append((cmd, stdin))
+            return self.answer
+        ws._run = fake
+        _, d, r = self.login()
+        self.ck = {"Cookie": self.cookie(r), "X-CSRF-Token": d["csrf"]}
+        self.calls.clear()
+
+    def tearDown(self):
+        ws._run = self.real_run
+        super().tearDown()
+
+    def start(self, body):
+        out, err = io.StringIO(), io.StringIO()
+        quiet = os.environ.pop("HS_WEB_QUIET", None)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                s, d, r = self.req("POST", "/api/start", body, headers=self.ck)
+        finally:
+            if quiet is not None:
+                os.environ["HS_WEB_QUIET"] = quiet
+        return s, json.loads(d), r, out.getvalue() + err.getvalue()
+
+    def test_the_start_answer_carries_the_code_once_and_is_not_stored(self):
+        s, d, r, log = self.start({"area": "peers", "args": ["code", "media", "--minutes", "10"]})
+        self.assertEqual(s, 200)
+        self.assertEqual(r.getheader("Cache-Control"), "no-store")
+        self.assertEqual(d["secret"], {"code": self.CODE, "address": "alpha.local:8480", "expires_in": "600"})
+        self.assertNotIn("job", d)
+        self.assertIn("web change: HOME\\anna: peers code media --minutes 10", log)      # the arguments only
+        for secret in (self.CODE, "alpha.local"):
+            self.assertNotIn(secret, log)
+        for cmd, _ in self.calls:
+            self.assertNotIn(self.CODE, " ".join(cmd))
+
+    def test_the_code_a_person_types_goes_on_stdin_only(self):
+        self.answer = (0, "status\tok\n")
+        line = "WXYZ-WXYZ-WXYZ-WXYZ@beta.local:8480"
+        for body in ({"area": "peers", "args": ["add-code"], "stdin": line},
+                     {"area": "peers", "args": ["send-code", "docs", "--peer", "gamma"], "stdin": line}):
+            self.calls.clear()
+            s, d, r, log = self.start(body)
+            self.assertEqual((s, d["status"]), (200, "ok"))
+            self.assertEqual(r.getheader("Cache-Control"), "no-store")
+            cmd, stdin = self.calls[-1]
+            self.assertEqual(stdin, (line + chr(10)).encode())
+            self.assertNotIn("WXYZ", " ".join(cmd))
+            self.assertNotIn("WXYZ", log)
+            self.assertNotIn("beta.local", log)
 
 
 class HelperLine(unittest.TestCase):

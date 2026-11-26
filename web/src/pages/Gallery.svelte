@@ -17,8 +17,10 @@
   // answers for the block samples below (GenBlock takes `data` instead of polling)
   const BLOCK_DATA = { '/api/sys/sample/copy': { rows: [['420', '1000', 'Copying photos', 'running']] }, '/api/sys/sample/done': { rows: [['10', '10', 'Backup', 'ok']] } };
   import Logo from '../ui/Logo.svelte';
+  import Breadcrumbs from '../ui/Breadcrumbs.svelte';
   import PageTabs from '../ui/PageTabs.svelte';
   import {
+    ServerField, ShareField, DiskField, PoolField, InstanceField, UserField,
     Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Grid, Icon, Kv, Menu, Muted, NetMap, NodePopover,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
     Timeline, Wizard, toast,
@@ -40,6 +42,15 @@
   let level = $state(40);
   let area = $state('One line\nAnother line');
   let combo = $state('');
+  let shareName = $state(''), sharePick = $state({ scope: 'local', peer: '', share: '' }), shareFree = $state(''), diskName = $state(''), diskPicked = $state([]), poolName = $state(''), ctName = $state(''), userName = $state('');
+  const SEARCH_OPTS = [{ value: 'a', label: 'media', detail: 'share · 1.2 TB', group: 'On this server' }, { value: 'b', label: 'photos', detail: 'sensitive · 340 GB', group: 'On this server' }, { value: 'c', label: 'cousin / media', detail: 'mounted', group: 'On other servers' }];
+  // rows as the live reads give them (shares overview, pool disks, pool list, ct list, users list, shares principals)
+  const GAL_SHARES = [['media', 'shares', '/srv/media', 'off', '1200000000000'], ['photos', 'sensitive', '/srv/photos', 'off', '340000000000']];
+  const GAL_DISKS = [['ata-ST4000_WX1', '4000787030016', 'HDD', ''], ['ata-ST4000_WX2', '4000787030016', 'HDD', '[has ext4 files]']];
+  const GAL_POOLS = [{ name: 'tank', role: 'data', kind: 'snapraid', state: 'online' }, { name: 'scratch', role: 'apps', kind: 'zfs', state: 'online' }];
+  const GAL_CTS = [['jellyfin', 'container', 'RUNNING', '10.10.95.20 (eth0)'], ['immich', 'container', 'STOPPED', '-']];
+  const GAL_USERS = [['anna', 'Anna Example', 'enabled', 'Domain Admins'], ['ben', '-', 'disabled', '-']];
+  const GAL_PRINCIPALS = [['S-1-5-21-1-2-3-1105', 'anna', 'user'], ['S-1-5-21-1-2-3-1106', 'family', 'group']];
   let sel = $state('zfs');
   let timeFilters = $state({ level: '' });
   let wiz = $state(1);
@@ -69,7 +80,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Components" crumb="Developer" sub={tr('Every shared component in each of its states. A component without an entry here fails the gallery test.')}>
+  <PageHeader title="Components" sub={tr('Every shared component in each of its states. A component without an entry here fails the gallery test.')}>
     {#snippet actions()}
       <Button onclick={toggleTheme}>{theme.dark ? 'Show light' : 'Show dark'}</Button>
       <Button aria-pressed={phone} onclick={() => (phone = !phone)}>{phone ? 'Full width' : 'Phone width (375 px)'}</Button>
@@ -225,6 +236,48 @@
     <Entry name="Combobox" text="A custom trigger and a popover instead of a native select.">
       <div class="cell"><small>placeholder</small><Combobox bind:value={combo} options={[{ value: 'a', label: 'All' }, 'Urgent only', { value: 'x', label: 'Off', disabled: true }]} placeholder="Priority" /></div>
       <div class="cell"><small>disabled</small><Combobox value="" options={['a']} disabled /></div>
+      <div class="cell"><small>search, detail, groups</small><Combobox bind:value={combo} search options={SEARCH_OPTS} placeholder="Type to filter" /></div>
+    </Entry>
+
+    <Entry name="ServerField" text="The base of the five server fields: a searchable list with the loading, error and empty states a plain dropdown hides.">
+      <div class="cell"><small>loading</small><ServerField options={[]} loaded={false} noun="things" /></div>
+      <div class="cell"><small>error</small><ServerField options={[]} error="x" noun="things" /></div>
+      <div class="cell"><small>empty, with a link</small><ServerField options={[]} noun="things" createHref="/storage/shares" createLabel="Create one" /></div>
+    </Entry>
+
+    <Entry name="ShareField" text="A share of the server from a searchable list. groups local + remote: the value is { scope, peer, share } (the remote group is a stub until issue 1149).">
+      <div class="cell"><small>shares</small><ShareField bind:value={shareName} data={GAL_SHARES} /></div>
+      <div class="cell"><small>kind = sensitive</small><ShareField value="" data={GAL_SHARES} kind="sensitive" /></div>
+      <div class="cell"><small>local and remote</small><ShareField bind:value={sharePick} data={GAL_SHARES} groups={['local', 'remote']} remote={[{ peer: 'cousin', share: 'media', state: 'mounted' }]} /></div>
+      <div class="cell"><small>free: a new name may be typed</small><ShareField bind:value={shareFree} data={GAL_SHARES} free /></div>
+      <div class="cell"><small>loading</small><ShareField value="" loaded={false} /></div>
+      <div class="cell"><small>error</small><ShareField value="" error="x" /></div>
+      <div class="cell"><small>none yet</small><ShareField value="" data={[['x', 'other']]} /></div>
+    </Entry>
+
+    <Entry name="DiskField" text="A free disk (or any disk) from a searchable list; multiple shows the checkbox list of the disk picker.">
+      <div class="cell"><small>free disks</small><DiskField bind:value={diskName} data={GAL_DISKS} /></div>
+      <div class="cell"><small>multiple</small><DiskField multiple bind:picked={diskPicked} data={GAL_DISKS} /></div>
+      <div class="cell"><small>loading</small><DiskField value="" loaded={false} /></div>
+      <div class="cell"><small>none</small><DiskField value="" data={[]} /></div>
+    </Entry>
+
+    <Entry name="PoolField" text="A pool of the server from a searchable list.">
+      <div class="cell"><small>pools</small><PoolField bind:value={poolName} data={GAL_POOLS} /></div>
+      <div class="cell"><small>role = apps</small><PoolField value="" data={GAL_POOLS} role="apps" /></div>
+      <div class="cell"><small>error</small><PoolField value="" data={[]} error="x" /></div>
+    </Entry>
+
+    <Entry name="InstanceField" text="An instance with its state from a searchable list; running leaves out the stopped ones.">
+      <div class="cell"><small>instances</small><InstanceField bind:value={ctName} data={GAL_CTS} /></div>
+      <div class="cell"><small>running only</small><InstanceField value="" data={GAL_CTS} running /></div>
+      <div class="cell"><small>loading</small><InstanceField value="" loaded={false} /></div>
+    </Entry>
+
+    <Entry name="UserField" text="A user of the domain from a searchable list (principals: users and groups by SID).">
+      <div class="cell"><small>users</small><UserField bind:value={userName} data={GAL_USERS} /></div>
+      <div class="cell"><small>principals</small><UserField principals value="" data={GAL_PRINCIPALS} /></div>
+      <div class="cell"><small>error</small><UserField value="" error="x" /></div>
     </Entry>
 
     <Entry name="Segmented" text="Two to four short choices as joined segments; ChoiceList is the one with explanations.">
@@ -338,8 +391,13 @@
       <div class="cell"><small>26 / 64</small><Row><Logo /><Logo size={64} /></Row></div>
     </Entry>
 
-    <Entry from="shell" name="PageHeader" text="Breadcrumb, title, subtitle and the actions.">
-      <div class="cell wide box"><PageHeader title="Disks" crumb="Storage" sub="Every disk of this server.">{#snippet actions()}<Button variant="primary" icon="plus">Add disks</Button>{/snippet}</PageHeader></div>
+    <Entry name="Breadcrumbs" text="The parents of a page, each a link; the shell derives them from the tree.">
+      <div class="cell wide"><small>a disk page</small><Breadcrumbs items={[{ label: 'homeserver', path: '/' }, { label: 'Storage', path: '/storage' }, { label: 'Disks', path: '/storage/disks' }]} /></div>
+      <div class="cell"><small>a page with no place in the tree</small><Breadcrumbs items={[{ label: 'homeserver', path: '/' }]} /></div>
+    </Entry>
+
+    <Entry from="shell" name="PageHeader" text="Breadcrumb (derived from the tree), title, subtitle and the actions.">
+      <div class="cell wide box"><PageHeader title="Disks" sub="Every disk of this server.">{#snippet actions()}<Button variant="primary" icon="plus">Add disks</Button>{/snippet}</PageHeader></div>
     </Entry>
 
     <Entry from="shell" name="PageState" text="Loading, error with and without old data, empty, content.">

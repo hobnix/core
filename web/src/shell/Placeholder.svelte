@@ -1,12 +1,13 @@
 <script>
   import { route } from '../route.svelte.js';
   import { titleOf } from '../nav.js';
+  import PageTrail from './PageTrail.svelte';
 
   const trail = $derived(titleOf(route.path));
 </script>
 
 <div class="page">
-  <div class="crumb">{trail ? trail.slice(0, -1).join(' / ') : ''}</div>
+  <PageTrail />
   <h3 style="margin:0">{trail ? trail[trail.length - 1] : 'Page not found'}</h3>
   <div class="card elev-sm" style="max-width:520px">
     <div style="display:flex;gap:10px;align-items:flex-start">
@@ -20,6 +21,5 @@
 
 <style>
   .page { display: flex; flex-direction: column; gap: 14px; }
-  .crumb { font-size: 11px; color: var(--color-neutral-500); min-height: 14px; }
   h3 { font-size: 20px; }
 </style>

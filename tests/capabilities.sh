@@ -29,9 +29,15 @@ for n in names:
     for v in m.get('variants', []):
         if not os.path.exists(os.path.join(root, 'scripts', 'providers', pdir, v + '.sh')): print('%s: variant %s has no scripts/providers/%s/%s.sh' % (n, v, pdir, v))
     if 'requires_core' in m and not re.fullmatch(r'>=[0-9]+', str(m['requires_core'])): print('%s: requires_core must look like ">=1"' % n)
+    if 'options' in m:
+        of = os.path.join(cdir, n, str(m['options']))
+        if not os.path.exists(of): print('%s: options = %s is missing' % (n, m['options']))
+        else:
+            for it in tomllib.load(open(of, 'rb')).get('item', []):
+                if it.get('capability') != n: print('%s: option %s in %s carries capability %r' % (n, it.get('key'), m['options'], it.get('capability')))
     if 'extension' in m and not isinstance(m['extension'], bool): print('%s: extension must be true or false' % n)
     if m.get('extension') and not os.path.exists(os.path.join(cdir, n, 'commands.tsv')): print('%s: an extension package needs a commands.tsv' % n)
-    if os.path.exists(os.path.join(cdir, n, 'commands.tsv')) and not m.get('extension'): print('%s: commands.tsv without extension = true' % n)
+    if os.path.exists(os.path.join(cdir, n, 'commands.tsv')) and not m.get('extension') and not m.get('words'): print('%s: commands.tsv without extension = true' % n)
     if os.path.exists(os.path.join(cdir, n, 'module.nix')) and m.get('nix') != 'module.nix': print('%s: module.nix exists but the manifest does not say nix = "module.nix"' % n)
 EOF
 ) || bad="the manifest check itself failed: $bad"

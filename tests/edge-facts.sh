@@ -108,7 +108,7 @@ printf 'example.org\thttps://example.org\t200\t%s\ndown.example.org\thttps://dow
 
 echo "-- registry"
 T=$'\t'
-reg=$SCRIPTS/lib/registry.tsv
+reg=$SCRIPTS/../capabilities/edge-status/commands.tsv   # the rows live in the package (words = ["edge"])
 check "row: sys edge status" grep -q "^sys${T}sys edge status${T}edge-status.sh${T}" "$reg"
 check "row: edge health" grep -q "^user${T}edge health${T}edge-health.sh${T}" "$reg"
 check "the facts library is python3 only (no jq call)" test -z "$(grep -nE "run\(.jq|jq -" "$SCRIPTS/lib/edge_facts.py" || true)"

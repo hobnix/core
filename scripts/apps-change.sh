@@ -51,30 +51,30 @@ case "$action" in retry|cleanup) exec bash "${HS_APPS_RECOVER:-$here/apps-recove
 case "$action" in update) exec bash "${HS_APPS_VERSION:-$here/apps-version.sh}" "$verb" update "${@:3}" ;; esac   # the update plan (step 12, #470)
 case "$action" in remove) exec bash "${HS_APPS_REMOVE:-$here/apps-remove.sh}" "$verb" remove "${@:3}" ;; esac   # Remove with keep/delete data (step 11, #466)
 [ "$action" = install ] || refuse_code action.unknown "unknown action (install, retry, cleanup, remove, update)"
-[[ "$name" =~ $word ]] || refuse "not a package name (lower case letters, digits and dashes)"
+[[ "$name" =~ $word ]] || refuse_code name.invalid "not a package name (lower case letters, digits and dashes)"
 shift 3 || true
 
 repo="" tag="" ct="" ask_again=false from="" from_phase="" by="" role="" confirm=""
 declare -A given=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo)    [ $# -ge 2 ] && [[ "$2" =~ $word ]] || refuse "--repo needs a repository name"; repo=$2; shift 2 ;;
-    --tag)     [ $# -ge 2 ] && [[ "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]{1,20})?$ ]] || refuse "--tag needs a release tag like v1.2.0"; tag=$2; shift 2 ;;
-    --name)    [ $# -ge 2 ] && [[ "$2" =~ $word ]] || refuse "'${2:-}' is not a container name (lower-case letters, digits and dashes)"; ct=$2; shift 2 ;;
+    --repo)    [ $# -ge 2 ] && [[ "$2" =~ $word ]] || refuse_code apps.repo-invalid "--repo needs a repository name"; repo=$2; shift 2 ;;
+    --tag)     [ $# -ge 2 ] && [[ "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]{1,20})?$ ]] || refuse_code apps.tag-invalid "--tag needs a release tag like v1.2.0"; tag=$2; shift 2 ;;
+    --name)    [ $# -ge 2 ] && [[ "$2" =~ $word ]] || refuse_code name.invalid "'${2:-}' is not a container name (lower-case letters, digits and dashes)"; ct=$2; shift 2 ;;
     --ask)     ask_again=true; shift ;;
-    --from)    [ $# -ge 2 ] || refuse "--from needs a step"
+    --from)    [ $# -ge 2 ] || refuse_code apps.from-missing "--from needs a step"
                if [[ "$2" =~ ^run:([a-z0-9][a-z0-9-]{0,30})$ ]]; then from=run; from_phase=${BASH_REMATCH[1]}   # a recipe phase: that phase and the ones after it
-               else [[ " ${steps_all[*]} " == *" $2 "* ]] || refuse "--from names one of: ${steps_all[*]}, run:<phase>"; from=$2; fi
+               else [[ " ${steps_all[*]} " == *" $2 "* ]] || refuse_code apps.from-invalid "--from names one of: ${steps_all[*]}, run:<phase>"; from=$2; fi
                shift 2 ;;
-    --by)      [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse "--by needs a user name"; by=$2; shift 2 ;;
-    --role)    [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse "--role needs a role"; role=$2; shift 2 ;;
+    --by)      [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse_code apps.by-invalid "--by needs a user name"; by=$2; shift 2 ;;
+    --role)    [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse_code apps.role-invalid "--role needs a role"; role=$2; shift 2 ;;
     --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
-    --set)     [ $# -ge 2 ] && [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse "--set needs KEY=value"
+    --set)     [ $# -ge 2 ] && [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse_code apps.set-invalid "--set needs KEY=value"
                given[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ "$verb" = plan ] || [ -n "$tag" ] || refuse "start needs --tag <the tag of the plan>: the job installs the release the plan showed, not whatever is newest"
+[ "$verb" = plan ] || [ -n "$tag" ] || refuse_code apps.tag-missing "start needs --tag <the tag of the plan>: the job installs the release the plan showed, not whatever is newest"
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
@@ -83,40 +83,41 @@ unset HS_GUIDED_TTY
 rcs=0; show=$(bash "$pkg" --show "$name" ${repo:+--repo "$repo"} 2>/dev/null </dev/null) || rcs=$?
 if [ "$rcs" -ne 0 ] || ! grep -q $'^status\tok' <<<"$show"; then
   why=$(awk -F'\t' '$1=="reason"{print $2; exit}' <<<"$show")
-  refuse "${why:-$name has no verified release (hs pkg fetch reads the repositories again)}"
+  refuse_code apps.no-release "${why:-$name has no verified release (hs pkg fetch reads the repositories again)}"
 fi
 sv() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' <<<"$show"; }
 kind=$(sv kind); srepo=$(sv repo); version=$(sv version); stag=$(sv tag); title=$(sv title); desc=$(sv description)
 needs_csv=$(sv needs); input=$(sv input)
-[ -z "$repo" ] || [ "$repo" = "$srepo" ] || refuse "$name is not in the repository $repo"
+[ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
+[ -z "$repo" ] || [ "$repo" = "$srepo" ] || refuse_code apps.not-in-repo "$name is not in the repository $repo"
 if [ -n "$tag" ] && [ "$tag" != "$stag" ]; then
-  refuse "The release moved: the plan showed $tag but the newest verified release is $stag now. Read the plan again."
+  refuse_code plan.changed "The release moved: the plan showed $tag but the newest verified release is $stag now. Read the plan again."
 fi
 tag=$stag; repo=$srepo
 mapfile -t jsteps < <(awk -F'\t' '$1=="step"{print $2}' <<<"$show")
-[ ${#jsteps[@]} -gt 0 ] || refuse "the release names no steps"
-[ -z "$from" ] || [[ " ${jsteps[*]} " == *" $from "* ]] || refuse "--from $from is not a step of $name (${jsteps[*]})"
+[ ${#jsteps[@]} -gt 0 ] || refuse_code apps.no-steps "the release names no steps"
+[ -z "$from" ] || [[ " ${jsteps[*]} " == *" $from "* ]] || refuse_code apps.from-invalid "--from $from is not a step of $name (${jsteps[*]})"
 
 market_row=$(bash "$pkg" --market 2>/dev/null </dev/null | awk -F'\t' -v n="$name" -v r="$repo" '$1 == n && $3 == r { print; exit }' || true)
 mstate=$(cut -f6 <<<"$market_row"); minst=$(cut -f5 <<<"$market_row")
 [ -z "$market_row" ] || case "$mstate" in
-  waits)  refuse "$name $version needs a newer core than this server has: hs update first" ;;
-  update) refuse "$name is installed (version $minst) and a newer release is out: update it instead" ;;
+  waits)  refuse_code apps.needs-newer-core "$name $version needs a newer core than this server has: hs update first" ;;
+  update) refuse_code apps.update-available "$name is installed (version $minst) and a newer release is out: update it instead" ;;
 esac
 have_copy=false; { [ -n "$market_row" ] && [ "$minst" != - ]; } && have_copy=true
-if $have_copy && [ "$kind" != recipe ] && [ "$verb" != run ]; then refuse "$name is installed already (version $minst): an extension or capability is switched on from its own page"; fi
+if $have_copy && [ "$kind" != recipe ] && [ "$verb" != run ]; then refuse_code apps.installed "$name is installed already (version $minst): an extension or capability is switched on from its own page"; fi
 if [ "$kind" = recipe ]; then
-  [ "$input" != terminal ] || refuse "$name needs a person at a terminal (a password is typed into the setup): hs pkg install $name, then hs recipe $name"
+  [ "$input" != terminal ] || refuse_code apps.needs-terminal "$name needs a person at a terminal (a password is typed into the setup): hs pkg install $name, then hs recipe $name"
 elif [ -n "$ct" ] || [ ${#given[@]} -gt 0 ]; then
-  refuse "$name is an $kind: it takes no container name and no answers"
+  refuse_code apps.takes-no-name "$name is an $kind: it takes no container name and no answers"
 fi
 
 # several instances (D16, #471): only a package that says `instances = "many"` may have more than the one named after it; the name is checked here
 if [ "$kind" = recipe ] && [ -n "$ct" ] && [ "$ct" != "$name" ]; then
-  [ "$(sv instances)" = many ] || refuse "$name runs once on a server: its package does not allow a second instance (--name $ct)"
-  [[ "$ct" =~ ^$name-[a-z0-9][a-z0-9-]*$ ]] && [ ${#ct} -le 40 ] || refuse "an instance of $name is named $name-<word> (lower case letters, digits and dashes, at most 40 characters): '$ct' does not fit"
+  [ "$(sv instances)" = many ] || refuse_code apps.single-instance "$name runs once on a server: its package does not allow a second instance (--name $ct)"
+  [[ "$ct" =~ ^$name-[a-z0-9][a-z0-9-]*$ ]] && [ ${#ct} -le 40 ] || refuse_code name.invalid "an instance of $name is named $name-<word> (lower case letters, digits and dashes, at most 40 characters): '$ct' does not fit"
   if "$incus" info "$ct" >/dev/null 2>&1 || [ -e "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}/$ct.toml" ]; then
-    refuse "the name $ct is taken already by an instance or a service: choose another word"
+    refuse_code apps.name-taken "the name $ct is taken already by an instance or a service: choose another word"
   fi
 fi
 
@@ -132,9 +133,9 @@ active() { local w; w=$(unfield "${aw[$1]}"); [ -z "$w" ] && return 0; [ "$(valu
 for k in "${!given[@]}"; do
   found=false
   for i in "${!ak[@]}"; do [ "${ak[$i]}" = "$k" ] && [ "${at[$i]}" != secret ] && found=true; done
-  if [[ "$k" =~ ^PUBLIC_NAME_[A-Z0-9_]+$ ]]; then [[ "${given[$k]}" =~ ^($a_fqdn)$ ]] || refuse "the answer to $k is not a host name (like media.example.org)"; found=true
-  elif [[ "$k" =~ ^(DASH|PUBLIC)_[A-Z0-9_]+$ ]]; then [[ "${given[$k]}" =~ ^(yes|no)$ ]] || refuse "the answer to $k must be yes or no"; found=true; fi
-  $found || refuse "$name does not ask '$k'"
+  if [[ "$k" =~ ^PUBLIC_NAME_[A-Z0-9_]+$ ]]; then [[ "${given[$k]}" =~ ^($a_fqdn)$ ]] || refuse_code apps.answer-invalid "the answer to $k is not a host name (like media.example.org)"; found=true
+  elif [[ "$k" =~ ^(DASH|PUBLIC)_[A-Z0-9_]+$ ]]; then [[ "${given[$k]}" =~ ^(yes|no)$ ]] || refuse_code apps.answer-invalid "the answer to $k must be yes or no"; found=true; fi
+  $found || refuse_code apps.answer-unknown "$name does not ask '$k'"
 done
 secret_key="" secret_label="" open_q=0
 for i in "${!ak[@]}"; do
@@ -144,10 +145,10 @@ for i in "${!ak[@]}"; do
   v=$(value_of "$k")
   if [ -z "$v" ]; then open_q=$((open_q + 1)); continue; fi
   case "$t" in
-    choice) [[ ",${ach[$i]}," == *",$v,"* ]] || refuse "'$v' is not one of: ${ach[$i]} ($k)" ;;
-    *) pat=$(unfield "${ap[$i]}"); [[ "$v" =~ ^(${pat:-.*})$ ]] || refuse "the answer to $k does not fit ($k)" ;;
+    choice) [[ ",${ach[$i]}," == *",$v,"* ]] || refuse_code apps.answer-invalid "'$v' is not one of: ${ach[$i]} ($k)" ;;
+    *) pat=$(unfield "${ap[$i]}"); [[ "$v" =~ ^(${pat:-.*})$ ]] || refuse_code apps.answer-invalid "the answer to $k does not fit ($k)" ;;
   esac
-  [[ "$v" != *[[:cntrl:]]* ]] || refuse "the answer to $k has a control character"
+  [[ "$v" != *[[:cntrl:]]* ]] || refuse_code apps.answer-invalid "the answer to $k has a control character"
 done
 
 # ── needs (D5): present or missing, and what is done about it ──
@@ -163,26 +164,26 @@ if [ "$kind" = recipe ] && [ -n "$needs_csv" ] && [ "$needs_csv" != - ]; then
       tailscale)
         if awk -F'\t' '$1=="tailscale" && $2=="on" { f=1 } END { exit !f }' < <(bash "$parts" --list 2>/dev/null </dev/null); then need_lines+=("need	tailscale	present	Tailscale is on already.	no")
         else need_tailscale=true; rebuild_need=true; need_lines+=("need	tailscale	missing	Tailscale is switched on and the server is rebuilt (a few minutes to half an hour).	yes"); fi ;;
-      *) refuse "$name needs '$n', which this server does not know how to provide" ;;
+      *) refuse_code apps.need-unknown "$name needs '$n', which this server does not know how to provide" ;;
     esac
   done
 elif [ "$kind" != recipe ] && [ -n "$needs_csv" ] && [ "$needs_csv" != - ]; then
   IFS=, read -ra nl <<<"$needs_csv"
   for n in "${nl[@]}"; do
     awk -F'\t' -v n="$n" '$1==n && $2=="on" { f=1 } END { exit !f }' < <(bash "$parts" --list 2>/dev/null </dev/null) \
-      || refuse "$name requires $n: switch $n on first (hs sys pkg bundle plan $name installs and switches on everything it requires)"
+      || refuse_code apps.need-off "$name requires $n: switch $n on first (hs sys pkg bundle plan $name installs and switches on everything it requires)"
     need_lines+=("need	$n	present	$n is on already.	no")
   done
 fi
 if $need_tailscale || [ "$kind" = capability ]; then
-  [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
+  [ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse_code apps.storage-locked "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
 fi
 if [[ " ${jsteps[*]} " == *" rebuild "* ]]; then rebuild_need=true; fi
 net_ok() { case "${HS_BUNDLE_NET:-}" in ok) return 0 ;; fail) return 1 ;; esac; . "$here/lib/netcheck.sh"; netcheck_ok >/dev/null 2>&1; }
 if $rebuild_need; then
-  net_ok || refuse "This needs the network (the rebuild reads the binary cache)."
+  net_ok || refuse_code apps.no-network "This needs the network (the rebuild reads the binary cache)."
 fi
-if $need_docker && [ "$name" = docker ]; then refuse "docker is the core recipe itself: install it from Docker, not as a need of itself"; fi
+if $need_docker && [ "$name" = docker ]; then refuse_code apps.docker-self "docker is the core recipe itself: install it from Docker, not as a need of itself"; fi
 
 # a package of an ADDED repository runs as root: the typed name (same rule as pkg-change.sh)
 red=""
@@ -192,7 +193,7 @@ if [ "$(bash "$pkg" --repos 2>/dev/null </dev/null | awk -F'\t' -v r="$repo" '$1
 secret=""
 if [ -n "$secret_key" ] && [ "$verb" = start ]; then
   IFS= read -r -t 3 secret || true
-  [[ "$secret" != *[[:cntrl:]]* ]] || refuse "the secret has a control character"
+  [[ "$secret" != *[[:cntrl:]]* ]] || refuse_code apps.secret-invalid "the secret has a control character"
 fi
 
 # ── the job body ──

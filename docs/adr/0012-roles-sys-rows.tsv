@@ -41,6 +41,9 @@ recipes versions	viewer	read
 setup list	viewer	read
 setup plan <action>	admin	plan
 setup start <action>	admin	start
+blueprint list	viewer	read
+blueprint plan <action>	admin	plan
+blueprint start <action>	admin	start
 preset list	viewer	read
 preset plan <action>	admin	plan
 preset start <action>	admin	start
@@ -130,7 +133,6 @@ parts plan <action>	admin	plan
 parts start <action>	admin	start
 node start <action>	admin	start
 node remote	admin	read
-edge status	admin	read
 notify channels	viewer	read
 notify channel <name>	viewer	read
 notify providers	viewer	read
@@ -218,6 +220,9 @@ vault usage	admin	read
 vault uses	admin	read
 remote list	admin	read
 remote mount-all	admin	change
+remote codes	admin	read
+remote claim	admin	read
+remote accept	admin	read
 ups status	viewer	read
 expiry list	viewer	read
 expiry plan <action>	admin	plan
@@ -255,6 +260,7 @@ live check	viewer	read
 ext list	admin	read
 ext status	admin	read
 pkg list	admin	read
+pkg index	viewer	read
 pkg available	admin	read
 pkg market	admin	read
 pkg show <name>	admin	read
@@ -293,3 +299,4 @@ incident start <action>	admin	start
 testlab results	viewer	read
 testlab plan <action>	admin	plan
 testlab start <action>	admin	start
+edge status	admin	read

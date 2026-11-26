@@ -581,4 +581,11 @@ fm ls pool:nope; check_eq "ls of a pool that is no row: refused" 1 "$rc"; has "u
 fm pair pool:tank pool:ssd; has "^status${T}ok" && pass "pair of two pools is ok" || fail "pair pools: $out"
 rm -f "$HS_MACHINE_FILE"; unset HS_POOLS_ROOT; _HS_POOLS_LOADED=
 
+echo "-- coded refusals"
+coded() {   # coded <what> <code> <output>: the refusal carries the code and the catalogue knows it
+  check_match "$1 is refused with $2" "code.$2" "$3"
+  check "$2 is in the catalogue" bash -c "python3 '$SCRIPTS/errors-doc-gen.py' codes | grep -qxF '$2'"
+}
+out=$(HS_PLAIN=1 bash "$SCRIPTS/fm.sh" plan nosuchop 2>/dev/null </dev/null || true); coded "an unknown operation" action.unknown "$out"
+out=$(HS_PLAIN=1 bash "$SCRIPTS/fm.sh" progress nojob 2>/dev/null </dev/null || true); coded "a unit that is no file manager job" job.unknown "$out"
 finish

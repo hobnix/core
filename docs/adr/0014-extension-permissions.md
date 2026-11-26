@@ -95,21 +95,26 @@ service could not emit, roll up, read an integration key or even start under the
 | From the package | systemd property |
 | --- | --- |
 | always | `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=` (none), `PrivateDevices=yes`, `ReadWritePaths=-/var/lib/hs/ext-svc` |
+| always (hardening, ADR 0031 decision 5) | `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectControlGroups`, `ProtectClock`, `ProtectHostname`, `RestrictNamespaces`, `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality` (all `yes`), `SystemCallArchitectures=native`, `SystemCallFilter=~@mount @swap @reboot @module @raw-io @cpu-emulation @debug @obsolete` with `SystemCallErrorNumber=EPERM`, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK` (unix sockets and the network stay: `net` is not filtered, no `IPAddressAllow`; netlink for `ip` and `hs` tools). Not set, because a violation is invisible before a hardware run: the allow list `SystemCallFilter=@system-service` (a call outside it kills the process with SIGSYS and no message), `ProtectProc=invisible` and `ProcSubset=pid` (`hs` and tools read /proc), `MemoryDenyWriteExecute` (Python). Riskiest of the set: `RestrictNamespaces` and the syscall filter; the hardware test runs a real service and a confined command. |
 | `fs.write:<path>` | `ReadWritePaths=-<path>` (and nothing else is writable) |
 | `fs.read:<path>` | `ReadOnlyPaths=-<path>` |
 | `devices:gpu` | `PrivateDevices=no`, `DevicePolicy=closed`, `DeviceAllow=char-drm rw` |
 | `net:<x>` | nothing: declared only (D6); a comment in the drop-in |
+| dynamic user (`ext_confine.properties(..., dynamic=True)`, `--dynamic`; every extension service, #1134. Not tested on hardware yet) | `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters), `StateDirectory=hs-ext/<name>`, `StateDirectoryMode=0700`, `UMask=0077`, no `BindPaths` of the state (the unit uses it at `/var/lib/hs-ext/<name>`, `$STATE_DIRECTORY`); `devices:gpu` adds `SupplementaryGroups=render video` |
+| dynamic user, `fs.read:<path>` of server state or of another extension | refused with `ext.dynamic-read` |
+| dynamic user, `fs.write:<path>` | only below `/var/lib/hs/<name>` (no line: its StateDirectory covers it); anything else is refused with `ext.dynamic-write` |
 | no `permissions` | the "always" row only, plus a warning |
 
-What it does NOT cover (say so wherever confinement is mentioned): the service still runs as root and the file system stays readable except the secret locations
+What it does NOT cover (say so wherever confinement is mentioned): the file system stays readable (for a service, which runs as its own user `hsx-<name>` since #1134, as far as the file modes allow; Not tested on hardware yet) except the secret locations
 (since #947: `/var/lib/hs` is an empty tmpfs apart from the granted `ext`, `ext-svc` and own-name (`/var/lib/hs/<package>`) state, `/root`, `/etc/shadow`, `/etc/gshadow`, `/etc/ssh` and `/etc/nixos` are inaccessible, and an `fs.read` or `fs.write` that overlaps them, or an `fs.write` below `/etc`, `/boot` or `/nix`, is refused; everything else is only read only); the network is open whatever `net` says; `host`, `secrets`
-and `events.*` are not systemd's business; a service can still reach the `incus` socket and the host's other sockets; the `ext.service-failed`
+and `events.*` are not systemd's business; no host socket is hidden (a service reaches what its user may open); the `ext.service-failed`
 event is written by the bridge, which is no longer confined (#1130). Commands are not confined unless a row opts in (below). Not tested on hardware yet: the units are only evaluated in CI (#1130: the transient unit, `LoadCredential` and the stop of the transient unit by the bridge were not run),
 the VM stage `confine` (scripts/dev/nested_stages.py) is written but has not been run.
 
 ## Step 3 as built: opt-in confinement of commands (2026-11-18, docs/PLAN-extensions-access.md step 11, #239 d)
 A row of `commands.tsv` with the flag `confine` is run by the dispatcher (scripts/lib/ext_proto.py) through `systemd-run --pipe --wait` with the
-same properties as a service (`ext_confine.properties`, one mapping). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
+same properties as a service (`ext_confine.properties`, one mapping). Since #1134 that is the dynamic mapping above: the command runs as `hsx-<name>`, not
+as root, writes only `/var/lib/hs/<name>`, and the state folder is prepared first like for a service (a problem: exit 69, no run). It needs `protocol = [1]` and `permissions` (validated in scripts/lib/pkg_protocol.py);
 at run time no `systemd-run`, no `permissions` or a bad path means exit 69 and no run. The install and update prompts print what it covers and what it
-does not (reads, network, `hs`/`incus`/`systemctl`, secrets). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
+does not (reads as far as the file modes allow, network, `hs`/`incus`/`systemctl` are not blocked). Other commands stay root and unconfined; a broker stays undecided (D7). Not tested on
 hardware yet: the real `systemd-run` was not run, and whether SIGTERM to the runner stops the transient unit (cancel, timeout) is unverified.

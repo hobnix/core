@@ -2,167 +2,74 @@
 
 # Hobnix
 
-A NixOS home server you can read: Incus containers on ZFS, Samba shares, backups, a web interface and one command, `hs`, to run it all.
-This is the server repository. Apps (recipes) and optional parts (extensions) are packages in their own repositories,
-[recipes](https://github.com/hobnix/recipes) and [extensions](https://github.com/hobnix/extensions);
-`hs pkg` installs them from signed releases.
+A NixOS home server you can read: apps in Incus containers, shares, backups, a web interface and one command, `hs`, to run it all.
+Status: beta. What was not run on real hardware is marked "Not tested on hardware yet." in the guides and is not promised here.
 
 ## Who Hobnix is for
 
 Hobnix is for people who run a home server today, for example with Unraid, and want apps, shares and backups on a system they can read and
-rebuild. It is a home NAS with apps first, not a virtualization platform.
+rebuild. It is a home NAS with apps first, not a virtualization platform. Every update is a NixOS generation, the server is one repository
+with one `machine.toml`, and every change shows a plan first; a destructive one asks you to type the name. It does not do clusters with
+shared state, high availability or live migration (ADR 0013).
 
-What Hobnix does better than Unraid and Proxmox:
+## Three repositories
 
-1. **Roll back the whole system**, not one app. Every update is a NixOS generation. Not tested on hardware yet.
-2. **Rebuild the server from a backup disk and a passphrase.** Not tested on hardware yet.
-3. **The server is a readable git repository.** One `machine.toml`; every change shows a plan first, and a destructive one asks you to type the name.
+| Repository | What is in it |
+| --- | --- |
+| [hobnix/core](https://github.com/hobnix/core) (this one) | The framework: the `hs` command, the web interface, the installer, the package client and the Nix glue. The core does not decide which capabilities a server has. |
+| [hobnix/official](https://github.com/hobnix/official) | The packages the project maintains: apps (recipes), optional parts (extensions), capabilities and blueprints. `kind` in each package tells them apart. |
+| [hobnix/community](https://github.com/hobnix/community) | Packages from other people, reviewed, with a lower trust tier. |
 
-What it does not do before 1.0: clusters with shared state, high availability, live migration. One server, or a few servers that each
-stay the owner of their own things (ADR 0013).
+`hobnix/recipes`, `hobnix/extensions` and `hobnix/capabilities` are retired into `official`; a server that recorded packages from them moves
+them over by itself (`hs pkg repo migrate`, also run by `hs update`). Design: [docs/PLAN-registry.md](docs/PLAN-registry.md).
 
-NixOS + Incus + ZFS home server configuration, shared between machines.
-Each server keeps its own `machine.toml` and `hardware-configuration.nix`
-(both git-ignored); everything else comes from this repo.
+## How packages reach a server
 
-> Deutsch: Die ausführlichen Anleitungen (Installation, Container, Pelican)
-> liegen im Ordner `docs/`. Für einen neuen Server: Abschnitt "New server" unten.
+- Each repository publishes a signed `index.json`. The server checks the signature and the hash of each package folder; neither the host
+  of the index nor the git host is trusted. The default repository is served from `packages.hobnix.dev` (live, signed). Servers on v0.12 keep the old
+  rows in `config/package-repos.toml` until they update. See PLAN-registry.
+- `hs pkg refresh` fetches the index (a daily timer does it too). `hs pkg fetch` updates the package repositories, `hs pkg available` shows
+  what they offer, `hs pkg install <name>` installs one, `hs pkg update <name>` updates one at a time, and `hs pkg list` and
+  `hs pkg updates` show what is installed and what is newer. `hs pkg repo add <name> <url> --key <allowed_signers file>` adds a
+  third-party repository.
+- `hs update` pulls this repository, refreshes the indexes and rebuilds.
+- A blueprint is a package that lists other packages and presets. You choose one at install time (`--blueprint <name>`, `hs blueprint list`);
+  nothing that was not chosen is installed. See [Install](docs/install.md).
+- Writing a package: [Apps and containers](docs/containers-and-apps.md), [Extensions SDK](docs/extensions-sdk.md), `hs pkg new`.
+
+Seen on one real server: installing and updating packages from the official index. Not tested on hardware yet: a community or third-party
+repository.
+
+## Install and use
+
+- First install, or moving an existing `/etc/nixos` into a repository: [docs/install.md](docs/install.md).
+- Daily work: change `machine.toml`, then `hs update` to pull and rebuild, or `hs rebuild` to apply local changes only.
+- `hs help` lists every command (`scripts/lib/registry.tsv` is the one list). `hs` alone opens the full-screen interface.
+
+## Documentation
+
+All guides are in [docs/](docs/README.md): [Install](docs/install.md), [Apps and containers](docs/containers-and-apps.md),
+[Storage and disks](docs/storage-and-disks.md), [Users and shares](docs/users-and-shares.md), [Backup and recovery](docs/backup-and-recovery.md),
+[Operations](docs/operations.md), [Web interface](docs/web-interface.md). Release notes: `docs/RELEASE-NOTES-*.md`.
+
+## Build and test the core
+
+See [docs/dev-environment.md](docs/dev-environment.md). In short: `scripts/dev/t list` names the tests and `scripts/dev/t quick [name...]` runs
+them quietly. Generated files (`config/defaults.nix`, `machine.toml.example`, ...) come from `config/schema.toml` through
+`python3 scripts/schema-gen.py write`; do not edit them by hand. A new command needs a row in `scripts/lib/registry.tsv`.
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `configuration.nix` | Shared system config (ZFS, Incus, Samba, ...) |
-| `install.nix` | Minimal config for the first installation, before the ZFS pools exist |
-| `machine.toml.example` | Template for per-machine values (NIC, SSH keys, VLANs, ...), every option explained |
-| `machine.toml` | Your values in the layout of the template, **not committed** (`diff machine.toml machine.toml.example` shows just your values) |
-| `hardware-configuration.nix` | Generated by the installer, **not committed** |
-| `scripts/` | Helper scripts, available as `hs <command>` |
-| `pkgs/` | Packages that are not in nixpkgs: `hs-web`, the web interface |
-| `docs/` | Step-by-step guides in German (installation, containers, Pelican) |
+| `configuration.nix`, `install.nix` | Shared system config, and the minimal config for the first installation |
+| `machine.toml.example` | Template for per-machine values, every option explained. `machine.toml` and `hardware-configuration.nix` are yours and not committed |
+| `scripts/` | The commands, available as `hs <command>` |
+| `config/` | Schema, defaults and the package repository list |
+| `pkgs/`, `web/` | Packages that are not in nixpkgs, and the web interface |
+| `docs/` | The guides, plans and decisions |
 
-## Language
-
-The `hs` commands print English only (ADR 0025). The web interface is translated (`web/src/i18n.js`); `language` in `machine.toml`
-(`en` or `de`) only sets its default, and each browser can choose its own. `HS_LANG` is accepted and ignored. German command
-descriptions stay in `# help.de:` for the German cheat sheet (`hs cheatsheet`).
-
-## Helper commands
-
-Run `hs help` to list everything with arguments. Every script in `scripts/`
-becomes a command after the next `rebuild`. Plain `hs` (no command) shows this list.
-
-| Command | What it does |
-| --- | --- |
-| `hs status` | Containers with state, IPv4 and pinned MAC |
-| `hs monitor [--plain]` | Tabs Overview and Disks: CPU, memory, problems, pools, and every disk with role, temperature and health |
-| `hs mac [name...]` | Pin the current MAC (all containers, or the ones given) |
-| `hs ct list` | Tab Containers: containers and VMs with CPU and memory use. Edit mode: create, change limits, start/stop, delete, snapshots, update, attach storage, fixed IP |
-| `hs ct add <name> [--docker] [--ram MB] [--profile VLAN]` | Create a Debian 13 container and pin its MAC |
-| `hs update` | `git pull` in `/etc/nixos`, then rebuild |
-| `hs rebuild` | Apply local changes without pulling (`rebuild` is a shortcut) |
-| `hs share add <name> [--sensitive] [--ct <container> <path>]` | Create a dataset under `/bulk/shares` (read/write over Samba) or `/bulk/sensitive` (read-only), publish it as its own Samba share, optionally mount it into a container |
-| `hs pool <pool> add\|replace\|remove\|convert [--dry-run]` | Tab Disks. Edit mode (pools, free disks, plan): choose `fast` or `bulk`, pick disks; `m` switches between add, replace and remove. ZFS: mirror pairs; snapraid: single data and parity disks (`--encrypt` makes new disks LUKS and new pools ZFS-encrypted; `--role adopt` keeps the files of disks that already hold an xfs/ext4/btrfs filesystem, e.g. from Unraid, and moves each folder into `shares/` as its own share named after the disk, e.g. `data-02-media`; `--merge` joins same-named folders instead). The plan is shown first, the pool name confirms |
-| `hs pool bulk sync [--force] [--scrub]` | `bulkType = "snapraid"` only: update the parity now (also runs three times a day), or verify part of the data |
-| `hs share <share> cache on\|off` | `bulkType = "snapraid"` only: per-share upload cache on the SSD pool. New files sit on the mirror until `hs cache-mover` moves them to the disks right before a sync, so they are never unprotected. Also `c` in `hs` |
-| `hs cache-mover [share] [--now] [--if-full]` | Move cached uploads to the data disks now (runs before every sync, and every 15 minutes when the cache is 80 % full) |
-| `hs` | The full-screen interface, one tab per area: overview, pools, disks, users, shares, containers, backup, jobs, commands (the problems are always shown, `f` opens the fix list, `?` shows the keys, `U` unlocks encrypted storage, `/` filters a list). Every tab opens in view mode; `e` switches to edit mode, esc back, digits switch tabs. The commands below open it on their tab |
-| `hs user list` | Tab Users: users and groups of the domain. Create and delete, set a password (typed on the terminal, straight into the domain controller), lock, group membership |
-| `hs share <share> perm` | Tab Shares: shares with size and upload cache, sortable. Edit mode: none/read/write/full per group and user, applied in one step; switch the cache; create a share; `R` renames one (`hs share <share> rename <new>`: folder on every disk, Samba share and permissions, backup switch, container mounts) |
-| `hs recipe [name]` | Install and set up a complete app in one go, each in its own container; without a name it offers a list. Running one again repairs or updates it. The first setup asks a few preferences with defaults (network, memory limit, port of the web page: 80 by default, fixed address); `--ask` asks again, `RECIPE_PORT=...` etc. set them up front. To build a server like this one: `domain` (domain controller VM + this server joined), `ntfy`, `zoraxy`, `cloudflared` (asks for the tunnel token), `docker` (Docker + Arcane); optional: `monitoring` (Prometheus on the server + Grafana in a container), `uptime-kuma`, `immich`, `jellyfin`, `arr` + `sabnzbd` + `seerr` (films and series from Usenet), `tdarr`, `pelican` |
-| `hs net setup \| check \| ip <ct> [set \| clear]` | UniFi connection (API key in a root-only file): DHCP ranges, who has an address, fixed IPs. `hs` uses it for its "Fixed IP" field |
-| `hs backup [status \| now \| list \| find <name> \| restore <snap> <path> \| browse [--off] \| verify \| drill \| offsite \| init <device> \| <share> on\|off \| ct <name> on\|off]` | Backup with restic to a disk labelled `backup`, mounted only while it runs (nightly 04:00). Shares are in by default (switch one off with `hs backup <share> off`), chosen containers are opt-in, the domain controller and host files (`machine.toml`, `/var/lib/hs`, domain join) are always in. `browse` shows the backup read-only as a Samba share |
-| `hs unlock [--status \| --setup-key \| --remove-key]` | Encrypted disks (LUKS) and encrypted ZFS pools share one passphrase. After a boot the services that need them wait; `hs unlock` asks for it, opens everything and starts them. `--setup-key` keeps the passphrase on the OS disk so the boot unlocks by itself. New disks/pools: `hs ... --encrypt`; Unraid LUKS disks can be adopted |
-| `hs migrate check [--parity <disk>]` | Before adopting the disks of an old server (Unraid): per disk the filesystem (adoptable, encrypted, not readable), data on it, SMART verdict, and whether a parity disk is large enough. Changes nothing. Guide: `docs/storage-and-disks.md` |
-| `hs disk temp [list \| mount <dev> [--rw] \| copy <name> <share> \| eject]` | A disk that already has data (hot-plug, USB, NTFS/exFAT/ext4...): mount it read-only under `/mnt/temp`, share it as `temp-<name>` (Domain Admins only), copy it into a share on the server, eject. Never formats; system and pool disks are not offered |
-| `hs config sync [--check]` | Puts `machine.toml` in the layout of `machine.toml.example`: same sections, order and comments, your values kept, new options in their place (commented out); a copy goes to `/var/lib/hs/machine.toml.before-sync`. `hs update` does this by itself and asks whether to rebuild now or stop to set the new options first |
-| `hs config check` | Parses `machine.toml`: typos, wrong types, missing options (`hs rebuild` runs it first) |
-| `hs config migrate` | Converts an old `machine.nix` to `machine.toml` (kept as `machine.nix.migrated`); `hs update` does it once by itself |
-| `hs share repair [--check] [--fix-owner]` | Publish every dataset under `/bulk/shares` and `/bulk/sensitive` that has no Samba share yet (`--check` only lists them). A folder that belongs to someone else (root, Unraid's nobody) is handed over to adminuser with all its files; `--fix-owner` does that for every share |
-| `hs disk list \| <disk> health \| <disk> test short\|long \| <disk> results` | SMART verdict per disk (OK / WATCH / BAD: pending or reallocated sectors, CRC errors, failed self-test, age, heat), details of one disk, and starting a self-test inside the disk (`long` reads the whole surface, takes hours, the disk stays usable) |
-| `hs health [test]` | List problems: unhealthy pool, missing SnapRAID disk or no parity, failing or hot disk, 90 % full, failed job, domain controller certificate about to expire. Pushes a message when the list changes (also runs every 15 minutes). `--test` sends a test message, `--dry-run` only shows |
-| `hs notify [--dry-run] <title> <message> [priority]` | Send a push message to `notifyUrl` from `machine.toml` (ntfy.sh style); without it the message only goes to the journal (`journalctl -t hs-notify`) |
-
-`hs mac` and `hs share repair` also run every night (03:30 and 03:35); see
-`journalctl -u hs-mac -u hs-sync-shares`. A scheduled job that fails sends a
-push message, if `notifyUrl` is set in `machine.toml`.
-
-New script: add `scripts/<name>.sh` with a `# help: <description>` and an optional `# args: <arguments>` line near the top,
-commit, `hs update`.
-
-## Daily workflow
-
-1. Change the config on your PC (or on the server), commit, push.
-2. On the server: `hs update`.
-
-`hs rebuild` (= `sudo nixos-rebuild switch`) applies local changes without pulling.
-
-## Setting up the repo on an existing server
-
-On the server, as `adminuser`:
-
-```bash
-# 1. SSH key for GitHub (no passphrase, server-only)
-ssh-keygen -t ed25519 -f ~/.ssh/id_github -N "" -C "homeserver"
-cat ~/.ssh/id_github.pub
-```
-
-Add the public key to the repo: GitHub → repo → Settings → Deploy keys →
-Add deploy key, tick **Allow write access** if you want to push from the server.
-
-```bash
-# 2. Tell SSH to use it for GitHub
-cat >> ~/.ssh/config << 'CFG'
-Host github.com
-    IdentityFile ~/.ssh/id_github
-CFG
-
-# 3. Clone, swap in, keep this machine's private files
-git clone git@github.com:<you>/homeserver.git ~/homeserver
-sudo mv /etc/nixos /etc/nixos.bak
-sudo mv ~/homeserver /etc/nixos
-sudo cp /etc/nixos.bak/machine.toml /etc/nixos.bak/hardware-configuration.nix /etc/nixos/
-sudo chown -R adminuser:users /etc/nixos
-
-# 4. Build from the repo
-rebuild
-```
-
-Once `rebuild` succeeds, `/etc/nixos.bak` can be deleted.
-
-## New server
-
-The full `configuration.nix` needs the ZFS pools `fast` and `bulk`, which don't
-exist on a fresh machine. So a new server is installed in two steps, without
-editing any config file in between:
-
-1. In the installer, after partitioning and mounting the OS disk at `/mnt`
-   (installation guide in `docs/`):
-
-   ```bash
-   nixos-generate-config --root /mnt
-   # copy configuration.nix, install.nix, machine.toml.example, scripts/ and pkgs/
-   # from this repo into /mnt/etc/nixos/, then:
-   cp /mnt/etc/nixos/machine.toml.example /mnt/etc/nixos/machine.toml
-   nano /mnt/etc/nixos/machine.toml          # at least hostId and sshKeys
-   NIXOS_CONFIG=/mnt/etc/nixos/install.nix nixos-install
-   nixos-enter --root /mnt -c 'passwd adminuser'
-   reboot
-   ```
-
-   `install.nix` is a minimal system: it boots, gets an address via DHCP, lets
-   `adminuser` in over SSH and can create ZFS pools. Nothing else.
-
-2. After the reboot, log in as `adminuser`, create the pools and datasets
-   (`fast/incus`, `bulk/shares`, `bulk/sensitive`), by hand or with the disk menu
-   (`sudo bash /etc/nixos/scripts/manage-pool.sh`, once per pool), then
-   switch to the full config:
-
-   ```bash
-   sudo nixos-rebuild switch
-   ```
-
-   From then on `hs rebuild` / `hs update` as usual.
+The `hs` commands print English only (ADR 0025); the web interface is translated.
 
 ## The name
 
@@ -174,9 +81,10 @@ the helper that keeps a NixOS home server running.
 
 Large parts of the code, the documentation and the tests of this repository were written with the help of AI coding assistants. The
 maintainer directs, reviews and tests the work, but not everything has been run on every kind of hardware (the guides mark what has not
-been tried yet: "noch nicht erprobt"), and AI-written code can be wrong in ways that look right. This software runs as root on your server
+been tried yet: "Not tested on hardware yet."), and AI-written code can be wrong in ways that look right. This software runs as root on your server
 and touches disks: read what it does, try it in a virtual machine first, and report what you find.
 
 ## Licence
 
-GNU Affero General Public License v3.0 or later. The packages in the two package repositories are MIT licensed.
+The core is licensed under the GNU Affero General Public License v3.0 or later. In [hobnix/official](https://github.com/hobnix/official) the
+recipes are MIT and everything else is AGPL-3.0. A community package keeps its author's licence.

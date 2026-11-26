@@ -28,6 +28,12 @@ Derived files (never edit them by hand):
 The schema is a TOML file with an ordered array of [[item]] tables:
   kind = "header"   text = the opening comment of the example
   kind = "section"  title = name of a section header line
+  kind = "include"  capability = "<name>" (optional keys = ["a", "b"]): an anchor. The options of capabilities/<name>/options.toml (the
+                    same [[item]] tables as below, each with capability = "<name>") stand at this spot, as if written here. Without
+                    `keys` it takes every option that no keyed anchor of that capability took (one such anchor per capability); with
+                    `keys` only those, so one capability can have its options in several places. Order and every generated file stay
+                    as if the options were written in schema.toml. A missing folder or file is skipped (the keys then come from the
+                    runtime overlay, once the capability is a vendored package). Every option must be placed, none may be in schema.toml too.
   kind = "option"   key, type (bool|string|int|float|list|table), required (on in the example),
                     settable (the web interface may change it), secret (value never shown),
                     doc (the comment lines above the option), value (the option line(s), without a leading "# "),
@@ -118,12 +124,74 @@ def check_page(it, what):
     die('%s: page must be one of %s or cap:<name> of a folder in capabilities/ (got %r)' % (what, ' '.join(PAGES), pg))
 
 
+def capabilities_dir(schema=None):
+    """capabilities/ beside the config/ folder of the schema (the checkout), else the one next to scripts/"""
+    beside = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(schema or SCHEMA))), 'capabilities')
+    return beside if os.path.isdir(beside) else os.path.join(ROOT, 'capabilities')
+
+
+def expand_includes(items, schema=None):
+    """The items with every kind = "include" anchor replaced by the options of capabilities/<name>/options.toml (see the docstring)."""
+    cdir = capabilities_dir(schema)
+    files, claimed, anchors = {}, {}, {}
+    for it in items:
+        if it.get('kind') != 'include':
+            continue
+        cap = it.get('capability')
+        if not (isinstance(cap, str) and re.fullmatch(r'[a-z][a-z0-9-]*', cap)):
+            die('include: capability must be a name like "tailscale" (got %r)' % (cap,))
+        keys = it.get('keys')
+        if keys is not None and not (isinstance(keys, list) and keys and all(isinstance(k, str) for k in keys)):
+            die('include %s: keys must be a non-empty list of option keys' % cap)
+        if cap not in files:
+            f = os.path.join(cdir, cap, 'options.toml')
+            files[cap] = None
+            if os.path.isfile(f):
+                try:
+                    with open(f, 'rb') as fh:
+                        files[cap] = tomllib.load(fh).get('item', [])
+                except (tomllib.TOMLDecodeError, OSError) as e:
+                    die('%s: %s' % (f, e))
+        anchors.setdefault(cap, []).append(keys)
+        if keys is not None:
+            claimed.setdefault(cap, set()).update(keys)
+    out = []
+    for it in items:
+        if it.get('kind') != 'include':
+            out.append(it)
+            continue
+        cap, keys = it['capability'], it.get('keys')
+        found = files[cap]
+        if found is None:
+            continue
+        have = [o.get('key') for o in found]
+        for o in found:
+            if not isinstance(o, dict) or o.get('kind') != 'option' or o.get('capability') != cap:
+                die('capabilities/%s/options.toml: every [[item]] must be kind = "option" with capability = "%s" (%r)' % (cap, cap, o.get('key') if isinstance(o, dict) else o))
+        if keys is None:
+            if sum(1 for a in anchors[cap] if a is None) > 1:
+                die('include %s: only one anchor without keys' % cap)
+            out.extend(o for o in found if o['key'] not in claimed.get(cap, ()))
+        else:
+            for k in keys:
+                if k not in have:
+                    die('include %s: no option %s in capabilities/%s/options.toml' % (cap, k, cap))
+            out.extend(o for o in found if o['key'] in keys)
+    for cap, found in files.items():
+        if found and None not in anchors[cap]:
+            left = [o.get('key') for o in found if o.get('key') not in claimed.get(cap, ())]
+            if left:
+                die('capabilities/%s/options.toml: not placed by any include in schema.toml: %s' % (cap, ' '.join(left)))
+    return out
+
+
 def load():
     with open(SCHEMA, 'rb') as f:
         data = tomllib.load(f)
     items = data.get('item')
     if not items:
         die('%s has no [[item]]' % SCHEMA)
+    items = expand_includes(items)
     seen = set()
     for it in items:
         kind = it.get('kind')
@@ -255,7 +323,7 @@ def overlay_rows(pkgdir):
     """Rows of the installed capability packages for the overlay capabilities.tsv (same columns as the core file). A package whose manifest is
     wrong, or that shares its name with a core capability (the core wins, nothing is shadowed), makes the whole run fail with the reason."""
     core = set(manifests())
-    rows = []
+    rows, bad = [], overlay_clashes(pkgdir)
     if os.path.isdir(pkgdir):
         for name in sorted(os.listdir(pkgdir)):
             f = os.path.join(pkgdir, name, 'capability.toml')
@@ -272,6 +340,8 @@ def overlay_rows(pkgdir):
                 die('%s: name must be %s' % (f, name))
             if name in core:
                 die('%s: %s is a core capability; a package may not shadow it' % (f, name))
+            if name in bad:
+                continue
             imp = m.get('implied_by', [])
             if not isinstance(imp, list) or not all(isinstance(x, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9]*', x) for x in imp):
                 die('%s: implied_by must be a list of setting names' % f)
@@ -296,12 +366,33 @@ def _is_capability_pkg(path):
         return False
 
 
+def overlay_clashes(pkgdir):
+    """{package: reason} for every package whose option key is a key of the core schema or of another package. The core always wins; two packages
+    that share a key are both refused, so the result does not depend on the order. A refused package brings none of its options (fail closed)."""
+    core = {o['key'] for o in options(load())}
+    owners, bad = {}, {}
+    for name, items in _overlay_items(pkgdir).items():
+        for it in items:
+            owners.setdefault(it['key'], []).append(name)
+    for key, names in owners.items():
+        for n in names:
+            other = 'core' if key in core else next((q for q in names if q != n), None)
+            if other and n not in bad:
+                bad[n] = 'option %s is also defined by %s' % (key, other)
+    return bad
+
+
 def overlay_options(pkgdir):
     """Options of the installed capability packages (options.toml named by package.toml): a list of normalised dicts, sorted by package name and
-    file order. The key of an option may not exist in the core schema nor in another package, and every [[item]] carries capability = <package>:
-    anything else makes the whole run fail with the reason (install then leaves the package inactive and the previous overlay in place)."""
-    core = {o['key'] for o in options(load())}
-    out, owner = [], {}
+    file order, without the packages that overlay_clashes refuses. Every [[item]] carries capability = <package>; any other mistake makes the whole
+    run fail with the reason (install then leaves the package inactive and the previous overlay in place)."""
+    bad = overlay_clashes(pkgdir)
+    return [o for n, items in _overlay_items(pkgdir).items() if n not in bad for o in items]
+
+
+def _overlay_items(pkgdir):
+    """{package: normalised options} of every capability package that names an options.toml, sorted by package name; clashes are not looked at"""
+    out = {}
     if not os.path.isdir(pkgdir):
         return out
     for name in sorted(os.listdir(pkgdir)):
@@ -328,10 +419,6 @@ def overlay_options(pkgdir):
                 die('%s: option key must look like gatewayPort (got %r)' % (name, key))
             if it.get('capability') != name:
                 die('%s: capability must be "%s"' % (where, name))
-            if key in core:
-                die('%s: the key is an option of the core; package %s is not activated' % (where, name))
-            if key in owner:
-                die('%s: the key is also an option of package %s; package %s is not activated' % (where, owner[key], name))
             if it.get('type') not in TYPES:
                 die('%s: type must be one of %s' % (where, '|'.join(TYPES)))
             if it.get('store', 'machine') not in ('machine', 'settings'):
@@ -350,13 +437,12 @@ def overlay_options(pkgdir):
                     re.compile(it['pattern'])
                 except re.error as e:
                     die('%s: bad pattern: %s' % (where, e))
-            owner[key] = name
             row = {k: it[k] for k in OPTION_FIELDS if k in it}
             row.setdefault('store', 'machine')
             row.setdefault('settable', False)
             row.setdefault('secret', False)
             row['capability'] = name
-            out.append(row)
+            out.setdefault(name, []).append(row)
     return out
 
 
@@ -499,6 +585,9 @@ def overlay_main(rest):
         for k in retire_package(pkgdir, rest[1], out):
             print('retired ' + k)
         return 0
+    refused = overlay_clashes(pkgdir)
+    for n, why in sorted(refused.items()):
+        print('%s: %s' % (n, why), file=sys.stderr)
     files = [('capabilities.tsv', render_overlay_tsv(pkgdir)), ('schema.overlay.json', render_overlay_schema(pkgdir)),
              ('config-keys.overlay', render_overlay_keys(pkgdir)), ('layout.overlay.json', render_overlay_layout(pkgdir))]
     core_example = opt('--example', os.path.join(ROOT, 'machine.toml.example'))
@@ -517,7 +606,7 @@ def overlay_main(rest):
     if mode == 'check':
         if stale or gone:
             print('stale (run: python3 scripts/schema-gen.py overlay write):\n  ' + '\n  '.join([os.path.join(out, n) for n, _ in stale] + ([gone] if gone else [])))
-        return 1 if stale or gone else 0
+        return 1 if stale or gone or refused else 0
     if mode != 'write':
         print('overlay: write, check, list or keys', file=sys.stderr)
         return 2
@@ -537,7 +626,7 @@ def overlay_main(rest):
             f.write(w)
         os.replace(tmp, path)
         print('wrote ' + path)
-    return 0
+    return 1 if refused else 0     # the clean packages are written; the refused ones are named on stderr
 
 
 def read(path):

@@ -314,22 +314,9 @@ value = '''
 webAccent = "#9184d9"'''
 
 [[item]]
-kind = "option"
-key = "webTailscale"
-type = "bool"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "tailscale"
-default = 'false'
-doc = '''
-# HTTPS for the web interface through Tailscale (`tailscale serve`): the page then listens on this
-# server only and is reached at https://<host>.<your-tailnet>.ts.net from devices in your tailnet;
-# the home-network port is closed. Needs once: `sudo tailscale up` on the server and "HTTPS
-# certificates" switched on in the Tailscale admin console (DNS). Default false. Needs webUi = true
-# and a rebuild.'''
-value = '''
-webTailscale = true'''
+keys = ["webTailscale"]
 
 [[item]]
 kind = "option"
@@ -610,7 +597,7 @@ default = '"/var/lib/hs/iso"'
 pattern = '^/[A-Za-z0-9._/-]{1,200}$'
 hint = "an absolute folder, e.g. /bulk/data-01/isos"
 doc = '''
-# The ISO library: the folder with the install images for virtual machines (hs iso, the Instances page). It can be a folder on a
+# The ISO library: the folder with the install images for virtual machines (hs iso, the ISO images page). It can be a folder on a
 # share or a bulk disk when the images are big. Images already in the old folder are not moved. Default "/var/lib/hs/iso".'''
 value = '''
 isoDir = "/var/lib/hs/iso"'''
@@ -632,21 +619,9 @@ value = '''
 sshOverIp = true'''
 
 [[item]]
-kind = "option"
-key = "tailscaleRouter"
-type = "bool"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "tailscale"
-default = 'false'
-doc = '''
-# Reach the home networks (admin pages, shares) from outside through Tailscale: this server
-# becomes a subnet router. Default false. After `hs rebuild` run once:
-#   sudo tailscale up --advertise-routes=10.10.95.0/24,10.10.10.95/32 --accept-dns=false
-# then approve the routes in the Tailscale admin console.'''
-value = '''
-tailscaleRouter = true'''
+keys = ["tailscaleRouter"]
 
 [[item]]
 kind = "section"
@@ -1237,6 +1212,22 @@ networkProvider = "unifi"'''
 
 [[item]]
 kind = "option"
+key = "docker"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "docker"
+store = "settings"
+choices = ["on"]
+doc = '''
+# The on switch of the capability docker (a locked container with Docker inside, and the share apps). `hs docker enable` sets it, `hs docker disable`
+# and only that removes it; `hs docker migrate` sets it on a server that has the older setting dockerManager. No rebuild.'''
+value = '''
+docker = "on"'''
+
+[[item]]
+kind = "option"
 key = "dockerManager"
 type = "string"
 required = false
@@ -1246,9 +1237,8 @@ capability = "docker"
 store = "settings"
 choices = ["webui", "arcane", "portainer", "none"]
 doc = '''
-# Which page manages Docker, when the capability docker is on: webui (the web interface of hobnix, the default of
-# `hs docker enable`; built later, until then it only records the choice), arcane, portainer, or none (Docker only).
-# `hs docker enable` sets it; setting it switches the capability docker on. Only `hs docker disable` removes it. No rebuild.'''
+# Superseded by the setting docker (the on switch); `hs docker migrate` (run by hs update) moves it there and removes this one. `hs docker enable`
+# still writes it for now, because it still installs the manager. Setting it still switches the capability docker on. No rebuild.'''
 value = '''
 dockerManager = "webui"'''
 
@@ -1674,205 +1664,20 @@ title = "Edge node (a public VPS, role = edge)"
 page = "advanced"
 
 [[item]]
-kind = "option"
-key = "edgeDomain"
-type = "string"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "edge-mail"
-default = '""'
-doc = '''
-# The mail domain this node is the MX for (the capability edge-mail). Mail for it is relayed to the mail server (edgeStalwartIp).'''
-value = '''
-edgeDomain = "example.org"'''
 
 [[item]]
-kind = "option"
-key = "edgeMxHost"
-type = "string"
-required = false
-settable = false
-secret = false
-capability = "edge-mail"
-default = '""'
-doc = '''
-# The name of the MX record and of the certificate (an A record for it must exist before the first rebuild, and the reverse DNS
-# of the VPS must match it). Not the name of the mail server behind it.'''
-value = '''
-edgeMxHost = "mx.example.org"'''
-
-[[item]]
-kind = "option"
-key = "edgeAcmeEmail"
-type = "string"
-required = false
-settable = false
-secret = false
-capability = "edge-mail"
-default = '""'
-doc = '''
-# Contact address for Let's Encrypt (the certificate of edgeMxHost is checked over port 80).'''
-value = '''
-edgeAcmeEmail = "you@example.org"'''
-
-[[item]]
-kind = "option"
-key = "edgeStalwartIp"
-type = "string"
-required = false
-settable = false
-secret = false
-capability = "edge-mail"
-default = '""'
-doc = '''
-# Tailscale address of the mail server that receives the relayed mail and answers "does this recipient exist" (port 25).'''
-value = '''
-edgeStalwartIp = "100.64.0.10"'''
-
-[[item]]
-kind = "option"
-key = "edgeWingsIp"
-type = "string"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "edge-ports"
-default = '""'
-doc = '''
-# Tailscale address of the game server host (pelican-wings) the game ports are forwarded to.'''
-value = '''
-edgeWingsIp = "100.64.0.11"'''
 
 [[item]]
-kind = "option"
-key = "edgeGamePorts"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '[ ]'
-doc = '''
-# The game port pool: ports and ranges ("25565-25579") forwarded to edgeWingsIp as TCP and UDP. It must be the same pool as the
-# allocations in Pelican and the same ports as the Tailscale ACL allows for this node. Never 22, 25, 80 or 41641.'''
-value = '''
-edgeGamePorts = ["25565-25579", "2456-2470"]'''
-
-[[item]]
-kind = "option"
-key = "edgeGameTcp"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '[ ]'
-doc = '''
-# Game ports that need only TCP (rare), on top of edgeGamePorts.'''
-value = '''
-edgeGameTcp = ["27015"]'''
-
-[[item]]
-kind = "option"
-key = "edgeGameUdp"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '[ ]'
-doc = '''
-# Game ports that need only UDP (rare), on top of edgeGamePorts.'''
-value = '''
-edgeGameUdp = ["27016"]'''
-
-[[item]]
-kind = "option"
-key = "edgeRtcIp"
-type = "string"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '""'
-doc = '''
-# Tailscale address of the LiveKit container (Matrix calls). Empty: the call ports are not forwarded.'''
-value = '''
-edgeRtcIp = "100.64.0.12"'''
-
-[[item]]
-kind = "option"
-key = "edgeRtcTcp"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '[ ]'
-doc = '''
-# TCP ports LiveKit advertises (forwarded to edgeRtcIp).'''
-value = '''
-edgeRtcTcp = ["7881"]'''
-
-[[item]]
-kind = "option"
-key = "edgeRtcUdp"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "edge-ports"
-default = '[ ]'
-doc = '''
-# UDP ports LiveKit advertises (forwarded to edgeRtcIp).'''
-value = '''
-edgeRtcUdp = ["50000-50100"]'''
-
-[[item]]
-kind = "option"
-key = "edgeWatchSites"
-type = "list"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "edge-watcher"
-default = '[ ]'
-doc = '''
-# Public addresses the outside watcher must see answer (any answer but "none" or a 5xx counts). No admin pages here.
-# The two push addresses (the home server's heartbeat topic to watch, and the topic to alarm on) are secrets:
-# `hs config set heartbeatUrl ...` and `hs config set notifyUrl ...` (files in /var/lib/hs, never in the repository).'''
-value = '''
-edgeWatchSites = ["https://example.org", "https://wiki.example.org"]'''
 
 [[item]]
-kind = "option"
-key = "tailscaleAuthKeyFile"
-type = "string"
-required = false
-settable = false
-secret = false
+kind = "include"
 capability = "tailscale"
-default = '""'
-doc = '''
-# File with a reusable Tailscale auth key (mode 0600), read once at the first start so a headless server joins the tailnet by
-# itself. Create the key in the admin console; with tailscaleTags it carries the tag. Default "" = join by hand (`sudo tailscale up`).'''
-value = '''
-tailscaleAuthKeyFile = "/var/lib/hs/tailscale-authkey"'''
-
-[[item]]
-kind = "option"
-key = "tailscaleTags"
-type = "list"
-required = false
-settable = false
-secret = false
-capability = "tailscale"
-default = '[ ]'
-doc = '''
-# Tailscale tags this node asks for when it joins (for example ["tag:vps"]); the ACL in the admin console decides what a tag may reach.'''
-value = '''
-tailscaleTags = ["tag:vps"]'''
 
 [[page]]
 id = "backups"

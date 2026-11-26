@@ -64,7 +64,7 @@
   const jobs = $derived((r) => !!u && (r.description ?? '').split(/[\s"']+/).includes(u.name));
 </script>
 
-<ObjectPage crumb="Identity > Users" title={name} chip={u?.full ?? ''} state={u ? (u.enabled ? 'ok' : 'off') : ''} stateLabel={u ? stateOf(u) : ''}
+<ObjectPage title={name} chip={u?.full ?? ''} state={u ? (u.enabled ? 'ok' : 'off') : ''} stateLabel={u ? stateOf(u) : ''}
             tabs={objects.user.tabs} tab={at?.tab ?? ''} onpick={(id) => go(userPath(name, id))} {menu} {danger} {links} {jobs} need="admin"
             loading={!list.loaded} error={list.error && !list.data ? list.error.message : ''} notFound={list.loaded && !!list.data && !u} notFoundTitle="No such user" backTo={P.users} backLabel="All users"
             notFoundText={`No user called “${name}” exists in the domain. It may have been deleted or renamed.`}>

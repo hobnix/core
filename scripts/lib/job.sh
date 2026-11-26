@@ -20,6 +20,15 @@ _hs_job_record_write() {
   fi
 }
 
+# _hs_job_record_write_or_python: error, result and skip are new in the Rust binary (#1192). A binary up to v0.12.0 answers the probe but rejects
+# them (a git pull before hs rebuild, or a rollback): then the Python writer does the word. TODO(remove in the release after the one that ships #1192:
+# ADR 0001, one release side by side): this fallback and its test in tests/job-record-rust.sh.
+_hs_job_record_write_or_python() {
+  _hs_job_record_write "$@" && return
+  [ "$_HS_JOB_RECORD_USE" = rust ] || return 1
+  python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"
+}
+
 # _hs_job_bump: count the change counter `reads:jobs-records` up (ADR 0005 rule 5) so the Jobs panel reads the list again; no log row. Best effort
 # (HS_JOB_NOBUMP switches it off), at most once per second per shell, like the Python writer's own bump.
 _hs_job_bump() {
@@ -41,20 +50,24 @@ hs_job_record() {
   local cmd=${1:-} out rc=0 id=${2:-} line text
   case "$cmd" in
     new|run|wait|resume|finish|reconcile|uncancel) ;;
-    skip)   # a job that found the same work running ends as skipped (exit 0): only the Python writer knows it
-      python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@" || return $?
+    skip)   # a job that found the same work running ends as skipped (exit 0)
+      _hs_job_record_write_or_python "$@" || return $?
+      [ "$_HS_JOB_RECORD_USE" != rust ] || _hs_job_bump
       # shellcheck source=scripts/lib/event.sh
       . "${BASH_SOURCE[0]%/*}/event.sh" 2>/dev/null && { event_emit job.skipped "$id" "${3:-Already running}" || true; }
       return 0 ;;
-    error|result|key)   # ADR 0018: only the Python writer knows it (result: PLAN-app-lifecycle Q2); an older or newer Rust binary that does not falls back
-      _hs_job_record_write "$@" && return
-      python3 "${BASH_SOURCE[0]%/*}/../job-record.py" "$@"; return ;;
+    error|result) _hs_job_record_write_or_python "$@"; return ;;   # ADR 0018; result: PLAN-app-lifecycle Q2
+    key) _hs_job_record_write "$@"; return ;;
     step|progress)   # the Rust writer does not count the change counter up (the Python one does): done here, once per second at most
       _hs_job_record_write "$@" || return $?
       [ "$_HS_JOB_RECORD_USE" != rust ] || _hs_job_bump
       return 0 ;;
     *) _hs_job_record_write "$@"; return ;;
   esac
+  local code="" cf="${HS_JOBS_DIR:-/var/lib/hs/jobs}/$id.code"   # the code of the refusal that ended the job (refuse_code, ADR 0028); gone on every finish path
+  if [ "$cmd" = finish ] && [[ "$id" =~ ^[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]+-[a-z]{4}$ ]] && [ -f "$cf" ] && [ ! -L "$cf" ]; then
+    code=$(head -n1 "$cf" 2>/dev/null | tr -cd 'a-z0-9.-'); rm -f "$cf"
+  fi
   if [ "$cmd" = finish ] && _hs_job_record_write get "$id" 2>/dev/null | grep -Eq '"state": *"skipped"'; then
     return 0   # skipped stays skipped (exit 0): no job.ok, no second end
   fi
@@ -83,7 +96,12 @@ hs_job_record() {
     resume) event_emit job.resumed "$id" "job got its answer" || true ;;
     finish)
       if [ "${3:-1}" = 0 ]; then _hs_job_key_arg; event_emit job.ok "$id" "job finished" ${_HS_KEYARG[@]+"${_HS_KEYARG[@]}"} || true
-      else event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)}" || true; fi ;;
+      else
+        if [ -n "$code" ]; then
+          _hs_job_record_write_or_python error "$id" --category exit --message "exit status ${3:-1}" --code "$code" >/dev/null 2>&1 || code=
+        fi
+        event_emit job.failed "$id" "job failed (exit ${3:-1})" --payload "{\"exit\":${3:-1}$(_hs_job_key_json)${code:+,\"code\":\"$code\"}}" || true
+      fi ;;
     reconcile)
       while IFS=$'	' read -r line _ text; do
         [ -z "$line" ] || event_emit job.interrupted "$line" "${text:-job} did not finish" || true
@@ -131,7 +149,8 @@ hs_job() {
   systemd-run --quiet --unit="$unit" --description="$desc" \
     --property="OnFailure=hs-notify-failure@$unit.service" \
     -E HS_CALLER=job -E "HS_JOB_UNIT=$unit" -E HS_LANG=en -E "PATH=$PATH" ${extra[@]+"${extra[@]}"} \
-    bash -c 'd=$1; shift   # $0 = scripts dir, $1 = description, the rest = the command
+    bash -c 'HS_JOB_PID=$$; export HS_JOB_PID   # refuse_code: only the job'"'"'s own script names the job'"'"'s code
+             d=$1; shift   # $0 = scripts dir, $1 = description, the rest = the command
              . "$0/lib/job.sh"   # hs_job_record
              [ -z "${HS_JOB_ID:-}" ] || hs_job_record run "$HS_JOB_ID" 2>/dev/null || true
              "$@"; rc=$?

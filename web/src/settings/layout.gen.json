@@ -80,6 +80,7 @@
   "proxyStatusUrl": "cap:vps",
   "vpsHost": "cap:vps",
   "networkProvider": "cap:network",
+  "docker": "cap:docker",
   "dockerManager": "cap:docker",
   "dockerSize": "cap:docker",
   "dockerMemory": "cap:docker",
@@ -338,7 +339,7 @@
     {
      "id": "auth",
      "title": "Login",
-     "text": "The login is set per service, not for the whole gateway: open a service under Instances, Services and choose its login there.",
+     "text": "The login is set per service, not for the whole gateway: open a service under Network, Services and choose its login there.",
      "keys": [],
      "question": "Where is the login set?"
     },

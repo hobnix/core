@@ -64,6 +64,8 @@ run plan toggle --name web --kind ct --to on
 has "only backed up while it runs" && pass "an instance in says it must run" || fail "ct on: $out"
 run plan toggle --name ghost --kind ct --to on
 check_eq "an unknown instance is refused" 1 "$rc"
+check_match "an unknown instance is refused with backup.instance-unknown" $'code	backup.instance-unknown' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF backup.instance-unknown && pass "backup.instance-unknown is in the catalogue" || fail "backup.instance-unknown is not in the catalogue"
 run plan toggle --name docs --kind folder --to on
 check_eq "a bad kind is refused" 1 "$rc"
 run plan toggle --name 'a;b' --kind shares --to on

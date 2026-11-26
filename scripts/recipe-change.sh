@@ -32,31 +32,31 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; name=${2:-}; action=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: recipe-change.sh plan|start <recipe> run [--name <container>] [--set KEY=value]..." >&2; exit 1 ;; esac
-[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "invalid recipe name"
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "invalid recipe name"
 [ "$action" = run ] || refuse_code action.unknown "unknown action (run)"
 shift 3 || true
 ct=""; interactive=false; by=""; role=""
 declare -A given=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name) [ $# -ge 2 ] || refuse "--name needs a value"; ct=$2; shift 2 ;;
+    --name) [ $# -ge 2 ] || refuse_code recipe.name-missing "--name needs a value"; ct=$2; shift 2 ;;
     --interactive) interactive=true; shift ;;
-    --by)   [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse "--by needs a user name"; by=$2; shift 2 ;;
-    --role) [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse "--role needs a role"; role=$2; shift 2 ;;
-    --set)  [ $# -ge 2 ] || refuse "--set needs KEY=value"
-            [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse "--set needs KEY=value"
+    --by)   [ $# -ge 2 ] && [[ "$2" =~ ^[A-Za-z0-9._@\\-]{1,64}$ ]] || refuse_code recipe.by-invalid "--by needs a user name"; by=$2; shift 2 ;;
+    --role) [ $# -ge 2 ] && [[ "$2" =~ ^(viewer|app-manager|admin)$ ]] || refuse_code recipe.role-invalid "--role needs a role"; role=$2; shift 2 ;;
+    --set)  [ $# -ge 2 ] || refuse_code recipe.set-invalid "--set needs KEY=value"
+            [[ "$2" =~ ^([A-Z][A-Z0-9_]{0,30})=(.*)$ ]] || refuse_code recipe.set-invalid "--set needs KEY=value"
             given[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
-[ -z "$ct" ] || [[ "$ct" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "'$ct' is not a container name (lower-case letters, digits and dashes)"
-file=$(recipe_script "$name" 2>/dev/null) || refuse "There is no recipe called '$name'."
+[ -z "$ct" ] || [[ "$ct" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code name.invalid "'$ct' is not a container name (lower-case letters, digits and dashes)"
+file=$(recipe_script "$name" 2>/dev/null) || refuse_code recipe.unknown "There is no recipe called '$name'."
 
 input=$(sed -n 's/^# input: //p' "$file" | head -n1 || true)
 if [ "$input" = terminal ]; then
-  refuse "$name needs a person at a terminal (a password is typed into the setup): hs recipe $name${ct:+ --name $ct}"
+  refuse_code recipe.needs-terminal "$name needs a person at a terminal (a password is typed into the setup): hs recipe $name${ct:+ --name $ct}"
 fi
-if [ "$name" = sunshine ]; then refuse "sunshine is parked: it does nothing unless it is forced from a terminal."; fi
+if [ "$name" = sunshine ]; then refuse_code recipe.parked "sunshine is parked: it does nothing unless it is forced from a terminal."; fi
 
 # the questions of the recipe: parallel arrays
 ak=() al=() at=() ad=() ap=() aw=()
@@ -82,13 +82,13 @@ for k in "${!given[@]}"; do
   for i in "${!ak[@]}"; do [ "${ak[$i]}" = "$k" ] && [ "${at[$i]}" != secret ] && found=true; done
   # the generic service keys (declare_service) need no `# ask:` line
   if [[ "$k" =~ ^PUBLIC_NAME_[A-Z0-9_]+$ ]]; then
-    [[ "${given[$k]}" =~ ^($a_fqdn)$ ]] || refuse "the answer to $k is not a host name (like media.example.org)"
+    [[ "${given[$k]}" =~ ^($a_fqdn)$ ]] || refuse_code recipe.answer-invalid "the answer to $k is not a host name (like media.example.org)"
     found=true
   elif [[ "$k" =~ ^(DASH|PUBLIC)_[A-Z0-9_]+$ ]]; then
-    [[ "${given[$k]}" =~ ^(yes|no)$ ]] || refuse "the answer to $k must be yes or no"
+    [[ "${given[$k]}" =~ ^(yes|no)$ ]] || refuse_code recipe.answer-invalid "the answer to $k must be yes or no"
     found=true
   fi
-  $found || refuse "$name does not ask '$k'"
+  $found || refuse_code recipe.answer-unknown "$name does not ask '$k'"
 done
 
 secret_key="" secret_label=""
@@ -105,10 +105,10 @@ for i in "${!ak[@]}"; do
     needs+=("$k"); continue
   fi
   case "$t" in
-    choice:*) [[ ",${t#choice:}," == *",$v,"* ]] || refuse "'$v' is not one of: ${t#choice:} ($k)" ;;
-    *) [[ "$v" =~ ^(${ap[$i]:-.*})$ ]] || refuse "the answer to $k does not fit ($(sed 's/ (.*//' <<<"${al[$i]}"))" ;;
+    choice:*) [[ ",${t#choice:}," == *",$v,"* ]] || refuse_code recipe.answer-invalid "'$v' is not one of: ${t#choice:} ($k)" ;;
+    *) [[ "$v" =~ ^(${ap[$i]:-.*})$ ]] || refuse_code recipe.answer-invalid "the answer to $k does not fit ($(sed 's/ (.*//' <<<"${al[$i]}"))" ;;
   esac
-  [[ "$v" != *[[:cntrl:]]* ]] || refuse "the answer to $k has a control character"
+  [[ "$v" != *[[:cntrl:]]* ]] || refuse_code recipe.answer-invalid "the answer to $k has a control character"
 done
 
 # the secret: one line on standard input, only while a secret question counts
@@ -116,7 +116,7 @@ secret=""
 if [ -n "$secret_key" ]; then
   IFS= read -r -t 3 secret || true
   [ -n "$secret" ] || $interactive || needs+=("$secret_key")   # interactive: it may be asked while the run goes
-  [[ "$secret" != *[[:cntrl:]]* ]] || refuse "the secret has a control character"
+  [[ "$secret" != *[[:cntrl:]]* ]] || refuse_code recipe.secret-invalid "the secret has a control character"
 fi
 if [ ${#needs[@]} -gt 0 ]; then
   printf 'status\tneeds\n'

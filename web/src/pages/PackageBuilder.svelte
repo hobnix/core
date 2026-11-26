@@ -3,7 +3,6 @@
   // The form makes a package.toml text (builder.js); the page sends it to `hs sys pkg plan check-draft` (the checks of `hs pkg validate`) and shows
   // the findings. Nothing is saved or written: drafts, the code editor and the pull request / archive step are later steps of the ADR.
   import { plan } from '../api.js';
-  import { ui } from '../ui.svelte.js';
   import { tr } from '../i18n.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import Banner from '../ui/Banner.svelte';
@@ -53,7 +52,7 @@
   const copy =() => navigator.clipboard?.writeText(text).catch(() => {});
 </script>
 
-<PageHeader title="Package builder" crumb={ui.host} sub="Write the manifest of a new app or extension; the server checks it as you type. Nothing is saved yet." />
+<PageHeader title="Package builder" sub="Write the manifest of a new app or extension; the server checks it as you type. Nothing is saved yet." />
 
 <div class="grid">
   <form class="card" onsubmit={(e) => e.preventDefault()}>

@@ -7,7 +7,7 @@ Writes <dir>/recipes/<name>/ (recipe), <dir>/extensions/<name>/ (extension) or <
 [package.<name>] to <dir>/index.toml, so that `pkg.py validate` (the folder linked as packages/ or capabilities/, as the repositories' CI
 does) and `pkg.py repo-check <dir>` pass without edits. Never overwrites anything.
 A recipe and an extension carry the store fields (docs/PLAN-app-lifecycle.md Q5: description, icon, category from
-config/package-categories.toml, app_version; requires_core ">=10"), a recipe also the [app] contract tables (Q4) and `instances`.
+config/package-categories.toml, app_version; requires_core ">=11"), a recipe also the [app] contract tables (Q4) and `instances`.
 A capability package carries neither (the checks refuse them there) and stays at level 1.
 Output, read by scripts/pkg.sh only (not a contract with the web interface):
   done:    folder TAB <absolute package folder>, then one `file TAB <path inside it>` per file, then `index TAB <absolute index.toml>`; exit 0
@@ -21,7 +21,7 @@ import tomllib
 SUB = {"recipe": "recipes", "extension": "extensions", "capability": "capabilities"}
 RESERVED = ("list", "enable", "disable")   # words of `hs ext`
 VERSION = "0.1.0"
-REQUIRES = {"recipe": ">=10", "extension": ">=10", "capability": ">=1"}   # the store fields and [app] tables came with API level 9
+REQUIRES = {"recipe": ">=11", "extension": ">=11", "capability": ">=1"}   # the store fields and [app] tables came with API level 9
 
 R_PACKAGE = '''# Manifest of a package (docs/PLAN-packages.md of the core). Raise version here AND in index.toml with every change.
 name = "{name}"
@@ -29,7 +29,7 @@ version = "0.1.0"
 kind = "recipe"
 title = {q_title}
 title_de = {q_title_de}
-requires_core = ">=10"
+requires_core = ">=11"
 audience = "generic"
 permissions = []
 needs = []
@@ -130,7 +130,7 @@ version = "0.1.0"
 kind = "extension"
 title = {q_title}
 title_de = {q_title_de}
-requires_core = ">=10"
+requires_core = ">=11"
 audience = "generic"
 permissions = ["web.read"]
 {proto}{store}'''

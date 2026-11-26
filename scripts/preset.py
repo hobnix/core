@@ -60,9 +60,9 @@ def load(name):
 
 
 def options():
-    with open(SCHEMA, "rb") as f:
-        items = tomllib.load(f).get("item", [])
-    return {i["key"]: i.get("store", "machine") for i in items if i.get("kind") == "option"}
+    sys.path.insert(0, os.path.join(HERE, "lib"))
+    import schema_options     # the checks of presets and blueprints share one reader of config/schema.toml
+    return schema_options.options()
 
 
 def main(argv):

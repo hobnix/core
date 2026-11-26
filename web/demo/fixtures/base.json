@@ -370,6 +370,17 @@
   "changes/list": [],
   "parts/pending": [],
   "rebuild/pending": [],
+  "blueprint/list": [
+   [
+    "home-server",
+    "core",
+    "1.0.0",
+    "home",
+    "samba,backup",
+    "new",
+    "Home server"
+   ]
+  ],
   "preset/list": [
    [
     "home",
@@ -439,6 +450,7 @@
   "users/groups": [],
   "vault/list": [],
   "remote/list": [],
+  "remote/codes": [],
   "unifi/networks": [],
   "unifi/clients": [],
   "ports/list": [],
@@ -629,6 +641,7 @@
   "apps/versions": [],
   "pkg/capabilities": [],
   "pkg/repos": [],
+  "pkg/index": [["repo", "official"], ["last_ok", "4102444800"], ["last_try", "4102444800"], ["error", "-"], ["expires", "-"], ["notified", "-"]],
   "dc/state": [],
   "recipes/asks": [],
   "recipes/steps": [],

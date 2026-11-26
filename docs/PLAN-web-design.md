@@ -100,7 +100,7 @@ Per node. Summary and eight groups instead of Summary and twelve entries, and th
 | Storage | Pools, Disks, Shares, Files, Encryption, Vault | Storage minus Incident |
 | Instances | Instances, ISO images | Instances group, Docker list for instances |
 | Apps | Installed, Marketplace, Registries | Apps, Docker, Marketplace |
-| Network | Network (tabs: Overview, DNS, Ports, Router, Remote shares), Services | Network, Services |
+| Network | Network (tabs: Overview, DNS, Ports, Router), Services | Network, Services |
 | People | Users, Groups, Certificates | Identity |
 | System | Health, Jobs, Events, Notifications, Hardware, Updates, Certificates, Diagnostics, Live state, Test-lab | Monitoring, Operations, Certificates, Updates, and the new Jobs page (#385). Named Health in the first draft; renamed System in 0.11 (docs/PLAN-navigation.md D2 c) |
 | Backup | Backup, Expiry dates | Protection |
@@ -181,7 +181,7 @@ Four pages are exempt from a template: **Files** (two-pane file manager, web/des
 
 | Prop | Meaning |
 |---|---|
-| `crumb`, `title`, `sub` | the `PageHeader` text (crumb is `Group > List`) |
+| `title`, `sub` | the `PageHeader` text (the breadcrumb is derived from the tree, `nav.js` `trailOf`) |
 | `chip`, `state`, `stateLabel` | the status next to the name (a `Chip` and a `StatusDot` with its word) |
 | `tabs` `[{ id, label }]`, `tab`, `onpick(id)` | at most four (`MAX_TABS`), the first is Overview with id `overview`; `tab` is the id from the address, an unknown one is Overview, not an error; one tab or none draws no tab row |
 | `primary` (snippet) | the visible actions: ONE primary and at most ONE secondary (D4). The page owns them; the frame only places them before the More menu |

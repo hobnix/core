@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Shares: Local, Remote and Kept folders views; remote shares moved from Network"
+body  = """The Shares page now has three views: Local (your shares), Remote and Kept folders. The Remote view holds what was the Network tab Remote shares: the shares you use from other servers and the shares you give to other servers, with the buttons Add remote share and Give access. The old address /network?tab=remote opens the Remote view. The Local view says when remote shares exist. The screens say server and remote share instead of peer."""

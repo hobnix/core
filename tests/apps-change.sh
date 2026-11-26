@@ -105,6 +105,22 @@ kind = "recipe"
 path = "recipes/failapp"
 requires_core = ">=1"
 ' >> index.toml
+mkdir -p blueprints/bp
+printf 'name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+recipes = []
+' > blueprints/bp/package.toml
+printf '[package.bp]
+version = "1.0.0"
+kind = "blueprint"
+path = "blueprints/bp"
+requires_core = ">=11"
+' >> index.toml
 git add -A && git commit -q -m one && git -c user.signingkey="$WORK/good.pub" tag -s v1.0.0 -m release
 cd "$ROOT"
 $PKGPY repo add test "$R" --key "$WORK/signers"
@@ -145,6 +161,11 @@ for r in "sys apps plan <action>${tab}apps-change.sh" "sys apps start <action>${
 done
 check "CHANGES has apps" grep -qF '"apps": [{"fixed": [r"^install$"' "$SCRIPTS/web-serve.py"
 check "openapi.json has the two rows" grep -q '"/apps/start/{action}"' "$ROOT/docs/api/openapi.json"
+
+echo "-- a blueprint is applied, never installed"
+run plan install bp
+if [ "$rc" = 1 ] && has "blueprint: hs blueprint apply bp" && ! has "^status${tab}ok"; then pass "plan install of a blueprint is refused with a reason"; else fail "blueprint plan: rc=$rc $out"; fi
+has "pkg.blueprint" && pass "and carries its code" || fail "code: $out"
 
 echo "-- the plan reads the verified clone and installs nothing"
 run plan install demo

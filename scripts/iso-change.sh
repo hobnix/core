@@ -100,14 +100,14 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: iso-change.sh plan|start add <file-or-url> [--name <n>] (--checksum <hex> | --no-checksum) | remove <name> [--confirm <n>]" >&2; exit 1 ;; esac
 case "$action" in add|remove) ;; *) refuse_code action.unknown "unknown action (add or remove)" ;; esac
-[ $# -ge 3 ] || refuse "$([ "$action" = add ] && echo 'a file or URL is needed' || echo 'a name is needed')"
+[ $# -ge 3 ] || refuse_code iso.args-missing "$([ "$action" = add ] && echo 'a file or URL is needed' || echo 'a name is needed')"
 arg=$3
 shift 3
 name="" checksum="" nochecksum=false confirm=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name) name=${2:-}; shift 2 || refuse "--name needs a value" ;;
-    --checksum) checksum=${2:-}; shift 2 || refuse "--checksum needs a value" ;;
+    --name) name=${2:-}; shift 2 || refuse_code iso.value-missing "--name needs a value" ;;
+    --checksum) checksum=${2:-}; shift 2 || refuse_code iso.value-missing "--checksum needs a value" ;;
     --no-checksum) nochecksum=true; shift ;;
     --confirm) confirm=${2:-}; shift 2 || refuse_code confirm.missing "--confirm needs a value" ;;
     *) refuse_code option.unknown "unknown option $1" ;;
@@ -116,10 +116,10 @@ done
 dir=$(iso_dir)
 
 if [ "$action" = remove ]; then
-  iso_valid_name "$arg" || refuse "invalid image name '$arg'"
-  [ -f "$dir/$arg" ] || refuse "There is no image called '$arg' in the library."
+  iso_valid_name "$arg" || refuse_code name.invalid "invalid image name '$arg'"
+  [ -f "$dir/$arg" ] || refuse_code iso.not-found "There is no image called '$arg' in the library."
   used=$(iso_used_by "$arg")
-  [ "$used" = - ] || refuse "'$arg' is attached to $used. Detach it there first."
+  [ "$used" = - ] || refuse_code iso.attached "'$arg' is attached to $used. Detach it there first."
   if [ "$verb" = start ]; then
     [ "$confirm" = "$arg" ] || refuse_code confirm.missing "type the name to confirm: $arg"
     rm -f -- "${dir:?}/${arg:?}" "${dir:?}/${arg:?}.meta"
@@ -133,41 +133,41 @@ if [ "$action" = remove ]; then
 fi
 
 # ── add: the checks ──
-[ -z "$confirm" ] || refuse "--confirm belongs to remove"
+[ -z "$confirm" ] || refuse_code iso.option-misplaced "--confirm belongs to remove"
 case "$arg" in
   http://*|https://*)
-    [ ${#arg} -le 1000 ] || refuse "the URL is too long"
-    [[ "$arg" =~ ^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~%/+=:@,\;\&?-]*)?$ ]] || refuse "invalid URL (http or https, no user name or password in it)"
+    [ ${#arg} -le 1000 ] || refuse_code iso.url-invalid "the URL is too long"
+    [[ "$arg" =~ ^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~%/+=:@,\;\&?-]*)?$ ]] || refuse_code iso.url-invalid "invalid URL (http or https, no user name or password in it)"
     host=${arg#*://}; host=${host%%[/:?]*}
     # curl also reads 2130706433, 0x7f.1 and 0177.0.0.1 as 127.0.0.1: a host of digits and dots must be a plain a.b.c.d, a hex part is refused
-    if [[ "$host" =~ ^[0-9.]+$ ]] && ! [[ "$host" =~ ^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$ ]]; then refuse "write an IP address as a.b.c.d (or use a name): $host"; fi
-    [[ ! "$host" =~ (^|\.)0[xX] ]] || refuse "write an IP address as a.b.c.d (or use a name): $host"
+    if [[ "$host" =~ ^[0-9.]+$ ]] && ! [[ "$host" =~ ^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$ ]]; then refuse_code iso.url-invalid "write an IP address as a.b.c.d (or use a name): $host"; fi
+    [[ ! "$host" =~ (^|\.)0[xX] ]] || refuse_code iso.url-invalid "write an IP address as a.b.c.d (or use a name): $host"
     host=${host%.}
-    case "$host" in localhost|127.*|0.*|169.254.*|*.localhost) refuse "this server does not download from itself ($host)" ;; esac
+    case "$host" in localhost|127.*|0.*|169.254.*|*.localhost) refuse_code iso.url-local "this server does not download from itself ($host)" ;; esac
     kind=url ;;
   /*)
-    [[ "$arg" != *..* ]] || refuse "no \"..\" in a path"
-    [[ "$arg" =~ ^/[A-Za-z0-9._/@+\ ~-]*$ ]] || refuse "invalid path"
-    [ -f "$arg" ] || refuse "There is no file '$arg'."
-    [ -r "$arg" ] || refuse "The file '$arg' cannot be read."
-    [[ "$arg" != "$dir"/* ]] || refuse "That file is in the library already."
+    [[ "$arg" != *..* ]] || refuse_code iso.path-invalid "no \"..\" in a path"
+    [[ "$arg" =~ ^/[A-Za-z0-9._/@+\ ~-]*$ ]] || refuse_code iso.path-invalid "invalid path"
+    [ -f "$arg" ] || refuse_code iso.file-missing "There is no file '$arg'."
+    [ -r "$arg" ] || refuse_code iso.file-unreadable "The file '$arg' cannot be read."
+    [[ "$arg" != "$dir"/* ]] || refuse_code iso.in-library "That file is in the library already."
     kind=path ;;
-  *) refuse "give an absolute path of a file on this server, or an http(s) URL" ;;
+  *) refuse_code iso.source-invalid "give an absolute path of a file on this server, or an http(s) URL" ;;
 esac
 if [ -z "$name" ]; then
   name=${arg%%[?#]*}; name=${name##*/}
 fi
-iso_valid_name "$name" || refuse "'$name' is not a usable image name: letters, digits, . _ - and it ends in .iso (use --name)"
-[ ! -e "$dir/$name" ] || refuse "There is an image called '$name' in the library already. Remove it first or use --name."
+iso_valid_name "$name" || refuse_code name.invalid "'$name' is not a usable image name: letters, digits, . _ - and it ends in .iso (use --name)"
+[ ! -e "$dir/$name" ] || refuse_code iso.exists "There is an image called '$name' in the library already. Remove it first or use --name."
 
 algo="" want=""
 if [ -n "$checksum" ]; then
-  $nochecksum && refuse "give --checksum or --no-checksum, not both"
+  $nochecksum && refuse_code iso.checksum-conflict "give --checksum or --no-checksum, not both"
   c=${checksum,,}
   case "$c" in sha256:*) c=${c#sha256:}; pre=sha256 ;; sha512:*) c=${c#sha512:}; pre=sha512 ;; *) pre="" ;; esac
-  [[ "$c" =~ ^[0-9a-f]+$ ]] || refuse "the checksum is hexadecimal text"
-  case ${#c} in 64) algo=sha256 ;; 128) algo=sha512 ;; *) refuse "the checksum has ${#c} characters: SHA-256 has 64, SHA-512 has 128" ;; esac
-  [ -z "$pre" ] || [ "$pre" = "$algo" ] || refuse "the prefix $pre does not fit a checksum of ${#c} characters"
+  [[ "$c" =~ ^[0-9a-f]+$ ]] || refuse_code iso.checksum-invalid "the checksum is hexadecimal text"
+  case ${#c} in 64) algo=sha256 ;; 128) algo=sha512 ;; *) refuse_code iso.checksum-invalid "the checksum has ${#c} characters: SHA-256 has 64, SHA-512 has 128" ;; esac
+  [ -z "$pre" ] || [ "$pre" = "$algo" ] || refuse_code iso.checksum-invalid "the prefix $pre does not fit a checksum of ${#c} characters"
   want=$c
 elif ! $nochecksum; then
   printf 'status\tneeds\nneeds\tchecksum\n'; exit 2
@@ -179,7 +179,7 @@ else size=$("$curl_bin" -sIL --max-time 8 --proto '=http,https' -- "$arg" 2>/dev
 mkdir -p "$dir" 2>/dev/null || true
 free=$(df -PB1 "$dir" 2>/dev/null | awk 'NR == 2 { print $4 }') || free=""
 if [ -n "$free" ] && [ "$size" -gt 0 ] && [ "$size" -gt "$free" ]; then
-  refuse "Not enough room in $dir: the image needs $(numfmt --to=iec "$size" 2>/dev/null || echo "$size") and $(numfmt --to=iec "$free" 2>/dev/null || echo "$free") are free. Change the folder with the setting isoDir."
+  refuse_code iso.no-room "Not enough room in $dir: the image needs $(numfmt --to=iec "$size" 2>/dev/null || echo "$size") and $(numfmt --to=iec "$free" 2>/dev/null || echo "$free") are free. Change the folder with the setting isoDir."
 fi
 human=""; [ "$size" -le 0 ] || human=" ($(numfmt --to=iec "$size" 2>/dev/null || echo "$size"))"
 

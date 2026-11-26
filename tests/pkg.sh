@@ -154,7 +154,7 @@ PY
   else check_out "$1" "$2" bash -c "HS_PACKAGES_ROOT=$APPT $PKG validate; true"; fi
 }
 appcase "the good fixture package passes" "" 'pass'
-check_eq "the API level is 10" "10" "$($PKG api)"
+check_eq "the API level is 11" "11" "$($PKG api)"
 appcase "an old manifest (requires >=1, no app fields) is unchanged" "" 't = "name = \"fixstore\"\nversion = \"1.0.0\"\nkind = \"recipe\"\ntitle = \"x\"\nrequires_core = \">=1\"\nscript = \"run.sh\"\n"'
 appcase "app fields on an older requires_core are named" 'need requires_core' 't = t.replace(">=9", ">=8")'
 appcase "an unknown category is named" 'category is not one of' 't = t.replace("tools", "stuff")'
@@ -204,6 +204,44 @@ check_out "a core recipe written before level 9 only gets a warning" 'warning: f
 check "and repo-check still passes" $PKG repo-check "$RC"
 sed -i 's/>=1/>=9/' "$RC/recipes/fixold/package.toml" "$RC/index.toml"
 check_out "a core recipe at level 9 without the contract is an error" 'missing: \[app.health\]' bash -c "$PKG repo-check $RC; true"
+
+echo "-- repo-check: a folder holds the kind of its top-level folder; licences of an index repository"
+KT=$WORK/kindrepo; rm -rf "$KT"; mkdir -p "$KT/extensions"; cp -r "$RC/recipes/fixold" "$KT/extensions/fixold"
+printf '[package.fixold]
+path = "extensions/fixold"
+kind = "recipe"
+version = "1.0.0"
+requires_core = ">=9"
+' > "$KT/index.toml"
+check_out "a recipe in extensions/ is refused" "extensions/fixold: kind recipe does not belong in extensions/" bash -c "$PKG repo-check $KT; true"
+check "and repo-check fails" bash -c "! $PKG repo-check $KT >/dev/null 2>&1"
+mkdir -p "$KT/recipes"; mv "$KT/extensions/fixold" "$KT/recipes/fixold"; rmdir "$KT/extensions"
+printf '[package.fixold]
+path = "recipes/fixold"
+kind = "recipe"
+version = "1.0.0"
+requires_core = ">=9"
+' > "$KT/index.toml"
+check "the same package in recipes/ passes" $PKG repo-check "$KT"
+check_out "no licence file in a repository without publish: no warning" "^0$" bash -c "$PKG repo-check $KT 2>&1 | grep -c LICENSE; true"
+printf 'publish = "index"
+
+' | cat - "$KT/index.toml" > "$KT/index.new" && mv "$KT/index.new" "$KT/index.toml"
+check "an index repository without licence files still passes" $PKG repo-check "$KT"
+check_out "and gets a warning for each missing file" 'warning: LICENSE: is missing' bash -c "$PKG repo-check $KT 2>&1"
+printf 'MIT License
+
+Copyright
+' > "$KT/LICENSE"
+check_out "an MIT root licence is refused" "LICENSE: is not the AGPL-3.0 licence" bash -c "$PKG repo-check $KT; true"
+printf 'GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3
+' > "$KT/LICENSE"; printf 'GNU AFFERO GENERAL PUBLIC LICENSE
+' > "$KT/recipes/LICENSE"
+check_out "an AGPL licence in recipes/ is refused" "recipes/LICENSE: is not the MIT licence" bash -c "$PKG repo-check $KT; true"
+printf 'MIT License
+' > "$KT/recipes/LICENSE"
+check "AGPL at the root and MIT in recipes/ passes" $PKG repo-check "$KT"
 
 echo "-- check-draft sees the fields"
 check_out "a draft with a bad category is an error" "error${tab}category${tab}category is not one of" bash -c "sed 's/tools/stuff/' $AF/packages/fixstore/package.toml | $PKG check-draft; true"
@@ -269,10 +307,10 @@ igcase "{port} is a placeholder too, also as the port of the URL" "" "{'integrat
 igcase "an unknown placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders (not {ip})" "{'integrations': {'x': {'api_url': 'http://{ip}:{port}'}}}"
 igcase "a half placeholder is refused" "integrations.x.api_url: only {host} and {port} are placeholders" "{'integrations': {'x': {'api_url': 'http://{host}:80/{'}}}"
 sd=$(mktemp -d); printf 'name = "a"\nport = 8080\n' >"$sd/a.toml"; printf 'name = "b"\n' >"$sd/b.toml"
-check_eq "rows: {port} comes from the service record, a missing port gives - and is reported, {host} stays" "a:http://{host}:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
+check_eq "rows: {port} comes from the service record, a missing port gives - and is reported ({host}: tests/pkg-integrations.sh)" "a:http://app:8080|b:-|c:-|unresolved=b/m,c/m" "$(python3 -I -c "
 import importlib.util
 s = importlib.util.spec_from_file_location('p', '$SCRIPTS/lib/pkg_integrations.py'); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
-ig = {'m': {'api_url': 'http://{host}:{port}'}}
+ig = {'m': {'api_url': 'http://app:{port}'}}
 ms = [('', {'name': n, 'kind': 'recipe', 'integrations': ig}) for n in 'abc']
 miss = []
 r = m.rows(ms, {'a', 'b', 'c'}, None, '$sd', miss)
@@ -315,5 +353,54 @@ ms = [mk('jelly', {'key_file': '/var/lib/hs/jelly/k'}), mk('radarr', {'key_file'
 on = {'jelly', 'radarr', 'plain'}
 ok, bad, why = m.grant_all(ms, on, 'media', 'e')
 print('|'.join([','.join(p for _, p in ok), m.grant_all(ms, on, 'media', 'x')[2][0], m.grant_all(ms, on, 'media', 'jelly')[2][0]]))")"
+
+echo "-- a blueprint (kind = blueprint, #1075)"
+BP=$WORK/bptree; mkdir -p "$BP/packages/bp"
+good_bp='name = "bp"
+version = "1.0.0"
+kind = "blueprint"
+title = "Bp"
+requires_core = ">=11"
+roles = ["homeserver"]
+[blueprint]
+capabilities = ["storage"]
+recipes = ["jellyfin"]
+[docker]
+manager = "webui"
+size = "m"
+[machine]
+timeZone = "Europe/Vienna"
+[settings]
+backupNewShares = "true"
+[answers.jellyfin]
+library = "/srv/media"
+'
+bpv() { printf '%s\n' "$1" > "$BP/packages/bp/package.toml"; HS_PACKAGES_ROOT=$BP $PKG validate 2>&1; }
+check "a good blueprint passes" bpv "$good_bp"
+bad_bp() {   # bad_bp "what" "text that must be named" "text of the good manifest" "its replacement" ("" = append the replacement)
+  local t=$good_bp; [ -n "$3" ] && t=${good_bp/"$3"/"$4"} || t=$good_bp$'\n'"$4"
+  check_out "$1" "$2" bpv "$t"
+}
+bad_bp "role in [machine] is refused" "role is not allowed" "[machine]" $'[machine]\nrole = "edge"'
+bad_bp "capabilities in [machine] is refused" "capabilities is not allowed" "[machine]" $'[machine]\ncapabilities = ["x"]'
+bad_bp "dockerManager in [machine] points to [docker]" "Docker only through" "[machine]" $'[machine]\ndockerManager = "arcane"'
+bad_bp "a key that is not an option is refused" "not an option of config/schema.toml" 'timeZone = "Europe/Vienna"' 'noSuchOption = "x"'
+bad_bp "a secret setting is refused" "is a secret" 'backupNewShares = "true"' 'notifyUrl = "x"'
+bad_bp "a key in the wrong table is refused" "belongs in" 'backupNewShares = "true"' 'timeZone = "x"'
+bad_bp "the recipe docker is refused" "Docker is the core capability" '"jellyfin"' '"docker"'
+bad_bp "a name twice is refused" "named twice" 'capabilities = ["storage"]' 'capabilities = ["jellyfin"]'
+bad_bp "docker in capabilities is refused" "Docker is the core capability" 'capabilities = ["storage"]' 'capabilities = ["docker"]'
+bad_bp "docker in extensions is refused" "Docker is the core capability" 'capabilities = ["storage"]' $'capabilities = ["storage"]
+extensions = ["docker"]'
+bad_bp "a requires_core below 11 is refused (older cores do not know the kind)" "a blueprint needs requires_core" 'requires_core = ">=11"' 'requires_core = ">=10"'
+bad_bp "an unknown manager is refused" "manager is not" '"webui"' '"nope"'
+bad_bp "an unknown size is refused" "size is not" 'size = "m"' 'size = "xl"'
+bad_bp "an answer for a recipe it does not name is refused" "recipe the blueprint does not name" 'answers.jellyfin' 'answers.other'
+bad_bp "empty roles are refused" "roles is missing or empty" 'roles = ["homeserver"]' 'roles = []'
+bad_bp "an unknown role is refused" "unknown role" '"homeserver"' '"nas"'
+bad_bp "module is refused" "module is not allowed" 'kind = "blueprint"' $'kind = "blueprint"\nmodule = "x.nix"'
+bad_bp "a [[binary]] table is refused" "binary is not allowed" "" $'[[binary]]\nname = "x"'
+bad_bp "more than 40 packages are refused" "at most 40" 'capabilities = ["storage"]' "capabilities = [$(seq -s, -f '"p%g"' 1 41)]"
+bad_bp "a manager that is missing is refused" "needs manager" 'manager = "webui"' 'sizeless = "x"'
 
 finish

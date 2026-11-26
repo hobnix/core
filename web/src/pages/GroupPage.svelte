@@ -2,7 +2,7 @@
   // The page of a group (Storage, Backup, System): one line of state at the top, then one StateCard per place that shows the place's STATE, not its
   // description. The page that uses it computes `state` with the functions of pages/groups/state.js from reads its places already do.
   // `group` (storage, backup, system ...) adds the cards of the package pages of that group that declare a `state`.
-  //   <GroupPage title="Storage" crumb="homeserver" state={storageState(...)}>{#snippet actions()}<Button>...</Button>{/snippet}</GroupPage>
+  //   <GroupPage title="Storage" state={storageState(...)}>{#snippet actions()}<Button>...</Button>{/snippet}</GroupPage>
   // `state` = { head: {state, label, line}, cards: [...] } (state.js); `actions`: one primary action at most, the rest belongs in the places;
   // children (bars, a banner) go between the line and the cards.
   import PageHeader from '../shell/PageHeader.svelte';
@@ -15,11 +15,11 @@
   import Stack from '../ui/Stack.svelte';
   import ExtCards from './ExtCards.svelte';
 
-  let { title, crumb = 'homeserver', sub = '', group = '', state, actions, children } = $props();
+  let { title, sub = '', group = '', state, actions, children } = $props();
 </script>
 
 <Stack gap="6">
-  <PageHeader {title} {crumb} {sub} {actions} />
+  <PageHeader {title} {sub} {actions} />
   <Card>
     <Row gap="3" wrap>
       <StatusDot state={state.head.state} label={state.head.label} large />

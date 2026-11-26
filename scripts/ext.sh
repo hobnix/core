@@ -24,6 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/machine.sh"
 . "$here/lib/registry-load.sh"
+. "$here/lib/pkg-deps.sh"
 . "$here/lib/effect.sh"
 . "$here/lib/integration.sh"
 state=${HS_STATE_DIR:-/var/lib/hs}
@@ -66,17 +67,7 @@ compat_problem() {   # compat_problem <name> <dir>: prints why the package canno
   done < <(manifest_list "$2" requires)
   return 0
 }
-dependents_on() {   # dependents_on <name>: the packages that are on and require it, one per line
-  local n d
-  while IFS= read -r n; do
-    [ "$n" != "$1" ] || continue
-    d=$(ext_package_dir "$n") || continue
-    [ -f "$d/capability.toml" ] || continue
-    ext_package_on "$n" || continue
-    manifest_list "$d" requires | grep -qxF -- "$1" && printf '%s\n' "$n"
-  done < <(ext_package_names)
-  return 0
-}
+dependents_on() { pkg_dependents "$1"; }   # the packages that are on and need it, one per line (scripts/lib/pkg-deps.sh)
 title_of() {   # title_of <dir>
   local t=""
   [ "$lang" = en ] || t=$(manifest "$1" "title_$lang")
@@ -166,7 +157,7 @@ cmd_stop() {
   ok "$(t "The service of '%s' is stopped. It stays stopped until: hs ext start %s" "$1" "$1")"
 }
 cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the supervisor
-  local n=${1:-} d name path prov first= cred=()
+  local n=${1:-} d name path prov first= cred=() perm listing= out ifile
   exists "$n" && ext_package_on "$n" && has_service "$n" || { printf '%s
 ' "hs ext svc-run: '$n' is not a service extension that is on" >&2; exit 1; }
   d=$(ext_package_dir "$n")
@@ -176,7 +167,19 @@ cmd_svc_run() {   # run by the unit; exec so that systemd's signals reach the su
     cred+=(--credential "integration-$name-$prov=$prov=$path")
     case " $first " in *" $name "*) ;; *) first="$first $name"; cred+=(--credential "integration-$name=$prov=$path") ;; esac
   done < <(integration_credentials "$n")
-  exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state" ${cred[@]+"${cred[@]}"}
+  # the rows of the declared integrations go into `init` (a confined service cannot run hs): what `hs sys pkg integrations <name>` prints, no keys.
+  # The bridge keeps only the integrations the package declared. `extras` is free text of a package, so the listing is not put in argv
+  # (visible in ps): it goes in a 0600 file in the root-owned state dir, which the bridge reads and removes.
+  while IFS= read -r perm; do
+    case "$perm" in integration:*)
+      if out=$(bash "$here/pkg.sh" --integrations "${perm#integration:}" 2>/dev/null); then listing+="$out"$'
+'
+      else warn "hs ext svc-run: the integration listing of '${perm#integration:}' could not be built: $n gets no rows for it." >&2; fi ;;
+    esac
+  done < <(python3 "$here/pkg.py" perms "$n" 2>/dev/null)
+  mkdir -p "$svc_state"; ifile=$(umask 077; mktemp "$svc_state/$n.integrations.XXXXXX") || ifile=
+  if [ -n "$ifile" ]; then printf '%s' "$listing" > "$ifile"; else warn "hs ext svc-run: no file for the integration listing: $n gets no integrations." >&2; fi
+  exec python3 "$here/lib/ext_service.py" svc-run --name "$n" --dir "$d" --state-dir "$svc_state" ${ifile:+--integrations-file "$ifile"} ${cred[@]+"${cred[@]}"}
 }
 
 overlay_add() { mkdir -p "$state"; grep -qxF -- "$2" "$state/capabilities-$1" 2>/dev/null || printf '%s\n' "$2" >> "$state/capabilities-$1"; }
@@ -271,7 +274,7 @@ cmd_disable() {
   d=$(ext_package_dir "$n")
   if is_recipe "$n"; then fail_fix "$(t "'%s' is a recipe: its container is managed with hs ct." "$n")" "hs ct"; fi
   deps=$(dependents_on "$n" | paste -sd' ' -)
-  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "hs ext disable ${deps%% *}"; fi
+  if [ -n "$deps" ]; then fail_fix "$(t "'%s' cannot be switched off: %s needs it." "$n" "$deps")" "$(if is_recipe "${deps%% *}"; then echo "hs ct"; else echo "hs ext disable ${deps%% *}"; fi)"; fi
   if has_service "$n"; then ctl stop "hs-ext-svc@$n.service" >/dev/null 2>&1 || true; fi   # a package that is off has no unit running (ADR 0011 rule 3)
   mapfile -t cur < <(caps_list)
   for x in ${cur[@]+"${cur[@]}"}; do [ "$x" = "$n" ] || keep+=("$x"); done

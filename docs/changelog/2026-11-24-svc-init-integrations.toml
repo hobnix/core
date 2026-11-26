@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Service extensions get their integrations in the start message"
+body  = """A service extension that declares integration:<name> now finds the rows of those integrations (provider, API address, key header) in the init message, so it no longer has to run hs from inside its confined unit. Keys still come only as systemd credentials. Older services ignore the new field."""

@@ -20,6 +20,7 @@ has() { grep -q -- "$1" <<<"$out"; }
 echo "-- test push"
 export HS_NOTIFY_FILE=$WORK/none
 run plan test-push;  check_eq "no push address: refused" 1 "$rc"; has "notifyUrl" && pass "points at notifyUrl" || fail "$out"
+check_match "no push address is refused with admin.no-push-address" $'code\tadmin.no-push-address' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF admin.no-push-address && pass "admin.no-push-address is in the catalogue" || fail "admin.no-push-address is not in the catalogue"
 echo "https://ntfy.sh/x" > "$WORK/notify-url"; export HS_NOTIFY_FILE=$WORK/notify-url
 run plan test-push;  check_eq "plan: exit 0" 0 "$rc"
 run start test-push; check_eq "start: exit 0" 0 "$rc"; has "^status${T}done" && pass "done" || fail "$out"
@@ -36,6 +37,7 @@ run plan cache-mover; check_eq "zfs layout: refused" 1 "$rc"; has "snapraid" && 
 echo snapraid > "$HS_BULK_TYPE_FILE"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/mp-no"; printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/mp-yes"; chmod +x "$WORK/mp-no" "$WORK/mp-yes"
 HS_MOUNTPOINT=$WORK/mp-no run plan cache-mover; check_eq "no cache mounted: refused" 1 "$rc"
+check_match "no cache mounted is refused with admin.no-cache" $'code\tadmin.no-cache' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF admin.no-cache && pass "admin.no-cache is in the catalogue" || fail "admin.no-cache is not in the catalogue"
 export HS_MOUNTPOINT=$WORK/mp-yes
 run plan cache-mover; check_eq "plan: exit 0" 0 "$rc"; has "^long${T}yes" && pass "a long job" || fail "$out"
 : > "$CALLS"; run start cache-mover; check_eq "start: exit 0" 0 "$rc"; has "^status${T}started" && pass "a job was started" || fail "$out"
@@ -49,6 +51,7 @@ run plan fans-clean; check_eq "plan: exit 0" 0 "$rc"; has "for 8 seconds" && pas
 run plan fans-clean --seconds 20; has "for 20 seconds" && pass "the seconds are used" || fail "$out"
 run plan fans-clean --seconds 2;  check_eq "too short: refused" 1 "$rc"
 run plan fans-clean --seconds 31; check_eq "too long: refused" 1 "$rc"
+check_match "too long a time is refused with admin.seconds-invalid" $'code\tadmin.seconds-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF admin.seconds-invalid && pass "admin.seconds-invalid is in the catalogue" || fail "admin.seconds-invalid is not in the catalogue"
 run plan fans-clean --seconds x;  check_eq "not a number: refused" 1 "$rc"
 : > "$CALLS"; run start fans-clean --seconds 12; check_eq "start: exit 0" 0 "$rc"
 grep -q "JOB bash .*fans-stub.sh clean 12" "$CALLS" && pass "fans.sh clean 12 ran as a job" || fail "$(cat "$CALLS")"

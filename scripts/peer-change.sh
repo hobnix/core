@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: change the shares between two homeservers without asking anything: what would happen (plan), then do it (start)
 # help.de: die Freigaben zwischen zwei Homeservern ändern, ohne etwas zu fragen: was passieren würde (plan), dann ausführen (start)
-# args: plan|start offer <peer> <share> [--new-password] | add <peer> <host> <share> --user <login> [--domain <D>] | remove <peer> [<share>] | revoke <peer> [<share>] | attach <peer> <instance> [--path <inside>] | detach <peer> <instance>
+# args: plan|start code <share> [--peer <name>] [--minutes N] | receive-code [--minutes N] | add-code [--server <name|host>] [--reconnect <server>] (code on stdin) | send-code <share> --peer <name> [--server <host>] (code on stdin) | offer <peer> <share> [--new-password] | add <peer> <host> <share> --user <login> [--domain <D>] | remove <peer> [<share>] | revoke <peer> [<share>] | attach <peer> <instance> [--path <inside>] | detach <peer> <instance>
 # System command (hs sys peers plan|start): for the interface and tests. It never asks and prints plain key<TAB>value lines like backup-change.sh.
 # The work is remote.sh's (no logic is repeated here). The reads are `hs sys remote list`.
 #   offer    give another homeserver read access to a share (the login remote-<peer>). It is answered in the start answer itself, never as a
@@ -25,32 +25,105 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 
 verb=${1:-}; action=${2:-}
 case "$verb" in plan|start) ;; *) echo "usage: peer-change.sh plan|start add|remove|revoke|attach|detach ..." >&2; exit 1 ;; esac
-case "$action" in offer|add|remove|revoke|attach|detach) ;; *) refuse_code action.unknown "unknown action (offer, add, remove, revoke, attach or detach)" ;; esac
+case "$action" in offer|add|remove|revoke|attach|detach|code|receive-code|add-code|send-code) ;; *) refuse_code action.unknown "unknown action (offer, add, remove, revoke, attach, detach, code, receive-code, add-code or send-code)" ;; esac
 shift 2 || true
+valid() { [[ "$2" =~ $3 ]] || refuse_code peer.invalid "that is not a valid $1"; }
 
-valid() { [[ "$2" =~ $3 ]] || refuse "that is not a valid $1"; }
+# Pairing by code (docs/PLAN-remote-shares.md D9). These four take no <peer> first:
+#   code <share> [--peer <name>] [--minutes N]    make a code the other server types (give access). Answered in the start answer itself, never a
+#                                                 background job: the lines `secret<TAB>code|address|expires_in<TAB>value` hold what to show.
+#   receive-code [--minutes N]                    make a code this server shows so that another server gives it a share (the reverse direction), same answer
+#   add-code [--server <name|host>]               use the code of another server: ONE LINE ON STANDARD INPUT of start (the code, maybe with @host); never in the arguments
+#   send-code <share> --peer <name> [--server <host>]   give a share to the server whose code is on standard input
+case "$action" in code|receive-code|add-code|send-code)
+  a="" peer="" server="" minutes="" reconnect=""
+  case "$action" in
+    code|send-code) a=${1:-}; shift || true; valid "share name" "$a" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' ;;
+  esac
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --peer)    [ $# -ge 2 ] || refuse_code peer.value-missing "--peer needs a value"; peer=$2; shift 2 ;;
+      --server)  [ $# -ge 2 ] || refuse_code peer.value-missing "--server needs a value"; server=$2; shift 2 ;;
+      --reconnect) [ $# -ge 2 ] || refuse_code peer.value-missing "--reconnect needs a value"; reconnect=$2; shift 2 ;;
+      --minutes) [ $# -ge 2 ] || refuse_code peer.value-missing "--minutes needs a value"; minutes=$2; shift 2 ;;
+      *) refuse_code option.unknown "unknown option $1" ;;
+    esac
+  done
+  [ -z "$peer" ] || valid "server name (lower-case letters, digits and dashes, at most 20)" "$peer" '^[a-z0-9][a-z0-9-]{0,19}$'
+  [ -z "$server" ] || valid "server (a name or an address)" "$server" '^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$'
+  [ -z "$reconnect" ] || valid "server name" "$reconnect" '^[a-z0-9][a-z0-9-]{0,19}$'
+  [ -z "$minutes" ] || valid "life time (1 to 60 minutes)" "$minutes" '^[0-9]{1,2}$'
+  if [ "$action" = send-code ] && [ -z "$peer" ]; then refuse_code peer.name-missing "send-code needs --peer <name for the other server>"; fi
+  if [ "$action" = add-code ] && [ "$verb" = plan ] && [ -z "$server" ]; then :; fi
+  export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
+  unset HS_GUIDED_TTY
+  args=()
+  case "$action" in
+    code) args=(offer "$a" --code); [ -z "$peer" ] || args+=(--peer "$peer"); [ -z "$minutes" ] || args+=(--minutes "$minutes"); args+=(--plain --yes) ;;
+    receive-code) args=(receive); [ -z "$minutes" ] || args+=(--minutes "$minutes"); args+=(--plain --yes) ;;
+    add-code) args=(add --code --stdin); [ -z "$server" ] || args+=(--server "$server"); [ -z "$reconnect" ] || args+=(--reconnect "$reconnect"); args+=(--yes) ;;
+    send-code) args=(send "$a" --peer "$peer" --code --stdin); [ -z "$server" ] || args+=(--server "$server"); args+=(--yes) ;;
+  esac
+  if [ "$verb" = start ]; then
+    rc=0
+    case "$action" in
+      code|receive-code) out=$(bash "$remote" "${args[@]}" </dev/null 2>&1) || rc=$? ;;
+      *) out=$(bash "$remote" "${args[@]}" 2>&1) || rc=$? ;;   # the code is the one line on standard input
+    esac
+    if [ "$rc" -ne 0 ]; then
+      refuse_code peer.failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
+    fi
+    printf 'status\tdone\n'
+    awk -F'\t' '$1 == "code-result" { printf "secret\t%s\t%s\n", $2, $3 }' <<<"$out"
+    exit 0
+  fi
+  printf 'status\tok\n'
+  case "$action" in
+    code)
+      printf 'heading\tmake a code for %s\n' "$a"
+      printf 'step\tmake a code of 16 characters; the other server types it within the next minutes\n'
+      printf 'note\tThe code works once and is shown once, on the next screen. It is not kept in any log.\n'
+      printf 'note\tWith it the other server can read %s and nothing else.\n' "$a" ;;
+    receive-code)
+      printf 'heading\tmake a code for another server to give a share to this one\n'
+      printf 'step\tmake a code of 16 characters; the other server types it and picks the share\n'
+      printf 'note\tThe code works once and is shown once, on the next screen. It is not kept in any log.\n' ;;
+    add-code)
+      printf 'heading\tuse the code of another server\n'
+      printf 'step\tclaim the share with the code, save the login in the vault and mount it read only\n'
+      printf 'note\tRead only. Not part of the share storage, the parity or the backup.\n' ;;
+    send-code)
+      printf 'heading\tgive %s to the server that made the code\n' "$a"
+      printf 'step\tmake the login remote-%s, which can read this share and nothing else, and hand it over\n' "$peer" ;;
+  esac
+  printf 'command\ths remote %s ...\n' "$action"
+  printf 'long\tno\n'
+  exit 0 ;;
+esac
+
+valid() { [[ "$2" =~ $3 ]] || refuse_code peer.invalid "that is not a valid $1"; }
 peer=${1:-}; valid "peer name (lower-case letters, digits and dashes, at most 20)" "$peer" '^[a-z0-9][a-z0-9-]{0,19}$'
 shift
 a="" b="" login="" domain="" path="" confirm="" newpw=false
 case "$action" in
   offer) a=${1:-}; shift || true; valid "share name" "$a" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' ;;
-  add) a=${1:-}; b=${2:-}; shift 2 || refuse "add needs <host> and <share>"
+  add) a=${1:-}; b=${2:-}; shift 2 || refuse_code peer.args-missing "add needs <host> and <share>"
        valid "host" "$a" '^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$'; valid "share name" "$b" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' ;;
   remove|revoke) if [ $# -gt 0 ] && [[ "$1" != -* ]]; then a=$1; shift; valid "share name" "$a" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'; fi ;;
   attach|detach) a=${1:-}; shift || true; valid "instance name" "$a" '^[A-Za-z0-9][A-Za-z0-9-]{0,62}$' ;;
 esac
 while [ $# -gt 0 ]; do
   case "$1" in
-    --user)    [ $# -ge 2 ] || refuse "--user needs a value"; login=$2; shift 2 ;;
-    --domain)  [ $# -ge 2 ] || refuse "--domain needs a value"; domain=$2; shift 2 ;;
-    --path)    [ $# -ge 2 ] || refuse "--path needs a value"; path=$2; shift 2 ;;
+    --user)    [ $# -ge 2 ] || refuse_code peer.value-missing "--user needs a value"; login=$2; shift 2 ;;
+    --domain)  [ $# -ge 2 ] || refuse_code peer.value-missing "--domain needs a value"; domain=$2; shift 2 ;;
+    --path)    [ $# -ge 2 ] || refuse_code peer.value-missing "--path needs a value"; path=$2; shift 2 ;;
     --new-password) newpw=true; shift ;;
     --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 if [ "$action" = add ]; then
-  [ -n "$login" ] || refuse "add needs --user <login>"
+  [ -n "$login" ] || refuse_code peer.user-missing "add needs --user <login>"
   valid "login" "$login" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
   [ -z "$domain" ] || valid "domain" "$domain" '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
 fi
@@ -62,11 +135,11 @@ unset HS_GUIDED_TTY
 list=$(bash "$remote" list </dev/null 2>/dev/null || true)   # kind peer share host-or-login state
 has_row() { awk -F'\t' -v k="$1" -v p="$2" -v s="${3:-}" '$1 == k && $2 == p && (s == "" || $3 == s) { f = 1 } END { exit !f }' <<<"$list"; }
 case "$action" in
-  offer)  if has_row offer "$peer" "$a" && ! $newpw; then refuse "'$a' is offered to '$peer' already (tick the new password to change it)."; fi ;;
-  add)    if has_row mount "$peer" "$b"; then refuse "'$peer' / '$b' is set up already."; fi ;;
-  remove) has_row mount "$peer" "$a" || refuse "Nothing is mounted from '$peer'${a:+ / '$a'}." ;;
-  revoke) has_row offer "$peer" "$a" || refuse "Nothing is shared with '$peer'${a:+ / '$a'}." ;;
-  attach|detach) has_row mount "$peer" || refuse "Nothing is mounted from '$peer'." ;;
+  offer)  if has_row offer "$peer" "$a" && ! $newpw; then refuse_code peer.offered "'$a' is offered to '$peer' already (tick the new password to change it)."; fi ;;
+  add)    if has_row mount "$peer" "$b"; then refuse_code peer.mounted "'$peer' / '$b' is set up already."; fi ;;
+  remove) has_row mount "$peer" "$a" || refuse_code peer.not-mounted "Nothing is mounted from '$peer'${a:+ / '$a'}." ;;
+  revoke) has_row offer "$peer" "$a" || refuse_code peer.not-offered "Nothing is shared with '$peer'${a:+ / '$a'}." ;;
+  attach|detach) has_row mount "$peer" || refuse_code peer.not-mounted "Nothing is mounted from '$peer'." ;;
 esac
 
 red=""
@@ -87,7 +160,7 @@ if [ "$verb" = start ]; then
   if [ "$action" = offer ]; then
     out=$(bash "$remote" "${args[@]}" </dev/null 2>&1) || rc=$?
     if [ "$rc" -ne 0 ]; then
-      refuse "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
+      refuse_code peer.failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
     fi
     printf 'status\tdone\n'
     awk -F'\t' '$1 == "offer-result" { printf "secret\t%s\t%s\n", $2, $3 }' <<<"$out"
@@ -96,7 +169,7 @@ if [ "$verb" = start ]; then
   if [ "$action" = add ]; then out=$(bash "$remote" "${args[@]}" 2>&1) || rc=$?
   else out=$(bash "$remote" "${args[@]}" </dev/null 2>&1) || rc=$?; fi
   if [ "$rc" -ne 0 ]; then
-    refuse "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
+    refuse_code peer.failed "$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)"
   fi
   printf 'status\tdone\n'
   exit 0

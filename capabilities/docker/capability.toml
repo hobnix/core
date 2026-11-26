@@ -9,9 +9,9 @@ requires = []
 provides = ["docker-manager"]
 variants = ["arcane", "portainer"]
 needs = []
-# On when the setting dockerManager is set (webui, arcane, portainer or none; `hs docker enable` sets it). No NixOS module: the container
-# is made by scripts/docker.sh. The recipe docker still has its own preference MANAGER (recipe-<ct>.conf) until `hs docker adopt` exists.
-implied_by = ["dockerManager"]
+# On when the setting docker is set (`hs docker enable` and `hs docker migrate` set it) or the older setting dockerManager is (it still counts
+# until it is removed). No NixOS module: the container is made by scripts/docker.sh. The recipe docker still has its own preference MANAGER (recipe-<ct>.conf) until `hs docker adopt` exists.
+implied_by = ["docker", "dockerManager"]
 notes = "NOTES.md"
 
 # The guided setup on the settings page (docs/PLAN-docker-instances.md): two questions, one screen each. Apply = `hs sys docker plan|start setup`.

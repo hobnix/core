@@ -10,6 +10,12 @@ export { default as EmptyState } from './EmptyState.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export { default as Switch } from './Switch.svelte';          // also the checkbox: <Switch box>
 export { default as Combobox } from './Combobox.svelte';
+export { default as ServerField } from './ServerField.svelte';   // base of the five below: searchable list with loading, error and empty states
+export { default as ShareField } from './ShareField.svelte';     // a form field for a share of the server (groups local / remote, kind filter, `free`)
+export { default as DiskField } from './DiskField.svelte';       // a disk (free by default, `multiple` = DiskPicker)
+export { default as PoolField } from './PoolField.svelte';       // a pool
+export { default as InstanceField } from './InstanceField.svelte'; // an instance with its state (`running` filter)
+export { default as UserField } from './UserField.svelte';       // a user (or `principals`: users and groups by SID)
 export { default as Drawer } from './Drawer.svelte';
 export { default as Button } from './Button.svelte';          // every button that starts something: busy state, spinner, promise-aware
 export { default as Kv } from './Kv.svelte';
@@ -46,5 +52,6 @@ export { default as Menu } from './Menu.svelte';           // the More menu and 
 export { default as Toast } from './Toast.svelte';         // mounted once in the shell; fed by toast() from toast.svelte.js
 export { toast, dismissToast } from './toast.svelte.js';
 export { default as QuickLook } from './QuickLook.svelte'; // the Drawer as an overlay above a list
+export { default as Breadcrumbs } from './Breadcrumbs.svelte';   // the parents of a page as links (shell/PageTrail.svelte derives them)
 export { default as NetMap } from './NetMap.svelte';             // issue 875: the network map, SVG nodes and links, canvas traffic dots (layout in netmap/)
 export { default as NodePopover } from './NodePopover.svelte';     // spike, issue 871: map-node detail popover on @ui-sdk/svelte (not used by a page yet)

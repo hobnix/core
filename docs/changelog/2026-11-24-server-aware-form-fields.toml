@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Forms: pick a share, user or instance from a searchable list"
+body  = """Forms that asked you to type the name of something that already exists now show a searchable list instead: the share in Bind storage, Restore files and Copy a disk into a share, the user or group in Add access, the instance in New share. Each entry shows a short detail (kind and size, state), the list says when it is still loading, could not be read or is empty, and Restore files still lets you type the name of a share that was deleted. The drop-down also finds entries as you type. The names sent to the server are the same as before."""

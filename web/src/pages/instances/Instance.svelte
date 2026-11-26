@@ -1,12 +1,13 @@
 <script>
-  // Instances > one instance: /instances/ct/<name>[/<tab>] (D6). The Object template (shell/ObjectPage.svelte) with the tabs Overview, Config, Network and Console (D3 a):
-  //   Overview  the facts, backup, the Docker apps of a Docker host, the linked shares, route and recipes
+  // Apps & VMs > one instance: /apps/instance/<name>[/<tab>] (D6). The Object template (shell/ObjectPage.svelte) with the tabs Overview, Config, Network and Console (D3 a):
+  //   Overview  the facts, the recipe that set it up, backup, the Docker apps of a Docker host, the linked shares, route and recipes
   //   Config    the settings, the storage bindings and the snapshots
   //   Network   the address and the route the reverse proxy publishes
   //   Console   a shell (and the screen of a VM) in their windows, and the journal
   // Actions (D4): primary Start or Stop; ONE secondary that follows the tab (Overview: Restart, Config: Settings, Network: Settings, Console: Terminal); the rest in
   // the More menu; Delete only in the danger section. A running or failed job shows on the header and the job strip. A viewer sees all of it read-only.
-  import { P, poolPath } from '../../paths.js';
+  import { P, poolPath, dockerAppPagePath } from '../../paths.js';
+  import { setSelection } from '../../select.svelte.js';
   import { route, go } from '../../route.svelte.js';
   import { objectOf, objects } from '../../objects.js';
   import { poll, rows } from '../../data.svelte.js';
@@ -71,13 +72,14 @@
       { kind: 'Pages', name: 'Backup', href: P.backup, note: m.backupKnown && c.name in m.backupOf ? (m.backupOf[c.name] ? 'in the backup' : 'not in the backup') : '' },
     ];
   });
+  const openRecipe = (recipe) => { setSelection('recipes', recipe); go(P.apps); };
   const re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const jobs = $derived((r) => !!name && new RegExp(`(^|[^\\w-])${re(name)}($|[^\\w-])`).test(r.description ?? ''));
 </script>
 
-<ObjectPage crumb="Instances" title={name} chip={c ? kindOf(c) : ''} state={c ? (failure ? 'bad' : doing ? 'info' : dot(c.state)) : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : c ? word(c.state) : ''}
+<ObjectPage title={name} chip={c ? kindOf(c) : ''} state={c ? (failure ? 'bad' : doing ? 'info' : dot(c.state)) : ''} stateLabel={failure ? 'failed' : doing ? `${doing.toLowerCase()}…` : c ? word(c.state) : ''}
             tabs={objects.instance.tabs} {tab} onpick={(id) => go(instancePath(name, id))} {menu} {danger} {links} {jobs} need="app-manager"
-            loading={!m.ctl.loaded} error={m.ctl.error && !m.ctl.data ? m.ctl.error.message : ''} notFound={m.ctl.loaded && !c} notFoundTitle="No such instance" backTo={P.instances} backLabel="All instances"
+            loading={!m.ctl.loaded} error={m.ctl.error && !m.ctl.data ? m.ctl.error.message : ''} notFound={m.ctl.loaded && !c} notFoundTitle="No such instance" backTo={P.appsGroup} backLabel="All apps and VMs"
             notFoundText={`No instance called “${name}” exists. It may have been deleted or renamed.`}>
   {#snippet primary()}
     {#if c}
@@ -108,11 +110,14 @@
             { k: 'RAM / CPU', v: `${spaced(c.ram) || '–'} / ${c.cpu || '–'}` }, { k: 'Disk', v: dash(c.disk) }, { k: 'Last snapshot', v: dash(c.lastSnap) },
             { k: 'Backup', v: m.backupKnown && c.name in m.backupOf ? (m.backupOf[c.name] ? 'in the nightly backup' : 'not in the backup') : '' },
           ]} />
+          {#if m.myRecipes.length}
+            <Row gap="2" wrap align="center"><Muted>Set up by the recipe</Muted>{#each m.myRecipes as r (r.name)}<Button variant="ghost" size="sm" tooltip="Open the recipe in the app catalog" onclick={() => openRecipe(r.name)}>{r.name}</Button>{/each}</Row>
+          {/if}
           <Muted as="p">Whether it is in the backup is set on <Button variant="ghost" size="sm" tooltip="Open the Backup page" onclick={() => go(P.backup)}>Backup</Button>.</Muted>
         </Card>
         {#if kids.length}
           <Card title="Docker apps">
-            <Row gap="3" wrap>{#each kids as r (r[0])}<Button size="sm" icon="shipping-container" tooltip="Open the app in Docker" onclick={() => go(P.docker)}>{r[0]} · {r[3]}</Button>{/each}</Row>
+            <Row gap="3" wrap>{#each kids as r (r[0])}<Button size="sm" icon="shipping-container" tooltip="Open the page of this Docker app" onclick={() => go(dockerAppPagePath(r[0]))}>{r[0]} · {r[3]}</Button>{/each}</Row>
           </Card>
         {/if}
       {/if}

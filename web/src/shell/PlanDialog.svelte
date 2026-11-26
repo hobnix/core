@@ -5,7 +5,8 @@
   import { plan as askPlan, start as doStart } from '../api.js';
   import { ui, starting, track, trackDone, showTab, openPlan } from '../ui.svelte.js';
   import { toast, dismissToast } from '../ui/toast.svelte.js';
-  import { offersRebuild, effectOf } from './effect.js';
+  import { effectOf } from './effect.js';
+  import { staysForRebuild, typedNames, allTyped, startRequest } from './planstart.js';
   import { jobKey } from '../jobkey.js';
   import { tr } from '../i18n.js';
   import PlanSteps from './PlanSteps.svelte';
@@ -21,7 +22,7 @@
 
   let p = $state(null);                 // the plan, as the backend parsed it
   let loadError = $state(dialog.refused ?? '');   // refused: this role may not make the change (ui.svelte.js openPlan), nothing is asked
-  let confirm = $state('');
+  let typed = $state([]);               // what the person typed, one entry per name the plan asks for
   let busy = $state(false);
   let startError = $state('');
   let startCode = $state('');
@@ -32,13 +33,15 @@
   const savedText = $derived(effectOf(p?.steps)?.text ?? 'This takes effect with hs rebuild.');
   const danger = $derived(!!p?.steps.some((s) => s[0] === 'danger'));
   const allowed = $derived(p?.status === 'ok');
-  const canStart = $derived(allowed && !busy && (!p.confirm_name || confirm === p.confirm_name));
+  const names = $derived(typedNames(dialog?.area, p));
+  const named = $derived(allTyped(names, typed));
+  const canStart = $derived(allowed && !busy && named);
   const kicker = $derived(p && !allowed ? 'Plan · refused' : danger ? 'Plan · danger' : 'Plan');
 
   let asked = 0;                        // a newer question makes an older answer stale
   function load() {
     const n = ++asked;
-    p = null; loadError = ''; startError = ''; startCode = ''; confirm = '';
+    p = null; loadError = ''; startError = ''; startCode = ''; typed = [];
     askPlan(dialog.area, args, undefined, undefined, undefined, dialog.document)
       .then((r) => { if (n === asked) p = r; }, (e) => { if (n === asked) loadError = e.message; });
   }
@@ -60,8 +63,8 @@
     const { area, title: dtitle, document } = dialog;
     const startArgs = [...args];
     const name = dtitle || p.heading || 'Change';
-    const ask = p.confirm_name ? confirm : '';
-    const stay = area !== 'system' && offersRebuild(p.steps);
+    const req = startRequest(area, startArgs, p, typed);
+    const stay = staysForRebuild(area, p.steps);
     const tkey = `start:${jobKey(area, startArgs)}`;
     const steps = p.steps ?? [];
     const again = () => openPlan(area, startArgs, dtitle);
@@ -70,7 +73,7 @@
     const pk = jobKey(area, startArgs);
     starting.keys.push(pk);
     try {
-      const r = await doStart(area, startArgs, ask, undefined, undefined, document);
+      const r = await doStart(area, req.args, req.confirm, undefined, undefined, document);
       if (r.status === 'started' && r.unit) {
         track(r.unit, name, jobKey(area, startArgs));
         toast({ key: tkey, kind: 'info', title: name, text: tr('Running in the background.'), action: () => showTab('tasks'), actionLabel: tr('Open Tasks') });
@@ -131,10 +134,12 @@
       {#if startError && startCode}<ErrorNote code={startCode} what={startError} />
       {:else if startError}<div class="refused"><i class="ph ph-warning-circle"></i>{startError}</div>{/if}
     </div>
-    {#if !saved && allowed && p.confirm_name}
+    {#if !saved && allowed && names.length}
       <div class="confirm">
-        <label for="cf">Type <code>{p.confirm_name}</code> to confirm</label>
-        <TextInput id="cf" bind:value={confirm} placeholder={p.confirm_name} autocomplete="off" spellcheck={false} />
+        {#each names as n, i (n)}
+          <label for="cf{i}">Type <code>{n}</code> to confirm</label>
+          <TextInput id="cf{i}" bind:value={() => typed[i] ?? '', (v) => { typed[i] = v; }} placeholder={n} autocomplete="off" spellcheck={false} />
+        {/each}
       </div>
     {/if}
     {#if saved}
@@ -151,7 +156,7 @@
         <Button variant="primary" onclick={() => { const cb = dialog.onReload; close(); cb(); }}>Reload</Button>
       {/if}
       {#if allowed}
-        <Button variant={danger ? 'danger' : 'primary'} tooltip={canStart ? '' : p.confirm_name && confirm !== p.confirm_name ? 'Type the name to confirm first' : busy ? 'Starting' : 'This change cannot be started now'} disabled={!canStart} onclick={() => { go(); }}>
+        <Button variant={danger ? 'danger' : 'primary'} tooltip={canStart ? '' : !named ? 'Type the name to confirm first' : busy ? 'Starting' : 'This change cannot be started now'} disabled={!canStart} onclick={() => { go(); }}>
           <i class="ph ph-play"></i>{busy ? 'Starting…' : 'Start job'}
         </Button>
       {/if}

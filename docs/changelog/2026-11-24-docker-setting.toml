@@ -1,0 +1,6 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Docker has its own on switch, a running manager keeps running"
+body  = """The new setting docker is the on switch of Docker (before, the setting dockerManager did both jobs). hs update moves a server over by itself with hs docker migrate: it sets docker, remembers Arcane or Portainer if one runs, and touches no container. hs docker migrate --undo puts the old setting back.
+
+Not tested on hardware yet."""

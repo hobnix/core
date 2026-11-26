@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "Extensions get the real address of an app instead of the text {host}"
+body  = """hs pkg integrations and the init message of a service extension now fill {host} in an app's API address, so Media Hub can reach Jellyfin. The address is the one Incus reports for the network card of the app's own instance (with several cards, the one called eth0); Docker bridge addresses are never used. When the instance is stopped or has no single address, the API address is shown as -. A service reads the address once, when it starts: if it changes, stop and start the service. Not tested on hardware yet."""

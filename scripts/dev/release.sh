@@ -7,7 +7,8 @@
 #       config/trusted-keys, then pushed. Refuses unless you are on main, the tree is clean, main equals origin/main and `pkg.py repo-check`
 #       passes. Shows what goes into the release and asks you to type the tag, or pass --yes. --version names the tag (the first one of a
 #       repository, or a level the number rule does not give). --dry-run does every check and shows the plan, then stops before the key is
-#       needed (the `gate` job of the GitHub workflow uses it, so CI and this script cannot drift).
+#       needed (the `gate` job of the GitHub workflow uses it, so CI and this script cannot drift). A repository that publishes a signed
+#       index (`publish = "index"` at the top of index.toml, hobnix/official) has no tags: this refuses there; only `bump` works.
 #   bash <core>/scripts/dev/release.sh bump <package> [patch|minor|major] [--pr] [--no-push]
 #       Raise the version of one package (package.toml and index.toml agree, the rule of CONTRIBUTING.md), commit it on the current
 #       branch (not main) and push the branch; --pr also opens the pull request; --no-push only commits (prepare-release.sh).
@@ -38,7 +39,7 @@ while [ $# -gt 0 ]; do
     --version) shift; want=${1:-} ;;
     --key) shift; key=${1:-} ;;
     --signers) shift; signers=${1:-} ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "Unknown argument: $1 (see --help)" ;;
   esac
   shift
@@ -64,8 +65,12 @@ valid_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 if [ "$what" = bump ]; then
   step "Raise the version of a package"
   [[ "$pkg" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "Name the package: release.sh bump <package> [patch|minor|major]"
-  dir=$repo/$pkg
-  [ -f "$dir/package.toml" ] || fail "There is no package $pkg in $repo/."
+  # hobnix/official holds several folders: the one that has the package
+  dir=""
+  for d in recipes extensions capabilities blueprints; do
+    if [ -f "$d/$pkg/package.toml" ]; then dir=$d/$pkg; break; fi
+  done
+  [ -n "$dir" ] || fail "There is no package $pkg in recipes/, extensions/, capabilities/ or blueprints/."
   branch=$(git branch --show-current)
   [ -n "$branch" ] && [ "$branch" != main ] || fail "Make a branch first (feature/<topic>); a version change goes in through a pull request."
   old=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$dir/package.toml" | head -n1)
@@ -80,7 +85,7 @@ if [ "$what" = bump ]; then
     { print }' index.toml > index.toml.new && mv index.toml.new index.toml
   python3 -I "$core/scripts/pkg.py" repo-check . >/dev/null 2>&1 || { git checkout -- "$dir/package.toml" index.toml; fail "repo-check fails with the new version; nothing was changed."; }
   git add "$dir/package.toml" index.toml
-  git commit -q -m "$pkg: $old -> $new" || fail "The commit failed."
+  git commit -q -s -m "$pkg: $old -> $new" || fail "The commit failed."
   ok "$(t '%s: %s -> %s, committed on %s' "$pkg" "$old" "$new" "$branch")"
   if ! $push; then exit 0; fi
   git push -q -u "$remote" "$branch" || fail "The push failed."
@@ -95,6 +100,9 @@ if [ "$what" = bump ]; then
 fi
 
 # ── tag the repository ──
+# A repository that publishes a signed index (hobnix/official) has no tags: a release is the merge develop -> main (docs/PLAN-packages.md).
+awk '/^\[/ { exit } /^publish[[:space:]]*=[[:space:]]*"index"/ { found = 1 } END { exit !found }' index.toml &&
+  fail "This repository publishes a signed index, no tags. A release is the merge of develop into main; the workflow index signs it."
 step "Check the repository"
 [ "$(git branch --show-current)" = main ] || fail "Switch to main first: a release is always cut from main."
 [ -z "$(git status --porcelain)" ] || fail "The tree has uncommitted changes."

@@ -19,7 +19,7 @@ parts=${HS_PARTS:-$here/parts.sh}
 partchange=${HS_PART_CHANGE:-$here/part-change.sh}
 rebuild=${HS_REBUILD:-$here/rebuild.sh}
 
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}
 namelist='^[a-z0-9][a-z0-9-]{0,40}(,[a-z0-9][a-z0-9-]{0,40}){0,15}$'
@@ -45,13 +45,13 @@ if [ "$verb" = run ]; then
   exit 0
 fi
 
-[ $# -ge 2 ] || refuse "give the packages as one comma list of names"
+[ $# -ge 2 ] || refuse_code name.invalid "give the packages as one comma list of names"
 arg=$2
 shift 2
 if [ $# -gt 0 ]; then
-  if [ "$1" = --confirm ] && [ $# -eq 2 ]; then :; else refuse "unexpected extra arguments"; fi
+  if [ "$1" = --confirm ] && [ $# -eq 2 ]; then :; else refuse_code args.unexpected "unexpected extra arguments"; fi
 fi
-[[ "$arg" =~ $namelist ]] || refuse "give the packages as one comma list of names"
+[[ "$arg" =~ $namelist ]] || refuse_code name.invalid "give the packages as one comma list of names"
 picked=()
 declare -A pk=()
 IFS=, read -ra raw <<<"$arg"
@@ -59,9 +59,9 @@ for n in "${raw[@]}"; do [ -z "${pk[$n]:-}" ] || continue; pk[$n]=1; picked+=("$
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
 
-[ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
+[ ! -e "${HS_LOCKED_MARKER:-/run/hs/storage-locked}" ] || refuse_code pkg.storage-locked "The storage is locked: unlock it first (hs unlock), a rebuild would refuse."
 net_ok() { case "${HS_BUNDLE_NET:-}" in ok) return 0 ;; fail) return 1 ;; esac; . "$here/lib/netcheck.sh"; netcheck_ok >/dev/null 2>&1; }
-net_ok || refuse "This needs the network (installing reads the signed releases, the rebuild the binary cache). Skip this step and add parts later with hs pkg install."
+net_ok || refuse_code pkg.no-network "This needs the network (installing reads the signed releases, the rebuild the binary cache). Skip this step and add parts later with hs pkg install."
 
 caps=$(bash "$pkg" --capabilities 2>/dev/null || true)
 repos=$(bash "$pkg" --repos 2>/dev/null || true)
@@ -69,55 +69,19 @@ plist=$(bash "$parts" --list 2>/dev/null || true)
 mcaps=""
 if machine_has capabilities; then mcaps=$(machine_get capabilities 2>/dev/null || true); fi
 
-inst=(); en=(); why=()
-declare -A done_=() busy=()
-visit() {   # visit <name> <required by or empty>
-  local n=$1 by=${2:-} crow prow cnt repo kind r reqs st sw rl
-  [ -z "${done_[$n]:-}" ] || return 0
-  [ -z "${busy[$n]:-}" ] || refuse "the packages require each other in a circle ($n)"
-  busy[$n]=1
-  crow=$(awk -F'\t' -v n="$n" '$1 == n { print; exit }' <<<"$caps")
-  prow=$(awk -F'\t' -v n="$n" '$1 == n { print; exit }' <<<"$plist")
-  st=""; sw=""
-  if [ -n "$prow" ]; then st=$(cut -f2 <<<"$prow"); sw=$(cut -f5 <<<"$prow"); fi
-  if [ -n "$crow" ]; then
-    cnt=$(awk -F'\t' -v n="$n" '$1 == n { c++ } END { print c + 0 }' <<<"$caps")
-    [ "$cnt" -le 1 ] || refuse "$n is in more than one repository: install it with hs pkg install $n --repo <repo>"
-    repo=$(cut -f2 <<<"$crow")
-    kind=$(awk -F'\t' -v r="$repo" '$1 == r { print $4; exit }' <<<"$repos")
-    [ "$kind" != added ] || refuse "$n comes from a repository you added: install it from the Marketplace"
-    reqs=$(cut -f6 <<<"$crow")
-    if [ "$reqs" != - ]; then
-      IFS=, read -ra rl <<<"$reqs"
-      for r in "${rl[@]}"; do visit "$r" "$n"; done
-    fi
-    if [ "$(cut -f4 <<<"$crow")" = - ]; then
-      inst+=("$n")
-      if [ -n "$by" ]; then why+=("also install $n: $by requires it"); fi
-    fi
-    if [ "$st" = on ] || grep -qxF -- "$n" <<<"$mcaps"; then :; else en+=("$n"); fi
-  elif [ -n "$prow" ]; then
-    if [ "$st" = on ] || grep -qxF -- "$n" <<<"$mcaps"; then :; else
-      [ "$sw" = yes ] || refuse "$by requires $n, which follows the role of this server"
-      en+=("$n")
-      if [ -n "$by" ]; then why+=("also switch on $n: $by requires it"); fi
-    fi
-  else
-    if [ -n "$by" ]; then refuse "$by requires $n, which this server does not have and no repository offers (hs pkg fetch reads them again)"; fi
-    refuse "There is no capability package $n in the repositories (fetch them again first)."
-  fi
-  unset "busy[$n]"
-  done_[$n]=1
-}
+# shellcheck source=scripts/lib/bundle-resolve.sh
+# shellcheck source-path=SCRIPTDIR/..
+. "$here/lib/bundle-resolve.sh"   # visit(): the order and the refusals, shared with blueprint-change.sh
+bundle_inputs "$caps" "$repos" "$plist" "$mcaps"
 for n in "${picked[@]}"; do visit "$n" ""; done
 
 join() { local sep=$1 out="" x; shift; for x in "$@"; do out=${out:+$out$sep}$x; done; printf '%s' "$out"; }
 csv() { if [ $# -eq 0 ]; then printf '%s' -; else join , "$@"; fi; }
-if [ ${#inst[@]} -eq 0 ] && [ ${#en[@]} -eq 0 ]; then refuse "$(join ', ' "${picked[@]}") installed and on already."; fi
+if [ ${#inst[@]} -eq 0 ] && [ ${#en[@]} -eq 0 ]; then refuse_code pkg.nothing-to-do "$(join ', ' "${picked[@]}") installed and on already."; fi
 
 if [ "$verb" = start ]; then
   . "${HS_JOB_LIB:-$here/lib/job.sh}"
-  unit=$(hs_job "pkg-bundle" "hs pkg bundle $(join , "${picked[@]}")" -- bash "$here/pkg-bundle.sh" run "$(csv ${inst[@]+"${inst[@]}"})" "$(csv ${en[@]+"${en[@]}"})") || refuse "the job could not be started"
+  unit=$(hs_job "pkg-bundle" "hs pkg bundle $(join , "${picked[@]}")" -- bash "$here/pkg-bundle.sh" run "$(csv ${inst[@]+"${inst[@]}"})" "$(csv ${en[@]+"${en[@]}"})") || refuse_code job.start-failed "the job could not be started"
   printf 'status\tstarted\nunit\t%s\n' "$unit"
   exit 0
 fi

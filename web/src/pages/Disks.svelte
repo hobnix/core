@@ -51,7 +51,7 @@
   const missCols = [{ key: 'model', label: 'Disk' }, { key: 'dev', label: 'Was' }, { key: 'serial', label: 'Serial' }, { key: 'seen', label: 'Last seen', sort: 'num', value: (x) => x.lastSeen }, { key: 'act', label: '', sort: false, align: 'right', width: '1%' }];
 </script>
 
-<PageHeader title="Disks" crumb="Storage" sub="Every disk of this server: where it belongs, how healthy it is, what it has been through.">
+<PageHeader title="Disks" sub="Every disk of this server: where it belongs, how healthy it is, what it has been through.">
   {#snippet actions()}
     <Button need="admin" disabled={locked} tooltip={lockTip('Look at a USB or hot-plug disk: mount it read-only, copy from it, eject it')} onclick={() => openCreate(OtherDisk, {})}><i class="ph ph-usb"></i>Other disk</Button>
     <Button need="admin" variant="primary" disabled={locked || !m.counts.none} tooltip={lockTip(m.counts.none ? 'Pick free disks and see the plan' : 'There is no free disk')} onclick={() => addToPool(poolForNew)}><i class="ph ph-plus"></i>Add disks to a pool</Button>

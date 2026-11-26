@@ -29,11 +29,11 @@ def cell(text):
 
 def link(item):
     c = item.get("content") or {}
-    repo = c.get("repository", "hobnix/server")
+    repo = c.get("repository", "hobnix/core")
     num = c.get("number")
     if num is None:
         return "-"
-    short = "#%d" % num if repo == "hobnix/server" else "%s#%d" % (repo, num)
+    short = "#%d" % num if repo == "hobnix/core" else "%s#%d" % (repo, num)
     return "[%s](%s)" % (short, c.get("url", ""))
 
 

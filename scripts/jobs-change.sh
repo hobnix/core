@@ -30,7 +30,7 @@ if [ "$action" = answer ]; then   # ADR 0018: the web interface answers a waitin
 fi
 case "$action" in stop|run) ;; *) refuse_code action.unknown "unknown action (stop or run)" ;; esac
 case "$unit" in *.service) ;; *) unit=$unit.service ;; esac
-[[ "$unit" =~ ^hs-[A-Za-z0-9@._-]+\.service$ ]] || refuse "that is not a job of this server (hs-*)"
+[[ "$unit" =~ ^hs-[A-Za-z0-9@._-]+\.service$ ]] || refuse_code job.unit-invalid "that is not a job of this server (hs-*)"
 shift 3 || true
 confirm=""
 while [ $# -gt 0 ]; do
@@ -49,7 +49,7 @@ danger=""; safe=yes; rec_id=""
 who=${SUDO_USER:-${USER:-}}
 case "$action" in
   stop)
-    [ "$state" = running ] || refuse "$desc is not running."
+    [ "$state" = running ] || refuse_code job.not-running "$desc is not running."
     cmd=("$systemctl" stop "$unit")
     case "$unit" in
       hs-job-pool-*|hs-job-system-sync-*|hs-job-system-scrub-*|hs-bulk-sync.service|hs-bulk-scrub.service|hs-job-backup-init*|hs-job-share-purge-*)
@@ -60,9 +60,9 @@ case "$action" in
     rec_id=$(hs_job_record find-unit "$unit" 2>/dev/null) || rec_id="" ;;
   run)
     [ "$state" != running ] || refuse_code job.busy "$desc is running already."
-    [ "$state" != unknown ] || refuse "There is no job called '$unit'."
+    [ "$state" != unknown ] || refuse_code job.unknown "There is no job called '$unit'."
     # only the jobs of a timer: the list the Jobs tab shows
-    bash "$jobs" --list 2>/dev/null | awk -F'\t' -v u="$unit" '$1 == u { f = 1 } END { exit !f }' || refuse "'$unit' is not a scheduled job (only the hs-* timers can be run now)."
+    bash "$jobs" --list 2>/dev/null | awk -F'\t' -v u="$unit" '$1 == u { f = 1 } END { exit !f }' || refuse_code job.not-scheduled "'$unit' is not a scheduled job (only the hs-* timers can be run now)."
     cmd=("$systemctl" start --no-block "$unit") ;;
 esac
 
@@ -76,7 +76,7 @@ if [ "$verb" = start ]; then
   fi
   if ! "${cmd[@]}"; then
     [ -z "$marked" ] || hs_job_record uncancel "$rec_id" 2>/dev/null || true
-    refuse "systemctl failed"
+    refuse_code job.systemctl-failed "systemctl failed"
   fi
   if [ -n "$marked" ]; then   # event log (docs/adr/0005-events.md rule 9): best effort
     . "$here/lib/event.sh"; event_emit job.cancelled "$rec_id" "job stopped by ${who:-unknown}" || true

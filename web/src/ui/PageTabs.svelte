@@ -1,14 +1,15 @@
 <script>
-  // The tab row of a page (not of a drawer: that is Drawer.svelte's own): Network uses it for Overview, DNS, Ports, Router, Remote shares.
+  // The tab row of a page (not of a drawer: that is Drawer.svelte's own): Network uses it for Overview, DNS, Ports, Router.
   //   <PageTabs tabs={[{ id: 'dns', label: 'DNS' }]} {tab} onpick={(id) => go('/network?tab=' + id)} />  (or bind:tab)
+  // `controlled`: a click only calls onpick and the mark follows `tab`, so a caller may refuse the pick (the Object page: the mark follows the address).
   import { tr } from "../i18n.js";
-  let { tabs = [], tab = $bindable(''), onpick = null } = $props();
+  let { tabs = [], tab = $bindable(''), onpick = null, controlled = false } = $props();
   const active = $derived(tab || tabs[0]?.id || '');
 </script>
 
 <div class="ptabs" role="tablist">
   {#each tabs as t (t.id)}
-    <button class="pt" class:on={active === t.id} role="tab" aria-selected={active === t.id} onclick={() => { tab = t.id; onpick?.(t.id); }}>{tr(t.label)}</button>
+    <button class="pt" class:on={active === t.id} role="tab" aria-selected={active === t.id} onclick={() => { if (!controlled) tab = t.id; onpick?.(t.id); }}>{tr(t.label)}</button>
   {/each}
 </div>
 

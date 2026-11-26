@@ -132,6 +132,18 @@ if [ -f "$repo/scripts/pkg.py" ] && ! bad=$(python3 -I "$repo/scripts/pkg.py" co
   fi
 fi
 
+# The package repositories: fetch the signed index and move installed packages to the repository that replaced theirs (hs pkg repo migrate).
+# Never fatal: with the index host down the update still succeeds, the installed packages keep running and the next fetch heals the rest.
+if [ -f "$repo/scripts/pkg.py" ]; then
+  # pkg-refresh.sh fetches, keeps the state (hs sys pkg index) and says so itself when the index changed or could not be fetched; it exits 0 for a host that is down
+  bash "$repo/scripts/pkg-refresh.sh" || warn "$(t 'The package repositories could not be fetched: installed packages keep running, hs pkg fetch tries again.')"
+  if mig=$(python3 -I "$repo/scripts/pkg.py" repo migrate 2>&1); then
+    ! grep -q '^migrated' <<< "$mig" || live_refresh event:pkg.changed
+  else
+    warn "$(t 'Installed packages were not moved to the new repository: hs pkg repo migrate shows why.')"
+  fi
+fi
+
 # machine.nix -> machine.toml once (the old file is kept as machine.nix.migrated), then the options that are new in
 # machine.toml.example are put into machine.toml in their place, commented out (nothing of yours is changed)
 sync=$repo/scripts/machine-sync.sh
@@ -172,6 +184,11 @@ fi
 # (nothing is lost: they keep referring to the settings). Quiet, and never a reason to stop the update.
 if ( . "$(dirname "$0")/lib/capability.sh"; capability_on notifications ) 2>/dev/null; then
   bash "$(dirname "$0")/notify-channel.sh" migrate >/dev/null 2>&1 || true
+fi
+
+# Docker: the setting docker is the on switch now (it was dockerManager). Quiet; a manager that runs keeps running (hs docker migrate).
+if ( . "$(dirname "$0")/lib/capability.sh"; capability_on docker ) 2>/dev/null; then
+  bash "$(dirname "$0")/docker.sh" migrate >/dev/null 2>&1 || true
 fi
 
 event_emit update.started "$(hostname)" "hs update is running"

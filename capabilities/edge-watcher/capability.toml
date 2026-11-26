@@ -9,3 +9,5 @@ needs = []
 # the NixOS module, loaded only while the capability is on (capabilities/default.nix)
 nix = "module.nix"
 notes = "NOTES.md"
+# config options of this capability (config/schema.toml has the include anchors)
+options = "options.toml"

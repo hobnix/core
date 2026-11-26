@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "feature"
+title = "Installer and first run: choose what the server is for"
+body  = """hs-install records what to set up after the first boot (--blueprint, --parts or --core-only; the interactive question is wizard or core) and fetches nothing. hs first-run offers only the core, one blueprint that fits the role, or single parts, with the recorded choice first; a blueprint is shown as a plan and --yes never types a name for you. Apps a blueprint leaves to you appear in the first-run checklist. --preset still works as before. Not tested on hardware yet."""

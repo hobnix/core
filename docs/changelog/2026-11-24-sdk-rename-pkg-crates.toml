@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Extension SDK crate hobnix-ext-sdk is renamed to the hobnix-pkg crates in 0.14"
+body  = """In 0.14 the SDK crate hobnix-ext-sdk is replaced by the hobnix-pkg crates. This is a breaking change for extension authors. The old name re-exports them in 0.14 and is marked deprecated; it is removed after that release. Extension crates pin the SDK by rev, so nothing breaks until a crate bumps its pin."""

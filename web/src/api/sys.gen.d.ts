@@ -295,6 +295,42 @@ export interface SysOperations {
     exit: number;
     lines: string[][];
   };
+  "blueprint.list": {
+    /** the blueprints: name, repo, version, roles (csv), packages (csv, in order), state (new|applied|update|waits), title; - = empty */
+    words: ["blueprint", "list"];
+    path: "/blueprint/list";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, repo: Field, version: Field, roles: Field, packages: Field, state: "new" | "applied" | "update" | "waits", title: Field])[];
+  };
+  "blueprint.plan.by_action": {
+    /** what applying a blueprint would do, as data: status, blueprint, part lines, step|note|warn, confirm_name (never asks; exit 0 ok, 1 refused) */
+    words: ["blueprint", "plan", "<action>"];
+    path: "/blueprint/plan/{action}";
+    method: "post";
+    class: "plan";
+    role: "admin";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
+  "blueprint.start.by_action": {
+    /** apply it as one background job (hs sys blueprint start apply <name> [--confirm <name>]...); fills only what is not set; status started, unit, job */
+    words: ["blueprint", "start", "<action>"];
+    path: "/blueprint/start/{action}";
+    method: "post";
+    class: "start";
+    role: "admin";
+    params: { action: string; };
+    stdin: "none";
+    exit: 0 | 1 | 2;
+    lines: ChangeLines;
+  };
   "cache.state": {
     /** upload cache state per share */
     words: ["cache", "state"];
@@ -2059,6 +2095,23 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
+  "pkg.index": {
+    /** the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch */
+    words: ["pkg", "index"];
+    path: "/pkg/index";
+    method: "get";
+    class: "read";
+    role: "viewer";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "repo", name: Field]
+      | [tag: "last_ok", epoch: Field]
+      | [tag: "last_try", epoch: Field]
+      | [tag: "error", text: Field]
+      | [tag: "expires", epoch: Field]
+      | [tag: "notified", epoch: Field])[];
+  };
   "pkg.integrations": {
     /** what installed packages offer as data: package, integration, source (recipe|extension|capability), api_url, key_state (ok|locked|missing|-), extra (k=v comma list, - = none), key_header (- = not set); - = empty */
     words: ["pkg", "integrations"];
@@ -2517,6 +2570,42 @@ export interface SysOperations {
     stdin: "none";
     exit: 0 | 1 | 2;
     lines: ChangeLines;
+  };
+  "remote.accept": {
+    /** the receiving side of the reverse pairing (hs sys remote accept [--source <address>]): the push on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/push) */
+    words: ["remote", "accept"];
+    path: "/remote/accept";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "yes";
+    exit: number;
+    lines: unknown;
+  };
+  "remote.claim": {
+    /** the giving side of a code pairing (hs sys remote claim [--source <address>]): the claim request on stdin, the answer body (JSON) on stdout, exit 1 with the refusal body; called by hs-web (POST /api/remote/claim) and by the node word pair */
+    words: ["remote", "claim"];
+    path: "/remote/claim";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "yes";
+    exit: number;
+    lines: unknown;
+  };
+  "remote.codes": {
+    /** the codes open on this server, tab separated: share, server (or -), seconds left (never the code) */
+    words: ["remote", "codes"];
+    path: "/remote/codes";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [share: Field, server: Field, expires_in: Field][];
   };
   "remote.list": {
     /** offers and mounts, tab separated: kind, peer, share, host or login, state */

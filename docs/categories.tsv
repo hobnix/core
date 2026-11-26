@@ -15,6 +15,7 @@ en	Guides	operations
 en	Reference	@commands
 en	Contributing	dev-environment
 en	Contributing	GUIDE-TEMPLATE
+en	Contributing	CODE-PRACTICES
 en	Contributing	PLAN-modular-core
 en	Contributing	PLAN-extensions
 en	Contributing	PLAN-live-interface
@@ -22,8 +23,10 @@ en	Contributing	PLAN-navigation
 en	Contributing	PLAN-package-pages
 en	Contributing	PLAN-packages
 en	Contributing	PLAN-registry
+en	Contributing	PLAN-marketplace-stats
 en	Contributing	PLAN-package-names
 en	Contributing	PLAN-network-map
+en	Contributing	PLAN-remote-shares
 en	Contributing	Package-API
 en	Contributing	extensions-sdk
 en	Contributing	PLAN-capabilities-on-machine
@@ -38,7 +41,11 @@ en	Contributing	PLAN-capabilities-repo
 en	Contributing	PLAN-app-lifecycle
 en	Contributing	PLAN-storage-nas
 en	Contributing	PLAN-extensions-access
+en	Contributing	PLAN-package-sdk
+en	Contributing	PLAN-rust
+en	Contributing	PLAN-core-daemon
 en	Contributing	PLAN-jobs
+en	Contributing	PLAN-workloads
 en	Contributing	events
 en	Contributing	errors
 en	Contributing	roadmap
@@ -60,6 +67,7 @@ en	Contributing	RELEASE-NOTES-0.9
 en	Contributing	RELEASE-NOTES-0.10
 en	Contributing	RELEASE-NOTES-0.11
 en	Contributing	RELEASE-NOTES-0.12
+en	Contributing	RELEASE-NOTES-0.13
 en	Contributing	PLAN-docker-instances
 en	Contributing	PLAN-web-design
 en	Contributing	PLAN-selfservice

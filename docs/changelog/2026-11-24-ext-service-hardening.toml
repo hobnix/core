@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Extension services run with more systemd hardening"
+body  = """Services of extensions (and confined commands) can no longer change kernel settings, load modules, read the kernel log, set the clock, create namespaces or use system calls outside the usual service set. Unix sockets and the network stay open, and declared permissions such as the GPU work as before."""

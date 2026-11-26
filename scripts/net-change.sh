@@ -26,7 +26,7 @@ shift 2 || true
 address=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --address) [ $# -ge 2 ] || refuse "--address needs a value"; address=$2; shift 2 ;;
+    --address) [ $# -ge 2 ] || refuse_code net.value-missing "--address needs a value"; address=$2; shift 2 ;;
     *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
@@ -40,8 +40,8 @@ if [ ${#needs[@]} -gt 0 ]; then
   printf 'needs\t%s\n' "${needs[@]}"
   exit 2
 fi
-[[ "${address%/}" =~ ^https?://[A-Za-z0-9._:-]{1,100}$ ]] || refuse "That is not an address of the router (like https://10.10.10.1)."
-[[ "$key" != *[[:cntrl:]]* ]] || refuse "The key has a control character."
+[[ "${address%/}" =~ ^https?://[A-Za-z0-9._:-]{1,100}$ ]] || refuse_code net.address-invalid "That is not an address of the router (like https://10.10.10.1)."
+[[ "$key" != *[[:cntrl:]]* ]] || refuse_code net.key-invalid "The key has a control character."
 
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=${HS_CALLER:-ui}
 unset HS_GUIDED_TTY
@@ -51,7 +51,7 @@ if [ "$verb" = start ]; then
   out=$(printf '%s\n' "$key" | bash "$unifi" setup --address "${address%/}" --stdin 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     reason=$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/^[✗!] *//' | awk 'NF' | tail -n 1)
-    refuse "${reason:-the router could not be connected} (the address and key may be saved already; run hs net check to look at it)"
+    refuse_code net.failed "${reason:-the router could not be connected} (the address and key may be saved already; run hs net check to look at it)"
   fi
   printf 'status\tdone\n'
   exit 0

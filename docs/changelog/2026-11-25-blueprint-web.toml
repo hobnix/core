@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "feature"
+title = "Setup wizard: What is this server for?"
+body  = """The first-run wizard of the web interface has one step for it: only the core, a blueprint, or single parts. It replaces the preset and optional parts steps. A blueprint is shown as a plan with every part before its background job starts. Not tested on hardware yet."""

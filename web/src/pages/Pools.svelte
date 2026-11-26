@@ -156,7 +156,7 @@
 </script>
 
 {#if !pool}
-  <PageHeader title="Pools" crumb="Storage" sub="How the disks are grouped, how full they are and whether the redundancy holds.">
+  <PageHeader title="Pools" sub="How the disks are grouped, how full they are and whether the redundancy holds.">
     {#snippet actions()}
       <Button tooltip={'A disk failed or a pool will not open: the guided recovery'} onclick={() => go(P.incident)}><i class="ph ph-first-aid-kit"></i>Incident</Button>
       {#if freeDisks.length}<Button tooltip={'Show the disks that belong to no pool'} onclick={() => go(P.disks + '?pool=none')}><i class="ph ph-hard-drive"></i>{freeDisks.length} free disk{freeDisks.length === 1 ? '' : 's'}</Button>{/if}
@@ -181,7 +181,7 @@
     {/if}
   </PageState>
 {:else}
-  <PageHeader title={pool} crumb="Storage › Pools" sub={layout ? `${layout}${members.length ? ` · ${members.length} disk${members.length === 1 ? '' : 's'}` : ''}${luks ? ' · LUKS' : ''}` : ''}>
+  <PageHeader title={pool} sub={layout ? `${layout}${members.length ? ` · ${members.length} disk${members.length === 1 ? '' : 's'}` : ''}${luks ? ' · LUKS' : ''}` : ''}>
     {#snippet actions()}
       <Button tooltip={'Back to the list of pools'} onclick={() => go(P.pools)}><i class="ph ph-caret-left"></i>All pools</Button>
       <Button need="admin" disabled={locked || failed} tooltip={locked ? 'The storage is locked: the pools are down' : 'Pick free disks and see the plan'} onclick={() => addPool('empty')}><i class="ph ph-plus"></i>{notCreated ? 'Create pool' : snap ? 'Add disks' : 'Add mirror pair'}</Button>
@@ -250,7 +250,7 @@
           {:else}
             <Muted>{cts.loaded ? `${volumes.length} volume${volumes.length === 1 ? '' : 's'}${volBytes ? ` · ${sizeTxt(volBytes)}` : ''} · Incus pool "default"` : 'Loading…'}</Muted>
             <Button variant="ghost" size="sm" tooltip={'Show the shares in this pool'} onclick={() => go(`${P.shares}?pool=${pool}`)}>Shares<i class="ph ph-caret-right"></i></Button>
-            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go(P.instances)}>Instances<i class="ph ph-caret-right"></i></Button>
+            <Button variant="ghost" size="sm" tooltip={'Show the instances'} onclick={() => go(P.appsGroup)}>Apps &amp; VMs<i class="ph ph-caret-right"></i></Button>
           {/if}
         {/snippet}
       </Card>

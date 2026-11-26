@@ -91,6 +91,7 @@ rid3=$($JR new --slug gc --desc "Clean up old generations" --unit hs-job-gc-0330
 printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/systemctl-bad"; chmod +x "$WORK/systemctl-bad"
 HS_EVENT_NOROOT=1 HS_STATE_DB="$EVDB" HS_SYSTEMCTL="$WORK/systemctl-bad" SUDO_USER=carol run start stop hs-job-gc-0330
 check_eq "a failed stop is refused" 1 "$rc"
+check_match "a failed stop is refused with job.systemctl-failed" $'code\tjob.systemctl-failed' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF job.systemctl-failed && pass "job.systemctl-failed is in the catalogue" || fail "job.systemctl-failed is not in the catalogue"
 check_eq "a failed stop leaves the record running" running "$($JR get "$rid3" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
 check_eq "a failed stop writes no job.cancelled" 0 "$(HS_STATE_DB="$EVDB" python3 "$SCRIPTS/state-db.py" event-list 20 2>/dev/null | grep -c job.cancelled)"
 rid4=$($JR new --slug gc --desc "Clean up old generations" --unit hs-job-gc-0340 --initiator alice); $JR run "$rid4"

@@ -16,7 +16,8 @@ flagged `proto` (a package with `protocol = [1]`) through `dispatch` below; test
       package name, the argv of the request is ARG..., the timeout is the row's `timeout:<s>` flag (default 30). Nothing but the
       rendered answer goes to stdout (a `sys` row: TSV only), errors to stderr, the exit codes of `call`. PROGRAM is run by its
       extension (.py python3, .sh bash, else directly). A row with the flag `confine` is run through `systemd-run --pipe --wait --property=...`
-      with the properties of the package's declared permissions (scripts/lib/ext_confine.py); when that cannot be set up the command does NOT run
+      with the properties of the package's declared permissions (scripts/lib/ext_confine.py), as the dynamic user hsx-<package> with the state
+      folder of the package (scripts/lib/ext_state.py, the same as its service); when that cannot be set up the command does NOT run
       (exit 69). Test knob: HS_SYSTEMD_RUN (the systemd-run program).
       Rendering of result.data: a list = one line per item (a list item = its cells joined by TAB, an object item = its values in key
       order); an object = key TAB value per member; a scalar = itself. An empty or null cell is `-`, a nested value is compact JSON. A user
@@ -30,6 +31,7 @@ import json
 import os
 import re
 import selectors
+import shutil
 import signal
 import subprocess
 import sys
@@ -301,8 +303,8 @@ def program_of(prog):
     return prog
 
 
-def _confine_module():
-    spec = importlib.util.spec_from_file_location("ext_confine", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_confine.py"))
+def _lib_module(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -320,7 +322,8 @@ def declared_permissions(package):
 
 def confined(prog, package):
     """(command, None) or (None, problem): PROG wrapped in `systemd-run --pipe --wait` with the properties of the declared permissions
-    (scripts/lib/ext_confine.py, the same mapping as the service unit). Fails closed: no systemd-run, no permissions, a bad path = no run.
+    (scripts/lib/ext_confine.py, the same mapping as the service unit: the dynamic user hsx-<package>, #1134). Fails closed: no systemd-run, no
+    permissions, a bad path, or a state folder that cannot be prepared = no run. The state is moved only after everything else passed.
     Opt-in per row (flag `confine`), partial by design (ADR 0014, D7). Not tested on hardware yet: the real systemd-run was not run."""
     try:
         perms = declared_permissions(package)
@@ -328,10 +331,27 @@ def confined(prog, package):
         return None, str(e)
     if perms is None:
         return None, "%s does not declare permissions, so its command cannot be confined" % package
-    props, _, bad = _confine_module().properties(perms, package)
+    props, _, bad = _lib_module("ext_confine").properties(perms, package, dynamic=True)
     if bad:
         return None, bad
-    cmd = [os.environ.get("HS_SYSTEMD_RUN", "systemd-run"), "--pipe", "--wait", "--collect", "--quiet",
+    root = os.environ.get("HS_STATE_DIR") or "/var/lib/hs"
+    pkgdir = os.path.abspath(os.path.join(root, "current", package))
+    if os.path.isdir(pkgdir):    # an installed package: the empty read-only /var/lib/hs of the unit hides it, so its own program comes back (as ext_service.py does)
+        props.append("BindReadOnlyPaths=-" + pkgdir)
+    runner = os.environ.get("HS_SYSTEMD_RUN", "systemd-run")
+    if not shutil.which(runner):
+        return None, "%s is not there, so the command cannot be confined" % runner
+    st = _lib_module("ext_state")
+    moved, bad = st.prepare(package)
+    if bad:
+        return None, bad
+    if moved == "moved":
+        old, pub = st._paths(package)[:2]
+        sys.stderr.write("moved the state of %s from %s to %s\n" % (package, old, pub))
+    bad = st.repair_owner(package)[1]    # files a root command left behind; a problem is only said
+    if bad:
+        sys.stderr.write(bad + "\n")
+    cmd = [runner, "--pipe", "--wait", "--collect", "--quiet",
            "--description=hs extension command of %s" % package, "--property=KillMode=control-group"]
     cmd += ["--property=" + x for x in props]
     return cmd + ["--"] + prog, None
@@ -376,12 +396,17 @@ def dispatch(a):
             sys.stderr.write(m["text"] + "\n")
             sys.stderr.flush()
     argv_prog = program_of([prog[0]])
-    if "confine" in [f.strip() for f in (a.flags or "").split(",")]:
+    is_confined = "confine" in [f.strip() for f in (a.flags or "").split(",")]
+    if is_confined:
         argv_prog, why = confined(argv_prog, a.package)
         if why:
             print("ext_proto.py: refused, confinement was asked for and cannot be set up: " + why, file=sys.stderr)
             return EXIT["spawn_failed"]
     o = run(argv_prog, req, timeout, DEFAULT_GRACE, show, cancel)
+    if is_confined:    # after every run, also a failed one: systemd may have made the folder, and root tools need /var/lib/hs/<package> to lead to it
+        problem = _lib_module("ext_state").link_after_start(a.package)
+        if problem:
+            sys.stderr.write(problem + "\n")
     # run() starts PROGRAM without its arguments: they are in the request (argv); the extension is told nothing else
     res = o["result"]
     if o["code"] == "ok":

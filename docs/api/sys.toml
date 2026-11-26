@@ -24,7 +24,7 @@ enums = { state = ["running", "ok", "failed", "unknown"] }
 ["jobs record <id>"]
 role = "viewer"
 kind = "json"
-note = "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error, result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null."
+note = "One job record (docs/adr/0004-job-record.md): id, key (the row key of web/src/jobkey.js, for example apps remove nextcloud; null when unknown), slug, description, source, initiator, unit, queued, started, ended, state, exit, step {n, of, text}, progress {done, total, unit}, error ({category, message}, and code, the catalogue code of docs/errors.md, when a refusal ended the job), result, cancel, version, and since ADR 0018 parent (id of the orchestration), kind (orchestration or step) and waiting (the pending question {seq, key, label, kind, default, pattern, choices, error, attempt, asked}, never an answer). state may be waiting. Absent values are null."
 
 ["jobs records"]
 role = "viewer"
@@ -133,6 +133,27 @@ records = { status = ["status"], reason = ["text"], unit = ["unit"] }
 enums = { status = ["started", "refused"] }
 note = "Start a test-lab run as a background job: hs sys testlab start run [--ref R] [--stage 1|2|3|4|5|6|<name>|all]; status started + the job unit."
 
+["blueprint list"]
+role = "viewer"
+kind = "tsv"
+columns = ["name", "repo", "version", "roles", "packages", "state", "title"]
+enums = { state = ["new", "applied", "update", "waits"] }
+note = "The blueprints the repositories offer: name, repository, version, roles (comma list), packages (comma list in install order; docker stands for the [docker] table), state, title. Never translated; a - is an empty field. No row when no repository has an index."
+
+["blueprint plan <action>"]
+role = "admin"
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], heading = ["text"], blueprint = ["name", "repo", "version", "tag"], part = ["n", "part", "name", "state", "text"], step = ["text"], note = ["text"], warn = ["text"], confirm_name = ["name"], command = ["text"], long = ["yes"] }
+enums = { status = ["ok", "refused"] }
+note = "What applying a blueprint would do: hs sys blueprint plan apply <name>. part = config|parts|rebuild|docker|app; its state is set|kept|install|enable|present|later. One confirm_name line per name to type (an added repository: the blueprint; Docker: what its plan asks). Exit 0 ok, 1 refused. Never asks."
+
+["blueprint start <action>"]
+role = "admin"
+kind = "tsv"
+records = { status = ["status"], reason = ["text"], unit = ["unit"], job = ["id"] }
+enums = { status = ["started", "refused"] }
+note = "Apply a blueprint as ONE background job: hs sys blueprint start apply <name> [--confirm <name>]... (one --confirm per confirm_name line of the plan); fills only what is not set yet. The job record result holds one entry per part."
+
 ["preset list"]
 role = "viewer"
 kind = "tsv"
@@ -219,7 +240,7 @@ role = "admin"
 kind = "tsv"
 columns = ["package", "integration", "source", "api_url", "key_state", "extra", "key_header"]
 enums = { source = ["recipe", "extension", "capability"], key_state = ["ok", "locked", "missing", "-"] }
-note = "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration."
+note = "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. In api_url the core fills {host} (the address Incus reports for the own network interface of the instance the service record names) and {port}; when one cannot be filled the field is - and the row is unresolved. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration."
 
 ["apps list"]
 role = "viewer"
@@ -227,6 +248,12 @@ kind = "tsv"
 columns = ["name", "kind", "stage", "flags", "repo", "available", "installed", "instances", "title"]
 enums = { stage = ["available", "installed", "on", "running"] }
 note = "The recipe rows of pkg states, same columns. An app whose declared check fails while its instances run is stage on with the flag unhealthy."
+
+["pkg index"]
+role = "viewer"
+kind = "tsv"
+records = { repo = ["name"], last_ok = ["epoch"], last_try = ["epoch"], error = ["text"], expires = ["epoch"], notified = ["epoch"] }
+note = "The state of the package index (pkg-refresh.sh): the repository, when it was last fetched (last_ok) and tried (last_try), the error of the last try (- = none), when the index expires and for which expiry a push message went out (notified). No line before the first fetch. Epoch values are seconds, - = unknown."
 
 ["apps versions"]
 role = "viewer"
@@ -855,6 +882,24 @@ role = "admin"
 
 ["remote mount-all"]
 role = "admin"
+
+["remote codes"]
+role = "admin"
+kind = "tsv"
+columns = ["share", "server", "expires_in"]
+note = "The pairing codes open on this server (docs/PLAN-remote-shares.md): the share (- for a code that waits for any share), the server name the code is bound to (- when none) and the seconds left. Never the code, its id or its key."
+
+["remote claim"]
+role = "admin"
+kind = "json"
+stdin = "bytes"
+note = "The giving side of a pairing: the claim request ({v, id, name, hostkey}) on stdin, the answer body on stdout ({v, nonce, box}, exit 0) or the one refusal shape ({v, error}, exit 1; error is code.unknown, code.rate or code.unavailable). Option --source <address> names the caller for the rate limit. Called by hs-web (POST /api/remote/claim, no session) and by the node word pair."
+
+["remote accept"]
+role = "admin"
+kind = "json"
+stdin = "bytes"
+note = "The receiving side of the reverse pairing: the push ({v, id, nonce, box}) on stdin, {v, ok} on stdout (exit 0) or the refusal shape (exit 1). Option --source <address>. Called by hs-web (POST /api/remote/push, no session)."
 
 ["ups status"]
 role = "viewer"

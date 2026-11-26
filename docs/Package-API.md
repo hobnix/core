@@ -6,7 +6,7 @@ is in [PLAN-app-lifecycle](PLAN-app-lifecycle.md) (Q4 and Q5); the states of a p
 
 **These field names are a contract.** The Apps and Marketplace pages and the later steps of the lifecycle plan (0.11, 0.13) read them. The field
 names are stable for milestones 0.11 and 0.13: a field is renamed or removed only with an API level bump and one level in which the old name still
-works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 10. Adding an optional key
+works. The checks live in `scripts/lib/pkg_app.py` (called by `scripts/pkg.py`); the level is 11. Adding an optional key
 is a bump too, because an older core would refuse the unknown key.
 
 ## Level 9: the app contract and store fields
@@ -60,6 +60,9 @@ disk_gb = 20
 ports = [2283]
 gpu = false
 ```
+
+`hs pkg install` and `update` refuse the whole package (error code `pkg.rows`) when `[app]` or anything under `[app.routes]` is not valid: a
+bad route name, `exposure`, `port`, `scheme` or `admin` value is refused, never skipped. Not tested on hardware yet.
 
 An unknown key in any `[app]` table is an error. A route that is public-ok and marked `admin = true`, or whose container and port are in
 `ADMIN_TARGETS` of `scripts/services.py`, is refused: a manifest cannot make an admin page public.
@@ -154,3 +157,24 @@ It does not cover: reading the file system (`fs.read` lists, it does not restric
 and `systemctl` (a confined command that calls them still acts as root through them), and secrets. Commands without the flag run as root and
 unconfined, as before. The install and update prompts say this in the same words. A confined command cannot write `/etc/hs` or other state unless `fs.write` lists it: list the path or leave the row unconfined (ADR 0014, D7).
 Not tested on hardware yet: only a fake `systemd-run` that records its arguments has run (tests/ext-confine.sh).
+
+## Level 11 (0.13): blueprints
+
+`kind = "blueprint"` (docs/PLAN-registry.md "Blueprints"): an ordered package list plus fill-only config, no script and no Nix. A blueprint says
+`requires_core = ">=11"`, so a core that does not know the kind (level 10 or lower) refuses it instead of installing it. Validated by
+`scripts/lib/pkg_blueprint.py`; a blueprint is applied (`hs blueprint apply`, a later release), never installed.
+
+## What the core refuses (hobnix/core#1072)
+
+All rules fail closed. Not tested on hardware yet.
+
+1. A package row never shadows a core row: a first word that a core command uses is refused, and `hs pkg install` and `update` then refuse the
+   whole package, so nothing stays half installed.
+2. A package never takes a first word or an option key that another package or the core has. A clashing option key leaves out all options of that
+   package.
+3. No public route to an admin page: an `[app.routes]` entry with `exposure = "public-ok"` on an admin page is refused at install.
+4. A `[[probe]]` of `hs smoke` must name a row of the same package with the flag `reads`, or a `changes` row when the words end in
+   `--dry-run` and that word reaches the script (args `-` or a `{rest}` token). Any other probe is skipped and counted as a failure.
+   This does not prove that the command only reads. This catches mistakes of a package, not a hostile one: the package sets the flags and names the script itself.
+5. A `sys` row with the word `start` needs its twin with `plan`. Asking the person to type the name before a destructive change stays a review
+   rule.

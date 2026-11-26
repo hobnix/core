@@ -17,28 +17,28 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 change=${HS_APPS_CHANGE:-$here/apps-change.sh}
-refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
+. "$here/lib/refuse-code.sh"   # refuse_code (ADR 0028)
 
 verb=${1:-}; action=${2:-}; job=${3:-}
-case "$verb" in plan|start|run) ;; *) refuse "usage: plan|start retry|cleanup <job>" ;; esac
-case "$action" in retry|cleanup) ;; *) refuse "unknown action (retry, cleanup)" ;; esac
-[ "$verb" != run ] || [ "$action" = cleanup ] || refuse "only cleanup runs as a job body"
-[[ "$job" =~ ^[0-9A-Za-z][0-9A-Za-z-]{6,100}$ ]] || refuse "not a job id"
+case "$verb" in plan|start|run) ;; *) refuse_code apps.usage "usage: plan|start retry|cleanup <job>" ;; esac
+case "$action" in retry|cleanup) ;; *) refuse_code action.unknown "unknown action (retry, cleanup)" ;; esac
+[ "$verb" != run ] || [ "$action" = cleanup ] || refuse_code apps.job-only "only cleanup runs as a job body"
+[[ "$job" =~ ^[0-9A-Za-z][0-9A-Za-z-]{6,100}$ ]] || refuse_code job.id-invalid "not a job id"
 shift 3 || true
 sets=() confirm="" delete_data=no by=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --set)         [ $# -ge 2 ] || refuse "--set needs KEY=value"; sets+=(--set "$2"); shift 2 ;;
-    --confirm)     [ $# -ge 2 ] || refuse "--confirm needs a value"; confirm=$2; shift 2 ;;
+    --set)         [ $# -ge 2 ] || refuse_code apps.set-invalid "--set needs KEY=value"; sets+=(--set "$2"); shift 2 ;;
+    --confirm)     [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs a value"; confirm=$2; shift 2 ;;
     --delete-data) delete_data=yes; shift ;;
-    --by)          [ $# -ge 2 ] || refuse "--by needs a user name"; by=$2; shift 2 ;;
-    --role)        [ $# -ge 2 ] || refuse "--role needs a role"; shift 2 ;;
-    *) refuse "unknown option $1" ;;
+    --by)          [ $# -ge 2 ] || refuse_code apps.by-invalid "--by needs a user name"; by=$2; shift 2 ;;
+    --role)        [ $# -ge 2 ] || refuse_code apps.role-invalid "--role needs a role"; shift 2 ;;
+    *) refuse_code option.unknown "unknown option $1" ;;
   esac
 done
 
 # ── the failed record: state, the result a failed Install left, and whether a later install of the same app finished ──
-rec=$(python3 "$here/job-record.py" get "$job" 2>/dev/null) || refuse "There is no job $job."
+rec=$(python3 "$here/job-record.py" get "$job" 2>/dev/null) || refuse_code job.unknown "There is no job $job."
 facts=$(python3 -c 'import json,os,sys,glob
 r=json.loads(sys.argv[1]); res=r.get("result") or {}
 def f(v): return (str(v).replace("\t"," ").replace("\n"," ") or "-")
@@ -50,13 +50,13 @@ for p in glob.glob(os.path.join(os.environ.get("HS_JOBS_DIR","/var/lib/hs/jobs")
     x=o.get("result") or {}
     if o.get("id")==r.get("id") or not str(o.get("slug","")).startswith("app-install-"): continue
     if (o.get("state")=="ok" and x.get("package")==res.get("package") and x.get("instance")==res.get("instance")) or (o.get("state") in ("queued","running","waiting") and o.get("description")==want): later="yes"
-print("\t".join(f(v) for v in (r.get("state"),res.get("status"),res.get("failed_step"),res.get("reason"),res.get("tail"),res.get("package"),res.get("repo"),res.get("tag"),res.get("instance"),later)))' "$rec") || refuse "cannot read the record of $job"
+print("\t".join(f(v) for v in (r.get("state"),res.get("status"),res.get("failed_step"),res.get("reason"),res.get("tail"),res.get("package"),res.get("repo"),res.get("tag"),res.get("instance"),later)))' "$rec") || refuse_code job.record-unreadable "cannot read the record of $job"
 IFS=$'\t' read -r jstate rstatus fstep reason tail pkg repo tag inst later <<<"$facts"
-[[ "$jstate" =~ ^(failed|interrupted)$ ]] || refuse "The job $job did not fail (it is $jstate): nothing to retry or clean up."
-[ "$rstatus" = failed ] && [ "$fstep" != - ] && [ "$pkg" != - ] && [ "$inst" != - ] || refuse "The job $job left no failed step (it was an older run or it was interrupted): install again from the start."
-[[ "$pkg" =~ ^[a-z0-9][a-z0-9-]{0,40}$ && "$inst" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse "the record names no usable app"
-[[ "$fstep" =~ ^(read|needs|ask|check|run(:[a-z0-9][a-z0-9-]{0,30})?|on|rebuild|done)$ ]] || refuse "the record names an unknown step"
-[ "$later" = no ] || refuse "$inst was installed or being installed by another run: use Remove for it, this clean-up could delete the working app."
+[[ "$jstate" =~ ^(failed|interrupted)$ ]] || refuse_code apps.job-not-failed "The job $job did not fail (it is $jstate): nothing to retry or clean up."
+[ "$rstatus" = failed ] && [ "$fstep" != - ] && [ "$pkg" != - ] && [ "$inst" != - ] || refuse_code apps.no-failed-step "The job $job left no failed step (it was an older run or it was interrupted): install again from the start."
+[[ "$pkg" =~ ^[a-z0-9][a-z0-9-]{0,40}$ && "$inst" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || refuse_code apps.record-invalid "the record names no usable app"
+[[ "$fstep" =~ ^(read|needs|ask|check|run(:[a-z0-9][a-z0-9-]{0,30})?|on|rebuild|done)$ ]] || refuse_code apps.record-invalid "the record names an unknown step"
+[ "$later" = no ] || refuse_code apps.other-run "$inst was installed or being installed by another run: use Remove for it, this clean-up could delete the working app."
 
 case "$action" in
 retry)
@@ -80,7 +80,7 @@ cleanup)
   . "$here/lib/network.sh"
   . "$here/lib/created-remove.sh"
   led=$(created_file "$inst")
-  [ -f "$led" ] || refuse "There is no record of what the run created for $inst (an app from before the record, or nothing was made): nothing is removed by guesswork."
+  [ -f "$led" ] || refuse_code apps.no-created-record "There is no record of what the run created for $inst (an app from before the record, or nothing was made): nothing is removed by guesswork."
   if [ "$verb" = run ]; then
     HS_PLAIN=1 step "Remove what was created for $inst"
     rc=0; created_remove_all "$inst" "$delete_data" || rc=$?
@@ -88,13 +88,13 @@ cleanup)
     exit 0
   fi
   lines=$(created_plan "$inst" "$delete_data")
-  [ -n "$lines" ] || refuse "The record of $inst lists nothing."
+  [ -n "$lines" ] || refuse_code apps.no-created-record "The record of $inst lists nothing."
   if [ "$verb" = start ]; then
-    [ "$confirm" = "$inst" ] || refuse "type the name ($inst) to confirm"
+    [ "$confirm" = "$inst" ] || refuse_code confirm.missing "type the name ($inst) to confirm"
     . "${HS_JOB_LIB:-$here/lib/job.sh}"
     export HS_JOB_ENV=${HS_JOB_ENV:-} HS_JOB_KIND=orchestration HS_JOB_INITIATOR=${by:-${SUDO_USER:-${USER:-}}}
     dargs=(); [ "$delete_data" = no ] || dargs=(--delete-data)
-    unit=$(hs_job "app-cleanup-$inst" "hs apps cleanup $inst" -- bash "$here/apps-recover.sh" run cleanup "$job" ${dargs[@]+"${dargs[@]}"}) || refuse "the job could not be started"
+    unit=$(hs_job "app-cleanup-$inst" "hs apps cleanup $inst" -- bash "$here/apps-recover.sh" run cleanup "$job" ${dargs[@]+"${dargs[@]}"}) || refuse_code job.start-failed "the job could not be started"
     jid=$(hs_job_record find-unit "$unit" 2>/dev/null) || jid=""
     printf 'status\tstarted\nunit\t%s\njob\t%s\n' "$unit" "${jid:--}"
     exit 0

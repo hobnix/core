@@ -21,7 +21,7 @@ refuse() { printf 'status\trefused\nreason\t%s\n' "$1"; exit 1; }
 verb=${1:-}; action=${2:-}; new=${3:-}
 case "$verb" in plan|start) ;; *) echo "usage: release-change.sh plan|start channel <stable|beta|edge> [--confirm <channel>]" >&2; exit 1 ;; esac
 [ "$action" = channel ] || refuse_code action.unknown "unknown action (channel)"
-case "$new" in stable|beta|edge) ;; *) refuse "unknown channel (stable, beta or edge)" ;; esac
+case "$new" in stable|beta|edge) ;; *) refuse_code release.channel-unknown "unknown channel (stable, beta or edge)" ;; esac
 shift 3
 confirm=""
 while [ $# -gt 0 ]; do
@@ -36,14 +36,14 @@ owner=$(stat -c %U "$repo" 2>/dev/null || echo root)
 if [ "$(id -u)" = 0 ] && [ "$owner" != root ]; then UC_OWNER=$owner; fi
 
 old=$(uc_channel)
-[ "$new" != "$old" ] || refuse "The server is on the channel $new already."
+[ "$new" != "$old" ] || refuse_code release.unchanged "The server is on the channel $new already."
 
 IFS=$'\t' read -r kind ref label < <(uc_target "$repo" "$new")
 if [ "$kind" = tag ]; then
   vrc=0
   vout=$(uc_verify "$repo" "$ref" 2>&1 || { printf '%s\n' "${UC_VERIFY_OUT:-}"; exit 1; }) || vrc=$?
   if [ "$vrc" -ne 0 ]; then
-    refuse "The signature of $ref is not valid for a trusted release key: $(printf '%s\n' "$vout" | awk 'NF { print; exit }')"
+    refuse_code release.signature-invalid "The signature of $ref is not valid for a trusted release key: $(printf '%s\n' "$vout" | awk 'NF { print; exit }')"
   fi
 fi
 st=$(uc_state "$repo" "$kind" "$ref")

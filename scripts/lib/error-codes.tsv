@@ -9,6 +9,8 @@ run.no-status	run	The command ended without a status line	The server could not d
 vault.locked	script	The vault is closed and the step needs a secret in it	The vault is closed: unlock it first.	hs vault open
 docker.off	script	Docker is not on or not running	Docker is not on or not running.	-
 app.unknown	script	No app of that name exists	No such app was found.	-
+pkg.blueprint	script	hs pkg install was asked for a blueprint, which is applied and never installed	This is a blueprint: apply it instead of installing it.	hs blueprint apply <name>
+pkg.rows	script	An installed package carried a command or app route the core refuses (it clashes with the core or another package), so it was not kept	The package was not installed: its commands clash with the core or another package.	-
 name.invalid	script	A name is not in the allowed form	The name is not valid.	-
 plan.changed	script	What the plan saw changed before it was applied	It changed meanwhile. Reload it and try again.	-
 job.busy	script	The same job is running already	This is running already.	-
@@ -34,3 +36,457 @@ binary.arch	script	The package ships a compiled program for x86_64 and the serve
 binary.unbuilt	script	The package declares a program that is not built yet (empty sha256, no file)	This package has no built program yet; it cannot be installed.	-
 binary.runner	script	A commands.tsv row without the flag proto names a [[binary]] program	This package starts its program the wrong way; it cannot be installed.	-
 binary.undeclared	script	A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it	This package starts a program that has no declared hash.	-
+binary.sdk-pin	script	repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N)	This package is not ready for a release: its extension SDK is not pinned to a core release.	-
+code.unknown	script	A pairing code is not known: wrong, already used, expired, or the server name is taken by another server (one answer for all of them, POST /api/remote/claim)	The other server does not know that code: wrong, already used or expired.	-
+code.rate	script	Too many wrong pairing codes from one address within a minute	Too many wrong codes from here. Wait a minute and try again.	-
+code.unavailable	script	The server cannot make the access now (no domain controller, storage locked)	The other server cannot make the access now (is its storage unlocked?).	-
+ext.state-conflict	script	The old and the new state folder of a service both exist, or the old path is a wrong link or not a folder (nothing is moved, nothing is deleted)	This extension has its data in two places and the server does not know which one to use; its service does not start. Nothing was changed.	see docs/extensions-sdk.md, "If something goes wrong"
+ext.state-move-failed	script	The state folder of a service cannot be moved because /var/lib/hs is on another file system (no copy is made)	The data of this extension cannot be moved to its new folder; its service does not start. Nothing was changed.	see docs/extensions-sdk.md, "If something goes wrong"
+ext.state-reserved	script	A package has the name of a folder the server itself keeps in /var/lib/hs (nothing is moved)	This extension has a name the server uses for its own data; its service does not start. Nothing was changed.	see docs/extensions-sdk.md, "If something goes wrong"
+ext.state-link-failed	script	The old path of a state folder could not be made a link to the new folder	The server could not link the data folder of this extension. Nothing was deleted.	see docs/extensions-sdk.md, "If something goes wrong"
+ext.dynamic-write	script	A service or confined command declares fs.write outside /var/lib/hs/<its name>	This extension wants to write outside its own folder; its service does not start.	-
+ext.dynamic-read	script	A service or confined command declares fs.read of the state of the server or of another extension	This extension wants to read data that is not its own; its service does not start.	-
+# S3: user., admin., dc., token., ssh., peer., node. (#1127)
+user.name-missing	script	The user or group name was not given.	Give the name of the user or group.	-
+user.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+user.nothing-to-change	script	An edit names no field to change.	Nothing was changed: give a field to change.	-
+user.group-forbidden	script	Domain Users was chosen as a group; every user is in it already.	Every user is in Domain Users; it cannot be chosen.	-
+user.group-unknown	script	A group that does not exist was named.	No such group was found.	-
+user.access-invalid	script	A share access is not written as share=read, write or full.	The access is share=read, write or full.	-
+user.share-unknown	script	A share that does not exist was named.	No such share was found.	-
+user.password-missing	script	The password was not passed on standard input.	No password was given.	-
+admin.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+admin.value-missing	script	An option was given without its value.	The option needs a value.	-
+admin.no-push-address	script	The test push message needs an address that is not set.	There is no push address yet.	-
+admin.test-failed	script	The test message could not be sent.	The test message could not be sent.	-
+admin.pin-failed	script	The MAC addresses could not be pinned.	The MAC addresses could not be pinned.	-
+admin.not-snapraid	script	The upload cache exists only on the snapraid layout.	There is no upload cache on this layout.	-
+admin.no-cache	script	The upload cache is not mounted.	There is no upload cache on this server.	-
+admin.seconds-invalid	script	The seconds of the fan cleaning are not a number from 3 to 30.	The seconds are a number from 3 to 30.	-
+admin.no-fan-controller	script	No fan controller was found on this machine.	No fan controller was found.	-
+dc.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+dc.value-missing	script	An option was given without its value.	The option needs a value.	-
+dc.name-invalid	script	The name of the domain controller is not an instance name.	That is not an instance name.	-
+dc.ca-exists	script	The certificate authority exists already (a new one would make every certificate invalid).	The CA exists already.	-
+dc.ca-failed	script	The certificate authority could not be made.	The CA could not be made.	-
+dc.no-ca	script	There is no certificate authority yet.	There is no CA yet: make it first.	-
+dc.not-local	script	The domain controller does not run on this server.	That controller does not run on this server.	-
+token.name-missing	script	The name of the token was not given.	Give the name of the token.	-
+token.value-missing	script	An option was given without its value.	The option needs a value.	-
+token.caller-missing	script	Who asks (the person and the role) was not given.	Who asks is missing.	-
+token.role-unknown	script	The role of the person who asks is not one that exists.	That role is not known.	-
+token.days-invalid	script	The days of a token are not a number from 1 to 365.	The days are a number from 1 to 365.	-
+token.invalid	script	The token cannot be created with these values.	The token cannot be created.	-
+token.not-found	script	There is no token with this name, or it belongs to someone else.	There is no token with this name.	-
+ssh.key-missing	script	The public key or the id of the key was not given.	Give the public key or the id of the key.	-
+ssh.too-long	script	The key line is longer than 800 characters.	That is too long.	-
+ssh.not-one-line	script	The key has more than one line or has control characters.	It must be one line without control characters.	-
+ssh.not-public-key	script	The text is not a public key line.	That is not a public key line.	-
+ssh.key-invalid	script	The public key did not pass the check of ssh-keygen.	That is not a valid public key.	-
+ssh.key-listed	script	The key is in the list already.	This key is in the list already.	-
+ssh.key-unknown	script	There is no key with this id.	There is no key with this id.	-
+ssh.last-key	script	The key is the last one; without a key nobody could log in over SSH.	That is the last key.	-
+ssh.session-key	script	The key is the one the current SSH session used.	That key is in use by your session.	-
+ssh.failed	script	The key script refused the change.	The key could not be changed.	-
+peer.invalid	script	A value of the peer (name, host, share, path ...) has characters that do not belong in it.	That value is not valid.	-
+peer.value-missing	script	An option was given without its value.	The option needs a value.	-
+peer.name-missing	script	The name for the other server was not given.	Give the name of the other server.	-
+peer.args-missing	script	The host and the share were not both given.	Give the host and the share.	-
+peer.user-missing	script	The login of the mount was not given.	Give the login.	-
+peer.offered	script	The share is offered to this peer already.	That share is offered already.	-
+peer.mounted	script	The share of this peer is set up already.	That share is set up already.	-
+peer.not-mounted	script	Nothing is mounted from this peer.	Nothing is mounted from that peer.	-
+peer.not-offered	script	Nothing is shared with this peer.	Nothing is shared with that peer.	-
+peer.failed	script	The peer script refused the step.	The step was refused.	-
+node.name-missing	script	The name of the node was not given.	Give the name of the node.	-
+node.name-invalid	script	The name is not a node name (lower case letters, digits and dashes, starting with a letter).	That is not a node name.	-
+node.host-invalid	script	The host is not a host name or an address.	That is not a host name or address.	-
+node.value-missing	script	An option was given without its value.	The option needs a value.	-
+node.kind-invalid	script	The kind of the node is not peer, vps or edge.	The kind is peer, vps or edge.	-
+node.port-invalid	script	The port is not a number from 1 to 65535.	That is not a port.	-
+node.exists	script	A node with this name exists already.	There is already a node with this name.	-
+node.unknown	script	No node has this name.	There is no node with this name.	-
+node.from-config	script	The node comes from a setting and goes away with that setting.	That node comes from a setting.	-
+# S1: disk. part. pool. share. backup.
+backup.browse-state	script	Browsing of the backup is already in the state asked for	Browsing is already in that state.	-
+backup.count-invalid	script	The number of drill restores is not from 1 to 100	The count is a number from 1 to 100.	-
+backup.disk-missing	script	The backup disk is not plugged in	The backup disk is not plugged in.	-
+backup.disk-present	script	A backup disk is plugged in already	A backup disk is plugged in already.	-
+backup.instance-unknown	script	The backup was asked about an instance that does not exist	No such instance was found.	-
+backup.kind-invalid	script	The kind of backup item or off-site target is not one that exists	That kind is not known.	-
+backup.no-offsite	script	No off-site repository is set, or it is off already	There is no off-site repository to change.	-
+backup.not-set-up	script	The backup is not set up yet	The backup is not set up yet.	hs backup init <device>
+backup.repo-invalid	script	A repository address or a field of an off-site target has characters that do not belong in it	That is not a valid repository address.	-
+backup.rule-invalid	script	A backup include or exclude rule is malformed	That backup rule is not valid.	-
+backup.to-invalid	script	The value after --to is not on or off	The value is on or off.	-
+disk.backup-disk	script	The disk is the backup disk and is not erased here	This is the backup disk.	-
+disk.close-failed	script	An encrypted volume on the disk could not be closed	The encrypted volume could not be closed.	-
+disk.forget-failed	script	A missing disk could not be removed from the inventory	The disk could not be forgotten.	-
+disk.in-use	script	The disk or partition is mounted or used as swap	The disk is in use.	-
+disk.not-data-disk	script	The name is not a data disk of the array (data-NN)	That is not a data disk of the array.	-
+disk.not-empty	script	A disk to add to a pool still holds data	The disk is not empty.	-
+disk.not-missing	script	Only a disk that is missing can be forgotten	The disk is in the machine.	-
+disk.not-offered	script	The disk is not one that may be mounted as a temp disk	This disk is not offered for mounting.	-
+disk.not-recovering	script	The disk is not out of the pool for a recovery	The disk is not in a recovery.	-
+disk.not-whole	script	The name is a partition, not a whole disk	This is not a whole disk.	-
+disk.pool-member	script	The disk is a member of a ZFS pool or of the data array	The disk is a member of a pool.	-
+disk.temp-refused	script	The temp disk script refused a mount, an eject or a copy	The temp disk step was refused.	-
+disk.test-kind	script	The self-test is not short or long	The test is short or long.	-
+disk.test-refused	script	The disk cannot run a self-test now	The self-test cannot start.	-
+disk.test-running	script	A self-test is running on the disk already	A self-test is running already.	-
+disk.wipe-failed	script	The disk could not be erased	The disk could not be erased.	-
+part.already	script	The part is already in the state asked for	The part is already in that state.	-
+part.not-switchable	script	The part follows the role of this server and is not switched by hand	This part is not switched here.	-
+part.pending	script	The part is switched on and waits for the next rebuild	The part takes effect with the next rebuild.	hs rebuild
+part.unknown	script	No part of that name exists	No such part was found.	-
+part.write-failed	script	machine.toml could not be changed	machine.toml could not be changed.	-
+pool.zfs-member	script	The disk belongs to a ZFS pool	The disk belongs to a ZFS pool.	-
+share.as-invalid	script	The owner given with --as is not <uid>:<gid>	The owner is <uid>:<gid>.	-
+share.exists	script	A share of that name exists already	A share of that name exists already.	-
+share.folder-invalid	script	The folder is not a folder inside the share	That is not a folder inside the share.	-
+share.instance-unknown	script	The instance named for a share does not exist	No such instance was found.	-
+share.kind-invalid	script	The kind of share is not shares or sensitive	The kind is shares or sensitive.	-
+share.needs-zfs	script	Snapshots need the ZFS layout	Snapshots need the ZFS layout.	-
+share.no-snapshots	script	The share has no snapshots	This share has no snapshots.	-
+share.not-kept	script	Only a kept folder of a deleted share can be removed or brought back	Only a kept folder can be changed here.	-
+share.path-invalid	script	The path inside an instance does not start with /	The path must start with /.	-
+share.perm-invalid	script	A permission is not <sid>=<level>	The permission is <sid>=<level>.	-
+share.reserved	script	The share name is reserved	That name is reserved.	-
+share.snapshot-invalid	script	The snapshot id is not an id	That is not a snapshot id.	-
+share.snapshot-unknown	script	The share has no snapshot of that id	No such snapshot was found.	-
+share.tier-invalid	script	The tier is not one of the two offered	The tier is not one of the two offered.	-
+share.to-invalid	script	The value after --to does not fit the setting	That value does not fit the setting.	-
+share.unknown	script	No share of that name exists	No such share was found.	-
+# S2: app. apps. registry. recipe. ct.
+app.is-manager	script	The app is the Docker manager, which is not changed here	This app is the Docker manager and cannot be changed here.	-
+app.unreadable	script	The app or its current revision cannot be read	The app could not be read.	-
+app.not-web-managed	script	The app is not managed by the web interface	Only apps managed by the web interface can be saved, rebuilt or deleted.	-
+app.doc-invalid	script	The document sent for an app is empty or has a malformed record	The document is not valid.	-
+app.exists	script	An app, a Docker app or an instance of that name exists already	That name is taken already.	-
+app.folder-missing	script	The folder of the app cannot be found	The folder of the app was not found.	-
+app.compose-invalid	script	The compose file does not pass the check	The compose file is not valid.	-
+app.port-used	script	A port of the compose file is used by another app	A port is used by another app.	-
+app.container-name-used	script	A container name of the compose file is used by another app	A container name is used by another app.	-
+app.compose-refused	script	The policy check of the compose file refused it	The compose file was refused.	-
+app.recreate-failed	script	The recreate of the app failed	The app could not be recreated.	-
+app.workdir-missing	script	The working directory of the app cannot be found	The working directory of the app was not found.	-
+app.action-failed	script	An action on the app failed	The action failed.	-
+app.usage	script	The command of the Docker app script got too few arguments	The command is missing arguments.	-
+app.rev-missing	script	The action needs --rev and did not get it	The action needs a revision.	-
+registry.user-missing	script	--user has no name	--user needs a name.	-
+registry.user-invalid	script	The user name of a registry login is not valid	The user name is not valid.	-
+registry.unknown	script	No registry of that name is set up	No such registry is set up.	-
+registry.token-invalid	script	The token of a registry login is missing or not valid	The token is missing or not valid.	-
+registry.login-failed	script	The registry did not accept the login	The login failed. Check the user and the token.	-
+registry.store-failed	script	The token of a registry login could not be stored	The token could not be stored.	-
+registry.forget-failed	script	The login of a registry could not be removed	The login could not be removed.	-
+registry.usage	script	The command of the registry script got too few arguments	The command is missing arguments.	-
+apps.repo-invalid	script	--repo is not a repository name	The repository name is not valid.	-
+apps.tag-invalid	script	--tag is not a release tag	The release tag is not valid.	-
+apps.tag-missing	script	A start has no --tag of the plan	The start needs the tag of the plan.	-
+apps.from-missing	script	--from has no step	--from needs a step.	-
+apps.from-invalid	script	--from names a step the package does not have	That step does not exist.	-
+apps.by-invalid	script	--by is not a user name	The user name is not valid.	-
+apps.role-invalid	script	--role is not a role	The role is not valid.	-
+apps.set-invalid	script	--set is not KEY=value	--set needs KEY=value.	-
+apps.no-release	script	The package has no verified release	The package has no verified release.	-
+apps.not-in-repo	script	The package is not in the repository asked for	The package is not in that repository.	-
+apps.no-steps	script	The release names no steps	The release names no steps.	-
+apps.needs-newer-core	script	The package needs a newer core than this server has	The package needs a newer core.	-
+apps.update-available	script	The package is installed and a newer release is out	The package is installed; update it instead.	-
+apps.installed	script	The package is installed already	The package is installed already.	-
+apps.needs-terminal	script	The package asks for a password and needs a terminal	This package must be installed at a terminal.	-
+apps.takes-no-name	script	The package takes no container name and no answers	This package takes no name and no answers.	-
+apps.single-instance	script	The package runs once on a server	This package runs once on a server.	-
+apps.name-taken	script	The instance name is taken by an instance or a service	That name is taken already.	-
+apps.answer-invalid	script	An answer to a question of the package does not fit	The answer does not fit.	-
+apps.answer-unknown	script	The package does not ask that question	The package does not ask that question.	-
+apps.need-unknown	script	The package needs something this server cannot provide	The package needs something this server cannot provide.	-
+apps.need-off	script	The package needs a part that is switched off	A part the package needs is off. Switch it on first.	-
+apps.storage-locked	script	The storage is locked	The storage is locked. Unlock it first.	-
+apps.no-network	script	The step needs the network and it is down	The server has no network.	-
+apps.docker-self	script	Docker was named as a need of itself	Docker cannot be a need of itself.	-
+apps.secret-invalid	script	The secret has a control character	The secret is not valid.	-
+recipe.name-missing	script	--name has no value	--name needs a value.	-
+recipe.by-invalid	script	--by is not a user name	The user name is not valid.	-
+recipe.role-invalid	script	--role is not a role	The role is not valid.	-
+recipe.set-invalid	script	--set is not KEY=value	--set needs KEY=value.	-
+recipe.unknown	script	No recipe of that name exists	No such recipe was found.	-
+recipe.needs-terminal	script	The recipe asks for a password and needs a terminal	This recipe must be run at a terminal.	-
+recipe.parked	script	The recipe is parked and does nothing without force	This recipe is parked.	-
+recipe.answer-invalid	script	An answer to a question of the recipe does not fit	The answer does not fit.	-
+recipe.answer-unknown	script	The recipe does not ask that question	The recipe does not ask that question.	-
+recipe.secret-invalid	script	The secret has a control character	The secret is not valid.	-
+ct.all-misuse	script	all is used with an action other than update-all, or update-all with another instance	all belongs to update-all only.	-
+ct.value-invalid	script	A value (number, autostart, docker, type or stop keep) is not one that exists	The value is not valid.	-
+ct.option-misplaced	script	An option is used with an action it does not belong to	The option does not belong to this action.	-
+ct.iso-vm-only	script	An installer image is given for something other than a virtual machine	An installer image is for a virtual machine only.	-
+ct.iso-invalid	script	The installer image name is not valid	The image name is not valid.	-
+ct.iso-missing	script	The installer image is not in the library	No such image is in the library.	-
+ct.pool-unknown	script	The storage pool does not exist	No such storage pool exists.	-
+ct.pool-full	script	The disk does not fit in the free space of the pool	The disk does not fit in the pool.	-
+ct.bind-invalid	script	A bind is not tier:name:path	The bind is not valid.	-
+ct.bind-duplicate	script	Two binds have the same name	Two binds have the same name.	-
+ct.bind-vm	script	A folder of the large-storage tier cannot be passed into a virtual machine	That folder cannot be passed into a virtual machine.	-
+ct.none-running	script	No running instance is left to update	No instance is running.	-
+# S4: system., service., config., setup., iso., release., vps., net. (#1127)
+system.force-misplaced	script	--force was given to an action other than sync.	--force belongs to sync only.	-
+system.days-invalid	script	The number of days is not a whole number of 1 or more.	Give a number of days, 1 or more.	-
+system.not-snapraid	script	A sync was asked on a server whose data is not on SnapRAID.	There is nothing to sync on this server.	-
+system.pool-unknown	script	A storage pool that does not exist was named.	No such storage pool was found.	-
+system.scrub-running	script	A scrub of the pool is running already.	A scrub is running already.	-
+system.storage-locked	script	The storage is locked, so an update or rebuild would refuse.	The storage is locked: unlock it first.	-
+system.power-refused	script	The reboot or shutdown check refused.	The server cannot do this now.	-
+system.schedule-failed	script	The reboot, update or rebuild could not be scheduled.	It could not be scheduled.	-
+service.value-missing	script	An option was given without its value.	The option needs a value.	-
+service.value-invalid	script	An option was given a value that is not yes or no.	The value is yes or no.	-
+service.proxy-invalid	script	The --proxy option is neither public nor local.	The proxy is public or local.	-
+service.public-name-invalid	script	The public name is not a full domain name.	The public name is a full name like app.example.org.	-
+service.public-name-missing	script	A public service was asked without a public name.	A public service needs its public name.	-
+service.no-proxy	script	No reverse proxy is set up.	No reverse proxy is set up yet.	-
+service.exists	script	A service with this name exists already.	There is a service with this name already.	-
+service.unknown	script	No service has this name.	No such service was found.	-
+service.port-invalid	script	The port is not a number from 1 to 65535.	The port is a number from 1 to 65535.	-
+service.target-both	script	Both a container and a host were given.	Give a container or a host, not both.	-
+service.target-missing	script	Neither a container nor a host was given.	Give the container or the host the service runs on.	-
+service.exposure-invalid	script	The exposure is not never-public, private-ok or public-ok.	The exposure is never-public, private-ok or public-ok.	-
+service.nothing-to-change	script	An edit or set names nothing to change.	Nothing was changed: give a field to change.	-
+service.nothing-to-do	script	There is nothing to adopt, describe or reconcile.	There is nothing to do.	-
+service.failed	script	The service command failed or refused.	The service could not be changed.	-
+config.no-machine-toml	script	There is no machine.toml on this server.	There is no machine.toml on this server.	-
+config.no-machine-nix	script	There is no machine.nix to convert.	There is no machine.nix to convert.	-
+config.exists	script	machine.toml exists already, so there is nothing to convert.	machine.toml exists already.	-
+config.nothing-new	script	machine.toml is in the layout of the example already.	Nothing is new.	-
+config.rewrite-failed	script	machine.toml could not be rewritten or converted (it is left as it was).	machine.toml could not be rewritten.	-
+config.not-settable	script	The setting cannot be changed from the interface.	This setting is changed on the server.	-
+config.key-unknown	script	The name is not an option of machine.toml.example.	No such setting was found.	-
+config.not-scalar	script	The setting is a list or table.	Edit this setting in machine.toml on the server.	-
+config.value-invalid	script	The value does not fit the setting.	The value does not fit this setting.	-
+config.not-set	script	The setting to switch off is not set.	This setting is not set.	-
+config.unchanged	script	The setting has this value already.	The setting has this value already.	-
+config.cannot-switch-off	script	The setting cannot be switched off.	This setting cannot be switched off.	-
+config.args-invalid	script	The arguments of set or apply are wrong.	The arguments are not a key and a value.	-
+config.key-twice	script	A setting was given twice in one apply.	A setting was given twice.	-
+config.write-failed	script	A setting could not be written (the earlier state is put back).	The setting could not be written.	-
+config.check-failed	script	machine.toml would have problems after the change (it was put back).	The change would break machine.toml.	-
+setup.not-open	script	The first-run wizard is not open.	The first-run wizard is not open.	-
+setup.close-failed	script	The first-run wizard could not be closed.	The wizard could not be closed.	-
+iso.args-missing	script	A file or URL, or an image name, was not given.	Give a file or URL, or an image name.	-
+iso.value-missing	script	An option was given without its value.	The option needs a value.	-
+iso.option-misplaced	script	An option was given to an action it does not belong to.	That option does not belong to this action.	-
+iso.not-found	script	No image has this name in the library.	No such image was found.	-
+iso.attached	script	The image is attached to an instance.	Detach the image first.	-
+iso.url-invalid	script	The URL is too long or not a plain http or https address.	The URL is not valid.	-
+iso.url-local	script	The URL points to this server itself.	This server does not download from itself.	-
+iso.path-invalid	script	The path of a file is not an absolute path without "..".	The path is not valid.	-
+iso.file-missing	script	The file does not exist.	No such file was found.	-
+iso.file-unreadable	script	The file cannot be read.	The file cannot be read.	-
+iso.in-library	script	The file is in the image library already.	The file is in the library already.	-
+iso.source-invalid	script	The source is neither an absolute path nor an http(s) URL.	Give a file path or an http(s) URL.	-
+iso.exists	script	An image with this name is in the library already.	Remove it first or use another name.	-
+iso.checksum-conflict	script	Both --checksum and --no-checksum were given.	Give one of them, not both.	-
+iso.checksum-invalid	script	The checksum is not hexadecimal text, or its length or prefix does not fit.	The checksum is not valid.	-
+iso.no-room	script	The image does not fit in the free space of the folder.	There is not enough room for the image.	-
+release.channel-unknown	script	The channel is not stable, beta or edge.	The channel is stable, beta or edge.	-
+release.unchanged	script	The server is on this channel already.	The server is on this channel already.	-
+release.signature-invalid	script	The signature of the release is not valid for a trusted release key.	The release is not signed by a trusted key.	-
+vps.host-missing	script	The setting vpsHost is not set.	The proxyserver is not set up yet.	-
+vps.host-invalid	script	The setting vpsHost is not a host name or address.	vpsHost is not a host name or address.	-
+vps.no-key	script	There is no key for the proxyserver yet.	There is no key for the proxyserver yet.	-
+net.value-missing	script	An option was given without its value.	The option needs a value.	-
+net.address-invalid	script	The address of the router is not an http(s) address.	That is not an address of the router.	-
+net.key-invalid	script	The key of the router has a control character.	The key has a control character.	-
+net.failed	script	The router could not be connected, or it refused the key.	The router could not be connected.	-
+# S5: notify., health., expiry., job., testlab. (#1127)
+notify.name-missing	script	A channel name was not given.	A channel name is needed.	-
+notify.provider-fixed	script	The provider of an existing channel was changed.	The provider of a channel cannot be changed.	-
+notify.value-missing	script	An option was given without its value.	The option needs a value.	-
+notify.set-invalid	script	A --set option is not in the form key=value.	The setting must be key=value.	-
+notify.options-misplaced	script	Options were given to an action that takes none.	This action takes no options.	-
+notify.secret-many	script	More than one --secret was given.	Give one secret at a time.	-
+notify.priority-invalid	script	The minimum priority is not min, low, default, high or urgent.	The minimum priority is min, low, default, high or urgent.	-
+notify.quiet-invalid	script	The quiet rule is not respect or ignore.	The quiet rule is respect or ignore.	-
+notify.enabled-invalid	script	The enabled value is not yes or no.	Enabled is yes or no.	-
+notify.classes-invalid	script	A message class is not alarm, status, heartbeat or digest.	The message classes are alarm, status, heartbeat and digest.	-
+notify.exists	script	A channel with this name exists already.	There is already a channel with this name.	-
+notify.unknown	script	No channel has this name.	There is no channel with this name.	-
+notify.provider-unknown	script	No provider has this name.	There is no provider with this name.	-
+notify.setting-unknown	script	The provider has no text setting of this name.	The provider has no such setting.	-
+notify.value-multiline	script	A setting value has a line break or a tab.	A value is one line without a tab.	-
+notify.secret-unknown	script	The provider has no secret setting of this name.	That is not a secret setting of the provider.	-
+notify.value-invalid	script	A setting value does not match the form the provider expects.	A value does not look right.	-
+notify.class-unsupported	script	The provider cannot carry a message class that was asked for.	The provider cannot carry this message class.	-
+notify.settings-unusable	script	The provider refused the settings as they are.	The settings are not usable.	-
+health.nothing-paused	script	Resume was asked while nothing is paused.	Nothing is paused.	-
+health.id-missing	script	A problem id was not given.	A problem id is needed.	-
+health.for-invalid	script	The --for time is not a number with m, h, d or w.	Give a time such as 90m, 12h, 7d or 2w.	-
+health.note-invalid	script	The --note text is missing or longer than 200 characters.	The note is at most 200 characters.	-
+health.id-invalid	script	The problem id has characters that are not allowed.	That is not a problem id.	-
+health.not-active	script	The problem is not in the list of active problems.	This is not an active problem.	-
+health.acked-already	script	The problem is acknowledged already.	This problem is acknowledged already.	-
+health.not-acked	script	The problem is not acknowledged.	This problem is not acknowledged.	-
+expiry.name-missing	script	An entry name was not given.	A name is needed.	-
+expiry.value-missing	script	An option was given without its value.	The option needs a value.	-
+expiry.date-invalid	script	The date is not a real date in the form YYYY-MM-DD.	Use a date as YYYY-MM-DD.	-
+expiry.renew-invalid	script	The renewal hint has a line break or a tab, or is longer than 120 characters.	The hint is one line of at most 120 characters.	-
+expiry.unknown	script	No entry has this name.	There is no entry with this name.	-
+job.unit-invalid	script	The unit is not a job of this server (hs-*).	That is not a job of this server.	-
+job.not-running	script	Stop was asked for a job that is not running.	This job is not running.	-
+job.unknown	script	No job has this name.	There is no job with this name.	-
+job.not-scheduled	script	Run now was asked for a unit that is not a scheduled job.	Only scheduled jobs can be run now.	-
+job.systemctl-failed	script	The service manager could not stop or start the job.	The job could not be changed.	-
+testlab.value-missing	script	An option was given without its value.	The option needs a value.	-
+testlab.stage-invalid	script	The stage is not 1 to 6, a stage name or all.	The stage is 1 to 6, a stage name or all.	-
+testlab.off	script	The test-lab is off.	The test-lab is off.	-
+testlab.ref-refused	script	The ref or repository is not a branch, tag or commit of a Hobnix repository.	That ref or repository is not accepted.	-
+# S8: pkg. blueprint. (#1127)
+pkg.value-missing	script	An option or the address of a repository was given without its value.	A value is missing.	-
+pkg.draft-readonly	script	A start was asked for a package draft, which is only checked.	A draft is only checked, nothing is started.	-
+pkg.draft-unchecked	script	The check of a package draft did not run.	The draft could not be checked.	-
+pkg.draft-invalid	script	A package draft has problems.	The draft has problems.	-
+pkg.unknown	script	No repository offers a package of this name.	There is no such package in the repositories.	-
+pkg.installed	script	Install was asked for a package that is installed already.	The package is installed already.	-
+pkg.not-installed	script	The package is not installed from a repository.	The package is not installed.	-
+pkg.up-to-date	script	Update was asked for a package that has no newer release.	The package is up to date.	-
+pkg.core	script	Remove was asked for a core package.	A core package is not removed.	-
+pkg.remove-refused	script	The dry run of the removal refused it.	The package cannot be removed now.	-
+pkg.repo-unknown	script	No repository has this name.	There is no repository with this name.	-
+pkg.repo-exists	script	A repository of this name exists already.	That name is taken already.	-
+pkg.repo-url-invalid	script	The address of the repository is not in an allowed form.	The address of the repository is not valid.	-
+pkg.repo-default	script	Remove was asked for a default repository.	A default repository stays.	-
+pkg.key-invalid	script	The public signing key of the repository is missing or is not an SSH public key.	An SSH public key is needed.	-
+pkg.repo-add-failed	script	The repository could not be added.	The repository could not be added.	-
+pkg.repo-unreadable	script	No signed release could be read from a new repository with the given key.	No signed release could be read, so the repository was not kept.	-
+pkg.action-failed	script	The package command failed.	The action on the package failed.	-
+pkg.storage-locked	script	The storage is locked, so the rebuild would refuse.	The storage is locked.	-
+pkg.no-network	script	The step needs the network and it is down.	This needs the network.	-
+pkg.nothing-to-do	script	Every package that was asked for is installed and on already.	There is nothing to do.	-
+pkg.require-circle	script	Packages require each other in a circle.	The packages require each other in a circle.	-
+pkg.ambiguous	script	A package is in more than one repository.	The package is in more than one repository.	-
+pkg.added-repo	script	A package of an added repository is not installed together with others.	Install this package from the Marketplace.	-
+pkg.role-part	script	A required part follows the role of the server and is not switched by hand.	A required part follows the role of this server.	-
+pkg.require-missing	script	A required part is neither on the server nor offered by a repository.	A required part is not available.	-
+blueprint.value-missing	script	An option was given without its value.	The option needs a value.	-
+blueprint.unreadable	script	The blueprint does not exist, cannot be read or has problems.	The blueprint cannot be used.	-
+blueprint.role	script	The blueprint is not made for the role of this server.	This blueprint is for another role.	-
+blueprint.storage-locked	script	The storage is locked, so the rebuild would refuse.	The storage is locked.	-
+blueprint.no-network	script	The step needs the network and it is down.	This needs the network.	-
+blueprint.docker-refused	script	The plan to turn Docker on refused.	Docker cannot be turned on.	-
+blueprint.needs-docker	script	An app of the blueprint needs Docker, which is off and not part of the blueprint.	An app of the blueprint needs Docker.	-
+blueprint.confirm-unknown	script	A typed name was given that the plan does not ask for.	The plan does not ask for that name.	-
+# rest: apps. job. disk. docker. gateway. migrate. pool. preset. fm. (#1127)
+apps.usage	script	The command to retry, clean up or remove an app was called without its arguments.	The command is missing arguments.	-
+apps.job-only	script	A step that only runs as a job body was called directly.	This step only runs as a job.	-
+apps.job-not-failed	script	Retry or clean up was asked for a job that did not fail.	This job did not fail.	-
+apps.no-failed-step	script	The job has no failed step to retry or clean up.	The job has no failed step. Install again from the start.	-
+apps.record-invalid	script	The job record names no usable app or an unknown step.	The record of the job cannot be used.	-
+apps.other-run	script	The app was installed by another run, so a clean-up could delete a working app.	Another run installed this app. Use Remove for it.	-
+apps.no-created-record	script	There is no record of what the install created.	There is no record of what the install created.	-
+apps.part-owned	script	The app belongs to a part and is removed by switching that part off.	This app belongs to a part. Switch that part off.	-
+apps.nothing-to-remove	script	Nothing is listed for the app.	There is nothing to remove.	-
+job.id-invalid	script	The argument is not a job id.	That is not a job id.	-
+job.record-unreadable	script	The record of the job cannot be read.	The job record cannot be read.	-
+job.value-missing	script	An option was given without its value.	The option needs a value.	-
+job.value-invalid	script	The value of an option of an answer is not in the allowed form.	A value is not valid.	-
+job.no-question	script	An answer was given to a job that does not ask questions.	This job does not ask questions.	-
+job.answer-forbidden	script	Someone who neither started the run nor is an administrator tried to answer.	Only the person who started this run, or an administrator, may answer.	-
+job.answer-invalid	script	The answer does not fit the question.	The answer does not fit the question.	-
+disk.recovering	script	The disk is out of the pool for a recovery.	The disk is out of the pool for a recovery.	-
+disk.already-detached	script	The disk is detached already.	The disk is detached already.	-
+disk.not-mounted	script	The disk is not mounted.	The disk is not mounted.	-
+disk.last-data-disk	script	No other data disk would keep the pool running.	This is the last data disk of the pool in use.	-
+disk.not-detached	script	Attach was asked for a disk that is not detached.	The disk is not detached.	-
+disk.mount-failed	script	The disk could not be mounted.	The disk could not be mounted.	-
+disk.value-missing	script	An option or the thing to move was not given.	A value is missing.	-
+disk.target-invalid	script	--to does not name a data disk.	The target is a data disk.	-
+disk.path-invalid	script	The path on the disk is not allowed.	The path is not allowed.	-
+disk.path-missing	script	There is no such folder or file on the disk.	There is no such path on the disk.	-
+disk.target-same	script	The target is the disk the files are on.	The target is the same disk.	-
+disk.target-closed	script	The target disk is closed and takes no new files.	The target disk takes no new files.	-
+disk.target-unmounted	script	The target disk is not mounted or is out for a recovery.	The target disk is not available.	-
+disk.no-target	script	No other data disk can take the files.	No other data disk can take the files.	-
+disk.target-full	script	The target disk has not enough room.	The target disk has not enough room.	-
+disk.types-invalid	script	--types is not media or all.	The types are media or all.	-
+disk.recovery-running	script	The recovery of the disk is still running.	The recovery is still running.	-
+disk.tool-missing	script	A program the step needs is not installed.	A program this step needs is not installed.	-
+docker.args-missing	script	The command did not get what it needs.	The command is missing arguments.	-
+docker.value-missing	script	An option was given without its value.	The option needs a value.	-
+docker.remote-read-only	script	A remote share is read only and takes no --as.	A remote share is read only.	-
+docker.value-invalid	script	The value of a Docker setting is not one of the allowed ones.	The value is not valid.	-
+docker.key-unknown	script	Only the Docker settings of the setup can be set here.	This setting cannot be set here.	-
+docker.already-on	script	Docker is on already.	Docker is on already.	-
+gateway.set-invalid	script	--set is not key=value.	--set needs key=value.	-
+gateway.key-unknown	script	The key is not a setting of the gateway setup.	This is not a gateway setting.	-
+gateway.key-twice	script	A setting was given twice.	A setting was given twice.	-
+gateway.nothing-to-change	script	No setting to change was given.	There is nothing to change.	-
+gateway.value-invalid	script	The value does not fit the setting.	The value does not fit this setting.	-
+gateway.not-scalar	script	The setting is a list or a table and is edited on the server.	Edit this setting in machine.toml on the server.	-
+gateway.unchanged	script	The gateway has these values already.	Nothing changes.	-
+gateway.port-conflict	script	The ports of the gateway clash with each other or with the server.	The ports clash.	-
+gateway.tunnel-from-missing	script	A tunnel port is set without the address the tunnel comes from.	The address the tunnel comes from is missing.	-
+gateway.acme-invalid	script	The certificate settings do not fit together.	The certificate settings are not valid.	-
+gateway.certificate-needed	script	The chosen answer for unknown hosts needs a certificate.	This needs a certificate.	-
+gateway.write-failed	script	A file of the gateway setup could not be written.	A file could not be written.	-
+gateway.check-failed	script	The change would break machine.toml.	The change would break machine.toml.	-
+gateway.rebuild-failed	script	The rebuild failed and the files were put back.	The rebuild failed.	-
+migrate.no-pool	script	No pool for data was found.	No pool for data was found.	-
+migrate.not-snapraid	script	Unraid disks are only adopted into a SnapRAID pool.	This pool cannot take disks from Unraid.	-
+migrate.disk-not-free	script	The name is not a free disk of the server.	That is not a free disk.	-
+migrate.disk-unusable	script	The disk holds no file system, or one that cannot be adopted.	This disk cannot be adopted.	-
+migrate.disk-twice	script	A disk was named twice or in two roles.	A disk was named twice.	-
+migrate.parity-not-empty	script	The disk named as old parity holds a file system.	That is not an Unraid parity disk.	-
+migrate.disk-too-small	script	The parity or spare disk is smaller than the largest data disk.	The disk is too small.	-
+migrate.passphrase-missing	script	The passphrase of the Unraid disks was not given.	The passphrase is missing.	-
+pool.not-recorded	script	The server has no pools line yet.	The pools of this server are not recorded yet.	-
+pool.already-imported	script	The pool is imported already.	The pool is imported already.	-
+pool.is-array	script	The name is the SnapRAID pool of the server.	That is the SnapRAID pool of this server.	-
+pool.not-waiting	script	No pool of this name waits to be imported.	No such pool is waiting to be imported.	-
+pool.name-ambiguous	script	Two pools have the same name.	Two pools have this name.	-
+pool.damaged	script	The pool is damaged and is not imported.	The pool is damaged.	-
+pool.foreign	script	The pool was last used by another system and is never forced.	The pool was last used by another system.	-
+pool.disk-not-whole	script	A disk of the pool is not a whole disk of this server.	A disk of the pool is not a whole disk.	-
+pool.disk-not-free	script	The disk is not a free disk of the pool.	That is not a free disk of the pool.	-
+pool.apps-unsupported	script	Importing an apps pool is not built yet.	An apps pool cannot be imported yet.	-
+pool.mountpoint-used	script	The folder of the pool already holds files on the system disk.	The folder of the pool is not empty.	-
+pool.use-invalid	script	--use is not data or apps.	The use is data or apps.	-
+preset.unknown	script	No preset has this name.	There is no preset with this name.	-
+preset.apply-failed	script	The preset could not be applied.	The preset could not be applied.	-
+preset.unreadable	script	The preset could not be read.	The preset could not be read.	-
+fm.capability-off	script	The file manager needs the capability storage.	The file manager is not available on this server.	-
+fm.usage	script	The command of the file manager was called without its arguments.	The command is missing arguments.	-
+fm.path-invalid	script	The path is not allowed or leaves the location.	The path is not allowed.	-
+fm.folder-missing	script	There is no such folder.	There is no such folder.	-
+fm.protected	script	The folder or file belongs to the array.	This belongs to the array and cannot be used.	-
+fm.value-missing	script	An option or a needed argument was not given.	A value is missing.	-
+fm.value-invalid	script	The value of an option is not in the allowed form.	A value is not valid.	-
+fm.option-misplaced	script	The option does not belong to this operation.	That option does not belong to this action.	-
+fm.selection-invalid	script	The selection that was sent cannot be used.	The selection is not valid.	-
+fm.nothing-selected	script	Nothing is selected.	Nothing is selected.	-
+fm.not-in-trash	script	The item is not in the trash, or its origin is not known.	The item cannot be restored from the trash.	-
+fm.in-trash	script	The folder is the trash, which is changed with restore only.	That is the trash. Use restore.	-
+fm.one-location	script	The operation works inside one location only.	This works inside one location only.	-
+fm.read-only	script	The location does not take this change.	This location cannot be changed this way.	-
+fm.exists	script	Something of that name exists already.	That name is taken already.	-
+fm.item-missing	script	There is no such item.	There is no such item.	-
+fm.item-unreadable	script	The item cannot be read.	The item cannot be read.	-
+fm.link	script	Links are not copied or moved.	Links are not copied or moved.	-
+fm.is-share	script	The folder is a share, which has its own rules.	This is a share.	-
+fm.target-invalid	script	The target does not fit the selection.	The target does not fit.	-
+fm.overwrite-move	script	Overwrite is refused together with move.	Overwrite is not offered for a move.	-
+fm.no-room	script	The target has not enough free room.	There is not enough room at the target.	-
+fm.busy	script	Another job works on the location or holds the lock of the pool.	Another job is running. Try again when it is done.	-
+fm.write-off	script	The file manager is read only until writing is allowed.	The file manager is read only.	-
+fm.state-unwritable	script	The state folder of the file manager is not writable.	The file manager cannot write its state.	-
+vault.value-missing	script	An option was given without its value.	The option needs a value.	-
+vault.args-unexpected	script	A secret name was given to an action that takes none.	This action takes no names.	-
+vault.name-invalid	script	The name is not a name of a secret.	That is not a name of a secret.	-
+vault.closed-already	script	Close was asked for a vault that is closed.	The vault is closed already.	-
+vault.missing	script	The server has no vault.	There is no vault on this server.	hs vault init
+docker.failed	script	A step of hs docker failed and gave no code of its own.	The step failed.	-
+fm.location-unknown	script	The id is not a location of the file manager.	There is no such location.	-
+fm.storage-locked	script	The encrypted storage is locked.	The encrypted storage is locked: unlock it first.	hs unlock
+fm.no-array	script	A disk was asked for on a server without an array.	This server has no data disks of an array.	-
+fm.no-cache	script	The upload cache was asked for on a server without one.	There is no upload cache on this server.	-
+fm.share-unknown	script	No pool holds a share of this name.	There is no such share.	-
+fm.location-unusable	script	The location exists but is not mounted.	The location cannot be used now.	-
+fm.same-files	script	Two locations show the same files.	Both sides show the same files.	-

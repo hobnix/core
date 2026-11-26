@@ -53,6 +53,8 @@ run plan wipe sdy
 check_eq "a free disk: exit 0" 0 "$rc"
 has "^status${T}ok$" && has "^danger${T}ALL DATA on sdy will be erased.$" && has "^confirm_name${T}sdy$" && has "^warn${T}sdy1 holds ext4 \"old\"$" && has "^long${T}no$" && pass "plan: status, danger, confirm_name, what is on it" || fail "plan: $out"
 run plan wipe sdm;  check_eq "mounted: refused" 1 "$rc"; has "in use" && pass "mounted: reason" || fail "mounted: $out"
+check_match "a mounted disk is refused with disk.in-use" $'code	disk.in-use' "$out"
+python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF disk.in-use && pass "disk.in-use is in the catalogue" || fail "disk.in-use is not in the catalogue"
 run plan wipe sdp;  check_eq "array member: refused" 1 "$rc"; has "member of the bulk array" && pass "array: reason" || fail "array: $out"
 run plan wipe sdb;  check_eq "backup disk: refused" 1 "$rc"; has "backup disk" && pass "backup: reason" || fail "backup: $out"
 run plan wipe sdk;  check_eq "ZFS member: refused" 1 "$rc"; has "ZFS pool" && pass "zfs: reason" || fail "zfs: $out"

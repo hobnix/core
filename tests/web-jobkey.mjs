@@ -21,7 +21,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const sh = readFileSync(here + '../scripts/docker-app-change.sh', 'utf8');
-const page = readFileSync(here + '../web/src/pages/Docker.svelte', 'utf8');
+const page = readFileSync(here + '../web/src/pages/Workloads.svelte', 'utf8');
 const inJob = [...sh.matchAll(/hs_job "docker-app-(\$action|[a-z]+)-/g)].map((m) => m[1]);
 check('start, stop and restart are one job template', inJob.includes('$action'));
 for (const a of ['start', 'stop', 'restart', 'pull', 'rebuild', 'recreate', 'delete']) {

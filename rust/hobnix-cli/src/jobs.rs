@@ -236,6 +236,27 @@ pub fn run(args: &[String]) -> Result<u8> {
             let [id, key] = exact::<2>(&p)?;
             store.set_key(id, key)?;
         }
+        "error" => {
+            let p = parse(rest, &["--category", "--message", "--code"])?;
+            let id = &exact::<1>(&p)?[0];
+            let category = p.opt("--category").ok_or_else(bad)?;
+            store.set_error(
+                id,
+                category,
+                p.opt("--message").unwrap_or(""),
+                p.opt("--code"),
+            )?;
+        }
+        "result" => {
+            let p = parse(rest, &["--json"])?;
+            let id = &exact::<1>(&p)?[0];
+            store.set_result(id, p.opt("--json").ok_or_else(bad)?)?;
+        }
+        "skip" => {
+            let p = parse(rest, &[])?;
+            let [id, message] = exact::<2>(&p)?;
+            store.skip(id, message)?;
+        }
         "finish" => {
             let p = parse(rest, &[])?;
             let [id, code] = exact::<2>(&p)?;

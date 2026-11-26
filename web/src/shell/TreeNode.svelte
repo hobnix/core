@@ -6,17 +6,21 @@
   import TreeRow from './TreeRow.svelte';
   import { route, go } from '../route.svelte.js';
   import { prefetchRoute } from '../prefetch.js';
-  import { visible } from '../nav.js';
+  import { visible, rowMark } from '../nav.js';
+  import { objectOf } from '../objects.js';
   import { ui } from '../ui.svelte.js';
   import { lockedWhy } from '../roles.js';
 
-  let { item, node, local = true, depth = 0, locked = false, meta = {} } = $props();
+  // trail: the parents of the page on screen when it is a page of this node, else [] (nav.js trailOf)
+  let { item, node, local = true, depth = 0, locked = false, meta = {}, trail = [] } = $props();
 
   const addr = $derived(`/node/${encodeURIComponent(node)}${item.path === '/' ? '' : item.path ?? ''}`);
   const kids = $derived(item.children ? visible(item.children, local ? ui.features.capabilities : null) : []);
   const hasKids = $derived(kids.length > 0);
   const here = $derived(route.node === node);
-  const selected = $derived(!!item.path && here && (route.path === item.path || (item.prefix && route.path.startsWith(item.path + '/'))));
+  const mark = $derived(here ? rowMark(item.path, route.path, trail) : '');
+  // the row of an object (a pool, or the temporary row) has its name as a tooltip: a long one is cut
+  const named = $derived(local && item.path && objectOf(item.path) ? item.label : '');
   // a page above the session's role is greyed with a lock and the reason; it stays a link (it opens "Not for your role") and is never prefetched
   const needs = $derived(local && item.path ? lockedWhy(ui.role, item.path) : '');
   const lockDim = $derived(local && locked && !!item.storage);
@@ -35,12 +39,12 @@
   }
 </script>
 
-<TreeRow {depth} icon={item.icon} label={item.label} href={addr} active={selected} {dim} gap={!!item.gap}
+<TreeRow {depth} icon={item.icon} label={item.label} href={addr} active={mark === 'current'} {mark} title={named} {dim} gap={!!item.gap}
          caret={hasKids ? (open ? 'open' : 'closed') : null} ontoggle={() => (open = !open)} onclick={click}
          onhover={() => local && !needs && prefetchRoute(item.path)} {needs}
          lock={lockDim} count={m?.text ?? ''} warn={!!m?.warn} dot={m?.dot ? { state: m.dot, title: m.title || m.dot } : null} />
 {#if hasKids && open}
   {#each kids as c (c.label + (c.path ?? ''))}
-    <TreeNode item={c} {node} {local} depth={depth + 1} {locked} {meta} />
+    <TreeNode item={c} {node} {local} depth={depth + 1} {locked} {meta} {trail} />
   {/each}
 {/if}

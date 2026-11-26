@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Preparation: unprivileged user for extension services"
+body  = """The server can now describe the settings of an unprivileged user for an extension service (its own user, its own state folder, no write access outside it). Nothing uses them yet: running extension services behave as before."""

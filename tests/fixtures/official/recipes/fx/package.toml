@@ -1,0 +1,7 @@
+name = "fx"
+version = "1.0.0"
+kind = "recipe"
+title = "Fixture fx"
+requires_core = ">=1"
+permissions = []
+script = "run.sh"

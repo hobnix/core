@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "fix"
+title = "Package releases cover extensions again, and need a tagged extension SDK"
+body  = """Preparing a release of the package repository raised only the versions of recipes, so a changed extension was left out. It now looks at every package folder. The release check also refuses a Rust extension whose SDK is not pinned to a core release tag."""

@@ -1,0 +1,100 @@
+# The config options of this capability (kind = "include" anchors in config/schema.toml put them back in file order).
+
+[[item]]
+kind = "option"
+key = "edgeWingsIp"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '""'
+doc = '''
+# Tailscale address of the game server host (pelican-wings) the game ports are forwarded to.'''
+value = '''
+edgeWingsIp = "100.64.0.11"'''
+
+[[item]]
+kind = "option"
+key = "edgeGamePorts"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '[ ]'
+doc = '''
+# The game port pool: ports and ranges ("25565-25579") forwarded to edgeWingsIp as TCP and UDP. It must be the same pool as the
+# allocations in Pelican and the same ports as the Tailscale ACL allows for this node. Never 22, 25, 80 or 41641.'''
+value = '''
+edgeGamePorts = ["25565-25579", "2456-2470"]'''
+
+[[item]]
+kind = "option"
+key = "edgeGameTcp"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '[ ]'
+doc = '''
+# Game ports that need only TCP (rare), on top of edgeGamePorts.'''
+value = '''
+edgeGameTcp = ["27015"]'''
+
+[[item]]
+kind = "option"
+key = "edgeGameUdp"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '[ ]'
+doc = '''
+# Game ports that need only UDP (rare), on top of edgeGamePorts.'''
+value = '''
+edgeGameUdp = ["27016"]'''
+
+[[item]]
+kind = "option"
+key = "edgeRtcIp"
+type = "string"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '""'
+doc = '''
+# Tailscale address of the LiveKit container (Matrix calls). Empty: the call ports are not forwarded.'''
+value = '''
+edgeRtcIp = "100.64.0.12"'''
+
+[[item]]
+kind = "option"
+key = "edgeRtcTcp"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '[ ]'
+doc = '''
+# TCP ports LiveKit advertises (forwarded to edgeRtcIp).'''
+value = '''
+edgeRtcTcp = ["7881"]'''
+
+[[item]]
+kind = "option"
+key = "edgeRtcUdp"
+type = "list"
+required = false
+settable = false
+secret = false
+capability = "edge-ports"
+default = '[ ]'
+doc = '''
+# UDP ports LiveKit advertises (forwarded to edgeRtcIp).'''
+value = '''
+edgeRtcUdp = ["50000-50100"]'''

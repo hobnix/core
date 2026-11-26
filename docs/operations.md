@@ -647,9 +647,27 @@ Close public SSH last, and only once SSH over Tailscale works (`sshOverIp = fals
 a command: it is a checklist you work through by hand (`docs/PLAN-nodes.md`, "Cutover checklist"). What a trial run does not prove: real mail
 delivery from the internet, outgoing mail, long game sessions through the forwarding, and a reboot of the real VPS.
 
+## Set up a server from a blueprint
+
+A **blueprint** is a signed, ready-made choice from a package repository: parts, a few plain settings, Docker and apps. It only fills what is
+not set yet and never overwrites a value. Look first:
+
+```bash
+hs blueprint list
+```
+
+```bash
+hs blueprint apply <name> --dry-run
+```
+
+Without `--dry-run` it shows the same plan, asks (a typed name for a blueprint from a repository you added, and where Docker asks for one)
+and starts one background job. A failed rebuild or Docker step stops the job; a failed app does not stop the next one. An app that needs an
+answer from you is left to you: it shows up in the first-run checklist with its command. When the repositories offer no blueprint, the list
+is empty. Not tested on hardware yet.
+
 ## Apps that are not healthy or have an update
 The weekly summary mentions an update of every app whose policy is `notify`; an app set to `pinned` is not mentioned. An update is not a
-health problem. An app that runs but fails its declared check shows as unhealthy on the Apps page. See and set the policy:
+health problem. An app that runs but fails its declared check shows as unhealthy in the app catalog. See and set the policy:
 
 ```bash
 hs apps policy <instance>
@@ -658,7 +676,7 @@ hs apps policy <instance>
 How install, retry and remove work: [Containers and apps](containers-and-apps.md). Not tested on hardware yet.
 
 ## Optional parts from hobnix/capabilities
-Some optional parts of the server (capabilities) can come from the repository `capabilities` instead of the core. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
+Some optional parts of the server (capabilities) can come from the default repository `official` (the old repository `capabilities` is frozen) instead of the core. Not tested on hardware yet. They are packages of the kind `capability`: installed from a signed release, switched on, and built into the system by `hs rebuild`. Which parts live there today: none are moved yet; the pilot is planned (see "Planned" below).
 
 See what the repository offers, then install one:
 

@@ -3,12 +3,13 @@
 //! Try it without the core, with the reference runner:
 //!   cargo build --example hello
 //!   python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
-use hobnix_ext_sdk::command::{run, Ctx, Failure, Request, Success};
-use hobnix_ext_sdk::{Event, LogLevel};
+#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
+use hobnix_ext_sdk::command::{run, Failure, Request, Success};
+use hobnix_ext_sdk::{Ctx, Event, LogLevel};
 use serde_json::json;
 use std::process::ExitCode;
 
-fn handle(req: &Request, ctx: &Ctx) -> Result<Success, Failure> {
+fn handle(req: &Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
     match req.words().as_slice() {
         ["greet"] => {
             let name = req.argv.first().map(String::as_str).unwrap_or("world");

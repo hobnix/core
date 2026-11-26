@@ -11,6 +11,11 @@
 # --list = kind<TAB>name<TAB>ok|fail|skip<TAB>detail. Exit 1 when something failed.
 # HS_SMOKE_HS (a replacement for lib/hs.sh), HS_SMOKE_PROBES (a file: label<TAB>words<TAB>ok exit codes), HS_SMOKE_TIMEOUT,
 # HS_SMOKE_TOOLS (space separated), HS_BULK: tests.
+# Packages bring their own: `[[probe]]` (label, words, ok, limit) and `tools = [...]` in the capability.toml / package.toml of a package
+# that is ON are added to the lists below (scripts/lib/pkg_probes.py); the programs of storage, incus, samba, backup are the `tools` of
+# those capabilities. A core probe whose registry row says `capability:X` is skipped while X is off.
+# A package probe must name a row it declares as a read (probe_is_read below, #1072): else skipped, warned, counted as a failure.
+# This catches package mistakes, not a hostile package: the package sets the flags and the script itself.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
@@ -49,6 +54,79 @@ in_registry() {
     for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
     found = 1
   } END { exit !found }' <(registry_rows)
+}
+
+# The folders of the packages that are ON (an in-tree capability, a capability package, a recipe that was applied), one per line.
+on_package_dirs() {
+  local r d n seen=" "
+  while IFS= read -r r; do
+    for d in "$r"/*/; do
+      d=${d%/}; n=${d##*/}
+      [ -f "$d/capability.toml" ] || [ -f "$d/package.toml" ] || continue
+      case "$seen" in *" $n "*) continue ;; esac
+      seen="$seen$n "
+      if [ -f "$d/capability.toml" ] || _ext_is_cap_package "$d"; then capability_on "$n" || continue
+      else grep -qxF "[package.$n]" "${HS_STATE_DIR:-/var/lib/hs}/packages/installed.toml" 2>/dev/null || continue
+      fi
+      printf '%s
+' "$d"
+    done
+  done < <(_ext_roots)
+}
+# probes carry a fifth column, the package that brought them (an empty limit is `-`: read would drop an empty tab field)
+package_lines() {   # package_lines probes|tools: what the packages that are on bring
+  local dirs d
+  dirs=$(on_package_dirs)
+  [ -n "$dirs" ] || return 0
+  if [ "$1" = probes ]; then
+    while IFS= read -r d; do
+      python3 "$here/lib/pkg_probes.py" probes "$d" 2>/dev/null |
+        awk -F'\t' -v OFS='\t' -v p="${d##*/}" '{ sub(/\r$/, ""); print $1, $2, $3, ($4 == "" ? "-" : $4), p }'
+    done <<<"$dirs"
+    return 0
+  fi
+  # shellcheck disable=SC2046,SC2086
+  python3 "$here/lib/pkg_probes.py" "$1" $(printf '%s\n' "$dirs" | tr '\n' ' ') 2>/dev/null || true
+}
+
+# May the probe of a package run? Only when the row hs would run for these words (the longest match) is a row of that same package and
+# is flagged `reads`; a row flagged `changes` only when the words end in --dry-run. The words are limited to plain characters: they are
+# split into arguments unquoted, so no glob and no backslash. Anything unclear is a no.
+probe_is_read() {   # probe_is_read <package> <words>
+  local row own flags safe='^[A-Za-z0-9 ._:=/@,+-]+$'
+  [[ $2 =~ $safe ]] || return 1
+  row=$(awk -F'\t' -v w="$2" '$1 == "user" || ($1 == "sys" && substr(w, 1, 4) == "sys ") {
+    n = split($2, p, " "); m = split(w, q, " ")
+    if (n > m || n <= bn) next
+    for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
+    bn = n; best = $0
+  } END { if (bn) print best }' <(registry_rows))
+  [ -n "$row" ] || return 1
+  own=$(registry_rows_of "$1") || return 1
+  grep -qxF -- "$row" <<<"$own" || return 1
+  flags=,$(awk -F'\t' '{ print $7 }' <<<"$row"),
+  case "$flags" in
+    # --dry-run must reach the script (build_args of hs.sh): typed after the row's words, with args `-` or a {rest} token of its own
+    *,changes,*) [[ $2 == *" --dry-run" ]] && awk -F'\t' -v w="$2" '{
+        if (split($2, p, " ") >= split(w, q, " ")) exit 1
+        if ($4 == "-") exit 0
+        n = split($4, a, " "); for (i = 1; i <= n; i++) if (a[i] == "{rest}") exit 0
+        exit 1 }' <<<"$row" ;;
+    *,reads,*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The capability a probe belongs to: the `capability:X` flag of the longest registry row its words match (empty = none).
+probe_capability() {
+  awk -F'	' -v w="$1" '$1 == "user" || ($1 == "sys" && substr(w, 1, 4) == "sys ") {
+    n = split($2, p, " "); m = split(w, q, " ")
+    if (n > m || n <= bn) next
+    for (i = 1; i <= n; i++) if (substr(p[i], 1, 1) != "<" && p[i] != q[i]) next
+    bn = n; best = $7
+  } END {
+    k = split(best, f, ","); for (i = 1; i <= k; i++) if (f[i] ~ /^capability:/) { print substr(f[i], 12); exit }
+  }' <(registry_rows)
 }
 
 # ---- the probes and the rows that are left out on purpose ----------------------------------------
@@ -96,6 +174,7 @@ default_probes() {
     $'hs sys incident state\tsys incident state\t0 1' \
     $'hs sys parts pending\tsys parts pending\t0' \
     $'hs sys pkg states\tsys pkg states\t0' \
+    $'hs sys pkg index	sys pkg index	0' \
     $'hs sys pkg integrations\tsys pkg integrations\t0' \
     $'hs sys pkg show\tsys pkg show hs-smoke-none\t0 1' \
     $'hs sys pkg asset\tsys pkg asset hs-smoke-none x.svg\t0 1' \
@@ -104,6 +183,7 @@ default_probes() {
     $'hs sys apps versions\tsys apps versions\t0' \
     $'hs sys rebuild pending\tsys rebuild pending\t0' \
     $'hs sys net nics\tsys net nics\t0' \
+    $'hs sys blueprint list\tsys blueprint list\t0' \
     $'hs sys preset list\tsys preset list\t0' \
     $'hs sys net check\tsys net check\t0 1' \
     $'hs sys fm locations\tsys fm locations\t0 1' \
@@ -121,6 +201,8 @@ default_probes() {
     $'hs job running\tjob running\t0' \
     $'hs job log\tjob log hs-health-check.service\t0 1' \
     $'hs config list\tconfig list\t0' \
+    $'hs blueprint list\tblueprint list\t0' \
+    $'hs blueprint show\tblueprint show web-server\t0 1' \
     $'hs preset list\tpreset list\t0' \
     $'hs preset show minimal\tpreset show minimal\t0' \
     $'hs config get\tconfig get language\t0 1' \
@@ -167,6 +249,7 @@ default_probes() {
     $'hs ext passthrough list\text passthrough list\t0 1' \
     $'hs ext passthrough status\text passthrough status\t0 1' \
     $'hs remote list\tremote list\t0 1' \
+    $'hs remote codes\tremote codes\t0 1 2' \
     $'hs cheatsheet\tcheatsheet\t0' \
     $'hs expiry\texpiry\t0' \
     $'hs iso\tiso\t0 1' \
@@ -175,6 +258,7 @@ default_probes() {
     $'hs pkg list\tpkg list\t0' \
     $'hs pkg integrations\tpkg integrations\t0' \
     $'hs pkg updates\tpkg updates\t0 1'
+  package_lines probes
   if [ -n "$first_share" ]; then
     printf '%s\t%s\t%s\n' "hs share $first_share show" "share $first_share show" "0" "hs share $first_share snapshots" "share $first_share snapshots" "0 1"
   fi
@@ -235,7 +319,9 @@ if $coverage; then
 fi
 
 # ---- 1. the programs the scripts call ------------------------------------------------------
-tools=${HS_SMOKE_TOOLS-"incus zpool zfs smartctl restic samba-tool wbinfo sharesec snapraid mergerfs cryptsetup lsblk blkid jq curl rsync wipefs systemctl git setfacl getfacl xfs_admin e2label btrfs mkfs.ext4 findmnt nix-env"}
+# the core list; storage, incus, samba, backup and every other package add theirs (`tools` of the capability, only while it is on)
+tools=${HS_SMOKE_TOOLS-"lsblk blkid jq curl rsync systemctl git setfacl getfacl findmnt nix-env $(package_lines tools | tr '
+' ' ')"}
 $list || step "Programs the scripts need"
 for tool in $tools; do
   if command -v "$tool" >/dev/null 2>&1; then continue; fi
@@ -257,10 +343,19 @@ if $run; then
   $list || step "Read-only commands"
   probes=$(default_probes)
   [ -z "${HS_SMOKE_PROBES:-}" ] || probes=$(cat "$HS_SMOKE_PROBES")
-  while IFS=$'\t' read -r label words codes plimit; do
+  while IFS=$'\t' read -r label words codes plimit pkg; do
     [ -n "$label" ] || continue
+    [ "$plimit" != - ] || plimit=
+    if [ -n "$pkg" ]; then
+      # the label and the name are package text: printable ASCII only
+      label=$(printf '%s' "$label" | LC_ALL=C tr -cd ' -~')
+      pkg=$(printf '%s' "$pkg" | LC_ALL=C tr -cd ' -~')
+      if ! probe_is_read "$pkg" "$words"; then result probe "$label" fail "$(t 'probe %s of %s is not a read: skipped' "$label" "$pkg")"; continue; fi
+    fi
     # a command this version does not have (the list below is longer than an old checkout) is skipped
     if [ "$words" != help ] && ! in_registry "$words"; then result probe "$label" skip "$(t 'no such command in this version')"; continue; fi
+    cap=$(probe_capability "$words")
+    if [ -n "$cap" ] && ! capability_on "$cap"; then result probe "$label" skip "$(t 'capability %s is off' "$cap")"; continue; fi
     out=$(HS_CALLER=smoke HS_PLAIN=1 timeout "${plimit:-$limit}" bash "$hs_sh" $words </dev/null 2>&1); rc=$?
     bad=$(grep -m1 -iE 'command not found|syntax error|unbound variable|No such file or directory|Traceback' <<<"$out" || true)
     if [ "$rc" = 124 ]; then

@@ -113,6 +113,9 @@ fake_service_systemd() {
   printf '#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n' > "$WORK/systemd-run"; chmod +x "$WORK/systemd-run"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/systemctl0"; chmod +x "$WORK/systemctl0"
   export HS_SYSTEMD_RUN=$WORK/systemd-run HS_SYSTEMCTL=$WORK/systemctl0 HS_CRED_DIR=$WORK/cred
+  # the bridge prepares the state folder of the service (ext_state.py): never the real /var/lib
+  export HS_STATE_DIR=${HS_STATE_DIR:-$WORK/hsroot} HS_EXT_STATE_DIR=$WORK/hsext HS_PRIVATE_DIR=$WORK/hsprivate
+  mkdir -p "$HS_STATE_DIR"
 }
 
 finish() {

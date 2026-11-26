@@ -439,6 +439,26 @@ pub fn valid_id(id: &str) -> bool {
         && b[b.len() - 4..].iter().all(u8::is_ascii_lowercase)
 }
 
+/// The longest `result` text, in characters.
+const RESULT_MAX_CHARS: usize = 4096;
+
+/// A `result` value: one flat JSON object whose values are strings or numbers (no booleans, nulls, lists, objects).
+fn parse_flat_result(json: &str) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|_| failed("result is not JSON"))?;
+    let flat = |v: &serde_json::Value| v.is_string() || v.is_number();
+    match value {
+        serde_json::Value::Object(map)
+            if json.chars().count() <= RESULT_MAX_CHARS && map.values().all(flat) =>
+        {
+            Ok(map)
+        }
+        _ => Err(failed(
+            "result must be one flat JSON object of strings and numbers, at most 4 KB",
+        )),
+    }
+}
+
 fn one_line(s: Option<&str>) -> String {
     let mut out = String::new();
     let mut in_ws = false;
@@ -798,13 +818,14 @@ impl Store {
         Ok(())
     }
 
-    /// `finish`: a cancelled record stays cancelled (the exit is stored, `ended` and `cancel` stay).
+    /// `finish`: a cancelled or skipped record stays as it is (the exit is stored, `ended` and `cancel` stay).
     pub fn finish(&self, id: &str, exit: i64) -> Result<()> {
         self.locked(id, || {
             let mut rec = self.load(id)?;
             rec.exit = Some(exit);
             rec.waiting = None;
-            if rec.state.as_deref() == Some("cancelled") {
+            if matches!(rec.state.as_deref(), Some("cancelled" | "skipped")) {
+                // a cancel stays cancelled, a skip stays skipped (exit 0, no error)
                 if rec.ended.as_deref().is_none_or(str::is_empty) {
                     rec.ended = Some(now_iso());
                 }
@@ -825,6 +846,65 @@ impl Store {
         })?;
         self.cleanup(id, true);
         Ok(())
+    }
+
+    /// `error`: name why an ended job ended (ADR 0018: input_timeout, input_rejected). Only a record that ended; state and exit stay.
+    /// `code` (ADR 0028) is the catalogue code of the refusal that ended the job; absent when none is known.
+    pub fn set_error(
+        &self,
+        id: &str,
+        category: &str,
+        message: &str,
+        code: Option<&str>,
+    ) -> Result<()> {
+        self.locked(id, || {
+            let mut rec = self.load(id)?;
+            if rec.is_active() {
+                return Err(failed("job has not ended"));
+            }
+            let mut extra = serde_json::Map::new();
+            if let Some(c) = code.filter(|c| !c.is_empty()) {
+                extra.insert("code".to_string(), serde_json::Value::String(c.to_string()));
+            }
+            rec.error = Some(ErrorInfo {
+                category: category.to_string(),
+                message: message.to_string(),
+                extra,
+            });
+            self.save(&rec)
+        })
+    }
+
+    /// `result`: what a job made (PLAN-app-lifecycle Q2). One flat JSON object of strings and numbers, at most 4096 characters; any state.
+    pub fn set_result(&self, id: &str, json: &str) -> Result<()> {
+        let object = parse_flat_result(json)?;
+        self.locked(id, || {
+            let mut rec = self.load(id)?;
+            rec.result = Some(serde_json::Value::Object(object.clone()));
+            self.save(&rec)
+        })
+    }
+
+    /// `skip`: a job that found the same work running ends as skipped (exit 0, the message in `result.message`). Not an error.
+    pub fn skip(&self, id: &str, message: &str) -> Result<()> {
+        self.locked(id, || {
+            let mut rec = self.load(id)?;
+            if !rec.is_active() {
+                return Err(failed("job has ended already"));
+            }
+            rec.state = Some("skipped".to_string());
+            rec.exit = Some(0);
+            rec.ended = Some(now_iso());
+            rec.waiting = None;
+            rec.error = None;
+            let mut result = serde_json::Map::new();
+            result.insert(
+                "message".to_string(),
+                serde_json::Value::String(message.to_string()),
+            );
+            rec.result = Some(serde_json::Value::Object(result));
+            self.save(&rec)
+        })
     }
 
     /// `find-unit`: the id of the newest queued/running record of a unit (with or without `.service`).
@@ -1513,6 +1593,51 @@ mod tests {
         assert!(out.contains(r#""hint":"keep me""#));
         assert!(out.contains(r#""why":1"#));
         assert!(out.contains(r#""a":[1,2]"#));
+    }
+
+    #[test]
+    fn error_result_and_skip() {
+        let tmp = Tmp::new();
+        let store = tmp.store();
+        let id = mk(&store, "hs-job-x-1");
+        assert!(
+            store.set_error(&id, "c", "m", None).is_err(),
+            "an active job has not ended"
+        );
+        store.run(&id).unwrap();
+        store.finish(&id, 2).unwrap();
+        store
+            .set_error(&id, "input_timeout", "no answer", Some("job.busy"))
+            .unwrap();
+        store.set_result(&id, r#"{"b": "2", "a": 1}"#).unwrap();
+        let text = read(&store, &id);
+        assert!(text.contains("\"category\": \"input_timeout\""));
+        assert!(text.contains("\"code\": \"job.busy\""));
+        assert!(text.contains("\"state\": \"failed\""));
+        assert!(
+            text.find("\"b\"") < text.find("\"a\""),
+            "result keeps the order given"
+        );
+        for bad in [
+            "{oops",
+            "[1]",
+            r#"{"a": {"b": 1}}"#,
+            r#"{"a": true}"#,
+            r#"{"a": null}"#,
+        ] {
+            assert!(store.set_result(&id, bad).is_err(), "{bad}");
+        }
+        let long = format!(r#"{{"a": "{}"}}"#, "x".repeat(RESULT_MAX_CHARS));
+        assert!(store.set_result(&id, &long).is_err());
+
+        let id = mk(&store, "hs-job-x-2");
+        store.skip(&id, "Already running").unwrap();
+        assert!(store.skip(&id, "again").is_err());
+        store.finish(&id, 1).unwrap();
+        let text = read(&store, &id);
+        assert!(text.contains("\"state\": \"skipped\""));
+        assert!(text.contains("\"exit\": 1"));
+        assert!(text.contains("\"message\": \"Already running\""));
     }
 
     #[test]

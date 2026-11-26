@@ -87,7 +87,7 @@ web/src/forms/instances/CreateInstance.svelte	1
 web/src/forms/instances/IsoAdd.svelte	1
 web/src/forms/instances/steps/StepNetwork.svelte	5
 web/src/forms/instances/steps/StepPlacement.svelte	11
-web/src/forms/ops/PeerMount.svelte	1
+web/src/forms/ops/RemoteMount.svelte	1
 web/src/nav.js	1
 web/src/pages/Apps.svelte	2
 web/src/pages/Health.svelte	3

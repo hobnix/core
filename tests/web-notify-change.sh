@@ -39,8 +39,10 @@ check_eq "a secret the provider refuses" 1 "$rc"
 run "https://ntfy.sh/x
 " plan add Bad_Name --provider ntfy --secret url; check_eq "bad name refused" 1 "$rc"
 run "" plan add phone --provider nope; check_eq "unknown provider refused" 1 "$rc"
+check_match "unknown provider refused with notify.provider-unknown" $'code\tnotify.provider-unknown' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF notify.provider-unknown && pass "notify.provider-unknown is in the catalogue" || fail "notify.provider-unknown is not in the catalogue"
 run "https://ntfy.sh/x
 " plan add phone --provider ntfy --secret url --categories nonsense; check_eq "bad class refused" 1 "$rc"
+check_match "bad class refused with notify.classes-invalid" $'code\tnotify.classes-invalid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF notify.classes-invalid && pass "notify.classes-invalid is in the catalogue" || fail "notify.classes-invalid is not in the catalogue"
 run "x
 " plan add phone --provider ntfy --set url=https://ntfy.sh/x; check_eq "a secret setting cannot come as --set" 1 "$rc"
 run "pw
@@ -58,11 +60,13 @@ run "https://ntfy.sh/a-long-random-topic
 check_eq "start add: done" 0 "$rc"; has '^status	done$' && pass "status done" || fail "start add: $out"
 check_eq "the channel exists" "phone" "$(chans)"
 run "" start add phone --provider ntfy --secret url; check_eq "adding it again is refused" 1 "$rc"
+check_match "adding it again is refused with notify.exists" $'code\tnotify.exists' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF notify.exists && pass "notify.exists is in the catalogue" || fail "notify.exists is not in the catalogue"
 run "" plan set phone --categories alarm
 check_eq "plan set" 0 "$rc"; has '^heading	change the channel phone$' && has '^step	it carries: alarm$' && pass "set plan" || fail "set plan: $out"
 run "" start set phone --categories alarm --enabled yes; check_eq "start set" 0 "$rc"
 check_eq "the classes were saved" "alarm" "$(bash "$SCRIPTS/notify-channel.sh" --show phone </dev/null | awk -F'\t' '$1 == "categories" { print $2 }')"
 run "" plan set nobody --enabled no; check_eq "set of an unknown channel refused" 1 "$rc"
+check_match "set of an unknown channel refused with notify.unknown" $'code\tnotify.unknown' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF notify.unknown && pass "notify.unknown is in the catalogue" || fail "notify.unknown is not in the catalogue"
 run "" plan set phone --provider email; check_eq "the provider cannot change" 1 "$rc"
 : > "$CALLS"
 run "" start test phone; check_eq "start test" 0 "$rc"; has '^status	done$' && pass "test done" || fail "test: $out"

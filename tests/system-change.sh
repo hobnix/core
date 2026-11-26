@@ -47,6 +47,7 @@ echo zfs > "$WORK/bulk-type"
 run plan sync
 check_eq "sync on ZFS is refused" 1 "$rc"
 has "nothing to sync" && pass "with the reason" || fail "zfs sync: $out"
+check_match "sync on ZFS is refused with system.not-snapraid" $'code	system.not-snapraid' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF system.not-snapraid && pass "system.not-snapraid is in the catalogue" || fail "system.not-snapraid is not in the catalogue"
 run plan scrub --pool bulk
 has "^command	.*zpool scrub bulk$" && pass "scrub of a ZFS bulk" || fail "zfs scrub: $out"
 

@@ -19,10 +19,10 @@ case "$verb" in plan|start) ;; *) echo "usage: setup-change.sh plan|start wizard
 [ "$action" = wizard-done ] || refuse_code action.unknown "unknown action (wizard-done)"
 
 state=$("$py" "$here/first_run.py" wizard 2>/dev/null || true)
-[ "$state" = open ] || refuse "The first-run wizard is not open."
+[ "$state" = open ] || refuse_code setup.not-open "The first-run wizard is not open."
 
 if [ "$verb" = start ]; then
-  "$py" "$here/first_run.py" wizard-done >/dev/null 2>&1 || refuse "the wizard could not be closed"
+  "$py" "$here/first_run.py" wizard-done >/dev/null 2>&1 || refuse_code setup.close-failed "the wizard could not be closed"
   printf 'status\tdone\n'
   exit 0
 fi

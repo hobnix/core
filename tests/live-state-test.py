@@ -510,6 +510,7 @@ class Groups(unittest.TestCase):
         self.assertEqual(self.set_of(c), want)
         self.assertTrue(c.soft == set())
         g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         g.refresh("@instances")
         self.assertLess(len(self.set_of(c)), len(self.set_of(g)))
 
@@ -534,6 +535,7 @@ class Groups(unittest.TestCase):
     def test_system_groups_wake_the_system_topics(self):
         rows, info = ls.topics(), ls.topic_info()
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@jobs")
         woken = self.set_of(c)
         for t in ("jobs-running", "jobs-list", "deck", "status", "live", "health-next", "setup-list"):
@@ -541,6 +543,7 @@ class Groups(unittest.TestCase):
         for t in ("ups", "hardware", "ssh-keys", "pool-info-bulk"):
             self.assertNotIn(t, woken)
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@security")
         self.assertIn("ssh-keys", self.set_of(c))
         self.assertIn("config-list", self.set_of(c))
@@ -612,6 +615,7 @@ APP_TOPICS = {
     'apps-list': (['apps', 'list'], 120, 'skip', None, {'system', 'instances'}),
     'apps-health': (['apps', 'health'], 60, 'skip', None, {'instances', 'system'}),
     'pkg-repos': (['pkg', 'repos'], 300, 'run', None, {'system'}),
+    'pkg-index': (['pkg', 'index'], 300, 'run', None, {'system'}),
     'recipes-list': (['recipes', 'list'], 60, 'skip', 'incus', {'instances', 'system'}),
     'recipes-versions': (['recipes', 'versions'], 60, 'skip', None, {'instances', 'system'}),
 }
@@ -649,6 +653,7 @@ PENDING_TOPICS = {
     'parts-pending': (['parts', 'pending'], 60, 'run', None, {'system', 'network'}),
     'rebuild-pending': (['rebuild', 'pending'], 60, 'run', None, {'system', 'network', 'security', 'backup'}),
     'preset-list': (['preset', 'list'], 3600, 'run', None, set()),
+    'blueprint-list': (['blueprint', 'list'], 3600, 'run', None, set()),
 }
 
 
@@ -658,7 +663,7 @@ class Cli(unittest.TestCase):
         self.assertEqual(ls.topic_info()["parts-list"]["groups"], {"system", "network"})
 
     def test_network_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in NET_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -687,7 +692,7 @@ class Cli(unittest.TestCase):
         self.assertTrue({"system", "network", "instances", "shares"} <= seen)
 
     def test_pending_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in PENDING_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -726,7 +731,7 @@ class Cli(unittest.TestCase):
         self.assertTrue({"system", "instances", "users", "shares", "disks", "security", "backup"} <= seen)
 
     def test_app_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         for name, (words, iv, lock, cap, groups) in APP_TOPICS.items():
             self.assertEqual(tuple(rows[name][1:]), (words, iv, lock), name)
@@ -790,7 +795,7 @@ class Cli(unittest.TestCase):
             self.assertIn("system", info[n]["groups"])
 
     def test_instance_topics(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         rows = {t[0]: t for t in ls.topics()}
         self.assertEqual(len(INSTANCE_TOPICS), 11)
         for name, (words, iv, lock, cap, groups) in INSTANCE_TOPICS.items():
@@ -798,14 +803,14 @@ class Cli(unittest.TestCase):
             self.assertEqual(info[name], {"cap": cap, "groups": groups}, name)
 
     def test_six_column_parse(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         self.assertEqual(info["status"], {"cap": None, "groups": {"any"}})
         self.assertEqual(info["temp-disks"]["groups"], {"disks", "shares"})
         self.assertEqual(info["vault-list"]["groups"], {"security"})
         self.assertEqual(set(info), {t[0] for t in ls.topics()})
 
     def test_system_topics_info(self):
-        info = ls.topic_info()
+        info = {t: {k: v for k, v in i.items() if k != "idle"} for t, i in ls.topic_info().items()}      # idle: D14, tests/live-demand-test.py
         self.assertEqual(set(SYSTEM_TOPICS) - set(info), set())
         self.assertEqual(info["deck"], {"cap": None, "groups": {"any"}})
         self.assertEqual(info["jobs-running"]["groups"], {"any", "jobs"})
@@ -895,7 +900,7 @@ class Cli(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(ls.cli_status(out, docs=self.fake(time.time() - 7).docs()), 0)
         lines = out.getvalue().rstrip("\n").split("\n")
-        self.assertEqual(len(lines), 82)
+        self.assertEqual(len(lines), 84)
         status = [l for l in lines if l.startswith("status\t")][0].split("\t")
         live = [l for l in lines if l.startswith("live\t")][0].split("\t")
         self.assertEqual(len(status), 14)
@@ -1129,9 +1134,29 @@ class ExtLive(unittest.TestCase):
     def test_live_read_becomes_a_topic(self):
         self.package(self.DECL + 'live = 30\n[[web.reads]]\nwords = "other"\nkind = "tsv"\nttl = 10\n')
         self.assertEqual(self.ext(), [("ext-demo-list", ["ext", "demo", "list"], 30, "skip")])
-        self.assertEqual(ls.topic_info()["ext-demo-list"], {"cap": "demo", "groups": {"ext-demo"}})
+        self.assertEqual(ls.topic_info()["ext-demo-list"], {"cap": "demo", "groups": {"ext-demo"}, "idle": 300})
         own = os.path.join(scripts, "lib", "live-topics.tsv")
         self.assertEqual([r for r in ls.topics(own) if r[0].startswith("ext-")], [])
+
+    def test_a_live_read_runs_on_demand(self):
+        # #1320: `live` seconds while a stream wants the topic, else max(300, live); a lease (a page that opens) reads it at once
+        for live, idle in ((10, 300), (300, 300), (3600, 3600)):
+            self.package(self.DECL + "live = %d\n" % live)
+            self.assertEqual(ls.topic_info()["ext-demo-list"]["idle"], idle)
+        self.package(self.DECL + "live = 30\n")
+        db = FakeResp()
+        c = lc.Collector(db, run=lambda w: (0, "x", ""), topic_rows=[], topic_info={}, ext_rows=ls.ext_live)
+        c._spawn = lambda *r: None
+        c.rescan()
+        self.assertEqual(c.pace("ext-demo-list", 30), 300)
+        self.assertFalse(c.events["ext-demo-list"].is_set())
+        db.demand = lambda now: {"ext-demo-list": now + 30}
+        c.lease_round()
+        self.assertTrue(c.events["ext-demo-list"].is_set())
+        self.assertEqual(c.pace("ext-demo-list", 30), 30)
+        db.demand = lambda now: {}
+        c.lease_round()
+        self.assertEqual(c.pace("ext-demo-list", 30), 300)
 
     def test_locked_run_and_bad_declarations(self):
         self.package(self.DECL + 'live = 10\nlocked = "run"\n')
@@ -1196,6 +1221,7 @@ class ExtLive(unittest.TestCase):
         self.assertEqual(started, ["ext-demo-list"])
         c.rescan()
         self.assertEqual(started, ["ext-demo-list"])        # not twice
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@ext-demo")
         self.assertTrue(c.events["ext-demo-list"].is_set())
         self.assertTrue(c.events["status"].is_set())        # status lists the group "any": every group wakes it

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# help: install a new server from the installer ISO: the OS disk, name, SSH key, preset (run on the ISO as root)
-# help.de: einen neuen Server vom Installer-Stick einrichten: Systemplatte, Name, SSH-Schlüssel, Vorlage (auf dem Stick als root)
-# args: [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bios] [--restore-from <dir>] [--dry-run]
+# help: install a new server from the installer ISO: the OS disk, name, SSH key, what to set up after the first boot (run on the ISO as root)
+# help.de: einen neuen Server vom Installer-Stick einrichten: Systemplatte, Name, SSH-Schlüssel, was nach dem ersten Start eingerichtet wird (auf dem Stick als root)
+# args: [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--blueprint <name> | --parts <a,b> | --core-only] [--confirm-disk <name>] [--bios] [--restore-from <dir>] [--dry-run]
 set -euo pipefail
 here=$(dirname "$0")
 . "$here/lib/ui.sh"
 . "$here/lib/machine.sh"
 . "$here/lib/restore.sh"
 . "$here/lib/checkout.sh"
+. "$here/lib/setup-choice.sh"
 
 # The terminal installer on the ISO (docs/PLAN-modular-core.md step 10a): it replaces the manual steps 2.1 to 2.7 of the Homeserver guide.
 # It touches ONE disk (the one you pick and then type the name of), leaves every other disk alone, puts a copy of this repository
@@ -17,6 +18,9 @@ here=$(dirname "$0")
 # The role: homeserver (the default: storage, Incus, Samba, backup), edge (a public VPS with the edge capabilities, preset edge: no pools, no
 # hostId, no network card or Samba networks to ask; on a machine without UEFI it lays out a BIOS boot partition and puts GRUB on the disk: machine.toml bootDevice)
 # or minimal (only the base). The role is written to machine.toml; a preset of the same name is the default.
+#
+# What the server is set up for after the first boot (a blueprint, single parts, only the core, or: choose in the setup wizard) is only
+# RECORDED here, in <target>/var/lib/hs/setup-choice: the installer fetches nothing, `hs first-run` reads it and shows a plan.
 #
 # Everything it asks can be given up front (the options above, plus --nic, --smb-allow, --bulk-type zfs|snapraid (homeserver role; the layout of /bulk, default zfs), --key <line>, --target <dir>, --repo <dir>).
 # An unattended run needs --disk and --confirm-disk <the same name>: without a terminal nothing is erased on a guess.
@@ -32,6 +36,7 @@ here=$(dirname "$0")
 disk=""; hostname_=""; admin=""; keyfile=""; key=""; tz=""; preset=""; confirm_disk=""; nic=""; smb=""; dry=false; role=""; bios=false; bulk_type=""
 target=${HS_INSTALL_TARGET:-/mnt}
 repo=""; restore_from=""
+choice=""; choice_name=-; choices=0
 # no arguments in a terminal: the entry menu, "New install" next to "Restore from backup" (UNVERIFIED: not tested on hardware)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ] && [ -z "${HS_INSTALL_SKIP_DISK:-}" ]; then
   what=$(choose "What do you want to do?" "New install" "Restore from backup") || what="New install"
@@ -49,6 +54,9 @@ while [ $# -gt 0 ]; do
     --key) key=${2:?}; shift 2 ;;
     --timezone) tz=${2:?}; shift 2 ;;
     --preset) preset=${2:?}; shift 2 ;;
+    --blueprint) choice=blueprint; choice_name=${2:?}; choices=$((choices + 1)); shift 2 ;;
+    --parts) choice=parts; choice_name=${2:?}; choices=$((choices + 1)); shift 2 ;;
+    --core-only) choice=core; choice_name=-; choices=$((choices + 1)); shift ;;
     --confirm-disk) confirm_disk=${2:?}; shift 2 ;;
     --nic) nic=${2:?}; shift 2 ;;
     --smb-allow) smb=${2:?}; shift 2 ;;
@@ -56,9 +64,14 @@ while [ $# -gt 0 ]; do
     --repo) repo=${2:?}; shift 2 ;;
     --restore-from) restore_from=${2:?}; shift 2 ;;
     --dry-run) dry=true; shift ;;
-    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--confirm-disk <name>] [--bulk-type zfs|snapraid] [--dry-run]"; exit 1 ;;
+    *) say "usage: hs-install [--role homeserver|edge|minimal] [--disk <name>] [--hostname <name>] [--admin <name>] [--key-file <file>] [--timezone <zone>] [--preset <name>] [--blueprint <name> | --parts <a,b> | --core-only] [--confirm-disk <name>] [--bulk-type zfs|snapraid] [--dry-run]"; exit 1 ;;
   esac
 done
+[ "$choices" -le 1 ] || fail "Give only one of --blueprint, --parts and --core-only."
+[ "$choices" = 0 ] || [ -z "$preset" ] || fail "--preset does not go together with --blueprint, --parts or --core-only: give one of them."
+[ "$choice" != blueprint ] || setup_name_ok "$choice_name" || fail "That is not a blueprint name (lowercase letters, digits and dashes)."
+[ "$choice" != parts ] || setup_parts_ok "$choice_name" || fail "--parts takes package names separated by commas (lowercase letters, digits and dashes)."
+[ "$choices" = 0 ] || [ -z "$restore_from" ] || fail "A restore keeps the settings of the backup: leave out --blueprint, --parts and --core-only."
 skip=${HS_INSTALL_SKIP_DISK:-}
 py=${HS_PYTHON:-python3}
 # the repository to copy: the one this script belongs to (on the ISO: /etc/hs-installer)
@@ -161,9 +174,12 @@ if [ -z "$tz" ] && $tty; then tz=$(ask "Time zone (e.g. Europe/Vienna; empty = U
 
 presets() { PYTHONUTF8=1 HS_PRESETS_DIR="${HS_PRESETS_DIR:-$repo/presets}" "$py" "$here/preset.py" list en | cut -f1; }
 if [ -z "$preset" ] && [ "$role" != homeserver ]; then preset=$role; fi   # the preset of the same name: edge, minimal
-if [ -z "$preset" ]; then
-  if $tty; then preset=$(choose "Preset (a ready-made list of choices; minimal changes nothing special)" $(presets)) || preset=minimal; else preset=minimal; fi
+if [ -z "$preset" ] && [ -z "$choice" ] && $tty && [ -z "$restore_from" ]; then
+  note "wizard: you choose after the first boot (setup wizard or hs first-run). core: only the core packages."
+  choice=$(choose "What should be set up after the first boot?" wizard core) || choice=wizard
 fi
+[ -n "$preset" ] || preset=minimal
+[ -n "$choice" ] || choice=wizard
 presets | grep -qx -- "$preset" || fail "$(t "No preset called '%s'." "$preset")"
 
 # the network card and the network of the PCs: from the route this installer itself uses
@@ -187,6 +203,15 @@ kv "Admin account" "$admin"
 kv "SSH key" "${key%% *} ... ${key##* }"
 kv "Time zone" "${tz:-UTC (not set)}"
 kv "Preset" "$preset"
+choice_text() {
+  case "$choice" in
+    blueprint) t 'the blueprint %s' "$choice_name" ;;
+    parts) t 'these parts: %s' "$choice_name" ;;
+    core) t 'only the core packages' ;;
+    *) t 'chosen in the setup wizard or with hs first-run' ;;
+  esac
+}
+[ -n "$restore_from" ] || kv "After the first boot" "$(choice_text)"
 if [ "$role" = homeserver ]; then
   kv "Network card" "${nic:-not found: from the example}"
   kv "Samba networks" "${smb:-from the example}"
@@ -298,6 +323,12 @@ if [ -z "$restore_from" ] && [ "$role" = homeserver ] && ! machine_has pools; th
   [ "$(machine_get bulkType 2>/dev/null || true)" != snapraid ] || note "With a pools line bulkType is not used: create the SnapRAID pool with hs pool <name> --use data --kind snapraid."
 fi
 
+# the setup choice for the first boot: only recorded, nothing is fetched (not on a restore: that server is set up already)
+if [ -z "$restore_from" ]; then
+  setup_choice_write "$HS_STATE_DIR/setup-choice" "$choice" "$choice_name" || fail "The setup choice could not be written."
+  ok "$(t 'Recorded for after the first boot: %s' "$(choice_text)")"
+fi
+
 # ---- the settings from the backup (hs-restore): over the fresh machine.toml, then what the new disk needs is set again
 if [ -n "$restore_from" ]; then
   restore_apply "$restore_from" "$target"
@@ -334,6 +365,9 @@ if [ -z "$restore_from" ] && [ "$role" = homeserver ]; then
 else
   note "Take the stick out and reboot. Then, from your PC:  ssh $admin@$hostname_.local   (or the address your router gave it)"
 fi
+case "$choice" in
+  blueprint|parts|core) [ -n "$restore_from" ] || note "$(t 'After the first boot, sudo hs first-run offers what you chose (%s): it shows the plan and asks before anything is installed.' "$(choice_text)")" ;;
+esac
 if [ "$role" = homeserver ]; then
   note "Next: create the pools: sudo hs pool ssd --use apps, sudo hs pool tank --use data [--kind snapraid] (any names), then sudo hs rebuild. The guide: docs/install.md."
 else

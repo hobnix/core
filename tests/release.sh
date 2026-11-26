@@ -66,6 +66,7 @@ check_out "bump says what it did" "demo: 1[.]0[.]0 -> 1[.]1[.]0" rel bump demo m
 check_eq "package.toml has the new version" 'version = "1.1.0"' "$(grep '^version' recipes/demo/package.toml)"
 check_eq "index.toml has it too" 'version = "1.1.0"' "$(grep '^version' index.toml)"
 check_eq "and it is one commit" "demo: 1.0.0 -> 1.1.0" "$(git log -1 --format=%s)"
+check_out "and it carries a Signed-off-by trailer" "Signed-off-by: t <t@t>" git log -1 --format=%B
 check_out "the branch is on the remote" "feature/demo-bump" git ls-remote --heads origin
 git checkout -q -b feature/demo-nopush
 check_out "bump --no-push commits and does not push" "demo: 1[.]1[.]0 -> 1[.]1[.]1" rel bump demo patch --no-push
@@ -80,7 +81,8 @@ mkpkg() {   # mkpkg <name>: a package folder and its index block at version 1.0.
   mkdir -p "recipes/$1"; sed "s/demo/$1/" recipes/demo/package.toml > "recipes/$1/package.toml"; cp recipes/demo/run.sh "recipes/$1/run.sh"
   printf '\n[package.%s]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/%s"\nrequires_core = ">=1"\n' "$1" "$1" >> index.toml
 }
-for n in chg same both pkgonly gone; do mkpkg "$n"; done
+for n in chg same both pkgonly gone cmt doc inl del; do mkpkg "$n"; done
+echo "text" > recipes/doc/guide.md; echo "x = 1 # c" > recipes/inl/extra.conf
 mkdir -p tests docs; echo t > tests/a.txt
 git add -A && git commit -q -m base && git tag base
 git checkout -q -b feature/unbumped
@@ -90,6 +92,10 @@ echo x >> recipes/both/run.sh                         # changed, only package.to
 sed -i 's/^version = "1.0.0"/version = "1.0.1"/' recipes/both/package.toml
 echo x >> recipes/pkgonly/run.sh                      # changed, only index.toml raised: listed
 sed -i '/^\[package.pkgonly\]/,/^version/s/^version = .*/version = "1.0.1"/' index.toml
+sed -i '1i # a header comment' recipes/cmt/package.toml; sed -i '1i # note' recipes/cmt/run.sh   # comment lines only: not listed
+echo more >> recipes/doc/guide.md                     # a guide only: not listed
+echo "x = 1" > recipes/inl/extra.conf                 # a trailing comment dropped: listed
+git rm -q recipes/del/run.sh                          # a deleted file: listed
 git rm -rq recipes/gone                               # removed: not listed
 sed -i '/^\[package.gone\]/,/^$/d;/^\[package.gone\]/,$d' index.toml
 mkpkg fresh                                           # new since the tag: not listed
@@ -97,10 +103,10 @@ echo y >> tests/a.txt; echo y > docs/b.md             # outside the package fold
 git add -A && git commit -q -m changes
 out=$($PKG repo-unbumped base . 2>&1); rc=$?
 check_eq "exit 1 when a package is unbumped" "1" "$rc"
-check_eq "exactly chg, both and pkgonly are listed" "both chg pkgonly" "$(printf '%s\n' "$out" | cut -d: -f1 | sort | paste -sd' ' -)"
-check_eq "one line per package" "3" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
+check_eq "exactly chg, both, del, inl and pkgonly are listed" "both chg del inl pkgonly" "$(printf '%s\n' "$out" | cut -d: -f1 | sort | paste -sd' ' -)"
+check_eq "one line per package" "5" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
 git checkout -q -b feature/fixed
-for n in chg both pkgonly; do
+for n in chg both pkgonly del inl; do
   sed -i 's/^version = ".*"/version = "1.2.0"/' "recipes/$n/package.toml"
   sed -i "/^\[package.$n\]/,/^version/s/^version = .*/version = \"1.2.0\"/" index.toml
 done
@@ -109,4 +115,13 @@ check_eq "all raised in both files: nothing is listed" "" "$($PKG repo-unbumped 
 check "and the exit is 0" $PKG repo-unbumped base .
 check_out "an unknown tag is an error" "no index.toml" bash -c "$PKG repo-unbumped nope . 2>&1; true"
 git checkout -q main
+
+echo "-- a repository that publishes an index has no tags"
+git checkout -q main
+before=$(remote_tags)
+sed -i '1i publish = "index"
+' index.toml
+check_out "release.sh refuses to tag" "publishes a signed index, no tags" rel patch --yes
+check_eq "and no tag was made" "$before" "$(remote_tags)"
+sed -i '1,2d' index.toml
 finish

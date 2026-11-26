@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # help: packages (recipes and extensions): list them with their version, see which have an update, check the manifests
 # help.de: Pakete (Rezepte und Erweiterungen): mit Version auflisten, Updates sehen, die Manifeste prüfen
-# args: --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
+# args: index build|validate|sign|verify|tree | --integrations [<name>] | --market | --show <name> [--repo R] | --asset <name> <file> [--repo R] | --states [--kind K] | --capabilities | --repos | integrations [<name>] | list [--all] [--kind recipe|extension|capability] | updates | validate | new <name> --template recipe|extension|capability [--dir <path>] | fetch | available | install <name> | update <name> | remove <name> [--dry-run] | rollback <name> | repo list|add|remove | --list
 # A package is a recipe (packages/<name>/package.toml) or an extension (capabilities/<name>/package.toml) with a semver `version`
 # (docs/PLAN-packages.md). This is step 1: the manifests of this repository only; repositories and `install` come later.
 #   list        name, kind, version in the tree, version last applied here, who it is for; personal ones only with --all
@@ -31,6 +31,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib/ui.sh"
 . "$here/lib/live.sh"
+. "$here/lib/pkg-deps.sh"
+export HS_BASH=${BASH:-bash}   # the bash that runs pkg-stage-check.sh for pkg_repo.py
 py() { python3 -I "$here/pkg.py" "$@"; }
 # A coded refusal of pkg_repo.py (HS_PKG_REFUSAL = a file it writes "code TAB reason" to): shown the ADR 0028 way, through refuse_code
 pkg_refusal_file() { HS_PKG_REFUSAL=$(mktemp); export HS_PKG_REFUSAL; }
@@ -43,10 +45,31 @@ pkg_refused() {
 # a change of the packages or the repositories changes what the web interface shows (Marketplace, repositories, recipes, parts): the live
 # state reads those topics again after it succeeded (a fetch always: one repository may have failed while the others moved); never fails it
 pkg_changed() { trap 'rc=$?; [ "$rc" -ne 0 ] || live_refresh event:pkg.changed; exit "$rc"' EXIT; }
+# A package changed (update, rollback, install, remove): a running service of it, and one that uses an integration it offers (--providers),
+# restarts to run the new code and load the keys again (ADR 0011: keys are read at start). Only active units, `--no-block` like `hs ext`.
+# Never fails the command: the change has happened, a failed restart is a warning. pkg_services runs BEFORE a remove (the manifest is gone after).
+pkg_services() { python3 -I "$here/lib/pkg_restart.py" "${HS_STATE_DIR:-/var/lib/hs}/packages/current" "$@" 2>/dev/null || true; }
+# pkg_stamp <name>: what says a package changed (its record in installed.toml and its manifest); equal before and after = nothing was installed
+pkg_stamp() {
+  local st=${HS_STATE_DIR:-/var/lib/hs}
+  { sed -n "/^\[package\.$1\]/,/^\[/p" "$st/packages/installed.toml"; cat "$st/packages/current/$1/package.toml"; } 2>/dev/null | cksum || true
+}
+pkg_restart() {   # pkg_restart <service package>...
+  local n ctl=${HS_SYSTEMCTL:-systemctl}
+  for n in "$@"; do
+    "$ctl" is-active --quiet "hs-ext-svc@$n.service" 2>/dev/null || continue
+    if "$ctl" restart --no-block "hs-ext-svc@$n.service" </dev/null >/dev/null 2>&1; then
+      note "$(t "The service of '%s' restarts to run the changed package." "$n")"
+    else
+      warn "$(t "The service of '%s' did not restart: run hs ext restart %s" "$n" "$n")"
+    fi
+  done
+}
 
 case "${1:-list}" in
   --list) py list --all ;;
   --market) py market ;;
+  blueprint) shift; py blueprint "$@" ;;   # list [lang] | show <name> [lang] | record <name> [later]: what hs blueprint reads (lib/pkg_blueprint.py)
   --show) shift; py show "$@" ;;
   --asset) shift; py asset "$@" ;;
   --states)
@@ -63,11 +86,15 @@ case "${1:-list}" in
     # what packages offer to each other ([integrations.<name>] in package.toml) from the packages that are there, with the state of the key file;
     # the key itself is never read here
     . "$here/lib/integration.sh"
-    on=$(integration_available)
+    # HS_INTEGRATIONS_STRICT (set only by the watcher of a running service, lib/ext_service.py): an Incus query that is needed and fails makes the
+    # listing fail, instead of leaving a provider out or its address at "-"
+    if [ -n "${HS_INTEGRATIONS_STRICT:-}" ]; then on=$(integration_available_strict "${2:-}") || exit 1
+    else on=$(integration_available); fi
     only=(); [ "$#" -lt 2 ] || only=(--only "$2")
     # shellcheck disable=SC2086
     miss=$(mktemp); trap 'rm -f "$miss"' EXIT
-    # {port} in an api_url comes from the service record of the package; without one the field is "-" and the human output says so
+    # {port} and {host} in an api_url are filled from the service record of the package ({host}: the address Incus reports for its instance);
+    # what cannot be filled makes the field "-" and the human output says so
     found=$(py integrations "${only[@]}" --services "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}" --unresolved "$miss" $on)
     out=""
     while IFS=$'	' read -r n i s u f x h; do
@@ -80,7 +107,7 @@ case "${1:-list}" in
     elif [ -z "$out" ]; then note "No integrations offered."
     else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More' 'Header'; printf '%s' "$out"; } | table; fi
     if [ "$1" != "--integrations" ]; then
-      while read -r w; do [ -z "$w" ] || warn "$(t 'The port of %s is not known (no service record with a port): its API address is shown as -.' "$w")"; done <"$miss"
+      while read -r w; do [ -z "$w" ] || warn "$(t 'The API address of %s is not known (no port in its service record, or no single address of its instance: is it running?). It is shown as -.' "$w")"; done <"$miss"
     fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;
@@ -89,6 +116,7 @@ case "${1:-list}" in
     rows=$(py list "$@")
     if [ -z "$rows" ]; then note "No packages."; exit 0; fi
     { thead 'Package' 'Kind' 'Version' 'Applied' 'For' 'What it is'; printf '%s\n' "$rows"; } | table
+    bash "$here/pkg-refresh.sh" --warn || true   # no fetch for 3 days, or the index expired
     next_step "hs pkg updates" ;;
   updates)
     rows=$(py updates)
@@ -101,8 +129,23 @@ case "${1:-list}" in
     done <<<"$waits"
     [ -z "$rows" ] || next_step "hs recipe <name>" ;;
   validate)
-    if out=$(py validate); then ok "$(t 'Every manifest is valid.')"; else
-      while IFS=$'\t' read -r n p; do warn "$n: $p"; done <<<"$out"
+    rc=0; out=$(py validate) || rc=1
+    while IFS=$'\t' read -r n p; do [ -z "$n" ] || warn "$n: $p"; done <<<"$out"
+    # the rows a package may not carry (scripts/lib/registry-load.sh) are findings too: package TAB line TAB words TAB reason
+    while IFS=$'\t' read -r n l w r; do [ -z "$n" ] || { warn "$n: row $w (line $l): $r"; rc=1; }; done < <(registry_refused)
+    if [ "$rc" = 0 ]; then ok "$(t 'Every manifest is valid.')"; else exit 1; fi ;;
+  index)    # the signed package index of a repository: what CI builds (pkg.py index, lib/pkg_index.py); build|validate|sign|verify|tree
+    shift
+    sub=${1:-}
+    case "$sub" in
+      build|validate|sign|verify|tree) ;;
+      *) say "usage: hs pkg index build <checkout> --repo <id> --out <dir> | validate <index.json> | sign <index.json> --key-file <file> | verify <index.json> --signers <file> | tree <folder>"; exit 1 ;;
+    esac
+    if out=$(py index "$@" 2>&1); then
+      while IFS=$'\t' read -r k v; do [ -z "$k" ] || kv "$k" "${v:-}"; done <<<"$out"
+      ok "$(t 'Index %s done.' "$sub")"
+    else
+      while IFS= read -r l; do [ -z "$l" ] || warn "${l#error	}"; done <<<"$out"
       exit 1
     fi ;;
   new)
@@ -134,6 +177,7 @@ case "${1:-list}" in
     trap 'live_refresh event:pkg.changed' EXIT
     hs_job_step 1 1 "Fetching the package repositories and checking their signatures"
     out=$(py fetch "$@") || rc=$?
+    py repo migrate >/dev/null 2>&1 || true   # heals what a replaced repository left behind; never changes the exit code of the fetch
     { thead 'Repository' 'Release' 'Commit' 'Result'; printf '%s\n' "$out"; } | table
     exit "${rc:-0}" ;;
   available)
@@ -165,15 +209,8 @@ case "${1:-list}" in
     if [ "$kind" != recipe ] && capability_on "$name"; then
       fail "$(t "'%s' is switched on: switch it off first." "$name")"; next_step "hs ext disable $name"; exit 1
     fi
-    for d in "$st"/packages/current/*/ "${HS_PACKAGES_ROOT:-$(dirname "$here")}"/capabilities/*/; do
-      [ -d "$d" ] || continue
-      n=$(basename "$d")
-      [ "$n" != "$name" ] || continue
-      f=$d/capability.toml; [ -f "$f" ] || f=$d/package.toml
-      [ -f "$f" ] || continue
-      sed -n 's/^requires[[:space:]]*=[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/p' "$f" | head -n1 | tr ',' '\n' | tr -d ' "' | grep -qxF -- "$name" || continue
-      ! capability_on "$n" || deps+="${deps:+ }$n"
-    done
+    # names it directly or through an interface only it provides (scripts/lib/pkg-deps.sh); a second provider that is on lets it go, and is refused later
+    deps=$(pkg_dependents "$name" | paste -sd' ' -)
     if [ -n "$deps" ]; then
       fail "$(t "'%s' cannot be removed: %s needs it." "$name" "$deps")"; next_step "hs ext disable ${deps%% *}"; exit 1
     fi
@@ -181,7 +218,7 @@ case "${1:-list}" in
     kv "$(t 'Version')" "$(mf version "$dir")"
     note "$(t 'Removed: the installed copy, its event declarations and its switch-on/off marks.')"
     note "$(t 'Stays: containers and data the package made (hs ct remove is for those).')"
-    note "$(t 'To remove an app with its route and address and choose to keep or delete its data: the Apps page (Remove), or hs sys apps plan remove <instance>.')"
+    note "$(t 'To remove an app with its route and address and choose to keep or delete its data: the app catalog (Remove), or hs sys apps plan remove <instance>.')"
     if [ "$dry" = 1 ]; then
       note "$(t 'Nothing was changed (dry run).')"
       exit 0
@@ -198,6 +235,7 @@ case "${1:-list}" in
     # the keys of its options become "retired" (hs config check says "unused", not "unknown"): written before the folder is gone
     PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay retire "$name" --packages "$st/packages/current" --out "$st/generated" >/dev/null \
       || warn "$(t 'The options of this package could not be remembered.')"
+    svcs=$(pkg_services "$name" --providers)
     py remove "$name"
     for o in on off; do
       f=$st/capabilities-$o
@@ -208,20 +246,38 @@ case "${1:-list}" in
     # a package that brought options or a capability row leaves none behind (ADR 0017 rule 16): the generated overlay is rewritten
     # without it, but only where an overlay exists already (nothing is created for a server that never had a capability package)
     if [ -f "$st/generated/capabilities.tsv" ]; then
-      PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay write --packages "$st/packages/current" --out "$st/generated" >/dev/null \
-        || warn "$(t 'The generated capability list could not be refreshed.')"
+      # exit 1 with only "<pkg>: option <key> is also defined by <x>" lines = the files were written, a package that clashes is left out
+      if ! errs=$(PYTHONUTF8=1 "${HS_PYTHON:-python3}" "$here/schema-gen.py" overlay write --packages "$st/packages/current" --out "$st/generated" 2>&1 >/dev/null); then
+        errs=$(printf '%s\n' "$errs" | tr -d '\r')
+        if [ -n "$errs" ] && ! printf '%s\n' "$errs" | grep -qv ': option .* is also defined by '; then
+          while IFS= read -r l; do note "$l"; done <<< "$errs"
+        else
+          warn "$(t 'The generated capability list could not be refreshed.')"
+        fi
+      fi
     fi
-    ok "$(t 'Package %s removed.' "$name")" ;;
+    ok "$(t 'Package %s removed.' "$name")"
+    # the package's own service is off already (it had to be off); the ones that used an integration it offered restart without it
+    # shellcheck disable=SC2086
+    pkg_restart $(printf '%s\n' $svcs | grep -vxF -- "$name" || true) ;;
   install)
     cmd=$1; shift
     pkg_changed; pkg_refusal_file
+    stamp=$(pkg_stamp "${1:-}")
     if res=$(py "$cmd" "$@"); then
       rm -f "$HS_PKG_REFUSAL"
       if [ -z "$res" ]; then ok "$(t 'Done.')"; else while IFS= read -r l; do ok "$l"; done <<<"$res"; fi
+      # shellcheck disable=SC2046
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}" --providers)
     else pkg_refused; exit 1; fi ;;
   update)
     shift; pkg_changed; pkg_refusal_file
-    if python3 -I "$here/pkg.py" update "$@"; then rm -f "$HS_PKG_REFUSAL"; else pkg_refused; exit 1; fi ;;
+    stamp=$(pkg_stamp "${1:-}")
+    if python3 -I "$here/pkg.py" update "$@"; then
+      rm -f "$HS_PKG_REFUSAL"
+      # shellcheck disable=SC2046
+      [ "$stamp" = "$(pkg_stamp "${1:-}")" ] || pkg_restart $(pkg_services "${1:-}")
+    else pkg_refused; exit 1; fi ;;
   rollback)
     # put the copy from before the last update back (plan first, the name to confirm); the rebuild is a separate step
     shift; name="${1:-}"; [ -n "$name" ] || fail "$(t 'Usage: hs pkg rollback <name>')"
@@ -230,7 +286,11 @@ case "${1:-list}" in
     note "$(t '%s: %s goes back to %s (its copy in vendor/ and the lock line).' "$name" "$from" "$to")"
     [ "${2:-}" = --yes ] || confirm_name "$name" "$(t 'the package')" || fail "$(t 'Left as it is.')"
     pkg_changed
-    py rollback "$name" >/dev/null && ok "$(t '%s is back at %s.' "$name" "$to")" && next_step "hs rebuild" ;;
+    py rollback "$name" >/dev/null || exit 1
+    ok "$(t '%s is back at %s.' "$name" "$to")"
+    # shellcheck disable=SC2046
+    pkg_restart $(pkg_services "$name")
+    next_step "hs rebuild" ;;
   repo)
     shift
     case "${1:-list}" in
@@ -238,7 +298,7 @@ case "${1:-list}" in
         { thead 'Repository' 'Address' 'Signed' 'From'; py repo list; } | table ;;
       add)
         pkg_changed
-        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> | --unsigned) [--confirm-name <name>]"; exit 1; }
+        name=${2:-}; url=${3:-}; [ -n "$name" ] && [ -n "$url" ] || { say "usage: hs pkg repo add <name> <url> (--key <allowed_signers file> [--index <address>] | --unsigned) [--confirm-name <name>]"; exit 1; }
         shift 3; confirmed=""; extra=()
         while [ $# -gt 0 ]; do
           case "$1" in
@@ -248,11 +308,13 @@ case "${1:-list}" in
         done
         step "$(t 'Package repository %s' "$name")"
         kv "$(t 'Address')" "$url"
-        key=""; unsigned=false
+        key=""; unsigned=false; index=""
         for ((i = 0; i < ${#extra[@]}; i++)); do
           [ "${extra[i]}" != --key ] || key=${extra[i + 1]:-}
+          [ "${extra[i]}" != --index ] || index=${extra[i + 1]:-}
           [ "${extra[i]}" != --unsigned ] || unsigned=true
         done
+        [ -z "$index" ] || kv "$(t 'Index')" "$index"
         if [ -n "$key" ] && [ -r "$key" ]; then
           while read -r line; do
             kv "$(t 'Signer')" "$(sed -E 's/^.*(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) /\1 /' <<<"$line" | ssh-keygen -lf /dev/stdin 2>/dev/null || echo "$line")"
@@ -272,7 +334,24 @@ case "${1:-list}" in
         fi
         py repo add "$name" "$url" "${extra[@]}" && ok "$(t 'Repository %s added.' "$name")" && next_step "hs pkg fetch $name" ;;
       remove) shift; pkg_changed; py repo remove "${1:-}" && ok "$(t 'Repository removed.')" ;;
-      *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name>"; exit 1 ;;
+      migrate)
+        # installed packages of a repository that a default one replaced move to it (docs: hs pkg repo); --dry-run shows what would change
+        shift; dry=""; [ "${1:-}" != --dry-run ] || dry=--dry-run
+        lines=$(py repo migrate ${dry:+"$dry"}) || exit 1
+        [ -z "$dry" ] || step "$(t 'Packages that would move to the replacing repository')"
+        moved=0
+        while IFS=$'	' read -r kind pname old new; do
+          [ -n "$kind" ] || continue
+          case "$kind" in
+            migrated) moved=$((moved + 1)); kv "$pname" "$old -> $new" ;;
+            unmoved) note "$(t '%s is no longer in a default repository: it stays installed and gets no updates.' "$pname")" ;;
+            ambiguous) note "$(t '%s is listed by several repositories (%s): it stays as it is. Name one: hs pkg install %s --repo <name>' "$pname" "$new" "$pname")" ;;
+            waits) note "$(t '%s: repository %s has no index yet. It runs again with the next hs pkg fetch.' "$pname" "$new")" ;;
+          esac
+        done <<<"$lines"
+        if [ "$moved" -gt 0 ] && [ -z "$dry" ]; then pkg_changed; ok "$(t '%s package(s) moved to their new repository.' "$moved")"
+        elif [ "$moved" -eq 0 ]; then note "$(t 'No package has to move.')"; fi ;;
+      *) say "usage: hs pkg repo list | add <name> <url> (--key <file> | --unsigned) | remove <name> | migrate [--dry-run]"; exit 1 ;;
     esac ;;
   *) say "usage: hs pkg list [--all] [--kind recipe|extension|capability] | updates | validate | new | fetch | available | install | update | remove | repo"; exit 1 ;;
 esac

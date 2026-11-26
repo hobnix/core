@@ -1,10 +1,11 @@
-// The data of the instances, shared by the list with its quick look (pages/Instances.svelte) and the page of one instance (pages/instances/Instance.svelte): the same reads and
-// the same words. Call it while a component is initialised (it makes polls and deriveds). `sel()` is the name of the instance the page or the quick look is about;
-// `detail: true` also reads its storage bindings and (on the Config tab) its snapshots; the quick look does not.
+// The data of the instances, shared by the list Apps & VMs (pages/Workloads.svelte) and the page of one instance (pages/instances/Instance.svelte): the same reads and
+// the same words. Call it while a component is initialised (it makes polls and deriveds). `sel()` is the name of the instance the page or the list is about;
+// `detail: true` also reads its storage bindings and (on the Config tab) its snapshots; the list does not.
 import { poll, rows } from '../../data.svelte.js';
 import { rowstate } from '../../rowstate.svelte.js';
 import { ctPending, ctFailed } from './pending.js';
 import { ctOf, isVm, isRunning, servicesOf } from './ct.js';
+import { recipesOf } from '../workloads.js';
 
 export const kindOf = (c) => (isVm(c) ? 'VM' : 'CT');
 export const word = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
@@ -27,9 +28,9 @@ export function instanceModel({ sel = () => '', detail = false, tab = () => '' }
   // services list: name, title, target, exposure, names, wants
   const services = $derived(rows(svc).map((r) => ({ name: r[0], title: r[1], target: r[2], exposure: r[3], names: r[4], wants: r[5] })));
   // recipes list: name, description, containers (comma separated, - for none), state
-  const recipes = $derived(rows(rec).map((r) => ({ name: r[0], cts: r[2] === '-' ? [] : r[2].split(',') })));
+  const recipes = $derived(rows(rec).map((r) => ({ name: r[0], cts: r[2] === '-' ? [] : r[2].split(','), state: r[3] })));
   const myServices = $derived(ct ? servicesOf(ct, services) : []);
-  const myRecipes = $derived(ct ? recipes.filter((r) => r.cts.includes(ct.name)) : []);
+  const myRecipes = $derived(ct ? recipesOf(ct.name, recipes).map((name) => ({ name })) : []);   // the recipes that set this instance up
 
   const doing = (c) => (c ? ctPending(c.name, rowstate.pending) : '');
   const failure = (c) => (c && !doing(c) ? ctFailed(c.name, rowstate.failed) : null);
@@ -46,6 +47,6 @@ export function instanceModel({ sel = () => '', detail = false, tab = () => '' }
   return {
     ctl, svc, doing, failure, busyOf, bind, snap, isRunning, isVm,
     get all() { return all; }, get ct() { return ct; }, get backupOf() { return backupOf; }, get backupKnown() { return backupKnown; }, get services() { return services; },
-    get myServices() { return myServices; }, get myRecipes() { return myRecipes; }, get bindings() { return bindings; }, get snaps() { return snaps; },
+    get recipes() { return recipes; }, get myServices() { return myServices; }, get myRecipes() { return myRecipes; }, get bindings() { return bindings; }, get snaps() { return snaps; },
   };
 }

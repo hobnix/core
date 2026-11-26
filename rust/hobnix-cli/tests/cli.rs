@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
 use std::process::Command;
 
 fn hobnix(args: &[&str]) -> std::process::Output {
@@ -37,8 +38,8 @@ fn hobnix_env(args: &[&str], env: &[(&str, &str)], unset: &[&str]) -> std::proce
     c.output().unwrap()
 }
 
-fn refused_text(reason: &str) -> String {
-    format!("status\trefused\nreason\t{reason}\n")
+fn refused_text(reason: &str, code: &str) -> String {
+    format!("status\trefused\nreason\t{reason}\ncode\t{code}\n")
 }
 
 #[test]
@@ -58,20 +59,26 @@ fn secrets_refusals_are_lines_on_stdout() {
         (
             vec!["secrets", "plan", "init"],
             "unknown action (header-backup, move, close or secrets-fix)",
+            "action.unknown",
         ),
         (
             vec!["secrets", "plan", "close", "--bogus"],
             "unknown option --bogus",
+            "option.unknown",
         ),
         (
             vec!["secrets", "plan", "move", "a b"],
             "'a b' is not a name of a secret",
+            "vault.name-invalid",
         ),
     ];
-    for (args, reason) in cases {
+    for (args, reason, code) in cases {
         let o = hobnix(&args);
         assert_eq!(o.status.code(), Some(1), "{args:?}");
-        assert_eq!(String::from_utf8_lossy(&o.stdout), refused_text(reason));
+        assert_eq!(
+            String::from_utf8_lossy(&o.stdout),
+            refused_text(reason, code)
+        );
     }
 }
 

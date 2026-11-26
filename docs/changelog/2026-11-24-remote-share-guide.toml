@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Guide: share a folder with another server using a code"
+body  = """The guide Users and shares now explains remote shares with a pairing code: give access, add, reconnect, take back, stop using, the key check and the errors. Not tested on hardware yet."""

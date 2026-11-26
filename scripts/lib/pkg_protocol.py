@@ -9,12 +9,13 @@ Keys (all optional; a manifest without them keeps the shell contract and validat
     health_interval = 30           seconds, 5 to 300 (default 30)
   commands.tsv flag `timeout:<seconds>` on a row: 1 to 3600 (ADR 0010 rule 6; default 30 s is the dispatcher's)
   commands.tsv flag `confine` on a row (step 11, ADR 0014, D7): the dispatcher runs the command through systemd-run with the properties of the
-    declared `permissions` (scripts/lib/ext_confine.py). Needs `protocol = [1]` and a `permissions` list in the manifest. Partial, see CONFINE_TEXT.
+    declared `permissions` (scripts/lib/ext_confine.py), as the dynamic user hsx-<name> (#1134). Needs `protocol = [1]` and a `permissions` list in the manifest. Partial, see CONFINE_TEXT.
 
 D9: a manifest may use `protocol` or `[service]` only if it requires an API level at or above PROTOCOL_LEVEL (the level step 2 bumps to).
 
 manifest_problems(m, folder=None, level=PROTOCOL_LEVEL) -> [text]; `folder` = the package folder (commands.tsv is read only then).
 """
+import importlib.util
 import os
 import re
 
@@ -29,10 +30,11 @@ TIMEOUT_FLAG = re.compile(r"^timeout:(.*)$")
 CONFINE_FLAG = "confine"
 # What the install and update prompts say about a package that has confined commands (ADR 0014: partial, never "sandboxed").
 CONFINE_TEXT = [
-    "confined commands (%s): run through systemd-run with the properties of the declared permissions:",
-    "  it covers: writes outside fs.write (and its state folder), the home folders, /tmp sharing, new privileges, capabilities, devices unless devices:gpu.",
-    "  it does NOT cover: reading the file system (fs.read lists, it does not restrict), the network (net is declared only), calls to hs, incus and",
-    "  systemctl (a command that calls them acts as root through them), and secrets. Other commands of the package run as root, unconfined.",
+    "confined commands (%s): run through systemd-run as their own unprivileged user, not as root, with the properties of the declared permissions:",
+    "  it covers: writes outside the package's own state folder (declared /var/lib/hs/<name>, seen as $STATE_DIRECTORY = /var/lib/hs-ext/<name>; any other fs.write is refused), the state of the server and of other",
+    "  extensions, the home folders, /tmp sharing, new privileges, capabilities, devices unless devices:gpu.",
+    "  it does NOT cover: reading the file system as far as the file modes allow (fs.read lists, it does not restrict), the network (net is declared",
+    "  only), and calls to hs, incus and systemctl (not blocked: they get what that user may do). Other commands of the package run as root, unconfined.",
 ]
 
 
@@ -149,6 +151,12 @@ def manifest_problems(m, folder=None, level=PROTOCOL_LEVEL):
     if uses and _requires(m) < level:
         out.append('%s needs requires_core = ">=%d" or higher (D9: a package that speaks the protocol states the API level it came with)'
                    % (" and ".join(uses), level))
+    if uses and isinstance(m.get("name"), str):
+        spec = importlib.util.spec_from_file_location("ext_state", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_state.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if mod._bad_name(m["name"]):    # its state folder would be a folder the core keeps in /var/lib/hs (ext_state.RESERVED): refused early
+            out.append("the name %s is reserved: a package with a service or the protocol cannot use the name of a folder the server keeps in /var/lib/hs; choose another name" % m["name"])
     if folder:
         out += timeout_problems(os.path.join(folder, "commands.tsv"))
         out += confine_problems(m, folder)

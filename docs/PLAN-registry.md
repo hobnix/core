@@ -1,6 +1,6 @@
 # Package registry: a signed index over git, a core that is only the framework
 
-Status: design, decided with the owner on 2026-11-22; milestone 0.13 "Package Registry" (before the marketplace, 0.14). Nothing is built yet.
+Status: design, decided with the owner on 2026-11-22; milestone 0.13 "Package Registry" (before the marketplace, 0.14). Step 2, the index format and its CI build and signing, is built (hobnix/core#1069, see "Built: the index format"), and `hs pkg` reads it (hobnix/core#1070, "Built: the client"); the timer and the event are not.
 It replaces "What stays in the core", the repository list and the tag-based version rule in docs/PLAN-packages.md, and part of the plan of
 the closed milestone 0.5 (docs/PLAN-capabilities-repo.md and ADR 0017, accepted 2026-11-10 and 2026-11-16): the repository
 `hobnix/capabilities` and the optional-only move. **Kept from that plan:** vendoring of Nix modules with a lock and a pure evaluation
@@ -24,6 +24,8 @@ step 4.
 3. **Three repositories:** `hobnix/core` (renamed from `hobnix/server`), `hobnix/official` (recipes, extensions and capabilities as one
    set; `kind` tells them apart) and `hobnix/community`. Third-party repositories stay possible. `hobnix/recipes`, `hobnix/extensions` and
    `hobnix/capabilities` are retired.
+   **Switched (2026-11-24, #1074):** `config/package-repos.toml` has the one default row `official` (signed index, `replaces` the three old
+   names, `core` the four packages the core names); `hs pkg repo migrate` moves installed packages over. Not tested on hardware yet.
 4. **The core is only the framework.** All capabilities move to `hobnix/official`. A server works with any subset.
 5. **Blueprints** choose the set at install time.
 
@@ -51,10 +53,79 @@ One `index.json` per repository, built and signed by CI on every merge to the ma
 - `expires`: a client keeps working from its cache after expiry and shows a warning after a grace period of 7 days.
 - `tree` is a hash of the package folder at `commit`. The server fetches an archive of that commit from the git host and checks the hash;
   neither the index host nor the git host is trusted, only the signature and the hash.
-- Only current versions and what a rollback needs are listed. A bad version is marked `yanked`.
+- Only current versions and what a rollback needs are listed. A bad version is marked `yanked`. The planned list of older versions
+  per entry is in [PLAN-marketplace-stats](PLAN-marketplace-stats.md).
 - `meta` is built from `package.toml` and `assets/` in the package folder, reviewed and versioned with the package. CI resizes images and
   names them by content hash, so the marketplace reads only the index and the assets and the server can cache them for offline use.
 - Format changes bump `format`; a client reads every format it knows and ignores unknown fields.
+
+### Built: the index format (hobnix/core#1069)
+
+`scripts/lib/pkg_index.py`, reached as `python3 scripts/pkg.py index ...` or `hs pkg index ...`: `build`, `validate`, `sign`, `verify`, `tree`.
+Not tested on hardware yet; the signing workflow has never run on GitHub.
+
+- **Entry fields** beyond the example above: `path` (the package folder in the repository, so a server can fetch it), `yanked_reason`
+  (optional), `renamed_from` (optional list), `binaries` (optional, see below). `meta.icon` and `meta.background` are `null` when the package has none.
+- **`binaries`** (hobnix/core#1129): for a package whose manifest has `[[binary]]` rows, a list `[{bin, target, sha256, size}]` read from the manifest
+  (`size` of the file in the folder when it is there; a row not built yet is left out). **Informational only**, inside the signed document so the
+  signature covers it, so a client can say "contains a prebuilt program (x86_64)" before it downloads anything. Install and update never use it: they
+  check the manifest `sha256` and the tree hash. A package without `[[binary]]` has no field, and an index without it stays valid. The builder side
+  (`pkg_index.py validate`, `verify`) refuses a row with a bad shape; a client (`validate` without strict) ignores a malformed or unknown field.
+- **Source:** the entries come from `index.toml` (paths, `core`) when the repository has one, else from `package.toml` files under `packages/`,
+  `recipes/`, `extensions/`, `capabilities/`, `blueprints/`. `meta` is the `[meta]` table of package.toml (`author`, `license`, `homepage`,
+  `tags`, `changes`) plus `title` and `title_de`. `needs` is `needs` of a recipe plus `requires` of a capability.
+- **Yanked:** `yanked.toml` in the repository: `[[yanked]]` with `name`, `version`, `reason`. The entry is the current version; older ones
+  are in `versions` (below) and carry their yanked state from the same file.
+- **`date` and `versions`** (hobnix/core#1247, open point 3): `date` is when the current version was first published; `versions` (optional,
+  older versions only, newest first, at most 10) has rows `{version, date, path, commit, tree, requires_core, yanked}` plus optional `changes`
+  and `yanked_reason`. Built ONLY from the first-parent history of the published commit (`build --history <repository>` names the repository of a
+  community `pins` branch; otherwise the checkout's own): never copied from the previous index, which is downloaded without a signature check.
+  Per older version the newest commit that had it is hashed with `tree_hash` (same rules; a folder with a link, submodule or a `.git` name is
+  skipped, like a commit with a missing or invalid manifest); `date` is the committer date of the first commit that had it. Only versions lower
+  than the current one, only the current `path` (a renamed folder is not followed). The walk reads at most 400 commits that touched the folder
+  and one 90 s deadline covers every call of the walk; `changes` and `yanked_reason` of an older row are cut to 500 characters, a build whose index would pass 10 MiB drops older rows first (clients refuse 20 MiB), a version part has at most 9 digits, and any failure of one old commit skips it; the commands run with the same hardening as the community fetch and ignore replace refs. For the community index
+  the history is the `pins` branch, which `assemble` only ever appends to. Format stays 1: the builder side (`validate`, `verify`, `build`)
+  refuses a bad row; a client ignores unknown fields and leaves out a malformed row (`pkg_index.clean_history`). Install and update do not read
+  `versions`. No downgrade command, UI or statistics yet. Not tested on hardware yet.
+- **Tree hash** (decided here): `sha256:` over the listing `<mode> <size> <sha256 of the content> <path>
+`, files sorted by path, mode 755
+  for an executable file else 644, symlinks refused. It does not depend on git, so a server computes the same hash from an archive of the commit.
+- **Assets** (`assets/icon.*`, `assets/background.*`, `assets/screenshots/*`; png, jpg, webp, at most 5 MB each, 8 screenshots): resized
+  (icon 256x256, background 1280x720, screenshot 1280x1280, proportions kept), written as WebP, named `assets/<first 16 hex of the sha256>.webp`.
+  The builder needs Pillow; `--skip-assets` leaves the images out.
+- **Serial:** `--serial N`, or `--prev <index.json>` for the previous index plus 1. `verify --prev` refuses a lower serial, and the same
+  serial with different content. `expires` is `generated` plus 14 days (`--ttl-days`); an expired index only warns.
+- **Signature** (decided here; the plan named none): an SSH signature, as for release tags, made with `ssh-keygen -Y sign` over the exact
+  bytes of `index.json`, namespace `hobnix-index`, stored beside it as `index.json.sig`. The trusted keys are an `allowed_signers` file
+  (`config/trusted-keys/<repo>.allowed_signers`) whose line carries `namespaces="hobnix-index"`, so a key that signs git tags does not sign
+  indexes. `verify` checks the signature first and reads nothing from the file before that.
+- **The key** is never in the repository, in argv or in a build step's environment: `sign` takes the name of a key FILE. In CI only the
+  `sign` job of the CALLER workflow (environment `index-signing`, main branch only) has the secret, because an environment secret did not reach the
+  jobs of a reusable workflow (hobnix/official run 45365647291). The job passes it as the input `key` to the composite action
+  `.github/actions/index-sign` of the core, which masks it, writes it to a file with mode 600 in the one step that gets it, signs, verifies against
+  the trusted keys and removes the file in an always() step. `build` (reusable, `.github/workflows/package-index.yml`) needs no secret, and the
+  tests sign with a key made on the spot. The caller block is in the header of the workflow. Neither has run in this shape.
+- **Not decided here:** the key itself (nobody has made it; its public half goes into `config/trusted-keys/` with the namespace above), the
+  channels (the index has no `channel` field yet; a client ignores unknown fields, so adding one later is a compatible change), the offline
+  root key.
+
+### Built: the client reads the index (hobnix/core#1070)
+
+`scripts/pkg_repo.py`. Not tested on hardware yet; no default repository has an index yet, so nothing changes for a server until one does.
+
+- **Which repository:** a repository row with an `index` address (`hs pkg repo add <name> <git url> --key <file> --index <address>`, or `index =` in
+  `config/package-repos.toml`). `url` stays the git address the commits come from. A row without `index` keeps the signed release tags. The key file must carry `namespaces="hobnix-index"`, and the `repo` field of the index must equal the row's name (so another repository's index, signed by the same CI key, cannot be served under this address): add the repository under the name its index has.
+- **Fetch:** `hs pkg fetch` loads `index.json` and `index.json.sig` (https or a local path), checks the signature first (the same key file, line with
+  `namespaces="hobnix-index"`), the schema, and the serial against the kept `index/<repo>/live/index.json` and against the serial floor `index/<repo>/serial` (serial and sha256 of that
+  index): lower is refused, the same serial with other content too. The fetch holds a lock (`index/<repo>/.lock`, flock). The floor is written first (synced, atomic rename) and never removed by the swap; then the kept pair (`index/<repo>/live/`) is replaced by a directory swap. A crash in the swap leaves `.old`, which is still read (and is not deleted before the new `live/` exists), and the next fetch repairs it; with `live/` and `.old` both gone the floor still refuses an older signed index. Every read re-verifies the signature of the kept copy. An index past `expires` plus 7 days
+  prints a warning; it keeps working. `hs pkg fetch` also clones or fetches the git repository, so a read (`show`, `asset`, `capabilities`) never runs `git clone` or `git fetch`; the checked package folders are cached per commit in `index-cache/<repo>/` (a read of a commit that is not in the clone says `hs pkg fetch`). The fetch (index part and git part) runs under the one lock and fetches every commit the index pins, also one no branch reaches any more; every git call has no terminal prompt and a time limit (`HS_PKG_GIT_TIMEOUT`, 180 s), and waiting for the lock is bounded (`HS_PKG_LOCK_WAIT`, 240 s, then "another pkg fetch is running"), so a stalled remote cannot hold the lock. An install may fetch, but under the same lock; the plan/diff of an update never fetches (a missing commit says `hs pkg fetch`). The clone is fetched once per run; a pinned commit that still cannot be fetched is recorded in `index/<repo>/unfetchable.json`: that package is not available (`show`/`install`/`update` give the reason, a warning goes to stderr) and the other packages and the exit code are unaffected. The package stays in the catalog flagged unavailable: never offered, an installed copy shows in `market` as `current` with the reason in the title (not as `orphan`), and `hs pkg install --core` exits non-zero naming it. The fetches by id share one `HS_PKG_GIT_TIMEOUT` budget, so the lock is held at most 3 x that + 60 s, which is also how long a waiting fetch or install waits; git gets `GIT_HTTP_LOW_SPEED_*` and (unless set by the person) an ssh command with ConnectTimeout/ServerAlive, so a fetch left behind by a killed caller ends by itself. Repositories without an index are still fetched outside the lock (unchanged). When the index is accepted but the clone step fails (or the index itself is refused), the row is `<repo><TAB>-<TAB>-<TAB><reason>` and `hs pkg fetch` (and `hs pkg update`) exit 1; the accepted index stays and is read. A damaged `serial` file with no kept index left refuses the fetch (delete the file by hand, the message names the exact path; this works for the default repositories too); a missing one is the first fetch. The cache keeps a folder created or read in the last 10 minutes when it prunes.
+- **Version:** the `version` of the entry is the available version. The tag column of the existing machine lines is `v<version>-<8 hex of the commit><8 hex of the tree hash>`, so a plan made for a tag installs only those files (the web job accepts that shape), the Release
+  column of `hs pkg fetch` is `serial-<N>` (shapes unchanged). An update is offered when the index version is higher; a changed commit with the same
+  version is not an update.
+- **Install:** the pinned `commit` is fetched into the clone, `git archive` of the package folder is extracted and its tree hash (`pkg_index.py tree_hash`)
+  must equal the entry's `tree`, else nothing is installed. `show`, `asset` and the update prompts read files from such a checked copy, not from git objects; a path with `..`, an absolute path or one that resolves outside the folder is refused.
+- **Yanked:** a yanked entry is not listed by `available`, not offered by `updates`, refused by `install`, `update` and the plan (`show`) with its reason; an installed copy stays.
+- **Not built:** the timer and event, ETag, the per-channel index, the check that a name does not exist in two repositories, `repo/name` syntax.
 
 ## Hosting
 
@@ -164,6 +235,24 @@ become blueprints.
 
 Steps 1 to 3 solve the versioning problem; 4 to 6 are the repository layout and the community side. Step 4 is the risky one (NixOS build,
 installer) and is "Not tested on hardware yet." until it runs on a real server.
+
+## Built: packages bring their surface (hobnix/core#1072)
+
+A package (an in-tree `capability.toml` or an installed `package.toml`) brings its commands (`commands.tsv`), options (`options.toml`), checks of
+`hs smoke` (`[[probe]]`, `tools`) and web declarations. The core refuses what clashes with itself or another package. Not tested on hardware yet.
+
+- **Options:** a key the core or another package already has is refused when the overlay is written (`scripts/schema-gen.py overlay write`); the
+  whole package brings no options, and two packages that share a key are both refused.
+- **Dependents:** `hs ext disable` and `hs pkg remove` refuse while a package that is on needs this one by name, or through an interface that no
+  other package that is on provides (`scripts/lib/pkg-deps.sh`). With a second provider on, the removal passes; removing that one later is refused.
+- **Rows:** `hs pkg install` and `update` refuse the whole package when the loader refuses one of its rows, and `hs pkg validate` lists them
+  (`scripts/lib/pkg-stage-check.sh`, error code `pkg.rows`). A `start` sys row needs its `plan` row. An app route that makes an admin page public
+  is refused too.
+- **Checks of hs smoke:** a package probe must name a command declared as a read (`probe_is_read` in `scripts/smoke.sh`).
+  This catches mistakes of a package, not a hostile one: the package sets the flags and names the script itself.
+
+The trust rules, numbered in docs/Package-API.md "What the core refuses", all fail closed. The typed name of a destructive command stays a
+review rule: the core cannot see whether a script asks for it. Later: `[[web.reads]]` for owned words (with hobnix/core#1074).
 
 ## Open points
 

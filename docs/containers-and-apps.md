@@ -105,7 +105,7 @@ hs iso
 hs iso remove <name.iso>
 ```
 
-Removing asks you to type the name, and is refused while a VM has the image attached. In the web interface the same is under Instances >
+Removing asks you to type the name, and is refused while a VM has the image attached. In the web interface the same is under Apps & VMs >
 ISO images. The folder is the setting `isoDir` (default `/var/lib/hs/iso`); put it on a share or a bulk disk when you keep many images:
 
 ```bash
@@ -116,7 +116,7 @@ Images already in the old folder are not moved. Do not point `isoDir` at a folde
 
 ### Create in the web interface
 
-Instances > Create is one guided flow for every kind (container, Docker, virtual machine). Its steps are: name and kind, resources (memory,
+**Create** on the Apps & VMs page is one guided flow for every kind (container, Docker, virtual machine). Its steps are: name and kind, resources (memory,
 CPU, disk), where the disk lives, the install image (virtual machines only), and network and storage. The panel on the right shows the plan
 after every change, with the exact commands, and Start is possible as soon as the plan is allowed. Not tested on hardware yet.
 
@@ -213,7 +213,7 @@ hs ct <name> autostart off
 
 On starts the instance at every boot. Off removes the flag instead of writing `false`: Incus then restores the state the instance had before
 the shutdown, so a running one comes back and a stopped one stays stopped. To stop an instance and keep it off at boot, use the Stop plan on the
-Instances page ("also keep it off at boot"). After `hs unlock` the instances with the flag on start. Not tested on hardware yet (the reboot).
+Apps & VMs page ("also keep it off at boot"). After `hs unlock` the instances with the flag on start. Not tested on hardware yet (the reboot).
 
 ## Add storage
 
@@ -320,7 +320,7 @@ tell you so):
 hs recipe <name> --check
 ```
 
-To see or change what happens when an app has an update (`notify` mentions an offered update in the weekly summary, `pinned` never offers one; nothing is updated by itself). The Apps page shows the version each app runs next to its package version. Not tested on hardware yet.
+To see or change what happens when an app has an update (`notify` mentions an offered update in the weekly summary, `pinned` never offers one; nothing is updated by itself). The app catalog shows the version each app runs next to its package version. Not tested on hardware yet.
 
 ```bash
 hs apps policy <instance>
@@ -345,7 +345,7 @@ To run a recipe a second time under a container name of its own, for a second in
 hs recipe <name> --name <container>
 ```
 
-In the web interface, **Apps** has a button per recipe that opens a step wizard: one page per group of questions, then the container name, then a
+In the web interface, the **App catalog** has a button per recipe that opens a step wizard: one page per group of questions, then the container name, then a
 review with the plan the server would run. Back and Next move between pages; Start is only on the review. A password you type goes into the
 container only, never into an argument or the log, and the review shows it as "set". A recipe that needs a person at a terminal shows the command
 to run instead. Recipe authors group questions with `# step: ID|label` and `# help: ID|text` header lines and a 7th field on an `# ask:` line
@@ -355,7 +355,7 @@ A recipe ends with a short text that holds only the clicks that cannot wait (cre
 and how to use it is in its own guide: open the **Docs** page of the web interface and look in the group **Apps**. A guide is shown
 there while its package is installed.
 
-The web interface runs recipes too: **Instances > Apps** shows the list with a form for the questions. A recipe that needs a person at a
+The web interface runs recipes too: **Apps & VMs > App catalog** shows the list with a form for the questions. A recipe that needs a person at a
 terminal (one that asks you to type a password into a setup) says so and runs only from the command line.
 
 A recipe that has a web page registers it as a service. While a reverse proxy is set (`reverseProxy`), it asks two more questions for
@@ -381,8 +381,8 @@ hs services plan
 
 The plan shows what the proxy will do. A proxy that cannot render a key (Zoraxy: headers and login) gets a `manual` row; set those by hand. With `reverseProxy = traefik-public` all keys are rendered (see the guide of the gateway proxy).
 
-## Install, check and remove an app (the Apps page)
-The Apps page installs and removes recipes in one flow. The commands behind it are `hs sys apps ...` (machine-readable, the web interface
+## Install, check and remove an app (the app catalog)
+The app catalog installs and removes recipes in one flow. The commands behind it are `hs sys apps ...` (machine-readable, the web interface
 calls them); you do not type them. Not tested on hardware yet.
 
 ### Install
@@ -421,7 +421,7 @@ hs sys apps list
 An app without a declared health check counts as healthy while its container runs.
 
 ### App version and policy
-The Apps page shows the version of the app itself next to the package version and says when the release offers a newer one. The policy of an
+The app catalog shows the version of the app itself next to the package version and says when the release offers a newer one. The policy of an
 app decides what happens then. `notify` (the default) mentions it in the weekly summary; `pinned` never offers it. Nothing updates by itself.
 
 ```bash
@@ -437,8 +437,13 @@ unique among containers and services). The plan checks the name. Ports and the f
 
 ## Install packages from a repository
 
-Recipes and extensions are both packages. They come from repositories, from signed release tags only. The project's two repositories
-(`recipes` and `extensions`) are there from the start; you can add more.
+Recipes and extensions are both packages. They come from repositories. The project's one repository, `official` (hobnix/official), is there
+from the start: a server reads its signed index, and the packages it names, pinned to a commit and a hash. The old repositories `recipes`,
+`extensions` and `capabilities` are frozen. A server that still has packages recorded from them moves them to `official` by itself on
+`hs update` (or `hs pkg repo migrate`): the version, the copy and the running app stay as they are, nothing is downgraded, and a repository
+you added yourself is never touched. A package `official` does not list (for example `docker`) stays installed and gets no updates;
+`hs pkg repo migrate` says so. If the index cannot be reached, the move waits for the next `hs pkg fetch`. You can add more repositories.
+Not tested on hardware yet.
 
 In the web interface this is the **Marketplace** page: every package of every repository with its state (not installed, installed, update),
 Install / Update / Remove, and a Repositories tab to add or remove a repository. Adding a repository asks for its public signing key and for
@@ -474,12 +479,14 @@ An installed package is a read-only copy. A package runs as root on your server,
 hs pkg update <name>
 ```
 
+In the web interface, use **Update** on the package in the Marketplace. If the new release asks for permissions that the installed one does not have, the plan lists each of them and you type the package name to accept them. If the release changed after you read the plan, the update is refused: read the plan again. **Update selected** and automatic updates never accept new permissions; update such a package with its own button. Not tested on hardware yet.
+
 A package update does not touch a running app. For a recipe it replaces the package files; run `hs recipe <name>` to apply them.
 `hs pkg remove <name>` forgets the package files only, never a container or data. It refuses while the package is switched on (`hs ext disable <name>` first) or while another package that is on needs it, and it asks you to type the name. If the server already has a generated capability list (`/var/lib/hs/generated/`), it is rewritten without the package. See the plan first with `hs pkg remove <name> --dry-run`. Not tested on hardware yet.
 
 A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`). `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has: run `hs update` first. There is no upper bound: the core only raises its level and keeps a function for one level after announcing its removal (ADR 0008).
 
-A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from the repository `capabilities` and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
+A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from a default repository (`official`) and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
 
 Add a repository of your own (a typed repository name confirms it; releases must be signed with a key you trust):
 
@@ -487,14 +494,27 @@ Add a repository of your own (a typed repository name confirms it; releases must
 hs pkg repo add <name> <url> --key <allowed-signers-file>
 ```
 
+A repository that publishes a signed index is added with `--index <address>` (the key must list the namespace `hobnix-index`): `hs pkg fetch` then verifies the index, refuses an older one than it already has, and the version of a package is the one in the index. Before an install the files of the pinned commit are checked against the hash in the index, and a withdrawn (yanked) version is neither offered nor installed. Not tested on hardware yet.
+
+### Where the index comes from
+
+The signed index of `official` is read from the address in `config/package-repos.toml` (`index`, today
+`https://packages.hobnix.dev/official/index.json`). The signature is over the content, so the host that serves it can change without a trust change.
+A timer, `hs-pkg-refresh`, fetches it once a day (at a random time within six hours, and 15 minutes after boot). `hs update` does the same. When the
+index changed, the update count in the top bar and the Marketplace read again without a reload; when it could not be fetched, the reason is kept.
+Fetch it by hand with `hs pkg refresh`, and read the state with `hs sys pkg index` (`last_ok`, `last_try`, `error`, `expires`; times are epoch seconds,
+`-` is unknown). After three days without a successful fetch, or once the index has expired, `hs pkg list` prints a warning and the web interface shows a banner at the top of the page (also when the very first fetch failed). One push message goes
+out when the index is less than three days from expiring. Installed packages keep running. Check the timer with `systemctl list-timers hs-pkg-refresh`
+and `journalctl -u hs-pkg-refresh`. Not tested on hardware yet.
+
 `hs pkg repo list` and `hs pkg repo remove <name>` show and remove them. (The Marketplace only adds signed repositories; `--unsigned` is
 for the command line, and a repository without signatures lets its owner run code on your server.) Extensions are switched on and off with `hs ext enable <name>`
 and `hs ext disable <name>`, and `hs ext list` shows them.
 
 ## Write a package of your own
 
-A package is a folder in a checkout of a package repository: `recipes/<name>/` in hobnix/recipes, `extensions/<name>/` in
-hobnix/extensions, or the same layout in a repository of your own. `hs pkg new` writes one that passes the checks as it is. Run it inside
+A package is a folder in a checkout of a package repository: `recipes/<name>/` and `extensions/<name>/` in
+hobnix/official, or the same layout in a repository of your own. `hs pkg new` writes one that passes the checks as it is. Run it inside
 the checkout (or name it with `--dir <path>`):
 
 ```bash
@@ -521,27 +541,27 @@ python3 -I <core>/scripts/pkg.py repo-check .
 
 The repository's CONTRIBUTING.md has the rest: versions, branches, releases. Not tested on hardware yet.
 
-## Apps in Docker (the Docker page)
+## Apps in Docker
 
 When the capability `docker` is on, the locked container `docker` holds apps that are
-Compose projects. Open them in the web interface under **Instances > Docker**:
+Compose projects. In the web interface they are on the **Apps & VMs** page, under the
+row `docker` (filter **Provider: Docker**):
 
-- The list shows every app with its state, how many of its containers are running,
-  published ports, images and whether it is managed by the web interface (`web`),
-  by a recipe (`recipe`) or created by hand (`other`).
-- Start, stop or restart an app from the actions column or from the drawer that
-  opens when you click a row.
+- Every app shows its state, how many of its containers are running, its address and
+  published ports, and the recipe that set it up. Its own page also shows the images and
+  whether it is managed by the web interface (`web`), by a recipe (`recipe`) or created
+  by hand (`other`).
+- Start, stop or restart an app from its row or its menu, or from its page.
 - **Pull** fetches newer images and recreates the containers; it runs as a
   background job because it can take a while.
-- The **Logs** tab shows the Compose log of the selected app. Log output may hold
+- The **Logs** tab of the app page shows its Compose log. Log output may hold
   secrets, so it is never cached by the web interface.
-- On the **Instances** page the locked `docker` row shows how many apps it holds
-  and can be expanded to open a specific app directly.
+- The locked `docker` row shows how many apps it holds and can be closed and opened.
 
 ### Edit an app
 
-Click **Open editor** in the Compose tab of an app, or **New app**, to open the editor on its
-own page (`/instances/docker/app/<app>`, `/instances/docker/new`). The compose file is on the
+Open the **Compose** tab of an app (`/apps/docker-app/<app>/compose`) to edit it, or press
+**New Docker app** to open the editor for a new one (`/apps/docker/new`). The compose file is on the
 left and the real text of the `.env` file on the right; on a phone they are stacked. The page
 is for administrators only, so the env file is shown as it is and fully editable. Values of
 keys whose name contains PASS, TOKEN, SECRET or KEY are hidden until you press **show** on
@@ -624,7 +644,7 @@ contain passwords and keys of apps.
 
 Not tested on hardware yet. The flag `--hash` of `docker compose config` is unverified on Compose 2.26.1; without it every app shows `-`.
 
-### Private registries (Instances > Docker > Registries)
+### Private registries (Apps & VMs > Docker registries)
 
 An image from a private registry (for example `ghcr.io/you/app`) needs a login. Add it
 on **Registries** (or `hs docker registry add ghcr.io --user <user>`; the token is asked
@@ -711,7 +731,7 @@ Not tested on hardware yet.
 
 ### Create an app with the guided wizard
 
-On the Docker page press **Guided** (or **Guided** on the New app page). The wizard asks one question per screen, in the same frame as the
+On the Apps & VMs page choose **Guided Docker app** in the menu (or press **Guided** on the New app page). The wizard asks one question per screen, in the same frame as the
 other wizards: the image and the app name, the ports, the folders (a share, or a folder next to the compose file), and the settings
 (variables). The last screen shows the `docker-compose.yml` and the `.env` it wrote, as plain text, and **Open in editor** opens the
 usual New app editor on exactly that text. The wizard adds nothing you did not answer: a published port is one line under `ports:`, a

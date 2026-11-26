@@ -13,6 +13,7 @@
   import { Card, Muted, Row } from '../ui/index.js';
   import Kv from '../ui/Kv.svelte';
   import StatusDot from '../ui/StatusDot.svelte';
+  import { P } from '../paths.js';
   import { ctOf, link, servicesOf } from './instances/ct.js';
   import Table from '../shell/Table.svelte';
   import ServiceForm from '../forms/ops/ServiceForm.svelte';
@@ -75,7 +76,7 @@
   ];
 </script>
 
-<PageHeader title="Services" crumb="{ui.host} › Instances" sub="What the reverse proxy publishes, and what each service wants. Public means reachable from the internet; admin pages never are.">
+<PageHeader title="Services" sub="What the reverse proxy publishes, and what each service wants. Public means reachable from the internet; admin pages never are.">
   {#snippet actions()}
     <Button need="admin" variant="primary" tooltip={'Describe a service so the proxy can route it'} onclick={() => describe()}><i class="ph ph-plus"></i>Describe a service…</Button>
     <Button need="admin" icon="check-circle" disabled={noProxy || !todo || (routesJob && !rowstate.pending('routes', ['apply']))} busy={rowstate.pending('routes', ['apply'])} busyLabel="Applying…" tooltip={todo ? 'Make the routes the services want' : 'The proxy already matches the services'} onpointerenter={() => prefetchPlan('routes', ['apply'])} onfocus={() => prefetchPlan('routes', ['apply'])} onclick={() => openPlan('routes', ['apply'], 'Apply the routes')}>Apply{todo ? ` (${todo})` : ''}…</Button>
@@ -113,7 +114,7 @@
         {:else if col.key === 'title'}<span class="c">{dash(s.title)}</span>
         {:else if col.key === 'target'}
           {@const ct = ctOfTarget(s)}
-          <span class="c">{#if ct}<a {...link('/instances', 'instances', ct)} use:tip={`Open the instance ${ct}`}>{s.target}</a>{:else}{s.target}{/if}</span>
+          <span class="c">{#if ct}<a {...link(P.appsGroup, 'instances', ct)} use:tip={`Open the instance ${ct}`}>{s.target}</a>{:else}{s.target}{/if}</span>
         {:else if col.key === 'exposure'}<Chip tone={s.exposure === 'public-ok' ? 'accent' : ''}>{s.exposure}</Chip>
         {:else if col.key === 'names'}<span class="c">{dash(s.names)}</span>
         {:else if col.key === 'wants'}<span class="c">{dash(s.wants)}</span>

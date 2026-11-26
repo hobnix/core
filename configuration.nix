@@ -287,7 +287,7 @@ in
   ];
 
   # ──────────────────────── Status document (Stream Deck, wall monitor, Home Assistant) ────────────────────────
-  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 20 s after the last run ended (as root: it
+  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 60 s after the last run ended (as root: it
   # reads disks and pools), hs-deck-api hands out that file (and /disks, /events written next to it) on port 9740, read only, as nobody. Home networks
   # and Tailscale only. Format: scripts/deck-status.sh, test: tests/deck-status.sh
   systemd.services.hs-deck-status = lib.mkIf deckApi {
@@ -304,17 +304,18 @@ in
         bash ${./scripts}/state.sh $what-json > /run/hs-deck/deck-$what.json.new && chmod 644 /run/hs-deck/deck-$what.json.new && mv /run/hs-deck/deck-$what.json.new /run/hs-deck/deck-$what.json || true
       done
     '';
-    # A timer that starts 20 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
-    # The history is hourly medians and a display reads the counters twice, so 20 s is plenty.
+    # A timer that starts 60 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
+    # The history is hourly medians and a display reads the counters twice, so 60 s is plenty (#1320; hs-deck-api answers 503 after 150 s, HS_DECK_STALE).
   };
   systemd.timers.hs-deck-status = lib.mkIf deckApi {
     wantedBy = [ "timers.target" ];
-    timerConfig = { OnBootSec = "30s"; OnUnitInactiveSec = "20s"; AccuracySec = "1s"; };
+    timerConfig = { OnBootSec = "30s"; OnUnitInactiveSec = "60s"; AccuracySec = "1s"; };
   };
   systemd.services.hs-deck-api = lib.mkIf deckApi {
     description = "Read-only status endpoint for displays (port 9740)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network.target" ];
+    environment.HS_DECK_STALE = "150";    # the status timer writes every 60 s after the last run (#1320)
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/deck-serve.py 9740 /run/hs-deck/deck.json";
       DynamicUser = true;
@@ -444,7 +445,7 @@ in
   # Not started by wantedBy: `hs ext enable|start` and hs-ext-boot do that. TimeoutStopSec is above the bridge's stop (10 s + 2 s + kill).
   # Confinement (ADR 0014, #1130): this unit is the BRIDGE and is not sandboxed: it alone writes state.db (emit, rollup), the snapshots and the
   # cursors. It starts the service as a transient unit hs-ext-run-<name> (systemd-run) with the properties of scripts/lib/ext_confine.py and the
-  # keys of the declared integrations as LoadCredential=. Only what systemd gives; the service still runs as root. Not tested on hardware yet.
+  # keys of the declared integrations as LoadCredential=. The service runs as the dynamic user hsx-<name> (#1134). Not tested on hardware yet.
   systemd.services."hs-ext-svc@" = {
     description = "Service extension %i";
     unitConfig = {
@@ -651,6 +652,21 @@ in
     description = "Timer of hs-apps-autoupdate";
     wantedBy = [ "timers.target" ];
     timerConfig = { OnCalendar = "*:00,30"; Persistent = false; };
+  };
+
+  # The package index (docs/PLAN-registry.md): fetched once a day (scripts/pkg-refresh.sh), also at boot. An index that changed or could not be
+  # fetched is an event (index.changed, index.failed), so the web interface reads the package lists again. Every server has the official repository: no option.
+  systemd.services.hs-pkg-refresh = lib.mkIf (!isEdge) {
+    description = "Fetch the package index, say when it changed or could not be fetched (hs pkg refresh)";
+    path = [ "/run/current-system/sw" pkgs.python3 pkgs.git pkgs.openssh ];
+    serviceConfig = { Type = "oneshot"; Nice = 10; };
+    environment.HS_PKG_LOCK_WAIT = "0";   # a running hs update or install holds the lock: this run is skipped quietly
+    script = "bash ${./scripts}/pkg-refresh.sh";
+  };
+  systemd.timers.hs-pkg-refresh = lib.mkIf (!isEdge) {
+    description = "Timer of hs-pkg-refresh";
+    wantedBy = [ "timers.target" ];
+    timerConfig = { OnCalendar = "daily"; RandomizedDelaySec = "6h"; Persistent = true; OnBootSec = "15min"; };
   };
 
   # Old system generations pile up and fill the root disk. Weekly: delete the ones older than

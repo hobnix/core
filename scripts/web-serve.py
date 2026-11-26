@@ -330,7 +330,7 @@ class Config:
         self.stale_max = float(env("HS_WEB_STALE_MAX", "1800"))      # up to half an hour old is shown at once (X-HS-Age says how old) while a fresh answer is read
         self.plan_ttl = float(env("HS_WEB_PLAN_TTL", "60"))   # a finished plan is answered again for this many seconds (same area and args); 0 = off
         self.cache_file = env("HS_WEB_CACHE_FILE", "/run/hs-web/cache.json")   # the answers survive a restart of this service (tmpfs: not a reboot); "" = memory only
-        self.warm_all = env("HS_WEB_WARM_ALL", "1") == "1"            # keep every read without arguments warm (see Warmer), not only the common ones
+        self.warm_all = env("HS_WEB_WARM_ALL", "0") == "1"          # keep every read without arguments warm (see Warmer), not only the common ones
         self.warm_idle_ttl = float(env("HS_WEB_WARM_IDLE_TTL", "120")) # such a read that nobody has asked for is read again at most this often
         self.seen_for = float(env("HS_WEB_SEEN_FOR", "1800"))         # a read somebody asked for stays in the warm-up for this many seconds
         self.warm_active = float(env("HS_WEB_WARM_ACTIVE", "300"))    # the warm-up runs while a session was seen within this many seconds
@@ -511,7 +511,7 @@ TOKEN_DENIED = frozenset(("token", "users", "secrets", "unlock", "vault", "termi
 # sets (tests/token-test.py fails for a new one); the denied areas can add keys, packages, routes, people or settings that survive a revoked token.
 TOKEN_CHANGE_ALLOWED = frozenset(("ct", "backup", "shares", "docker", "docker-app", "docker-registry", "apps", "recipes", "jobs", "notify", "health", "expiry", "iso"))
 TOKEN_CHANGE_DENIED = frozenset(("token", "users", "secrets", "ssh-key", "pkg", "config", "system", "routes", "net", "dc", "node", "migrate", "incident",
-                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "vps", "parts", "release", "gateway", "fm", "ext"))
+                                 "pool", "disk", "peers", "testlab", "admin", "setup", "preset", "blueprint", "vps", "parts", "release", "gateway", "fm", "ext"))
 
 _actor = threading.local()      # who a command runs for: _run hands it to the command as HS_ACTOR (the audit line, scripts/lib/audit.sh)
 
@@ -1141,6 +1141,7 @@ READS = {
     ("changes", "list"): {"kind": "tsv", "ttl": 60, "query": {"from": (r"^[0-9a-f]{7,40}$", "--from"), "since": (r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "--since")}},   # What's new
     ("parts", "pending"): {"kind": "tsv", "ttl": 15, "topic": "parts-pending"},
     ("rebuild", "pending"): {"kind": "tsv", "ttl": 15, "topic": "rebuild-pending"},
+    ("blueprint", "list"): {"kind": "tsv", "ttl": 60, "topic": "blueprint-list"},                                         # the blueprints (first-run wizard)
     ("preset", "list"): {"kind": "tsv", "ttl": 60, "topic": "preset-list"},                                               # the presets (first-run wizard)
     ("net", "check"): {"kind": "tsv", "ttl": 5},                                                  # the network check rows (Network wizard)
     ("net", "nics"): {"kind": "tsv", "ttl": 15},                                                  # the physical network cards (Network wizard)
@@ -1167,6 +1168,7 @@ READS = {
     ("users", "groups"): {"kind": "tsv", "ttl": 30, "topic": "users-groups"},
     ("vault", "list"): {"kind": "tsv", "ttl": 60, "topic": "vault-list"},
     ("remote", "list"): {"kind": "tsv", "ttl": 30, "topic": "remote-list"},
+    ("remote", "codes"): {"kind": "tsv", "ttl": 5, "topic": "remote-list"},      # the open pairing codes: share, server, seconds left (never a code)
     ("unifi", "networks"): {"kind": "tsv", "ttl": 60, "topic": "unifi-networks"},
     ("unifi", "clients"): {"kind": "tsv", "ttl": 30, "topic": "unifi-clients"},
     ("ports", "list"): {"kind": "tsv", "ttl": 60, "topic": "ports-list"},
@@ -1224,6 +1226,7 @@ READS = {
     ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
     ("pkg", "capabilities"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},   # the capability packages (first-run wizard)
     ("pkg", "repos"): {"kind": "tsv", "ttl": 30, "topic": "pkg-repos"},
+    ("pkg", "index"): {"kind": "tsv", "ttl": 60, "topic": "pkg-index"},   # the state of the package index (pkg-refresh.sh): last fetch, error, expiry
     ("dc", "state"): {"kind": "tsv", "ttl": 60, "topic": "dc-state"},
     ("recipes", "asks"): {"kind": "tsv", "ttl": 60, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},
     ("recipes", "steps"): {"kind": "tsv", "ttl": 60, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},
@@ -1447,7 +1450,13 @@ CHANGES = {
     # the services and their routes on the reverse proxy (services-change.sh): apply (red when a route goes public, changes or goes away), adopt, import, forget one
     # shares between two homeservers (peer-change.sh): the password of an added share is one line on stdin; `offer` answers with the new password in the
     # start answer (key `secret`), once: it is never a job, so no job log keeps it, and the "web change" log line names the arguments only
-    "peers": [{"fixed": [r"^offer$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--new-password": (None, False)}},
+    # pairing by code (docs/PLAN-remote-shares.md): code <share> and receive-code answer in `secret` lines (code, address, expires_in) like offer; add-code and
+    # send-code take the code as ONE LINE on stdin (it may carry @host), never in the arguments
+    "peers": [{"fixed": [r"^code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--minutes": (r"^[0-9]{1,2}$", False)}},
+              {"fixed": [r"^receive-code$"], "opts": {"--minutes": (r"^[0-9]{1,2}$", False)}},
+              {"fixed": [r"^add-code$"], "opts": {"--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False), "--reconnect": (r"^[a-z0-9][a-z0-9-]{0,19}$", False)}, "stdin": True},
+              {"fixed": [r"^send-code$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--peer": (r"^[a-z0-9][a-z0-9-]{0,19}$", False), "--server": (r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", False)}, "need": ["--peer"], "stdin": True},
+              {"fixed": [r"^offer$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"], "opts": {"--new-password": (None, False)}},
 {"fixed": [r"^add$", r"^[a-z0-9][a-z0-9-]{0,19}$", r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"],
                "opts": {"--user": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", False), "--domain": (r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", False)}, "stdin": True},
               [r"^(remove|revoke)$", r"^[a-z0-9][a-z0-9-]{0,19}$"],
@@ -1465,6 +1474,8 @@ CHANGES = {
     "setup": [[r"^wizard-done$"]],
     # apply a preset (preset-change.sh): fills only what is not set yet; the name is a file name in presets/ (the script checks it exists)
     "preset": [[r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"]],
+    # apply a blueprint (blueprint-change.sh): ONE background job, fills only what is not set; --confirm once per typed name the plan asks for (confirm_name lines), --tag of the shown plan
+    "blueprint": [{"fixed": [r"^apply$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--confirm": (r"^[a-z0-9][a-z0-9-]{0,40}$", True), "--tag": (r"^v[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$", False)}}],
     # posters (poster-change.sh) are the extension "posters": area "ext/posters", declared in its manifest; the picture is served by GET /api/poster/<file>
     # the router connection (net-change.sh): the address as an option, the API key as the one line on stdin
     "net": [{"fixed": [r"^setup$"], "opts": {"--address": (r"^https?://[A-Za-z0-9._:-]{1,100}/?$", False)}, "stdin": True}],
@@ -1487,7 +1498,10 @@ CHANGES = {
     # the Marketplace (pkg-change.sh): install / update / remove a package, fetch the repositories, add a repository (its public key is ONE line on stdin) or
     # remove one; a package or repository that came from an added source is red (the typed word is its name)
     "pkg": [{"fixed": [r"^install$", r"^[a-z0-9][a-z0-9-]{0,40}$"], "opts": {"--repo": (r"^[a-z0-9][a-z0-9-]{0,40}$", False)}},
-            [r"^(update|remove)$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            [r"^remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+            # --tag and --seen are what the update plan showed (the start refuses anything else; new permissions need both and the typed name)
+            {"fixed": [r"^update$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
+             "opts": {"--tag": (r"^v[0-9]+\.[0-9]+\.[0-9]+([-.+][A-Za-z0-9.+-]{1,60})?$", False), "--seen": (r"^[0-9a-f]{32}$", False)}},
             [r"^fetch$"], [r"^fetch$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
             {"fixed": [r"^repo-add$", r"^[a-z0-9][a-z0-9-]{0,40}$", r"^(https://|ssh://git@|git@)[A-Za-z0-9._:/@~+-]{3,200}$"], "stdin": True},
             [r"^repo-remove$", r"^[a-z0-9][a-z0-9-]{0,40}$"],
@@ -1843,13 +1857,19 @@ def parse_change(out, rc):
         k, _, v = line.partition("\t")
         if k in ("step", "note", "warn", "danger", "section", "text"):
             d["steps"].append([k, v])
+        elif k == "blueprint" and len(v.split("\t")) == 4:
+            d["tag"] = v.split("\t")[3]       # name, repo, version, tag: the start sends the tag of the plan that was shown
+        elif k == "part" and len(v.split("\t")) == 5:
+            # a blueprint plan (blueprint-change.sh): n, part, name, state, text. What the job does is a step, what it leaves alone a note
+            f = v.split("\t")
+            d["steps"].append(["step" if f[3] in ("set", "install", "enable") else "note", f[4]])
         elif k == "finding":
             d.setdefault("findings", []).append(v.split("	", 2))     # the Test of the Docker editor: level, where (compose:<line|path>, env:<line>, -), text
         elif k == "fix":
             d["fixes"].append(v)       # a refused plan: the command that makes it possible
         elif k == "needs":
             d["needs"].append(v)
-        elif k in ("package", "kind", "repo", "version", "tag", "commit", "title", "description"):
+        elif k in ("package", "kind", "repo", "version", "tag", "seen", "commit", "title", "description"):
             d[k] = v               # the plan of One Install (apps-change.sh)
         elif k == "creates":
             d.setdefault("creates", []).append(v)
@@ -1872,14 +1892,16 @@ def parse_change(out, rc):
         elif k == "id":
             d["id"] = v
         elif k in ("status", "reason", "heading", "command", "confirm_name", "unit"):
+            if k == "confirm_name" and d[k] and v != d[k]:
+                d.setdefault("confirm_names", [d[k]]).append(v)     # several names to type (a blueprint plan); only then this list exists
             d[k] = v
         elif k == "code" and v:
             d["code"] = v          # ADR 0028: the stable name of a refusal, only when the script printed one
         elif k == "job" and re.fullmatch(r"[0-9]{8}-[0-9]{6}-[A-Za-z0-9-]{1,60}-[a-z]{4}", v):
             d["job"] = v           # the job record of an interactive recipe run (ADR 0018): the page follows it
         elif k == "secret":
-            name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer): login, domain, host, password
-            if name in ("login", "domain", "host", "password", "token"):
+            name, _, val = v.partition("\t")      # what the other side types (peer-change.sh offer, code): login, domain, host, password; code, address, expires_in
+            if name in ("login", "domain", "host", "password", "token", "code", "address", "expires_in"):
                 d.setdefault("secret", {})[name] = val
         elif k in ("file", "color", "seed", "size"):
             d[k] = v           # what a poster drawing reports
@@ -3098,6 +3120,37 @@ def make_handler(app):
                 return False
             return self.headers.get("X-Forwarded-Proto", "").strip().lower() != "http"
 
+        def _claim_source_ok(self, ip):
+            """The claim door is for servers on the same network: loopback, RFC 1918, link-local, IPv6 ULA, the tailnet (100.64.0.0/10, fd7a:115c:a1e0::/48)."""
+            try:
+                a = ipaddress.ip_address(ip.split("%")[0])
+            except ValueError:
+                return False
+            if a.version == 6 and a.ipv4_mapped:
+                a = a.ipv4_mapped
+            # an explicit list: Python's is_private also takes Teredo, 64:ff9b:1::/48 and other ranges that are no home network
+            nets = ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fe80::/10", "fc00::/7",
+                    "100.64.0.0/10", "fd7a:115c:a1e0::/48")
+            return any(a in ipaddress.ip_network(n) for n in nets)
+
+        def _pair_door(self, path, raw):
+            """POST /api/remote/claim and /api/remote/push: no session (the code is the credential), a source check, one refusal shape
+            ({"v":1,"error":"code.unknown|code.rate|code.unavailable"}). The body goes to hs sys remote claim|accept on stdin as it came (it is the
+            associated data of the box). Nothing about the code or the answer is logged."""
+            ip = self._client()
+            word = "claim" if path.endswith("/claim") else "accept"
+            if not self._claim_source_ok(ip) or raw is None:
+                return self._json(404, {"v": 1, "error": "code.unknown"})
+            rc, out = _run([cfg.hs, "sys", "remote", word, "--source", ip], stdin=raw, timeout=40)
+            try:
+                body = json.loads(out)
+            except ValueError:
+                return self._json(503, {"v": 1, "error": "code.unavailable"})
+            if rc == 0:
+                return self._json(200, body)
+            status = {"code.unknown": 404, "code.rate": 429}.get(body.get("error") if isinstance(body, dict) else None, 503)
+            return self._json(status, {"v": 1, "error": {404: "code.unknown", 429: "code.rate"}.get(status, "code.unavailable")})
+
         def _client(self):
             """The address the throttle counts. Behind the local proxy (tailscale serve) every request comes from 127.0.0.1: then the proxy's X-Forwarded-For names the client."""
             ip = self.client_address[0]
@@ -3594,6 +3647,8 @@ def make_handler(app):
                 return
             path = urllib.parse.urlsplit(self.path).path
             raw = self._read(FM_SELECTION_BYTES + 8192 if path in ("/api/plan", "/api/start") else 4096)      # a file manager selection can be long
+            if path in ("/api/remote/claim", "/api/remote/push"):      # a server that types a code of this one; no session, no Origin (not a browser)
+                return self._pair_door(path, raw)
             if path not in ("/api/login", "/api/logout", "/api/plan", "/api/start", "/api/unlock", "/api/terminal", "/api/vmconsole", "/api/changes/seen", "/api/live/refresh", "/api/live/sample", "/api/events/subscribe", "/api/setup", "/api/sessions/end", "/api/sessions/end-others"):
                 return self._json(404, {"error": "unknown"})
             bearer = self.headers.get("Authorization", "")[:7].lower() == "bearer "

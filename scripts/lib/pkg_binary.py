@@ -21,7 +21,11 @@ import os
 import platform
 import re
 import stat
+import tomllib
 
+SDK = "hobnix-ext-sdk"
+SDK_URLS = ("https://github.com/hobnix/core", "https://github.com/hobnix/core.git")
+SDK_TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?")
 TARGETS = ("x86_64-unknown-linux-musl",)
 HOST_ARCHS = ("x86_64", "amd64")
 KEYS = {"path", "sha256", "bin", "target"}
@@ -175,6 +179,44 @@ def problems(m, folder=None, built=False):
 
 def manifest_problems(m, folder=None, built=False):
     return ["%s: %s" % c for c in problems(m, folder, built)]
+
+
+def _dependency_tables(doc):
+    """Every table of a Cargo.toml that may name a dependency, as (label, table)."""
+    kinds = ("dependencies", "dev-dependencies", "build-dependencies")
+    out = [(k, doc.get(k)) for k in kinds]
+    out.append(("workspace.dependencies", (doc.get("workspace") or {}).get("dependencies")))
+    for cfg, t in (doc.get("target") or {}).items():
+        out += [("target.%s.%s" % (cfg, k), t.get(k)) for k in kinds if isinstance(t, dict)]
+    for src, t in (doc.get("patch") or {}).items():
+        out.append(("patch.%s" % src, t))
+    return [(label, t) for label, t in out if isinstance(t, dict)]
+
+
+def sdk_pin_problems(folder):
+    """[(code, text)] of a release (ADR 0031): the crate in the package folder takes the SDK from the core by a release tag. A rev, a
+    branch, a path, another source or a [patch] is for develop only. No Cargo.toml = nothing to check. No network: whether the tag exists is
+    cargo's to find out when the release preparation builds with --locked."""
+    path = os.path.join(folder, "Cargo.toml")
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path, "rb") as f:
+            doc = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return [("binary.sdk-pin", "Cargo.toml cannot be read")]
+    out = []
+    for label, table in _dependency_tables(doc):
+        for key, dep in table.items():
+            name = dep.get("package", key) if isinstance(dep, dict) else key
+            if name != SDK or (isinstance(dep, dict) and dep.get("workspace") is True):
+                continue
+            ok = (not label.startswith("patch.") and isinstance(dep, dict) and str(dep.get("git", "")) in SDK_URLS
+                  and SDK_TAG.fullmatch(str(dep.get("tag", ""))) and not {"rev", "branch", "path"} & set(dep))
+            if not ok:
+                out.append(("binary.sdk-pin", "Cargo.toml [%s]: a release takes %s from %s by tag = \"vX.Y.Z\" (a core release tag, or a beta tag vX.Y.Z-beta.N; a rev, "
+                            "branch, path or patch is for develop only)" % (label, SDK, SDK_URLS[0])))
+    return out
 
 
 def install_problems(m, folder):

@@ -101,6 +101,27 @@ def credential(name, provider=None):
         return None
 
 
+class Integration:
+    """One row of `init.integrations`: an integration the package declared. `package` is the provider, `integration` the name, `api_url` and
+    `key_header` may be None, `extras` is a dict. No key in it: `credential()` reads it from the systemd credential."""
+    def __init__(self, d):
+        self.package = d["package"]
+        self.integration = d["integration"]
+        self.source = d.get("source", "")
+        self.api_url = d.get("api_url")
+        self.extras = dict(d.get("extras") or {})
+        self.key_header = d.get("key_header")
+
+    def credential(self):
+        return credential(self.integration, self.package)
+
+
+def init_integrations(init):
+    """The rows of the integrations the package declared, from the `init` message a service gets on stdin (the core sends them because a
+    confined service cannot run `hs`); [] when there are none or the core is older than this field."""
+    return [Integration(d) for d in init.get("integrations") or [] if isinstance(d, dict) and "package" in d and "integration" in d]
+
+
 def run(handler):
     """Read the request, call handler(request, ctx), write the result and exit with the status the protocol wants."""
     ctx = Ctx()

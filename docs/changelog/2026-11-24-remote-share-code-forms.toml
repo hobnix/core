@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "change"
+title = "Remote shares: pair two servers with a code in the web interface"
+body  = """Shares > Remote now pairs servers with a code instead of a password. Give access makes a code on the server that gives the share; the dialog shows the code with its address and a countdown, and turns into "<server> connected" with the key fingerprint when the other server has used it. Add remote share takes that code (or CODE@address) and a server you know or an address; Enter a login by hand stays as the fallback. A share you use has Reconnect... (type a new code from that server), a share you give has New code... (replaces New password...) and Take back.... Nothing of the code is kept after the dialog is closed. Not tested on hardware yet."""

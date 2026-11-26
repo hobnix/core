@@ -72,10 +72,10 @@ write_checks() {
   [[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
   docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
   app_is_child "$app" || refuse_code app.unknown "No app called '$app' was found."
-  if is_manager "$app"; then refuse "The app '$app' is the Docker manager and cannot be changed here."; fi
+  if is_manager "$app"; then refuse_code app.is-manager "The app '$app' is the Docker manager and cannot be changed here."; fi
   local managed
-  managed=$(current_managed "$app") || refuse "The app '$app' cannot be read."
-  [ "$managed" = web ] || refuse "Only web-managed apps can be saved, rebuilt or deleted."
+  managed=$(current_managed "$app") || refuse_code app.unreadable "The app '$app' cannot be read."
+  [ "$managed" = web ] || refuse_code app.not-web-managed "Only web-managed apps can be saved, rebuilt or deleted."
 }
 
 base_checks() {
@@ -83,7 +83,7 @@ base_checks() {
   [[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
   docker_on_and_running || refuse_code docker.off "Docker is not on or not running."
   app_is_child "$app" || refuse_code app.unknown "No app called '$app' was found."
-  if is_manager "$app"; then refuse "The app '$app' is the Docker manager and cannot be changed here."; fi
+  if is_manager "$app"; then refuse_code app.is-manager "The app '$app' is the Docker manager and cannot be changed here."; fi
 }
 
 find_working_dir() {
@@ -147,12 +147,12 @@ read_document() {
   local rec name value line n
   # read compose up to the first NUL
   if ! IFS= read -r -d '' DOC_COMPOSE; then
-    [ -n "$DOC_COMPOSE" ] || refuse "The document is empty or malformed."
+    [ -n "$DOC_COMPOSE" ] || refuse_code app.doc-invalid "The document is empty or malformed."
   fi
   while IFS= read -r -d '' rec || [ -n "$rec" ]; do
     case "$rec" in
       \**)
-        if [ "$DOC_ENV_SHAPE" -ne 0 ] || [ "${#DOC_SET_NAMES[@]}" -ne 0 ] || [ "${#DOC_REM_NAMES[@]}" -ne 0 ]; then refuse "Malformed record in the document."; fi
+        if [ "$DOC_ENV_SHAPE" -ne 0 ] || [ "${#DOC_SET_NAMES[@]}" -ne 0 ] || [ "${#DOC_REM_NAMES[@]}" -ne 0 ]; then refuse_code app.doc-invalid "Malformed record in the document."; fi
         DOC_ENV_SHAPE=1; DOC_ENV_TEXT=${rec#\*}
         n=0
         while IFS= read -r line || [ -n "$line" ]; do
@@ -160,22 +160,22 @@ read_document() {
           case "$line" in ""|"#"*) continue ;; esac
           if ! [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
             if [ "$DOC_COLLECT" -eq 1 ]; then add_finding error "env:$n" "Line $n of the env file is not NAME=value."; ENV_BAD=1
-            else refuse "Line $n of the env file is not NAME=value."; fi
+            else refuse_code app.doc-invalid "Line $n of the env file is not NAME=value."; fi
           fi
         done <<<"$DOC_ENV_TEXT" ;;
       +*)
-        [ "$DOC_ENV_SHAPE" -eq 0 ] || refuse "Malformed record in the document."
+        [ "$DOC_ENV_SHAPE" -eq 0 ] || refuse_code app.doc-invalid "Malformed record in the document."
         name=${rec%%=*}; name=${name#+}; value=${rec#*=}
-        [[ "$name" =~ $NAME_RE ]] || refuse "Malformed set record in the document."
-        if [ -n "${DOC_SET_MAP[$name]:-}" ]; then refuse "Duplicate set name in the document."; fi
+        [[ "$name" =~ $NAME_RE ]] || refuse_code app.doc-invalid "Malformed set record in the document."
+        if [ -n "${DOC_SET_MAP[$name]:-}" ]; then refuse_code app.doc-invalid "Duplicate set name in the document."; fi
         DOC_SET_MAP[$name]=1; DOC_SET_NAMES+=("$name"); DOC_SET_VALUES+=("$value") ;;
       -*)
-        [ "$DOC_ENV_SHAPE" -eq 0 ] || refuse "Malformed record in the document."
+        [ "$DOC_ENV_SHAPE" -eq 0 ] || refuse_code app.doc-invalid "Malformed record in the document."
         name=${rec#-}
-        [[ "$name" =~ $NAME_RE ]] || refuse "Malformed remove record in the document."
-        if [ -n "${DOC_REM_MAP[$name]:-}" ]; then refuse "Duplicate remove name in the document."; fi
+        [[ "$name" =~ $NAME_RE ]] || refuse_code app.doc-invalid "Malformed remove record in the document."
+        if [ -n "${DOC_REM_MAP[$name]:-}" ]; then refuse_code app.doc-invalid "Duplicate remove name in the document."; fi
         DOC_REM_MAP[$name]=1; DOC_REM_NAMES+=("$name") ;;
-      *) refuse "Malformed record in the document." ;;
+      *) refuse_code app.doc-invalid "Malformed record in the document." ;;
     esac
   done
 }
@@ -438,14 +438,14 @@ cmd_plan_save() {
     dir=$(app_dir_for "$app" new)
     # the three places an app can live: stacks/ and recipes/ of the share apps, the legacy /opt/apps
     if timeout 8 "${HS_INCUS:-incus}" exec "$CT" -- sh -c '[ -e "$2/stacks/$1" ] || [ -e "$2/recipes/$1" ] || [ -e "$3/$1" ]' sh "$app" "$DOCKER_APPS_ROOT" "$DOCKER_APPS_LEGACY" </dev/null 2>/dev/null; then
-      refuse "The app '$app' exists already."
+      refuse_code app.exists "The app '$app' exists already."
     fi
-    if app_is_child "$app"; then refuse "An app called '$app' already runs in Docker."; fi
-    if inc info "$app" >/dev/null 2>&1; then refuse "An instance called '$app' exists already."; fi
+    if app_is_child "$app"; then refuse_code app.exists "An app called '$app' already runs in Docker."; fi
+    if inc info "$app" >/dev/null 2>&1; then refuse_code app.exists "An instance called '$app' exists already."; fi
   else
-    current=$(current_rev "$app") || refuse "The app '$app' cannot be read."
+    current=$(current_rev "$app") || refuse_code app.unreadable "The app '$app' cannot be read."
     [ "$current" = "$rev" ] || refuse_code plan.changed "The app changed meanwhile. Reload it before saving."
-    dir=$(app_dir_for "$app") || refuse "The folder of the app '$app' cannot be found."
+    dir=$(app_dir_for "$app") || refuse_code app.folder-missing "The folder of the app '$app' cannot be found."
   fi
   DOC_COLLECT=1
   read_document
@@ -494,7 +494,7 @@ cmd_plan_save() {
 
 cmd_start_save() {
   local app=$1 rev=$2 mode=${3:-save} tmp is_new=0 policy up=1 dir
-  if [ "$rev" = new ]; then is_new=1; need_apps_mounted; dir=$(app_dir_for "$app" new); else dir=$(app_dir_for "$app") || refuse "The folder of the app '$app' cannot be found."; fi
+  if [ "$rev" = new ]; then is_new=1; need_apps_mounted; dir=$(app_dir_for "$app" new); else dir=$(app_dir_for "$app") || refuse_code app.folder-missing "The folder of the app '$app' cannot be found."; fi
   if [ "$mode" = write ]; then up=0; fi
   read_document
   tmp=$(make_tmp_dir "$app" "$dir")
@@ -502,21 +502,21 @@ cmd_start_save() {
     local err
     err=$(cat /tmp/docker-app-save-err-$$ 2>/dev/null || true)
     remove_tmp "$tmp"
-    if [ -n "$err" ]; then refuse "The compose file is not valid. $err"; else refuse "The compose file is not valid."; fi
+    if [ -n "$err" ]; then refuse_code app.compose-invalid "The compose file is not valid. $err"; else refuse_code app.compose-invalid "The compose file is not valid."; fi
   fi
-  policy=$(run_check "$app" "$tmp" "$dir" 2>/dev/null) || { remove_tmp "$tmp"; refuse "The compose file is not valid."; }
+  policy=$(run_check "$app" "$tmp" "$dir" 2>/dev/null) || { remove_tmp "$tmp"; refuse_code app.compose-invalid "The compose file is not valid."; }
   while IFS=$'\t' read -r k v p; do
     case "$k" in
       port)
         local owner
         owner=$(docker_port_owner "$v" "$app" 2>/dev/null || true)
-        [ -z "$owner" ] || { remove_tmp "$tmp"; refuse "Port $v is used by '$owner' in Docker already."; } ;;
+        [ -z "$owner" ] || { remove_tmp "$tmp"; refuse_code app.port-used "Port $v is used by '$owner' in Docker already."; } ;;
       cname)
         owner=$(cname_owner "$v" "$app")
-        [ -z "$owner" ] || { remove_tmp "$tmp"; refuse "The container name $v is used by $owner."; } ;;
+        [ -z "$owner" ] || { remove_tmp "$tmp"; refuse_code app.container-name-used "The container name $v is used by $owner."; } ;;
       refuse)
         remove_tmp "$tmp"
-        refuse "$v" ;;
+        refuse_code app.compose-refused "$v" ;;
     esac
   done <<<"$policy"
   [ "$up" -eq 0 ] || auth_check_tmp "$app" "$tmp"
@@ -735,7 +735,7 @@ cmd_start_recreate() {
     printf 'status\tstarted\nunit\t%s\n' "$unit"
     return 0
   fi
-  if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse "The recreate of $app failed."; fi
+  if docker_with_auth "$app" up -d; then printf 'status\tdone\n'; else refuse_code app.recreate-failed "The recreate of $app failed."; fi
 }
 
 apply_recreate() {
@@ -757,7 +757,7 @@ apply_recreate() {
 cmd_plan_delete() {
   local app=$1 data=$2 dir
   write_checks "$app"
-  dir=$(app_dir_for "$app") || refuse "The folder of the app '$app' cannot be found."
+  dir=$(app_dir_for "$app") || refuse_code app.folder-missing "The folder of the app '$app' cannot be found."
   printf 'status\tok\nheading\tdelete %s\n' "$app"
   printf 'confirm_name\t%s\n' "$app"
   printf 'step\tStop and remove the containers\n'
@@ -778,7 +778,7 @@ cmd_plan_delete() {
 cmd_start_delete() {
   local app=$1 confirm=${2:-} data=${3:-0}
   write_checks "$app"
-  [ "$confirm" = "$app" ] || refuse "The name did not match. Nothing was deleted."
+  [ "$confirm" = "$app" ] || refuse_code confirm.missing "The name did not match. Nothing was deleted."
   if [ -n "${HS_DOCKER_NO_JOB:-}" ]; then
     apply_delete "$app" "$data"
     printf 'status\tdone\n'
@@ -828,7 +828,7 @@ cmd_plan_old() {
   local app=$1 action=$2 dir
   base_checks "$app"
   if [ "$action" = pull ]; then
-    dir=$(find_working_dir "$app") || refuse "The working directory of $app could not be found."
+    dir=$(find_working_dir "$app") || refuse_code app.workdir-missing "The working directory of $app could not be found."
     DOCKER_AUTH_DIR=$dir auth_check "$app"
   elif [ "$action" != stop ] && [ "$(app_state "$app")" = stopped ]; then
     auth_check "$app"
@@ -875,7 +875,7 @@ cmd_start_old() {
   case "$action" in
     start|stop|restart)
       if [ -n "${HS_DOCKER_NO_JOB:-}" ]; then
-        run_action "$app" "$action" || refuse "The $action of $app failed."
+        run_action "$app" "$action" || refuse_code app.action-failed "The $action of $app failed."
         printf 'status	done
 '
       else
@@ -887,7 +887,7 @@ unit	%s
       fi
       ;;
     pull)
-      dir=$(find_working_dir "$app") || refuse "The working directory of $app could not be found."
+      dir=$(find_working_dir "$app") || refuse_code app.workdir-missing "The working directory of $app could not be found."
       DOCKER_AUTH_DIR=$dir auth_check "$app"
       if [ -n "${HS_DOCKER_NO_JOB:-}" ]; then
         apply_pull "$app" "$dir"
@@ -939,12 +939,12 @@ if [ "${1:-}" = "--apply-delete" ]; then
   exit 0
 fi
 
-[ $# -ge 3 ] || refuse "Usage: plan|start <app> <action> [--rev new|<rev>]"
+[ $# -ge 3 ] || refuse_code app.usage "Usage: plan|start <app> <action> [--rev new|<rev>]"
 verb=$1; app=$2; action=$3; shift 3
 [[ "$app" =~ $APP_RE ]] || refuse_code name.invalid "The app name is not valid."
 [[ "$action" =~ $ACTION_RE ]] || refuse_code action.unknown "Action must be start, stop, restart, pull, app-save, app-write, rebuild, recreate or delete."
 case "$action" in
-  start|stop|restart|pull|recreate) [ $# -eq 0 ] || refuse "Unexpected arguments." ;;
+  start|stop|restart|pull|recreate) [ $# -eq 0 ] || refuse_code args.unexpected "Unexpected arguments." ;;
 esac
 delete_data=0
 
@@ -953,12 +953,12 @@ case "$verb" in
     case "$action" in
       start|stop|restart|pull) cmd_plan_old "$app" "$action" ;;
       app-save|app-write)
-        [ $# -eq 2 ] && [ "$1" = --rev ] || refuse "$action needs --rev new|<rev>."
+        [ $# -eq 2 ] && [ "$1" = --rev ] || refuse_code app.rev-missing "$action needs --rev new|<rev>."
         cmd_plan_save "$app" "$2" "${action#app-}" ;;
       rebuild) cmd_plan_rebuild "$app" ;;
       recreate) cmd_plan_recreate "$app" ;;
       delete)
-        [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --delete-data ] && delete_data=1; } || refuse "delete takes only --delete-data."
+        [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --delete-data ] && delete_data=1; } || refuse_code option.unknown "delete takes only --delete-data."
         cmd_plan_delete "$app" "$delete_data" ;;
     esac
     ;;
@@ -966,7 +966,7 @@ case "$verb" in
     case "$action" in
       start|stop|restart|pull) cmd_start_old "$app" "$action" ;;
       app-save|app-write)
-        [ $# -eq 2 ] && [ "$1" = --rev ] || refuse "$action needs --rev new|<rev>."
+        [ $# -eq 2 ] && [ "$1" = --rev ] || refuse_code app.rev-missing "$action needs --rev new|<rev>."
         cmd_start_save "$app" "$2" "${action#app-}" ;;
       rebuild) cmd_start_rebuild "$app" ;;
       recreate) cmd_start_recreate "$app" ;;
@@ -974,13 +974,13 @@ case "$verb" in
         confirm=""
         while [ $# -gt 0 ]; do
           case "$1" in
-            --confirm) [ $# -ge 2 ] || refuse "--confirm needs the app name."; confirm=$2; shift 2 ;;
+            --confirm) [ $# -ge 2 ] || refuse_code confirm.missing "--confirm needs the app name."; confirm=$2; shift 2 ;;
             --delete-data) delete_data=1; shift ;;
-            *) refuse "delete takes only --confirm <app> and --delete-data." ;;
+            *) refuse_code option.unknown "delete takes only --confirm <app> and --delete-data." ;;
           esac
         done
         cmd_start_delete "$app" "$confirm" "$delete_data" ;;
     esac
     ;;
-  *) refuse "Usage: plan|start <app> <action> [--rev new|<rev>]" ;;
+  *) refuse_code action.unknown "Usage: plan|start <app> <action> [--rev new|<rev>]" ;;
 esac

@@ -1,0 +1,4 @@
+date  = "2026-11-25"
+type  = "change"
+title = "Extension services no longer run as root"
+body  = """Each extension service now runs as its own unprivileged user and may write only its own folder. At the first start its data moves once from /var/lib/hs/<name> to /var/lib/hs-ext/<name>; the old path stays as a link for root tools. Inside the service the folder is /var/lib/hs-ext/<name> (the variable $STATE_DIRECTORY), not /var/lib/hs/<name>. If both folders already exist, the service does not start and nothing is changed. An extension that asks to write anywhere else does not start. Not tested on hardware yet."""

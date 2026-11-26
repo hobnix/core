@@ -22,6 +22,7 @@
   import Banner from '../ui/Banner.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import { Card, Row, Muted, TextInput } from '../ui';
+  import { P } from '../paths.js';
   import { link } from './instances/ct.js';
   import { restoreDrill, instanceDrill } from './backup-drill.js';
 
@@ -90,7 +91,7 @@
   const runningNow = $derived(rowstate.activeJob('backup', ['now']));   // a backup job runs: the button is busy, its tooltip names it and a click shows the job
   const tipWhy = (t) => (why ? `${t} (${why})` : t);
   const headDot = $derived(!configured ? 'off' : s.status === 'failed' ? 'bad' : s.last_ok ? 'ok' : 'warn');
-  const itemLink = (i) => (i.kind === 'ct' ? link('/instances', 'instances', i.name) : link(sharesPath(), 'shares', i.name));
+  const itemLink = (i) => (i.kind === 'ct' ? link(P.appsGroup, 'instances', i.name) : link(sharesPath(), 'shares', i.name));
   const toggle = (i) => openPlan('backup', ['toggle', '--name', i.name, '--kind', i.kind, '--to', i.on ? 'off' : 'on'], `${i.on ? 'Leave out of' : 'Put into'} the backup: ${i.name}`);
   const kindName = { shares: 'share', sensitive: 'sensitive share', ct: 'instance', always: 'always' };
   const kindIcon = { shares: 'folder', sensitive: 'folder-lock', ct: 'cube', always: 'desktop-tower' };
@@ -107,7 +108,7 @@
   ];
 </script>
 
-<PageHeader title="Backup" crumb="{ui.host} › Protection" sub="restic on the backup disk · 7 daily / 4 weekly / 6 monthly · the one place that decides what is in the backup">
+<PageHeader title="Backup" sub="restic on the backup disk · 7 daily / 4 weekly / 6 monthly · the one place that decides what is in the backup">
   {#snippet actions()}
     <Button need="admin" icon="seal-check" busy={rowstate.pending('backup', ['verify'])} busyLabel="Verifying…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['verify'])} onfocus={() => prefetchPlan('backup', ['verify'])} tooltip={tipWhy('Read part of the stored data and check it')} onclick={() => openPlan('backup', ['verify'], 'Verify the backup')}>Verify</Button>
     <Button need="admin" icon="broom" busy={rowstate.pending('backup', ['prune'])} busyLabel="Freeing space…" disabled={!!why} onpointerenter={() => prefetchPlan('backup', ['prune'])} onfocus={() => prefetchPlan('backup', ['prune'])} tooltip={tipWhy('Give space back: delete leftovers of a failed run, apply the retention, prune')} onclick={() => openPlan('backup', ['prune'], 'Free space on the backup disk')}>Free space</Button>

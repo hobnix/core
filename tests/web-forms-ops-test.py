@@ -40,6 +40,9 @@ class Changes(unittest.TestCase):
                     ["remove"], ["fetch", "a b"], ["repo-add", "friends"], ["repo-add", "friends", "file:///tmp/x"], ["repo-add", "friends", "/tmp/x"],
                     ["repo-add", "friends", "https://x y"], ["repo-add", "Friends", "https://github.com/a/b"], ["repo-remove"], ["wipe", "arr"]):
             self.assertFalse(ok("pkg", bad), bad)
+        self.assertTrue(ok("pkg", ["update", "arr", "--tag", "v1.2.0", "--seen", "0" * 32]))      # what the update plan showed
+        for bad in (["update", "arr", "--tag", "1.2"], ["update", "arr", "--seen", "x"], ["update", "arr", "--accept-permissions"], ["remove", "arr", "--tag", "v1.2.0"]):
+            self.assertFalse(ok("pkg", bad), bad)
         self.assertTrue(ok("pkg", ["repo-add", "friends", "https://github.com/someone/recipes"], stdin="ssh-ed25519 AAAAC3Nza"))   # the key is the one stdin line
         for words in (("pkg", "market"), ("pkg", "repos")):
             self.assertEqual(ws.READS[words]["kind"], "tsv", words)
@@ -127,6 +130,28 @@ class Changes(unittest.TestCase):
         d = ws.parse_change("status\tdone\nsecret\tlogin\tremote-bob\nsecret\tdomain\tHOME\nsecret\thost\tme.local\nsecret\tpassword\tPw-Aa1\nsecret\tother\tx\n", 0)
         self.assertEqual(d["secret"], {"login": "remote-bob", "domain": "HOME", "host": "me.local", "password": "Pw-Aa1"})
         self.assertNotIn("secret", ws.parse_change("status\tdone\n", 0))
+
+    def test_blueprint_plan_parts_are_shown(self):
+        d = ws.parse_change("status\tok\npart\t1\tconfig\ttimeZone\tkept\ttimeZone is set already and is kept\npart\t2\tparts\ta\tinstall\tinstall a\nnote\tOne job\nconfirm_name\tmedia\n", 0)
+        self.assertEqual(d["steps"], [["note", "timeZone is set already and is kept"], ["step", "install a"], ["note", "One job"]])
+        self.assertEqual(d["confirm_name"], "media")
+        self.assertEqual(ws.parse_change("status\tok\npart\tshort\n", 0)["steps"], [])
+        self.assertNotIn("confirm_names", d)
+
+    def test_blueprint_tag_and_names(self):
+        d = ws.parse_change("status\tok\nblueprint\tmedia\tmine\t1.0.0\tv1.0.0\nconfirm_name\tmedia\nconfirm_name\tdocker\n", 0)
+        self.assertEqual((d["tag"], d["confirm_names"]), ("v1.0.0", ["media", "docker"]))
+        body = {"area": "blueprint", "args": ["apply", "media", "--tag", "v1.0.0", "--confirm", "docker"], "confirm": "media"}
+        self.assertIsNotNone(ws.validate_change(body))
+        self.assertIsNone(ws.validate_change(dict(body, args=["apply", "media", "--tag", "latest"])))
+        self.assertIsNone(ws.validate_change(dict(body, args=["apply", "media", "--tag", "v1.0.0", "--tag", "v2.0.0"])))
+
+    def test_secret_lines_of_a_code(self):
+        d = ws.parse_change("status\tdone\nsecret\tcode\tK7QXQ9M2DT4PW3HN\nsecret\taddress\talpha.local:8480\nsecret\texpires_in\t600\nsecret\tother\tx\n", 0)
+        self.assertEqual(d["secret"], {"code": "K7QXQ9M2DT4PW3HN", "address": "alpha.local:8480", "expires_in": "600"})
+        # an answer with a secret is never kept in the plan cache
+        out = "status\tok\nsecret\tcode\tK7QX\n"
+        self.assertFalse(ws.plan_stable(out, 0, ws.parse_change(out, 0)))
 
     def test_fix_lines_of_a_refused_plan(self):
         d = ws.parse_change("status\trefused\nreason\tno route\nfix\ths ext x expose public <name>\nfix\ths services apply\n", 1)

@@ -9,7 +9,7 @@
     return out
 
 
-  pkg.py repo-unbumped <tag> [<folder>]                    packages of a repository checkout whose folder changed since <tag> without a version rise (package.toml AND index.toml); exit 1 when any
+  pkg.py repo-unbumped <tag> [<folder>]                    packages of a repository checkout whose folder changed since <tag> without a version rise (package.toml AND index.toml); exit 1 when any (docs and comment-only edits do not count)
   pkg.py validate                                          check every manifest (and that a recipe's header agrees); exit 1 on a problem
   pkg.py check-draft                                       a package.toml draft on stdin: level, where, text per finding; exit 1 on an error (web package builder)
   pkg.py convert <recipe-script>                           print the package.toml for a recipe written with header lines
@@ -21,6 +21,7 @@
   pkg.py perms <name>                                     the permissions the package declares, one per line; "-" when it declares none (ADR 0014: declared, not enforced)
   pkg.py vendor --from <package folder> --to <checkout>   copy a capability module into <checkout>/vendor/ and write the lock (lib/pkg_vendor.py)
   pkg.py unvendor <name> --to <checkout> | vendor-check --to <checkout>
+  pkg.py index tree|build|validate|sign|verify|assemble|diff|pin ...  the signed package index index.json of a repository (lib/pkg_index.py; CI builds and signs it)
   pkg.py new <name> --template recipe|extension [--dir <path>]  start a package in a checkout of a package repository (pkg_new.py)
 
 Repositories (docs/PLAN-packages.md, "Repositories" and "Trust"); the git work is `git`, signatures are SSH signatures on release tags:
@@ -133,6 +134,16 @@ def _load_pkg_binary():
 pkg_binary = _load_pkg_binary()
 
 
+def _load_pkg_blueprint():
+    spec = importlib.util.spec_from_file_location("pkg_blueprint", os.path.join(HERE, "lib", "pkg_blueprint.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+pkg_blueprint = _load_pkg_blueprint()
+
+
 def _load_pkg_integrations():
     spec = importlib.util.spec_from_file_location("pkg_integrations", os.path.join(HERE, "lib", "pkg_integrations.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -160,7 +171,7 @@ def capability_toml(folder):
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-KINDS = ("recipe", "extension", "capability")
+KINDS = ("recipe", "extension", "capability", "blueprint")
 CAP_TYPES = ("feature", "provider")
 CAP_LISTS = ("requires", "provides", "needs", "variants", "implied_by")
 NIX_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.nix$")
@@ -422,7 +433,7 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
     if not SEMVER.match(str(m.get("version", ""))):
         bad("version is not semver (1.2.3)")
     if m.get("kind") not in KINDS:
-        bad("kind is not recipe, extension or capability")
+        bad("kind is not recipe, extension, capability or blueprint")
     if not m.get("title"):
         bad("title missing")
     rq = REQUIRES.match(str(m.get("requires_core", "")))
@@ -477,6 +488,9 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
                 bad(f"question {a.get('key')}: label missing")
     elif m.get("kind") == "capability":
         for t in capability_problems(m, path):
+            bad(t)
+    elif m.get("kind") == "blueprint":
+        for t in pkg_blueprint.manifest_problems(m):
             bad(t)
     elif path and not os.path.isfile(os.path.join(os.path.dirname(path), "capability.toml")):
         bad("an extension needs its capability.toml beside package.toml")
@@ -571,9 +585,42 @@ def _ver(v):
     return tuple(int(x) for x in str(v).split(".")) if SEMVER.match(str(v)) else None
 
 
+def _code_lines(text):
+    """The lines of a text without blank lines and whole-line comments (first non-space character is #); a trailing comment stays."""
+    return [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+def _file_changed(folder, since, path):
+    """True when a changed file matters for a release: *.md never; any other file when its lines differ after dropping blank and whole-line comment lines
+    (package.toml: when the parsed content differs); added, deleted, binary or undecodable files count as changed."""
+    if path.endswith(".md"):
+        return False
+    r = subprocess.run(["git", "-C", folder, "show", f"{since}:./{path}"], capture_output=True)
+    try:
+        with open(os.path.join(folder, path), "rb") as f:
+            new = f.read()
+    except OSError:
+        return True
+    if r.returncode != 0:
+        return True
+    try:
+        old_t, new_t = r.stdout.decode("utf-8"), new.decode("utf-8")
+        if "\x00" in old_t or "\x00" in new_t:
+            return True
+        if os.path.basename(path) == "package.toml":
+            try:
+                return tomllib.loads(old_t) != tomllib.loads(new_t)
+            except tomllib.TOMLDecodeError:
+                pass
+        return _code_lines(old_t) != _code_lines(new_t)
+    except UnicodeDecodeError:
+        return True
+
+
 def repo_unbumped(folder, since):
     """Packages whose folder changed since the tag `since` while the version did not rise in package.toml AND index.toml (CI of the package repositories, release PRs).
-    A package that is new since the tag, or gone, is not listed; neither is a change outside the package folders."""
+    A package that is new since the tag, or gone, is not listed; neither is a change outside the package folders.
+    Only a real change counts: *.md files and blank or whole-line comment (#) lines are ignored (see _file_changed); a trailing comment after a value is a change."""
     old_idx = _git_show(folder, since, "index.toml")
     if old_idx is None:
         raise ValueError(f"no index.toml at {since}")
@@ -589,10 +636,10 @@ def repo_unbumped(folder, since):
         if old is None:
             continue
         path, oldpath = str(e.get("path", "")), str(old.get("path", ""))
-        d = subprocess.run(["git", "-C", folder, "diff", "--name-only", since, "--", path, oldpath], capture_output=True, text=True)
+        d = subprocess.run(["git", "-C", folder, "diff", "--name-only", "--no-renames", "--relative", since, "--", path, oldpath], capture_output=True, text=True)
         if d.returncode != 0:
             raise ValueError(f"git diff against {since} failed")
-        if not d.stdout.strip():
+        if not any(_file_changed(folder, since, f) for f in d.stdout.splitlines() if f.strip()):
             continue
         try:
             with open(os.path.join(folder, path, "package.toml"), "rb") as f:
@@ -605,6 +652,9 @@ def repo_unbumped(folder, since):
         if not (rose_pkg and rose_idx):
             out.append(f"{name}: changed since {since}, version {old_pkg} -> package.toml {now_pkg}, index.toml {old.get('version')} -> {e.get('version')}")
     return out
+
+
+FOLDER_KINDS = {"recipes": "recipe", "extensions": "extension", "capabilities": "capability", "blueprints": "blueprint"}
 
 
 def repo_check(folder, warnings=None, release=False):
@@ -645,24 +695,86 @@ def repo_check(folder, warnings=None, release=False):
         if not SEMVER.match(str(e.get("version", ""))):
             out.append(f"{name}: version is not semver")
         out += [f"{name}: {t}" for t in pkg_events.manifest_problems(name, m.get("events", []))]
-        if pkg_perms.undeclared(m):
+        if pkg_perms.undeclared(m) and m.get("kind") != "blueprint":     # a blueprint installs nothing itself and may not carry the key
             out.append(f"{name}: {pkg_perms.missing_text(name)}")
         out += [f"{name}: permissions: {t}" for t in pkg_perms.manifest_problems(name, m, capability_toml(os.path.join(folder, path)))]
         out += [f"{name}: {t}" for t in pkg_protocol.manifest_problems(m, os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_binary.manifest_problems(m, os.path.join(folder, path), release)]
+        if release:
+            out += ["%s: %s: %s" % (name, *c) for c in pkg_binary.sdk_pin_problems(os.path.join(folder, path))]
         out += [f"{name}: {t}" for t in pkg_slots.manifest_problems(name, pkg_slots.doc_of(capability_toml(os.path.join(folder, path)), m))]
+        if m.get("kind") == "blueprint":
+            out += [f"{name}: {t}" for t in pkg_blueprint.manifest_problems(m)]
         errs, warns = pkg_app.check(m, os.path.join(folder, path), e.get("core") is True)
         out += [f"{name}: {t}" for t in errs]
         warnings += [f"{name}: {t}" for t in warns]
         for k in ("icon", "category", "app_version"):
             if m.get(k) != e.get(k):
                 out.append(f"{name}: {k} differs between index and package.toml")
-    for sub in ("recipes", "extensions", "capabilities"):
+    for sub, kind in FOLDER_KINDS.items():
         d = os.path.join(folder, sub)
         if os.path.isdir(d):
             for n in sorted(os.listdir(d)):
-                if os.path.isfile(os.path.join(d, n, "package.toml")) and os.path.normpath(f"{sub}/{n}") not in listed:
+                mf = os.path.join(d, n, "package.toml")
+                if not os.path.isfile(mf):
+                    continue
+                if os.path.normpath(f"{sub}/{n}") not in listed:
                     out.append(f"{sub}/{n}: has a package.toml but is not in index.toml")
+                try:
+                    with open(mf, "rb") as f:
+                        k = tomllib.load(f).get("kind")
+                except (OSError, tomllib.TOMLDecodeError):
+                    continue   # reported above when it is listed
+                if k != kind:
+                    out.append(f"{sub}/{n}: kind {k} does not belong in {sub}/")
+    out += licence_problems(folder, warnings)
+    return out
+
+
+def licence_problems(folder, warnings):
+    """One repository for several kinds (hobnix/official): AGPL-3.0 at the root, MIT only in recipes/. Only a repository that publishes an index
+    (`publish = "index"` in index.toml) is held to it; a licence file that is absent is a warning, one that says the wrong thing is an error."""
+    try:
+        with open(os.path.join(folder, "index.toml"), "rb") as f:
+            idx = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    if idx.get("publish") != "index":
+        return []
+    if idx.get("licences") == "per-package":
+        return per_package_licence_problems(folder, idx, warnings)
+    out = []
+    for rel, word, name in (("LICENSE", "GNU AFFERO GENERAL PUBLIC LICENSE", "AGPL-3.0"), ("recipes/LICENSE", "MIT License", "MIT")):
+        if rel.startswith("recipes/") and not os.path.isdir(os.path.join(folder, "recipes")):
+            continue
+        try:
+            with open(os.path.join(folder, rel), encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            warnings.append(f"{rel}: is missing (expected {name})")
+            continue
+        if word.lower() not in text.lower():
+            out.append(f"{rel}: is not the {name} licence")
+    return out
+
+
+def per_package_licence_problems(folder, idx, warnings):
+    """A repository of other people's packages (hobnix/community, `licences = "per-package"`): no licence of its own is imposed; each package
+    folder needs a LICENSE, LICENSE.md or COPYING file (error when none and no [meta] license; a warning when only the meta field names it)."""
+    out = []
+    for name, e in sorted(idx.get("package", {}).items()):
+        path = os.path.join(folder, str(e.get("path", "")))
+        if any(os.path.isfile(os.path.join(path, n)) for n in ("LICENSE", "LICENSE.md", "COPYING")):
+            continue
+        try:
+            with open(os.path.join(path, "package.toml"), "rb") as f:
+                meta = tomllib.load(f).get("meta", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            continue    # reported by the package check
+        if isinstance(meta, dict) and meta.get("license"):
+            warnings.append(f"{name}: has no licence file, only [meta] license")
+        else:
+            out.append(f"{name}: has neither a LICENSE file nor [meta] license")
     return out
 
 
@@ -759,7 +871,7 @@ def main(argv):
             if "repo" not in have or n in seen:
                 continue
             for r_name, e, _, _ in cat.get(n, []):
-                if r_name == have["repo"] and semver_key(e["version"]) > semver_key(have["version"]):
+                if r_name == have["repo"] and not e.get("yanked") and semver_key(e["version"]) > semver_key(have["version"]):
                     w = waits_for(e)
                     if "--waits" in rest:     # newer releases this core cannot take yet: name, available, what they wait for
                         if w:
@@ -793,7 +905,7 @@ def main(argv):
                     except ValueError:
                         state = "update"
                 try:
-                    m = tomllib.loads(mod.git("show", "%s:%s/package.toml" % (tag, path), cwd=R.clone_dir(r_name)).decode("utf-8"))
+                    m = tomllib.loads(R.read_at(r_name, e, tag, "package.toml").decode("utf-8"))
                 except Exception:
                     m = {}
                 req = m.get("requires") if isinstance(m.get("requires"), list) else []
@@ -801,7 +913,7 @@ def main(argv):
                 typ = m.get("type") if m.get("type") in ("feature", "provider") else "-"
                 title = (e.get("title") or m.get("title") or "-").replace("\t", " ")
                 print("\t".join([pname, r_name, ver, inst, state, ",".join(req) or "-", typ, title]))
-    elif cmd in ("repo", "fetch", "available", "market", "show", "asset", "install", "update", "remove", "rollback", "rollback-candidates"):
+    elif cmd in ("repo", "fetch", "available", "market", "blueprint", "show", "asset", "install", "update", "remove", "rollback", "rollback-candidates"):
         spec = importlib.util.spec_from_file_location("pkg_repo", os.path.join(HERE, "pkg_repo.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -816,6 +928,11 @@ def main(argv):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod.run(MAIN, rest)
+    elif cmd == "index":     # index tree|build|validate|sign|verify ...: the signed package index (lib/pkg_index.py, docs/PLAN-registry.md)
+        spec = importlib.util.spec_from_file_location("pkg_index", os.path.join(HERE, "lib", "pkg_index.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.run(rest)
     elif cmd == "perms":
         found = [m for _, m in manifests(True) if m.get("name") == (rest[0] if rest else "")]
         if not found:

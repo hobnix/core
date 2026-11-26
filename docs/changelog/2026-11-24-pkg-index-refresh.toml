@@ -1,0 +1,4 @@
+date  = "2026-11-24"
+type  = "feature"
+title = "The package index refreshes by itself once a day (hs pkg refresh)"
+body  = """A timer fetches the signed package index daily. When it changed, the update count and the Marketplace read again without a reload; when it could not be fetched, `hs pkg list` and a banner in the web interface warn after three days or when the index expired, and one push message goes out shortly before it expires. `hs sys pkg index` shows the state."""

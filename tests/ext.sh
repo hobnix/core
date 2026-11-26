@@ -212,7 +212,7 @@ done
 mkdir -p "$HS_STATE_DIR/packages"
 printf '[package.capa]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 
 [package.capb]
 version = "1.0.0"
@@ -220,7 +220,7 @@ repo = "elsewhere"
 
 [package.disk]
 version = "1.0.0"
-repo = "recipes"
+repo = "official"
 ' > "$HS_STATE_DIR/packages/installed.toml"
 printf 'capa
 capb
@@ -238,5 +238,46 @@ check_out "and says why" "the word disk is also a core command" registry_refused
 check_eq "the same package reports no refusal when the row is its own" "0" "$(registry_refused capa | grep -c .)"
 echo capa-off > "$HS_CAPABILITIES_FILE"
 check_eq "a capability package that is off adds no row" "0" "$(registry_rows | grep -c "capa go")"
+
+echo "-- words: extra first words a package owns"
+# wa = in-tree folder (capability.toml) owning "fx"; wb = default-repo capability package owning "gx" and "disk"; wc = added-repo package asking for "hx"
+# wd = a second in-tree folder asking for "fx" too
+mkdir -p "$PK/wa" "$PK/wb" "$PK/wc" "$PK/wd"
+manifest wa 'words = ["fx"]'; manifest wd 'words = ["fx"]'
+capmf wb; printf 'words = ["gx", "disk"]
+' >> "$PK/wb/package.toml"
+capmf wc; printf 'words = ["hx"]
+' >> "$PK/wc/package.toml"
+printf '[package.wb]
+version = "1.0.0"
+repo = "official"
+
+[package.wc]
+version = "1.0.0"
+repo = "elsewhere"
+' >> "$HS_STATE_DIR/packages/installed.toml"
+row user "fx go" > "$PK/wa/commands.tsv"; row sys "sys fx data" >> "$PK/wa/commands.tsv"
+{ row user "gx go"; row user "disk go"; } > "$PK/wb/commands.tsv"
+row user "hx go" > "$PK/wc/commands.tsv"
+row user "fx go" > "$PK/wd/commands.tsv"
+printf 'wa
+wb
+wc
+wd
+' > "$HS_CAPABILITIES_FILE"
+rows=$(registry_rows)
+check_eq "an in-tree package that is off adds no word row" "0" "$(HS_CAPABILITIES_FILE=/dev/null registry_rows | grep -c "fx go")"
+check_eq "a word clash between two packages loads neither row" "0" "$(grep -c "fx go${tab}" <<<"$rows")"
+check_out "and says which package uses the word" "the word fx is also used by the package w[ad]" registry_refused wa
+rm -r "$PK/wd"
+rows=$(registry_rows)
+check_out "an in-tree package loads its owned word row" "^user${tab}fx go${tab}$PK/wa/x.sh${tab}" echo "$rows"
+check_out "and its sys row" "^sys${tab}sys fx data${tab}" echo "$rows"
+check_out "a default-repository package loads its word row" "^user${tab}gx go${tab}" echo "$rows"
+check_eq "a word that is a core command is refused" "0" "$(grep -c "^user${tab}disk go${tab}$PK/wb" <<<"$rows")"
+check_out "and says why" "the word disk is also a core command" registry_refused wb
+check_eq "a package of an added repository may not own a word" "0" "$(grep -c "^user${tab}hx go${tab}" <<<"$rows")"
+check_out "and the refusal names the ext form" "a user row must be: ext wc <command>$" registry_refused wc
+echo capa-off > "$HS_CAPABILITIES_FILE"
 
 finish

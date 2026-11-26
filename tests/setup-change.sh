@@ -10,6 +10,7 @@ echo "-- hs sys setup wizard-done"
 out=$($S plan wizard-done 2>&1 || true)
 check_out "without a flag the plan is refused" "status.refused" echo "$out"
 check_out "and says the wizard is not open" "reason.The first-run wizard is not open" echo "$out"
+check_match "a closed wizard is refused with setup.not-open" $'code	setup.not-open' "$out"; python3 "$SCRIPTS/errors-doc-gen.py" codes | grep -qxF setup.not-open && pass "setup.not-open is in the catalogue" || fail "setup.not-open is not in the catalogue"
 printf '%s' '{"state":"done","user":"adminuser","done":1,"wizard":"open"}' > "$HS_FIRST_RUN_FILE"
 out=$($S plan wizard-done 2>&1); rc=$?
 check "an open wizard: the plan exits 0" test "$rc" = 0

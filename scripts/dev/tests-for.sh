@@ -2,7 +2,7 @@
 # Which tests does a change need? (CI, job `changes`; `scripts/dev/t changed` is the local cousin.)
 #
 #   scripts/dev/tests-for.sh <base-commit>     prints "all", or the test names (tests/<name>.sh) that mention a changed file, one line, space separated
-#                                              (the line is empty when no test mentions any changed file)
+#                                              (the profile tests are always in it)
 #   scripts/dev/tests-for.sh <base> [<head>]   head defaults to HEAD
 #   scripts/dev/tests-for.sh                   no base: "all"
 #
@@ -10,7 +10,7 @@
 # (scripts/foo-bar.sh -> every test that says `foo-bar`), and for capabilities/<x>/ and packages/<x>/ the name <x>. Files the whole suite
 # rests on select "all": scripts/lib/, tests/lib*.sh, tests/run-all.sh, config/, the workflows, this script. It is a guess made from names,
 # not from a call graph: a script that another script calls is not followed. That is why the full set runs in the merge queue and every
-# night on `develop`; a pull request gets the quick answer. Read-only: runs no test.
+# night on `develop`; a pull request gets the quick answer, plus the two profile tests (profile-core-only, profile-vps) always. Read-only: runs no test.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 base=${1:-}; head=${2:-HEAD}
@@ -44,4 +44,8 @@ names=$(
     [ -f "tests/$n.sh" ] && echo "$n"
   done
 )
+# the profiles prove the core does not depend on a capability again (docs/PLAN-registry.md "CI", hobnix/core#1073): every pull request runs them
+ALWAYS="profile-core-only profile-vps"
+names=$(printf '%s
+' $names $ALWAYS | sort -u)
 echo "$names" | tr "\n" " " | sed "s/ *$//"
