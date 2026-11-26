@@ -66,6 +66,12 @@ printf "[patch.'https://github.com/hobnix/core']\nhobnix-ext-sdk = { path = \"x\
 check_out "a [patch] of the SDK is refused" "binary.sdk-pin" rel
 printf '[package]\nname = "svc"\n[dependencies]\nsdk = { package = "hobnix-ext-sdk", version = "1" }\n' > "$B/extensions/svc/Cargo.toml"
 check_out "a renamed dependency is checked too" "binary.sdk-pin" rel
+for k in hobnix-pkg hobnix-pkg-command hobnix-pkg-service; do   # the crates of 0.14 (hobnix-ext-sdk is their deprecated re-export)
+  printf '[package]\nname = "svc"\n[dependencies]\n%s = { %s, tag = "v0.14.0" }\n' "$k" "$git_core" > "$B/extensions/svc/Cargo.toml"
+  check "$k by a release tag passes --release" $PKG repo-check --release "$B"
+  printf '[package]\nname = "svc"\n[dependencies]\n%s = { %s, branch = "develop" }\n' "$k" "$git_core" > "$B/extensions/svc/Cargo.toml"
+  check_out "$k by a branch is refused" "binary.sdk-pin" rel
+done
 base "$B" bin/svc ""
 check_out "a file that is there with an empty sha256 is refused" "binary.hash" rc "$B"
 base "$B" bin/none "$SUM"

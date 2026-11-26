@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# The Rust extension SDK (rust/hobnix-ext-sdk, issue #240): its two example extensions built with cargo and driven by the reference
+# The Rust package SDK (rust/hobnix-pkg, hobnix-pkg-command, hobnix-pkg-service; issues #240, #1262): its example extensions built with cargo and driven by the reference
 # runners of the protocols (scripts/lib/ext_proto.py for commands, ADR 0010; scripts/lib/ext_service.py for services, ADR 0011).
 # The API example (http client, integration listing, credential) runs against a local python server; the musl build only when the target is installed.
-# The SDK's own unit tests are `cargo test -p hobnix-ext-sdk` (CI runs them). Skipped (77) without cargo or python3, or off Linux.
+# The SDK's own unit tests are `cargo test -p hobnix-pkg -p hobnix-pkg-command -p hobnix-pkg-service -p hobnix-ext-sdk` (CI runs them).
+# Skipped (77) without cargo or python3, or off Linux.
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 command -v cargo >/dev/null || { echo "  skip  cargo missing"; exit 77; }
 command -v python3 >/dev/null || { echo "  skip  python3 missing"; exit 77; }
 [ "$(uname -s)" = Linux ] || { echo "  skip  needs Linux"; exit 77; }
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/rust/target}
-if ! (cd "$ROOT/rust" && cargo build --locked -q -p hobnix-ext-sdk --examples) > "$WORK/build.log" 2>&1; then
+if ! (cd "$ROOT/rust" && cargo build --locked -q -p hobnix-pkg-command -p hobnix-pkg-service --examples) > "$WORK/build.log" 2>&1; then
   # most likely no network for the crates, or a toolchain older than rust-toolchain.toml wants: not this test's business
   if grep -q -E "failed to (get|download)|Could not resolve|unable to update registry|network" "$WORK/build.log"; then echo "  skip  crates not available (offline)"; exit 77; fi
   fail "cargo build of the examples: $(tail -n 5 "$WORK/build.log" | tr '\n' ' ')"; finish; exit
@@ -65,7 +66,7 @@ check_out "an unknown integration is bad_request" '"code":"bad_request"' printf 
 echo "-- static musl build"
 # asked in rust/: the target belongs to the toolchain that rust-toolchain.toml names, not to rustup's default
 if (cd "$ROOT/rust" && rustup target list --installed 2>/dev/null) | grep -q x86_64-unknown-linux-musl; then
-  if (cd "$ROOT/rust" && cargo build --locked -q --release --target x86_64-unknown-linux-musl -p hobnix-ext-sdk --example apiprobe) > "$WORK/musl.log" 2>&1; then
+  if (cd "$ROOT/rust" && cargo build --locked -q --release --target x86_64-unknown-linux-musl -p hobnix-pkg-command --example apiprobe) > "$WORK/musl.log" 2>&1; then
     ok_file=$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/examples/apiprobe
     check_out "the musl build is statically linked" 'statically linked|static-pie linked' sh -c "file '$ok_file'"
   else fail "musl build: $(tail -n 5 "$WORK/musl.log" | tr '\n' ' ')"; fi

@@ -15,5 +15,5 @@ cargo_ok() {   # cargo_ok "what" args...: the last lines of the output on failur
 cargo_ok "cargo fmt --check" fmt --check
 cargo_ok "clippy, all targets and features, warnings are errors" clippy --locked --all-targets --all-features -- -D warnings
 cargo_ok "tests, all features" test --locked --all-features
-cargo_ok "tests of the SDK built alone" test --locked -p hobnix-ext-sdk
+cargo_ok "tests of the SDK built alone" test --locked -p hobnix-pkg -p hobnix-pkg-command -p hobnix-pkg-service -p hobnix-ext-sdk
 finish
