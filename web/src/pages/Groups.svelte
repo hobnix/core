@@ -54,7 +54,7 @@
   ];
 </script>
 
-<PageHeader title="Groups" crumb="Identity" sub="Who is in which group, and which shares a group is entered on.">
+<PageHeader title="Groups" sub="Who is in which group, and which shares a group is entered on.">
   {#snippet actions()}
     <Button icon="arrows-clockwise" busy={rowstate.pending('users', ['all', 'flush'])} busyLabel="Flushing…" tooltip={'Make the file server forget cached users and groups'} onclick={() => openPlan('users', ['all', 'flush'], 'Flush caches')}>Flush caches</Button>
     <Button variant="primary" tooltip={'Create a group of users'} onclick={() => openCreate(NewGroup, { existing: groups.map((g) => g.name) })}><i class="ph ph-plus"></i>New group</Button>

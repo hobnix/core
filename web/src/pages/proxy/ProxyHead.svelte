@@ -1,10 +1,11 @@
 <script>
-  // Page header. `summary` = the node header of the design (tile, name, online dot, meta line, health chip); otherwise crumb + title.
+  // Page header. `summary` = the node header of the design (tile, name, online dot, meta line, health chip); otherwise the breadcrumb + title.
   import { duration } from '../../format.js';
   import { ui, openPlan, jobRunning } from '../../ui.svelte.js';
   import { route } from '../../route.svelte.js';
   import { VPS_NODE } from '../../redirects.js';
   import Button from '../../ui/Button.svelte';
+  import PageTrail from '../../shell/PageTrail.svelte';
   // vps update / vps watch exist for the proxyserver node only (CHANGES["vps"]); another edge node is looked at, never changed from here
   const canAct = $derived(route.node === VPS_NODE);
   let { px, summary = false, title = '', sub = '' } = $props();
@@ -34,7 +35,7 @@
   </div>
 {:else}
   <div class="head">
-    <div><div class="crumb">{route.node || 'proxyserver'}</div><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="title">{title}</span>{#if sub}<span class="muted">{sub}</span>{/if}</div></div>
+    <div><PageTrail /><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="title">{title}</span>{#if sub}<span class="muted">{sub}</span>{/if}</div></div>
   </div>
 {/if}
 
@@ -44,7 +45,6 @@
   .name { font-size: 20px; font-weight: 500; }
   .state { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-neutral-400); }
   .muted { font-size: 12px; color: var(--color-neutral-500); }
-  .crumb { font-size: 11px; color: var(--color-neutral-500); }
   .title { font-size: 20px; font-weight: 500; }
   .chip { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 12px; border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--color-neutral-800); color: var(--color-neutral-300); }
 </style>

@@ -106,7 +106,7 @@
   const tipOf = (op, text) => (why(op) ? `${text}: ${why(op)}` : text);
 </script>
 
-<PageHeader title="Files" crumb="Storage" sub="Copy and move between disks and pools. Nothing runs from a click: every operation opens a plan first.">
+<PageHeader title="Files" sub="Copy and move between disks and pools. Nothing runs from a click: every operation opens a plan first.">
   {#snippet actions()}
     <Button icon="keyboard" tooltip="Show the keyboard shortcuts" keys="?" onclick={() => (fm.keys = true)}>Shortcuts</Button>
   {/snippet}

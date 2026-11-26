@@ -40,7 +40,7 @@
   const diskOf = (v) => v.kind === 'LUKS disk';
 </script>
 
-<PageHeader title="Encryption" crumb="Storage" sub="One passphrase unlocks every LUKS disk and encrypted pool. Locked is a normal state after a boot: the system disk is plain and always reachable over SSH." />
+<PageHeader title="Encryption" sub="One passphrase unlocks every LUKS disk and encrypted pool. Locked is a normal state after a boot: the system disk is plain and always reachable over SSH." />
 
 <Stack gap="4">
   <Card>

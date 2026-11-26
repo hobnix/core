@@ -6,7 +6,6 @@
   import { get } from '../api.js';
   import { live } from '../live.svelte.js';
   import { lang } from '../lang.svelte.js';
-  import { ui } from '../ui.svelte.js';
   import { tr } from '../i18n.js';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -61,7 +60,7 @@
 </script>
 
 <div class="page">
-  <PageHeader title="Events" crumb="{ui.host} / Operations" sub="What happened on this server, newest first." />
+  <PageHeader title="Events" sub="What happened on this server, newest first." />
 
   <PageState loading={!list.loaded} error={list.error?.message ?? ''} hasData={list.data != null} empty={false}>
     <Timeline {entries} {filters} bind:values {more} onmore={loadMore}

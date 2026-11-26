@@ -667,7 +667,7 @@ is empty. Not tested on hardware yet.
 
 ## Apps that are not healthy or have an update
 The weekly summary mentions an update of every app whose policy is `notify`; an app set to `pinned` is not mentioned. An update is not a
-health problem. An app that runs but fails its declared check shows as unhealthy on the Apps page. See and set the policy:
+health problem. An app that runs but fails its declared check shows as unhealthy in the app catalog. See and set the policy:
 
 ```bash
 hs apps policy <instance>

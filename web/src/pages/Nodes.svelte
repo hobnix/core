@@ -62,7 +62,7 @@
 
 {#each remote.filter((n) => n.key === 'ok') as n (n.name)}<NodeProbe name={n.name} onstate={report} />{/each}
 
-<PageHeader title="Nodes" crumb={ui.host} sub="The servers this one can look at. A remote server is only read: nothing here changes it.">
+<PageHeader title="Nodes" sub="The servers this one can look at. A remote server is only read: nothing here changes it.">
   {#snippet actions()}<Button need="admin" variant="primary" tooltip={'Add another server to this list'} onclick={() => openCreate(NodeAdd, { ondone: () => { /* the list is read again within 15 s */ } })}><i class="ph ph-plus"></i>Add a server</Button>{/snippet}
 </PageHeader>
 

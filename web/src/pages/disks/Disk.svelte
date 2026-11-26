@@ -77,7 +77,7 @@
   const tabs = objects.disk.tabs;
 </script>
 
-<ObjectPage crumb="Storage > Disks" title={name} chip={d ? m.poolText(d) : ''} state={d ? m.stateOf(d) : ''} stateLabel={d ? m.wordOf(d) : ''}
+<ObjectPage title={name} chip={d ? m.poolText(d) : ''} state={d ? m.stateOf(d) : ''} stateLabel={d ? m.wordOf(d) : ''}
             {tabs} tab={at?.tab ?? ''} onpick={(id) => go(diskPath(name, id))} {menu} {danger} {links} {jobs} need="admin"
             loading={!m.mon.loaded} notFound={m.mon.loaded && !d} notFoundTitle="No such disk" backTo={P.disks} backLabel="All disks"
             notFoundText={`No disk called “${name}” is connected. It may have been removed or renamed; the list shows every disk the server has seen, also the missing ones.`}>

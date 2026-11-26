@@ -60,7 +60,7 @@ set = { gatewayAcmeChallenge = "dns", gatewayAcmeDnsProvider = "cloudflare" }
 id = "auth"
 title = "Login"
 question = "Where is the login set?"
-text = "The login is set per service, not for the whole gateway: open a service under Instances, Services and choose its login there."
+text = "The login is set per service, not for the whole gateway: open a service under Network, Services and choose its login there."
 keys = []
 
 [[settings.steps]]

@@ -31,7 +31,7 @@ export function eventHref(e) {
   if (e.source === 'job') return `${P.system}/jobs`;
   if (e.source === 'disk') return '/storage/disks';
   if (e.source === 'storage') return e.subject ? `/storage/pools/${s}` : '/storage/pools';
-  if (e.source === 'ct') return '/instances';
+  if (e.source === 'ct') return P.appsGroup;
   return P.events;
 }
 

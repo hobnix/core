@@ -28,7 +28,7 @@
   const images = $derived(rows(lst).map((r) => ({ name: r[0], size: Number(r[1]), algo: r[2], hash: r[3], checked: r[4] === 'yes', source: r[5], added: r[6], used: r[7] && r[7] !== '-' ? r[7] : '' })));
 </script>
 
-<PageHeader title="ISO images" crumb="Instances" sub="Install images for virtual machines. A checksum is verified before an image can be used.">
+<PageHeader title="ISO images" sub="Install images for virtual machines. A checksum is verified before an image can be used.">
   {#snippet actions()}
     <Button need="admin" variant="primary" tooltip={'Add an image from a file on this server or from a URL'} busy={jobRunning('iso')} onclick={() => openCreate(IsoAdd)}><i class="ph ph-plus"></i>Add image</Button>
   {/snippet}

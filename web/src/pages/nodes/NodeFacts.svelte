@@ -16,12 +16,12 @@
   const st = poll(() => `/api/sys/node/status/${encodeURIComponent(node.name)}`, 30000);
   const d = $derived(st.data);
   const f = $derived(facts(d));
-  const which = $derived(route.path === P.backup ? 'backup' : route.path === P.instances ? 'instances' : 'storage');
+  const which = $derived(route.path === P.backup ? 'backup' : route.path === P.peerInstances ? 'instances' : 'storage');
   const title = $derived({ backup: 'Backup', instances: 'Instances', storage: 'Storage' }[which]);
   const empty = $derived(d != null && !f.locked && (which === 'storage' ? !f.pools.length : which === 'instances' ? !f.instances : !f.backup));
 </script>
 
-<PageHeader {title} crumb={node.name} sub="A summary from the status document of {node.name}, read only. Last answer: {d ? since(d.time) : 'never'}." />
+<PageHeader {title} sub="A summary from the status document of {node.name}, read only. Last answer: {d ? since(d.time) : 'never'}." />
 {#if f.locked}<Banner tone="warn" icon="lock">The storage on {node.name} is locked; its pools and instances are not available until it is unlocked there.</Banner>{/if}
 <PageState loading={!st.loaded} error={st.error?.message} hasData={d != null} {empty} emptyIcon="tray" emptyTitle="The document has nothing about this" emptyText="{node.name} does not report it (yet).">
   <div class="card pad">

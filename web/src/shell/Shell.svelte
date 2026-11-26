@@ -1,7 +1,7 @@
 <script>
   import { P, nodePath } from '../paths.js';
   import { route, setLocalNode, go } from '../route.svelte.js';
-  import { poll, rows, prefetch, refresh } from '../data.svelte.js';
+  import { poll, rows, prefetch, refresh, touch, clearPollCache, cacheSession } from '../data.svelte.js';
   import TopBar from './TopBar.svelte';
   import Tree from './Tree.svelte';
   import BottomPanel from './BottomPanel.svelte';
@@ -11,7 +11,8 @@
   import Toast from '../ui/Toast.svelte';
   import JobAsks from './JobAsks.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
-  import { readsFor } from '../readsfor.js';
+  import { readsFor, fieldReads } from '../readsfor.js';
+  import { lockGate } from '../lockgate.js';
   import { ui } from '../ui.svelte.js';
   import { canSee } from '../roles.js';
   import { pools, loadPools, poolOfRole } from '../pools.svelte.js';
@@ -52,23 +53,27 @@
   const users = poll(() => (locked || !admin ? '' : '/api/sys/users/list'), 60000);
   const groups = poll(() => (locked || !admin ? '' : '/api/sys/users/groups'), 60000);
   const vault = poll(() => (locked || !admin ? '' : '/api/sys/vault/list'), 60000, 'vault-list');
-  // Docker is on but something it needs is missing (the share apps, its mount): a dot on Docker, its children dimmed
+  // Docker is on but something it needs is missing (the share apps, its mount): a dot on Apps & VMs, the rows that need Docker dimmed
   const dockerOn = $derived(Array.isArray(ui.features.capabilities) && ui.features.capabilities.includes('docker'));
   const dockerHealth = poll(() => (locked || !dockerOn ? '' : '/api/sys/docker/health'), 30000);
 
-  // once the deck says the storage is open: read what the main pages show first, while the browser is idle (the answers land in poll()'s cache)
-  let prefetched = false;
-  $effect(() => {
-    if (!deck.loaded || locked || prefetched) return;
-    prefetched = true;
-    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them)
-    loadPools().then(() => {
-      const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
+  // each time the deck says the storage is open: read what the main pages show first, while the browser is idle (the answers land in poll()'s cache).
+  // A lock drops that cache, so the next unlock reads anew
+  const gate = lockGate(clearPollCache, () => {
+    // first, all at once: what the pickers of the dialogs list (who wants one of these while it runs joins it, api.js)
+    touch(fieldReads(ui.role, ui.features.capabilities));
+    // what the pages read first, one after the other while the browser is idle: the first click on any of them finds its data (the pools first: the data pool is one of them).
+    // loadPools(true): the pool store would else keep the rows from before a lock (the read of touch() is joined)
+    const asked = cacheSession();
+    loadPools(true).then(() => {
+      if (asked !== cacheSession()) return;   // locked or signed out meanwhile
+      const pages = [P.appsGroup, '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
         P.apps, P.services, '/storage/vault', '/storage/encryption', P.hardware, P.expiry];
-      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
+      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined, ui.features.capabilities)),
         '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });
+  $effect(() => { gate(!!deck.data, locked); });   // no answer yet = the lock state is not known
 
   // the proxyserver node: the VPS status document (404 = proxyStatusUrl not set, 502 = not reachable); it drives the dots of its tree rows
   const prox = poll('/api/proxy/status', 15000);
@@ -134,7 +139,7 @@
     const sl = rows(shares).filter((r) => r[1] !== 'other');
     if (sl.length) m['/storage/shares'] = { text: String(sl.length) };
     const cl = rows(cts);
-    if (cl.length) m['/instances'] = { text: `${cl.filter((r) => /^running$/i.test(r[2])).length}/${cl.length}` };
+    if (cl.length) m[P.appsGroup] = { text: `${cl.filter((r) => /^running$/i.test(r[2])).length}/${cl.length}` };
     if (rows(groups).length) m[P.groups] = { text: String(rows(groups).length) };
     if (rows(users).length) m[P.users] = { text: String(rows(users).length) };
     if (d) m['/storage/encryption'] = locked ? { text: 'locked', warn: true } : d.encryption && d.encryption !== 'none' ? { text: 'open' } : null;
@@ -146,7 +151,7 @@
       const h = Math.floor(Number(b[2]) / 3600);
       m[P.backup] = { text: h < 1 ? '< 1 h' : h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`, warn: b[1] !== 'ok' };
     }
-    if (dockerHealth.loaded && dockerOn) Object.assign(m, dockerTree(rows(dockerHealth), dockerChildren(tree)));
+    if (dockerHealth.loaded && dockerOn) for (const [p, v] of Object.entries(dockerTree(rows(dockerHealth), dockerChildren(tree)))) m[p] = { ...m[p], ...v };   // Apps & VMs keeps its count
     if (d?.problems > 0) m[P.health] = { text: String(d.problems), warn: true };
     // a remote node's rows are keyed "<node>:<inner path>"
     for (const [p, v] of Object.entries(treeMeta(proxState, prox.data))) m[`${VPS_NODE}:${p}`] = v;

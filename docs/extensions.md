@@ -126,7 +126,7 @@ the slot shows nothing, and the install dialog says "adds a card once X is on". 
 | --- | --- |
 | page | `[web.page]` with `title = "Sync"` and `group = "apps"` |
 | tab | `[[web.page.tabs]]` with `title = "Settings"` and its own blocks; `requires` hides it while the part is off |
-| action | `[[web.actions]]` with `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<package>", "sync"]`, `role = "app-manager"`, `main = true`: a button in the page header and on the Apps > Installed row (one main action, the others under More); the plan may only change the package's own area |
+| action | `[[web.actions]]` with `id = "sync"`, `label = "Start sync"`, `plan = ["ext/<package>", "sync"]`, `role = "app-manager"`, `main = true`: a button in the page header and on the row of the app catalog (one main action, the others under More); the plan may only change the package's own area |
 | health | `[[health]]` with `id = "stale"` and `read = "checks"`: the read (kind `tsv`, no arguments) prints `level<TAB>message` rows with level `ok`, `info`, `warn` or `bad`; a `warn` or `bad` row shows in System > Health with the package named, and can be acknowledged like any problem. `info` (a PC that is simply switched off) and `ok` are never a problem: they are not counted and nothing is sent; they show in `python3 scripts/lib/pkg_slots.py list` only |
 | state | `[web.page.state]` with `read`, `dot` and `line`: one dot and one line on the card |
 

@@ -105,7 +105,7 @@ hs iso
 hs iso remove <name.iso>
 ```
 
-Removing asks you to type the name, and is refused while a VM has the image attached. In the web interface the same is under Instances >
+Removing asks you to type the name, and is refused while a VM has the image attached. In the web interface the same is under Apps & VMs >
 ISO images. The folder is the setting `isoDir` (default `/var/lib/hs/iso`); put it on a share or a bulk disk when you keep many images:
 
 ```bash
@@ -116,7 +116,7 @@ Images already in the old folder are not moved. Do not point `isoDir` at a folde
 
 ### Create in the web interface
 
-Instances > Create is one guided flow for every kind (container, Docker, virtual machine). Its steps are: name and kind, resources (memory,
+**Create** on the Apps & VMs page is one guided flow for every kind (container, Docker, virtual machine). Its steps are: name and kind, resources (memory,
 CPU, disk), where the disk lives, the install image (virtual machines only), and network and storage. The panel on the right shows the plan
 after every change, with the exact commands, and Start is possible as soon as the plan is allowed. Not tested on hardware yet.
 
@@ -213,7 +213,7 @@ hs ct <name> autostart off
 
 On starts the instance at every boot. Off removes the flag instead of writing `false`: Incus then restores the state the instance had before
 the shutdown, so a running one comes back and a stopped one stays stopped. To stop an instance and keep it off at boot, use the Stop plan on the
-Instances page ("also keep it off at boot"). After `hs unlock` the instances with the flag on start. Not tested on hardware yet (the reboot).
+Apps & VMs page ("also keep it off at boot"). After `hs unlock` the instances with the flag on start. Not tested on hardware yet (the reboot).
 
 ## Add storage
 
@@ -320,7 +320,7 @@ tell you so):
 hs recipe <name> --check
 ```
 
-To see or change what happens when an app has an update (`notify` mentions an offered update in the weekly summary, `pinned` never offers one; nothing is updated by itself). The Apps page shows the version each app runs next to its package version. Not tested on hardware yet.
+To see or change what happens when an app has an update (`notify` mentions an offered update in the weekly summary, `pinned` never offers one; nothing is updated by itself). The app catalog shows the version each app runs next to its package version. Not tested on hardware yet.
 
 ```bash
 hs apps policy <instance>
@@ -345,7 +345,7 @@ To run a recipe a second time under a container name of its own, for a second in
 hs recipe <name> --name <container>
 ```
 
-In the web interface, **Apps** has a button per recipe that opens a step wizard: one page per group of questions, then the container name, then a
+In the web interface, the **App catalog** has a button per recipe that opens a step wizard: one page per group of questions, then the container name, then a
 review with the plan the server would run. Back and Next move between pages; Start is only on the review. A password you type goes into the
 container only, never into an argument or the log, and the review shows it as "set". A recipe that needs a person at a terminal shows the command
 to run instead. Recipe authors group questions with `# step: ID|label` and `# help: ID|text` header lines and a 7th field on an `# ask:` line
@@ -355,7 +355,7 @@ A recipe ends with a short text that holds only the clicks that cannot wait (cre
 and how to use it is in its own guide: open the **Docs** page of the web interface and look in the group **Apps**. A guide is shown
 there while its package is installed.
 
-The web interface runs recipes too: **Instances > Apps** shows the list with a form for the questions. A recipe that needs a person at a
+The web interface runs recipes too: **Apps & VMs > App catalog** shows the list with a form for the questions. A recipe that needs a person at a
 terminal (one that asks you to type a password into a setup) says so and runs only from the command line.
 
 A recipe that has a web page registers it as a service. While a reverse proxy is set (`reverseProxy`), it asks two more questions for
@@ -381,8 +381,8 @@ hs services plan
 
 The plan shows what the proxy will do. A proxy that cannot render a key (Zoraxy: headers and login) gets a `manual` row; set those by hand. With `reverseProxy = traefik-public` all keys are rendered (see the guide of the gateway proxy).
 
-## Install, check and remove an app (the Apps page)
-The Apps page installs and removes recipes in one flow. The commands behind it are `hs sys apps ...` (machine-readable, the web interface
+## Install, check and remove an app (the app catalog)
+The app catalog installs and removes recipes in one flow. The commands behind it are `hs sys apps ...` (machine-readable, the web interface
 calls them); you do not type them. Not tested on hardware yet.
 
 ### Install
@@ -421,7 +421,7 @@ hs sys apps list
 An app without a declared health check counts as healthy while its container runs.
 
 ### App version and policy
-The Apps page shows the version of the app itself next to the package version and says when the release offers a newer one. The policy of an
+The app catalog shows the version of the app itself next to the package version and says when the release offers a newer one. The policy of an
 app decides what happens then. `notify` (the default) mentions it in the weekly summary; `pinned` never offers it. Nothing updates by itself.
 
 ```bash
@@ -541,27 +541,27 @@ python3 -I <core>/scripts/pkg.py repo-check .
 
 The repository's CONTRIBUTING.md has the rest: versions, branches, releases. Not tested on hardware yet.
 
-## Apps in Docker (the Docker page)
+## Apps in Docker
 
 When the capability `docker` is on, the locked container `docker` holds apps that are
-Compose projects. Open them in the web interface under **Instances > Docker**:
+Compose projects. In the web interface they are on the **Apps & VMs** page, under the
+row `docker` (filter **Provider: Docker**):
 
-- The list shows every app with its state, how many of its containers are running,
-  published ports, images and whether it is managed by the web interface (`web`),
-  by a recipe (`recipe`) or created by hand (`other`).
-- Start, stop or restart an app from the actions column or from the drawer that
-  opens when you click a row.
+- Every app shows its state, how many of its containers are running, its address and
+  published ports, and the recipe that set it up. Its own page also shows the images and
+  whether it is managed by the web interface (`web`), by a recipe (`recipe`) or created
+  by hand (`other`).
+- Start, stop or restart an app from its row or its menu, or from its page.
 - **Pull** fetches newer images and recreates the containers; it runs as a
   background job because it can take a while.
-- The **Logs** tab shows the Compose log of the selected app. Log output may hold
+- The **Logs** tab of the app page shows its Compose log. Log output may hold
   secrets, so it is never cached by the web interface.
-- On the **Instances** page the locked `docker` row shows how many apps it holds
-  and can be expanded to open a specific app directly.
+- The locked `docker` row shows how many apps it holds and can be closed and opened.
 
 ### Edit an app
 
-Click **Open editor** in the Compose tab of an app, or **New app**, to open the editor on its
-own page (`/instances/docker/app/<app>`, `/instances/docker/new`). The compose file is on the
+Open the **Compose** tab of an app (`/apps/docker-app/<app>/compose`) to edit it, or press
+**New Docker app** to open the editor for a new one (`/apps/docker/new`). The compose file is on the
 left and the real text of the `.env` file on the right; on a phone they are stacked. The page
 is for administrators only, so the env file is shown as it is and fully editable. Values of
 keys whose name contains PASS, TOKEN, SECRET or KEY are hidden until you press **show** on
@@ -644,7 +644,7 @@ contain passwords and keys of apps.
 
 Not tested on hardware yet. The flag `--hash` of `docker compose config` is unverified on Compose 2.26.1; without it every app shows `-`.
 
-### Private registries (Instances > Docker > Registries)
+### Private registries (Apps & VMs > Docker registries)
 
 An image from a private registry (for example `ghcr.io/you/app`) needs a login. Add it
 on **Registries** (or `hs docker registry add ghcr.io --user <user>`; the token is asked
@@ -731,7 +731,7 @@ Not tested on hardware yet.
 
 ### Create an app with the guided wizard
 
-On the Docker page press **Guided** (or **Guided** on the New app page). The wizard asks one question per screen, in the same frame as the
+On the Apps & VMs page choose **Guided Docker app** in the menu (or press **Guided** on the New app page). The wizard asks one question per screen, in the same frame as the
 other wizards: the image and the app name, the ports, the folders (a share, or a folder next to the compose file), and the settings
 (variables). The last screen shows the `docker-compose.yml` and the `.env` it wrote, as plain text, and **Open in editor** opens the
 usual New app editor on exactly that text. The wizard adds nothing you did not answer: a published port is one line under `ports:`, a
