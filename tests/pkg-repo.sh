@@ -110,7 +110,7 @@ check "and the installed copy is untouched" grep -q '^version = "1[.]3[.]5"$' "$
 
 echo "-- requires_core_max: the highest API level a package works with (#1265)"
 LVL=$(cat "$SCRIPTS/lib/api-level")
-cd "$R"; release v1.4.3 1.4.3 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1" "requires_core_max = 1"; cd "$ROOT"; $PKG fetch test >/dev/null
+cd "$R" || exit 1; release v1.4.3 1.4.3 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1" "requires_core_max = 1"; cd "$ROOT" || exit 1; $PKG fetch test >/dev/null
 check_out "update of a release whose range ends below this core is refused from the index" "demo does not support this core yet: it works up to core API level 1, this server has $LVL.*the index of test" bash -c "$PKG update demo --yes 2>&1; true"
 check_out "with its error code" "^code${tab}pkg[.]core-too-new$" bash -c "$PKG update demo --yes 2>&1; true"
 check "and the installed copy is untouched" grep -q '^version = "1[.]3[.]5"$' "$HS_STATE_DIR/packages/installed.toml"
@@ -121,12 +121,12 @@ check_out "the marketplace row waits" "^demo${tab}recipe${tab}test${tab}1[.]4[.]
 cp -r "$HS_STATE_DIR" "$WORK/fresh"; chmod -R u+w "$WORK/fresh/packages/current"; rm -rf "$WORK/fresh/packages/current/demo"; : > "$WORK/fresh/packages/installed.toml"
 check_out "install of it is refused" "demo does not support this core yet" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
 check "and nothing is installed" test ! -e "$WORK/fresh/packages/current/demo"
-cd "$R"; release v1.4.4 1.4.4 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1"; cd "$ROOT"; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+cd "$R" || exit 1; release v1.4.4 1.4.4 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1"; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
 check_out "package.toml decides too when the index has no upper bound" "does not support this core yet.*(package.toml)" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
 check "and the refused copy is gone" bash -c "! ls -A '$WORK/fresh/packages/current' | grep -q demo"
-cd "$R"; release v1.4.5 1.4.5 "$WORK/good" ">=1" recipes/demo 'requires_core_max = "12"' 'requires_core_max = "12"'; cd "$ROOT"; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+cd "$R" || exit 1; release v1.4.5 1.4.5 "$WORK/good" ">=1" recipes/demo 'requires_core_max = "12"' 'requires_core_max = "12"'; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
 check_out "a malformed upper bound is refused" "^code${tab}pkg[.]core-range$" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
-cd "$R"; release v1.4.6 1.4.6 "$WORK/good" ">=1" recipes/demo "requires_core_max = $LVL" "requires_core_max = $LVL"; cd "$ROOT"; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+cd "$R" || exit 1; release v1.4.6 1.4.6 "$WORK/good" ">=1" recipes/demo "requires_core_max = $LVL" "requires_core_max = $LVL"; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
 check_out "a range that takes this core installs" "demo 1[.]4[.]6 from test" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1"
 check_eq "and is not reported as beyond its range" "" "$(HS_STATE_DIR=$WORK/fresh $PKG core-beyond)"
 chmod u+w "$WORK/fresh/packages/current/demo" "$WORK/fresh/packages/current/demo/package.toml"
