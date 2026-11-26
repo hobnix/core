@@ -326,19 +326,19 @@ build_args() {
 # rest is refused, never dropped (#1345: `stop --dry-run` really stopped the instance). --foreground on a long row is honoured: it runs here.
 extra_guard() {   # extra_guard <typed after the words...>
   case "$row_args" in *"{rest}"*) return 0 ;; *"{"*) ;; *) return 0 ;; esac
-  local x seen=" "   # an option with a value counts once: build_args passes the first, a second would be dropped
+  local x taken=" "   # an option with a value counts once: build_args passes the first, a second would be dropped
   while [ $# -gt 0 ]; do
     x=$1; shift
     case ",$row_flags,=$x" in *,long,*"=--foreground") continue ;; esac
-    if [[ $x == --* && $x != *[[:space:]{}=]* ]]; then
+    if [[ $x == --* && $x != *[[:space:]]* && $x != *[{}=]* ]]; then
       case " $row_args " in
         *" {?$x} "*) continue ;;
-        *" {?$x=} "*) if [ $# -gt 0 ] && [[ $seen != *" $x "* ]]; then seen+="$x "; shift; continue; fi ;;
+        *" {?$x=} "*) if [ $# -gt 0 ] && [[ $taken != *" $x "* ]]; then taken+="$x "; shift; continue; fi ;;
       esac
     fi
     . "$here/ui.sh"
-    warn "$(t "'hs %s' does not take '%s'. Nothing was run." "$typed" "$x")" >&2
-    next_step "hs help $typed" >&2
+    warn "$(t "'hs %s' does not take '%s'. Nothing was run." "${typed[*]}" "$x")" >&2
+    next_step "hs help ${typed[*]}" >&2
     exit 1
   done
 }
