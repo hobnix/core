@@ -6,7 +6,7 @@ on:
   # A push to a feature branch runs nothing: its pull request does.
   push:
     tags: ['v*']
-    branches: [develop, '0.2', '0.[3-9]', '[1-9].[0-9]*']
+    branches: [develop, '0.2', '0.[3-9]', '0.[1-9][0-9]', '[1-9].[0-9]*']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
