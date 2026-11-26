@@ -165,7 +165,83 @@ check_out "a start row does not pass on a refused plan row" "sys ext two start a
 check_out "a plan twin of the wrong kind does not count" "sys ext two start a${tab}a start row needs its plan row" \
   bash -c "HS_PACKAGES_DIR='$D' bash -c '. $SCRIPTS/lib/registry-load.sh; registry_refused two'"
 
+echo "-- the cost of the command list grows with the packages, not with their square (hobnix/core#1320)"
+# registry_rows runs on every hs call. Counted, not timed: the external programs and the subshells of one call.
+SHIM=$WORK/shim; mkdir -p "$SHIM"
+for x in grep awk sort tr paste cut mktemp rm dirname basename sed cat head uniq; do
+  printf '#!/bin/sh\necho %s >> "$COUNT_LOG"\nexec "%s" "$@"\n' "$x" "$(command -v "$x")" > "$SHIM/$x"; chmod +x "$SHIM/$x"
+done
+printf 'name = "official"\n' > "$WORK/official.toml"
+crowd() {   # crowd <folder> <packages>: half in-tree folders, half default-repository packages; each owns two words, has a plan and a start row
+  local i n d=$1
+  mkdir -p "$d/pk" "$d/state/packages" "$d/etc"; : > "$d/state/packages/installed.toml"; : > "$d/on"
+  for ((i = 1; i <= $2; i++)); do
+    n=crowd$i; mkdir -p "$d/pk/$n"
+    if ((i % 2)); then printf 'name = "%s"\nwords = ["%sa", "%sb"]\n' "$n" "$n" "$n" > "$d/pk/$n/capability.toml"
+    else
+      printf 'name = "%s"\nkind = "capability"\nwords = ["%sa", "%sb"]\n' "$n" "$n" "$n" > "$d/pk/$n/package.toml"
+      printf '[package.%s]\nrepo = "official"\n' "$n" >> "$d/state/packages/installed.toml"
+    fi
+    { row sys "sys ${n}a plan x" '@/x.sh'; row sys "sys ${n}a start x" '@/x.sh'; row user "${n}b go" '@/x.sh'; } > "$d/pk/$n/commands.tsv"
+    echo "$n" >> "$d/on"
+  done
+}
+crowded() {   # crowded <folder> <command...>: run it against the fixtures of crowd
+  local d=$1; shift
+  HS_PACKAGES_DIR=$d/pk HS_STATE_DIR=$d/state HS_CAPABILITIES_FILE=$d/on HS_ETC_DIR=$d/etc HS_PACKAGE_REPOS_FILE=$WORK/official.toml "$@"
+}
+for k in 4 8 16; do
+  crowd "$WORK/crowd$k" "$k"
+  : > "$WORK/crowd$k/ext.log"
+  COUNT_LOG=$WORK/crowd$k/ext.log crowded "$WORK/crowd$k" bash -c '. "$1/lib/registry-load.sh"; : > "$COUNT_LOG"; PATH=$2:$PATH; hash -r; registry_rows > "$3"' _ "$SCRIPTS" "$SHIM" "$WORK/crowd$k/rows"
+  : > "$WORK/crowd$k/sub.log"
+  crowded "$WORK/crowd$k" bash -c '. "$1/lib/registry-load.sh"; set -T; trap "echo \$BASHPID >> \"$2\"" DEBUG; registry_rows > /dev/null' _ "$SCRIPTS" "$WORK/crowd$k/sub.log"
+  eval "ext$k=$(wc -l < "$WORK/crowd$k/ext.log" | tr -d ' ') sub$k=$(sort -u "$WORK/crowd$k/sub.log" | wc -l | tr -d ' ')"
+  check_eq "$k packages: every row is loaded" "$((k * 3))" "$(grep -c "$tab.*$WORK/crowd$k/pk/crowd" "$WORK/crowd$k/rows")"
+done
+# shellcheck disable=SC2154   # set by the eval above
+{
+  echo "   external programs: $ext4 $ext8 $ext16, shells: $sub4 $sub8 $sub16 (4, 8, 16 packages)"
+  check "the shim counts" test "$ext4" -gt 4
+  check "external programs stay under 10 per package" test "$ext16" -le $((10 + 16 * 10))
+  check "shells stay under 12 per package" test "$sub16" -le $((20 + 16 * 12))
+  check "external programs grow linearly" test $((ext16 - ext8)) -le $((2 * (ext8 - ext4) + 4))
+  check "shells grow linearly" test $((sub16 - sub8)) -le $((2 * (sub8 - sub4) + 6))
+}
+
+echo "-- nothing of one call is kept for the next (a shell that installs or stages packages)"
+crowd "$WORK/live" 2
+cat > "$WORK/live.sh" <<'EOF'
+. "$1/lib/registry-load.sh"
+w=$2
+has() { registry_rows | grep -qF "$1"; }
+has 'sys crowd1a plan x' && ! has 'newword go' || exit 10
+# a package that appears is seen
+mkdir -p "$w/pk/late"; printf 'name = "late"\nwords = ["newword"]\n' > "$w/pk/late/capability.toml"
+printf 'user\tnewword go\t@/x.sh\t-\th\th\n' > "$w/pk/late/commands.tsv"; echo late >> "$w/on"
+has 'newword go' || exit 11
+# and so is a word it takes from another one
+printf 'name = "late"\nwords = ["newword", "crowd1a"]\n' > "$w/pk/late/capability.toml"
+! has 'sys crowd1a plan x' || exit 12
+rm -r "$w/pk/late"
+has 'sys crowd1a plan x' || exit 13
+# the installed repository decides again
+printf '[package.crowd2]\nrepo = "elsewhere"\n' > "$w/state/packages/installed.toml"
+! has 'crowd2b go' || exit 14
+HS_STAGE_PKG=crowd2 HS_STAGE_REPO=official has 'crowd2b go' || exit 15
+! has 'crowd2b go' || exit 16
+HS_PACKAGES_DIR=$w/none; ! has 'crowd1b go' || exit 17
+HS_PACKAGES_DIR=$w/pk; has 'crowd1b go' || exit 18
+HS_REGISTRY=$w/none.tsv; ! has 'crowd1b go' || exit 19
+EOF
+check "each call reads the packages again" crowded "$WORK/live" bash "$WORK/live.sh" "$SCRIPTS" "$WORK/live"
+
 echo "-- the check itself breaking is a refusal, not a pass"
+mkdir -p "$WORK/broken"; printf '#!/bin/sh\nexit 2\n' > "$WORK/broken/awk"; chmod +x "$WORK/broken/awk"
+for call in '_ext_filter crowd1 "$3" 0' 'registry_rows_of crowd1' 'ext_package_names' 'registry_refused'; do
+  check "a failing awk fails ${call%% *}, it is not an empty list" \
+    crowded "$WORK/live" bash -c '. "$1/lib/registry-load.sh"; PATH=$2:$PATH; hash -r; ! eval "$4" >/dev/null 2>&1' _ "$SCRIPTS" "$WORK/broken" "$WORK/live/pk/crowd1" "$call"
+done
 mkdir -p "$D/three/x"
 printf 'name = "x"\nkind = "recipe"\n' > "$D/three/x/package.toml"
 row user 'ext x go' 'rust:evil' > "$D/three/x/commands.tsv"
