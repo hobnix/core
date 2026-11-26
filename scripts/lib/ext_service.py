@@ -17,12 +17,13 @@ service (shutdown message, SIGTERM to the process group, SIGKILL). Restarting af
      DIR/<N>.json and records a failed run. The fifth failure within 10 minutes (the unit's StartLimitBurst, ADR 0011 rule 2) emits the
      core event ext.service-failed ONCE (systemd then refuses the sixth start). Events come from the event log (state.db) after the cursor
      file CURSOR_DIR/<N> (decision D12); `emit` becomes an event (50 a minute, the 51st is dropped with a warning); `snapshot` is written to
-     SNAP_DIR/<N>/<topic>.json, which the live collector serves as the live topic ext-<N>-<topic>. Exit: 0 stopped on request, 1 failed, 75 never ready.
+     SNAP_DIR/<N>/<topic>.json, which the live collector serves as the live topic ext-<N>-<topic>. When the integration rows change
+     while it runs (ext_watch.py), the process is stopped and started again in the same bridge with a new `init`. Exit: 0 stopped on request, 1 failed, 75 never ready.
   ext_service.py has-service DIR      exit 0 when the package has a [service] table
   ext_service.py status --name N --state-dir DIR [--active yes|no] [--stopped yes|no]    prints state, reason, since (TAB, `-` when empty)
   ext_service.py reset --name N --state-dir DIR    forget the state and the failures (hs ext start)
   Test knobs: HS_NOW (the clock), HS_EXT_EMIT (a program called instead of `hs event emit`, same arguments), HS_STATE_DIR (the state root,
-  default LIB_DIR), HS_STATE_DB (the event log).
+  default LIB_DIR), HS_STATE_DB (the event log), HS_EXT_INCUS_EVENTS (the event stream of ext_watch.py), HS_EXT_LISTING_CMD (listing_rows).
 
 Schema of the messages: docs/api/ext-service-v1.schema.json.
 """
@@ -34,6 +35,7 @@ import math
 import os
 import queue
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -53,6 +55,8 @@ EMIT_LIMIT = 50                 # emits a minute per service
 EMIT_WINDOW = 60.0
 MAX_LINE = 1 << 20
 MAX_SNAPSHOT = 256 << 10
+MAX_LISTING = 1 << 18           # characters of an integration listing that are read
+LISTING_TIMEOUT = 30            # seconds for one listing while the service runs
 WINDOW = 100                    # events sent but not yet acknowledged, at most
 KIND = re.compile(r"^pkg\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 STATES = ("starting", "running", "degraded", "stopping", "stopped", "failed")
@@ -734,14 +738,40 @@ def integration_rows(text, perms):
     return out
 
 
+def listing_rows(name, perms):
+    """The rows of `init.integrations` as they are now, built like `hs ext svc-run` builds them at the start (pkg.sh --integrations for each
+    declared integration); None when one listing fails: then nothing is known. The listing stays in a pipe (never argv or environment).
+    Test knob HS_EXT_LISTING_CMD: a command line instead of pkg.sh, the integration name is appended."""
+    knob = os.environ.get("HS_EXT_LISTING_CMD")
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pkg.sh")
+    base = shlex.split(knob) if knob else ["bash", script, "--integrations"]
+    texts = []
+    for p in perms or []:
+        if not p.startswith("integration:"):
+            continue
+        try:
+            r = subprocess.run(base + [p[len("integration:"):]], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               timeout=LISTING_TIMEOUT, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.returncode != 0:
+            return None
+        texts.append(r.stdout.decode("utf-8", "replace"))
+    return integration_rows("\n".join(texts)[:MAX_LISTING], perms)
+
+
 def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
     table = service_table(pkgdir)
     if not table or not isinstance(table.get("exec"), str):
         print(f"ext_service.py: {name} has no [service] table with exec", file=sys.stderr)
         return 2
-    stop = threading.Event()
-    for s in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(s, lambda *_: stop.set())
+    term, halt = threading.Event(), threading.Event()    # term: stop the bridge; halt: stop the service process (also for new integration rows)
+
+    def on_signal(*_):
+        term.set()      # before halt: the loop below clears halt and then looks at term
+        halt.set()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, on_signal)
 
     st = _load_lib("ext_state")
 
@@ -761,40 +791,69 @@ def svc_run(name, pkgdir, state_dir, creds=(), integrations_text=""):
     subscribe = table.get("subscribe", [])
     if subscribe and not os.path.exists(cursor_path(name)):
         write_cursor(cursor_path(name), db_latest())
-    sweep_creds(name)
-    prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
-    if bad:     # fail closed: a service whose confinement cannot be set up does not run
-        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
-        drop_creds(name)    # never a copy left by a refused start
-        record_failure(state_dir, name, "confine_failed", bad)
-        return 69
-    stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
-    # only now, after the permissions passed and the old unit is stopped: the one-time move of the state folder (a refused start moves nothing)
-    moved, bad = st.prepare(name)
-    if bad:     # fail closed: with two state folders or a failed move the service does not run, and nothing is merged or deleted
-        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
-        drop_creds(name)
-        on_state("failed", bad)
-        record_failure(state_dir, name, bad.split(":")[0], bad)
-        return 69
-    if moved == "moved":
-        old, pub = st._paths(name)[:2]
-        print(f"ext_service.py: moved the state of {name} from {old} to {pub}", file=sys.stderr, flush=True)
-    bad = st.repair_owner(name)[1]    # files a root command left behind; a problem is only said
-    if bad:
-        print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+    perms = declared_perms(pkgdir)
+    rows = integration_rows(integrations_text, perms)
+    handler = make_handler(name, perms=perms, pkgdir=pkgdir)    # one for all rounds: new rows do not reset the emit limit
+    pending, lock = [], threading.Lock()
+
+    def on_change(new):     # called by the watcher thread
+        with lock:
+            pending[:] = [new]
+            halt.set()
+    watch, first = None, True
     try:
-        res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
-                        float(table.get("health_interval", 30)), 3, 10, stop, on_state, make_handler(name, perms=declared_perms(pkgdir), pkgdir=pkgdir),
-                        integrations=integration_rows(integrations_text, declared_perms(pkgdir)))
+        while True:    # one round per set of integration rows: a restart in the same unit, systemd counts no start (#1328)
+            sweep_creds(name)
+            prog, bad = confined_program(name, pkgdir, program_of(pkgdir, table["exec"]), creds)
+            if bad:     # fail closed: a service whose confinement cannot be set up does not run
+                print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+                drop_creds(name)    # never a copy left by a refused start
+                record_failure(state_dir, name, "confine_failed", bad)
+                return 69
+            stop_unit(name)     # one that outlived an earlier bridge would collide with the new unit name
+            if first:
+                first = False
+                # only now, after the permissions passed and the old unit is stopped: the one-time move of the state folder (a refused start moves nothing)
+                moved, bad = st.prepare(name)
+                if bad:     # fail closed: with two state folders or a failed move the service does not run, and nothing is merged or deleted
+                    print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+                    drop_creds(name)
+                    on_state("failed", bad)
+                    record_failure(state_dir, name, bad.split(":")[0], bad)
+                    return 69
+                if moved == "moved":
+                    old, pub = st._paths(name)[:2]
+                    print(f"ext_service.py: moved the state of {name} from {old} to {pub}", file=sys.stderr, flush=True)
+                bad = st.repair_owner(name)[1]    # files a root command left behind; a problem is only said
+                if bad:
+                    print(f"ext_service.py: {name}: {bad}", file=sys.stderr)
+                pi, ew = _load_lib("pkg_integrations"), _load_lib("ext_watch")
+                services = os.environ.get("HS_SERVICES_DIR") or os.path.join(os.environ.get("HS_STATE_DIR") or LIB_DIR, "services.d")
+                watched = ew.watched_instances(rows, services, pi)
+                if watched:     # without a provider instance there is no extra process
+                    watch = ew.IntegrationWatch(watched, rows, lambda: listing_rows(name, perms), on_change, pi,
+                                                log=lambda text: print(f"ext_service.py: {name}: {text}", file=sys.stderr, flush=True))
+                    watch.start()
+            try:
+                res = supervise(prog, name, subscribe, db_events() if subscribe else None, cursor_path(name), 30,
+                                float(table.get("health_interval", 30)), 3, 10, halt, on_state, handler, integrations=rows)
+            finally:
+                stop_unit(name)
+                drop_creds(name)
+                link_state()    # also after a start that failed behind systemd's folder: else a root tool could make a second /var/lib/hs/<name>
+            if res["state"] == "failed":
+                record_failure(state_dir, name, res["code"], res["reason"])
+                return 75 if res["code"] == "start_timeout" else 1
+            with lock:
+                new = pending.pop() if pending else None
+                halt.clear()
+            if term.is_set() or new is None:    # looked at after the clear: a signal in between is not lost
+                return 0
+            rows = new
+            print(f"ext_service.py: {name}: integration rows changed, the service restarts", file=sys.stderr, flush=True)
     finally:
-        stop_unit(name)
-        drop_creds(name)
-        link_state()    # also after a start that failed behind systemd's folder: else a root tool could make a second /var/lib/hs/<name>
-    if res["state"] == "failed":
-        record_failure(state_dir, name, res["code"], res["reason"])
-        return 75 if res["code"] == "start_timeout" else 1
-    return 0
+        if watch:
+            watch.stop()
 
 
 def status(name, state_dir, active, stopped):
@@ -865,7 +924,7 @@ def main_svc(argv):
         if a.integrations_file:
             try:
                 with open(a.integrations_file, encoding="utf-8", errors="replace") as fh:
-                    text = fh.read(1 << 18)
+                    text = fh.read(MAX_LISTING)
             except OSError:
                 print("ext_service.py: the integration listing could not be read: the service gets no integrations", file=sys.stderr)
             try:
