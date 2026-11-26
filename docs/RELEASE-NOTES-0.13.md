@@ -21,8 +21,35 @@ check on a server; an unticked box is postponed and never blocks the release. Wh
 
 ## New in v0.13.0-beta.2
 
-Web interface only (design: [PLAN-workloads](PLAN-workloads.md)). Seen only in the demo in a browser, and not every page. None of it has run on a
-real server. Not tested on hardware yet.
+### Less CPU use on an idle server
+
+Beta.1 kept a server busy with nobody using it: about 6.6 of 8 cores were busy on the server where it was seen. The effect of these fixes on the
+whole server has not been measured yet. Not tested on hardware yet.
+
+- **Every `hs` command starts much faster.** Beta.1 built the command list with hundreds of programs on every call. Measured with the new code on
+  a real server with 667 commands, without installing it: 0.12 CPU seconds instead of 2.79 for this one step
+  ([#1331](https://github.com/hobnix/core/pull/1331)).
+- **Status that only a page shows is read when a page is open.** With no page open it is read when something changes, and otherwise every 5 to
+  10 minutes. A page that you open can show a value that old for a moment. Reads that can send an event or a notification keep their timing, and
+  so does the health check. A read that starts to fail with no page open is noticed up to about 10 minutes later, so a warning about it can miss
+  one health check.
+- **A client with an API token** does not count as an open page: its answers can be about 10 minutes old. Add `?fresh=1` for a new read.
+- The web server no longer reads in advance with nobody there, and the display status is read every 60 seconds instead of every 20.
+- Live reads of packages are read on demand too. No package of the official or community repository declares one today.
+
+### Apps that talk to each other
+
+- **A service such as Media Hub gets the real address of an app** instead of `{host}`, so it can reach recipe apps
+  ([#1327](https://github.com/hobnix/core/pull/1327)).
+- **It follows the app:** when an app stops, restarts or gets another address, or has none yet at boot, the service restarts with the new rows.
+  A stopped app can keep its old address for about 12 seconds. A change that Incus does not report is found within 30 minutes, later when a check
+  fails; a failed check changes nothing. The address is what the app's container reports about itself
+  ([#1344](https://github.com/hobnix/core/pull/1344)).
+
+### Web interface
+
+Design: [PLAN-workloads](PLAN-workloads.md). Seen only in the demo in a browser, and not every page. None of it has run on a real server. Not
+tested on hardware yet.
 
 - **Apps & VMs** is one list of containers, virtual machines and Docker apps. It replaces the pages Instances and Docker. It has the columns
   Provider (Incus, Docker) and Type (Container, Virtual machine), filters for both and a search. The system container `docker` holds the Docker apps
