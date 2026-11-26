@@ -510,6 +510,7 @@ class Groups(unittest.TestCase):
         self.assertEqual(self.set_of(c), want)
         self.assertTrue(c.soft == set())
         g = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        g.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         g.refresh("@instances")
         self.assertLess(len(self.set_of(c)), len(self.set_of(g)))
 
@@ -534,6 +535,7 @@ class Groups(unittest.TestCase):
     def test_system_groups_wake_the_system_topics(self):
         rows, info = ls.topics(), ls.topic_info()
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@jobs")
         woken = self.set_of(c)
         for t in ("jobs-running", "jobs-list", "deck", "status", "live", "health-next", "setup-list"):
@@ -541,6 +543,7 @@ class Groups(unittest.TestCase):
         for t in ("ups", "hardware", "ssh-keys", "pool-info-bulk"):
             self.assertNotIn(t, woken)
         c = lc.Collector(FakeResp(), run=lambda w: (0, "x", ""), topic_rows=rows, topic_info=info)
+        c.leases = {"*": float("inf")}      # a page is open: a group wake passes idle topics by without one (tests/live-demand-test.py)
         c.refresh("@security")
         self.assertIn("ssh-keys", self.set_of(c))
         self.assertIn("config-list", self.set_of(c))

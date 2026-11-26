@@ -579,7 +579,7 @@ class Collector:
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
-        woken, queued = [], 0
+        woken, queued, skipped = [], 0, 0
         t_trig = since if since else time.time()
         for t, ev in items:
             hard = soft = False
@@ -592,6 +592,9 @@ class Collector:
                 elif "any" in groups:
                     soft = True
             if not (hard or soft):
+                continue
+            if topic.startswith("@") and self.idle_now(t):
+                skipped += 1
                 continue
             self.trig.setdefault(t, t_trig)      # the earliest trigger of the next read starts its delay measure
             if ev.is_set():
@@ -606,8 +609,8 @@ class Collector:
         # one journal line per request (journalctl -u hs-live): which topics it woke, so a stale page can be traced to a missing or late refresh
         if queued and not woken:
             return                              # all of it was queued already: nothing new to say (a burst filled the journal)
-        log("refresh %s -> %s%s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic"),
-                                    " (+%d already queued)" % queued if queued else ""))
+        log("refresh %s -> %s%s%s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic"),
+                                      " (+%d already queued)" % queued if queued else "", " (+%d idle skipped)" % skipped if skipped else ""))
 
     def collect(self, topic, words, mode="run"):
         """One read of one topic. Returns True when the output differs from the last read (new gen, published); an identical read writes nothing."""
@@ -702,6 +705,10 @@ class Collector:
         ls_ = self.leases
         return max(ls_.get(topic, 0), ls_.get("*", 0)) > now
 
+    def idle_now(self, t):
+        """True for a demand topic that no open page wants now: a group wake and a wave pass it by (a named event, its name, `*` and a lease do not)"""
+        return bool((self.info.get(t) or {}).get("idle")) and not self.leased(t)
+
     def pace(self, topic, interval):
         """seconds between two reads of a topic: its interval, or its idle interval (live-topics.tsv column 9, D14) while nobody wants it"""
         idle = (self.info.get(topic) or {}).get("idle")
@@ -764,6 +771,8 @@ class Collector:
             with self.tlock:
                 if t not in self.events:          # an extension topic went away
                     continue
+            if self.idle_now(t):
+                continue
             wait = self.last_read.get(t, 0) + self.gap(t, self.min_gap) - time.time()
             if wait > 0:
                 self.stop.wait(wait)

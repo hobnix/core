@@ -167,6 +167,34 @@ class Pace(unittest.TestCase):
         c._store("disk-health", 0, "x", "", time.time(), [])
         self.assertEqual(c.pace("disk-health", 30), 300)
 
+    def test_a_group_wake_passes_an_idle_topic_nobody_watches(self):
+        for group in ("@disks", "@shares"):                  # hard (its own group) and soft (it lists `any`)
+            c, st = self.make()
+            c.info["disk-health"]["groups"] = {"disks", "any"}
+            c.refresh(group)
+            self.assertFalse(c.events["disk-health"].is_set(), group)
+            self.assertNotIn("disk-health", c.trig)
+            c.leases = {"disk-health": time.time() + 30}
+            c.refresh(group)
+            self.assertTrue(c.events["disk-health"].is_set(), group)
+
+    def test_its_name_and_the_star_still_wake_an_idle_topic(self):
+        for word in ("disk-health", "*"):
+            c, st = self.make()
+            c.refresh(word)
+            self.assertTrue(c.events["disk-health"].is_set(), word)
+
+    def test_a_wave_reads_only_a_watched_idle_dependent(self):
+        c, st = self.make()
+        c.min_gap = 0
+        c.order, c.needs = ["status", "disk-health"], {"disk-health": ("status",)}
+        read = []
+        c.collect = lambda t, words, mode="run": read.append(t) or False
+        self.assertEqual(c.wave({"status"}), [])
+        c.leases = {"disk-health": time.time() + 30}
+        self.assertEqual(c.wave({"status"}), ["disk-health"])
+        self.assertEqual(read, ["disk-health"])
+
     def test_a_table_that_cannot_be_read_keeps_the_leases_and_raises_nothing(self):
         c, st = self.make()
         c.leases = {"disk-health": time.time() + 20}
