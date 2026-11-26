@@ -1,4 +1,4 @@
-// What a row of Instances / Docker is doing, from rowstate (web/src/rowstate.svelte.js; plain JS so node can test it, tests/web-rowstate.mjs).
+// What a row of Apps & VMs (instance or Docker app) is doing, from rowstate (web/src/rowstate.svelte.js; plain JS so node can test it, tests/web-rowstate.mjs).
 // `pending(area, args)` and `failed(area, args)` are the rowstate functions. A job started in a terminal counts too: the answer comes from the job records and events.
 const CT = (n) => [
   [[n, 'start'], 'Starting'], [[n, 'stop'], 'Stopping'], [[n, 'stop', '--autostart', 'off'], 'Stopping'], [[n, 'restart'], 'Restarting'],

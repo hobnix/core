@@ -16,5 +16,5 @@
   const options = $derived(instanceOptions(data ?? rows(st), { running, type, exclude }));
 </script>
 
-<ServerField {options} loaded={loaded ?? (data ? true : st.loaded)} error={error ?? (data ? '' : st.error)} noun={running ? 'running instances' : 'instances'} createHref={P.instances}
+<ServerField {options} loaded={loaded ?? (data ? true : st.loaded)} error={error ?? (data ? '' : st.error)} noun={running ? 'running instances' : 'instances'} createHref={P.appsGroup}
              createLabel="Open the instances" {free} {wide} {label} {id} {placeholder} {disabled} {onchange} bind:value />

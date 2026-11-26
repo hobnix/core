@@ -30,6 +30,6 @@
     {:else}<Muted as="p">{m.svc.loaded ? 'No service describes this instance, so it has no route.' : 'Loading…'}</Muted>{/each}
   </Stack>
   {#if m.myRecipes.length}
-    <Row gap="2" wrap align="center"><Muted>Set up by the recipe</Muted>{#each m.myRecipes as r (r.name)}<Button variant="ghost" size="sm" tooltip="Open the recipe in Apps" onclick={() => { setSelection('recipes', r.name); go(P.apps); }}>{r.name}</Button>{/each}</Row>
+    <Row gap="2" wrap align="center"><Muted>Set up by the recipe</Muted>{#each m.myRecipes as r (r.name)}<Button variant="ghost" size="sm" tooltip="Open the recipe in the app catalog" onclick={() => { setSelection('recipes', r.name); go(P.apps); }}>{r.name}</Button>{/each}</Row>
   {/if}
 </Card>

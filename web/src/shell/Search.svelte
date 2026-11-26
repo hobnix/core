@@ -62,7 +62,7 @@
   // lists: [searchable strings, the shown item]; the first string is the name
   const sources = $derived({
     pages: pages.map((p) => ({ ...p, kind: 'pages', keys: [p.name, p.hint] })),
-    instances: rows(cts).map((r) => ({ kind: 'instances', name: r[0], hint: r[2] ?? '', path: local('/instances'), keys: [r[0]] })),
+    instances: rows(cts).map((r) => ({ kind: 'instances', name: r[0], hint: r[2] ?? '', path: local(P.appsGroup), keys: [r[0]] })),
     shares: rows(shares).map((r) => ({ kind: 'shares', name: r[0], hint: r[2] ?? '', path: local('/storage/shares'), keys: [r[0]] })),
     users: rows(users).map((r) => ({ kind: 'users', name: r[0], hint: r[1] && r[1] !== '-' ? r[1] : '', path: local(P.users), keys: [r[0], r[1] ?? ''] })),
     groups: rows(groups).map((r) => ({ kind: 'groups', name: r[0], hint: '', path: local(P.groups), keys: [r[0]] })),

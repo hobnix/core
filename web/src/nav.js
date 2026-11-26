@@ -20,16 +20,12 @@ export const tree = [
           { label: 'Vault', icon: 'vault', path: P.vault },
         ],
       },
-      // Instances is a place itself (the list of containers and VMs) with the ISO images under it
-      { label: 'Instances', icon: 'cube', path: P.instances, storage: true, children: [
-        { label: 'ISO images', icon: 'disc', path: P.iso, storage: true, capability: 'incus' },
-      ] },
-      { label: 'Apps', icon: 'package', path: P.appsGroup, storage: true, children: [
-        { label: 'Installed', icon: 'package', path: P.apps, storage: true },
-        { label: 'Docker', icon: 'shipping-container', path: P.docker, capability: 'docker', children: [
-          { label: 'Registries', icon: 'key', path: P.registries, capability: 'docker' },
-        ] },
+      // Apps & VMs is a place itself: the one list of containers, VMs and Docker apps (docs/PLAN-workloads.md 3)
+      { label: 'Apps & VMs', icon: 'cube', path: P.appsGroup, storage: true, children: [
+        { label: 'App catalog', icon: 'package', path: P.apps, storage: true },
         { label: 'Marketplace', icon: 'storefront', path: P.marketplace, prefix: true },
+        { label: 'Docker registries', icon: 'key', path: P.registries, capability: 'docker' },
+        { label: 'ISO images', icon: 'disc', path: P.iso, storage: true, capability: 'incus' },
       ] },
       { label: 'Network', icon: 'network', path: P.network, children: [
         { label: 'Services', icon: 'arrows-split', path: P.services, capability: 'reverse-proxy' },
@@ -106,7 +102,7 @@ export function visible(items, caps) {
 // ── nodes as the roots of the tree ─────────────────────────────────────────────────────────────────
 // The paths above are INNER paths: the page of a node is /node/<name><path> (route.svelte.js). The main node (this server) gets the long tree. A
 // REMOTE node's tree is built from the capabilities its status document reports (`capabilities`, a list of names): Summary and Health always, then
-// `storage` -> Storage, `incus` -> Instances, `backup` -> Backup (all read only, summaries of the document), and for an edge or vps node the
+// `storage` -> Storage, `incus` -> Instances (its own address /instances), `backup` -> Backup (all read only, summaries of the document), and for an edge or vps node the
 // proxyserver pages (Mail entry, Ports, Outside watcher, Certificate, Tailscale, Settings). `caps` null/undefined = the node did not say: a vps node
 // shows all its pages (an old document), any other node only Summary and Health.
 export const mainTree = tree[0].children;
@@ -117,7 +113,7 @@ const edgeItems = tree[1].children;
 const EDGE_NEEDS = { [P.mail]: 'edge-mail', [P.certificate]: 'edge-mail', [P.ports]: 'edge-ports', [P.watcher]: 'edge-watcher' };
 const peerItems = [
   { label: 'Storage', icon: 'database', path: P.storage, capability: 'storage' },
-  { label: 'Instances', icon: 'cube', path: P.instances, capability: 'incus' },
+  { label: 'Instances', icon: 'cube', path: P.peerInstances, capability: 'incus' },
   { label: 'Backup', icon: 'cloud-arrow-up', path: P.backup, capability: 'backup' },
 ];
 export const remoteTree = [HEALTH];
@@ -163,8 +159,8 @@ function withCapItems(items, capItems) {
 
 // Extension pages: one page per extension package that is on AND declares a web page (ui.features.extensions, the manifests' [web.page]). A page
 // goes into the group its `group` key names (storage, instances, apps, network, people, system, backup, settings; default apps, an unknown name
-// too), after the places of the core. Nothing is added while there is no such package. The pages are /extensions/<name> (pages/Extension.svelte).
-export const EXT_GROUPS = Object.freeze({ storage: P.storage, instances: P.instances, apps: P.appsGroup, network: P.network, people: P.people, system: P.system, backup: P.backupGroup, settings: P.settings });
+// too; `instances` and `apps` are both Apps & VMs), after the places of the core. Nothing is added while there is no such package. The pages are /extensions/<name> (pages/Extension.svelte).
+export const EXT_GROUPS = Object.freeze({ storage: P.storage, instances: P.appsGroup, apps: P.appsGroup, network: P.network, people: P.people, system: P.system, backup: P.backupGroup, settings: P.settings });
 export const extGroup = (e) => EXT_GROUPS[e?.group] ?? P.appsGroup;
 // Order inside a group: the places of the core keep their order; package places follow, alphabetically by title. A package that says `after`
 // (the last word of a place's path, its label in lower case, or another package's name) sits right behind that place instead; an `after` that

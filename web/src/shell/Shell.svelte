@@ -53,7 +53,7 @@
   const users = poll(() => (locked || !admin ? '' : '/api/sys/users/list'), 60000);
   const groups = poll(() => (locked || !admin ? '' : '/api/sys/users/groups'), 60000);
   const vault = poll(() => (locked || !admin ? '' : '/api/sys/vault/list'), 60000, 'vault-list');
-  // Docker is on but something it needs is missing (the share apps, its mount): a dot on Docker, its children dimmed
+  // Docker is on but something it needs is missing (the share apps, its mount): a dot on Apps & VMs, the rows that need Docker dimmed
   const dockerOn = $derived(Array.isArray(ui.features.capabilities) && ui.features.capabilities.includes('docker'));
   const dockerHealth = poll(() => (locked || !dockerOn ? '' : '/api/sys/docker/health'), 30000);
 
@@ -67,9 +67,9 @@
     const asked = cacheSession();
     loadPools(true).then(() => {
       if (asked !== cacheSession()) return;   // locked or signed out meanwhile
-      const pages = ['/instances', '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
+      const pages = [P.appsGroup, '/storage/shares', poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools', '/storage/disks', P.health, P.backup, '/network', P.users,
         P.apps, P.services, '/storage/vault', '/storage/encryption', P.hardware, P.expiry];
-      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined)),
+      prefetch([...new Set([...pages.filter((pg) => canSee(ui.role, pg)).flatMap((p) => readsFor(p, ui.features.extensions, ui.features.live, pools.loaded ? pools.rows : undefined, ui.features.capabilities)),
         '/api/sys/jobs/running', '/api/sys/unifi/networks', '/api/sys/unifi/clients'])]);
     });
   });
@@ -139,7 +139,7 @@
     const sl = rows(shares).filter((r) => r[1] !== 'other');
     if (sl.length) m['/storage/shares'] = { text: String(sl.length) };
     const cl = rows(cts);
-    if (cl.length) m['/instances'] = { text: `${cl.filter((r) => /^running$/i.test(r[2])).length}/${cl.length}` };
+    if (cl.length) m[P.appsGroup] = { text: `${cl.filter((r) => /^running$/i.test(r[2])).length}/${cl.length}` };
     if (rows(groups).length) m[P.groups] = { text: String(rows(groups).length) };
     if (rows(users).length) m[P.users] = { text: String(rows(users).length) };
     if (d) m['/storage/encryption'] = locked ? { text: 'locked', warn: true } : d.encryption && d.encryption !== 'none' ? { text: 'open' } : null;
@@ -151,7 +151,7 @@
       const h = Math.floor(Number(b[2]) / 3600);
       m[P.backup] = { text: h < 1 ? '< 1 h' : h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`, warn: b[1] !== 'ok' };
     }
-    if (dockerHealth.loaded && dockerOn) Object.assign(m, dockerTree(rows(dockerHealth), dockerChildren(tree)));
+    if (dockerHealth.loaded && dockerOn) for (const [p, v] of Object.entries(dockerTree(rows(dockerHealth), dockerChildren(tree)))) m[p] = { ...m[p], ...v };   // Apps & VMs keeps its count
     if (d?.problems > 0) m[P.health] = { text: String(d.problems), warn: true };
     // a remote node's rows are keyed "<node>:<inner path>"
     for (const [p, v] of Object.entries(treeMeta(proxState, prox.data))) m[`${VPS_NODE}:${p}`] = v;

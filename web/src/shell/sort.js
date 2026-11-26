@@ -1,6 +1,7 @@
 // The sorting of the shared table (Table.svelte), kept apart so it can be tested without a browser.
 //
 //   sortRows(rows, columns, order)  -> a new array; order = { key, dir: 'asc' | 'desc' } or null (the order the data came in)
+//   treeRows(rows, columns, order, first, kids) -> the same with one level of rows under a row
 //   nextOrder(order, col)           -> the order a click on the header of `col` leads to: ascending, descending, none
 //
 // A column compares `col.value(row)` (else row[col.key]) as text ('text', natural order: "disk2" before "disk10"), as numbers ('num') or with its own
@@ -31,6 +32,15 @@ export function sortRows(rows, columns, order, first = null) {
       return sign * cmp(x.v, y.v) || x.i - y.i;
     })
     .map((x) => x.r);
+}
+
+// A list with one level of rows under a row (`kids(row)` -> its rows, Table.svelte): the top rows are sorted among themselves and the rows under
+// each one separately, so a child never leaves its parent. -> [{ row, depth: 0 | 1 }] in the order the table draws them; without `kids` the plain list.
+export function treeRows(rows, columns, order, first = null, kids = null) {
+  return sortRows(rows, columns, order, first).flatMap((row) => [
+    { row, depth: 0 },
+    ...(kids ? sortRows(kids(row) ?? [], columns, order, first).map((child) => ({ row: child, depth: 1 })) : []),
+  ]);
 }
 
 export function nextOrder(order, col) {

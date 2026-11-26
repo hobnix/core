@@ -19,12 +19,12 @@ eq('an unknown role on either side is refused (as the server)', [roleOk('root', 
 // the pages: every role sees every page; the ones above the role are greyed (lockedWhy), never left out
 const all = tree();
 const greyed = (role) => all.filter((p) => lockedWhy(role, p));
-eq('every role sees every page of the tree (no page is hidden)', ROLES.map(() => all.includes('/people') && all.includes('/storage/vault') && all.includes('/instances')), [true, true, true]);
+eq('every role sees every page of the tree (no page is hidden)', ROLES.map(() => all.includes('/people') && all.includes('/storage/vault') && all.includes('/apps')), [true, true, true]);
 eq('the tree does not depend on the role (nodeItems takes none)', nodeItems.length <= 5, true);
 eq('an admin has no greyed page', greyed('admin'), []);
 for (const r of ['viewer', 'app-manager'])
   eq(`${r}: the greyed pages are exactly the admin ones`, greyed(r).every((p) => p === '/storage/vault' || p === '/storage/files' || p === '/system/certificates' || p.startsWith('/people')) && ['/people', '/people/users', '/system/certificates', '/storage/vault', '/storage/files'].every((p) => greyed(r).includes(p)), true);
-for (const p of ['/instances', '/apps/installed', '/storage/pools', '/storage/disks', '/storage/shares', '/backup/overview', '/system/health', '/settings/access', '/settings/general', '/nodes', '/apps/marketplace', '/extensions/demo'])
+for (const p of ['/apps', '/apps/installed', '/storage/pools', '/storage/disks', '/storage/shares', '/backup/overview', '/system/health', '/settings/access', '/settings/general', '/nodes', '/apps/marketplace', '/extensions/demo'])
   eq(`${p}: open to every role (a viewer without plans, buttons disabled)`, ROLES.map((r) => lockedWhy(r, p)), ['', '', '']);
 eq('the reason names the role, as tooltip and accessible name', [lockedWhy('viewer', '/storage/vault'), lockedWhy('app-manager', '/people/users'), lockedWhy('admin', '/people')], ['Needs the admin role', 'Needs the admin role', '']);
 eq('the pool pages are in the tree', paths(nodeItems('main', null, [], [], [{ name: 'tank', role: 'data' }])).includes('/storage/pools/tank'), true);

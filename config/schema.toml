@@ -597,7 +597,7 @@ default = '"/var/lib/hs/iso"'
 pattern = '^/[A-Za-z0-9._/-]{1,200}$'
 hint = "an absolute folder, e.g. /bulk/data-01/isos"
 doc = '''
-# The ISO library: the folder with the install images for virtual machines (hs iso, the Instances page). It can be a folder on a
+# The ISO library: the folder with the install images for virtual machines (hs iso, the ISO images page). It can be a folder on a
 # share or a bulk disk when the images are big. Images already in the old folder are not moved. Default "/var/lib/hs/iso".'''
 value = '''
 isoDir = "/var/lib/hs/iso"'''

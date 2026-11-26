@@ -40,8 +40,8 @@ function extReads(name, pages) {
 }
 
 // `extPages` = ui.features.extensions (the pages of the extension packages that are on); without it an extension page reads nothing first.
-// `poolList` = the pool rows (pools.rows once loaded). `liveOn` = ui.features.live. Diagnostics switches its read in live mode so the prefetch/refresh button matches the visible table.
-export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_POOLS) {
+// `poolList` = the pool rows (pools.rows once loaded). `caps` = ui.features.capabilities (not a list = not told: everything is on, as the pages do). `liveOn` = ui.features.live. Diagnostics switches its read in live mode so the prefetch/refresh button matches the visible table.
+export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_POOLS, caps = null) {
   path = innerPath(path);
   let m;
   if ((m = path.match(/^\/extensions\/([a-z][a-z0-9-]*)$/))) return extReads(m[1], extPages);
@@ -54,8 +54,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
   if (path.startsWith('/settings/')) return [`${A}config/list`];
   switch (path) {
     case P.summary: return [`${A}status`, `${A}monitor/disks`, `${A}setup/list`, `${A}ups/status`];
-    case P.instances: return [`${A}ct/list`, `${A}backup/overview`, `${A}services/list`, `${A}recipes/list`, `${A}docker/list`];
-    case P.docker: return [`${A}docker/apps`, `${A}docker/status`];
+    case P.appsGroup: return [`${A}ct/list`, ...(!Array.isArray(caps) || caps.includes('docker') ? [`${A}docker/apps`, `${A}docker/status`, `${A}docker/health`] : []), `${A}backup/overview`, `${A}services/list`, `${A}recipes/list`];
     case P.registries: return [`${A}docker/registries`];
     case P.network: return [`${A}ct/list`, `${A}dns/list`, `${A}ports/list`, `${A}remote/list`, `${A}unifi/clients`, `${A}unifi/networks`];
     case P.users: case P.groups: return [`${A}users/list`, `${A}users/groups`];

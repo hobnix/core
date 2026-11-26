@@ -2,7 +2,7 @@
   import { P } from '../../paths.js';
   // The guided way to a new Docker app: image, ports, folders, variables, one question per screen (ui/Wizard.svelte, the frame the capability
   // wizards use). The last screen shows the compose file and the .env text it will hand over, as plain text, and "Open in editor" opens
-  // /instances/docker/new on exactly that text. The wizard saves and applies nothing: the editor's Test, Save and Apply do (editor/wizard.js has the logic).
+  // /apps/docker/new on exactly that text. The wizard saves and applies nothing: the editor's Test, Save and Apply do (editor/wizard.js has the logic).
   import { poll, rows } from '../../data.svelte.js';
   import { go } from '../../route.svelte.js';
   import { tr } from '../../i18n.js';

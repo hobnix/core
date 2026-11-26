@@ -1,5 +1,5 @@
 <script>
-  // The overview of a group that has no state page of its own (Instances, Apps, Network, People, Settings, Developer): one card per child page with the
+  // The overview of a group that has no state page of its own (Network, People, Settings, Developer; Apps & VMs is a list of its own, pages/Workloads.svelte): one card per child page with the
   // note the tree shows (a count or a problem chip). Storage, Backup and System have pages/GroupPage.svelte. Nothing is read here that the tree does not read.
   import { route, go } from '../route.svelte.js';
   import { lockedWhy } from '../roles.js';

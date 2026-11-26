@@ -39,7 +39,7 @@
 {:else}
   {#if recipe}
     <div class="card"><EmptyState tone="info" icon="package" title="This app has no page" text="It is not installed on this server, or its recipe declares no page.">
-      {#snippet action()}<Button tooltip={'Back to the installed apps'} onclick={() => go(P.apps)}><i class="ph ph-package"></i>Open Apps</Button>{/snippet}
+      {#snippet action()}<Button tooltip={'Back to the app catalog'} onclick={() => go(P.apps)}><i class="ph ph-package"></i>Open the app catalog</Button>{/snippet}
     </EmptyState></div>
   {:else}
     <div class="card"><EmptyState tone="info" icon="power" title="This extension is switched off" text="It is not part of this server's configuration, so there is nothing to show. Switch it on with hs ext enable, or in Settings.">
