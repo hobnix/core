@@ -254,21 +254,25 @@ fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, HttpError> {
             .windows(2)
             .position(|w| w == b"\r\n")
             .ok_or_else(|| bad("chunk size missing"))?;
-        let size_text = std::str::from_utf8(&b[..i]).map_err(|_| bad("chunk size"))?;
+        let (line, tail) = (b.get(..i), b.get(i + 2..));
+        let size_text =
+            std::str::from_utf8(line.unwrap_or_default()).map_err(|_| bad("chunk size"))?;
         let size_text = size_text.split(';').next().unwrap_or("").trim();
         let n = usize::from_str_radix(size_text, 16).map_err(|_| bad("chunk size"))?;
-        b = &b[i + 2..];
+        b = tail.unwrap_or_default();
         if n == 0 {
             return Ok(out);
         }
-        if b.len() < n + 2 {
-            return Err(bad("chunk cut off"));
-        }
-        out.extend_from_slice(&b[..n]);
-        if out.len() > MAX_BODY {
+        // the size comes from the peer: refuse it before any arithmetic with it
+        if n > MAX_BODY || out.len().saturating_add(n) > MAX_BODY {
             return Err(bad("body too large"));
         }
-        b = &b[n + 2..];
+        let end = n.checked_add(2).ok_or_else(|| bad("chunk size"))?;
+        let (Some(chunk), Some(next)) = (b.get(..n), b.get(end..)) else {
+            return Err(bad("chunk cut off"));
+        };
+        out.extend_from_slice(chunk);
+        b = next;
     }
 }
 
@@ -304,5 +308,30 @@ mod tests {
         assert!(matches!(r.ok(), Err(HttpError::Status(404, _))));
         assert!(parse_response(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nab").is_err());
         assert!(parse_response(b"garbage").is_err());
+    }
+
+    #[test]
+    fn absurd_chunk_sizes_are_errors_not_panics() {
+        for size in [
+            "ffffffffffffffff",
+            "fffffffffffffffe",
+            "10000000000000000",
+            "1000001",
+        ] {
+            let raw = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{size}\r\nab\r\n0\r\n\r\n"
+            );
+            assert!(
+                matches!(
+                    parse_response(raw.as_bytes()),
+                    Err(HttpError::BadResponse(_))
+                ),
+                "chunk size {size}"
+            );
+        }
+        // a chunk that claims more than it carries, and one without its line end
+        assert!(dechunk(b"5\r\nab\r\n0\r\n\r\n").is_err());
+        assert!(dechunk(b"2\r\nab").is_err());
+        assert_eq!(dechunk(b"2\r\nab\r\n0\r\n\r\n").unwrap(), b"ab");
     }
 }
