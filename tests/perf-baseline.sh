@@ -247,7 +247,7 @@ rc=$(TMPDIR=$WORK/int-tmp HS_BIN=$WORK/slow-hs HS_PERF_TOOLS=none-installed \
 check_eq "it ends by the interrupt" "-2" "$rc"
 check_eq "no second read is started" "1" "$(wc -l < "$WORK/slow-calls" | tr -d ' ')"
 check "the read and what it started are gone" gone "$WORK/slow-pids"
-check_eq "no temporary file is left" "" "$(ls -A "$WORK/int-tmp" "$WORK/int-out" | grep -v -e ':$' -e '^$')"
+check_eq "no temporary file is left" "" "$(find "$WORK/int-tmp" "$WORK/int-out" -mindepth 1)"
 
 cat > "$WORK/slow-state.py" <<'PY'
 import os, subprocess
