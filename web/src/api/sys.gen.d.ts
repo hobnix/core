@@ -2096,7 +2096,7 @@ export interface SysOperations {
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
   "pkg.cards": {
-    /** what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index, - = never) */
+    /** what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index of the official signed repository only, - = none) */
     words: ["pkg", "cards"];
     path: "/pkg/cards";
     method: "get";
