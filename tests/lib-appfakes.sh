@@ -14,6 +14,37 @@
 # the -E words, as a transient unit gets one. A unit that ended well or was stopped is gone afterwards (LoadState not-found, Result success,
 # exit status 0), a failed one stays loaded: what systemd 25x showed for transient user units on a developer machine (2026-11-26). Not
 # compared with system units on a real server.
+#
+# Safety. Names: instances, apps and units are called zz-hstest-*, which no real system has. Real names stay where the product code asks for
+# them: the instance docker (CT in docker-app-change.sh and docker.sh), the manager arcane (docker_manager_project knows only arcane and
+# portainer), the unit prefix hs-job- (jobs-change.sh). And the stand-ins only catch what is started through PATH: as root, or with another
+# implementation (HS_UNDER_TEST, HOBNIX_BIN, a hobnix on the PATH) while a socket of Incus, Docker or systemd can be reached, the tests skip.
+# HS_TEST_THROWAWAY=1 runs them anyway: this machine may be broken. In CI (REQUIRE_ALL=1) such a skip is a failure.
+
+_real_sockets() {   # what of Incus, Docker and systemd this user could talk to, one per line
+  local s
+  [ -z "${DOCKER_HOST:-}" ] || printf 'DOCKER_HOST\n'
+  for s in "${INCUS_SOCKET:-}" ${INCUS_DIR:+"$INCUS_DIR/unix.socket"} /var/lib/incus/unix.socket /var/lib/incus/unix.socket.user \
+    /run/incus/unix.socket /var/run/docker.sock /run/docker.sock /run/systemd/private /run/dbus/system_bus_socket \
+    ${XDG_RUNTIME_DIR:+"$XDG_RUNTIME_DIR/docker.sock" "$XDG_RUNTIME_DIR/bus" "$XDG_RUNTIME_DIR/systemd/private"}; do
+    if [ -S "$s" ] && [ -w "$s" ]; then printf '%s\n' "$s"; fi
+  done
+}
+_unsafe_because() {   # why the test could reach a real system; nothing when it cannot
+  local sockets
+  if [ "$(id -u)" -eq 0 ]; then echo "it runs as root"; return; fi
+  [ -n "${HS_UNDER_TEST:-}${HOBNIX_BIN:-}" ] || command -v hobnix >/dev/null 2>&1 || return 0
+  sockets=$(_real_sockets | paste -sd' ' -)
+  [ -z "$sockets" ] || echo "another implementation (HS_UNDER_TEST, HOBNIX_BIN or hobnix on the PATH) could use: $sockets"
+}
+if [ "${HS_TEST_THROWAWAY:-}" != 1 ]; then
+  why=$(_unsafe_because)
+  if [ -n "$why" ]; then
+    skip "could reach a real system: $why. Only on a throwaway machine: HS_TEST_THROWAWAY=1"
+    finish; exit
+  fi
+  unset why
+fi
 
 T=$'\t'
 BIN=$WORK/bin; mkdir -p "$BIN"
@@ -161,13 +192,13 @@ case "$1" in
       exit 0
     fi
     if [ "$1" = docker ] && [ "$2" = ps ]; then
-      [ -e "$FAKE/no-arr" ] || printf 'arr\trunning\t0.0.0.0:8989->8989/tcp\n'
+      [ -e "$FAKE/no-zz-hstest-arr" ] || printf 'zz-hstest-arr\trunning\t0.0.0.0:8989->8989/tcp\n'
       printf 'arcane\trunning\t-\n'
       exit 0
     fi
     script=$3; shift 4   # sh -c <script> sh <words...>
     case "$script" in
-      *'ls -d /opt/apps/'*) printf '/shares/apps/stacks/kept/docker-compose.yml\n' ;;   # an app with a folder and no container
+      *'ls -d /opt/apps/'*) printf '/shares/apps/stacks/zz-hstest-kept/docker-compose.yml\n' ;;   # an app with a folder and no container
       *'recipes/$a'*) printf 'web\t/shares/apps/stacks/%s\n' "$1" ;;
       *'config --images'*) printf 'ghcr.io/example/app:1\n' ;;
       *'docker compose -p "$1" "$2"'*) printf 'compose %s %s\n' "$2" "$1" >> "$FAKE/changes"; knobs compose ;;
@@ -270,7 +301,7 @@ _end_units() {   # nothing of a job outlives the test
   for f in "$FAKE"/units/*/pgid; do
     [ ! -s "$f" ] || kill -KILL -- "-$(cat "$f")" 2>/dev/null
   done
-  cleanup
+  rm -rf "${WORK:?}"   # not the cleanup of tests/lib.sh (see the trap in the tests)
 }
 trap _end_units EXIT
 
