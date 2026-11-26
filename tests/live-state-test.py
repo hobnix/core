@@ -1131,9 +1131,29 @@ class ExtLive(unittest.TestCase):
     def test_live_read_becomes_a_topic(self):
         self.package(self.DECL + 'live = 30\n[[web.reads]]\nwords = "other"\nkind = "tsv"\nttl = 10\n')
         self.assertEqual(self.ext(), [("ext-demo-list", ["ext", "demo", "list"], 30, "skip")])
-        self.assertEqual(ls.topic_info()["ext-demo-list"], {"cap": "demo", "groups": {"ext-demo"}})
+        self.assertEqual(ls.topic_info()["ext-demo-list"], {"cap": "demo", "groups": {"ext-demo"}, "idle": 300})
         own = os.path.join(scripts, "lib", "live-topics.tsv")
         self.assertEqual([r for r in ls.topics(own) if r[0].startswith("ext-")], [])
+
+    def test_a_live_read_runs_on_demand(self):
+        # #1320: `live` seconds while a stream wants the topic, else max(300, live); a lease (a page that opens) reads it at once
+        for live, idle in ((10, 300), (300, 300), (3600, 3600)):
+            self.package(self.DECL + "live = %d\n" % live)
+            self.assertEqual(ls.topic_info()["ext-demo-list"]["idle"], idle)
+        self.package(self.DECL + "live = 30\n")
+        db = FakeResp()
+        c = lc.Collector(db, run=lambda w: (0, "x", ""), topic_rows=[], topic_info={}, ext_rows=ls.ext_live)
+        c._spawn = lambda *r: None
+        c.rescan()
+        self.assertEqual(c.pace("ext-demo-list", 30), 300)
+        self.assertFalse(c.events["ext-demo-list"].is_set())
+        db.demand = lambda now: {"ext-demo-list": now + 30}
+        c.lease_round()
+        self.assertTrue(c.events["ext-demo-list"].is_set())
+        self.assertEqual(c.pace("ext-demo-list", 30), 30)
+        db.demand = lambda now: {}
+        c.lease_round()
+        self.assertEqual(c.pace("ext-demo-list", 30), 300)
 
     def test_locked_run_and_bad_declarations(self):
         self.package(self.DECL + 'live = 10\nlocked = "run"\n')
