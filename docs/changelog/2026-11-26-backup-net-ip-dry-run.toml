@@ -1,0 +1,8 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "hs backup refuses --dry-run where there is no dry run, and hs net ip refuses unknown words"
+body  = """Before, many hs backup commands accepted --dry-run and did the real work: hs backup ct <name> reset --dry-run removed the backup rules, and a restore of a path, offsite off or browse --off ran too.
+
+now, report, prune, init, restore ct and config restore keep their dry run. Every other changing hs backup command refuses --dry-run and changes nothing.
+
+hs net ip refuses what it does not know: a misspelled clear --dryrun no longer clears the address reservation."""

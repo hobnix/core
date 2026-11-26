@@ -134,6 +134,22 @@ set -- "${args[@]+"${args[@]}"}"
 cmd=${1:-status}
 [ $# -gt 0 ] && shift
 
+# --dry-run is taken out above for every command, so a command that never looks at $dry would do the real work (#1354: `ct <ct> reset
+# --dry-run` removed the rules). Only the commands named here take it; a new command is refused until it is added.
+dry_ok() {   # dry_ok <command> [<word>...]: it only reads, or it looks at $dry before it changes anything
+  case "$1" in
+    now|report|prune|init|status|list|find|--find|--snapshots|--overview|--rules|--state|--shares) return 0 ;;
+    restore) [ "${2:-}" = ct ] ;;                                   # the whole-path restore has no dry run
+    config)  [ $# -eq 1 ] || [ "$2" = restore ] ;;
+    ct)      [ $# -eq 3 ] && [ "$3" = paths ] ;;
+    *) return 1 ;;
+  esac
+}
+if $dry && ! dry_ok "$cmd" "$@"; then
+  die "$(t "'hs backup %s' has no dry run. Nothing was changed. Run it without --dry-run to do it." "$cmd${1:+ $*}")"
+  exit 1
+fi
+
 # --from-disk (config restore on a fresh install): the typed passphrase is in a private temp file and the disk is read-only, so no lock is taken
 R_PASSFILE=$PASSFILE
 R_EXTRA=()
@@ -205,6 +221,7 @@ share_names() {
 # later start off. (Not writable, e.g. without root: the old rule stays in effect.)
 migrate_on() {
   [ -z "${migrated:-}" ] || return 0
+  ! $dry || return 0   # a dry run writes nothing: without the list the old rule gives the same answer
   migrated=1
   [ ! -f "$ON" ] || return 0
   local kind name tmp="$ON.new"
@@ -751,6 +768,7 @@ off_env() {   # runs in the subshell of the restic call: the variables of the ol
 }
 offsite_adopt_old() {   # the address of before: into the repository file, once
   [ -s "$OFFSITE_OLD" ] && [ ! -e "$OFFSITE" ] || return 0
+  ! $dry || return 0
   [ "$(secret_state "$OFFSITE")" != locked ] || return 0
   secret_write "$OFFSITE" < "$OFFSITE_OLD" && rm -f "$OFFSITE_OLD" || true
 }
