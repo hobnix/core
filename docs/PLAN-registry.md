@@ -87,6 +87,10 @@ Not tested on hardware yet; the signing workflow has never run on GitHub.
   the history is the `pins` branch, which `assemble` only ever appends to. Format stays 1: the builder side (`validate`, `verify`, `build`)
   refuses a bad row; a client ignores unknown fields and leaves out a malformed row (`pkg_index.clean_history`). Install and update do not read
   `versions`. No downgrade command, UI or statistics yet. Not tested on hardware yet.
+- **`verified`** (hobnix/core#477, optional): the day (`YYYY-MM-DD`) the release of the entry last ran on a real server, set by a person after
+  such a run, never by a program. Format stays 1: an older client ignores the field; the builder side (`validate --strict`) refuses a value
+  that is not a date; a client reads a malformed value as no date (`hs sys pkg cards`). No date means "Not tested on a real server" in the
+  Marketplace. `build` does not write it yet: how the date gets into the signed index (a field in the repository that `build` copies) is open.
 - **Tree hash** (decided here): `sha256:` over the listing `<mode> <size> <sha256 of the content> <path>
 `, files sorted by path, mode 755
   for an executable file else 644, symlinks refused. It does not depend on git, so a server computes the same hash from an archive of the commit.

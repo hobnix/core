@@ -113,7 +113,7 @@
       <div class="cell"><small>strong</small><Chip kind="strong">strong</Chip></div>
       <div class="cell"><small>out / in</small><Row><Chip kind="out">outside</Chip><Chip kind="in">this server</Chip></Row></div>
       <div class="cell"><small>tone</small><Row><Chip tone="accent">accent</Chip><Chip tone="soft">soft</Chip><Chip tone="warn">warn</Chip><Chip tone="bad">bad</Chip><Chip tone="info">info</Chip></Row></div>
-      <div class="cell"><small>trust</small><Row><Chip kind="trust" level="official" /><Chip kind="trust" level="signed" tested="2026-11-18" /><Chip kind="trust" level="community" /></Row></div>
+      <div class="cell"><small>trust</small><Row><Chip kind="trust" level="official" tested="2026-11-18" /><Chip kind="trust" level="community" /><Chip kind="trust" level="unsigned" /></Row></div>
       <div class="cell"><small>status</small><Row>{#each ['ok', 'warn', 'bad', 'info', 'off'] as s (s)}<Chip kind="status" state={s} />{/each}</Row></div>
     </Entry>
 

@@ -1,7 +1,7 @@
 // The Marketplace as a store (web/src/pages/market.js, #474): cards from the package reads, tabs and their counts, categories, search, the
 // buttons of a card, and that nothing a repository says becomes markup, a script address or a path outside the asset endpoint.
 import { parseCards, storeRows, rowsOf, tabsOf, categoriesOf, filterRows, cardActions, iconOf, assetUrl, safeLink, openHref, parseShow, usesOf,
-  stateLine, categoryLabel } from '../web/src/pages/market.js';
+  stateLine, categoryLabel, trustOf, testedText } from '../web/src/pages/market.js';
 
 let ok = 0, bad = 0;
 const check = (name, cond, extra = '') => { if (cond) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name} ${extra}`); } };
@@ -90,6 +90,17 @@ check('show: lists and routes', s.needs.join() === 'a,b' && s.routes[0].port ===
 check('uses: memory in GB, disk, ports, graphics card', usesOf(s).map((x) => `${x.k}=${x.v}`).join('|') === 'Needs=a, b|Memory=2 GB|Disk=8 GB|Ports=8096|Graphics card=used when there is one');
 const r = parseShow([['status', 'refused'], ['reason', 'no package x']]);
 check('show refused: the reason', r.refused && r.reason === 'no package x');
+
+// trust (#477): official only for the official repository the core configures, and signed
+const repos = [{ name: 'official', signed: true, from: 'default' }, { name: 'friends', signed: true, from: 'added' }, { name: 'family', signed: false, from: 'added' }];
+check('the configured official repository, signed: Official', trustOf('official', repos) === 'official');
+check('an added signed repository: Community', trustOf('friends', repos) === 'community');
+check('an unsigned repository: Community, unsigned', trustOf('family', repos) === 'unsigned');
+check('an added repository called official is never Official', trustOf('official', [{ name: 'official', signed: true, from: 'added' }]) === 'community');
+check('the official repository without signatures is not Official', trustOf('official', [{ name: 'official', signed: false, from: 'default' }]) === 'unsigned');
+check('another default repository is not Official', trustOf('recipes', [{ name: 'recipes', signed: true, from: 'default' }]) === 'community');
+check('an unknown repository: no label yet', trustOf('x', repos) === '' && trustOf('x', null) === '');
+check('tested: the day or not tested', testedText('2026-01-02') === 'Tested on a real server on 2026-01-02' && testedText('') === 'Not tested on a real server');
 
 console.log(`${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

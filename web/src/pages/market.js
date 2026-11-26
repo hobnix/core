@@ -38,6 +38,20 @@ export function parseCards(rows) {
   }]));
 }
 
+// Who vouches for a package (#477), the `level` of the trust chip: official only for the official repository as the core configures it
+// (`official`, a default row of config/package-repos.toml) AND signed; any repository added on this server is never official, whatever its name
+// (the server refuses a second `official` anyway); an unsigned one says so. '' while the repository is not known (the chip is left out).
+export const OFFICIAL_REPO = 'official';
+export function trustOf(repo, repos) {
+  const r = (repos ?? []).find((x) => x.name === repo);
+  if (!r) return '';
+  if (!r.signed) return 'unsigned';
+  return r.name === OFFICIAL_REPO && r.from === 'default' ? 'official' : 'community';
+}
+
+// the tested line of a card and the page: the day from the index, or the plain "not tested"
+export const testedText = (verified) => (verified ? `Tested on a real server on ${verified}` : 'Not tested on a real server');
+
 // the address of a package picture (/api/pkg/asset/<repo>/<name>/<file>), '' for anything the server would refuse anyway
 export function assetUrl(repo, name, file) {
   if (!NAME.test(repo ?? '') || !NAME.test(name ?? '') || !(ICON_FILE.test(file ?? '') || SHOT.test(file ?? ''))) return '';
