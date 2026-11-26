@@ -204,6 +204,9 @@ Moving recipes out of the repository turns `scripts/recipes/_lib.sh`, `scripts/l
   package whose range does not take its level. It is a key of its own, and `requires_core` keeps the exact form `">=N"`: a released core refuses
   a whole signed index in which one entry's `requires_core` has another form, and drops a history row with another form, but it ignores a key it
   does not know. So a core before this change ignores the upper bound (it installs such a package as before) and nothing else changes for it.
+  One exception: a **blueprint** checks its top-level keys against an allow-list, so a core before this change (v0.13.0-beta.1; v0.12 has no
+  blueprints) refuses a blueprint that carries `requires_core_max` ("requires_core_max is not allowed in a blueprint"): it is still listed, but
+  showing or applying it is refused. Give a blueprint the key only when that is acceptable.
   The key is the same in package.toml, in an index entry and in a history row of the signed index; `hs pkg validate` checks that it is a whole
   number from the `requires_core` level on, and the repository check that index.toml and package.toml say the same.
 - an installed package whose range ends below the core after an `hs update` is **reported, never removed or switched off**: `hs update` names it

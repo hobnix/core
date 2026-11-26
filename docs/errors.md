@@ -2904,6 +2904,14 @@ Install or update was asked for a package whose requires_core_max is below the A
 - Text: The package does not support this core yet: wait for a release of the package that does.
 - Fix: none
 
+### pkg.other-repo
+
+Install was asked for a package whose name is installed from another repository (or from one that is gone).
+
+- Layer: script
+- Text: A package of this name is installed from another repository: remove it first to switch.
+- Fix: `hs pkg remove <name>`
+
 ### pkg.core-range
 
 The requires_core or requires_core_max of a package is not in a valid form.

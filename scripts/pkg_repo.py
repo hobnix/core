@@ -846,6 +846,12 @@ class Repos:
         r = self.all()[r_name]
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
+        # a copy that came from another repository (also an orphan whose repository is gone) is never replaced by a package of the same name:
+        # switching is a removal first. A record without repo (the old `hs recipe` record) and one without a copy in current/ replace nothing.
+        home = self.pkg.installed().get(name, {}).get("repo")
+        if os.path.isdir(cur) and isinstance(home, str) and home and home != r_name:
+            raise Refused("%s is installed from %s; the package of the same name in %s would replace it. To switch on purpose: hs pkg remove %s, then hs pkg install %s --repo %s"
+                          % (name, home, r_name, name, name, r_name), "pkg.other-repo")
         tmp = os.path.join(self.state, "current", ".new-" + name)
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)

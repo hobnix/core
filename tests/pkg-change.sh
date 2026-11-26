@@ -131,6 +131,9 @@ check_out "plan: its install is refused with the reason, not as installed alread
 check_out "plan: and its code, before anything is read" "^code${tab}pkg[.]core-too-new$" bash -c "$C plan install demo; true"
 check_out "start: refused the same way" "^code${tab}pkg[.]core-too-new$" bash -c "$C start install demo --confirm demo; true"
 check "and nothing is installed" test ! -e "$HS_STATE_DIR/packages/current/demo"
+AC="bash $SCRIPTS/apps-change.sh"
+check_out "the app install plan says so too, with the code of the range" "^code${tab}pkg[.]core-too-new$" bash -c "$AC plan install demo 2>&1; true"
+check_out "and the reason, not hs update" "^reason${tab}.*does not support this core yet" bash -c "$AC plan install demo 2>&1; true"
 
 echo "-- removing a repository"
 check_out "a default repository stays" "default" bash -c "$C plan repo-remove official; true"
@@ -198,4 +201,19 @@ check_out "plan: the update is the newer release of beta, not alpha's 99.0.0" "^
 check_out "start: it installs that release" "^status${tab}done" $C start update foo --confirm foo
 check_out "and installed.toml still names beta" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
 check_out "plan: remove names the package of beta" "^status${tab}ok" $C plan remove foo
+# installing the name from another repository never replaces the copy of beta: not by hand, not by the app install of the web
+check_out "pkg install --repo alpha is refused with its code" "^code${tab}pkg[.]other-repo$" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "and says how to switch on purpose" "hs pkg remove foo" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "the copy of beta stays" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
+check_out "the app install plan from alpha is refused" "^code${tab}pkg[.]other-repo$" bash -c "$AC plan install foo --repo alpha 2>&1; true"
+check_out "an update of beta's own copy still works (same repository)" "current" bash -c "python3 -I $SCRIPTS/pkg.py update foo --yes 2>&1"
+# an orphan: beta's row is gone, the copy stays; alpha's package of the same name does not take its place
+$C start repo-remove beta --confirm beta >/dev/null
+check_out "market: the copy of beta is an orphan" "^foo${tab}[?]${tab}beta${tab}-${tab}1[.]1[.]0${tab}orphan" $PKGSH --market
+check_out "pkg install --repo alpha does not replace the orphan" "^code${tab}pkg[.]other-repo$" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "plan install from alpha is refused" "installed already" bash -c "$C plan install foo --repo alpha; true"
+check_out "the app install plan from alpha is refused" "^code${tab}pkg[.]other-repo$" bash -c "$AC plan install foo --repo alpha 2>&1; true"
+check_out "the orphan is still beta's" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
+python3 -I "$SCRIPTS/pkg.py" remove foo >/dev/null
+check_out "after remove, alpha's package installs (the switch on purpose)" "foo 99[.]0[.]0 from alpha" python3 -I "$SCRIPTS/pkg.py" install foo --repo alpha
 finish
