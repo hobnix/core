@@ -10,6 +10,7 @@ printf '#!/usr/bin/env bash\n[ "$*" = "conf listshares" ] && printf "data-03-in-
 mkdir -p "$WORK/disks/data-01/shares" "$WORK/bulk/shares"
 . "$SCRIPTS/lib/bulkpath.sh"
 . "$SCRIPTS/lib/sharepath.sh"
+# shellcheck source=scripts/lib/adopt-names.sh
 . "$SCRIPTS/lib/adopt-names.sh"
 
 LONG=CommunityApplicationsAppdataBackup      # data-02-<it> is 42 characters (the report of issue 1245)
