@@ -79,16 +79,38 @@ Go has no library on purpose: the protocol is five message types and the example
 
 ## Write it in Rust
 
-The crate `rust/hobnix-ext-sdk` has the same message types, a command runner and a service runner (ADR 0011). Its examples are
-`rust/hobnix-ext-sdk/examples/hello.rs` and `ticker.rs`.
+The SDK is three crates in `rust/` (0.14; docs/PLAN-package-sdk.md):
 
-For a service that talks to an integration (Jellyfin, Plex, ...) the crate has three helpers:
+| Crate | What it has |
+|---|---|
+| `hobnix-pkg` | `Ctx`, `Event`, `LogLevel`, `Secret`, `Error`, the wire messages of both protocols (`wire`), `integrations`, `credentials`, `http`, `testing::FakeCtx` |
+| `hobnix-pkg-command` | the command runner (`run`, `Request`, `Success`, `Failure`) |
+| `hobnix-pkg-service` | the service runner (`Service`, `run`, `Init`, `EventRow`, `Health`) |
 
-- `hobnix_ext_sdk::integrations::parse(text)` turns the output of `hs pkg integrations` (package, integration, source, api_url, key_file, extras, key_header) into typed rows; `-` becomes `None`.
-- `hobnix_ext_sdk::service::credential_for("<name>", "<provider>")` reads the key of one provider, and `row.credential()` does the same for a row (see "Keys of integrations (services)" below). `service::credential("<name>")` is deprecated.
-- `hobnix_ext_sdk::http::Client` is a small blocking client built on the standard library: `Client::new().timeout(..).header(key_header, key).get_json(url)`, also `post_json`. It has no dependencies of its own, so a build for `x86_64-unknown-linux-musl` needs no OpenSSL and no C toolchain. **It speaks plain `http://` only**: `https://` is refused with `HttpError::TlsUnsupported`. A TLS stack (rustls with `ring`) brings C and assembly code and many crates, and the core's Nix build of `rust/` has not been checked with them. Media servers on the same host or LAN are reached over http; for an https-only API put a local proxy in front.
+A command extension depends on `hobnix-pkg` and `hobnix-pkg-command`, a service on `hobnix-pkg` and `hobnix-pkg-service`, each by the same core tag
+(ADR 0031): `hobnix-pkg = { git = "https://github.com/hobnix/core", tag = "vX.Y.Z" }`. The examples are `rust/hobnix-pkg-command/examples/hello.rs`
+and `apiprobe.rs`, and `rust/hobnix-pkg-service/examples/ticker.rs`.
 
-`hobnix_ext_sdk::Ctx` is a trait: what a handler asks of the host (`credential`, `integrations`, `emit`, `log`, `progress`; a service also `rollup` and `snapshot`). `command::run` and `service::run` hand the handler a `&dyn Ctx`, so write `fn handle(req: &Request, ctx: &dyn Ctx)` and `use hobnix_ext_sdk::Ctx`. In a test, call the handler with `hobnix_ext_sdk::testing::FakeCtx`, which records every call (`calls()`) and answers `credential` and `integrations` from what the test set. `ctx.shared()` gives an `Arc<dyn Ctx>` for another thread. There is no call that runs a host command: a service never does (ADR 0031). The wire output is unchanged.
+**Moving from `hobnix-ext-sdk` (breaking rename in 0.14).** The crate `hobnix-ext-sdk` is deprecated: in 0.14 it re-exports the new crates under
+the old paths, so an extension of 0.13 builds unchanged, with a deprecation warning at `run`; it is removed after 0.14. A crate that pins an older
+tag or rev keeps building against that one. To move: replace the dependency by the two crates above, then
+
+- `hobnix_ext_sdk::command::{run, Request, Success, Failure}` becomes `hobnix_pkg_command::...`; `hobnix_ext_sdk::service::{run, Service, Init, EventRow, Health}` becomes `hobnix_pkg_service::...`; `Ctx`, `Event`, `LogLevel`, `http`, `integrations`, `testing` come from `hobnix_pkg`.
+- `Service::start` and `on_event` return `Result<(), hobnix_pkg::Error>` instead of `Result<(), String>`. `?` still works on a `Result<_, String>`, an `io::Error`, a `serde_json::Error` and an `HttpError`; `Error::with_cause(kind, "text", e)` keeps the cause, and the log line shows the whole chain.
+- `ctx.credential(..)`, `row.credential()` and `hobnix_pkg::credentials::credential_for(..)` return `Option<Secret>`: `Debug` and `Display` print `***`, `key.expose()` is the value. `Client::header` takes a `Secret` as it is.
+- `ctx.event(..)` is `ctx.emit(..)`.
+- `Request`, `Init`, `EventRow`, `Event`, `Success` and `Failure` are `#[non_exhaustive]`: build them with their constructors (`Request::new(id, command, argv)`, `Init::new(..)`, `EventRow::new(..)`), not with a struct literal. `Integration` and `Health` still take a literal in 0.14.
+- An unknown `lang` or `caller` from a newer core is `Lang::Other` or `Caller::Other` instead of a `bad_request`.
+
+For a service that talks to an integration (Jellyfin, Plex, ...) `hobnix-pkg` has three helpers:
+
+- `hobnix_pkg::integrations::parse(text)` turns the output of `hs pkg integrations` (package, integration, source, api_url, key_file, extras, key_header) into typed rows; `-` becomes `None`.
+- `hobnix_pkg::credentials::credential_for("<name>", "<provider>")` reads the key of one provider as a `Secret`, and `row.credential()` does the same for a row (see "Keys of integrations (services)" below).
+- `hobnix_pkg::http::Client` is a small blocking client built on the standard library: `Client::new().timeout(..).header(key_header, &key).get_json(url)`, also `post_json`. It has no dependencies of its own, so a build for `x86_64-unknown-linux-musl` needs no OpenSSL and no C toolchain. **It speaks plain `http://` only**: `https://` is refused with `HttpError::TlsUnsupported`. A TLS stack (rustls with `ring`) brings C and assembly code and many crates, and the core's Nix build of `rust/` has not been checked with them. Media servers on the same host or LAN are reached over http; for an https-only API put a local proxy in front.
+
+`hobnix_pkg::Ctx` is a trait: what a handler asks of the host (`credential`, `integrations`, `emit`, `log`, `progress`; a service also `rollup` and `snapshot`). The runners hand the handler a `&dyn Ctx`, so write `fn handle(req: &Request, ctx: &dyn Ctx)` and `use hobnix_pkg::Ctx`. In a test, call the handler with `hobnix_pkg::testing::FakeCtx`, which records every call (`calls()`) and answers `credential` and `integrations` from what the test set. `ctx.shared()` gives an `Arc<dyn Ctx>` for another thread. There is no call that runs a host command: a service never does (ADR 0031).
+
+`hobnix_pkg::wire` holds every message of both protocols as a type that can be read and written (`wire::decode`, `wire::encode`, `wire::Writer`): the runners use it, and so can a test or a host. A message type this version does not know is `Decoded::Unknown` and is ignored. The wire output of 0.14 is byte for byte the one of 0.13.
 
 **The user of a service.** A service does not run as root: it runs as its own unprivileged user `hsx-<name>` (systemd `DynamicUser`; #1134). It may write only
 its own folder (declare it as `fs.write:/var/lib/hs/<name>`): any other `fs.write` is refused (`ext.dynamic-write`), and so is `fs.read` of the server's state or of another extension
@@ -97,7 +119,7 @@ folder gives each file back to the service, with `chown -h --reference="$dir" "$
 
 A service never calls `hs` (inside its confined unit `hs` cannot see the package registry); it gets what it needs through the protocol. Build, shipping and run rules of a Rust extension: ADR 0031 (docs/adr/0031-rust-extensions.md).
 
-`examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl --example apiprobe` in `rust/`. Not tested on hardware yet.
+`rust/hobnix-pkg-command/examples/apiprobe.rs` uses all three. A static binary: `rustup target add x86_64-unknown-linux-musl`, then `cargo build --release --target x86_64-unknown-linux-musl -p hobnix-pkg-command --example apiprobe` in `rust/`. Not tested on hardware yet.
 
 ### Ship the program: `[[binary]]`
 
@@ -130,7 +152,7 @@ A confined service cannot write `state.db` or read `/var/lib/hs` (ADR 0014): it 
 
 ## Keys of integrations (services)
 
-A service that declares `permissions = ["integration:<name>"]` gets one key per provider of that integration: the provider `radarr` of `media` is the file `$CREDENTIALS_DIRECTORY/integration-media-radarr` (a systemd credential: not in argv, not in the environment). The provider is the `package` column of the row in `hs pkg integrations` (the `integration` column is `<name>`), so a row names its credential and a service never has to guess whose key it holds: `integration-<integration>-<package>`. A provider that offers the integration without a `key_file` gives no credential and no failure. Only integrations the package declared are handed over, never a key of an integration it did not declare, and never the key of its own provider block. Every key goes through the same strict check (registered provider, key file below that provider's folder, read once on the open descriptor, private 0600 copy). The key files stay hidden from the service. Python: `ext_sdk.credential("<name>", "<provider>")`; Rust: `hobnix_ext_sdk::service::credential_for("<name>", "<provider>")`, or `row.credential()` on a row of `integrations::parse`. They return `None` when there is none (not declared, the provider has no key, the vault is locked, the file is missing). A confined service cannot run `hs pkg integrations` (the vault is an empty tmpfs there), so the core sends the rows of the declared integrations in `init`: Rust `Init::integrations: Vec<Integration>`, Python `ext_sdk.init_integrations(init)`. The rows hold no key and no key path; call `row.credential()` for the key. An undeclared integration is never in the list. Not tested on hardware yet. The one-name form (`ext_sdk.credential("<name>")`, Rust `service::credential("<name>")`, the file `integration-<name>`) is deprecated: it was the key of the first provider with a key, without the owner. The core still hands that file over for one release; move to the provider form. Not tested on hardware yet.
+A service that declares `permissions = ["integration:<name>"]` gets one key per provider of that integration: the provider `radarr` of `media` is the file `$CREDENTIALS_DIRECTORY/integration-media-radarr` (a systemd credential: not in argv, not in the environment). The provider is the `package` column of the row in `hs pkg integrations` (the `integration` column is `<name>`), so a row names its credential and a service never has to guess whose key it holds: `integration-<integration>-<package>`. A provider that offers the integration without a `key_file` gives no credential and no failure. Only integrations the package declared are handed over, never a key of an integration it did not declare, and never the key of its own provider block. Every key goes through the same strict check (registered provider, key file below that provider's folder, read once on the open descriptor, private 0600 copy). The key files stay hidden from the service. Python: `ext_sdk.credential("<name>", "<provider>")`; Rust: `hobnix_pkg::credentials::credential_for("<name>", "<provider>")`, or `row.credential()` on a row of `integrations::parse` (both a `Secret`). They return `None` when there is none (not declared, the provider has no key, the vault is locked, the file is missing). A confined service cannot run `hs pkg integrations` (the vault is an empty tmpfs there), so the core sends the rows of the declared integrations in `init`: Rust `Init::integrations: Vec<Integration>`, Python `ext_sdk.init_integrations(init)`. The rows hold no key and no key path; call `row.credential()` for the key. An undeclared integration is never in the list. Not tested on hardware yet. The one-name form (`ext_sdk.credential("<name>")`, Rust `hobnix_ext_sdk::service::credential("<name>")`, the file `integration-<name>`) is deprecated: it was the key of the first provider with a key, without the owner. The core still hands that file over for one release; move to the provider form. Not tested on hardware yet.
 
 ## Keep a monthly rollup instead of raw ticks
 
