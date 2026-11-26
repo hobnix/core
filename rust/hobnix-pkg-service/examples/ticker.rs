@@ -4,13 +4,10 @@
 //! cargo build --example ticker
 //! python3 ../../scripts/lib/ext_service.py run --name ticker --health-interval 1 --run-for 3 -- target/debug/examples/ticker
 //! ```
-#![expect(
-    clippy::print_stderr,
-    reason = "diagnostics go to stderr, stdout carries the protocol"
-)]
-use hobnix_ext_sdk::Ctx;
-use hobnix_ext_sdk::service::{EventRow, Health, Init, Service, run};
+use hobnix_pkg::{Ctx, Error};
+use hobnix_pkg_service::{EventRow, Health, Init, Service, run};
 use serde_json::json;
+use std::io::{self, Write};
 use std::process::ExitCode;
 
 #[derive(Default)]
@@ -20,14 +17,16 @@ struct Ticker {
 }
 
 impl Service for Ticker {
-    fn start(&mut self, init: &Init, _ctx: &dyn Ctx) -> Result<(), String> {
-        eprintln!(
-            "ticker starting as {} (subscribed to {:?})",
-            init.name, init.subscribe
-        );
+    // Nothing but `ready` may go to stdout before `start` returns: a diagnostic goes to stderr.
+    fn start(&mut self, init: &Init, _ctx: &dyn Ctx) -> Result<(), Error> {
+        let (name, subscribe) = (&init.name, &init.subscribe);
+        writeln!(
+            io::stderr(),
+            "ticker starting as {name} (subscribed to {subscribe:?})"
+        )?;
         Ok(())
     }
-    fn on_event(&mut self, _event: &EventRow, _ctx: &dyn Ctx) -> Result<(), String> {
+    fn on_event(&mut self, _event: &EventRow, _ctx: &dyn Ctx) -> Result<(), Error> {
         // idempotent enough for an example: a repeated event only counts twice
         self.seen += 1;
         Ok(())

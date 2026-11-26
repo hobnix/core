@@ -1,7 +1,9 @@
-//! The SDK against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
+//! The 0.13 API through the deprecated re-export, against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
+//! This file is the test of 0.13 unchanged: only this comment and the deprecation in the attribute below are new.
 #![expect(
     clippy::unwrap_used,
-    reason = "test code: a failed unwrap is the failure"
+    deprecated,
+    reason = "test code: a failed unwrap is the failure; the 0.13 entry points it calls are deprecated"
 )]
 
 use std::io::{Cursor, Write};

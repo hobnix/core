@@ -5,12 +5,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use serde_json::Value;
 
 use crate::integrations::Integration;
-use crate::{Ctx, Event, LogLevel};
+use crate::{Ctx, Event, LogLevel, Secret};
 
 /// One call a handler made on a [`FakeCtx`].
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Call {
-    /// `emit` (or `event`).
+    /// `emit`.
     Emit(Event),
     /// `log` with the level and the text as given.
     Log(LogLevel, String),
@@ -85,42 +86,42 @@ impl FakeCtx {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    #[expect(
-        clippy::unnecessary_wraps,
-        reason = "the Ctx methods return what this returns"
-    )]
-    fn record(&self, call: Call) -> io::Result<()> {
+    fn record(&self, call: Call) {
         self.lock().calls.push(call);
-        Ok(())
     }
 }
 
 impl Ctx for FakeCtx {
-    fn credential(&self, name: &str, provider: &str) -> Option<String> {
+    fn credential(&self, name: &str, provider: &str) -> Option<Secret> {
         let state = self.lock();
         let hit = state
             .credentials
             .iter()
             .find(|(n, p, _)| n == name && p == provider);
-        hit.map(|(_, _, key)| key.clone())
+        hit.map(|(_, _, key)| Secret::new(key.as_str()))
     }
     fn integrations(&self) -> &[Integration] {
         &self.integrations
     }
     fn emit(&self, ev: &Event) -> io::Result<()> {
-        self.record(Call::Emit(ev.clone()))
+        self.record(Call::Emit(ev.clone()));
+        Ok(())
     }
     fn log(&self, level: LogLevel, text: &str) -> io::Result<()> {
-        self.record(Call::Log(level, text.into()))
+        self.record(Call::Log(level, text.into()));
+        Ok(())
     }
     fn progress(&self, fraction: Option<f64>, text: &str) -> io::Result<()> {
-        self.record(Call::Progress(fraction, text.into()))
+        self.record(Call::Progress(fraction, text.into()));
+        Ok(())
     }
     fn rollup(&self, kind: &str, user: &str, n: f64, sum: f64) -> io::Result<()> {
-        self.record(Call::Rollup(kind.into(), user.into(), n, sum))
+        self.record(Call::Rollup(kind.into(), user.into(), n, sum));
+        Ok(())
     }
     fn snapshot(&self, topic: &str, data: Value) -> io::Result<()> {
-        self.record(Call::Snapshot(topic.into(), data))
+        self.record(Call::Snapshot(topic.into(), data));
+        Ok(())
     }
     fn shared(&self) -> Arc<dyn Ctx> {
         Arc::new(self.clone())
@@ -136,8 +137,9 @@ mod tests {
         let ctx = FakeCtx::new().with_credential("media", "jf", "k");
         ctx.log(LogLevel::Info, "a").unwrap();
         ctx.shared().emit(&Event::new("pkg.t.x", "s")).unwrap();
-        assert_eq!(ctx.credential("media", "jf").as_deref(), Some("k"));
-        assert_eq!(ctx.credential("media", "other"), None);
+        let key = ctx.credential("media", "jf");
+        assert_eq!(key.as_ref().map(Secret::expose), Some("k"));
+        assert!(ctx.credential("media", "other").is_none());
         assert_eq!(
             ctx.calls(),
             [

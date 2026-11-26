@@ -5,8 +5,8 @@
 //! cargo build --example hello
 //! python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
 //! ```
-use hobnix_ext_sdk::command::{Failure, Request, Success, run};
-use hobnix_ext_sdk::{Ctx, Event, LogLevel};
+use hobnix_pkg::{Ctx, Event, LogLevel};
+use hobnix_pkg_command::{Failure, Request, Success, run};
 use serde_json::json;
 use std::process::ExitCode;
 
@@ -15,7 +15,7 @@ fn handle(req: &Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
         ["greet"] => {
             let name = req.argv.first().map_or("world", String::as_str);
             let _ = ctx.log(LogLevel::Info, "greeting");
-            let _ = ctx.event(&Event::new("pkg.hello.greeted", name));
+            let _ = ctx.emit(&Event::new("pkg.hello.greeted", name));
             let greeting = format!("hello {name}");
             Ok(Success::data(json!({ "greeting": greeting })).with_text(greeting))
         }
