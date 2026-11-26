@@ -269,6 +269,66 @@ done <<<"$out"
 check_eq "the unit checks ran to the end" 0 "$rc"
 [ "$rc" = 0 ] || tail -n 15 "$WORK/unit.err"
 
+echo "-- listing_rows through the real pkg.sh: an Incus that does not answer is a failed listing, not rows without an address"
+cat > "$WORK/real.py" <<'PY'
+# real.py <lib> <integration> [listing timeout]: what the watcher sees: "None", or "package=api_url" of each row
+import importlib.util
+import os
+import sys
+s = importlib.util.spec_from_file_location("es", os.path.join(sys.argv[1], "ext_service.py"))
+es = importlib.util.module_from_spec(s)
+s.loader.exec_module(es)
+if len(sys.argv) > 3:
+    es.LISTING_TIMEOUT = float(sys.argv[3])
+got = es.listing_rows("fixsvc", ["integration:" + sys.argv[2]])
+print("None" if got is None else " ".join("%s=%s" % (r["package"], r["api_url"]) for r in got) or "empty")
+PY
+R=$WORK/real; mkdir -p "$R/packages/jellyfin" "$R/packages/literal" "$R/state/services.d"
+for n in jellyfin literal; do
+  printf '#!/usr/bin/env bash\n# recipe: %s: test\nct=${RECIPE_NAME:-%s}\n' "$n" "$n" > "$R/packages/$n/run.sh"
+done
+printf 'name = "jellyfin"\nkind = "recipe"\n[integrations.media]\napi_url = "http://{host}:8096"\n' > "$R/packages/jellyfin/package.toml"
+printf 'name = "literal"\nkind = "recipe"\n[integrations.fixed]\napi_url = "http://10.1.1.1:80"\n' > "$R/packages/literal/package.toml"
+printf 'container = "jellyfin"\n' > "$R/state/services.d/jellyfin.toml"
+# the fake incus: NAMES is the answer to recipes-list.sh (the names), JSON the answer to the query for the addresses
+cat > "$R/incus" <<'SH'
+#!/usr/bin/env bash
+case "$*" in *json*) how=$JSON ;; *) how=$NAMES ;; esac
+case "$how" in
+  fail) exit 1 ;;
+  hang) exec sleep 30 ;;
+  bad) echo 'Error: not authorized' ;;
+  object) echo '{"error": 1}' ;;
+  names) printf 'jellyfin\nliteral\n' ;;
+  absent) echo '[]' ;;
+  running|stopped)
+    st=Stopped; [ "$how" = running ] && st=Running
+    printf '[{"name":"jellyfin","status":"%s","expanded_devices":{"eth0":{"type":"nic","hwaddr":"00:16:3e:00:00:01"}},"state":{"network":{"eth0":{"hwaddr":"00:16:3e:00:00:01","addresses":[{"scope":"global","address":"192.168.1.20"}]}}}}]\n' "$st" ;;
+esac
+SH
+chmod +x "$R/incus"
+renv() { env -u HS_EXT_LISTING_CMD HS_PACKAGES_ROOT="$R" HS_RECIPES_DIR="$R/packages" HS_STATE_DIR="$R/state" HS_INCUS="$R/incus" HS_INCUS_TIMEOUT=1 NAMES="$1" JSON="$2" "${@:3}"; }
+real() { renv "$1" "$2" python3 -I "$WORK/real.py" "$SCRIPTS/lib" "${@:3}"; }
+check_eq "Incus answers: the address" "jellyfin=http://192.168.1.20:8096" "$(real names running media)"
+check_eq "a stopped instance is a real answer: no address" "jellyfin=None" "$(real names stopped media)"
+check_eq "an instance that is not in the answer: no address" "jellyfin=None" "$(real names absent media)"
+for how in fail bad object hang; do
+  check_eq "the address query $how: a failed listing" None "$(real names "$how" media)"
+done
+check_eq "the instance names cannot be read (the recipe would drop out): a failed listing" None "$(real fail fail media)"
+s=$SECONDS
+check_eq "the instance names query hangs: a failed listing" None "$(real hang running media 3)"
+check "and the listing timeout ends it, with the hanging incus" test $((SECONDS - s)) -le 12
+check_eq "no incus program: a failed listing" None "$(renv names running env HS_INCUS="$R/nosuch" python3 -I "$WORK/real.py" "$SCRIPTS/lib" media)"
+check_eq "an address that needs no query: a failing query does not matter" "literal=http://10.1.1.1:80" "$(real names fail fixed)"
+check_eq "no recipe offers it: Incus is not needed" empty "$(real fail fail nobody)"
+today() { renv "$1" "$2" env -u HS_INTEGRATIONS_STRICT bash "$SCRIPTS/pkg.sh" --integrations media; }
+rc=0; out=$(today names fail) || rc=$?
+check_eq "hs pkg integrations and the start stay as before: exit 0, the row with -" "0 jellyfin media -" "$rc $(cut -f1,2,4 <<<"$out" | tr '\t' ' ')"
+rc=0; out=$(today fail fail) || rc=$?
+check_eq "and exit 0 without a row when the names cannot be read" "0 " "$rc $out"
+check "ext.sh does not ask for the strict listing" sh -c "! grep -q HS_INTEGRATIONS_STRICT '$SCRIPTS/ext.sh'"
+
 echo "-- svc-run: new rows restart the service process inside the same bridge"
 PKG=$WORK/pkgs/fixsvc; mkdir -p "$PKG" "$WORK/svcstate"
 printf 'name = "fixsvc"\npermissions = ["integration:media"]\n[service]\nexec = "@/run.sh"\nhealth_interval = 5\n' > "$PKG/package.toml"

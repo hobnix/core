@@ -740,23 +740,30 @@ def integration_rows(text, perms):
 
 def listing_rows(name, perms):
     """The rows of `init.integrations` as they are now, built like `hs ext svc-run` builds them at the start (pkg.sh --integrations for each
-    declared integration); None when one listing fails: then nothing is known. The listing stays in a pipe (never argv or environment).
+    declared integration); None when one listing fails: then nothing is known. HS_INTEGRATIONS_STRICT makes pkg.sh fail when Incus was needed and
+    did not answer (the start in ext.sh does not set it). The listing stays in a pipe (never argv or environment).
     Test knob HS_EXT_LISTING_CMD: a command line instead of pkg.sh, the integration name is appended."""
     knob = os.environ.get("HS_EXT_LISTING_CMD")
     script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pkg.sh")
     base = shlex.split(knob) if knob else ["bash", script, "--integrations"]
+    env = dict(os.environ, HS_INTEGRATIONS_STRICT="1")
     texts = []
     for p in perms or []:
         if not p.startswith("integration:"):
             continue
         try:
-            r = subprocess.run(base + [p[len("integration:"):]], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                               timeout=LISTING_TIMEOUT, check=False)
+            with subprocess.Popen(base + [p[len("integration:"):]], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  env=env, start_new_session=True) as proc:
+                try:
+                    out = proc.communicate(timeout=LISTING_TIMEOUT)[0]
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)    # also a hanging `incus` below bash: it holds the pipe
+                    return None
         except (OSError, subprocess.SubprocessError):
             return None
-        if r.returncode != 0:
+        if proc.returncode != 0:
             return None
-        texts.append(r.stdout.decode("utf-8", "replace"))
+        texts.append(out.decode("utf-8", "replace"))
     return integration_rows("\n".join(texts)[:MAX_LISTING], perms)
 
 
