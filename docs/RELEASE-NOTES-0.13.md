@@ -107,7 +107,7 @@ them were looked at on the real server was not recorded. Not tested on hardware 
   system calls). Unix sockets, the network and declared permissions such as the GPU stay. A command that asks to write elsewhere is refused. If both
   the old and the new state folder exist, the service does not start and nothing is changed.
 - Service extensions get their integrations (provider, API address, key header) in the init message; keys still come only as systemd credentials.
-  Keys and rollups work again for extension services (fix).
+  Keys and monthly sums (rollups) work again for extension services (fix).
 - Rust SDK: handlers take `&dyn Ctx`, and `hobnix_ext_sdk::testing::FakeCtx` runs a handler in a test. The job record writer handles `error`,
   `result` and `skip` in Rust.
 - In 0.14 the crate `hobnix-ext-sdk` is replaced by the `hobnix-pkg` crates: a breaking change for extension authors. The old name re-exports them

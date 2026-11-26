@@ -515,7 +515,8 @@ def emit_verdict(name, perms, kind):
 
 
 def metric_kinds(pkgdir):
-    """The kinds the package declared with `retention = "metric"` in its [[events]] (package.toml, else capability.toml)."""
+    """The kinds the package declared with `retention = "metric"` in its [[events]] (package.toml, else capability.toml), as written there: the
+    short name without `pkg.<name>.` (docs/events.md "Package events")."""
     if tomllib is None or not pkgdir:
         return set()
     for f in ("package.toml", "capability.toml"):
@@ -533,7 +534,7 @@ def rollup_verdict(name, pkgdir, kind):
     """None when `name` may add to the monthly rollup of `kind`, else the reason: only a kind of its own that its [[events]] declare with retention = metric."""
     if not kind.startswith(f"pkg.{name}."):
         return f"a package may only roll up pkg.{name}.<what>"
-    if kind not in metric_kinds(pkgdir):
+    if kind[len(f"pkg.{name}."):] not in metric_kinds(pkgdir):
         return 'not declared in [[events]] with retention = "metric"'
     return None
 
