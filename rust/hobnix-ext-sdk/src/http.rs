@@ -205,24 +205,28 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
 }
 
 /// The URL for an error text: the query and fragment become `?***`, a userinfo part `***@` (either can carry a key).
+///
+/// A pasted password may hold `/`, `?` or `#` unencoded, so everything before the LAST `@` goes (an `@` in the path or query hides the
+/// host too: too much hidden is fine in an error text, too little is not); only a well-formed scheme is kept in front of it.
 fn redact_url(url: &str) -> String {
-    let (base, cut) = match url.split_once(['?', '#']) {
-        Some((b, _)) => (b, "?***"),
-        None => (url, ""),
+    let (head, rest) = match url.rsplit_once('@') {
+        Some((before, after)) => {
+            let scheme = before.split_once("://").map(|(s, _)| s).filter(|s| {
+                !s.is_empty()
+                    && s.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+            });
+            (
+                scheme.map_or_else(|| "***@".to_string(), |s| format!("{s}://***@")),
+                after,
+            )
+        }
+        None => (String::new(), url),
     };
-    let (scheme, rest) = match base.split_once("://") {
-        Some((s, r)) => (format!("{s}://"), r),
-        None => (String::new(), base),
-    };
-    let (auth, path) = match rest.split_once('/') {
-        Some((a, p)) => (a, format!("/{p}")),
-        None => (rest, String::new()),
-    };
-    let auth = match auth.rsplit_once('@') {
-        Some((_, host)) => format!("***@{host}"),
-        None => auth.to_string(),
-    };
-    format!("{scheme}{auth}{path}{cut}")
+    match rest.split_once(['?', '#']) {
+        Some((base, _)) => format!("{head}{base}?***"),
+        None => format!("{head}{rest}"),
+    }
 }
 
 fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
@@ -361,6 +365,27 @@ mod tests {
         assert_eq!(e.to_string(), "bad url: ftp://h:1/x?***");
         let e = parse_url("http://u:p@h/x").unwrap_err();
         assert_eq!(e.to_string(), "bad url: http://***@h/x");
+    }
+
+    #[test]
+    fn bad_url_hides_a_password_with_slash_question_mark_or_hash() {
+        for url in [
+            "http://u:pa?ss-9d2e@h/x",
+            "http://u:pa/ss-9d2e@h/x",
+            "http://u:pa#ss-9d2e@h/x",
+            "ftp://u:pa?ss-9d2e@h",
+            "u@x://pa?ss-9d2e@h",
+        ] {
+            let e = parse_url(url).unwrap_err();
+            for shown in [e.to_string(), format!("{e:?}")] {
+                assert!(!shown.contains("pa"), "{url}: {shown}");
+                assert!(!shown.contains("9d2e"), "{url}: {shown}");
+            }
+        }
+        let e = parse_url("http://u:pa/ss@h/x?k=1").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: http://***@h/x?***");
+        let e = parse_url("ftp://h/x#frag").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: ftp://h/x?***");
     }
 
     #[test]
