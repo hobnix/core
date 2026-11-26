@@ -81,10 +81,21 @@ impl Response {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Client {
     timeout: Duration,
     headers: Vec<(String, String)>,
+}
+
+/// Header names only: a value can be the integration key.
+impl std::fmt::Debug for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(k, _)| k.as_str()).collect();
+        f.debug_struct("Client")
+            .field("timeout", &self.timeout)
+            .field("headers", &names)
+            .finish()
+    }
 }
 
 impl Default for Client {
@@ -169,7 +180,7 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
     if url.starts_with("https://") {
         return Err(HttpError::TlsUnsupported);
     }
-    let bad = || HttpError::BadUrl(url.into());
+    let bad = || HttpError::BadUrl(redact_url(url));
     let rest = url.strip_prefix("http://").ok_or_else(bad)?;
     let (auth, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
@@ -191,6 +202,31 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
         (auth.to_string(), 80)
     };
     Ok((host, port, path.to_string()))
+}
+
+/// The URL for an error text: the query and fragment become `?***`, a userinfo part `***@` (either can carry a key).
+///
+/// A pasted password may hold `/`, `?` or `#` unencoded, so everything before the LAST `@` goes (an `@` in the path or query hides the
+/// host too: too much hidden is fine in an error text, too little is not); only a well-formed scheme is kept in front of it.
+fn redact_url(url: &str) -> String {
+    let (head, rest) = match url.rsplit_once('@') {
+        Some((before, after)) => {
+            let scheme = before.split_once("://").map(|(s, _)| s).filter(|s| {
+                !s.is_empty()
+                    && s.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+            });
+            (
+                scheme.map_or_else(|| "***@".to_string(), |s| format!("{s}://***@")),
+                after,
+            )
+        }
+        None => (String::new(), url),
+    };
+    match rest.split_once(['?', '#']) {
+        Some((base, _)) => format!("{head}{base}?***"),
+        None => format!("{head}{rest}"),
+    }
 }
 
 fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
@@ -254,21 +290,25 @@ fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, HttpError> {
             .windows(2)
             .position(|w| w == b"\r\n")
             .ok_or_else(|| bad("chunk size missing"))?;
-        let size_text = std::str::from_utf8(&b[..i]).map_err(|_| bad("chunk size"))?;
+        let (line, tail) = (b.get(..i), b.get(i + 2..));
+        let size_text =
+            std::str::from_utf8(line.unwrap_or_default()).map_err(|_| bad("chunk size"))?;
         let size_text = size_text.split(';').next().unwrap_or("").trim();
         let n = usize::from_str_radix(size_text, 16).map_err(|_| bad("chunk size"))?;
-        b = &b[i + 2..];
+        b = tail.unwrap_or_default();
         if n == 0 {
             return Ok(out);
         }
-        if b.len() < n + 2 {
-            return Err(bad("chunk cut off"));
-        }
-        out.extend_from_slice(&b[..n]);
-        if out.len() > MAX_BODY {
+        // the size comes from the peer: refuse it before any arithmetic with it
+        if n > MAX_BODY || out.len().saturating_add(n) > MAX_BODY {
             return Err(bad("body too large"));
         }
-        b = &b[n + 2..];
+        let end = n.checked_add(2).ok_or_else(|| bad("chunk size"))?;
+        let (Some(chunk), Some(next)) = (b.get(..n), b.get(end..)) else {
+            return Err(bad("chunk cut off"));
+        };
+        out.extend_from_slice(chunk);
+        b = next;
     }
 }
 
@@ -304,5 +344,84 @@ mod tests {
         assert!(matches!(r.ok(), Err(HttpError::Status(404, _))));
         assert!(parse_response(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nab").is_err());
         assert!(parse_response(b"garbage").is_err());
+    }
+
+    #[test]
+    fn bad_url_does_not_show_query_or_userinfo() {
+        for url in [
+            "http://u:pw-9d2e@h/a?api_key=key-4f1c9a",
+            "ftp://h/x?api_key=key-4f1c9a",
+            "http://h/a b?api_key=key-4f1c9a#pw-9d2e",
+            "pw-9d2e@h?api_key=key-4f1c9a",
+            "http://h:notaport/?token=key-4f1c9a",
+        ] {
+            let e = parse_url(url).unwrap_err();
+            for shown in [e.to_string(), format!("{e:?}")] {
+                assert!(!shown.contains("key-4f1c9a"), "{shown}");
+                assert!(!shown.contains("pw-9d2e"), "{shown}");
+            }
+        }
+        let e = parse_url("ftp://h:1/x?y=1").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: ftp://h:1/x?***");
+        let e = parse_url("http://u:p@h/x").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: http://***@h/x");
+    }
+
+    #[test]
+    fn bad_url_hides_a_password_with_slash_question_mark_or_hash() {
+        for url in [
+            "http://u:pa?ss-9d2e@h/x",
+            "http://u:pa/ss-9d2e@h/x",
+            "http://u:pa#ss-9d2e@h/x",
+            "ftp://u:pa?ss-9d2e@h",
+            "u@x://pa?ss-9d2e@h",
+        ] {
+            let e = parse_url(url).unwrap_err();
+            for shown in [e.to_string(), format!("{e:?}")] {
+                assert!(!shown.contains("pa"), "{url}: {shown}");
+                assert!(!shown.contains("9d2e"), "{url}: {shown}");
+            }
+        }
+        let e = parse_url("http://u:pa/ss@h/x?k=1").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: http://***@h/x?***");
+        let e = parse_url("ftp://h/x#frag").unwrap_err();
+        assert_eq!(e.to_string(), "bad url: ftp://h/x?***");
+    }
+
+    #[test]
+    fn debug_does_not_show_header_values() {
+        let c = Client::new()
+            .header("X-Emby-Token", "key-4f1c9a")
+            .header("Accept-Language", "en");
+        let d = format!("{c:?}");
+        assert!(!d.contains("key-4f1c9a"), "{d}");
+        assert!(!d.contains("\"en\""), "{d}");
+        assert!(d.contains("X-Emby-Token"), "{d}");
+        assert!(d.contains("timeout"), "{d}");
+    }
+
+    #[test]
+    fn absurd_chunk_sizes_are_errors_not_panics() {
+        for size in [
+            "ffffffffffffffff",
+            "fffffffffffffffe",
+            "10000000000000000",
+            "1000001",
+        ] {
+            let raw = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{size}\r\nab\r\n0\r\n\r\n"
+            );
+            assert!(
+                matches!(
+                    parse_response(raw.as_bytes()),
+                    Err(HttpError::BadResponse(_))
+                ),
+                "chunk size {size}"
+            );
+        }
+        // a chunk that claims more than it carries, and one without its line end
+        assert!(dechunk(b"5\r\nab\r\n0\r\n\r\n").is_err());
+        assert!(dechunk(b"2\r\nab").is_err());
+        assert_eq!(dechunk(b"2\r\nab\r\n0\r\n\r\n").unwrap(), b"ab");
     }
 }
