@@ -134,7 +134,7 @@ jobs:
           manifest-path: rust/Cargo.toml
           command: check advisories
           rust-version: ${{ steps.toolchain.outputs.channel }}
-      # an extension builds the SDK alone: serde_json without hobnix-core's preserve_order (proto.rs pins the wire lines either way)
+      # an extension builds the SDK alone: serde_json without hobnix-core's preserve_order (hobnix-pkg/src/wire pins the wire lines either way)
       - name: Tests of the SDK built alone
         run: cargo test --locked -p hobnix-pkg -p hobnix-pkg-command -p hobnix-pkg-service -p hobnix-ext-sdk
       - name: tests/vault-change.sh against the binary, and shell and Rust side by side (tests/vault-change-rust.sh)
