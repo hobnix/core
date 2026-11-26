@@ -14,13 +14,13 @@ check('nothing is wrong when every check is ok', problems(fine).length === 0);
 check('a failing check is a problem', problems(broken).length === 1 && problems(broken)[0].id === 'mount');
 check('an off check is no problem', problems(off).length === 0);
 check('a short or empty answer is no problem and does not throw', problems([['a']]).length === 0 && problems(undefined).length === 0);
-check('the children of Docker are found in the tree', dockerChildren(tree).includes(P.registries));
-check('Docker itself is not one of its children', !dockerChildren(tree).includes(P.docker));
+check('the rows that need Docker are found in the tree', dockerChildren(tree).includes(P.registries));
+check('the list Apps & VMs is not one of them: it lists the instances too', !dockerChildren(tree).includes(P.appsGroup));
 check('no notes while everything is fine', Object.keys(treeMeta(fine, ['/x'])).length === 0);
 const m = treeMeta(broken, dockerChildren(tree));
-check('Docker gets a red dot with the reason', m[P.docker]?.dot === 'bad' && /hs docker enable/.test(m[P.docker].title));
+check('Apps & VMs gets a red dot with the reason', m[P.appsGroup]?.dot === 'bad' && /hs docker enable/.test(m[P.appsGroup].title));
 check('Registries is dimmed', m[P.registries]?.dim === true);
-check('a warn gives an amber dot', treeMeta([['share', 'warn', '-', '-', 'w']], [])[P.docker].dot === 'warn');
+check('a warn gives an amber dot', treeMeta([['share', 'warn', '-', '-', 'w']], [])[P.appsGroup].dot === 'warn');
 
 console.log(`${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

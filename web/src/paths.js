@@ -3,16 +3,15 @@
 // These are INNER paths (route.path); `url()`/`go()` of route.svelte.js put the node in front. A literal path is a test failure (tests/web-select.mjs).
 export const P = Object.freeze({
   summary: '/',
-  // groups (D2 c: Storage, Instances, Apps, Network, People, System, Backup, Settings; Developer only while its capability is on)
-  storage: '/storage', instances: '/instances', appsGroup: '/apps', people: '/people', system: '/system', backupGroup: '/backup',
+  // groups (D2 c, and docs/PLAN-workloads.md 3 for Apps & VMs: Storage, Apps & VMs, Network, People, System, Backup, Settings; Developer only while its capability
+  // is on). appsGroup is a place itself: the one list of containers, VMs and Docker apps
+  storage: '/storage', appsGroup: '/apps', people: '/people', system: '/system', backupGroup: '/backup',
   developer: '/developer', settings: '/settings',
   // storage
   pools: '/storage/pools', incident: '/storage/incident', disks: '/storage/disks', shares: '/storage/shares', files: '/storage/files',
   encryption: '/storage/encryption', vault: '/storage/vault',
-  // instances
-  iso: '/instances/iso',
-  // apps
-  apps: '/apps/installed', docker: '/apps/docker', registries: '/apps/docker/registries',
+  // apps and VMs: `apps` is the app catalog
+  apps: '/apps/installed', iso: '/apps/iso', registries: '/apps/docker/registries',
   dockerNew: '/apps/docker/new', dockerWizard: '/apps/docker/wizard', marketplace: '/apps/marketplace', builder: '/apps/marketplace/builder',
   // network
   network: '/network', services: '/network/services', networkMap: '/network/map',
@@ -27,16 +26,15 @@ export const P = Object.freeze({
   // settings
   settingsGeneral: '/settings/general', settingsNetwork: '/settings/network', settingsStorage: '/settings/storage', settingsBackups: '/settings/backups',
   settingsAccess: '/settings/access', capabilities: '/settings/capabilities', settingsExtensions: '/settings/extensions', settingsAdvanced: '/settings/advanced',
-  // pages of a remote node (edge, vps: the proxy pages; every remote kind: its health)
-  nodeHealth: '/health', mail: '/mail', ports: '/ports', watcher: '/watcher', certificate: '/certificate', tailscale: '/tailscale',
+  // pages of a remote node (edge, vps: the proxy pages; every remote kind: its health; peerInstances: a peer's read-only summary of its instances)
+  peerInstances: '/instances', nodeHealth: '/health', mail: '/mail', ports: '/ports', watcher: '/watcher', certificate: '/certificate', tailscale: '/tailscale',
 });
 
 // pages with a name or a topic in the address
 export const poolPath = (name) => `${P.pools}/${name}`;
 // the page of one disk: /storage/disks/<name>[/<tab>] (D6); Overview has no tab segment
 export const diskPath = (name, tab = '') => `${P.disks}/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
-export const dockerAppPath = (name) => `${P.docker}/app/${encodeURIComponent(name)}`;
-// ^ the compose EDITOR of one Docker app; its own page is dockerAppPagePath: /apps/docker-app/<name>[/<tab>], Overview has no tab segment
+// the page of one Docker app: /apps/docker-app/<name>[/<tab>], Overview has no tab segment; its compose editor is the tab `compose`
 export const dockerAppPagePath = (name, tab = '') => `${P.appsGroup}/docker-app/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
 export const capabilityPath = (name) => `${P.capabilities}/${name}`;
 export const extensionPath = (name) => `/extensions/${name}`;

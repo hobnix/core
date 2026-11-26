@@ -87,7 +87,7 @@
 
   // --- one line per fact: icon, label, value, a note, the dot, and the page that owns it (a click opens it)
   const dataPage = $derived(poolOfRole('data') ? `/storage/pools/${poolOfRole('data')}` : '/storage/pools');
-  const OWNER = $derived({ Backup: P.backup, Encryption: '/storage/encryption', Instances: '/instances', 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': P.hardware });
+  const OWNER = $derived({ Backup: P.backup, Encryption: '/storage/encryption', Instances: P.appsGroup, 'Upload cache': dataPage, 'Parity sync': dataPage, Scrub: dataPage, 'Disk health': poolOfRole('data') ? `/storage/disks?pool=${poolOfRole('data')}` : '/storage/disks', 'Hottest disk': P.hardware });
   const facts = $derived.by(() => {
     const m = {};
     const jobs = [];

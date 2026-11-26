@@ -24,7 +24,7 @@ eq('a pool page ends on Pools, with or without its row in the items', [labels(po
 eq('the server crumb carries the given name', trailOf(P.disks, { server: 'attic' })[0], { label: 'attic', path: '/' });
 eq('a place outside the tree has the server only', offTree.map((it) => labels(it.path)), offTree.map(() => [S]));
 eq('so has a guide and the first-run page', [labels(`${P.docs}/en/setup`), labels(P.firstRun)], [[S], [S]]);
-eq('a page that is no row hangs under the row its address starts with', [labels(P.dockerNew), labels(`${P.docker}/app/photos`), labels(P.builder)], [[S, 'Apps', 'Docker'], [S, 'Apps', 'Docker'], [S, 'Apps', 'Marketplace']]);
+eq('a page that is no row hangs under the row its address starts with', [labels(P.dockerNew), labels(P.dockerWizard), labels(P.builder)], [[S, 'Apps & VMs'], [S, 'Apps & VMs'], [S, 'Apps & VMs', 'Marketplace']]);
 eq('a settings page of a capability ends on Capabilities', labels(`${P.capabilities}/vps`), [S, 'Settings', 'Capabilities']);
 eq('an unknown address has the server', labels('/nowhere'), [S]);
 eq('an extension page is under the group of its package', nodeTrail('/extensions/demo', null, S, [{ name: 'demo', title: 'Demo', group: 'network' }]).map((c) => c.label), [S, 'Network']);

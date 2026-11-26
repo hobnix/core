@@ -1,12 +1,12 @@
 // Shared by the Instances, Apps, Services and Network pages: one reading of `sys ct list`, and the links between them.
 import { go, url } from '../../route.svelte.js';
 import { setSelection } from '../../select.svelte.js';
+import { isVm, isRunning } from './kind.js';
 
 // ct list: name, type, state, address, ram, cpu, autostart, mac pinned, docker, disk, snapshots, last snapshot, memory in use, cpu time, bindings, last start, owner
 export const ctOf = (r) => ({ name: r[0], type: r[1], state: r[2], address: r[3], ram: r[4], cpu: r[5], autostart: r[6], docker: r[8], disk: r[9], lastSnap: r[11], owner: r[16] && r[16] !== '-' ? r[16] : '' });
 
-export const isVm = (c) => /virtual|VM/i.test(c.type);
-export const isRunning = (c) => /running/i.test(c.state);
+export { isVm, isRunning };
 
 // the IPv4 address in a cell such as "10.10.95.20 (eth0)"; '' when there is none
 export const ipOf = (addr) => (/(\d+\.\d+\.\d+\.\d+)/.exec(addr || '') || [])[1] ?? '';

@@ -35,7 +35,7 @@ export const graphOf = (rows) => (rows || []).map((r) => ({ id: r[0], kind: r[1]
 // The inner path (paths.js) of a node's page, '' where there is none; the page puts the node in front with url() (route.svelte.js).
 export function hrefOf(row) {
   switch (row.kind) {
-    case 'instance': return P.instances;
+    case 'instance': return P.appsGroup;
     case 'service': return P.services;
     case 'host': return P.hardware;
     case 'wan': case 'gateway': case 'bridge': return P.network;
