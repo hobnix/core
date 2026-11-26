@@ -136,7 +136,7 @@ export function fitLabel(f) {
   if (f.verdict === 'fits') return part ? 'Fits what it states' : 'Fits this server';
   if (f.verdict === 'note') return part ? 'Fits what it states, with a note' : 'Fits, with a note';
   if (f.verdict === 'no') return 'Does not fit this server';
-  if (f.verdict === 'unstated') return 'Needs not stated';
+  if (f.verdict === 'unstated') return 'Memory and disk not stated';   // other needs (Docker, a share) may well be stated
   return 'Fit could not be checked';
 }
 
@@ -199,7 +199,7 @@ export function hiddenByFit(rows, fit) {
     if (!fitsServer(f)) n[f ? f.verdict : p.installed ? 'installed' : 'unknown']++;
   }
   const words = [
-    [n.no, 'does not fit', 'do not fit'], [n.unstated, 'does not state its needs', 'do not state their needs'],
+    [n.no, 'does not fit', 'do not fit'], [n.unstated, 'states neither memory nor disk', 'state neither memory nor disk'],
     [n.unknown, 'could not be checked', 'could not be checked'], [n.installed, 'is installed', 'are installed'],
   ].filter(([c]) => c).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`);
   return words.length ? `Hidden: ${words.join(', ')}.` : '';

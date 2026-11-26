@@ -460,7 +460,7 @@ of the storage pool where the disk of a new container goes (files on shares are 
 install sets up first (Docker, Tailscale) and whether a graphics card is there when the app can use one. These are the package's own
 figures, for one app at a time: they do not promise that the install works. With ZFS the free memory can look smaller than it is, because
 the file cache counts as used, so too little free memory is a note and only more than the total is "does not fit". A package that states
-neither memory nor disk space says "Needs not stated", never "fits", and the filter **Fits this server** hides it. Not tested on hardware
+neither memory nor disk space says "Memory and disk not stated", never "fits", and the filter **Fits this server** hides it. Not tested on hardware
 yet.
 
 ```bash

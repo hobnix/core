@@ -1,4 +1,4 @@
 date  = "2026-11-26"
 type  = "feature"
 title = "The Marketplace says whether an app fits this server"
-body  = """An app that is not installed shows on its card and its page whether the memory and disk space its package states fit this server, with the reason when they do not, and notes such as a missing graphics card or Docker being set up first. The filter "Fits this server" shows only the apps that fit. A package that states neither memory nor disk space says "Needs not stated". The figures are the package's own and are not a promise that the install works. Not tested on hardware yet."""
+body  = """An app that is not installed shows on its card and its page whether the memory and disk space its package states fit this server, with the reason when they do not, and notes such as a missing graphics card or Docker being set up first. The filter "Fits this server" shows only the apps that fit. A package that states neither memory nor disk space says "Memory and disk not stated". The figures are the package's own and are not a promise that the install works. Not tested on hardware yet."""

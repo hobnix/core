@@ -116,7 +116,7 @@ const fit = parseFit([
 check('fit: rows join by repo and name', fit.get('official/immich').checks.length === 2 && fit.get('family/navidrome').verdict === 'fits' && !fit.has('official/navidrome'));
 check('fit: a verdict or level this page does not know is unknown, never fits', fit.get('official/odd').verdict === 'unknown' && fit.get('official/odd').checks[0].level === 'unknown' && !fitsServer(fit.get('official/odd')));
 check('fit: the verdict in words', fitLabel(fit.get('official/immich')) === 'Fits, with a note' && fitLabel(fit.get('official/big')) === 'Does not fit this server'
-  && fitLabel(fit.get('official/seerr')) === 'Needs not stated' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
+  && fitLabel(fit.get('official/seerr')) === 'Memory and disk not stated' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
 check('fit: with the disk not stated it only fits what is stated', fitLabel(fit.get('family/navidrome')) === 'Fits what it states');
 check('fit: sizes count 1024', binSize(4 * G) === '4 GB' && binSize(512 * 1048576) === '512 MB' && binSize(1536 * G) === '1.5 TB');
 check('fit: not enough memory now says both figures', fitText(fit.get('official/immich').checks[0]).startsWith('Memory: it says it uses 8 GB, more than the 6 GB free right now (16 GB in total).'));
@@ -131,7 +131,7 @@ check('fit: the short reason of a card', fitReason(fit.get('official/big')) === 
 const some = [{ repo: 'official', name: 'immich' }, { repo: 'family', name: 'navidrome' }, { repo: 'official', name: 'seerr' }, { repo: 'official', name: 'big' },
   { repo: 'official', name: 'here', installed: true }, { repo: 'official', name: 'norow' }].map((p) => ({ title: '', category: '', installed: false, ...p }));
 check('fit filter: fits and fits with a note, never not stated', filterRows(some, { fit }).map((p) => p.name).join() === 'immich,navidrome');
-check('fit filter: says what it hides', hiddenByFit(some, fit) === 'Hidden: 1 does not fit, 1 does not state its needs, 1 could not be checked, 1 is installed.');
+check('fit filter: says what it hides', hiddenByFit(some, fit) === 'Hidden: 1 does not fit, 1 states neither memory nor disk, 1 could not be checked, 1 is installed.');
 check('fit filter off: everything', filterRows(some, {}).length === 6);
 
 // the version list of the package page (#1251): hs sys pkg history
