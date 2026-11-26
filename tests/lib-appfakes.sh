@@ -201,7 +201,8 @@ pushes() { grep -c . "$FAKE/pushes" || true; }
 job_files() { find "$HS_JOBS_DIR" -name '*.json' 2>/dev/null | wc -l | tr -d ' '; }
 
 # ── the program under test ──
-# as_web: the way scripts/web-serve.py calls a row (HS_CALLER=web from the unit of hs-web, HS_ACTOR = the signed-in person).
+# as_web: the way scripts/web-serve.py calls a row (HS_CALLER=web from the unit of hs-web, HS_ACTOR = the signed-in person). USER=root is
+# a stand-in: the unit of hs-web names no User=, what USER holds there was not looked at.
 # as_person: a person at the command line of the server (as root through sudo is not simulated). Both set RC, OUT, ERR.
 _hs() {
   RC=0

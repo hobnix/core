@@ -180,7 +180,10 @@ for row in "start STOPPED RUNNING" "stop RUNNING STOPPED" "restart RUNNING RUNNI
   check_eq "start $action: stdout" "$(lines "status|started" "unit|hs-job-ct-$action-app-HHMMSS")" "$(norm <<<"$OUT")"
   check_eq "start $action: stderr" "" "$ERR"
   check_eq "start $action: the answer comes before anything changed" "" "$(changes)"
-  # LOOKS WRONG: initiator is the user of the web service, not the signed-in person (HS_ACTOR is not used by hs_job)
+  # LOOKS WRONG: initiator is not the signed-in person: hs_job reads HS_JOB_INITIATOR, SUDO_USER, USER, never HS_ACTOR. The "root" here is
+  # the USER that as_web gives the web process; see "who and where in the record" for a process without one.
+  # LOOKS WRONG: sys ct rows have no flag changes, so a start or stop from the web writes no audit line (hs ct <ct> stop and the
+  # docker-app rows do)
   queued=$(record "$ID")
   check_eq "start $action: the record while queued" "$(printf '%s\n' 'id="ID-ct-'"$action"'-app"' "slug=\"ct-$action-app\"" \
     "description=\"hs ct app $action\"" 'source="web"' 'initiator="root"' "unit=\"hs-job-ct-$action-app-HHMMSS\"" 'queued="T"' 'started=null' \
@@ -249,6 +252,9 @@ person=$(record "$ID")
 # LOOKS WRONG: ct-change.sh sets HS_CALLER=ui when it is not set, so a start typed at the command line is recorded as from the web
 check_eq "sys ct start typed by a person: source" '"web"' "$(field "$person" source)"
 check_eq "sys ct start typed by a person: initiator" '"tester"' "$(field "$person" initiator)"
+setup STOPPED
+_hs -u USER HS_CALLER=web HS_ACTOR=anna timeout 60 "${HS_CMD[@]}" sys ct start app start
+check_eq "from the web by anna, the web process without USER: initiator" null "$(field "$(record "$(job_id_of "$(unit_of_output)")")" initiator)"
 check_no_surprise "success"
 
 echo "== web: the job fails"
@@ -332,7 +338,7 @@ cancelled=$(record "$ID")
 check_eq "cancel: state" '"cancelled"' "$(field "$cancelled" state)"
 check_eq "cancel: no exit status" null "$(field "$cancelled" exit)"
 check_eq "cancel: ended" '"T"' "$(field "$cancelled" ended)"
-# LOOKS WRONG: requested_by is the user of the web service, not the signed-in person; safe is yes for every instance job
+# LOOKS WRONG: requested_by is SUDO_USER or USER of the calling process (here the stand-in root), not the signed-in person (HS_ACTOR)
 check_eq "cancel: the cancel block" '{"requested_by":"root","at":"T","safe":true}' "$(field "$cancelled" cancel)"
 check_eq "cancel: no error" null "$(field "$cancelled" error)"
 check_events "cancel" "job.cancelled|ID-ct-stop-app|info|job stopped by root|-"
