@@ -195,6 +195,19 @@ class Pace(unittest.TestCase):
         self.assertEqual(c.wave({"status"}), ["disk-health"])
         self.assertEqual(read, ["disk-health"])
 
+    def test_only_the_idle_wait_of_an_unwatched_topic_is_not_stretched(self):
+        c, st = self.make()
+        c.stretch = lambda: 10.0
+        self.assertEqual(c.wait_for("disk-health", 30), 300)        # nobody watches: the safety net stays at its idle interval
+        self.assertEqual(c.wait_for("status", 15), 150)             # an always topic is stretched
+        c.leases = {"disk-health": time.time() + 30}
+        self.assertEqual(c.wait_for("disk-health", 30), 300)        # watched: 30 x 10
+        c.stretch = lambda: 2.0
+        self.assertEqual(c.wait_for("disk-health", 30), 60)
+        c.leases = {}
+        c.failing.add("disk-health")
+        self.assertEqual(c.wait_for("disk-health", 30), 60)         # failing: its interval, stretched as before
+
     def test_a_table_that_cannot_be_read_keeps_the_leases_and_raises_nothing(self):
         c, st = self.make()
         c.leases = {"disk-health": time.time() + 20}

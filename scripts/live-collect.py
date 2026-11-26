@@ -716,6 +716,12 @@ class Collector:
             return max(idle, interval)
         return interval
 
+    def wait_for(self, topic, interval):
+        """seconds until the next timed read: pace x stretch, but the idle interval of a topic nobody watches is the safety net and is never stretched"""
+        pace = self.pace(topic, interval)
+        idle = self.idle_now(topic) and topic not in self.failing
+        return max(pace if idle else pace * self.stretch(), self.gap(topic, 0))
+
     def _meta(self, topic):
         """(src, ttl) of a topic for its document: the words of the read and the seconds it counts as fresh (live-topics.tsv column 8, else 3 x interval)"""
         for r in self.rows:
@@ -805,7 +811,7 @@ class Collector:
                 log("state.db down (%s), retry in 5 s" % e)
                 self.stop.wait(5)
                 continue
-            if ev.wait(timeout=max(self.pace(topic, interval) * self.stretch(), self.gap(topic, 0))):
+            if ev.wait(timeout=self.wait_for(topic, interval)):
                 # woken by a refresh, not by the interval: a topic is not read again sooner than min_gap after its last read (any_gap when only the
                 # group `any` woke it); refreshes that arrive meanwhile are the same read
                 while not self.stop.is_set() and not mine.is_set():

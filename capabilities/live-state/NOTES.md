@@ -143,7 +143,8 @@ Not tested on hardware yet.
 
 **Demand (D14, #1320).** Every topic whose document only a page reads has `idle:<s>` in column 9 (300 s, 600 s for slow settings):
 it runs at its interval only while a page holds a lease, else once per idle period, and at once when a page opens or a named event wakes it. A
-`@group` refresh and a wave skip an idle topic without a lease. Always on: the reads whose script holds emit or notify calls (`ALWAYS_TOPICS` in
+wave and a `@group` call inside the collector skip an idle topic without a lease (hooks and units are not skipped: `state-db.py expand_topics`
+turns `@group` into names). The load stretch does not lengthen the idle wait of a topic without a lease. Always on: the reads whose script holds emit or notify calls (`ALWAYS_TOPICS` in
 `tests/live-demand-test.py`). `health-next` and `health-list` must stay there: both run `health-check.sh` dry, and that writes `health-since` and
 emits `health.new` / `health.resolved`; `health-info` is named in `health-check.sh`. A failing topic keeps its own ttl in `live check` and is
 retried at its interval. The other eight hold such calls only outside the mode the topic runs (read in the code in #1320). Before a topic
