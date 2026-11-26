@@ -125,7 +125,7 @@ check_out "remove" "^status${tab}done" $C start remove demo
 check "the files are gone" test ! -e "$HS_STATE_DIR/packages/current/demo"
 check_out "market: new again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}-${tab}new" $PKGSH --market
 check_out "removing what is not installed is refused" "not installed" bash -c "$C plan remove demo; true"
-cd "$R"; release v1.1.5 1.1.5 "$WORK/good" "requires_core_max = 1"; cd "$ROOT"; $PKGSH fetch test >/dev/null 2>&1
+cd "$R" || exit 1; release v1.1.5 1.1.5 "$WORK/good" "requires_core_max = 1"; cd "$ROOT" || exit 1; $PKGSH fetch test >/dev/null 2>&1
 check_out "market: a release whose range ends below this core waits (requires_core_max, #1265)" "^demo${tab}recipe${tab}test${tab}1[.]1[.]5${tab}-${tab}waits" $PKGSH --market
 check_out "plan: its install is refused with the reason, not as installed already" "^reason${tab}.*does not support this core yet" bash -c "$C plan install demo; true"
 check_out "plan: and its code, before anything is read" "^code${tab}pkg[.]core-too-new$" bash -c "$C plan install demo; true"
