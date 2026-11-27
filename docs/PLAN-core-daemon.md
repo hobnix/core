@@ -490,8 +490,8 @@ files and large shell scripts, not the rest of this list.
 
 ### 15.2 Milestone "Core and Jobs"
 
-**Decided:** a milestone of its own, **0.15**, after 0.14 (Marketplace). Translations, Virtualization and Networking move up by one. Nothing on GitHub is
-changed yet.
+**Decided:** a milestone of its own, **0.15**, after 0.14 (Marketplace). Translations, Virtualization and Networking move up by one. Done on GitHub
+on 2026-11-26.
 
 It holds P0 to P4. P5 to P8 get later milestones, by area, once P4 is done. P3 is the largest risk to its size: the extension host may move to the next
 milestone.

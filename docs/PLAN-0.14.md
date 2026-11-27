@@ -9,8 +9,8 @@ Not tested on hardware yet.
 | Milestone | State on 2026-11-26 |
 |---|---|
 | 0.13 Package Registry | beta (`v0.13.0-beta.1` tagged, notes for beta 2 in review), not released. Open: #1067, #1076, #1127, #1129, #1189 (epic), #1261 |
-| 0.14 Marketplace | 33 open issues before this plan, 3 added by it |
-| 0.15 Core and Jobs | decided in the plan, **not created on GitHub**: the milestone called 0.15 there is still "Translations" |
+| 0.14 Marketplace | 33 open issues before this plan, 3 added by it, 2 moved to 0.15 (below) |
+| 0.15 Core and Jobs | created on GitHub on 2026-11-26; Translations, Virtualization and Networking are now 0.16, 0.17 and 0.18 |
 
 ## Branches
 
@@ -33,12 +33,18 @@ A piece moves only when 0.14 would otherwise build it in a shape 0.15 must redo,
 
 | What | Issue | Why now |
 |---|---|---|
-| P0: two decision records (Proposed) and the migration map | #1308 | 0.15 starts with code; the map shows what 0.14 work must not block |
+| P0: two decision records and the migration map | #1308 | 0.15 starts with code; the map shows what 0.14 work must not block |
 | P1 slice: protocol message types the core can use as the host | #1309 | the SDK split (#1262) decides where the types live; later means moving them twice |
 | Async, daemon and SQLite rules in the code practices | #1307 | written before the first daemon code, not after |
+| Performance baseline: a measuring script and written steps | #1333 | the plan measures before it ports |
+| Build time and size with the 0.15 libraries | #1334 | feeds the web server record (#1266) |
+| Tests of how app start and stop behave today | #1335 | the first operation 0.15 ports end to end |
+| P1 slice: the core writes events to the database | #1336 | the base of the job system; rests on P-h, confirmed by the owner |
 
-**Not** moved forward: the operation model, the system access layer, locks, job records in SQLite, the daemon and `hobnix-web`. They depend on
-the records of #1308, which the owner has not accepted, and ADR code is merged only after that.
+The last four were added by the owner on 2026-11-26.
+
+**Not** moved forward: the operation model, the system access layer, locks, job records in SQLite, the daemon and `hobnix-web`. They are the
+work of milestone 0.15 (#1337 to #1342), and several rest on Planned items of the records that are not confirmed yet.
 
 ## What this round builds, and in which order
 
@@ -64,7 +70,6 @@ Design points fixed by this plan:
 
 | Issue | Why |
 |---|---|
-| #1266 web server record, #1267 move small Python programs | [PLAN-core-daemon](PLAN-core-daemon.md) 15.2 proposes to move both to 0.15, where they are rewritten as parts of the core. Building them now would be building them twice. **Owner decides** |
 | #1268 remove `job-record.py` | its condition (one release with the Rust writer on servers) is not met while 0.13 is a beta, and `install.nix` does not include the `hobnix` program, so some paths still need the fallback |
 | #1219 recipe SDK and jobs | mostly needs the new job system; the issue asks for a talk before building |
 | #1126, #1123, #1124, #1125 | jobs for extensions, terminal and console blocks, package secrets: root-level and security design, a record first |
@@ -75,6 +80,13 @@ Design points fixed by this plan:
 | #225, #217 capabilities out of the core | needs changes in hobnix/official and a run on a real server |
 | #923, #925, #269 games and importers | need real data, real hardware or another repository |
 | #1269 permissions from code | optional, after #1263 |
+
+## Decisions of the owner, 2026-11-26
+
+- #1266 (web server record) and #1267 (small Python programs) move to 0.15, as [PLAN-core-daemon](PLAN-core-daemon.md) 15.2 proposed (done).
+- ADR 0033 and 0034 are accepted: their Decided items are rules. Planned items, proposals and open points each wait for their own decision.
+- **Nothing is merged into `0.14` until 0.13 is released.** Topics stay in open pull requests; dependent ones are stacked.
+- The SDK defects found by the audit also go into 0.13 (#1318).
 
 ## Check that it worked
 
