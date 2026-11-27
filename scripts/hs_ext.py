@@ -336,10 +336,12 @@ def ext_declarations(log=None):
             bad = perms.folder_problems(name, d)      # ADR 0014: a package may not use more than its `permissions` cover
             if bad:
                 raise ValueError("permissions: " + "; ".join(bad))
-            web = ext_manifest(d).get("web", {})
+            manifest = ext_manifest(d)
+            web = manifest.get("web", {})
             if not web:
                 continue        # a capability without a [web] declaration (most of them) has nothing to register and no commands.tsv
-            recipe = not os.path.isfile(os.path.join(d, "capability.toml"))      # a recipe package has package.toml only
+            # a recipe package has package.toml only; so has a capability package, which says its kind and counts like an extension
+            recipe = not os.path.isfile(os.path.join(d, "capability.toml")) and manifest.get("kind") != "capability"
             try:
                 rows = ext_sys_rows(os.path.join(d, "commands.tsv"))
             except OSError:

@@ -1,0 +1,6 @@
+date  = "2026-11-27"
+type  = "fix"
+title = "Capability packages: their web page works, and their web tables are checked like an extension's"
+body  = """A capability package keeps its web declaration in package.toml. It was treated like an app: a page with a group was refused together with everything else the package declared for the web interface. The page now sits in its group.
+
+Its web tables are now checked: the permissions web.read and web.change are enforced, and hs pkg validate reports wrong roles and page blocks. A package whose declared permissions do not cover its web tables is no longer registered."""

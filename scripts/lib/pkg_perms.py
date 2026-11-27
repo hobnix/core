@@ -74,7 +74,8 @@ def check_one(name, p):
 
 
 def manifest_problems(name, m, web=None):
-    """[text] for the `permissions` of a package.toml dict `m`; `web` = the parsed capability.toml of an extension (its [[web.*]] tables) or None."""
+    """[text] for the `permissions` of a package.toml dict `m`; `web` = the document with the [web] tables (the parsed capability.toml of an
+    extension, `m` itself for a capability package) or None."""
     if "permissions" not in m:
         return []
     perms = m["permissions"]
@@ -139,7 +140,8 @@ def folder_problems(name, folder):
         with open(os.path.join(folder, "capability.toml"), "rb") as f:
             web = tomllib.load(f)
     except OSError:
-        pass
+        if m.get("kind") == "capability":
+            web = m      # a capability package has no capability.toml: its [web] tables are in package.toml
     except tomllib.TOMLDecodeError as e:
         return ["capability.toml is not valid TOML (%s)" % e]
     return manifest_problems(name, m, web)

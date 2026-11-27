@@ -496,13 +496,16 @@ def manifest_problems(m, path=None, seen=None, core=False, warnings=None):
         bad("an extension needs its capability.toml beside package.toml")
     for t in pkg_events.manifest_problems(n, m.get("events", [])):
         bad(t)
-    for t in pkg_perms.manifest_problems(n, m, capability_toml(os.path.dirname(path)) if path else None):
+    # the document with the [web] tables: package.toml itself for a capability package, else the capability.toml of an extension
+    cap = capability_toml(os.path.dirname(path)) if path else None
+    web = m if m.get("kind") == "capability" else cap
+    for t in pkg_perms.manifest_problems(n, m, web):
         bad("permissions: " + t)
-    for t in pkg_roles.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
+    for t in pkg_roles.manifest_problems(web):
         bad(t)
-    for t in pkg_blocks.manifest_problems(capability_toml(os.path.dirname(path)) if path else None):
+    for t in pkg_blocks.manifest_problems(web):
         bad(t)
-    out += pkg_slots.manifest_problems(n, pkg_slots.doc_of(capability_toml(os.path.dirname(path)) if path else None, m))
+    out += pkg_slots.manifest_problems(n, pkg_slots.doc_of(cap, m))
     out += pkg_protocol.manifest_problems(m, os.path.dirname(path) if path else None)
     out += pkg_binary.manifest_problems(m, os.path.dirname(path) if path else None)
     out += pkg_integrations.manifest_problems(m)
