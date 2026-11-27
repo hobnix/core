@@ -5,6 +5,7 @@ import importlib.util
 import os
 import re
 import shutil
+import sys
 import tempfile
 import unittest
 
@@ -393,6 +394,96 @@ class RecipePackage(unittest.TestCase):
         reads, _, pages = ws.ext_load_web()
         self.assertIn(("ext", "app", "status"), reads)
         self.assertEqual([p["name"] for p in pages], ["app"])
+
+
+CAP_MANIFEST = """name = "cap"
+version = "0.1.0"
+kind = "capability"
+type = "feature"
+title = "t"
+title_de = "t"
+requires_core = ">=1"
+%s
+[[web.reads]]
+words = "status"
+kind = "tsv"
+ttl = 5
+[web.page]
+title = "Cap"
+group = "system"
+[[web.page.blocks]]
+type = "table"
+read = "status"
+key = "name"
+columns = [ { key = "name", label = "Name" } ]
+"""
+
+
+class CapabilityPackage(unittest.TestCase):
+    """a capability package has no capability.toml: its web tables are in package.toml, and they count like an extension's (hobnix/core#1373)"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pk = os.path.join(self.tmp, "packages")
+        os.environ["HS_PACKAGES_DIR"] = self.pk
+        os.environ["HS_CAPABILITIES_FILE"] = os.path.join(self.tmp, "caps")
+        os.environ["HS_STATE_DIR"] = os.path.join(self.tmp, "state")
+        write(os.path.join(self.tmp, "caps"), "cap\n")
+        write(os.path.join(self.pk, "cap", "commands.tsv"),
+              TAB.join(["sys", "sys ext cap status", "@/s.sh", "--list", "h", "-"]) + "\n")
+
+    def tearDown(self):
+        os.environ.pop("HS_PACKAGES_DIR", None)
+        write(os.path.join(self.tmp, "caps"), "")
+        ws.ext_refresh(force=True)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def load(self, extra=""):
+        write(os.path.join(self.pk, "cap", "package.toml"), CAP_MANIFEST % extra)
+        return ws.ext_load_web()
+
+    def validate(self, text):
+        import tomllib
+        spec = importlib.util.spec_from_file_location("pkg", os.path.join(here, "..", "scripts", "pkg.py"))
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules["pkg"] = pkg      # pkg.py looks itself up there
+        self.addCleanup(sys.modules.pop, "pkg", None)
+        spec.loader.exec_module(pkg)
+        path = os.path.join(self.pk, "cap", "package.toml")
+        write(path, text)
+        return pkg.manifest_problems(tomllib.loads(text), path)
+
+    def test_page_is_placed_by_its_group(self):
+        reads, _, pages = self.load()
+        self.assertIn(("ext", "cap", "status"), reads)
+        self.assertEqual([(p["name"], p["group"], p.get("kind")) for p in pages], [("cap", "system", None)])
+
+    def test_web_reads_need_the_permission(self):
+        reads, _, pages = self.load("permissions = []")
+        self.assertEqual((reads, pages), ({}, []))
+        reads, _, _ = self.load('permissions = ["web.read"]')
+        self.assertIn(("ext", "cap", "status"), reads)
+
+    def test_web_changes_need_the_permission(self):
+        changes = '[[web.changes]]\nfixed = ["^go$"]\n'
+        write(os.path.join(self.pk, "cap", "commands.tsv"),
+              "".join(TAB.join(["sys", "sys ext cap " + w, "@/s.sh", "--list", "h", "-"]) + "\n" for w in ("status", "plan", "start")))
+        write(os.path.join(self.pk, "cap", "package.toml"), CAP_MANIFEST % 'permissions = ["web.read"]' + changes)
+        self.assertEqual(ws.ext_load_web()[:2], ({}, {}))
+        write(os.path.join(self.pk, "cap", "package.toml"), CAP_MANIFEST % 'permissions = ["web.read", "web.change"]' + changes)
+        self.assertIn("ext/cap", ws.ext_load_web()[1])
+
+    def test_validate_reports_the_web_tables(self):
+        good = CAP_MANIFEST % 'permissions = ["web.read"]'
+        base = self.validate(good)
+        cases = {
+            "permission": CAP_MANIFEST % "permissions = []",
+            "role": good.replace("ttl = 5", 'ttl = 5\nrole = "king"'),
+            "block": good.replace('type = "table"', 'type = "hologram"'),
+        }
+        for what, text in cases.items():
+            with self.subTest(what):
+                self.assertGreater(len(self.validate(text)), len(base))
 
 
 class ExtRoles(unittest.TestCase):
