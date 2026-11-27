@@ -28,6 +28,12 @@ All keys are optional. A manifest written before level 9 validates unchanged. A 
 The package index (`index.toml`) carries `icon`, `category` and `app_version` as well (optional); `pkg.py repo-check` compares them with the
 package. Description, pictures and `[app.uses]` are read from the package itself.
 
+**What the Marketplace does with a recipe's needs** (`hs sys pkg fit`, no key of its own): `[app.uses] ram_mb` (MiB) is compared with the
+server's memory (above the total: does not fit; above what is free now: a note), `disk_gb` (GiB) with the free space of the storage pool where
+a new container's disk goes (above it: does not fit), `[app.uses] gpu` or `uses = ["gpu"]` with the graphics card (never in the way), and
+`needs` with what is set up. A key that is absent or 0 is "not stated"; a recipe with neither `ram_mb` nor `disk_gb` is never shown as
+fitting. State what the app needs to run well, not the smallest value it starts with. Not tested on hardware yet.
+
 ### `[app]` tables
 
 ```toml

@@ -1340,14 +1340,36 @@ class Repos:
         r = self.all().get(r_name) or {}
         return r_name == self.OFFICIAL and bool(r.get("default")) and not r.get("unsigned")
 
+    NEED_WORD = re.compile(r"[a-z][a-z0-9-]{0,30}")
+
+    @classmethod
+    def declared(cls, m) -> list:
+        """[needs, ram_mb, disk_gb, gpu] a manifest states, for hs sys pkg fit (scripts/pkg-fit.sh): - = not stated, ? = cannot be told
+        (the manifest was not read, or the value is not what Package-API.md allows). needs is the recipe's list; gpu is yes or no"""
+        if not m:
+            return ["?"] * 4
+        needs = m.get("needs", []) if m.get("kind") == "recipe" else []
+        ok = isinstance(needs, list) and len(needs) <= 10 and all(isinstance(x, str) and cls.NEED_WORD.fullmatch(x) for x in needs)
+        app = m.get("app") if isinstance(m.get("app"), dict) else {}
+        uses = app.get("uses") if isinstance(app.get("uses"), dict) else {}
+
+        def size(k: str) -> str:
+            v = uses.get(k, 0)
+            if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 10_000_000:
+                return "?"
+            return str(v) if v else "-"
+        gpu = uses.get("gpu") is True or (isinstance(m.get("uses"), list) and "gpu" in m["uses"])
+        return [(",".join(needs) or "-") if ok else "?", size("ram_mb"), size("disk_gb"), "yes" if gpu else "no"]
+
     def cards(self):
         """the lines of `hs sys pkg cards`: what a store card shows beyond pkg market, one line per package and repository (the same rows).
         package, repo, category, icon (ph:<name> or a file of the package), verified (the date the release last ran on a real server, an optional
-        field of the index entry, only from the official signed repository, - = none). category and icon come from package.toml of the verified release; one that cannot be read gives -."""
+        field of the index entry, only from the official signed repository, - = none). category and icon come from package.toml of the verified release; one that cannot be read gives -.
+        Then what that manifest states it needs (declared): needs, ram_mb, disk_gb, gpu."""
         out = []
         for pname, rows in sorted(self.catalog(True).items()):
             for r_name, e, tag, commit in rows:
-                cat, icon = "-", "-"
+                cat, icon, m = "-", "-", {}
                 path = str(e.get("path", ""))
                 if not e.get("_unavailable") and re.match(r"^[A-Za-z0-9._/-]+$", path) and ".." not in path.split("/"):
                     try:
@@ -1361,8 +1383,33 @@ class Repos:
                 # the tested day counts only from the official repository as the core configures it, and signed: an added or unsigned
                 # repository could write any day, so its value is never passed on (the Marketplace then claims nothing)
                 v = e.get("verified") if self.official(r_name) else None
-                out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-"))
+                out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-", *self.declared(m)))
         return out
+
+    def history(self, name, repo=None) -> list:
+        """the lines of `hs sys pkg history`: what the index says of a package's versions. `history TAB index|none` (none: a repository without a
+        signed index keeps no history), then one `version` line for the newest (current) and one per older version the index lists (at most
+        HISTORY_VERSIONS, already cleaned by index_entries), newest first: version, date (first published, - = not given), current|older,
+        withdrawn yes|no, reason, changes. Nothing is fetched and no package file is read. A withdrawn current version is listed too."""
+        rows = [c for c in self.catalog(True).get(name, []) if not repo or c[0] == repo]
+        if not rows:
+            raise Refused("no package %s in the repositories (hs pkg fetch updates them)" % name)
+        if len(rows) > 1:
+            raise Refused("%s is in %s: name one with --repo" % (name, ", ".join(c[0] for c in rows)))
+        entry = rows[0][1]
+        if not entry.get("_index"):
+            return ["history\tnone"]
+
+        def text(v) -> str:
+            return (" ".join(v.split())[:self.pkg_index.HISTORY_TEXT] if isinstance(v, str) else "") or "-"
+
+        def line(r: dict, which: str, changes) -> str:
+            yanked = bool(r.get("yanked"))
+            return tsv_row("version", r.get("version"), r.get("date") or "-", which, "yes" if yanked else "no",
+                           text(r.get("yanked_reason")) if yanked else "-", text(changes))
+        meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+        return (["history\tindex", line(entry, "current", meta.get("changes"))]
+                + [line(r, "older", r.get("changes")) for r in entry.get("versions") or []])
 
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
@@ -1383,9 +1430,9 @@ def flag_value(rest, flag):
     return rest[i]
 
 
-def run(pkg, cmd, rest):
+def run(pkg, cmd, rest, repos=None):
     """the commands of pkg.py that need a repository; returns the exit code"""
-    R = Repos(pkg)
+    R = repos or Repos(pkg)
     try:
         if cmd == "repo":
             sub = rest[0] if rest else "list"
@@ -1449,6 +1496,15 @@ def run(pkg, cmd, rest):
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
+        elif cmd == "history":
+            repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            print("\n".join(R.history(rest[0], repo)))
+        elif cmd == "market-cards":      # for hs sys pkg fit: both in one process (the signed index checked once), an empty line between them
+            rc = run(pkg, "market", [], R)
+            if rc:
+                return rc
+            print()
+            return run(pkg, "cards", [], R)
         elif cmd == "cards":
             lines = R.cards()
             if lines:

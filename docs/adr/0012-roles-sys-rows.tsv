@@ -264,7 +264,9 @@ pkg index	viewer	read
 pkg available	admin	read
 pkg market	admin	read
 pkg cards	admin	read
+pkg fit	admin	read
 pkg show <name>	admin	read
+pkg history <name>	admin	read
 pkg asset <name> <file>	admin	read
 pkg states	admin	read
 pkg integrations	admin	read

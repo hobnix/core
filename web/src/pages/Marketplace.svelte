@@ -2,14 +2,15 @@
   import { P, packagePath, appPath } from '../paths.js';
   // The Marketplace as a store (#474): cards of the apps first, add-ons (extensions, capabilities, blueprints) on their own tab, Installed and
   // Updates with a count, and the repositories, the package builder and the full package table on Advanced. A card opens the page of its package.
-  // Reads: hs sys pkg market / states / cards / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
+  // An app that is not installed says on its card whether it fits this server (#793, hs sys pkg fit).
+  // Reads: hs sys pkg market / states / cards / fit / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
   // confirmation) and the plans of hs sys pkg (update, remove, fetch, repo-add, repo-remove) and parts (turn on/off); a package or repository that
   // came from a repository somebody added is red (the typed word is its name).
   import { poll, rows, refresh } from '../data.svelte.js';
   import { openPlan, openCreate, ui } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
   import { rowstate } from '../rowstate.svelte.js';
-  import { ErrorNote, AppTile, Grid, EmptyState } from '../ui/index.js';
+  import { ErrorNote, AppTile, Grid, EmptyState, Row } from '../ui/index.js';
   import { route, go } from '../route.svelte.js';
   import { link } from './instances/ct.js';
   import { start } from '../api.js';
@@ -23,7 +24,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText } from './market.js';
+  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText, isApp, parseFit, fitLabel, fitReason } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
@@ -37,6 +38,7 @@
   const tiles = poll('/api/sys/services/tiles', 60000);
   const stageOf = $derived(parseStates(rows(stateList)));
   const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const FIT = '/api/sys/pkg/fit';
 
   const store = $derived(storeRows(rows(market), parseCards(rows(cardList))));
   // name, kind, repository, available version, installed version, state, core, title (the Advanced table)
@@ -50,6 +52,14 @@
   const tabs = $derived(tabsOf(store));
   const tab = $derived(TABS.includes(route.query.tab) ? route.query.tab : route.query.tab === 'repos' ? 'advanced' : 'apps');   // ?tab=repos: the old Repositories tab
   const pick = (id) => go(id === 'apps' ? P.marketplace : `${P.marketplace}?tab=${id}`);
+
+  // does a not-installed app fit this server: read only while the page shows it (the Apps tab with an app that is not installed)
+  const showsFit = $derived(tab === 'apps' && store.some((p) => isApp(p) && !p.installed));
+  const fitList = poll(() => (showsFit ? FIT : ''), 120000, 'pkg-market');
+  const fit = $derived(parseFit(rows(fitList)));
+  const fitOf = (p) => (showsFit && isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
+  // what a refresh reads again
+  const paths = () => (showsFit ? [...PATHS, FIT] : PATHS);
 
   let q = $state('');
   let category = $state('all');
@@ -88,7 +98,7 @@
   const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
   let wasBusy = false;
   $effect(() => {
-    if (wasBusy && !busyNow) refresh(PATHS);
+    if (wasBusy && !busyNow) refresh(paths());
     wasBusy = busyNow;
   });
   // the pending word of a package row, from its job
@@ -138,7 +148,7 @@
         bulkSummary.push({ name: p.name, ok: r.ok, reason: r.reason, status: r.status });
       }
       selected = new Set();
-      await refresh(PATHS);
+      await refresh(paths());
       showSummary = true;
     } finally {
       bulkBusy = false;
@@ -164,7 +174,7 @@
 <PageTabs {tabs} {tab} onpick={pick} controlled />
 
 {#if tab !== 'advanced'}
-  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={false} retry={() => refresh(PATHS)}>
+  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={false} retry={() => refresh(paths())}>
     <div class="bar">
       {#if cats.length > 2}
         <div class="cats" role="group" aria-label="Categories">
@@ -175,6 +185,8 @@
       {/if}
       <div class="find"><TextInput bind:value={q} type="search" placeholder={tab === 'addons' ? 'Search add-ons' : 'Search apps'} ariaLabel="Search" autocomplete="off" /></div>
     </div>
+
+    {#if showsFit && fitList.error && fitList.data == null}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
 
     {#if !inTab.length}
       <EmptyState icon={tab === 'updates' ? 'check-circle' : 'storefront'} title={tab === 'updates' ? 'No updates' : 'Nothing here yet'} text={emptyText[tab]} />
@@ -190,6 +202,13 @@
               {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
               {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified, trustOf(p.repo, repos))}`} />{/if}
               <Muted>{testedText(p.verified, trustOf(p.repo, repos))}</Muted>
+              {#if fitOf(p)}
+                {@const f = fitOf(p)}
+                <Row gap="2" wrap style="flex-basis:100%">
+                  <Chip kind="fit" level={f.verdict}>{fitLabel(f)}</Chip>
+                  {#if fitReason(f)}<Muted>{fitReason(f)}</Muted>{/if}
+                </Row>
+              {/if}
               {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
             {/snippet}
             {#snippet actions()}
@@ -206,7 +225,7 @@
 {:else}
   <h2 class="sect">Repositories</h2>
   <PageState loading={!repoList.loaded} error={repoList.error?.message} hasData={repoList.data != null} empty={repoList.loaded && !repoList.error && !repos.length}
-             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(PATHS)}>
+             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(paths())}>
     <div class="card tc">
       <Table id="repos" columns={repoColumns} rows={repos} key="name" loading={!repoList.loaded} empty="No repository.">
         {#snippet cell(r, col)}
@@ -229,7 +248,7 @@
 
   <h2 class="sect">All packages</h2>
   <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !pkgs.length}
-             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(PATHS)}>
+             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(paths())}>
     {#if selected.size}
       <div class="bulk">
         <span class="bulk-count">{selected.size} selected</span>

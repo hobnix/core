@@ -164,7 +164,11 @@ print('; '.join(m.validate(json.load(open('$WORK/hbad.json')))))")"
 check_eq "the client leaves out malformed rows and keeps the good ones" "1.1.0 1.0.5 1.0.0 None" "$(python3 -I -c "$PYI
 e=m.clean_history(json.load(open('$WORK/hbad.json'))['packages']['demo'])
 print(' '.join(r['version'] for r in e['versions']), e.get('date'))")"
-check "install and update read the list only through clean_history" test "$(grep -c "\[.versions.\]\|get(.versions.)" "$SCRIPTS/pkg_repo.py")" = 0
+# the one reader of the list is hs sys pkg history (Repos.history, #1251): it shows the rows of an entry that index_entries passed through
+# clean_history and installs nothing. A second read anywhere in the client fails here.
+reads_versions() { grep -c "\[.versions.\]\|get(.versions.)"; }
+check_eq "the client reads the version list in one place only" 1 "$(reads_versions <"$SCRIPTS/pkg_repo.py")"
+check_eq "and that place is hs sys pkg history" 1 "$(sed -n '/^    def history(/,/^    def choose_installed(/p' "$SCRIPTS/pkg_repo.py" | reads_versions)"
 echo "-- hostile history never breaks a build"
 H2=$WORK/hist2; git init -q "$H2"
 H2G() { git -C "$H2" -c user.name=t -c user.email=t@t.invalid -c commit.gpgsign=false "$@"; }

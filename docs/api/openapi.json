@@ -10197,7 +10197,7 @@
   "/pkg/cards": {
    "get": {
     "operationId": "pkg.cards",
-    "summary": "what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index of the official signed repository only, - = none)",
+    "summary": "what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index of the official signed repository only, - = none); then what the package states it needs: needs (comma list), ram_mb, disk_gb (- = not stated, ? = cannot be told), gpu (yes|no|?)",
     "x-hs-exit": true,
     "x-hs-role": "admin",
     "x-hs-sys": {
@@ -10216,7 +10216,7 @@
      "ttl": 120,
      "query": []
     },
-    "description": "What a store card shows beyond pkg market, one row per package and repository like pkg market. category is one id of config/package-categories.toml or -; icon is ph:<name> (a Phosphor icon) or the file name of an svg icon in the package (served by pkg asset), - = none. category and icon come from package.toml of the newest verified release; a package that cannot be read gives -. verified is the date (YYYY-MM-DD) the index entry says the release last ran on a real server, passed on only for the official repository as the core configures it and signed; - = none (an added or unsigned repository always gives -). The core never writes it.",
+    "description": "What a store card shows beyond pkg market, one row per package and repository like pkg market. category is one id of config/package-categories.toml or -; icon is ph:<name> (a Phosphor icon) or the file name of an svg icon in the package (served by pkg asset), - = none. category and icon come from package.toml of the newest verified release; a package that cannot be read gives -. verified is the date (YYYY-MM-DD) the index entry says the release last ran on a real server, passed on only for the official repository as the core configures it and signed; - = none (an added or unsigned repository always gives -). The core never writes it. needs (comma list, the recipe's needs), ram_mb, disk_gb and gpu (yes|no) are what that package.toml states ([app.uses] and uses): - = not stated, ? = cannot be told (the manifest was not read, or the value is not valid).",
     "responses": {
      "0": {
       "description": "ok",
@@ -10246,10 +10246,246 @@
            {
             "$ref": "#/components/schemas/Field",
             "title": "verified"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "needs"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "ram_mb"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "disk_gb"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "gpu"
            }
           ],
-          "minItems": 5,
-          "maxItems": 5
+          "minItems": 9,
+          "maxItems": 9
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/pkg/fit": {
+   "get": {
+    "operationId": "pkg.fit",
+    "summary": "does an app that is not installed fit this server, as data: name, repo, verdict (fits|note|no|unstated|unknown), check (core|memory|disk|gpu|share|docker|tailscale|need), level (ok|note|no|unstated|unknown), need, have, total (- = not known; memory and disk in bytes)",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "fit"
+     ],
+     "script": "pkg-fit.sh",
+     "args": "-",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/fit",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": []
+    },
+    "description": "Does an app (recipe) that is not installed yet fit this server: one row per package, repository and check; verdict is the same on all rows of a package and repository. No row for an installed app. What the package states (memory, disk, a graphics card, needs) next to the server now. need, have and total of memory and disk are bytes: memory have = available now, total = all of it; disk = free and total of the Incus storage pool of the default profile's root disk (files on shares are not counted). memory is no above the total and note above what is available; disk is no above what is free; gpu is optional and never no, have = nvidia|other|none; docker and tailscale have = present|missing, note = the install sets it up; core no = the release waits for a newer core; need no = a word of needs this server cannot provide. unstated = the package states neither memory nor disk (never fits); unknown = could not be compared. - = not known.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "verdict",
+            "enum": [
+             "fits",
+             "note",
+             "no",
+             "unstated",
+             "unknown"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "check",
+            "enum": [
+             "core",
+             "memory",
+             "disk",
+             "gpu",
+             "share",
+             "docker",
+             "tailscale",
+             "need"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "level",
+            "enum": [
+             "ok",
+             "note",
+             "no",
+             "unstated",
+             "unknown"
+            ]
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "need"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "have"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "total"
+           }
+          ],
+          "minItems": 8,
+          "maxItems": 8
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
+  "/pkg/history/{name}": {
+   "get": {
+    "operationId": "pkg.history.by_name",
+    "summary": "the versions of a package as its repository's signed index lists them, as data: history TAB index|none, then version TAB version, date (- = none), current|older, withdrawn yes|no, reason, changes (- = none); nothing is installed",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "history",
+      "<name>"
+     ],
+     "script": "pkg.sh",
+     "args": "--history {1} {rest}",
+     "class": "read",
+     "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/history/<name>",
+     "kind": "tsv",
+     "ttl": 120,
+     "query": [
+      "repo"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "description": "The versions of one package as the signed index of its repository lists them: hs sys pkg history <name> [--repo R]. First line history: index, or none for a repository without a signed index (no version lines follow, which says nothing about how many versions there were). Then the newest version (current), then the older ones newest first, at most 10: the index may not list every version ever published. date is when that version was first published, as the index says (- = not given). withdrawn is yes for a version the repository took back (yanked), with its reason. changes is the change text of that version, written by the repository (- = none): untrusted text, one line, at most 500 characters. Nothing is installed or fetched; this row installs no older version. A package no repository offers is refused on stderr, exit 1.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "oneOf": [
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "history"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "source",
+              "enum": [
+               "index",
+               "none"
+              ]
+             }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+           },
+           {
+            "type": "array",
+            "prefixItems": [
+             {
+              "const": "version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "version"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "date"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "which",
+              "enum": [
+               "current",
+               "older"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "withdrawn",
+              "enum": [
+               "yes",
+               "no"
+              ]
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "reason"
+             },
+             {
+              "$ref": "#/components/schemas/Field",
+              "title": "changes"
+             }
+            ],
+            "minItems": 7,
+            "maxItems": 7
+           }
+          ]
          }
         }
        }

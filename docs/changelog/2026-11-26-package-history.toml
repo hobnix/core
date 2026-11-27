@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "feature"
+title = "The package page lists the versions of a package"
+body  = """A package page in the Marketplace shows the versions the signed index of its repository lists: the day each was first published, its change text, whether it is installed and whether its repository withdrew it, with the reason. The list holds the newest version and at most 10 older ones. A repository without a signed index has no list. An older version cannot be installed from the page. Not tested on hardware yet."""

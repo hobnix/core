@@ -1,7 +1,7 @@
 // The Marketplace as a store (web/src/pages/market.js, #474): cards from the package reads, tabs and their counts, categories, search, the
 // buttons of a card, and that nothing a repository says becomes markup, a script address or a path outside the asset endpoint.
 import { parseCards, storeRows, rowsOf, tabsOf, categoriesOf, filterRows, cardActions, iconOf, assetUrl, safeLink, openHref, parseShow, usesOf,
-  stateLine, categoryLabel, trustOf, testedText } from '../web/src/pages/market.js';
+  stateLine, categoryLabel, trustOf, testedText, parseFit, fitLabel, fitText, fitReason, binSize, parseHistory } from '../web/src/pages/market.js';
 
 let ok = 0, bad = 0;
 const check = (name, cond, extra = '') => { if (cond) { ok++; console.log(`  ok    ${name}`); } else { bad++; console.log(`  FAIL  ${name} ${extra}`); } };
@@ -102,6 +102,43 @@ check('another default repository is not Official', trustOf('recipes', [{ name: 
 check('an unknown repository: no label yet', trustOf('x', repos) === '' && trustOf('x', null) === '');
 check('tested: the day or not tested (official)', testedText('2026-01-02', 'official') === 'Tested on a real server on 2026-01-02' && testedText('', 'official') === 'Not tested on a real server');
 check('tested: any other repository claims nothing, even with a day', ['community', 'unsigned', ''].every((t) => testedText('2026-01-02', t) === 'No Hobnix test date' && testedText('', t) === 'No Hobnix test date'));
+
+// fits this server (#793): hs sys pkg fit, name, repo, verdict, check, level, need, have, total
+const G = 1073741824;
+const n = (v) => String(v * G);
+const fit = parseFit([
+  ['immich', 'official', 'note', 'memory', 'note', n(8), n(6), n(16)], ['immich', 'official', 'note', 'disk', 'ok', n(20), n(180), n(460)],
+  ['navidrome', 'family', 'fits', 'memory', 'ok', n(1), n(6), n(16)], ['navidrome', 'family', 'fits', 'disk', 'unstated', '-', n(180), n(460)],
+  ['seerr', 'official', 'unstated', 'memory', 'unstated', '-', n(6), n(16)], ['seerr', 'official', 'unstated', 'disk', 'unstated', '-', n(180), n(460)],
+  ['big', 'official', 'no', 'memory', 'ok', n(1), n(6), n(16)], ['big', 'official', 'no', 'disk', 'no', n(500), n(180), n(460)],
+  ['odd', 'official', 'perfect', 'constructor', 'great', '<b>', '-', '-'],
+]);
+check('fit: rows join by repo and name', fit.get('official/immich').checks.length === 2 && fit.get('family/navidrome').verdict === 'fits' && !fit.has('official/navidrome'));
+check('fit: a verdict or level this page does not know is unknown, never fits', fit.get('official/odd').verdict === 'unknown' && fit.get('official/odd').checks[0].level === 'unknown' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
+check('fit: the verdict in words', fitLabel(fit.get('official/immich')) === 'Fits, with a note' && fitLabel(fit.get('official/big')) === 'Does not fit this server'
+  && fitLabel(fit.get('official/seerr')) === 'Memory and disk not stated' && fitLabel(fit.get('official/odd')) === 'Fit could not be checked');
+check('fit: with the disk not stated it only fits what is stated', fitLabel(fit.get('family/navidrome')) === 'Fits what it states');
+check('fit: sizes count 1024', binSize(4 * G) === '4 GB' && binSize(512 * 1048576) === '512 MB' && binSize(1536 * G) === '1.5 TB');
+check('fit: not enough memory now says both figures', fitText(fit.get('official/immich').checks[0]).startsWith('Memory: it says it uses 8 GB, more than the 6 GB free right now (16 GB in total).'));
+check('fit: the disk reason', fitText(fit.get('official/big').checks[1]) === "Disk: it says it uses 500 GB; only 180 GB is free where the disk of a new container goes.");
+check('fit: not stated is said', fitText(fit.get('official/seerr').checks[0]) === 'Memory: the package does not state how much it uses.');
+check('fit: a figure that is no number is not drawn', fitText({ check: 'memory', level: 'ok', need: '<b>', have: n(1), total: n(2) }) === 'Memory: could not be checked.');
+check('fit: no graphics card, and one of another make claim nothing', fitText({ check: 'gpu', level: 'note', have: 'none' }).endsWith('none was found on this server.')
+  && fitText({ check: 'gpu', level: 'note', have: 'other' }).includes('does not say whether'));
+check('fit: a check named like an object property is a plain unknown need', fitReason({ verdict: 'no', checks: [{ check: 'constructor', level: 'no', need: 'x' }] }) === 'needs "x"');
+check('fit: the short reason of a card', fitReason(fit.get('official/big')) === 'not enough free disk space' && fitReason(fit.get('official/immich')) === 'more memory than is free now'
+  && fitReason(fit.get('official/seerr')) === '' && fitReason(fit.get('family/navidrome')) === '');
+
+// the version list of the package page (#1251): hs sys pkg history
+const h = parseHistory([['history', 'index'], ['version', '1.2.0', '2026-11-20T09:12:00Z', 'current', 'no', '-', 'Fix the address'],
+  ['version', '1.1.0', '-', 'older', 'yes', 'broke the database', '<img src=x onerror=alert(1)>'], ['version', '1.0.0', 'soon', 'older', 'no', '-', 'a‮b'],
+  ['version', '<b>', '-', 'older', 'no', '-', '-']]);
+check('history: the versions in the order given, a bad version number left out', h.source === 'index' && h.versions.map((v) => v.version).join() === '1.2.0,1.1.0,1.0.0');
+check('history: the day only, anything else is no date', h.versions[0].date === '2026-11-20' && h.versions[1].date === '' && h.versions[2].date === '');
+check('history: newest, withdrawn and its reason', h.versions[0].current && !h.versions[1].current && h.versions[1].withdrawn && h.versions[1].reason === 'broke the database' && !h.versions[0].withdrawn);
+check('history: change text stays text, no change text is empty', h.versions[1].changes === '<img src=x onerror=alert(1)>' && h.versions[0].reason === '');
+check('history: characters that reorder a line are taken out', h.versions[2].changes === 'ab');
+check('history: none, and nothing read', parseHistory([['history', 'none']]).source === 'none' && parseHistory(null).source === '' && parseHistory([['history', 'all']]).source === '');
 
 console.log(`${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

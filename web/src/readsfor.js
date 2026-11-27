@@ -47,7 +47,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
   if ((m = path.match(/^\/extensions\/([a-z][a-z0-9-]*)$/))) return extReads(m[1], extPages);
   if ((m = path.match(/^\/apps\/([a-z][a-z0-9-]*)$/)) && (extPages || []).some((p) => p.name === m[1] && p.kind === 'recipe')) return extReads(m[1], extPages);   // the page of a recipe
   if ((m = path.match(/^\/storage\/pools\/([a-z0-9-]+)$/))) return pool(m[1]);
-  if ((m = path.match(/^\/apps\/marketplace\/([a-z][a-z0-9-]{0,40})\/([a-z][a-z0-9-]{0,40})$/))) return [`${A}pkg/show/${m[2]}?repo=${m[1]}`, `${A}pkg/market`, `${A}pkg/repos`, `${A}pkg/cards`];   // the page of one package
+  if ((m = path.match(/^\/apps\/marketplace\/([a-z][a-z0-9-]{0,40})\/([a-z][a-z0-9-]{0,40})$/))) return [`${A}pkg/show/${m[2]}?repo=${m[1]}`, `${A}pkg/history/${m[2]}?repo=${m[1]}`, `${A}pkg/market`, `${A}pkg/repos`, `${A}pkg/cards`];   // the page of one package (pkg fit only when its card shows: the page asks)
   if (/^\/apps\/docker-app\/[^/]+/.test(path)) return [`${A}docker/apps`, `${A}docker/status`, `${A}recipes/list`];   // the page of one Docker app
   if (/^\/storage\/disks\/[^/]+/.test(path)) return DISKS;   // the page of one disk reads what the list reads (its SMART history and tests are read by the page itself)
   if (path.startsWith('/settings/capabilities') || path === P.settingsExtensions) return [`${A}config/list`, `${A}parts/list`, `${A}parts/pending`];
@@ -66,7 +66,7 @@ export function readsFor(path, extPages = [], liveOn = false, poolList = LEGACY_
     case P.expiry: return [`${A}expiry/list`];
     case P.health: return [`${A}health/next`, `${A}health/list`, `${A}health/info`, `${A}jobs/list`, `${A}status`];
     case P.apps: return [`${A}recipes/list`, `${A}recipes/versions`, `${A}apps/versions`, `${A}ct/list`];
-    case P.marketplace: return [`${A}pkg/market`, `${A}pkg/repos`, `${A}pkg/states`, `${A}pkg/cards`];
+    case P.marketplace: return [`${A}pkg/market`, `${A}pkg/repos`, `${A}pkg/states`, `${A}pkg/cards`];   // not pkg fit: only the Apps tab shows it, and its poll asks
     case P.services: return [`${A}services/list`, `${A}services/routes`, `${A}ct/list`];
     case P.events: return [`${A}event/list?n=100`];
     case P.notifications: return [`${A}notify/channels`, `${A}notify/providers`];
