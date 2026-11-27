@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "Monthly sums of extension services are recorded again"
+body  = """A service extension adds to a monthly sum, for example Media Hub's plays and watched minutes. The core compared the full event name with the short name that a package writes in [[events]], so every such addition was dropped with a warning in the service's journal. Sums that were dropped are not added later. Not tested on hardware yet."""
