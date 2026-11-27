@@ -24,7 +24,7 @@ set -- "${args[@]+"${args[@]}"}"
 mode=${1:-quick}
 [ $# -eq 0 ] || shift
 
-HELPERS=" lib lib-poolfakes lib-standins run run-all "
+HELPERS=" lib lib-appfakes lib-poolfakes lib-standins run run-all "
 all_tests() { local f n; for f in tests/*.sh; do n=$(basename "$f" .sh); case "$HELPERS" in *" $n "*) continue ;; esac; echo "$n"; done; }
 needs_root() { grep -q 'need_root' "tests/$1.sh"; }
 is_external() { [ "$1" = zfs-vm ] || [ "$1" = rebuild-vm ]; }
