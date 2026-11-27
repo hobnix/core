@@ -94,17 +94,16 @@ check_eq "hs ct zz-hstest-ghost start: Incus is not told to change anything" "" 
 check_events "hs ct zz-hstest-ghost start" 'audit.failed|ct zz-hstest-ghost start|warn|-|{"actor":"tester","exit":1}'
 check_signals "hs ct zz-hstest-ghost start" event:area.instances
 
-echo "-- LOOKS WRONG: the rows have fixed arguments without {rest}, so every further word is dropped without a message"
-# scripts/manage-ct.sh documents --dry-run for any change and --keep-off for --stop. Through `hs ct <ct> stop` neither arrives.
+echo "-- words after hs ct <ct> stop reach the script (#1345): --dry-run changes nothing, --keep-off takes the app out of the start at boot"
 setup RUNNING
 as_person ct zz-hstest-app stop --dry-run
-check_run "LOOKS WRONG: hs ct zz-hstest-app stop --dry-run exits 0 and prints nothing" 0 ""
-check_eq "LOOKS WRONG: hs ct zz-hstest-app stop --dry-run really stops the app" "incus stop zz-hstest-app" "$(changes)"
-check_eq "LOOKS WRONG: hs ct zz-hstest-app stop --dry-run, the state after" STOPPED "$(state_of zz-hstest-app)"
+check_run "hs ct zz-hstest-app stop --dry-run prints the command" 0 "  incus stop zz-hstest-app"
+check_eq "hs ct zz-hstest-app stop --dry-run: Incus is not told to change anything" "" "$(changes)"
+check_eq "hs ct zz-hstest-app stop --dry-run, the state after" RUNNING "$(state_of zz-hstest-app)"
 setup RUNNING
 as_person ct zz-hstest-app stop --keep-off
-check_run "LOOKS WRONG: hs ct zz-hstest-app stop --keep-off" 0 ""
-check_eq "LOOKS WRONG: --keep-off is dropped, the instance still starts at boot" "incus stop zz-hstest-app" "$(changes)"
+check_run "hs ct zz-hstest-app stop --keep-off" 0 ""
+check_eq "hs ct zz-hstest-app stop --keep-off: what Incus was told" "$(lines "incus stop zz-hstest-app" "incus config unset zz-hstest-app boot.autostart")" "$(changes)"
 
 echo "-- the locked container docker (every app in it) can be stopped and started by hand: only delete and device changes are locked"
 reset_fakes; instance zz-hstest-docker RUNNING docker
