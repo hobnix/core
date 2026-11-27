@@ -23,7 +23,7 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref } from './market.js';
+  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
@@ -188,7 +188,8 @@
                    kicker={p.kind === 'recipe' ? '' : kindLabel(p.kind)} status={doing(p) || stateLine(p)}>
             {#snippet meta()}
               {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
-              <Chip tone="soft" title="The repository it comes from">{p.repo}</Chip>
+              {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified, trustOf(p.repo, repos))}`} />{/if}
+              <Muted>{testedText(p.verified, trustOf(p.repo, repos))}</Muted>
               {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
             {/snippet}
             {#snippet actions()}

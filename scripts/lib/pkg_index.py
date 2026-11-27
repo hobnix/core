@@ -500,6 +500,8 @@ def validate(doc, now=None, warnings=None, strict=False):
                 w("binaries is not a list of {bin, target, sha256 (64 hex), size}")
         if strict and "date" in e and not (isinstance(e["date"], str) and TIME.match(e["date"])):
             w("date is not a UTC time like 2026-11-22T04:00:00Z")
+        if strict and "verified" in e and not (isinstance(e["verified"], str) and re.fullmatch(r"\d{4}-\d\d-\d\d", e["verified"])):
+            w("verified is not a day like 2026-11-22")
         if strict and "versions" in e:
             vs = e["versions"]
             if not isinstance(vs, list) or len(vs) > HISTORY_VERSIONS:

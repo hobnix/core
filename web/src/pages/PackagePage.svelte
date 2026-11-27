@@ -14,7 +14,7 @@
   import PageState from '../shell/PageState.svelte';
   import { Button, Card, Chip, Banner, Kv, Grid, Stack, Row, Muted, Menu, EmptyState, ErrorNote, AppIcon, Screenshots } from '../ui/index.js';
   import { parseStates, stageActions } from './states.js';
-  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl } from './market.js';
+  import { parseCards, parseRepos, storeRows, parseShow, usesOf, categoryLabel, kindLabel, stateLine, cardActions, openHref, assetUrl, trustOf, testedText } from './market.js';
   import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   // the two words of the address (the route only sends a path that matches routes.js PACKAGE_PAGE)
@@ -70,6 +70,12 @@
     wasBusy = busyNow;
   });
   const failure = $derived(p ? failureOf(p) : null);
+  // who vouches for it (#477): the words of the trust chip, said once more as a sentence, and what the tested day covers
+  const trust = $derived(trustOf(repo, parseRepos(rows(repoList))));
+  const vouch = $derived(trust === 'official' ? 'It comes from the official Hobnix repository, and its release is signed with the key of the project. The signature is checked before anything is installed.'
+    : trust === 'community' ? `It comes from the repository ${repo}, which was added on this server, not by the Hobnix project. Its releases are signed with the key that repository was added with, and the signature is checked; the Hobnix project has not looked at it.`
+    : trust === 'unsigned' ? `It comes from the repository ${repo}, which has no signatures: nobody vouches that these are the files its author published. Installing it asks you to type its name.`
+    : '');
 </script>
 
 <PageHeader title={name} sub={p?.title || s.title || ''}>
@@ -96,12 +102,21 @@
             <Row gap="2" wrap>
               <Chip>{kindLabel(p.kind)}</Chip>
               {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
-              <Chip tone="soft" title="The repository it comes from">{repo}</Chip>
+              {#if trust}<Chip kind="trust" level={trust} title={`From the repository ${repo}`} />{/if}
             </Row>
             <span>{stateLine(p)}</span>
             {#if failure}<ErrorNote error={failure.error} ondismiss={() => rowstate.dismiss(failure.id)} />{/if}
           </Stack>
         </Row>
+      </Card>
+
+      <Card title="Who vouches for it">
+        <Row gap="2" wrap>
+          {#if trust}<Chip kind="trust" level={trust} />{/if}
+          <b>{testedText(p.verified, trust)}</b>
+        </Row>
+        {#if vouch}<p style="margin:0;line-height:1.55">{vouch}</p>{/if}
+        <Muted as="p">Tested means (the official repository only): a person installed this release on a real Hobnix server (not only in an automatic test), opened it, checked that it does its main job, and then wrote the day into the index of its repository. It does not cover every setting or every kind of hardware, a later release, or an update of the app itself. Packages run as root on this server.</Muted>
       </Card>
 
       {#if show.error || s.refused}

@@ -83,6 +83,10 @@ bad "expires before generated" 'd["expires"]=d["generated"]'
 bad "the reserved repo name core" 'd["repo"]="core"'
 python3 -c "import json; d=json.load(open('$J')); d['future']=1; d['packages']['demo']['x']=2; json.dump(d,open('$WORK/ok.json','w'))"
 check "unknown fields are ignored" $IDX validate "$WORK/ok.json"
+# verified (#477): optional; a day when it is there
+bad "a verified value that is not a day" 'd["packages"]["demo"]["verified"]="soon"'
+python3 -c "import json; d=json.load(open('$J')); d['packages']['demo']['verified']='2026-01-02'; json.dump(d,open('$WORK/okv.json','w'))"
+check "a verified day is valid" $IDX validate "$WORK/okv.json"
 
 echo "-- version history (from the first-parent git history only)"
 if have git; then
