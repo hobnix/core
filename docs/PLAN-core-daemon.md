@@ -192,9 +192,11 @@ Questions keep ADR 0018: state `waiting`, answered by the person who started the
 
 **Planned.**
 
-- **Update and rollback.** `scripts/state-db.py` refuses a database with a newer schema (`SchemaTooNew`). Once jobs depend on the database, a rollback could
-  stop every job. Rule: at least the previous release works with the new format. Test an update and a rollback while a job of the old version runs. The
-  same holds for the socket messages between old jobs, the CLI and a new daemon.
+- **Update and rollback.** `scripts/state-db.py` refuses a database with a newer schema (`SchemaTooNew`) unless the database names an oldest writer that
+  its own schema version reaches (`meta` key `oldest_writer`, #1352; when a step keeps or raises it: `schema_steps` in that file). A release from before
+  #1352 does not read the number, so the first schema change that relies on it ships at least one release later. Not tested on hardware yet. Once jobs
+  depend on the database, a rollback could stop every job. Rule: at least the previous release works with the new format. Test an update and a rollback
+  while a job of the old version runs. The same holds for the socket messages between old jobs, the CLI and a new daemon.
 - **Database failure** (disk full, damaged, locked). Today a job runs without a record when the record cannot be written. New: normal changes are refused;
   a short, named list of repair operations runs anyway and logs to the journal.
 - **Alerts do not need the daemon.** systemd's failure alert (`hs-notify-failure@`) stays independent. The daemon itself is watched. Check this again when
