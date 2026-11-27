@@ -31,7 +31,9 @@ Issue: hobnix/server#213 (epic #207). Records the branch model in CLAUDE.md and 
   being tested; the beta ships the ISO and is a GitHub prerelease.*
 - **One milestone is released at a time; the next may be built on its own long-lived branch `0.N`.** `develop` is merged into it after every
   change (merge commit); it never lacks anything `develop` or `main` has. Right after the tag of the release before it, `main` is merged back
-  into `develop` and the milestone branch is merged into `develop`, then deleted.
+  into `develop` and the milestone branch is merged into `develop`, then deleted. *Changed by the owner 2026-11-27: the branch is not
+  deleted then, because betas are cut only from it; its first beta may be tagged before the merge into `develop`. It is kept until `X.Y.0`
+  is released, and `develop` is synced into it before each later beta.*
 - **A hotfix is merged back** into `develop` and the open milestone branch.
 - `main` takes merge commits only; the rulesets for the milestone branches are proposals for the owner.
 - Runbook and script: docs/RELEASE-PROCESS.md, `scripts/dev/release-core.sh`.
