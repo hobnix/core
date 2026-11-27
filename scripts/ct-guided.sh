@@ -191,9 +191,11 @@ storage)
   fi
   case "$kind" in fast|shares|sensitive) ;; *) usage ;; esac
   # an option that this kind of storage would ignore is refused
-  [ "$kind" != fast ] || [ -z "$source_" ] || refuse_word --source
-  [ "$kind" != fast ] || [ -z "$as" ] || refuse_word --as
-  [ "$kind" = fast ] || [ -z "$apool" ] || refuse_word -s
+  case "$kind" in   # share folders take --source and --as, a volume takes -s
+    shares|sensitive) [ -z "$apool" ] || refuse_word -s ;;
+    *) [ -z "$source_" ] || refuse_word --source
+       [ -z "$as" ] || refuse_word --as ;;
+  esac
   if [ -z "$sname" ]; then
     if [ "$kind" = fast ]; then need "--name"; sname=$(ask "Name of the volume:" "$ct-data")
     else

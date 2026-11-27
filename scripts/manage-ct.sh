@@ -332,8 +332,10 @@ case "$1" in
       esac
     done
     if $words; then   # an option that this kind of storage would ignore
-      [ "$kind" != fast ] || [ -z "$as" ] || refuse_word --as
-      [ "$kind" = fast ] || [ -z "$apool" ] || refuse_word -s
+      case "$kind" in   # share folders take --as, a volume takes -s
+        shares|sensitive) [ -z "$apool" ] || refuse_word -s ;;
+        *) [ -z "$as" ] || refuse_word --as ;;
+      esac
     fi
     [ -z "$as" ] || [[ "$as" =~ ^[0-9]+:[0-9]+$ ]] || fail "$(t "--as expects <uid>:<gid>, got '%s'" "$as")"
     [[ "$sname" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "$(t "invalid storage name '%s'" "$sname")"
