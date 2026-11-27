@@ -1,0 +1,4 @@
+date  = "2026-11-27"
+type  = "fix"
+title = "The guide of a capability package is listed under Extensions, not under Apps"
+body  = """The documentation pages listed the guide of an installed capability package under Apps. It is now listed under Extensions. Build the pages again with `hs docs build`; `hs update` does it by itself. Not tested on hardware yet."""
