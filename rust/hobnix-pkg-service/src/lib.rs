@@ -8,11 +8,14 @@
 //!
 //! **Before `ready`.** The protocol allows nothing but `ready` first. What `start`, or a thread it started, writes through the SDK
 //! before that (`log`, `emit`, `rollup`, `snapshot`) returns at once, is held back and follows `ready` in the order it was written, so
-//! `start` may wait for such a thread. At most 1000 messages and 4 MiB of lines are held: a message that does not fit fails with
-//! `io::ErrorKind::QuotaExceeded`, and a `log` line after `ready` says how many were dropped. When `start` fails or panics, none of
-//! them is sent: the held `log` lines go to stderr, the other messages are only counted there, and later writes fail with
-//! `NotConnected`. What is held is lost when the process ends without unwinding (the core kills a `start` that takes too long,
-//! `std::process::exit`, `panic = "abort"`), so write to stderr what has to be seen then.
+//! `start` may wait for such a thread. At most 1000 messages and 4 MiB of lines are held: a newer message that does not fit is
+//! dropped (the call still returns `Ok`), and a `log` line after `ready` says how many were dropped. When `start` fails or panics,
+//! none of them is sent: the SDK writes the held `log` lines to stderr, only counts the other messages there, and later writes fail
+//! with `NotConnected`. What is held is lost when the process ends without unwinding (the core kills a `start` that takes too long,
+//! `std::process::exit`, `panic = "abort"`).
+//!
+//! **stderr.** Today the core's bridge discards the stderr of a service (hobnix/core issue #1368), so nothing that the SDK or the
+//! service writes there can be seen on a server.
 //!
 //! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (`Ctx::shared` gives a handle that
 //! moves to another thread).
@@ -286,7 +289,7 @@ fn send_health(out: &Output, h: Health) -> Result<(), ProtocolError> {
     out.send(&FromService::Health(Health { ok: h.ok, text }))
 }
 
-/// The one error line on stderr (part of the protocol: the core keeps it) and exit status 1.
+/// The one error line on stderr and exit status 1 (the bridge discards a service's stderr today, #1368).
 fn die(reason: &str) -> u8 {
     let _ = writeln!(io::stderr(), "hobnix-pkg-service: {reason}");
     1

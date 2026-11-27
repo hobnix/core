@@ -17,8 +17,8 @@ struct Ticker {
 }
 
 impl Service for Ticker {
-    // What `ctx` writes here is held until `ready` is out, and is not sent when the start fails or hangs: a diagnostic about the
-    // start itself goes to stderr. Never write to stdout directly.
+    // What `ctx` writes here is held until `ready` is out, and is not sent when the start fails or hangs. Never write to stdout
+    // directly. The line below goes to stderr, which the core's bridge discards today (#1368).
     fn start(&mut self, init: &Init, _ctx: &dyn Ctx) -> Result<(), Error> {
         let (name, subscribe) = (&init.name, &init.subscribe);
         writeln!(

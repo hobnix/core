@@ -5,6 +5,7 @@
 //! A held write returns at once: `start` may wait for a thread that writes. The protocol has no message that the core answers, so
 //! nothing a service writes can wait for `ready` to be out.
 
+use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -20,10 +21,10 @@ const HELD_MAX_BYTES: usize = 4 << 20;
 /// The messages written before `ready`, as encoded lines.
 #[derive(Default)]
 struct Held {
-    lines: Vec<HeldLine>,
+    lines: VecDeque<HeldLine>,
     bytes: usize,
-    /// Messages that did not fit; the newest are refused, so what is held has no older gap than the first refusal.
-    refused: u64,
+    /// Messages that did not fit. The newest is dropped, so nothing is missing before the first drop.
+    dropped: u64,
 }
 
 struct HeldLine {
@@ -33,25 +34,24 @@ struct HeldLine {
 }
 
 impl Held {
-    /// Keep the line, or refuse it with `QuotaExceeded` when a limit is reached.
-    fn push(&mut self, line: HeldLine) -> io::Result<()> {
+    /// Keep the line, or drop and count it when a limit is reached. The writer is not told, as with the core's emit limit: an error
+    /// would end a poller that passes it on with `?`.
+    fn push(&mut self, line: HeldLine) {
         let bytes = self.bytes.saturating_add(line.text.len());
         if self.lines.len() >= HELD_MAX_MESSAGES || bytes > HELD_MAX_BYTES {
-            self.refused = self.refused.saturating_add(1);
-            let why = "too much was written before ready; the message is dropped";
-            return Err(io::Error::new(io::ErrorKind::QuotaExceeded, why));
+            self.dropped = self.dropped.saturating_add(1);
+            return;
         }
         self.bytes = bytes;
-        self.lines.push(line);
-        Ok(())
+        self.lines.push_back(line);
     }
 
-    /// What became of the refused messages, if there are any.
-    fn refused_text(&self) -> Option<String> {
-        (self.refused > 0).then(|| {
+    /// What became of the messages that did not fit, if there are any.
+    fn dropped_text(&self) -> Option<String> {
+        (self.dropped > 0).then(|| {
             format!(
                 "{} messages written before ready were dropped (at most {HELD_MAX_MESSAGES} messages or {} MiB are held)",
-                self.refused,
+                self.dropped,
                 HELD_MAX_BYTES >> 20
             )
         })
@@ -63,7 +63,7 @@ enum State {
     Holding(Held),
     /// `ready` is out: every message is written at once.
     Open,
-    /// The service never became ready: nothing may be written any more.
+    /// Given up: nothing may be written any more.
     Closed,
 }
 
@@ -88,8 +88,8 @@ impl Output {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Write `msg`, or hold it while `ready` is not out. Fails as [`wire::encode`] does (before `ready` too), with the write error,
-    /// with `QuotaExceeded` when no more can be held and with `NotConnected` after [`Output::abandon`].
+    /// Write `msg`, or hold it while `ready` is not out (a message over the limits is dropped, and this still returns `Ok`). Fails
+    /// as [`wire::encode`] does (before `ready` too), with the write error and with `NotConnected` after [`Output::abandon`].
     pub(crate) fn send(&self, msg: &FromService) -> Result<(), ProtocolError> {
         let line = HeldLine {
             is_log: matches!(msg, FromService::Log(_)),
@@ -98,7 +98,10 @@ impl Output {
         let mut inner = self.lock();
         let Inner { sink, state } = &mut *inner;
         match state {
-            State::Holding(held) => held.push(line),
+            State::Holding(held) => {
+                held.push(line);
+                Ok(())
+            }
             State::Open => write_line(sink, &line.text),
             State::Closed => Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -109,17 +112,18 @@ impl Output {
     }
 
     /// Write `ready`, then what was held, then a warning when messages were dropped. The lock is kept over all of it, so a thread
-    /// that writes at the same time comes after. When a write fails nothing is forgotten: [`Output::abandon`] still has it.
+    /// that writes at the same time comes after. When a write fails, what was not written stays held for [`Output::abandon`].
     pub(crate) fn ready(&self) -> Result<(), ProtocolError> {
         let ready = encode_line(&FromService::Ready)?;
         let mut inner = self.lock();
         let Inner { sink, state } = &mut *inner;
         write_line(sink, &ready).map_err(ProtocolError::Io)?;
         if let State::Holding(held) = state {
-            for line in &held.lines {
+            while let Some(line) = held.lines.front() {
                 write_line(sink, &line.text).map_err(ProtocolError::Io)?;
+                held.lines.pop_front();
             }
-            if let Some(text) = held.refused_text() {
+            if let Some(text) = held.dropped_text() {
                 let warning = FromService::Log(Log::new(LogLevel::Warn, &text));
                 write_line(sink, &encode_line(&warning)?).map_err(ProtocolError::Io)?;
             }
@@ -128,8 +132,8 @@ impl Output {
         Ok(())
     }
 
-    /// The service does not become ready: what was held may not go to the core, so the log lines go to `diagnostics` (stderr) and
-    /// the rest is counted there. Later writes fail. Does nothing after [`Output::ready`].
+    /// The start failed, or [`Output::ready`] did: what is still held does not go to the core, so the log lines are written to
+    /// `diagnostics` (stderr) and the rest is counted there. Later writes fail. Does nothing after a successful [`Output::ready`].
     pub(crate) fn abandon(&self, diagnostics: &mut dyn Write) {
         let held = {
             let mut inner = self.lock();
@@ -157,13 +161,13 @@ fn report_unsent(held: &Held, to: &mut dyn Write) -> io::Result<()> {
             "hobnix-pkg-service: not sent: {others} other messages (emit, snapshot, rollup)"
         )?;
     }
-    if let Some(text) = held.refused_text() {
+    if let Some(text) = held.dropped_text() {
         writeln!(to, "hobnix-pkg-service: {text}")?;
     }
     Ok(())
 }
 
-/// Calls [`Output::abandon`] with stderr when it is dropped, so a panicking `start` loses no log line either.
+/// Calls [`Output::abandon`] with stderr when it is dropped, so after a panic in `start` the held log lines are written there too.
 pub(crate) struct AbandonOnDrop<'a>(pub(crate) &'a Output);
 
 impl Drop for AbandonOnDrop<'_> {
@@ -217,13 +221,48 @@ mod tests {
         for _ in 0..HELD_MAX_MESSAGES {
             output.send(&log("x")).unwrap();
         }
-        assert!(output.send(&log("x")).is_err());
+        output.send(&log("x")).unwrap();
         let mut diagnostics = Vec::new();
         output.abandon(&mut diagnostics);
         let text = String::from_utf8(diagnostics).unwrap();
         assert!(text.ends_with(
             "1 messages written before ready were dropped (at most 1000 messages or 4 MiB are held)\n"
         ));
+    }
+
+    /// A sink that takes this many lines and then fails.
+    struct FailsAfter(usize);
+
+    impl Write for FailsAfter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_sub(1)
+                .ok_or_else(|| io::Error::from(io::ErrorKind::BrokenPipe))?;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_held_line_that_was_sent_is_not_reported_when_a_later_one_fails() {
+        // takes `ready` and the first held line
+        let output = Output::new(FailsAfter(2));
+        for text in ["sent", "failed", "never tried"] {
+            output.send(&log(text)).unwrap();
+        }
+        assert!(output.ready().is_err());
+        let mut diagnostics = Vec::new();
+        output.abandon(&mut diagnostics);
+        let text = String::from_utf8(diagnostics).unwrap();
+        assert!(!text.contains(r#""text":"sent""#), "{text}");
+        assert_eq!(text.lines().count(), 2, "{text}");
+        assert!(
+            text.contains("failed") && text.contains("never tried"),
+            "{text}"
+        );
     }
 
     #[test]

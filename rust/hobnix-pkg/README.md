@@ -46,10 +46,11 @@ the `ack` after `on_event` returns `Ok`, and returns on `shutdown` or end of std
 
 ## Rules for the author
 
-- **stdout is the protocol.** Never `println!`; diagnostics go to stderr (kept by the core on failure, or in the journal for a service).
+- **stdout is the protocol.** Never `println!`; diagnostics go to stderr. The core keeps a command's stderr on failure; today it discards
+  a service's stderr (hobnix/core issue #1368).
   Before `ready` the protocol allows nothing else, so the service runner holds back what `start` and its threads write through `ctx`
-  and sends it after `ready` (at most 1000 messages and 4 MiB). A direct write to stdout is not held back. What must be seen when
-  `start` hangs goes to stderr.
+  and sends it after `ready` (at most 1000 messages and 4 MiB; a newer one that does not fit is dropped and counted in a log line). A
+  direct write to stdout is not held back. What is held is not sent when `start` fails or hangs.
 - **No secrets** in `argv`, `data`, snapshots or logs (ADR 0010 rule 9). A key is a `Secret`: it prints as `***`.
 - **Cancel and timeout are SIGTERM** to the process group, then SIGKILL after the grace time. The SDK installs no signal handler (it
   would need `unsafe` or a crate); the default action ends the process, which is a valid answer within the rules. A command that

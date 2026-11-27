@@ -114,15 +114,14 @@ fn a_thread_that_writes_across_ready_keeps_its_order() {
 }
 
 #[test]
-fn more_than_1000_messages_are_refused_and_counted_after_ready() {
+fn more_than_1000_messages_are_dropped_and_counted_after_ready() {
     let output = Buf::default();
     run(output.clone(), |ctx| {
         for number in 0..1000 {
             ctx.log(LogLevel::Info, &number.to_string())?;
         }
         for _ in 0..500 {
-            let refused = ctx.log(LogLevel::Info, "too many").unwrap_err();
-            assert_eq!(refused.kind(), ErrorKind::QuotaExceeded);
+            ctx.log(LogLevel::Info, "too many")?;
         }
         Ok(())
     });
@@ -137,14 +136,13 @@ fn more_than_1000_messages_are_refused_and_counted_after_ready() {
 }
 
 #[test]
-fn more_than_4_mib_are_refused() {
+fn more_than_4_mib_are_dropped_and_counted_after_ready() {
     let output = Buf::default();
     run(output.clone(), |ctx| {
         let data = json!("x".repeat(250 << 10));
-        let accepted = (0..30)
-            .filter(|_| ctx.snapshot("big", data.clone()).is_ok())
-            .count();
-        assert_eq!(accepted, 16);
+        for _ in 0..30 {
+            ctx.snapshot("big", data.clone())?;
+        }
         // a small message still fits
         ctx.log(LogLevel::Info, "small")?;
         Ok(())
