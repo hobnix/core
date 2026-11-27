@@ -816,10 +816,11 @@ def cmd_emit(args):
         try:
             def no_const(name):
                 raise ValueError(name)       # NaN, Infinity: not JSON
-            ok = isinstance(json.loads(payload, parse_constant=no_const), dict)
+            obj = json.loads(payload, parse_constant=no_const)
+            # a number too large for a float (1e400) is read as infinity: only writing it back refuses it
+            payload = json.dumps(obj, allow_nan=False, separators=(",", ":")) if isinstance(obj, dict) else None
         except ValueError:
-            ok = False
-        payload = json.dumps(json.loads(payload), allow_nan=False, separators=(",", ":")) if ok else None
+            payload = None
     subject = one_line(pos[1]) if len(pos) > 1 else ""
     text = one_line(pos[2]) if len(pos) > 2 else ""
     c = open_rw()

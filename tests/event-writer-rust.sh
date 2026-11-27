@@ -96,15 +96,11 @@ check_eq "floats keep a point" '0:{"x":1.0,"y":1000.0,"z":0.1}' "$(payload '{"x"
 check_eq "large and small floats get an exponent" '0:{"x":1e+22,"y":1e-07}' "$(payload '{"x":1e22,"y":0.0000001}')"
 check_eq "a whole number of any size stays exact" '0:{"big":123456789012345678901234567890}' "$(payload '{"big":123456789012345678901234567890}')"
 check_eq "nesting, true, false and null" '0:{"a":{"b":[true,false,null,{}]}}' "$(payload '{"a":{"b":[true,false,null,{}]}}')"
-for none in '[1,2]' '"text"' 7 null nonsense '' '{"a":NaN}' '{"a":Infinity}' '{"a":-Infinity}' '{"a":1}x'; do
+# 1e400 is too large for a float: it is read as infinity, so it counts like Infinity
+for none in '[1,2]' '"text"' 7 null nonsense '' '{"a":NaN}' '{"a":Infinity}' '{"a":-Infinity}' '{"a":1}x' \
+            '{"a":1e400}' '{"a":[{"b":-1e400}]}' '[1e400]'; do
   check_eq "payload '$none' is stored as NULL, the event is written" "0:NULL" "$(payload "$none")"
 done
-# today's behaviour, not the intended one: a number too large for a float is not refused like NaN, writing the payload back raises
-reset
-out=$(emit storage.new s t --payload '{"a":1e400}' 2>&1); rc=$?
-check_eq "a number too large for a float: exit 1 (today)" "1" "$rc"
-check_out "with a Python error" "ValueError" echo "$out"
-check_eq "and the event is lost (today)" "0" "$(rows)"
 
 echo "-- retention runs with every event"
 reset

@@ -1,0 +1,4 @@
+date  = "2026-11-27"
+type  = "fix"
+title = "An event with a number too large to store is written instead of lost"
+body  = """`hs event emit` with a payload number too large to store, such as `1e400`, failed with an error and wrote no event. The event is now written without the payload, as for `NaN`. Not tested on hardware yet."""
