@@ -67,6 +67,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-extensions-access](PLAN-extensions-access.md) | Design for milestone 0.8: extension protocol and SDK, enforced permissions, package events, roles and API tokens, two-factor login and single sign-on |
 | [PLAN-package-sdk](PLAN-package-sdk.md) | One SDK for packages: command protocol, permissions, lifecycle (plan, nothing built) |
 | [PLAN-rust](PLAN-rust.md) | Rust as the main language behind the `hs sys` contract, Python retired (plan, nothing built) |
+| [PLAN-autopilot](PLAN-autopilot.md) | A runner that builds approved board issues in a throwaway VM, up to a draft pull request, and the test stages (plan, nothing built) |
 | [PLAN-core-daemon](PLAN-core-daemon.md) | One Rust core, the daemon `hobnixd`, a Rust CLI and web API, jobs, events, history and live state (plan, nothing built) |
 | [PLAN-core-daemon-migration](PLAN-core-daemon-migration.md) | Migration map of Core and Jobs: every command, service, timer, route, stored file and package hook with its new owner and step (P0, nothing built) |
 | [PLAN-0.14](PLAN-0.14.md) | What milestone 0.14 builds first, what moves forward from 0.15 and what waits (plan) |
