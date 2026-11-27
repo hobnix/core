@@ -93,9 +93,14 @@ package is on, with these checks. If any check fails the whole declaration of th
 
 **Live reads (opt-in).** Without `live` a read is run by the web interface as before. With `live = <seconds>` and the live state on (the capability
 `live-state`, on with the web interface) the read gets the live topic `ext-<name>-<words joined by '-'>` (`games` + `list` gives `ext-games-list`): the collector
-`scripts/live-collect.py` runs `hs sys ext <name> <words>` every `<live>` seconds, at most 4 reads at once, and again at once when something
+`scripts/live-collect.py` runs `hs sys ext <name> <words>` on demand (#1320): every `<live>` seconds only while an open page wants the topic,
+otherwise every `max(300, <live>)` seconds, and at once when a page opens; at most 4 reads at once. So a read must not be relied on to run
+without a page: no counters, history, events, notifications or device polling in it (that belongs in the package's `[service]`; `[[health]]`
+checks run their read themselves). There is no way for a package to opt out. Not tested on hardware yet. The collector also reads it again at once when something
 asks for the group `ext-<name>`, which the web interface does after every change started in the area `ext/<name>` (an extension script that changes
-state outside the web interface can call `live_refresh @ext-<name>`). The page keeps its URL (`/api/sys/ext/<name>/<words>`); the browser
+state outside the web interface can call `live_refresh @ext-<name>`). Known gap, older than #1320: `state-db.py topic-bump` expands a
+group from `scripts/lib/live-topics.tsv` only, so `@ext-<name>` does not wake the package's own topic today (only the topics of the group
+`any`); an open page sees the change at the next `<live>` read, a page opened later reads at once. The page keeps its URL (`/api/sys/ext/<name>/<words>`); the browser
 learns the topic from the session answer and then follows the stream instead of polling. The capability of the topic is the package itself: while it
 is off the read is gone from the web interface (no URL, like any read of a package that is off) and the collector stops the topic at its next look. The collector looks at the packages every 60 s (and when the
 web interface asks for an unknown `ext-` topic), starts the thread of a new topic and stops that of a removed one. The read's output is stored in

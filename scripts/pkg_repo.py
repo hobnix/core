@@ -841,11 +841,9 @@ class Repos:
             raise Refused("%s: the path %r in index.toml is not allowed" % (repo, path))
         if not pkg.NAME.match(name):
             raise Refused("%s: not a package name" % name)
-        rq = pkg.REQUIRES.match(str(entry.get("requires_core", "")))
-        if not rq:
-            raise Refused('%s: requires_core in the index must look like ">=1"' % name)
-        if int(rq.group(1)) > pkg.api_level():
-            raise Refused("%s needs core API level %s, this one has %d: hs update first" % (name, rq.group(1), pkg.api_level()))
+        miss = pkg.core_misfit(name, entry)      # from the index: refused before anything is downloaded
+        if miss:
+            raise Refused("%s (the index of %s)" % (miss[1], repo), miss[0])
         if not pkg.SEMVER.match(str(entry.get("version", ""))):
             raise Refused("%s: the version in the index is not semver" % name)
 
@@ -863,6 +861,12 @@ class Repos:
         r = self.all()[r_name]
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
+        # a copy that came from another repository (also an orphan whose repository is gone) is never replaced by a package of the same name:
+        # switching is a removal first. A record without repo (the old `hs recipe` record) and one without a copy in current/ replace nothing.
+        home = self.pkg.installed().get(name, {}).get("repo")
+        if os.path.isdir(cur) and isinstance(home, str) and home and home != r_name:
+            raise Refused("%s is installed from %s; the package of the same name in %s would replace it. To switch on purpose: hs pkg remove %s, then hs pkg install %s --repo %s"
+                          % (name, home, r_name, name, name, r_name), "pkg.other-repo")
         tmp = os.path.join(self.state, "current", ".new-" + name)
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
@@ -882,10 +886,10 @@ class Repos:
         if m.get("name") != name or m.get("version") != entry["version"]:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
-        rq = self.pkg.REQUIRES.match(str(m.get("requires_core", "")))
-        if not rq or int(rq.group(1)) > self.pkg.api_level():
+        miss = self.pkg.core_misfit(name, m)       # package.toml decides too, not only the index
+        if miss:
             self.rm_quiet(tmp)
-            raise Refused("%s: package.toml says requires_core %r, this server has API level %d: hs update first" % (name, m.get("requires_core"), self.pkg.api_level()))
+            raise Refused("%s (package.toml)" % miss[1], miss[0])
         for src, v in (("index.toml", entry.get("requires_nix_api")), ("package.toml", m.get("requires_nix_api"))):
             if v is None:
                 continue
@@ -1181,11 +1185,12 @@ class Repos:
         """-> (old commit, new tag, new commit, diff text) or None when the installed package is current"""
         have = self.recorded(name)
         r_name, entry, tag, commit = self.choose_installed(name, have["repo"])
-        self.check_entry(name, entry, r_name)
         if entry.get("yanked"):
+            self.check_entry(name, entry, r_name)
             raise Refused(self.yanked_text(name, entry) + " (the installed copy is %s)" % have.get("version", "?"))
         if commit == have.get("commit"):
-            return None
+            return None     # current, also when its range no longer takes this core (core_beyond reports that; nothing is refused or removed)
+        self.check_entry(name, entry, r_name)
         ev, hv, ht = self.pkg.semver_key(entry["version"]), self.pkg.semver_key(have["version"]), have.get("tag", "")
         indexed = bool(entry.get("_index"))
         # same version under a newer tag: a beta that became the release (release tags only; an index version is what the package says)
@@ -1455,11 +1460,15 @@ def run(pkg, cmd, rest):
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
             seen = set()
+            beyond = dict(pkg.core_beyond())     # installed copies whose requires_core_max is below this core: named in the title, kept as they are
             for pname, rows in sorted(R.catalog(True).items()):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
-                    if os.path.isdir(os.path.join(cur, pname)):
+                    # the copy belongs to the row of the repository it came from (a same-name package of another repository is not its
+                    # update); an entry without repo (the old `hs recipe` record) still goes with every row of the name
+                    home = have.get(pname, {}).get("repo")
+                    if os.path.isdir(os.path.join(cur, pname)) and (not home or home == r_name):
                         inst = str(have.get(pname, {}).get("version", "?"))
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
@@ -1482,9 +1491,13 @@ def run(pkg, cmd, rest):
                         state = "current"
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
-                    seen.add(pname)
+                    if inst != "-" or not os.path.isdir(os.path.join(cur, pname)):
+                        seen.add(pname)     # a copy that no row of its own repository carries is shown as an orphan below
+                    title = e.get("title") or "-"
+                    if inst != "-" and pname in beyond:
+                        title = "%s (the installed copy does not support this core yet: it works up to core API level %d)" % (e.get("title") or pname, beyond[pname])
                     print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
-                                  e.get("audience", "generic"), e.get("title") or "-"))
+                                  e.get("audience", "generic"), title))
             if os.path.isdir(cur):
                 for pname in sorted(os.listdir(cur)):
                     if pname in seen or pname.startswith("."):

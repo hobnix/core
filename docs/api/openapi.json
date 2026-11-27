@@ -1010,7 +1010,7 @@
       "<word>"
      ],
      "script": "backup.sh",
-     "args": "--find {1}",
+     "args": "--find {1} {?--repo=}",
      "class": "read",
      "rest": false
     },
@@ -1334,7 +1334,7 @@
       "<tag>"
      ],
      "script": "backup.sh",
-     "args": "--snapshots {1}",
+     "args": "--snapshots {1} {?--repo=}",
      "class": "read",
      "rest": false
     },
@@ -10405,7 +10405,7 @@
      "class": "read",
      "rest": true
     },
-    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. api_url may contain {host}, the address of the instance. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration.",
+    "description": "What the packages that are there (recipe installed, extension or capability on) offer through [integrations.<name>] (hobnix/core#926); the core knows no integration names. An empty field is -. In api_url the core fills {host} (the address Incus reports for the own network interface of the instance the service record names) and {port}; when one cannot be filled the field is - and the row is unresolved. key_state says whether the key file can be read (locked = the vault is closed); the key is never printed. extra is a comma list of key=value pairs beyond the envelope. key_header (last column) is the header the app wants the key in, - = not set (the default is X-Api-Key). An optional name keeps one integration.",
     "responses": {
      "0": {
       "description": "ok",
@@ -15495,7 +15495,7 @@
       "<serial>"
      ],
      "script": "state.sh",
-     "args": "forget {1} --yes",
+     "args": "forget {1} --yes {?--yes}",
      "class": "change",
      "rest": false
     },

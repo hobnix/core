@@ -1,7 +1,7 @@
 # Plan: one Rust core, a daemon, and thin front ends
 
-Design record. Contributor document, not a guide. Written from design discussions with the maintainer on 2026-11-25. Nothing here is built, measured or run
-on a server. Not tested on hardware yet.
+Design record. Contributor document, not a guide. Written from design discussions with the maintainer on 2026-11-25. Nothing here is built or run on a
+server. The only measurement so far is the build in section 14.1, made on a development PC. Not tested on hardware yet.
 
 It extends [PLAN-rust.md](PLAN-rust.md) and ADR 0032 (docs/adr/0032-rust-main-language.md: Rust is the main language). It changes some earlier decisions;
 they stay in force until the records of section 16 replace them.
@@ -445,12 +445,15 @@ Each has an owner and a boundary here and gets its detailed design before its mi
 
 ## 14. Measure first
 
-On a real server, before any port, and again after P3, P4 and P6. Results go into this file.
+On a real server, before any port, and again after P3, P4 and P6. Results go into this file. How to take and compare them:
+[operations](operations.md#take-a-performance-baseline) (`hs perf baseline`; build time and closure size are not part of it). It counts started
+processes only for the whole host, not for one service. Not tested on hardware yet.
 
 - `hs-live`: CPU time, processes started per minute, memory, with and without an open page.
 - Per read: wall and CPU time, split into dispatcher and script overhead against time in external tools.
 - Time from a change to the open page (`hs live measure`, #486).
-- Build time and closure size of `hobnix` on the pinned nixpkgs, also with the new dependencies.
+- Build time and closure size of `hobnix` on the pinned nixpkgs, also with the new dependencies. Measured on a development PC only (section 14.1); the run
+  on a server is open.
 
 For orientation, not a measurement: from the intervals in `scripts/lib/live-topics.tsv` (84 topics, every capability on, storage unlocked, no page open) the
 schedule asks for about 155 reads a minute. One older server timing exists (2026-10-08, docs/Entwicklungsnotizen.md): the page-load reads took under 0.5 s
@@ -458,6 +461,148 @@ except two at 2.2 s and 1.8 s, which then ran their sources side by side.
 
 Expected, to be checked: the largest gain is in the reads, which stop starting bash and Python. Time in external tools, parity syncs and backups change
 little. Moving only the scheduler gains little while it still runs `hs sys`.
+
+### 14.1 Build of `hobnix`, measured on a development PC
+
+**Measured on a development PC** on 2026-11-26, not on a server (#1334). Not tested on hardware yet.
+
+**Setup.** AMD Ryzen 9 7950X3D (16 cores, 32 threads), WSL2 on Windows 11 (Debian 13, 32 CPUs and 31 GiB visible), Nix 2.35.2 single-user, sandbox on,
+`max-jobs = 1`. nixpkgs at the pin of that day, `774debe7a0d1b496e35677ad955a1011c6ff74f3` (rustc and cargo 1.95.0, SQLite 3.51.2). Source: `rust/` and
+`pkgs/hobnix.nix` of the branch `feature/rust-quality` at `23bed8fd` (not merged into 0.14 at that time). Each time is one build of the whole derivation
+(release build, then `cargo test` in the check phase, install, strip) with every input already in the store: no timed build fetched or built anything else.
+
+**Variants.** Each had only the features the plan would use, `default-features = false`:
+
+| Variant | Added |
+|---|---|
+| base | nothing |
+| Tokio | `tokio` 1.54.1 (`rt-multi-thread`, `macros`, `net`, `io-util`, `process`, `signal`, `sync`, `time`), `tokio-util` 0.7.20 (cancellation token) |
+| SQLite, system | `rusqlite` 0.43.0 (`cache`, `backup`), `libsqlite3-sys` 0.40.0; in Nix `pkg-config` and `sqlite` |
+| SQLite, bundled | the same with `bundled` (compiles SQLite 3.54.1 from the crate) |
+| axum | `axum` 0.8.9 (`http1`, `json`, `query`, `tokio`, `ws`), `tower-http` 0.7.1 (`fs`, for the frontend files), `futures-util` 0.3.34 (the SSE stream), and the Tokio it needs (`rt-multi-thread`, `macros`, `net`, `signal`, `sync`, `time`) |
+| all | Tokio, SQLite (system or bundled) and axum |
+
+axum cannot run without Tokio, so the rows do not add up.
+
+**The libraries were really used.** The linker drops code that nothing calls, so each variant got a small throwaway skeleton in the `hobnix` binary, reached
+from `main` through a hidden subcommand with input from the command line: a daemon (Unix socket, bounded line reads, an actor with channels, timers, signals,
+a started program, shutdown), a database (WAL, busy timeout, migrations in `BEGIN IMMEDIATE`, cached statements, a backup) and a web server (JSON routes,
+SSE, WebSocket upgrade, static files, graceful stop). The built binaries were run: socket request and reply, SQLite rows and backup, and over HTTP a read, a
+change (and its refusal without a cookie), two SSE events, a static file and the `101` answer of the WebSocket (no message was sent over it). `nm -C` on
+unstripped builds found symbols of each added library and none in the base build. The skeletons and the new dependencies are not in the repository.
+
+**Time with 32 cargo jobs** (all CPUs). Three runs each, in seconds, `run 1 / run 2 / run 3`:
+
+| Variant | Wall time | CPU time of the build |
+|---|---|---|
+| base | 13.6 / 15.6 / 13.2 | 66 / 79 / 67 |
+| Tokio | 15.4 / 16.1 / 15.7 | 89 / 91 / 91 |
+| SQLite, system | 12.9 / 13.0 / 13.2 | 71 / 70 / 72 |
+| SQLite, bundled | 49.5 / 49.2 / 50.3 | 113 / 113 / 114 |
+| axum | 20.4 / 21.1 / 20.3 | 137 / 142 / 137 |
+| all, system SQLite | 21.6 / 21.3 / 21.0 | 153 / 148 / 147 |
+| all, bundled SQLite | 55.5 / 52.3 / 52.8 | 204 / 191 / 193 |
+
+**Time with 4 cargo jobs** (`--option cores 4`; the same CPU, not a slower one). Two runs each, in seconds:
+
+| Variant | Wall time | CPU time of the build |
+|---|---|---|
+| base | 18.0 / 20.5 | 56 / 65 |
+| Tokio | 23.6 / 26.3 | 77 / 87 |
+| SQLite, system | 18.9 / 21.5 | 62 / 71 |
+| SQLite, bundled | 55.2 / 57.6 | 103 / 109 |
+| axum | 33.2 / 33.1 | 115 / 115 |
+| all, system SQLite | 36.0 / 36.4 | 125 / 126 |
+| all, bundled SQLite | 75.4 / 81.2 | 176 / 192 |
+
+**How much the numbers vary.** Other work ran on this PC. With 32 jobs most variants stayed within about 1 s; the largest differences were base (2.4 s, 18 %) and
+all with bundled SQLite (3.2 s, 6 %). With 4 jobs the two runs differ by up to 14 % (base) and 5.8 s (all, bundled). So a difference of 2 to 3 s between two
+rows means nothing: system SQLite looks as fast as base in wall time, though it needed about 4 s more CPU time (median, 32 jobs). Before each build there
+was no other `cargo`, `rustc` or Nix build process in WSL (not watched during the build), and the Windows CPU load was 0 to 32 %. The CPU time of the whole
+WSL machine during a build was 3 to 50 % higher than that of the build.
+
+**Size and crates.** The sizes are the stripped binary and `nix path-info -S` of the output. "Locked" counts new packages in `Cargo.lock`, including crates
+for other platforms, which Nix still fetches. "Compiled" counts new crates in the `Compiling` lines of the build log (x86_64 Linux). Base has 40 packages
+in `Cargo.lock`, 3 of them our own.
+
+| Variant | Binary, MiB | Closure, MiB (store paths) | Crates locked | Crates compiled |
+|---|---|---|---|---|
+| base | 1.40 | 47.40 (7) | | |
+| Tokio | 2.20 | 48.20 (7) | +14 | +12 |
+| SQLite, system | 1.52 | 53.24 (9) | +9 | +9 |
+| SQLite, bundled | 3.62 | 49.62 (7) | +12 | +12 |
+| axum | 3.48 | 49.47 (7) | +63 | +56 |
+| all, system SQLite | 3.92 | 55.64 (9) | +70 | +63 |
+| all, bundled SQLite | 6.01 | 52.01 (7) | +73 | +66 |
+
+- With the system library the closure gains the store paths `sqlite-3.51.2` (5.6 MiB) and `zlib-1.3.2` (0.13 MiB). A server may have both already; not
+  checked. If it has, the download hardly grows.
+- Bundled SQLite adds about 31 to 36 s of wall time with 32 jobs (medians), almost all in the build phase; the check phase stayed at 3 to 4 s. It is probably
+  the C file of SQLite, compiled by one process (not timed alone), so it would depend on the speed of one core.
+- `cargo deny check` (0.22.1, the version CI uses, with `rust/deny.toml` of that commit) said `advisories ok, bans ok, licenses ok, sources ok` for every
+  variant, with no warning. It used the advisory database of that day.
+
+**SQLite.** The owner chose the system library. The measurement used the pin, and the binary reported SQLite 3.51.2. According to
+[sqlite.org](https://sqlite.org/wal.html#walresetbug), the WAL-reset corruption bug is likely present in 3.7.0 to 3.51.2 and fixed in 3.51.3, with backports
+in 3.50.7 and 3.44.6. The package file of SQLite in the pinned nixpkgs applies no patch. So **the pin has to move before the database lands** (the new Rust
+rules on `feature/rust-quality` require a fixed SQLite). The `nixos-26.05` revision `0dc498bf` names SQLite 3.53.3 in its package file; it was not built or
+measured.
+
+**Binary cache.** What was fetched and what is built was read from a dry run against an empty store, with only `cache.nixos.org` as the cache:
+
+| Variant | Fetched from the cache | Derivations to build |
+|---|---|---|
+| base | 113 paths, 783.1 MiB download, 2.6 GiB unpacked | 18 |
+| all, system SQLite | 199 paths, 800.1 MiB download, 2.6 GiB unpacked | 60 |
+| all, bundled SQLite | 196 paths, 796.7 MiB download, 2.6 GiB unpacked | 62 |
+
+- The toolchain (rustc, cargo, the C compiler, and `pkg-config` and `sqlite` for the system library) comes from the cache. A server already has some of
+  these paths, so its download is likely smaller.
+- Some crate archives and unpacked crates are in that cache too. For base all crate archives were; each "all" variant also downloads 8 from
+  crates.io. The rest of the local derivations unpack crates, collect them (the vendor directory) and build `hobnix`.
+- **No compiled crate comes from a cache.** `buildRustPackage` compiles all crates inside the one `hobnix` derivation, so every change under `rust/` that
+  makes a server build `hobnix` compiles all dependencies again.
+- The Hobnix cache of ADR 0003 (`config/binary-cache.nix`) was not asked. When it has the same store path, a server downloads `hobnix` and does not build
+  it; that was not measured. The times above are the case without that hit.
+
+**What limits these numbers.**
+
+- A server is slower: slower cores, usually fewer of them, often slower disks. Neither table is a server time, and 4 jobs on this CPU do not imitate a small
+  server.
+- Not measured: a real server; peak memory of the build (it may matter on a small server); fetching with an empty store (only the sizes above); a whole
+  `hs rebuild`; the web frontend (`pkgs/hs-web.nix`); aarch64; the newer nixpkgs revision.
+- Not included: a D-Bus library (section 4.2), the CLI libraries (section 3), logging or tracing libraries, TLS (none was assumed: `web-serve.py` sets up
+  none itself), multipart uploads. Each adds time and size.
+- The skeletons are small. The real daemon and web server add their own code and call more of each library, so the binary and the build will be larger than
+  here.
+
+**How to repeat it.** Work in a directory outside the repository, with one copy of `rust/` and `pkgs/hobnix.nix` per variant.
+
+1. Add the dependencies of the table to `[workspace.dependencies]` and to `hobnix-cli`, and write code that uses them as described above. For the system
+   library add `nativeBuildInputs = [ pkg-config ]` and `buildInputs = [ sqlite ]` to that copy of `hobnix.nix`. Resolve the "all" variant first with
+   `cargo metadata`, copy its `Cargo.lock` to the others and run `cargo metadata` there, so all variants use the same versions. The versions above were the
+   ones resolved on that day.
+2. Put this `default.nix` beside the copies, and give `nixpkgs` the store path of the pinned tarball
+   (`builtins.fetchTarball` of `scripts/dev/nixpkgs-pin.sh get url`):
+
+   ```nix
+   { nixpkgs, variant, run ? "warm" }:
+   let pkgs = import nixpkgs { config = { }; overlays = [ ]; }; in
+   (pkgs.callPackage (./. + "/${variant}/pkgs/hobnix.nix") { }).overrideAttrs { measureRun = run; }
+   ```
+
+3. Build each variant once so that all inputs are in the store. A new `run` value gives a new store path, so the next build is a full build and nothing has to
+   be deleted.
+4. Time one build at a time: `nix-instantiate` with the new `run` value, then in Bash `time nix-store --realise "$drv" --option substitute false --option
+   cores 0` (or `4`). `user` plus `sys` is the CPU time **only with single-user Nix**; with the Nix daemon the builder is not a child of the shell, so read
+   the CPU time from the control group of the build.
+5. Sizes: `nix path-info -s` and `-S` on the output. Crates: `Cargo.lock` and the `Compiling` lines. Licences and advisories: `cargo deny check` in each
+   `rust/`. Cache: `nix-build --dry-run --store <empty directory>` with `nixpkgs` as `builtins.fetchTarball`. Use: run the code, and `nm -C` on a build with
+   `dontStrip = true`.
+
+On a server, the first number to get is today's build: in the repository (`/etc/nixos`), run `nix-build -E 'with import <nixpkgs> {}; callPackage
+./pkgs/hobnix.nix {}' --no-out-link` under `time`. If the result is already in the store, add `--check` to build it again. With the Nix daemon `time` gives
+only the wall time. Not tested on hardware yet.
 
 ## 15. Steps and milestone
 
@@ -488,8 +633,8 @@ files and large shell scripts, not the rest of this list.
 
 ### 15.2 Milestone "Core and Jobs"
 
-**Decided:** a milestone of its own, **0.15**, after 0.14 (Marketplace). Translations, Virtualization and Networking move up by one. Nothing on GitHub is
-changed yet.
+**Decided:** a milestone of its own, **0.15**, after 0.14 (Marketplace). Translations, Virtualization and Networking move up by one. Done on GitHub
+on 2026-11-26.
 
 It holds P0 to P4. P5 to P8 get later milestones, by area, once P4 is done. P3 is the largest risk to its size: the extension host may move to the next
 milestone.

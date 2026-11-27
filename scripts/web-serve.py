@@ -332,7 +332,7 @@ class Config:
         self.stale_max = float(env("HS_WEB_STALE_MAX", "1800"))      # up to half an hour old is shown at once (X-HS-Age says how old) while a fresh answer is read
         self.plan_ttl = float(env("HS_WEB_PLAN_TTL", "60"))   # a finished plan is answered again for this many seconds (same area and args); 0 = off
         self.cache_file = env("HS_WEB_CACHE_FILE", "/run/hs-web/cache.json")   # the answers survive a restart of this service (tmpfs: not a reboot); "" = memory only
-        self.warm_all = env("HS_WEB_WARM_ALL", "1") == "1"            # keep every read without arguments warm (see Warmer), not only the common ones
+        self.warm_all = env("HS_WEB_WARM_ALL", "0") == "1"          # keep every read without arguments warm (see Warmer), not only the common ones
         self.warm_idle_ttl = float(env("HS_WEB_WARM_IDLE_TTL", "120")) # such a read that nobody has asked for is read again at most this often
         self.seen_for = float(env("HS_WEB_SEEN_FOR", "1800"))         # a read somebody asked for stays in the warm-up for this many seconds
         self.warm_active = float(env("HS_WEB_WARM_ACTIVE", "300"))    # the warm-up runs while a session was seen within this many seconds
@@ -1110,7 +1110,10 @@ PKG_REPO = r"^[a-z][a-z0-9-]{0,40}$"
 # a picture of a package: relative, at most four folders, no segment starts with a dot (so no . or ..), svg (the icon) or png/webp (screenshots)
 PKG_ASSET = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}){0,3}\.(svg|png|webp)$"
 PKG_ASSET_MAX = 300 * 1024      # the largest screenshot pkg_repo.py serves (an icon is at most 20 KB)
-FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
+FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,79}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
+# a share that EXISTS: up to 80 characters, the most Samba takes. A NEW name is at most 41 (SHARE below); older adoptions made longer ones.
+SHARE_EXISTING = r"^[a-z0-9][a-z0-9-]{0,79}$"
+SHARE_READ = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,79}$"       # the reads of one share: the characters of NAME
 POOL_NAME = r"^[a-z][a-z0-9]{0,11}$"     # a pool name (hs pool: lower case, at most 12 characters; reserved words are refused by the scripts)
 LEGACY_POOLS = [("bulk", "data", "-", "-"), ("fast", "apps", "zfs", "-")]     # no `hs sys pool list` yet: the two fixed pools (kind - = unknown)
 
@@ -1221,10 +1224,10 @@ READS = {
     ("backup", "shares"): {"kind": "tsv", "ttl": 30, "topic": "backup-shares"},
     ("shares", "overview"): {"kind": "tsv", "ttl": 30, "topic": "shares-overview"},
     ("shares", "list"): {"kind": "tsv", "ttl": 30},
-    ("shares", "acl"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "visible"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "mounts"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "history"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
+    ("shares", "acl"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "visible"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "mounts"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "history"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
     ("users", "list"): {"kind": "tsv", "ttl": 30, "topic": "users-list"},
     ("users", "groups"): {"kind": "tsv", "ttl": 30, "topic": "users-groups"},
     ("vault", "list"): {"kind": "tsv", "ttl": 60, "topic": "vault-list"},
@@ -1235,7 +1238,7 @@ READS = {
     ("ports", "list"): {"kind": "tsv", "ttl": 60, "topic": "ports-list"},
     ("dns", "list"): {"kind": "tsv", "ttl": 60, "topic": "dns-list"},
     ("cache", "state"): {"kind": "tsv", "ttl": 15},
-    ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},     # per share: limit, default, skip (share-parity.sh --state)
+    ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [SHARE_EXISTING]},     # per share: limit, default, skip (share-parity.sh --state)
     ("share", "parity", "refused"): {"kind": "tsv", "ttl": 10},     # the shares the last parity sync stopped for (share-parity.sh --refused)
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
@@ -1327,7 +1330,7 @@ READS = {
 # Like READS this is a closed list: per area the argument patterns that are allowed (alternatives; each argument must match completely).
 # The script behind it repeats every check at start, and a plan that has a danger line only starts with its confirm_name typed.
 CT = r"^[a-z][a-z0-9-]{0,40}$"
-SHARE = r"^[a-z0-9][a-z0-9-]{0,40}$"
+SHARE = r"^[a-z0-9][a-z0-9-]{0,40}$"      # a NEW share (add, rename --to); one that exists: SHARE_EXISTING
 ONOFF = r"^(on|off)$"
 LABEL = r"^[A-Za-z0-9._-]{1,40}$"
 PARITY_FOLDER = r"^[A-Za-z0-9._ -]{1,80}(/[A-Za-z0-9._ -]{1,80}){0,6}$"     # a folder inside a share (share-parity.sh checks again, no ..)
@@ -1369,9 +1372,9 @@ CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one
 CT_PATH = r"^(?!.*\.\.)/[A-Za-z0-9._/-]{0,200}$"
 SHARE_PATH = r"^(?!.*\.\.)/?[A-Za-z0-9_][A-Za-z0-9._/ -]{0,200}$"
 UIDGID = r"^[0-9]{1,7}:[0-9]{1,7}$"
-SHARE_ACCESS = r"^[a-z0-9][a-z0-9-]{0,40}=(read|write|full)$"
+SHARE_ACCESS = r"^[a-z0-9][a-z0-9-]{0,79}=(read|write|full)$"
 SID_LEVEL = r"^S-1-[0-9]{1,12}(-[0-9]{1,12}){1,15}=(none|read|write|full)$"
-KEPT = r"^[a-z0-9][a-z0-9-]{0,40}\.deleted-[0-9]{8}$"
+KEPT = r"^[a-z0-9][a-z0-9-]{0,79}\.deleted-[0-9]{8}$"
 DISKID = r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}$"                 # sda, nvme0n1, ata-WDC_WD40EFRX_WD-1234 (no '/', no '..')
 DISKIDS = r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}(,[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}){0,15}$"
 FSTYPE = r"^(ext4|xfs|btrfs)$"
@@ -1508,7 +1511,7 @@ CHANGES = {
              {"fixed": [MEMBER, r"^move$"], "opts": {"--path": (DISKPATH, False), "--to": (MEMBER, False)}},
              # another disk (USB, hot-plug): mounted read-only and shared by temp-disk.sh, copied into a share, ejected
              {"fixed": [TEMP_PART, r"^temp-mount$"], "opts": {"--name": (TEMP_NAME, False)}},
-             {"fixed": [TEMP_NAME, r"^temp-copy$"], "opts": {"--to": (SHARE, False)}},
+             {"fixed": [TEMP_NAME, r"^temp-copy$"], "opts": {"--to": (SHARE_EXISTING, False)}},
              [TEMP_NAME, r"^temp-eject$"]],
     # run a recipe as a job with the stored answers or the defaults; a recipe that needs something typed is refused by the plan (recipe-change.sh)
     # the services and their routes on the reverse proxy (services-change.sh): apply (red when a route goes public, changes or goes away), adopt, import, forget one
@@ -1619,30 +1622,30 @@ CHANGES = {
                {"fixed": [r"^init$"], "opts": {"--disk": (DISKID, False)}},     # make a free disk the backup disk (red: the kernel name of the disk is typed)
                [r"^drill$", r"^--count$", r"^[0-9]{1,2}$"],
                [r"^browse$", r"^--to$", ONOFF],
-               [r"^toggle$", r"^--name$", NAME, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
+               [r"^toggle$", r"^--name$", SHARE_READ, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
                [r"^offsite-now$"], [r"^offsite-off$"],
                # the guided off-site target (backup-change.sh offsite-config): keys and passwords are lines on stdin, never an argument
                {"fixed": [r"^offsite-config$"], "stdin": True,
                 "opts": {"--kind": (r"^(s3|rest|sftp|folder|typed)$", False), "--endpoint": (OFFW, False), "--bucket": (OFFW, False), "--prefix": (OFFW, False),
                          "--url": (OFFW, False), "--user": (OFFW, False), "--host": (OFFW, False), "--port": (r"^[0-9]{1,5}$", False),
                          "--path": (OFFW, False), "--repo": (OFFW, False)}}],
-    "shares": [[SHARE, r"^(snapshot|repair)$"],
-               [SHARE, r"^snapshot$", r"^--label$", LABEL],
-               [SHARE, r"^(backup|cache|auto)$", r"^--to$", ONOFF],
-               [SHARE, r"^rollback$", r"^--snapshot$", SNAP],
+    "shares": [[SHARE_EXISTING, r"^(snapshot|repair)$"],
+               [SHARE_EXISTING, r"^snapshot$", r"^--label$", LABEL],
+               [SHARE_EXISTING, r"^(backup|cache|auto)$", r"^--to$", ONOFF],
+               [SHARE_EXISTING, r"^rollback$", r"^--snapshot$", SNAP],
                # parity settings of a share (share-parity.sh): skip needs the folder name typed as --confirm, limit off the share name
-               [SHARE, r"^parity-(skip|keep)$", r"^--folder$", PARITY_FOLDER],
-               [SHARE, r"^parity-limit$", r"^--to$", PARITY_LIMIT],
+               [SHARE_EXISTING, r"^parity-(skip|keep)$", r"^--folder$", PARITY_FOLDER],
+               [SHARE_EXISTING, r"^parity-limit$", r"^--to$", PARITY_LIMIT],
                # forms (web/src/forms/shares): create, permissions, rename, delete, purge a kept folder, restore from the backup
                {"fixed": [SHARE, r"^add$"],
                 "opts": {"--kind": (r"^(shares|sensitive)$", False), "--tier": (r"^(bulk|fast)$", False), "--pool": (POOL, False), "--ct": (CT, False), "--path": (CT_PATH, False), "--as": (UIDGID, False)}},
-               {"fixed": [SHARE, r"^perm$"], "opts": {"--set": (SID_LEVEL, True)}},
-               [SHARE, r"^visibility$", r"^--to$", r"^(visible|hidden)$"],
-               [SHARE, r"^rename$", r"^--to$", SHARE],
-               [SHARE, r"^delete$"],
+               {"fixed": [SHARE_EXISTING, r"^perm$"], "opts": {"--set": (SID_LEVEL, True)}},
+               [SHARE_EXISTING, r"^visibility$", r"^--to$", r"^(visible|hidden)$"],
+               [SHARE_EXISTING, r"^rename$", r"^--to$", SHARE],
+               [SHARE_EXISTING, r"^delete$"],
                [KEPT, r"^purge$"],
                [KEPT, r"^undelete$"],      # bring a kept folder back as the share of its old name (a rename; nothing is overwritten)
-               {"fixed": [SHARE, r"^restore$"], "opts": {"--snapshot": (r"^(latest|[A-Za-z0-9]{1,64})$", False), "--path": (SHARE_PATH, False)}}],
+               {"fixed": [SHARE_EXISTING, r"^restore$"], "opts": {"--snapshot": (r"^(latest|[A-Za-z0-9]{1,64})$", False), "--path": (SHARE_PATH, False)}}],
     "users": [[NAME, r"^(lock|unlock)$"],
               {"fixed": [USER_NEW, r"^user-add$"], "opts": {"--full": (FULL_NAME, False), "--group": (GROUP, True)}, "stdin": True},     # the password: one line on stdin; --group: existing groups to join
               {"fixed": [NAME, r"^password$"], "stdin": True},
@@ -1696,7 +1699,7 @@ CHANGES = {
                [r"^(remove|test)$", NOTIFY_CHANNEL],
                [r"^migrate$"]],
 }
-CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,64}$")
+CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,97}$")     # the longest: a kept folder, 80 + .deleted-YYYYMMDD
 
 
 # ─────────────────────── extension packages: reads and changes from their manifests ───────────────────────
@@ -1887,6 +1890,32 @@ def validate_change(body):
             return None
         stdin = b"".join(n.encode("utf-8", "surrogateescape") + b"\0" for n in sel)
     return area, args, confirm, stdin
+
+
+def share_name_refusal(body):
+    """-> why a refused change was refused when a share name is too long (code share.name-too-long), else None. Only names of allowed
+    characters count: anything else stays the general refusal. It only words the answer, it never allows anything."""
+    area, args = body.get("area"), body.get("args")
+    if area not in ("shares", "users") or not isinstance(args, list) or len(args) < 2 or not all(isinstance(a, str) for a in args):
+        return None
+    names = []      # (the name, True = it would be a new share)
+    if area == "shares":
+        name, action = args[0], args[1]
+        if action in ("purge", "undelete"):
+            kept = re.fullmatch(r"(.*)\.deleted-[0-9]{8}", name)
+            name = kept.group(1) if kept else ""
+        names.append((name, action == "add"))
+        if action == "rename" and args[2:3] == ["--to"]:
+            names += [(a, True) for a in args[3:4]]
+    elif args[1] == "group-add":
+        names = [(v.partition("=")[0], False) for f, v in zip(args[2:], args[3:]) if f == "--access"]
+    for name, new in names:
+        if len(name) > (41 if new else 80) and re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+            if new:
+                return "The share name is too long: a new share name has at most 41 characters."
+            return ("The share name is longer than 80 characters, the most Samba takes. Give the share a shorter name on the server: "
+                    "hs share <share> rename <new>")
+    return None
 
 
 CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
@@ -3878,6 +3907,9 @@ def make_handler(app):
                 return self._json(403, {"error": "csrf"})
             ch = validate_change(body)
             if ch is None:
+                why = share_name_refusal(body)
+                if why:
+                    return self._json(400, {"error": why, "code": "share.name-too-long"})
                 return self._json(400, {"error": "That change is not allowed."})
             area, args, confirm, stdin = ch
             if area == "pool" and not pool_change_ok(cfg.hs, args):

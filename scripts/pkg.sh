@@ -87,11 +87,15 @@ case "${1:-list}" in
     # what packages offer to each other ([integrations.<name>] in package.toml) from the packages that are there, with the state of the key file;
     # the key itself is never read here
     . "$here/lib/integration.sh"
-    on=$(integration_available)
+    # HS_INTEGRATIONS_STRICT (set only by the watcher of a running service, lib/ext_service.py): an Incus query that is needed and fails makes the
+    # listing fail, instead of leaving a provider out or its address at "-"
+    if [ -n "${HS_INTEGRATIONS_STRICT:-}" ]; then on=$(integration_available_strict "${2:-}") || exit 1
+    else on=$(integration_available); fi
     only=(); [ "$#" -lt 2 ] || only=(--only "$2")
     # shellcheck disable=SC2086
     miss=$(mktemp); trap 'rm -f "$miss"' EXIT
-    # {port} in an api_url comes from the service record of the package; without one the field is "-" and the human output says so
+    # {port} and {host} in an api_url are filled from the service record of the package ({host}: the address Incus reports for its instance);
+    # what cannot be filled makes the field "-" and the human output says so
     found=$(py integrations "${only[@]}" --services "${HS_SERVICES_DIR:-${HS_STATE_DIR:-/var/lib/hs}/services.d}" --unresolved "$miss" $on)
     out=""
     while IFS=$'	' read -r n i s u f x h; do
@@ -104,7 +108,7 @@ case "${1:-list}" in
     elif [ -z "$out" ]; then note "No integrations offered."
     else { thead 'Package' 'Integration' 'Source' 'API' 'Key' 'More' 'Header'; printf '%s' "$out"; } | table; fi
     if [ "$1" != "--integrations" ]; then
-      while read -r w; do [ -z "$w" ] || warn "$(t 'The port of %s is not known (no service record with a port): its API address is shown as -.' "$w")"; done <"$miss"
+      while read -r w; do [ -z "$w" ] || warn "$(t 'The API address of %s is not known (no port in its service record, or no single address of its instance: is it running?). It is shown as -.' "$w")"; done <"$miss"
     fi ;;
   --capabilities) py capabilities ;;
   --repos) py repo list ;;

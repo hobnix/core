@@ -44,6 +44,7 @@ kind        = "recipe"                # recipe | extension
 title       = "Radarr, Sonarr, Lidarr, Prowlarr, Bazarr"
 title_de    = "Radarr, Sonarr, Lidarr, Prowlarr, Bazarr"
 requires_core = ">=1"                 # integer API level of the core helpers, see "The core API"
+requires_core_max = 12                # optional: the highest API level it works with (inclusive); absent = no upper bound
 license     = "MIT"
 authors     = ["Name <mail>"]
 homepage    = "https://..."
@@ -118,13 +119,15 @@ metadata lives. A mechanical converter (`hs pkg convert`) turns an old header in
   `hs recipe <name>` to apply"; the recipe is idempotent, so running it again applies the new version. Updating the apps inside the
   container is a separate thing (their images, `hs update` for the OS), and a recipe pins its image tags in its own script, so a package
   version change is the only way those move.
-- `requires_core` is checked on install and update: a package that needs a newer core than the server has is shown as "needs hs update
-  first", never half installed.
+- `requires_core` and `requires_core_max` are checked on install and update: a package that needs a newer core than the server has is shown
+  as "needs hs update first" (`pkg.core-too-old`), one whose range ends below the server's level as "does not support this core yet"
+  (`pkg.core-too-new`); both are refused from the index before anything is downloaded, and again from the package.toml that was read,
+  never half installed.
 
 ## Repositories
 
 - Two repositories are on by default: **recipes** and **extensions**. Each is a git repository with `index.toml` at the root
-  (one table per package: name, version, kind, title, path, `requires_core`) and one folder per package. The index is what `hs pkg
+  (one table per package: name, version, kind, title, path, `requires_core`, the optional `requires_core_max`) and one folder per package. The index is what `hs pkg
   updates` and the web page read, so listing does not clone every package.
 - The list lives in machine.toml (`packageRepos`, the defaults are written by the schema, so a new server has them). A user adds one with
   `hs pkg repo add <url>`, removes with `hs pkg repo remove <name>`, `hs pkg repo list` shows them with their trust state.
@@ -165,7 +168,18 @@ key_header = "X-Api-Key"                   # optional, default X-Api-Key
 kind       = "movies"                      # any other key is passed through as plain text
 ```
 
-`api_url` knows two placeholders and refuses any other (`pkg.py validate`). `{host}` stays in the listing: the package that uses the URL fills in the address. `{port}` is filled by `hs pkg integrations` from the service record of the package (`services.d/<package>.toml`, its `port`: the recipe declares 80 in LXC mode and 8080 in docker mode, so one URL fits both). Without a record or a port the field is `-` and the human output warns; the core never guesses a port.
+`api_url` knows two placeholders and refuses any other (`pkg.py validate`). The core fills both in the rows of `hs pkg integrations` (and so in `init.integrations`) from the service record of the package (`services.d/<package>.toml`). `{port}` is its `port` (the recipe declares 80 in LXC mode and 8080 in docker mode, so one URL fits both). When a value cannot be filled the field is `-` and the human output warns; the core never guesses, and a placeholder never reaches a consumer.
+
+`{host}` decides where a consumer sends the provider's key (hobnix/core#1322), so it is filled only like this (`instance_address` in `scripts/lib/pkg_integrations.py`; not tested on hardware yet):
+
+- The instance is the one the record's `container` names (checked as an Incus instance name). A record with `host` instead is not used. No DNS or other name lookup, no address from package text.
+- The network card is one of the instance's own `nic` devices as Incus configures them: the only one; with several, the device `eth0` (the card of the core's profiles; the gateway's internal link is a second one).
+- The interface inside the instance is the one with the MAC address Incus knows for that device, so a VM's `enp5s0` is found and the Docker bridges (`docker0`, `br-*`, `veth*`) are never candidates.
+- The instance runs, one such interface has a global address, and it has exactly one IPv4 address (with no IPv4 at all: exactly one IPv6 address, in brackets). Loopback, link-local and other special addresses do not count. Anything else gives `-`.
+- `{host}` must be the whole host of the URL, once: in `http://{host}.example.org` the address would become part of a name, so that gives `-`.
+- One `incus list --format json` per call, only when a row needs `{host}`, with a 5 s timeout. A failure or timeout gives `-`.
+
+The address is what the instance reports about its own interface, so root inside the providing instance can change it. A service reads the rows once, at start: after the address changes (or when the instance had none yet) it needs `hs ext stop` and `hs ext start`. A fixed address for the instance avoids this.
 
 The core validates only the envelope (`api_url`, `key_file`, `key_header`, all optional) in `scripts/lib/pkg_integrations.py`; other keys must be plain text
 (at most 200 characters, no comma, no control character). No API level change: the block is optional.
@@ -197,6 +211,19 @@ Moving recipes out of the repository turns `scripts/recipes/_lib.sh`, `scripts/l
 - level 6: a recipe that runs in Docker keeps its files in `APP_DIR` (`apps/recipes/<app>` in the share apps, or the legacy `/opt/apps/<app>` when the app is there already); `child_compose` writes there (docs/PLAN-docker-instances.md, Decision 13);
 - level 7: a package may declare its events in `[[events]]` (docs/events.md, hobnix/server#313);
 - `requires_core` names the lowest level a package works with; the core refuses a package that needs more;
+- `requires_core_max` (optional, hobnix/core#1265) names the highest level it works with, inclusive; the core refuses to install or update a
+  package whose range does not take its level. It is a key of its own, and `requires_core` keeps the exact form `">=N"`: a released core refuses
+  a whole signed index in which one entry's `requires_core` has another form, and drops a history row with another form, but it ignores a key it
+  does not know. So a core before this change ignores the upper bound (it installs such a package as before) and nothing else changes for it.
+  One exception: a **blueprint** checks its top-level keys against an allow-list, so a core before this change (v0.13.0-beta.1; v0.12 has no
+  blueprints) refuses a blueprint that carries `requires_core_max` ("requires_core_max is not allowed in a blueprint"): it is still listed, but
+  showing or applying it is refused. Give a blueprint the key only when that is acceptable.
+  The key is the same in package.toml, in an index entry and in a history row of the signed index; `hs pkg validate` checks that it is a whole
+  number from the `requires_core` level on, and the repository check that index.toml and package.toml say the same.
+- an installed package whose range ends below the core after an `hs update` is **reported, never removed or switched off**: `hs update` names it
+  after the pull (`pkg.py core-beyond`), the Marketplace row says so in its title and stays `current`, `hs pkg update` of the current copy says
+  `current`, and no newer release is offered until one whose range takes this core (`hs pkg updates --waits` names what it waits for). Only
+  switching such an extension on again (`hs ext enable`) is refused. Not tested on hardware yet.
 - core tests run every package of the default repositories against the current core (see "Compatibility").
 
 ## No third-party installers: our own formulas

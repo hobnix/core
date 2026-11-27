@@ -38,7 +38,10 @@ Per-feature history and implementation details moved out of CLAUDE.md so that ev
   `bulk-data-NN` is written (xfs_admin/e2label/btrfs label; xfs labels max 12 chars, which
   fits), the top-level folders move into `shares/` (rename on the same filesystem) as their own
   share `<disk>-<lowercased name>` (data-02-media; `--merge` keeps the plain name, so folders
-  of the same name on several disks become one), then bulk-mount.sh merges the disk. Hidden folders and loose files stay. The disk is inspected
+  of the same name on several disks become one), then bulk-mount.sh merges the disk. The names are decided in
+  scripts/lib/adopt-names.sh: never over 41 characters (cut, plus 6 hex digits of the sha256 of the whole name; with `--merge` a long
+  share that exists keeps its name), and two folders never become one share (the plan is refused). The web interface changes a share
+  that EXISTS up to 80 characters (scripts/web-serve.py SHARE_EXISTING); a new name stays at 41 (SHARE). Hidden folders and loose files stay. The disk is inspected
   with a read-only mount (`norecovery`/`noload`), so a dirty xfs log is refused with a hint.
   Tested on ext4 loop images (the sandbox kernel has no xfs driver: only the label and the
   failure path were exercised for xfs). Parity is a separate, destructive step afterwards.

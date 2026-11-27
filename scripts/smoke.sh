@@ -148,6 +148,7 @@ default_probes() {
     $'hs health\thealth\t0 1\t120' \
     $'hs health list-acks\thealth list-acks\t0 1\t30' \
     $'hs live load\tlive load\t0 1' \
+    $'hs perf baseline\tperf baseline --minutes 0 --no-reads\t0\t90' \
     $'hs ct list\tct list\t0' \
     $'hs ct hardware\tct hardware\t0 1' \
     $'hs disk list\tdisk list\t0 1' \

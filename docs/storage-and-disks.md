@@ -508,6 +508,12 @@ erased.
    Check `df -h /bulk` and `ls /bulk/shares`, then adopt the others, separated by commas. Each top folder becomes a share named
    `<disk>-<folder>` (for example `data-02-media`). To merge same-named folders from several disks into one share, as Unraid does, add
    `--merge`. If Samba may not change the files (they belong to `nobody:users`), add `--chown`; it is slow on big disks.
+
+   A share made this way has at most 41 characters, like any new share. A longer name is cut and ends in 6 characters made from the
+   whole name; the plan shows the new name, and `--merge` still joins the folders of one name. Two folders never become one share by
+   accident: when two names come out the same, or (without `--merge`) a share of that name exists already, the adoption is refused at
+   the plan and nothing is written. Then rename the folder on its disk, or the share that exists (`sudo hs share <share> rename <new>`).
+   Not tested on hardware yet.
 5. Publish the shares, then check a few files from a computer.
 
    ```bash

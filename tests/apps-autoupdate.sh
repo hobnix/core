@@ -46,7 +46,9 @@ cat > "$WORK/pkg" <<F
 echo "pkg \$*" >> "$CALLS"
 case "\$1" in
   fetch|rollback) exit 0 ;;
-  market) for a in $apps; do v=\$(cat "$WORK/new-\$a"); r=official; [ \$a = added ] && r=mine; printf '%s\trecipe\t%s\t%s\t1.0.0\tupdate\tno\tgeneric\t%s\n' \$a \$r "\$v" \$a; done ;;
+  market) for a in $apps; do v=\$(cat "$WORK/new-\$a"); r=official; [ \$a = added ] && r=mine; printf '%s\trecipe\t%s\t%s\t1.0.0\tupdate\tno\tgeneric\t%s\n' \$a \$r "\$v" \$a; done
+          # the same name in an added repository: since #933 that row does not carry the installed copy, and it is never the update
+          printf 'good\trecipe\tmine\t9.0.0\t-\tnew\tno\tgeneric\tgood\n' ;;
   show) v=\$(cat "$WORK/new-\$2"); r=official; [ "\$2" = added ] && r=mine; printf 'status\tok\nname\t%s\nrepo\t%s\nversion\t%s\napp_version\t%s\n' "\$2" \$r "\$v" "\$v" ;;
   update) case "\$*" in *--yes*) exit 0 ;; esac; cat "$WORK/diff-\$2" 2>/dev/null; exit 1 ;;
 esac

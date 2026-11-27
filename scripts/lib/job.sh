@@ -115,6 +115,8 @@ hs_job() {
   local slug=$1 desc=$2 unit here
   shift 3   # slug, description, --
   slug=$(printf '%s' "$slug" | tr -c 'A-Za-z0-9' '-' | sed -E 's/-+/-/g; s/^-//; s/-$//')   # a row path such as pool-<pool>-sync is no unit name
+  # at most 60: a job id and a unit name the web interface accepts (scripts/web-serve.py), also for a share of 80 characters (the description keeps the name)
+  slug=${slug:0:60}; slug=${slug%-}
   here=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)
   unit=hs-job-$slug-$(date +%H%M%S)
   local extra=() kv

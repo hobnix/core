@@ -1,0 +1,5 @@
+date  = "2026-11-26"
+type  = "feature"
+title = "Take a performance baseline of the server and compare two runs with hs perf baseline"
+docs  = "operations#take-a-performance-baseline"
+body  = """sudo hs perf baseline measures the CPU time and memory of the live-state collector and the web server, with or without an open page, and times the page reads. For each read it shows the CPU time and how much goes into the command dispatcher, into external tools and into the rest. It only reads, and its result holds no names, addresses or secrets. With --compare it puts two saved results side by side. hs timing has the new option --split. Not tested on hardware yet."""

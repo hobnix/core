@@ -83,6 +83,11 @@ unset HS_GUIDED_TTY
 rcs=0; show=$(bash "$pkg" --show "$name" ${repo:+--repo "$repo"} 2>/dev/null </dev/null) || rcs=$?
 if [ "$rcs" -ne 0 ] || ! grep -q $'^status\tok' <<<"$show"; then
   why=$(awk -F'\t' '$1=="reason"{print $2; exit}' <<<"$show")
+  # a release outside the core range of this server (scripts/pkg.py core_misfit): its own code, and the advice that fits it
+  case "$why" in
+    *"does not support this core yet"*) refuse_code pkg.core-too-new "$why" ;;
+    *"needs a newer core"*) refuse_code pkg.core-too-old "$why" ;;
+  esac
   refuse_code apps.no-release "${why:-$name has no verified release (hs pkg fetch reads the repositories again)}"
 fi
 sv() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' <<<"$show"; }
@@ -98,7 +103,14 @@ mapfile -t jsteps < <(awk -F'\t' '$1=="step"{print $2}' <<<"$show")
 [ ${#jsteps[@]} -gt 0 ] || refuse_code apps.no-steps "the release names no steps"
 [ -z "$from" ] || [[ " ${jsteps[*]} " == *" $from "* ]] || refuse_code apps.from-invalid "--from $from is not a step of $name (${jsteps[*]})"
 
-market_row=$(bash "$pkg" --market 2>/dev/null </dev/null | awk -F'\t' -v n="$name" -v r="$repo" '$1 == n && $3 == r { print; exit }' || true)
+market=$(bash "$pkg" --market 2>/dev/null </dev/null || true)
+market_row=$(awk -F'\t' -v n="$name" -v r="$repo" '$1 == n && $3 == r { print; exit }' <<<"$market")
+# a copy of the same name from another repository (also an orphan whose repository is gone): the market gives it only to the row of its own
+# repository, and the install would replace it; refused here already, not only when the job runs (Repos.install refuses the same)
+elsewhere=""     # a record without repo carries every row of the name, also the one of this repository: nothing to replace then
+[ "$(cut -f5 <<<"$market_row")" != - ] && [ -n "$market_row" ] || \
+  elsewhere=$(awk -F'\t' -v n="$name" -v r="$repo" '$1 == n && $3 != r && $5 != "-" { print $3 " (version " $5 ")"; exit }' <<<"$market")
+[ -z "$elsewhere" ] || refuse_code pkg.other-repo "$name is installed from $elsewhere; the package of the same name in $repo would replace it. To switch on purpose: hs pkg remove $name, then install it again"
 mstate=$(cut -f6 <<<"$market_row"); minst=$(cut -f5 <<<"$market_row")
 [ -z "$market_row" ] || case "$mstate" in
   waits)  refuse_code apps.needs-newer-core "$name $version needs a newer core than this server has: hs update first" ;;

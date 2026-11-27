@@ -35,11 +35,10 @@ lc = load("live_collect_demand", "live-collect.py")
 ws = load("web_serve_demand", "web-serve.py")
 TOPICS_TSV = os.path.join(scripts, "lib", "live-topics.tsv")
 
-# What a health check, a notification or a push rule reads is never demand. The first list is the fixed part (the topics the web interface shows as
-# health, status, backup and pool state, the heartbeat, the jobs and the notification channels); the second test finds more in the files.
-HEALTH_TOPICS = ["status", "live", "deck", "health-next", "health-list", "health-info", "jobs-running", "jobs-list", "backup-state", "pool-state-bulk", "pool-state-fast",
-                 "ups", "expiry", "notify-channels", "notify-providers", "hardware", "disk-marks", "disk-inventory", "encryption", "rebuild-pending",
-                 "parts-pending", "system-updates", "dc-state", "gateway-health", "apps-health", "docker-health"]
+# Reads that keep their interval. health-next and health-list run health-check.sh dry, which writes health-since and emits health.new and
+# health.resolved; health-info is named in health-check.sh (#1320). For the others: their scripts contain emit/notify calls; read mode not verified (#1320). The second test finds more in the files.
+ALWAYS_TOPICS = ["health-next", "health-list", "health-info", "encryption", "vault-list", "vault-uses", "ups", "notify-channels", "notify-providers",
+                 "pkg-index", "backup-state"]
 CANDIDATES = ["disk-health", "monitor-disks", "shares-overview", "shares-deleted", "vault-usage", "fm-locations", "backup-overview", "backup-shares"]
 
 
@@ -51,10 +50,18 @@ class Table(unittest.TestCase):
         for t in CANDIDATES:
             self.assertTrue(self.info[t].get("idle"), t)
 
-    def test_every_health_topic_is_always(self):
-        for t in HEALTH_TOPICS:
+    def test_every_always_topic_is_always(self):
+        for t in ALWAYS_TOPICS:
             self.assertIn(t, self.info)
-            self.assertIsNone(self.info[t].get("idle"), "%s feeds a health check or a notification: it keeps its interval" % t)
+            self.assertIsNone(self.info[t].get("idle"), "%s can write events or notifications: it keeps its interval" % t)
+
+    def test_every_topic_decides(self):
+        for topic, _, interval, _ in ls.topics(TOPICS_TSV):
+            self.assertTrue(topic in ALWAYS_TOPICS or self.info[topic].get("idle") or interval >= 3600, topic)
+
+    def test_health_topics_follow_the_timer(self):
+        for t in ("health-next", "health-list", "health-info"):
+            self.assertIn(t, ls.event_topics()["health.checked"])
 
     def test_topics_named_by_the_health_check_and_the_rules_are_always(self):
         text = ""
@@ -151,6 +158,55 @@ class Pace(unittest.TestCase):
         self.assertEqual(c.pace("disk-health", 30), 300)
         c.lease_round()
         self.assertEqual(c.pace("disk-health", 30), 300)
+
+    def test_a_failing_topic_is_retried_at_its_interval(self):
+        c, st = self.make()
+        st.get, st.fail, st.put = (lambda t: None), (lambda *a: None), (lambda *a: None)
+        c._store("disk-health", 1, "", "boom", time.time(), [])
+        self.assertEqual(c.pace("disk-health", 30), 30)
+        c._store("disk-health", 0, "x", "", time.time(), [])
+        self.assertEqual(c.pace("disk-health", 30), 300)
+
+    def test_a_group_wake_passes_an_idle_topic_nobody_watches(self):
+        for group in ("@disks", "@shares"):                  # hard (its own group) and soft (it lists `any`)
+            c, st = self.make()
+            c.info["disk-health"]["groups"] = {"disks", "any"}
+            c.refresh(group)
+            self.assertFalse(c.events["disk-health"].is_set(), group)
+            self.assertNotIn("disk-health", c.trig)
+            c.leases = {"disk-health": time.time() + 30}
+            c.refresh(group)
+            self.assertTrue(c.events["disk-health"].is_set(), group)
+
+    def test_its_name_and_the_star_still_wake_an_idle_topic(self):
+        for word in ("disk-health", "*"):
+            c, st = self.make()
+            c.refresh(word)
+            self.assertTrue(c.events["disk-health"].is_set(), word)
+
+    def test_a_wave_reads_only_a_watched_idle_dependent(self):
+        c, st = self.make()
+        c.min_gap = 0
+        c.order, c.needs = ["status", "disk-health"], {"disk-health": ("status",)}
+        read = []
+        c.collect = lambda t, words, mode="run": read.append(t) or False
+        self.assertEqual(c.wave({"status"}), [])
+        c.leases = {"disk-health": time.time() + 30}
+        self.assertEqual(c.wave({"status"}), ["disk-health"])
+        self.assertEqual(read, ["disk-health"])
+
+    def test_only_the_idle_wait_of_an_unwatched_topic_is_not_stretched(self):
+        c, st = self.make()
+        c.stretch = lambda: 10.0
+        self.assertEqual(c.wait_for("disk-health", 30), 300)        # nobody watches: the safety net stays at its idle interval
+        self.assertEqual(c.wait_for("status", 15), 150)             # an always topic is stretched
+        c.leases = {"disk-health": time.time() + 30}
+        self.assertEqual(c.wait_for("disk-health", 30), 300)        # watched: 30 x 10
+        c.stretch = lambda: 2.0
+        self.assertEqual(c.wait_for("disk-health", 30), 60)
+        c.leases = {}
+        c.failing.add("disk-health")
+        self.assertEqual(c.wait_for("disk-health", 30), 60)         # failing: its interval, stretched as before
 
     def test_a_table_that_cannot_be_read_keeps_the_leases_and_raises_nothing(self):
         c, st = self.make()

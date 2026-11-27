@@ -202,6 +202,10 @@ hs ct <name> set disk=50
 `hs ct <name> set` also takes `autostart=on|off` and `docker=yes|no` (restart the instance after changing `docker`). The guided form is
 `hs ct <name> edit`; it shows the current values first.
 
+Every `hs ct <name>` command that changes the instance (`start`, `stop`, `restart`, `remove`, `autostart`, `update`, `set`, `edit`,
+`ip`, `snapshot`, `restore`, `storage`) takes `--dry-run`: it shows what would happen and changes nothing. An unknown or misspelled option
+is refused. `remove` always asks you to type the name. Not tested on hardware yet.
+
 ### Start at boot
 
 ```bash
@@ -484,7 +488,7 @@ In the web interface, use **Update** on the package in the Marketplace. If the n
 A package update does not touch a running app. For a recipe it replaces the package files; run `hs recipe <name>` to apply them.
 `hs pkg remove <name>` forgets the package files only, never a container or data. It refuses while the package is switched on (`hs ext disable <name>` first) or while another package that is on needs it, and it asks you to type the name. If the server already has a generated capability list (`/var/lib/hs/generated/`), it is rewritten without the package. See the plan first with `hs pkg remove <name> --dry-run`. Not tested on hardware yet.
 
-A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`). `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has: run `hs update` first. There is no upper bound: the core only raises its level and keeps a function for one level after announcing its removal (ADR 0008).
+A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`) and, when its author says so, `requires_core_max = M`, the highest level it works with. `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has (run `hs update` first) and one that does not support your core yet (wait for a newer release of the package). The Marketplace shows such a release as waiting. When an `hs update` raises the level above what an installed package supports, `hs update` names the package; it stays installed and keeps running, nothing is removed or switched off. Not tested on hardware yet.
 
 A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from a default repository (`official`) and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
 
