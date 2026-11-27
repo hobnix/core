@@ -11,6 +11,7 @@
 #                     $HS_STATE_DIR/capabilities-on says so until the next rebuild); one with a module needs `hs rebuild`, and is told so
 #   disable <name>    the reverse (capabilities-off wins over everything until the next rebuild); refused while another package that is on requires it
 #   enable also refuses a package whose `requires` names a capability that is off, or whose `requires_core = ">=N"` is above scripts/lib/api-level
+#                     (or whose `requires_core_max = N` is below it)
 #   <name>            the commands of the package (also while it is off, marked as such); a word after it that is no command is named
 #   boot              (run by hs-ext-boot.service at boot) for each package that is on and has a `sys ext <name> boot` row: run it, print
 #                     `<name><TAB>ok|failed` (journal only); one failing or hanging package never stops the others; exits 0 always
@@ -45,6 +46,11 @@ manifest() {   # manifest <dir> <key>: a plain string of capability.toml (packag
   [ -f "$f" ] || f=$1/package.toml
   sed -n "s/^$2[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/p" "$f" | head -n1
 }
+manifest_int() {   # manifest_int <dir> <key>: a whole number `key = 12` of package.toml (capability.toml when there is none); nothing for another form
+  local f=$1/package.toml
+  [ -f "$f" ] || f=$1/capability.toml
+  sed -n "s/^$2[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*\$/\1/p" "$f" 2>/dev/null | head -n1
+}
 manifest_list() {   # manifest_list <dir> <key>: the names of a one-line array `key = ["a", "b"]`, one per line
   local f=$1/capability.toml
   [ -f "$f" ] || f=$1/package.toml
@@ -57,10 +63,15 @@ perms_of() {   # perms_of <name>: the declared permissions, comma separated; "no
 }
 core_level() { cat "$here/lib/api-level" 2>/dev/null || echo 0; }
 compat_problem() {   # compat_problem <name> <dir>: prints why the package cannot be switched on (a capability it requires is off, or it needs a newer core); nothing when fine
-  local r need
+  local r need max
   need=$(manifest "$2" requires_core | sed -n 's/^>=[[:space:]]*\([0-9][0-9]*\)$/\1/p')
   if [ -n "$need" ] && [ "$need" -gt "$(core_level)" ]; then
     t "needs core API level %s, this server has %s (hs update first)" "$need" "$(core_level)"; return 0
+  fi
+  # requires_core_max = N (a whole number, its own key: an older core ignores it): the highest level the package works with
+  max=$(manifest_int "$2" requires_core_max)
+  if [ -n "$max" ] && [ "$max" -lt "$(core_level)" ]; then
+    t "does not support this core yet: it works up to core API level %s, this server has %s" "$max" "$(core_level)"; return 0
   fi
   while IFS= read -r r; do
     capability_on "$r" || { t "needs the capability '%s', which is off" "$r"; return 0; }

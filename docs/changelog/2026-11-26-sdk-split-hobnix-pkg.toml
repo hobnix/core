@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "change"
+title = "Breaking rename: the Rust SDK hobnix-ext-sdk is now three hobnix-pkg crates"
+body  = """Breaking change for authors of Rust extensions, as announced in 0.13: hobnix-ext-sdk is split into hobnix-pkg (shared base), hobnix-pkg-command and hobnix-pkg-service. A key is now a Secret that prints as ***, Service::start and on_event return hobnix_pkg::Error, ctx.event is ctx.emit, growable types are built with constructors, and an unknown language or caller is accepted. The protocol lines are byte for byte the same. The old name stays for this release only, with a deprecation warning, but not every extension of 0.13 builds unchanged with it. A crate that pins an older tag or rev is not affected. docs/extensions-sdk.md "Write it in Rust" lists what to edit."""

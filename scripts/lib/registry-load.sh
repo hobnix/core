@@ -303,7 +303,8 @@ _ext_filter_ix() {   # the same inside _ext_with_index, with <dir> in the index
           if (pass == 1) { accepted[path] = 1; continue }
           if (report == 1) continue
           if (script ~ /^@\//) $3 = dir "/" substr(script, 3)
-          if (proto == 1) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
+          # a row may carry proto itself (rows of the command macro of the SDK do; pkg_binary.py asks for it): not twice
+          if (proto == 1 && $7 !~ /(^|,)proto(,|$)/) { $7 = ($7 == "" || $7 == "-") ? "proto" : $7 ",proto"; }
           print
         }
       }

@@ -14,7 +14,7 @@ eq('no permissions, no line', manifestText(f).includes('permissions'), false);
 eq('a newline in a title stays one TOML line', manifestText({ ...f, title: 'a\nb' }).split('\n').filter((l) => l.startsWith('title')).length, 1);
 eq('findings: errors first, - means no place', findingsOf([['warn', '-', 'w'], ['error', 'name', 'e']]), [{ level: 'error', where: 'name', text: 'e' }, { level: 'warn', where: '', text: 'w' }]);
 eq('nothing found', findingsOf(undefined), []);
-eq('requires_core belongs to the requires field', [fieldOf('requires_core'), fieldOf('title'), fieldOf('-'), fieldOf('')], ['requires', 'title', '', '']);
+eq('requires_core belongs to the requires field', [fieldOf('requires_core'), fieldOf('requires_core_max'), fieldOf('title'), fieldOf('-'), fieldOf('')], ['requires', 'requires', 'title', '', '']);
 
 const toml = readFileSync(new URL('../config/package-categories.toml', import.meta.url), 'utf8');
 eq('the category list is the one of config/package-categories.toml', CATEGORIES, [...toml.match(/^ids\s*=\s*\[(.*)\]/m)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));

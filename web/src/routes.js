@@ -27,6 +27,7 @@ import IsoLibrary from './pages/IsoLibrary.svelte';
 import Extension from './pages/Extension.svelte';
 import Apps from './pages/Apps.svelte';
 import Marketplace from './pages/Marketplace.svelte';
+import PackagePage from './pages/PackagePage.svelte';
 import PackageBuilder from './pages/PackageBuilder.svelte';
 import Services from './pages/Services.svelte';
 import Registries from './pages/docker/Registries.svelte';
@@ -135,10 +136,14 @@ export const nodeRoutes = { vps: edgeRoutes, edge: edgeRoutes, peer: peerRoutes 
 // Address without a node -> address with the local node (redirects.js, pure so that a test can run it); route.svelte.js applies it.
 export { redirect, VPS_NODE } from './redirects.js';
 
+// the page of one package: /apps/marketplace/<repo>/<name> (paths.js packagePath)
+export const PACKAGE_PAGE = new RegExp(`^${P.marketplace}/[a-z][a-z0-9-]{0,40}/[a-z][a-z0-9-]{0,40}$`);
+
 // The page for an INNER path (route.path: the address without /node/<name>): the exact path, or a guide (/docs/<lang>/<slug>).
 export function pageFor(path, kind = 'main') {
   if (kind !== 'main') return (nodeRoutes[kind] ?? peerRoutes)[path];
   const obj = objectOf(path);
   if (obj) return objectPages[obj.kind];
+  if (PACKAGE_PAGE.test(path)) return PackagePage;
   return routes[path] ?? (path.startsWith('/docs/') ? Docs : path.startsWith('/extensions/') || /^\/apps\/[a-z][a-z0-9-]*$/.test(path) ? Extension : path.startsWith('/settings/capabilities/') ? CapabilitySettings : undefined);
 }

@@ -165,8 +165,9 @@ The same model in hobnix/core, hobnix/recipes and hobnix/extensions.
    side (every marker with its heading). A failed run becomes a bug issue linked from the box (it is in the milestone, so the bar drops for a
    real reason). A box that is not ticked is **postponed, not a blocker**: nothing in the release depends on it.
 8. One milestone is *released* at a time, and at most three issues are In Progress. The next milestone may be built on its own long-lived
-   branch (now `0.2`; `develop` is merged into it after every change). Right after the release tag, `main` is merged back into `develop` and
-   the milestone branch is merged into `develop` (docs/RELEASE-PROCESS.md).
+   branch (now `0.2`; `develop` is merged into it after every change). After the release tag, `main` is merged back into `develop` and the
+   milestone branch is merged into `develop`, after its first beta if one is ready; the branch is kept for the later betas
+   (docs/RELEASE-PROCESS.md).
 9. A pull request opened by an AI session carries the label `agent-pr` from the start (`gh pr create --label agent-pr`); the DCO job is
    skipped for it and the maintainer who merges it takes the responsibility (CONTRIBUTING.md).
 
@@ -205,7 +206,12 @@ A new test needs no entry in the workflow. A test never hard-codes a TCP port: `
 
 - **Who moves it:** the workflow `nixpkgs-bump` (Mondays, or by hand) opens a pull request that moves `rev` to the head of the channel;
   the normal CI runs on it and a maintainer merges it when green. Without a bump the pin stays; a stale pin costs cache hits, not correctness.
-- **By hand:** `bash scripts/dev/nixpkgs-pin.sh bump` (head of the channel) or `bump --rev <sha>`, then commit the file.
+- **By hand:** `bash scripts/dev/nixpkgs-pin.sh bump` (head of the channel) or `bump --rev <sha>`, then
+  `bash scripts/dev/nixpkgs-pin.sh toolchain-sync` (needs nix) and commit both files.
+- **The Rust toolchain follows the pin:** `rust/rust-toolchain.toml` names the rustc of the pinned nixpkgs, the one servers build `rust/`
+  with. The job `nixos` fails when they differ (`nixpkgs-pin.sh toolchain-check`); the bump workflow moves the toolchain in the same pull
+  request and says so in its text. `rust-version` in `rust/Cargo.toml` is the oldest rustc that must build the crates (hobnix/official's
+  pinned toolchain builds the SDK, job `ext-crates`), so it can be lower than the toolchain.
 - **A NixOS release change** changes `channel` too and is a project decision, not a bump: [Move to a new NixOS release](operations.md#move-to-a-new-nixos-release).
 - The bump workflow needs repository settings that only the owner can change (see the comment at the top of `.github/workflows/nixpkgs-bump.yml`).
 

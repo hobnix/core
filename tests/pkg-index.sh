@@ -83,6 +83,10 @@ bad "expires before generated" 'd["expires"]=d["generated"]'
 bad "the reserved repo name core" 'd["repo"]="core"'
 python3 -c "import json; d=json.load(open('$J')); d['future']=1; d['packages']['demo']['x']=2; json.dump(d,open('$WORK/ok.json','w'))"
 check "unknown fields are ignored" $IDX validate "$WORK/ok.json"
+# verified (#477): optional; a day when it is there
+bad "a verified value that is not a day" 'd["packages"]["demo"]["verified"]="soon"'
+python3 -c "import json; d=json.load(open('$J')); d['packages']['demo']['verified']='2026-01-02'; json.dump(d,open('$WORK/okv.json','w'))"
+check "a verified day is valid" $IDX validate "$WORK/okv.json"
 
 echo "-- version history (from the first-parent git history only)"
 if have git; then
@@ -160,7 +164,11 @@ print('; '.join(m.validate(json.load(open('$WORK/hbad.json')))))")"
 check_eq "the client leaves out malformed rows and keeps the good ones" "1.1.0 1.0.5 1.0.0 None" "$(python3 -I -c "$PYI
 e=m.clean_history(json.load(open('$WORK/hbad.json'))['packages']['demo'])
 print(' '.join(r['version'] for r in e['versions']), e.get('date'))")"
-check "install and update read the list only through clean_history" test "$(grep -c "\[.versions.\]\|get(.versions.)" "$SCRIPTS/pkg_repo.py")" = 0
+# the one reader of the list is hs sys pkg history (Repos.history, #1251): it shows the rows of an entry that index_entries passed through
+# clean_history and installs nothing. A second read anywhere in the client fails here.
+reads_versions() { grep -c "\[.versions.\]\|get(.versions.)"; }
+check_eq "the client reads the version list in one place only" 1 "$(reads_versions <"$SCRIPTS/pkg_repo.py")"
+check_eq "and that place is hs sys pkg history" 1 "$(sed -n '/^    def history(/,/^    def choose_installed(/p' "$SCRIPTS/pkg_repo.py" | reads_versions)"
 echo "-- hostile history never breaks a build"
 H2=$WORK/hist2; git init -q "$H2"
 H2G() { git -C "$H2" -c user.name=t -c user.email=t@t.invalid -c commit.gpgsign=false "$@"; }
@@ -242,6 +250,26 @@ print(Image.open('$WORK/out4/'+d['packages']['demo']['meta']['icon']).size[0])"
 else
   skip "needs Pillow for the asset resizing"
 fi
+
+echo "-- requires_core_max: an upper bound of its own, requires_core stays \">=N\" (#1265)"
+RM=$WORK/rmax; mkdir -p "$RM/recipes/top"
+printf 'name = "top"\nversion = "2.0.0"\nkind = "recipe"\ntitle = "Top"\nrequires_core = ">=3"\nrequires_core_max = 12\n' > "$RM/recipes/top/package.toml"
+check "build carries the field" $IDX build "$RM" --repo official --out "$WORK/rmax-out" --serial 1 --commit $C --skip-assets
+check_eq "the entry has requires_core >=3 and requires_core_max 12" ">=3 12" "$(python3 -c "import json; e=json.load(open('$WORK/rmax-out/index.json'))['packages']['top']; print(e['requires_core'], e['requires_core_max'])")"
+check "the index validates (strict)" $IDX validate "$WORK/rmax-out/index.json"
+pim() { python3 -I -c "
+import importlib.util as u, json
+s=u.spec_from_file_location('pi','$SCRIPTS/lib/pkg_index.py'); m=u.module_from_spec(s); s.loader.exec_module(m)
+d=json.load(open('$WORK/rmax-out/index.json')); e=d['packages']['top']
+$1"; }
+check_eq "a client (non-strict) accepts the index" "" "$(pim "print('; '.join(m.validate(d)))")"
+check_eq "a malformed bound fails the build check, not a client" "1 0" "$(pim "e['requires_core_max']='12'; print(len(m.validate(d, strict=True)), len(m.validate(d)))")"
+check_eq "a bound below requires_core is malformed" "1" "$(pim "e['requires_core_max']=2; print(len(m.validate(d, strict=True)))")"
+check_eq "a history row keeps the bound, a row with a malformed one is left out" "1.0.0:12 -" "$(pim "
+r={'version':'1.0.0','date':'2026-01-01T00:00:00Z','path':e['path'],'commit':'a'*40,'tree':'sha256:'+'0'*64,'requires_core':'>=3','requires_core_max':12,'yanked':False}
+print(' '.join('%s:%s' % (x['version'], x['requires_core_max']) for x in m.clean_history(dict(e, versions=[r]))['versions']), ' '.join(x['version'] for x in m.clean_history(dict(e, versions=[dict(r, requires_core_max=True)]))['versions']) or '-')")"
+sed -i 's/^requires_core_max = 12$/requires_core_max = "12"/' "$RM/recipes/top/package.toml"
+check "a package.toml with a malformed bound does not build" bash -c "! $IDX build '$RM' --repo official --out '$WORK/rmax-bad' --serial 1 --commit $C --skip-assets >/dev/null 2>&1"
 
 echo "-- the CI workflow stub"
 W=$ROOT/.github/workflows/package-index.yml

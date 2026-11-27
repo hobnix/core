@@ -195,7 +195,7 @@ def update_one(r, market, seen, dry):
     row = market.get(name)
     target, pkg_new = r["offered"], None
     if row and row[5] == "update":
-        rc, out, _ = sh(pkg + ["show", name], 120)
+        rc, out, _ = sh(pkg + ["show", name, "--repo", repo], 120)     # the release of its own repository, also when another has the name
         info = kv(out) if rc == 0 else {}
         if info.get("status") != "ok":
             return "skip: %s: the new release cannot be read" % name
@@ -292,8 +292,8 @@ def main(argv):
     market = {}
     for ln in out.splitlines() if rc == 0 else []:
         p = ln.split("\t")
-        if len(p) >= 6:
-            market[p[0]] = p
+        if len(p) >= 6 and (p[0] not in market or p[4] != "-"):
+            market[p[0]] = p      # of several rows of a name, the one that carries the installed copy (its own repository, #933)
     seen = Seen()
     for r in todo:
         try:

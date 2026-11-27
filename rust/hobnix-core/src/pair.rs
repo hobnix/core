@@ -1,18 +1,25 @@
 //! Pairing of remote shares by code (docs/PLAN-remote-shares.md D3 to D6): the code, its derived id and key, the box, the code store and the rate
 //! limit. The clock and the random source are parameters, so the tests need no sleeping and no real randomness. No terminal output.
+#![expect(
+    clippy::indexing_slicing,
+    clippy::string_slice,
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "ratchet #1307: fixed-size codes and alphabets; to be rewritten with get() and try_from"
+)]
 
 use crate::{Error, Result, Secret};
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// The alphabet of the setup code (scripts/first_run.py): no 0 O 1 I. 32 letters, so one random byte masked with 31 is uniform.
+/// The alphabet of the setup code (`scripts/first_run.py)`: no 0 O 1 I. 32 letters, so one random byte masked with 31 is uniform.
 pub const ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 pub const CODE_LEN: usize = 16;
 pub const MAX_OPEN: usize = 5;
@@ -30,13 +37,13 @@ pub trait Clock {
     fn now(&self) -> u64;
 }
 
+#[derive(Debug)]
 pub struct SystemClock;
 impl Clock for SystemClock {
     fn now(&self) -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+            .map_or(0, |d| d.as_secs())
     }
 }
 
@@ -45,6 +52,7 @@ pub trait Random {
     fn fill(&mut self, buf: &mut [u8]) -> Result<()>;
 }
 
+#[derive(Debug)]
 pub struct OsRandom;
 impl Random for OsRandom {
     fn fill(&mut self, buf: &mut [u8]) -> Result<()> {
@@ -97,11 +105,23 @@ pub struct Keys {
     key: [u8; 32],
 }
 
+/// The id only: the key is never printed.
+impl std::fmt::Debug for Keys {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Keys")
+            .field("id", &self.id)
+            .field("key", &"***")
+            .finish()
+    }
+}
+
 fn expand(norm: &str, info: &str) -> [u8; 32] {
     let h = Hkdf::<Sha256>::new(None, norm.as_bytes());
     let mut out = [0u8; 32];
-    // HKDF-SHA256 cannot fail for a 32 byte output (the limit is 8160 bytes)
-    #[allow(clippy::expect_used)]
+    #[expect(
+        clippy::expect_used,
+        reason = "HKDF-SHA256 cannot fail for a 32 byte output (the limit is 8160 bytes)"
+    )]
     h.expand(info.as_bytes(), &mut out)
         .expect("32 bytes are a valid HKDF length");
     out
@@ -284,11 +304,13 @@ struct State {
 }
 
 /// A made code: the only moment the code itself exists on this server.
+#[derive(Debug)]
 pub struct Made {
     pub code: Secret,
     pub expires_in: u64,
 }
 
+#[derive(Debug)]
 pub struct Listed {
     pub kind: Kind,
     pub share: String,
@@ -306,6 +328,15 @@ pub enum Taken {
 pub struct Store<'a> {
     path: PathBuf,
     clock: &'a dyn Clock,
+}
+
+impl std::fmt::Debug for Store<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Store")
+            .field("path", &self.path)
+            .field("now", &self.clock.now())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'a> Store<'a> {
@@ -492,7 +523,8 @@ impl Refusal {
     }
 }
 
-/// What the other side gets (or hands over) inside the box.
+/// What the other side gets (or hands over) inside the box. Debug is safe: the password is a [`Secret`].
+#[derive(Debug)]
 pub struct Inner {
     pub server: String,
     pub host: String,
@@ -546,7 +578,7 @@ pub fn valid_host(s: &str) -> bool {
 
 /// The outside world of a door: the account work (shell, remote.sh), the mount and the event log.
 pub trait Host {
-    /// Make or reuse the login for `server`, set a new password, READ on `share`. Err(Refusal::Unknown) for a name another server owns (Q4).
+    /// Make or reuse the login for `server`, set a new password, READ on `share`. `Err(Refusal::Unknown)` for a name another server owns (Q4).
     fn grant(
         &self,
         server: &str,
@@ -561,6 +593,7 @@ pub trait Host {
 }
 
 /// What the HTTP handler sends: status class as the error name (or none) and the body.
+#[derive(Debug)]
 pub struct Reply {
     pub error: Option<Refusal>,
     pub body: Value,
@@ -574,7 +607,7 @@ fn refuse(r: Refusal) -> Reply {
 }
 
 fn take_or_refuse(
-    store: &Store,
+    store: &Store<'_>,
     host: &dyn Host,
     kind: Kind,
     id: &str,
@@ -624,7 +657,7 @@ fn is_id(s: &str) -> bool {
 
 /// The giving side (D5): `body` is the request exactly as it came (it is the associated data of the box), `source` the caller's address.
 pub fn claim(
-    store: &Store,
+    store: &Store<'_>,
     host: &dyn Host,
     rng: &mut dyn Random,
     body: &[u8],
@@ -670,9 +703,8 @@ pub fn claim(
             return refuse(r);
         }
     };
-    let keys = match Keys::from_stored(&entry.id, &entry.key) {
-        Some(k) => k,
-        None => return refuse(Refusal::Unavailable),
+    let Some(keys) = Keys::from_stored(&entry.id, &entry.key) else {
+        return refuse(Refusal::Unavailable);
     };
     match seal_answer(&keys, rng, body, inner.to_json().to_string().as_bytes()) {
         Ok(b) => {
@@ -692,7 +724,7 @@ pub fn claim(
 }
 
 /// The receiving side of the reverse direction: another server pushes `{"v":1,"id","nonce","box"}` for a receive code made here.
-pub fn accept(store: &Store, host: &dyn Host, body: &[u8], source: &str) -> Reply {
+pub fn accept(store: &Store<'_>, host: &dyn Host, body: &[u8], source: &str) -> Reply {
     let req: Value = match serde_json::from_slice(body) {
         Ok(v) => v,
         Err(_) => return refuse(Refusal::Unknown),
@@ -918,8 +950,8 @@ mod tests {
 
     #[test]
     fn base64_roundtrip_and_fingerprint() {
-        for n in 0..9 {
-            let v: Vec<u8> = (0..n as u8).map(|x| x.wrapping_mul(37)).collect();
+        for n in 0..9u8 {
+            let v: Vec<u8> = (0..n).map(|x| x.wrapping_mul(37)).collect();
             assert_eq!(unb64(&b64(&v)).unwrap(), v);
         }
         assert_eq!(b64(b"foobar"), "Zm9vYmFy");
@@ -953,6 +985,8 @@ mod tests {
             panic!("the code was not found");
         };
         assert_eq!(entry.key, key);
+        let shown = format!("{keys:?}");
+        assert!(!shown.contains(&key) && shown.contains(&keys.id), "{shown}");
         for shown in [format!("{entry:?}"), format!("{taken:?}")] {
             assert!(!shown.contains(&key), "{shown}");
             assert!(

@@ -10,6 +10,9 @@ set -euo pipefail
 . "$(dirname "$0")/lib/diskused.sh"
 . "$(dirname "$0")/lib/bulkpath.sh"
 . "$(dirname "$0")/lib/adopt-check.sh"
+. "$(dirname "$0")/lib/sharepath.sh"
+# shellcheck source=scripts/lib/adopt-names.sh
+. "$(dirname "$0")/lib/adopt-names.sh"
 . "$(dirname "$0")/lib/live.sh"
 . "$(dirname "$0")/lib/pools.sh"
 . "$(dirname "$0")/lib/pools-write.sh"
@@ -316,15 +319,7 @@ clean_disk() {
 # folders move into shares/ (a rename on the same filesystem, no data copied).
 adopt_entries=()
 adopt_loose=0
-# the folder an adopted folder becomes inside shares/: per disk by default
-# ("Media" on data-02 -> data-02-media: lowercase, spaces to dashes), or the same name (merge)
-# a folder with a name the share code keeps for itself is renamed with a suffix when merged (docs/PLAN-storage-nas.md D10)
-adopt_reserved() { case "$(tr 'A-Z' 'a-z' <<<"$1")" in shares|sensitive|global|homes|printers) return 0 ;; esac; return 1; }
-adopt_target() {   # adopt_target <label> <folder>
-  if $merge_folders; then
-    if adopt_reserved "$2"; then printf '%s-adopted\n' "$2"; else printf '%s\n' "$2"; fi
-  else printf '%s-%s\n' "${1#bulk-}" "$(tr 'A-Z ' 'a-z-' <<<"$2")"; fi
-}
+# The name each folder gets there is decided in lib/adopt-names.sh: never over 41 characters, and two folders never become one share.
 # Encrypted Unraid disks (D11). HS_UNRAID_PASSPHRASE_FILE holds the Unraid passphrase (0600, read once, deleted). When this server has no encrypted
 # disk yet, that passphrase becomes the server's; otherwise it only opens the disk and a key slot with this server's passphrase is added after the
 # header backup, once the parity is complete (adopt_luks_slot), because it writes to the disk.
@@ -408,6 +403,9 @@ adopt_inspect() {   # adopt_inspect <partition> <fstype>: read-only look, nothin
   while IFS= read -r e; do adopt_entries+=("$e"); done < \
     <(find "$tmp" -mindepth 1 -maxdepth 1 -type d ! -name '.*' ! -name 'lost+found' ! -name shares ! -name sensitive -printf '%f\n' | sort)
   adopt_loose=$(find "$tmp" -mindepth 1 -maxdepth 1 ! -type d ! -name '.*' | wc -l)
+  adopt_own=()   # the shares the disk has already: no adopted folder takes one of their names
+  while IFS= read -r e; do adopt_own+=("$e"); done < \
+    <(find "$tmp/shares" "$tmp/sensitive" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null)
   umount "$tmp"; rmdir "$tmp"
 }
 adopt_label() {   # adopt_label <partition> <fstype> <label>
@@ -1153,6 +1151,7 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
       fi
     done
     todo=()
+    adopt_reset "$root"   # before anything moves: the plan and the move loop decide the share names from the same picture
     phead "Plan (no file is erased or copied):" "Plan: no file is erased or copied"
     for c in "${chosen[@]}"; do
       line=""
@@ -1181,6 +1180,14 @@ if pool_is_snapraid "$pool" || { $newname && [ "$kind" = snapraid ]; }; then
           if $merge_folders; then pl "      renamed: '$e' is a reserved share name, it becomes '$(adopt_target "$label" "$e")'"
           else pl "      note: '$e' is a reserved share name, hs share repair will not publish it"; fi
         fi
+      done
+      for e in "${adopt_entries[@]}"; do
+        note_line=$(adopt_name_note "$label" "$e")
+        [ -z "$note_line" ] || pl "$note_line"
+        adopt_claim "$label" "$e" "$(adopt_target "$label" "$e")" || {
+          warn "$(t 'Not possible: %s. Two folders never become one share: rename the folder on its disk, or the share that exists (hs share <share> rename <new>), then run this again.' "$adopt_why")"
+          exit 1
+        }
       done
       if [ "$luksdev" != - ]; then
         case " ${adopt_slots[*]} " in

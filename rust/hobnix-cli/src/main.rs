@@ -1,8 +1,12 @@
 //! Adapter of the strangler: the only place that writes to the terminal.
-#![allow(clippy::print_stdout, clippy::print_stderr)] // contract output (hs sys lines) is this crate's job
+#![expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "contract output (hs sys lines) is this crate's job"
+)]
 
-use hobnix_core::log::{self, Level};
 use hobnix_core::Error;
+use hobnix_core::log::{self, Level};
 use std::process::ExitCode;
 
 mod jobs;
@@ -10,17 +14,18 @@ mod pair;
 mod secrets;
 
 fn run(args: &[String]) -> hobnix_core::Result<u8> {
+    let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
         None | Some("--version") => {
             println!("hobnix {}", hobnix_core::version());
             Ok(hobnix_core::EXIT_OK)
         }
-        Some("job-record") => jobs::run(&args[1..]),
-        Some("secrets") => secrets::run(&args[1..]),
-        Some("remote-codes") => pair::codes(&args[1..]),
-        Some("remote-claim") => pair::claim(&args[1..]),
-        Some("remote-accept") => pair::accept(&args[1..]),
-        Some("pair") => pair::run(&args[1..]),
+        Some("job-record") => jobs::run(rest),
+        Some("secrets") => secrets::run(rest),
+        Some("remote-codes") => pair::codes(rest),
+        Some("remote-claim") => pair::claim(rest),
+        Some("remote-accept") => pair::accept(rest),
+        Some("pair") => pair::run(rest),
         Some(other) => Err(Error::Refused(format!("unknown subcommand: {other}"))),
     }
 }

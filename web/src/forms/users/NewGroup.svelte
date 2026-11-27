@@ -3,6 +3,7 @@
   // new group the chosen levels (manage-shares.sh --set) as soon as the domain knows its SID.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
+  import { EXISTING_SHARE } from '../../ui/serverfields.js';
   import { Field, TextInput, Segmented, Muted } from '../../ui';
 
   let { existing = [], ondone = () => {} } = $props();
@@ -13,7 +14,7 @@
 
   const sh = poll('/api/sys/shares/overview', 60000, 'shares-overview');
   // name, kind, ... ; "other" rows are not shares of the file server
-  const shares = $derived(rows(sh).filter((r) => r[1] !== 'other' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(r[0])).map((r) => r[0]));
+  const shares = $derived(rows(sh).filter((r) => r[1] !== 'other' && EXISTING_SHARE.test(r[0])).map((r) => r[0]));
   const levelOf = (s) => levels[s] ?? 'none';
   const args = () => (nameOk && !taken
     ? [name, 'group-add', ...shares.filter((s) => levelOf(s) !== 'none').flatMap((s) => ['--access', `${s}=${levelOf(s)}`])]

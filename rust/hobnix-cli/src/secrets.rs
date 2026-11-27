@@ -1,7 +1,8 @@
 //! `hobnix secrets plan|start ...`: reads the words, calls hobnix-core and writes the lines vault-change.sh wrote.
 
 use hobnix_core::secrets::{self, Action, Paths, Plan, SecretName, SystemHost};
-use hobnix_core::{Error, Result, EXIT_OK, EXIT_REFUSED};
+use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
+use std::fmt::Write as _;
 use std::io::Write;
 
 const USAGE: &str =
@@ -40,21 +41,22 @@ fn refused(reason: &str) -> String {
 }
 
 fn plan_lines(p: &Plan) -> String {
+    // writing to a String cannot fail: the results of writeln! are dropped
     let mut o = format!("status\tok\nheading\t{}\n", p.heading);
     for s in &p.steps {
-        o.push_str(&format!("step\t{s}\n"));
+        let _ = writeln!(o, "step\t{s}");
     }
     for d in &p.dangers {
-        o.push_str(&format!("danger\t{d}\n"));
+        let _ = writeln!(o, "danger\t{d}");
     }
     if let Some(n) = p.note {
-        o.push_str(&format!("note\t{n}\n"));
+        let _ = writeln!(o, "note\t{n}");
     }
-    o.push_str(&format!("command\t{}\n", p.command));
+    let _ = writeln!(o, "command\t{}", p.command);
     if let Some(c) = p.confirm_name {
-        o.push_str(&format!("confirm_name\t{c}\n"));
+        let _ = writeln!(o, "confirm_name\t{c}");
     }
-    o.push_str(&format!("long\t{}\n", if p.long { "yes" } else { "no" }));
+    let _ = writeln!(o, "long\t{}", if p.long { "yes" } else { "no" });
     o
 }
 
@@ -72,8 +74,7 @@ fn parse(args: &[String]) -> std::result::Result<(Action, Option<String>), Strin
     let mut names: Vec<SecretName> = Vec::new();
     let mut confirm = None;
     let mut i = 2;
-    while i < args.len() {
-        let a = &args[i];
+    while let Some(a) = args.get(i) {
         if a == "--confirm" {
             let v = args
                 .get(i + 1)
@@ -99,7 +100,7 @@ fn parse(args: &[String]) -> std::result::Result<(Action, Option<String>), Strin
 }
 
 /// `args` = everything after `secrets`. Returns the exit code.
-pub fn run(args: &[String]) -> Result<u8> {
+pub(crate) fn run(args: &[String]) -> Result<u8> {
     let verb = args.first().map_or("", String::as_str);
     if verb != "plan" && verb != "start" {
         eprint!("{USAGE}");

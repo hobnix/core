@@ -35,6 +35,9 @@ export { default as Stack } from './Stack.svelte';           // flex column, gap
 export { default as Grid } from './Grid.svelte';             // grid of equal columns that wrap (the cards of a group page)
 export { default as Muted } from './Muted.svelte';           // the one secondary text style (not `mute`, not `muted`)
 export { default as StateCard } from './StateCard.svelte';     // Group page card: status dot, one line, link
+export { default as AppIcon } from './AppIcon.svelte';         // the square icon tile of an app: Phosphor name or its own picture
+export { default as AppTile } from './AppTile.svelte';         // the store card of an app or package: icon, name link, one line, chips, actions
+export { default as Screenshots } from './Screenshots.svelte'; // the pictures of an app in one row that scrolls sideways
 export { default as DangerZone } from './DangerZone.svelte';   // marked section of an Object page; each action opens a plan
 export { default as Progress } from './Progress.svelte';       // one bar: value/total, unknown total moves, tone, text beside it
 export { default as StepList } from './StepList.svelte';       // the steps of a job with a state word each; compact = the current step on one line

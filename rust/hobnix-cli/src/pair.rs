@@ -1,10 +1,11 @@
 //! Pairing of remote shares by code: `hobnix remote-codes|remote-claim|remote-accept` (the rows of `hs sys remote ...`) and the internal
 //! `hobnix pair ...` that remote.sh calls. A code or a password is read from stdin and written to stdout only, never taken from an argument.
 
-use hobnix_core::pair::{self, Clock, Inner, Kind, OsRandom, Store, SystemClock, DEFAULT_MINUTES};
+use hobnix_core::pair::{self, Clock, DEFAULT_MINUTES, Inner, Kind, OsRandom, Store, SystemClock};
 use hobnix_core::pair_host::SystemHost;
-use hobnix_core::{Error, Result, EXIT_OK, EXIT_REFUSED};
+use hobnix_core::{EXIT_OK, EXIT_REFUSED, Error, Result};
 use serde_json::Value;
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 
 const LIMIT: u64 = 16 * 1024;
@@ -56,7 +57,7 @@ fn store(clock: &dyn Clock) -> Store<'_> {
 }
 
 /// `hs sys remote codes`: `share  server  expires_in`, one line per open code, `-` for an empty field.
-pub fn codes(args: &[String]) -> Result<u8> {
+pub(crate) fn codes(args: &[String]) -> Result<u8> {
     if !args.is_empty() {
         return Err(Error::Refused(
             "hs sys remote codes takes no arguments".into(),
@@ -65,7 +66,7 @@ pub fn codes(args: &[String]) -> Result<u8> {
     let clock = SystemClock;
     let mut o = String::new();
     for c in store(&clock).list()? {
-        o.push_str(&format!("{}\t{}\t{}\n", c.share, c.server, c.expires_in));
+        let _ = writeln!(o, "{}\t{}\t{}", c.share, c.server, c.expires_in);
     }
     write_out(&o)?;
     Ok(EXIT_OK)
@@ -91,12 +92,12 @@ fn door(args: &[String], accept: bool) -> Result<u8> {
 }
 
 /// `hs sys remote claim [--source <ip>]`: the request on stdin, the answer body on stdout; exit 1 and the refusal body for a refusal.
-pub fn claim(args: &[String]) -> Result<u8> {
+pub(crate) fn claim(args: &[String]) -> Result<u8> {
     door(args, false)
 }
 
 /// `hs sys remote accept [--source <ip>]`: the push on stdin (the reverse direction).
-pub fn accept(args: &[String]) -> Result<u8> {
+pub(crate) fn accept(args: &[String]) -> Result<u8> {
     door(args, true)
 }
 
@@ -112,7 +113,11 @@ fn text<'a>(v: &'a Value, k: &str) -> &'a str {
 }
 
 /// `hobnix pair <word>`: make | cancel | check | request | open | push (internal, called by remote.sh).
-pub fn run(args: &[String]) -> Result<u8> {
+#[expect(
+    clippy::too_many_lines,
+    reason = "ratchet #1307: one arm per word; split into a function per word"
+)]
+pub(crate) fn run(args: &[String]) -> Result<u8> {
     match args.first().map(String::as_str) {
         Some("make") => {
             let [_, kind, share, server, minutes] = args else {
@@ -181,12 +186,13 @@ pub fn run(args: &[String]) -> Result<u8> {
             let fp = pair::fingerprint(text(&inner, "hostkey")).unwrap_or_else(|| "-".into());
             let mut o = String::new();
             for k in ["server", "host", "share", "login", "domain", "password"] {
-                o.push_str(&format!("{k}\t{}\n", text(&inner, k)));
+                let _ = writeln!(o, "{k}\t{}", text(&inner, k));
             }
-            o.push_str(&format!(
+            let _ = write!(
+                o,
                 "hostkey\t{}\nfingerprint\t{fp}\n",
                 text(&inner, "hostkey")
-            ));
+            );
             write_out(&o)?;
             Ok(EXIT_OK)
         }

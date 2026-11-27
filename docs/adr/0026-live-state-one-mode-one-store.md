@@ -1,6 +1,6 @@
 # 0026: Live state is always on, one mode, one store (the state database, not Redis)
 
-Status: Accepted (2026-11-13), option A. Migration steps 2 to 6 are built (#561, #562, #563): the switch `liveState` and Redis are gone, live state always runs on the state database. The measurement of step 1 and the check of step 7 are still to do on a real server (#566); the first real write load is seen on the 0.10 beta.
+Status: Accepted (2026-11-13), option A. Migration steps 2 to 6 are built (#561, #562, #563): the switch `liveState` and Redis are gone, live state always runs on the state database. The measurement of step 1 and the check of step 7 are still to do on a real server (#566); the first real write load is seen on the 0.10 beta. Later: ADR 0033 (accepted 2026-11-26, Decided items) changes parts of this record, see "What changes in older records on acceptance" there. Until a step is built, this record applies as written.
 Issue: hobnix/server#481 (part of #480)
 
 The owner decided: live state is on by default, with one mode and one store, and accepted the state database as that store (2026-11-13).

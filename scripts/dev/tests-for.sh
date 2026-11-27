@@ -7,7 +7,8 @@
 #   scripts/dev/tests-for.sh                   no base: "all"
 #
 # Rule: a changed tests/<name>.sh selects <name>; any other changed file selects the tests whose text mentions its name without extension
-# (scripts/foo-bar.sh -> every test that says `foo-bar`), and for capabilities/<x>/ and packages/<x>/ the name <x>. Files the whole suite
+# (scripts/foo-bar.sh -> every test that says `foo-bar`), for capabilities/<x>/ and packages/<x>/ the name <x>, and for rust/ also
+# rust-cargo. Files the whole suite
 # rests on select "all": scripts/lib/, tests/lib*.sh, tests/run-all.sh, config/, the workflows, this script. It is a guess made from names,
 # not from a call graph: a script that another script calls is not followed. That is why the full set runs in the merge queue and every
 # night on `develop`; a pull request gets the quick answer, plus the two profile tests (profile-core-only, profile-vps) always. Read-only: runs no test.
@@ -31,6 +32,8 @@ while IFS= read -r f; do
   s=$(basename "$f"); s=${s%.*}
   case "$GENERIC" in *" $s "*) ;; *) [ ${#s} -ge 3 ] && stems="$stems"$'\n'"$s" ;; esac
   case "$f" in capabilities/*/*|packages/*/*) d=${f#*/}; d=${d%%/*}; stems="$stems"$'\n'"$d" ;; esac
+  # any Rust change: fmt, clippy and the cargo tests (tests/rust-cargo.sh; it skips itself in CI, the job `rust` runs them there)
+  case "$f" in rust/*) stems="$stems"$'\n'"=rust-cargo" ;; esac
 done <<<"$files"
 names=$(
   while IFS= read -r s; do

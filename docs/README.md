@@ -69,6 +69,8 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-rust](PLAN-rust.md) | Rust as the main language behind the `hs sys` contract, Python retired (plan, nothing built) |
 | [PLAN-autopilot](PLAN-autopilot.md) | A runner that builds approved board issues in a throwaway VM, up to a draft pull request, and the test stages (plan, nothing built) |
 | [PLAN-core-daemon](PLAN-core-daemon.md) | One Rust core, the daemon `hobnixd`, a Rust CLI and web API, jobs, events, history and live state (plan, nothing built) |
+| [PLAN-core-daemon-migration](PLAN-core-daemon-migration.md) | Migration map of Core and Jobs: every command, service, timer, route, stored file and package hook with its new owner and step (P0, nothing built) |
+| [PLAN-0.14](PLAN-0.14.md) | What milestone 0.14 builds first, what moves forward from 0.15 and what waits (plan) |
 | [PLAN-workloads](PLAN-workloads.md) | Milestone 0.13: one list Apps & VMs, a page per Docker app, breadcrumbs, tree marks, early data |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
@@ -86,6 +88,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [RELEASE-NOTES-0.11](RELEASE-NOTES-0.11.md) | Draft release notes of 0.11.0, with what is not verified |
 | [RELEASE-NOTES-0.13](RELEASE-NOTES-0.13.md) | Release notes of 0.13.0, with what is not verified |
 | [RELEASE-NOTES-0.12](RELEASE-NOTES-0.12.md) | Draft release notes of 0.12.0, with what is not verified |
+| [RELEASE-NOTES-0.14](RELEASE-NOTES-0.14.md) | Release notes of 0.14.0 (beta 1), with what is not verified |
 | [PLAN-docker-instances](PLAN-docker-instances.md) | Docker as a capability: locked instances, child apps, recipes with `runs` |
 | [PLAN-web-design](PLAN-web-design.md) | Plan: handover of the web design (tokens, components, mockups, open points) |
 | [PLAN-selfservice](PLAN-selfservice.md) | Self-service password change for domain users |

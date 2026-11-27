@@ -10,7 +10,7 @@ real server yet: **Not tested on hardware yet.** The script is tested against a 
 | Branch | Holds | Starts from | Goes into |
 | --- | --- | --- | --- |
 | `develop` | the next release, and its release candidate | | `main` (release pull request) |
-| `0.N` (a milestone branch, now `0.2`) | the work of the milestone after the one being released | `develop` | `develop`, right after the tag of the release before it |
+| `0.N` (a milestone branch, now `0.2`) | the work of the milestone after the one being released | `develop` | `develop`, after the tag of the release before it (a first beta may come first); kept for later betas |
 | `main` | released code only | | back into `develop` |
 | `hotfix/<topic>` | a fix for a released version | `main` | `main` |
 | `feature/<topic>`, `fix/<topic>` | one change | the branch it is for | that branch |
@@ -33,7 +33,7 @@ where everything stands.
 4. **Check.** `gh run watch`, then `bash scripts/dev/release-core.sh verify v0.1.0`.
 5. **Merge back.** `main` carries the release merge commit, which `develop` lacks. Open a pull
    request `main` into `develop` (`git switch -c chore/main-into-develop origin/develop && git merge --no-ff origin/main`, merge commit),
-   then merge the milestone branch into `develop` (below).
+   then merge the milestone branch into `develop` and keep the branch (below).
 
 Without step 5 `git describe` on `develop` does not see the tag and the next release pull request conflicts.
 
@@ -56,13 +56,17 @@ never lacks anything `develop` or `main` has.**
   `origin/develop` into `origin/0.2` on a branch `chore/sync-develop-into-0.2-<rev>` and pushes it (`--pr` opens the pull request). Merge that
   pull request with a merge commit. `release-core.sh status` lists what `0.2` misses. A conflict stops the script and pushes nothing: resolve
   it by hand in a worktree, once, early, instead of at release time. Not automated yet: a scheduled `status` is a possible follow-up.
-- **Right after the 0.1.0 tag** (owner decision 2026-11-10). Merge `main` into `develop`, sync once more, then open a pull request `0.2` into
-  `develop` (merge commit; it needs no conflict handling, because `develop` is already an ancestor). From then on 0.2 is built on `develop`
-  and the branch `0.2` is deleted. One milestone is *released* at a time; the next one may be built on its own long-lived branch (`0.3`,
-  cut from `develop` when its work starts while 0.2 is still being stabilised).
+- **After the 0.1.0 tag** (owner decision 2026-11-10, changed 2026-11-27). Merge `main` into `develop` and sync once more. If the first beta
+  of 0.2 is ready, tag it now, from `0.2`. Then open a pull request into `develop` that holds `0.2` (merge commit; it needs no conflict
+  handling as long as `develop` is still an ancestor of `0.2`). Open it from a branch of its own, so that merging it cannot delete `0.2`.
+  From then on 0.2 is built on `develop`. One milestone is *released* at a time; the next one may be built on its own long-lived branch
+  (`0.3`, cut from `develop` when its work starts while 0.2 is still being stabilised).
+- **Keep `0.2` for its later betas.** `release-core.sh` and the workflow `release` cut a beta only from `origin/0.2`. Before a later beta,
+  sync `develop` into `0.2` (`release-core.sh sync --to 0.2`); the beta then holds everything that is in `develop` at that point. The branch
+  is not needed any more once v0.2.0 is released.
 
-So there is one line of history: `develop` is always an ancestor of the milestone branch, the milestone branch of `develop` after its pull
-request, and `main` of `develop` after the merge-back.
+So there is one line of history: `develop` is an ancestor of the milestone branch after each sync, the milestone branch of `develop` after its
+pull request, and `main` of `develop` after the merge-back.
 
 ## Release from GitHub (no owner PC)
 

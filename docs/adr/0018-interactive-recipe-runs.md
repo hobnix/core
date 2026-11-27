@@ -1,6 +1,6 @@
 # 0018: Interactive recipe runs through an orchestrator job
 
-Status: Accepted (2026-11-09)
+Status: Accepted (2026-11-09). Later: ADR 0034 (accepted 2026-11-26, Decided items) adds to this record, see "What changes in older records on acceptance" there. Until a step is built, this record applies as written.
 Issue: to be filed (none exists yet); the follow-ups are listed under Consequences. Builds on ADR 0004 (job record), 0005 (events), 0006 (API in front
 of the CLI) and 0012 (roles); it extends 0004, it does not replace it.
 
