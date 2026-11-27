@@ -1,7 +1,8 @@
 # Plan: one Rust core, a daemon, and thin front ends
 
 Design record. Contributor document, not a guide. Written from design discussions with the maintainer on 2026-11-25. Nothing here is built or run on a
-server. The only measurement so far is the build in section 14.1, made on a development PC. Not tested on hardware yet.
+server. Measured so far: the build on a development PC (section 14.1) and a first part of the baseline on a real server (section 14.2). Nothing of the
+design is tested on hardware yet.
 
 It extends [PLAN-rust.md](PLAN-rust.md) and ADR 0032 (docs/adr/0032-rust-main-language.md: Rust is the main language). It changes some earlier decisions;
 they stay in force until the records of section 16 replace them.
@@ -610,6 +611,53 @@ measured.
 On a server, the first number to get is today's build: in the repository (`/etc/nixos`), run `nix-build -E 'with import <nixpkgs> {}; callPackage
 ./pkgs/hobnix.nix {}' --no-out-link` under `time`. If the result is already in the store, add `--check` to build it again. With the Nix daemon `time` gives
 only the wall time. Not tested on hardware yet.
+
+### 14.2 Baseline of a real server, before any port
+
+**Run on the maintainer's server** on 2026-11-27, installed release `v0.13.0-beta.2`, 8 cores. That release has no `hs perf baseline`, so the script ran
+from a separate copy of `develop`, with `HS_BIN` set to the installed `hs.sh` so that the installed reads were timed. The server was not updated.
+**Taken:** the run with no page open and `hs live measure` with a page open. **Open:** the baseline run with a page open, so no CPU or memory number with a
+page open exists yet. It must be taken on the same release with the same apps.
+
+**No page open**, 30 minutes (load 1.62 at the start; 7 of 7 samples saw no open page):
+
+| What | `hs-live` | `hs-web` |
+|---|---|---|
+| CPU, cores (with everything the service starts) | 0.763 | 0.005 |
+| CPU, cores (the service's own process) | 0.008 | 0.005 |
+| Memory of the service, MiB, average / largest | 192.2 / 233.5 | 269.3 / 270.3 |
+| Memory of the service's own process, MiB, average | 44.3 | 101.3 |
+
+Neither service restarted. The whole host, containers and VMs included, used 1.476 cores and started 19209 processes and threads a minute; the
+measuring used 0.007 cores. So `hs-live` used about half of the host's CPU time. How many of the started processes are its own is not counted.
+The collector ran 35.0 reads a minute, with 0.686 seconds of read time per second and a largest stretch of 2.16.
+
+**Page reads:** 21 reads, 34.2 s of wall time and 35.9 s of CPU time in one run each. The split comes from a second run of each read, so its parts do not
+add up to those sums exactly (33.7 s wall, 37.0 s CPU):
+
+| Part | Wall, s | CPU, s | Share of CPU |
+|---|---|---|---|
+| command dispatcher | 5.1 | 6.9 | 19 % |
+| external tools (777 calls) | 7.7 | 4.6 | 12 % |
+| rest (the script, its shells, Python, `jq`, tools called by full path) | 20.9 | 25.6 | 69 % |
+
+The slowest reads (wall / CPU, seconds): shares overview 10.5 / 11.1 (9.9 / 10.6 of it in the rest, 8 tool calls), system doctor 8.0 / 7.7 (276 tool
+calls), status 1.9 / 4.0, container list 1.7 / 0.4, pool disks 1.4 / 1.5, job list 1.2 / 1.0. The one read with a non-zero exit is the doctor report,
+which ends with 1 when one of its checks reports a problem. A call spends about 0.2 to 0.45 s of wall time and 0.29 to 0.43 s of CPU in the dispatcher.
+Time outside the external tools is most of the CPU time; how much of it a port removes was not measured.
+
+**Change to page**, `hs live measure`, 10 minutes: 60 probes, none lost, 59 with a stream open, the collector did not restart. The latency is 0 ms at
+the median and 95th percentile and 9 ms at most. **0 does not mean no time:** the script counts from the end of the program that writes the probe and
+turns a negative difference into 0, so here the web server mostly had the change before that program had exited. The write took 75 ms at the median
+(126 ms at most) from start to exit. This number cannot show a gain below that. Database writes: 17.9 stored reads, 12.0 heartbeats and 29.7 change
+counter steps a minute, 44.4 KiB of payload a minute, 1.2 ms for a commit on average, none over 100 ms; `state.db` did not grow (2620 KiB, write-ahead log
+4079.8 KiB).
+
+**Delays that count since the collector first recorded a topic**, not only during the run (median of the last values / worst): change to stored value
+14.6 s / 879 s over 59 topics; stored value to page 9.3 s / 58 s over 19 topics.
+
+One run of each: how much two equal runs differ is not known, so a small later difference says nothing. The release is a beta; a later release on the same
+server also differs in other ways than a port.
 
 ## 15. Steps and milestone
 
