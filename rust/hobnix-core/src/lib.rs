@@ -1,5 +1,6 @@
 //! Service layer: typed inputs and results, no terminal output (docs/adr/0001-rust-strangler.md).
 
+pub mod db;
 pub mod error;
 pub mod jobs;
 pub mod log;
