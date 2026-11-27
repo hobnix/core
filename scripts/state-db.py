@@ -145,32 +145,83 @@ class SchemaTooNew(Exception):
 
 
 def schema_steps():
-    """The migrations, in order: (version it leads to, function). A step must be safe to run twice (check first, change inside BEGIN IMMEDIATE),
-    because two writers may start at once and a crash can leave the version behind. A new schema change: add a step here, raise SCHEMA_VERSION,
-    and never edit an old step. Version 2 is the first numbered one: the columns of `events` and `reads` (#324) were added by the two
-    functions before the number existed, so an old database of any age lands on 2."""
-    return ((2, lambda c: (migrate_events(c), migrate_reads(c))),)
+    """The migrations, in order: (version it leads to, oldest writer afterwards, function). A step must be safe to run twice (check first, change
+    inside BEGIN IMMEDIATE), because two writers may start at once and a crash can leave the version behind. A new schema change: add a step here
+    (SCHEMA_VERSION follows), and never edit an old step. Version 2 is the first numbered one: the columns of `events` and `reads` (#324) were
+    added by the two functions before the number existed, so an old database of any age lands on 2.
+
+    The oldest writer (#1352) is the lowest schema version whose programs may still write the database after the step; it keeps events and live
+    updates working after a rollback. KEEP the number of the step before only if every writer from that version on stays correct without knowing
+    the change. Examples: a new table it never has to fill; a new column that may be NULL or has a DEFAULT, in a table whose rows every older
+    writer inserts with the column names; a new index that is not unique.
+    RAISE it to the step's own version in every other case, and when in doubt. Examples: a table or column removed or renamed (the schema script
+    of an older writer would make a removed table again); a new type or meaning of a column or value; ANY new column in `meta`, `smart`, `hours`,
+    `samples` or `usage`, whose rows are inserted without column names; a new column an older INSERT OR REPLACE would reset although it must keep
+    its value; a new NOT NULL without DEFAULT, unique or check constraint or trigger; data that moved elsewhere, or that must change together
+    with other data. The number never goes down. The Rust writer of #1336 follows the same rule."""
+    return ((2, 2, lambda c: (migrate_events(c), migrate_reads(c))),)
 
 
 SCHEMA_VERSION = schema_steps()[-1][0]
+OLDEST_WRITER_KEY = "oldest_writer"        # a row of `meta`: part of the contract with later releases, never renamed
+
+
+def oldest_writer(c):
+    """The oldest schema version that may still write this database, None when it does not say (a release before #1352 wrote it)."""
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone():
+        return None
+    row = c.execute("SELECT value FROM meta WHERE key = ?", (OLDEST_WRITER_KEY,)).fetchone()
+    return int(row[0]) if row and re.fullmatch(r"[0-9]{1,9}", str(row[0])) else None
+
+
+def refuse_below_oldest_writer(c):
+    """Raise SchemaTooNew when the database names an oldest writer above this program. Returns the number, or None. Reads only."""
+    oldest = oldest_writer(c)
+    if oldest is not None and SCHEMA_VERSION < oldest:
+        raise SchemaTooNew("state.db may be written from schema version %d on, this release knows up to %d: it was written by a newer release"
+                           % (oldest, SCHEMA_VERSION))
+    return oldest
+
+
+def check_may_write(c):
+    """The schema version of the database, or SchemaTooNew when this program must not write it. A newer database is refused unless it says that
+    this version may still write it: an old script must not write into a layout it does not know. Reads only."""
+    oldest = refuse_below_oldest_writer(c)
+    have = c.execute("PRAGMA user_version").fetchone()[0]
+    if oldest is None and have > SCHEMA_VERSION:
+        raise SchemaTooNew("state.db has schema version %d, this release knows up to %d: it was written by a newer release" % (have, SCHEMA_VERSION))
+    return have
+
+
+def raise_oldest_writer(c, version):
+    """Store the oldest writer. It only goes up, also when another writer stores a higher one at the same moment; writes nothing when it is there."""
+    stored = oldest_writer(c)
+    if stored is not None and stored >= version:
+        return
+    with c:
+        c.execute("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value "
+                  "WHERE CAST(meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)", (OLDEST_WRITER_KEY, str(version)))
 
 
 def migrate_schema(c):
-    """Bring the database to SCHEMA_VERSION (PRAGMA user_version). A database from a NEWER release (after a downgrade) is refused with
-    SchemaTooNew: an old script must not write into a layout it does not know. user_version 0 is a database from before the number existed."""
-    have = c.execute("PRAGMA user_version").fetchone()[0]
+    """Bring the database to SCHEMA_VERSION (PRAGMA user_version) and store its oldest writer. A newer database that this program may still
+    write is left as it is. user_version 0 is a database from before the number existed."""
+    have = check_may_write(c)
     if have > SCHEMA_VERSION:
-        raise SchemaTooNew("state.db has schema version %d, this release knows up to %d: it was written by a newer release" % (have, SCHEMA_VERSION))
-    for version, fn in schema_steps():
+        return
+    for version, oldest, fn in schema_steps():
         if version > have:
+            raise_oldest_writer(c, oldest)     # before the change: an older writer is locked out no later than the layout changes
             fn(c)
             c.execute("PRAGMA user_version=%d" % version)
+    raise_oldest_writer(c, schema_steps()[-1][1])
 
 
 def open_rw(threads=False):
     os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
     c = sqlite3.connect(DB, timeout=30, check_same_thread=not threads)
     c.execute("PRAGMA busy_timeout=30000")      # several writers (hs-live, hooks, hs state): wait for the lock, never fail at once
+    check_may_write(c)                          # before the first write: the schema script would make a table a newer release removed
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA synchronous=NORMAL")
     c.executescript(SCHEMA)
@@ -1284,6 +1335,7 @@ def demand_open():
     os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
     c = sqlite3.connect(DB, timeout=2, check_same_thread=False)
     c.execute("PRAGMA busy_timeout=2000")
+    refuse_below_oldest_writer(c)              # no number: as before it, leases are written whatever the schema version is
     c.executescript(DEMAND_SCHEMA)
     return c
 
