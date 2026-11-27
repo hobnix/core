@@ -7,7 +7,8 @@ command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
 wp() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 export HS_PLAIN=1 HS_LANG=en HS_CALLER=test PYTHONUTF8=1
 mkdir -p "$WORK/state" "$WORK/pe"
-export HS_STATE_DIR=$(wp "$WORK/state") HS_PKG_EVENTS_DIR=$(wp "$WORK/pe") HS_STATE_DB=$(wp "$WORK/state/state.db")
+HS_STATE_DIR=$(wp "$WORK/state") HS_PKG_EVENTS_DIR=$(wp "$WORK/pe") HS_STATE_DB=$(wp "$WORK/state/state.db")
+export HS_STATE_DIR HS_PKG_EVENTS_DIR HS_STATE_DB
 unset HS_EVENT_KEEP HS_EVENT_DAYS HS_EVENT_EPHEMERAL_DAYS HS_EVENT_METRIC_DAYS
 export HS_NOW=1000000000
 SD=$SCRIPTS/state-db.py
