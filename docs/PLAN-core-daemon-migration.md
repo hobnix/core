@@ -6,7 +6,8 @@ it moves, which test guards it and when the old part goes. Nothing here is built
 
 The records behind it are ADR 0033 (`docs/adr/0033-core-and-daemon.md`) (core and daemon) and ADR 0034 (`docs/adr/0034-job-system.md`) (job system), both
 **Proposed**. Where this map picks an owner the plan does not name, the row says "map's reading" or lands in [Missing from the plan](#missing-from-the-plan);
-such a row is a proposal for the owner, not a decision.
+such a row is a proposal for the owner, not a decision. The gaps the map first found are answered below the tables
+([Missing from the plan](#missing-from-the-plan), step "P0, rest", #1337, 2026-11-27).
 
 ## How it was counted
 
@@ -105,7 +106,7 @@ Grouped by area. Each row covers the `sys` groups (row count in brackets) and th
 | sys `services` (8), `routes` (2), `ports` (1); user `services` (16), `ports` (1) | `services.sh`, `services.py` (`ADMIN_TARGETS` guard), `services-change.sh`, `ports.sh`; service files in `/var/lib/hs/services.d` | core; the admin-route guard becomes a core rule | P7 | services, services-change, services-stats, services-traefik-public, services-zoraxy-api, declare-service, ports, traefik-provider, network-provider, web-routes, web-proxy | P7 |
 | sys `gateway` (6); user `gateway` (5) | `gateway.sh`, `gateway-setup.sh`, `gateway_render.py` | core | P7 | gateway, gateway-setup, gateway-traefik, gateway-acme-token | P7 |
 | sys `net` (4), `netmap` (3), `unifi` (4), `dns` (1); user `net` (5), `dns` (2) | `net-nics.sh`, `net-check.sh`, `net-change.sh`, `net-ip.sh`, `netmap.sh`, `netmap-counters.sh`, `unifi.sh`, `dns.sh` | core | P7 | net, net-change, net-check, netmap, netmap-counters, dns, web-netmap, web-netcheck | P7 |
-| sys `remote` (5, three already `rust:`), `peers` (2), `node` (7), `vps` (2), `deck` (1); user `remote` (10), `node` (6), `vps` (1) | `remote.sh`, `hobnix pair` (codes, claim, accept), `peer-change.sh`, `node.sh`, `node-change.sh`, `node-remote.sh`, `vps-change.sh`, `vps.sh`, `deck-status.sh` | **unassigned** (plan 11: "to be assigned in P0"); map's proposal: core (pairing is already in `hobnix-core` `pair`) | - until assigned | remote, remote-pair, node, peer-change, vps-watch, deck-status, web-node-change, web-nodes, web-vps, web-remote-code | open |
+| sys `remote` (5, three already `rust:`), `peers` (2), `node` (7), `vps` (2), `deck` (1); user `remote` (10), `node` (6), `vps` (1) | `remote.sh`, `hobnix pair` (codes, claim, accept), `peer-change.sh`, `node.sh`, `node-change.sh`, `node-remote.sh`, `vps-change.sh`, `vps.sh`, `deck-status.sh` | core: reads, changes and pairing (pairing is already in `hobnix-core` `pair`); the deck feed is `hobnixd`'s ([gap 1](#missing-from-the-plan)) | P7 | remote, remote-pair, node, peer-change, vps-watch, deck-status, web-node-change, web-nodes, web-vps, web-remote-code | P7 |
 
 ### Health, notifications, configuration, system (P3, P7)
 
@@ -115,13 +116,13 @@ Grouped by area. Each row covers the `sys` groups (row count in brackets) and th
 | sys `notify` (5); user `notify` (9) | `notify.sh`, `notify-channel.sh`, `notify-change.sh`; `event-notify.sh`/`event-notify.py` every 30 s | core delivery; event notifications move into `hobnixd` (P3); `hs-notify-failure@` stays independent (ADR 0034 Planned 14) | P3 (event notifications), P7 (channels) | notify-channel, notify-route, ntfy-style, event-notify, web-notify-change | `event-notify.py` and its timer after P3's side-by-side release; `notify.sh` stays for `hs-notify-failure@` |
 | sys `config` (4), `setup` (3), `parts` (4), `rebuild` (1), `release` (3), `changes` (1); user `config` (7), `machine-merge` (1), `changes` (1), `setup-code` (1) | `config-read.sh`, `config-change.sh`, `config.sh`, `machine-sync.sh`, `machine-merge.sh`, `setup-list.sh`, `setup-change.sh`, `parts.sh`, `part-change.sh`, `pending-rebuild.sh`, `release-channel.sh`, `release-change.sh`, `changes.sh`, `setup-code.sh` | core (plan 11 "Configuration": own design first) | P7 | machine-toml, settings, schema, config-overlay, schema-overlay, apply-effect, setup-change, setup-list, pending-rebuild, release-channel, update-channel, changes, capabilities | P7 |
 | sys `system` (7), `power` (2), `logs` (3); user `system` (5), `update` (2), `rebuild` (1), `reboot` (1), `shutdown` (1), `doctor` (1), `cleanup` (1), `report` (1), `smoke` (1) | `system-change.sh`, `system.sh`, `update.sh`, `update-preview.sh`, `rebuild.sh`, `power.sh`, `power-notice.sh`, `doctor.sh`, `cleanup.sh`, `system-updates.sh`, `report.sh`, `logs.sh`, `smoke.sh` | `hs update`, rollback and rebuild stay bash (ADR 0032 decision 3); reads (`doctor`, `cleanup`, `updates`, `report`, `logs`) to the core; an update does not run beside a job that cannot be interrupted (ADR 0034 Planned 10) | P7 for reads; - for update | system, system-change, system-updates, update-preview, update-rollback, power, power-notice, doctor, cleanup, logs, smoke, rebuild-checks, web-system-reboot | P7 for reads; update stays |
-| sys `migrate` (2), `testlab` (3); user `migrate` (3), `testlab` (2), `installer` (3), `first-run` (1), `docs` (2), `cheatsheet` (1) | `migrate-unraid.sh`, `migrate.sh`, `migrate-check.sh`, `testlab.sh`, `testlab-change.sh`, `install-wizard.sh`, `answers.sh`, `install-restore.sh`, `first-run.sh`, `docs-build.sh`, `docs-verified.sh`, `cheatsheet.sh` | installer, first run: bash (stays); migration dialogue stays bash, parsers to the core (PLAN-rust); testlab: dev driver, stays; docs and cheatsheet: no owner in the plan | - | migrate, migrate-unraid, import-unraid, install-wizard, install-restore, first-run, testlab, docs, docs-verified, cheatsheet | stays; docs and cheatsheet: see [Missing from the plan](#missing-from-the-plan) |
+| sys `migrate` (2), `testlab` (3); user `migrate` (3), `testlab` (2), `installer` (3), `first-run` (1), `docs` (2), `cheatsheet` (1) | `migrate-unraid.sh`, `migrate.sh`, `migrate-check.sh`, `testlab.sh`, `testlab-change.sh`, `install-wizard.sh`, `answers.sh`, `install-restore.sh`, `first-run.sh`, `docs-build.sh`, `docs-verified.sh`, `cheatsheet.sh` | installer, first run: bash (stays); migration dialogue stays bash, parsers to the core (PLAN-rust); testlab: dev driver, stays; docs and cheatsheet: thin tools, stay ([gap 9](#missing-from-the-plan)) | - | migrate, migrate-unraid, import-unraid, install-wizard, install-restore, first-run, testlab, docs, docs-verified, cheatsheet | stays |
 
 ## Background services and timers
 
 46 units of our own. "Timed" names the start rule. Timers are front ends in the plan (section 2: "timer -> CLI or core"); a scheduled run that changes
-something becomes a job (plan 5.1). Map's reading: the systemd timer stays and calls the core operation of its area; the plan names no step for it, so
-it moves with its area.
+something becomes a job (plan 5.1). Decided by the owner (2026-11-27, [gap 2](#missing-from-the-plan)): the systemd timer stays and starts the
+core operation of its area, so it moves in the step of its area and keeps working while `hobnixd` is stopped.
 
 | Unit (file) | Current behaviour | New owner | Step | Test | Old part removed when |
 |---|---|---|---|---|---|
@@ -140,10 +141,11 @@ it moves with its area.
 | `hs-health-check` every 15 min | `health-check.sh` (or `edge-health.sh` on an edge node) | core checks, daemon scheduling (plan 11) | with health (P7) | health | P7 |
 | `hs-apps-autoupdate` :00 and :30, `hs-pkg-refresh` daily, `hs-system-gc` Sun 06:30 | `apps-autoupdate.sh`, `pkg-refresh.sh`, `system.sh gc 30 --yes` + `apps-version.sh --summary` | timer calls the core operation as a job | with apps, pkg, system (P7) | apps-autoupdate, pkg-refresh, system | P7 |
 | `hs-mac` 03:30 (capabilities/incus) | `mac.sh` | core (instances) | P7 | none found by name; write one first | P7 |
-| `hs-deck-status` every 20 s, `hs-deck-api`; `hs-edge-status` every 10 s, `hs-edge-api` (edge-status); `hs-edge-watch` every 5 min (edge-watcher) | `deck-status.sh` and `state.sh *-json` into `/run/hs-deck`, `deck-serve.py` on port 9740; `edge-status.sh`; `vps/hs-watch.sh` | **unassigned** (remote, edge, displays) | - | deck-status, edge-facts, vps-watch | open |
-| `hs-unlock`, `hs-unlock-alarm`, `bulk-mount`, `hs-disk-erc`, `hs-disk-spindown`, `hs-pci-bind`, `hs-boot-notice`, `hs-shutdown-notice`, `hs-setup-code` | boot and shutdown paths: `unlock.sh --boot/--alarm`, `bulk-mount.sh`, `disk-erc.sh apply`, `disk-spindown.sh apply`, PCI bind script, `power-notice.sh`, `hs setup-code boot` | bash (boot and recovery, plan 11: "bash and core") | - | unlock-order, unlock-alarm, disk-erc, disk-spindown, power-notice, first-run | stays; which part is core is not in the plan |
-| `hs-disk-event@` (udev rule), ZED zedlet `all-hobnix.sh`, UPS `NOTIFYCMD` | `disk-event.sh <action> <name>`, `zed-event.sh`, `ups.sh event` | map's reading: event sources for the system access layer (udev is named in plan 4.2); the receiver is not named | not named | disk-event, zed-event, ups | open |
-| `hs-nss-warm` minutely (samba, "temporary"), `hs-web-tailscale` | inline scripts: warm winbind lookups; `tailscale serve` for the web port | Nix (thin wrappers) | - | none found by name | stays; `hs-nss-warm` says it is temporary |
+| `hs-deck-status` every 20 s, `hs-deck-api`; `hs-edge-status` every 10 s, `hs-edge-api` (edge-status); `hs-edge-watch` every 5 min (edge-watcher) | `deck-status.sh` and `state.sh *-json` into `/run/hs-deck`, `deck-serve.py` on port 9740; `edge-status.sh`; `vps/hs-watch.sh` | deck feed (`hs-deck-status`): `hobnixd`; `deck-serve.py` (`hs-deck-api`, `hs-edge-api`) stays a server of its own until `hobnix-web` can serve the deck API; the edge units stay unchanged until P7 | P7 | deck-status, edge-facts, vps-watch | `hs-deck-status` after one release side by side with the daemon's feed |
+| `hs-unlock`, `hs-unlock-alarm`, `bulk-mount`, `hs-disk-erc`, `hs-disk-spindown`, `hs-pci-bind`, `hs-boot-notice`, `hs-shutdown-notice`, `hs-setup-code` | boot and shutdown paths: `unlock.sh --boot/--alarm`, `bulk-mount.sh`, `disk-erc.sh apply`, `disk-spindown.sh apply`, PCI bind script, `power-notice.sh`, `hs setup-code boot` | bash or core per unit ([gap 3](#boot-and-shutdown-units)) | per unit | unlock-order, unlock-alarm, disk-erc, disk-spindown, power-notice, first-run | per unit |
+| `hs-disk-event@` (udev rule), ZED zedlet `all-hobnix.sh`, UPS `NOTIFYCMD` | `disk-event.sh <action> <name>`, `zed-event.sh`, `ups.sh event` | the hooks stay and start the core operation of their area; `hobnixd` only watches for refreshes ([gap 4](#missing-from-the-plan)) | P7 (storage; UPS with health) | disk-event, zed-event, ups | the hooks stay; their scripts at P7 |
+| `hs-nss-warm` minutely (samba, "temporary") | inline script: warms winbind and DNS lookups, logs slow ones | **goes** ([gap 10](#missing-from-the-plan)) | - | none found by name | after a week of a real server's journal shows no slow lookup |
+| `hs-web-tailscale` | inline script: `tailscale serve` for the web port | Nix (thin wrapper) | - | none found by name | stays |
 | `hs-testlab-nightly` 03:30 (testlab) | `testlab.sh run` | dev tool, stays | - | testlab, testlab-live | stays |
 | Units of other software: `incus`, `incus-startup`, `samba-smbd`, `samba-winbindd`, `zfs-mount`, `traefik`, `postfix`, `tailscaled`, `nftables`, `sshd` | Nix sets `whenUnlocked`, `OnFailure` and service options | Nix; "the system owns its state" (plan 1) | - | rebuild-checks | stays |
 | Shell init (zsh and bash in configuration.nix) | `hs motd` at SSH login, `hs sys complete` for completion | Rust CLI | P5 | motd, commands | P8 with `sys complete` |
@@ -160,7 +162,7 @@ it moves with its area.
 | `GET /api/sys/jobs/stream/<unit>`, `/api/logs/stream/<unit>`, `/api/netmap/stream` | journal and samples as SSE | live connections: `hobnix-web` streams, `hobnixd` decides who may open one (plan 11) | P6 | web-progress, logs, web-netmap | P6 |
 | `POST /api/terminal`, `GET /api/terminal/ws`, `POST /api/vmconsole`, `GET /api/vmconsole/ws` | `web_terminal.py` (pty in a transient unit, tmux), `web_vmconsole.py` (SPICE relay, ticket) | live connections as above | P6 | web-terminal, web-terminal-pty, web-vmconsole | P6 |
 | `POST /api/unlock` | `hs sys unlock stdin`, passphrase on stdin, only while locked | `hobnix-web` route; unlock logic stays bash; must work while storage is locked (plan 9) | P6 (route) | web-unlock, web-unlock-login | P6 for the route; `unlock.sh` stays |
-| `POST /api/remote/claim`, `/api/remote/push` | pairing door without a session (another server types a code) | unassigned (remote) | open | web-remote-code, remote-pair | open |
+| `POST /api/remote/claim`, `/api/remote/push` | pairing door without a session (another server types a code) | `hobnix-web` route; pairing logic in the core | P6 (route), P7 (rest of remote) | web-remote-code, remote-pair | P6 for the route |
 | `GET /api/proxy/status` | reverse proxy status thread | core (services) | P6 | web-proxy | P6 |
 | `GET /api/poster/<name>` | pictures from `/var/lib/hs/posters` | `hobnix-web` (files), core (apps) | P6 | web-apps | P6 |
 | `GET /api/docs/<path>` | the built docs site | `hobnix-web` | P6 | web-docs | P6 |
@@ -168,19 +170,19 @@ it moves with its area.
 | `GET /api/settings-layout` | settings overlay layout | `hobnix-web` (generated from the core's settings) | P6 | web-settings-layout | P6 |
 | `GET /api/board` | dashboard tiles, also without a session on a private address (`dashboardOpen`) | `hobnix-web` with `hobnixd` check | P6 | web-board | P6 |
 | background threads (lines 2116 to 2890) | warm-up, events watcher and lease, push listener, netmap sampler | `hobnixd` (live state) and `hobnix-web` (streams) | P6 | web-events, web-netmap | P6 |
-| `deck-serve.py` (`hs-deck-api`, port 9740) | serves `/run/hs-deck/*.json` | unassigned (displays) | open | deck-status | open |
+| `deck-serve.py` (`hs-deck-api`, port 9740) | serves `/run/hs-deck/*.json` | a server of its own until `hobnix-web` can serve the deck API | after P6 | deck-status | when `hobnix-web` serves the deck API |
 
 ## Stored files
 
-"Backup" says what `scripts/backup.sh` `host_files` does today: it copies `/var/lib/hs` (except the disk mount points), `/var/lib/hs-ext`,
+What the backup does today: `scripts/backup.sh` `host_files` copies `/var/lib/hs` (except the disk mount points), `/var/lib/hs-ext`,
 `/var/lib/private/hs-ext`, `/var/lib/samba/private`, `/var/lib/hs-gateway/acme` and, while the vault is open, the vault secrets. Plan 6.1 asks for each
-stored file whether it is backed up or can be rebuilt; where the map cannot say, the row says "to decide".
+stored file whether it is backed up or can be rebuilt: see [Backed up or rebuildable](#backed-up-or-rebuildable).
 
 | Store | Current behaviour | New owner | Step | Test | Old part removed when |
 |---|---|---|---|---|---|
 | `state.db` `events`, `rollups` | event log (5000 rows, 90 days), monthly package counts; file copy in backup | core, moved to `history.db` with the ids kept, SQLite backup | P2 | event-log, event-retention, state-db | after the move and one release |
 | `state.db` `live`, `topics`, `heartbeat`, `demand`, `live_delay`, `reads` | live documents and counters; rebuildable (ADR 0026) | `hobnixd`; memory after P6 | P3, P6 | live-db, change-counters | after P6 |
-| `state.db` `disks`, `smart`, `baseline`, `samples`, `usage`, `hours`, `meta` | disk inventory, SMART readings (400 days), fill levels, schema version | core measurements (plan 6.2); file and backup class to decide | P7 (storage, health) | state-db, smart-baseline, capacity | to decide |
+| `state.db` `disks`, `smart`, `baseline`, `samples`, `usage`, `hours`, `meta` | disk inventory, SMART readings (400 days), fill levels, schema version | core measurements (plan 6.2); they stay in `state.db` at P2, backed up ([gap 5](#missing-from-the-plan)) | P7 (storage, health) | state-db, smart-baseline, capacity | the health and notifications design (#1380) decides |
 | `/var/lib/hs/jobs/<id>.json` | job records (ADR 0004); backed up as files | core, rows in `history.db` | P2 | job-record, jobs-records | after the records moved and one release |
 | `/var/lib/hs/api-tokens.json`; `/run/hs-web/sessions.json`, `cache.json`, `probe.tsv` | token hashes (0600, before unlock); sessions in tmpfs; web caches | `hobnixd` (security) | P6 | token, web-login, web-cache | P6 |
 | `/var/lib/hs/settings`, `machine.toml.before-*`, `machine.toml.built`, `generated`, `capabilities-on`, `last-rebuild-rev`, `last-rebuild-seconds`, `update-channel`; `/run/hs-machine-cache` | runtime settings (ADR 0002), copies before a change, rebuild marks, a 30 s cache of `machine.toml` answers | core (configuration); rebuild and update marks stay with bash `hs update` | P7 | settings, machine-toml, update-channel, pending-rebuild | P7 |
@@ -191,8 +193,8 @@ stored file whether it is backed up or can be rebuilt; where the map cannot say,
 | `/var/lib/hs/vault-header`, `vault-uuid`, `vault-binds`, `luks-uuids`, `luks-headers`, `restic-password`; `/var/lib/hs-vault` | vault and encryption metadata, secrets (restic password excluded from the backup) | bash (unlock and recovery) and `scripts/lib/secret.sh` | - | vault, crypt, luks-class | stays |
 | `/var/lib/hs/backup.state`, `backup-dump`, `backup-offsite.env`, `.backup.lock`; `/run/hs-backup.lock` | backup results, dump commands, offsite settings, locks | core (backup) | P7 | backup, backup-offsite | P7 |
 | `/var/lib/hs/apps`, `apps-autoupdate.json`, `apps-autoupdate.lock`, `stat-<app>`, `recipe-*`, `posters`, `blueprints.toml`, `iso`, `docker-registries.tsv`, `docker-registry-<host>`, `docker-manager-legacy`, `docker-manager-undo`, `unifi`, `migrate.state` | app, recipe, blueprint, ISO, Docker and migration state | core (their areas) | P7 | apps-autoupdate, blueprint, iso, docker-registry, migrate | P7 |
-| `/var/lib/hs/first-run.json`, `setup-choice`, `pci-bind.log`, `testlab`, `testlab-marker`, `docs-site`, `metrics`, `live-measure-<date>` | first run, boot log, dev lab, docs build, metrics capability, measurement results | first run and boot: bash; docs, metrics, testlab: no owner in the plan | - | first-run, testlab, docs, live-measure | stays or open |
-| `/var/lib/hs/nodes.tsv`, `vps-key`, `tailscale-authkey`, `deck-history`, `remote-offers`, `remote-<peer>.cred`, `.remote.lock`; `/run/hs/remote-codes.json`; `/run/hs-deck/*` | nodes, VPS key, pairing, deck history and feed | unassigned (remote, edge, displays) | open | remote, remote-pair, deck-status, node | open |
+| `/var/lib/hs/first-run.json`, `setup-choice`, `pci-bind.log`, `testlab`, `testlab-marker`, `docs-site`, `metrics`, `live-measure-<date>` | first run, boot log, dev lab, docs build, metrics capability, measurement results | first run and boot: bash; docs and testlab stay; metrics goes with health ([gap 9](#missing-from-the-plan)) | - (metrics: P7) | first-run, testlab, docs, live-measure | stays; metrics P7 |
+| `/var/lib/hs/nodes.tsv`, `vps-key`, `tailscale-authkey`, `deck-history`, `remote-offers`, `remote-<peer>.cred`, `.remote.lock`; `/run/hs/remote-codes.json`; `/run/hs-deck/*` | nodes, VPS key, pairing, deck history and feed | core (remote, nodes, VPS); deck history and feed: `hobnixd` | P7 | remote, remote-pair, deck-status, node | P7 |
 | `/run/hs/ask/<id>/` | questions and answers of waiting jobs (ADR 0018) | core job module | P2 | ask-protocol | P2 |
 | `/run/hs/job-pass.*`, `job-unraid-pass.*` | passwords handed to a job as temporary files | systemd credentials (ADR 0034 Planned 11) | P2 | pool-change, migrate-unraid | P2 |
 | `/run/hs-bulk.lock`, `disk-event.lock`, the record locks of `job-record.py` and `token_store.py` | `flock` locks | core locks held by the job process (ADR 0034 Planned 10) | P2 | bulklock, disk-event | when no bash path takes them (P8) |
@@ -206,7 +208,7 @@ stored file whether it is backed up or can be rebuilt; where the map cannot say,
 | Hook | Current behaviour | New owner | Step | Test | Old part removed when |
 |---|---|---|---|---|---|
 | `commands.tsv` user rows (`ext <name> ...`, owned `words`) | loaded by `registry-load.sh` into the dispatcher | Rust CLI loads them | P5 | pkg-rows, commands | P8 with the dispatcher |
-| `commands.tsv` `sys` rows (`sys ext <name> ...`, `sys <word> ...`) | `sys` contract rows of a package, plan/start pairs | a new way to declare operations (plan 10); package contract change with a deprecation release | not named | pkg-rows, openapi | when the replacement has survived its deprecation release |
+| `commands.tsv` `sys` rows (`sys ext <name> ...`, `sys <word> ...`) | `sys` contract rows of a package, plan/start pairs | core package manager: a new way to declare operations (plan 10, #1379); package contract change with a deprecation release | before P8 | pkg-rows, openapi | when the replacement has survived its deprecation release |
 | `protocol = [1]` command rows, `timeout:`, `confine` (ADR 0010, 0014) | JSON lines over stdin and stdout, run by `ext_proto.py` | core extension host (same message types as the SDK) | P3 | ext-proto, ext-confine | after one release with the Rust host |
 | `[service]` (ADR 0011, 0031) | one supervised process, `hs-ext-run-<name>`, events at least once, cursors | `hobnixd` extension supervisor | P3 | ext-service, ext-service-reach, ext-events | as above |
 | `[[binary]]` (ADR 0031) | Rust extension binaries | core package manager | P7 | pkg-binary, ext-sdk-rust | - |
@@ -223,27 +225,107 @@ stored file whether it is backed up or can be rebuilt; where the map cannot say,
 
 ## Missing from the plan
 
-These parts have no owner or no step in PLAN-core-daemon.md. Each needs a line in the plan, or a note that it is meant to be removed, before P0 is done.
+The parts the map found without an owner or a step, each with its answer (#1337, 2026-11-27). "Owner decided" means the maintainer chose it on that day.
+"Map's reading" follows from the plan, the decision records and the code; it is confirmed with the review of this change, not before.
 
-1. **Remote, edge and displays** (`remote`, `peers`, `node`, `vps`, `deck` rows; `hs-deck-status`, `hs-deck-api`, `hs-edge-status`, `hs-edge-api`,
-   `hs-edge-watch`, `deck-serve.py`, `vps/hs-watch.sh`; `/api/remote/claim|push`; `nodes.tsv`, `deck-history`, `/run/hs-deck`). Plan section 11 says
-   "to be assigned in P0". Proposal in ADR 0033 item 22.
-2. **Timers.** 26 timed units. The plan says scheduled changes are jobs, but not whether the timers stay systemd timers or the daemon schedules them,
-   and gives them no step. The map assumes "systemd timer calls the core operation, with its area".
-3. **Boot and shutdown units** (`hs-unlock`, `hs-unlock-alarm`, `bulk-mount`, `hs-disk-erc`, `hs-disk-spindown`, `hs-pci-bind`, `hs-boot-notice`,
-   `hs-shutdown-notice`, `hs-setup-code`, `hs-ext-boot`). Plan 11 gives "bash and core" without saying which part is which.
-4. **Event sources outside the daemon:** the udev rule that starts `hs-disk-event@`, the ZED zedlet, the UPS `NOTIFYCMD`. Plan 4.2 names udev for the
-   access layer, but not whether these hooks keep starting scripts or feed a daemon watcher.
-5. **Measurement tables** in `state.db` (`disks`, `smart`, `baseline`, `samples`, `usage`, `hours`): plan 6.2 says their design is part of health and
-   notifications, which has no step, and does not say whether they stay in `state.db` or go to `history.db`.
-6. **Backed up or rebuildable** for each stored file (plan 6.1): the map lists the groups; the class of most files is still to decide. Today the whole
-   of `/var/lib/hs` is copied as files, the database included (ADR 0034 disagreement 5).
-7. **Lock files beyond the bulk lock** (`/run/hs-backup.lock`, `.backup.lock`, `.remote.lock`, `disk-event.lock`, `event-notify.lock`,
-   `apps-autoupdate.lock`): plan 5.2 names only `/run/hs-bulk.lock` (ADR 0034 disagreement 6).
-8. **Package `sys` rows:** plan 10 says packages need a new way to declare operations before `sys` can go, but names no step and no issue.
-9. **Docs, cheatsheet, testlab, metrics:** `docs build`, `docs verified`, `cheatsheet` rows, `/var/lib/hs/docs-site`, `metrics`, `hs-testlab-nightly`.
-   No owner; probably "stays" (dev or thin tools), to be said.
-10. **`hs-nss-warm`** calls itself temporary; no owner and no end condition.
-11. **Measurement of section 14 is not done:** P0's third part (the baseline numbers in PLAN-core-daemon.md) needs a real server and is not part of
-    this map. Not tested on hardware yet.
-12. **The move of events out of `state.db`** into `history.db` is implied (plan 6.2) but is not a named step or issue (ADR 0033 disagreement 3).
+| # | Gap | Answer | Owner and step | Source |
+|---|---|---|---|---|
+| 1 | **Remote, edge and displays** (`remote`, `peers`, `node`, `vps`, `deck` rows; `hs-deck-status`, `hs-deck-api`, `hs-edge-status`, `hs-edge-api`, `hs-edge-watch`, `deck-serve.py`, `vps/hs-watch.sh`; the routes `/api/remote/claim` and `/api/remote/push`; `nodes.tsv`, `deck-history`, `/run/hs-deck`) | ADR 0033 item 22 is confirmed: the reads and the pairing go to the core, the deck feed to `hobnixd`, `deck-serve.py` stays a server of its own until `hobnix-web` can serve the deck API. The edge-node units stay unchanged until they move | core and `hobnixd`, P7 (after 0.15) | Owner decided. That the changes of these areas are core operations too follows from D1 |
+| 2 | **Timers** | systemd timers stay and start the core operation (through the CLI or the core, plan section 2) of their area. A scheduled change is a job. They keep working while `hobnixd` is stopped. Not timers of this kind: the polling programs that move into the daemon (`hs-event-notify` at P3, and the deck feed `hs-deck-status` by gap 1) | the area of each timer, in that area's step | Owner decided. The two exceptions follow from step P3 and gap 1 |
+| 3 | **Boot and shutdown units** | none of them needs the daemon; [which part is bash and which is core](#boot-and-shutdown-units) | per unit | Map's reading |
+| 4 | **Event sources outside the daemon** (the udev rules that start `hs-disk-event@` and `hs-disk-spindown`, the ZED zedlet, the UPS `NOTIFYCMD`) | the hooks stay, keep firing and start the core operation of their area. The operation they start is the producer of its events (plan 7 rule 4); the `hobnixd` watcher only sends refresh signals. The UPS countdown unit `hs-ups-deadline` stays with its hook | core; storage at P7, UPS with health at P7 | Owner decided (the hooks stay, the daemon only watches). The producer rule is the map's reading |
+| 5 | **Measurement tables** (`disks`, `smart`, `baseline`, `samples`, `usage`, `hours`, with `meta`) | they stay in `state.db` at P2; P2 moves only events, job records and their daily totals to `history.db`. They are backed up, so `state.db` needs a safe SQLite backup too, not only `history.db`. Where they live later is part of the health and notifications design | core; no move in 0.15; design #1380 | Owner decided |
+| 6 | **Backed up or rebuildable** for each stored file (plan 6.1) | [the table below](#backed-up-or-rebuildable) | core | Map's reading |
+| 7 | **Lock files beyond the bulk lock** | [the list below](#lock-files); which of them the core takes over and the fixed order are decided with the job system | core, P2 (#1339, ADR 0034 open point 7) | List: read in the code |
+| 8 | **Package `sys` rows** | packages get a new way to declare operations before `sys` can go; it needs a deprecation release | core package manager, before P8 (#1379) | Map's reading |
+| 9 | **Docs, cheatsheet, testlab, metrics** | `docs build`, `docs verified` and `cheatsheet` **stay** as thin tools; their `user` rows get the Rust front at P5 like all others, and they change when the command list comes from the core (`sys registry`, P5 to P8). `testlab` and `hs-testlab-nightly` **stay** (a development tool). `/var/lib/hs/metrics` is written by `health-check.sh` and moves with health; the `metrics` capability stays Nix | stays; metrics: core, P7 | Map's reading |
+| 10 | **`hs-nss-warm`** | **goes**, after the journal of a real server (`journalctl -t hs-nss-warm --since -7d`) shows no slow lookup over a week. Until then it stays unchanged. Not checked on a server yet | removed by a change of its own, outside the steps of the move | Owner decided |
+| 11 | **Measurement of section 14** | **open.** P0's third part (the baseline numbers in PLAN-core-daemon.md) needs a real server. The script exists (`hs perf baseline`, #1333); the run is a box in the tracker "Hardware test: 0.14" (#1366), not ticked on 2026-11-27. No part is ported before it. Not tested on hardware yet | the owner of the server | - |
+| 12 | **The move of events out of `state.db`** into `history.db` | it is part of step P2, with the event ids kept | core, P2 (#1340) | Plan section 15, step P2 |
+
+### Boot and shutdown units
+
+Map's reading. All stay systemd units, and none may need `hobnixd` to run.
+
+| Unit | Logic | Step |
+|---|---|---|
+| `hs-unlock`, `hs-unlock-alarm` | bash, stays (unlock, ADR 0032 decision 3) | - |
+| `bulk-mount` | bash, stays (boot path of the storage) | - |
+| `hs-pci-bind` | stays the script inside the Nix module: it runs before the pools are imported | - |
+| `hs-setup-code` | stays with the first run (bash) | - |
+| `hs-boot-notice`, `hs-shutdown-notice` | `power-notice.sh` stays bash; it sends through `notify.sh`, which stays for alerts without the daemon | - |
+| `hs-disk-erc`, `hs-disk-spindown` | the logic moves to the core with storage; the unit stays and calls it. `unlock.sh` still starts the units of `/etc/hs/unlock-units` | P7 |
+| `hs-ext-boot` | extension host. Whether the unit stays or the daemon's supervisor starts the enabled services itself is part of that step's design | P3 (#1341; may slip) |
+| `hs-job-reconcile` | see its row in the table of units above | P2, P3 |
+
+### Backed up or rebuildable
+
+The class says what a backup must hold; this table does not change what `scripts/backup.sh` copies today. Classes:
+
+- **backed up:** it cannot be made again, or it is a person's choice.
+- **rebuildable:** the server makes it again; a lost copy costs time, not data.
+- **left out:** kept out of the backup on purpose.
+- **not kept:** in `/run`, gone at a reboot.
+
+**A name that is not listed here is backed up until somebody shows that it can be rebuilt.** The classes are the map's reading from the code and the
+names of the files, except the measurement tables (owner decided). No restore was run for this table. Not tested on hardware yet.
+
+| Stored (below `/var/lib/hs` unless a path is given) | Class |
+|---|---|
+| `state.db`: `events`, `rollups` (move to `history.db` at P2) | backed up |
+| `state.db`: `disks`, `smart`, `baseline`, `samples`, `usage`, `hours`, `meta` | backed up |
+| `state.db`: `live`, `topics`, `heartbeat`, `demand`, `live_delay` | rebuildable (ADR 0026) |
+| `state.db`: `reads` (written by nobody since ADR 0026) | rebuildable |
+| `jobs/<id>.json` | backed up |
+| `api-tokens.json` | backed up |
+| `settings`, `capabilities-on` and `capabilities-off`, `update-channel`, `setup-choice`, `first-run.json` | backed up |
+| `machine.toml.before-*` | backed up |
+| `machine.toml.built`, `last-rebuild-rev`, `last-rebuild-seconds`, `generated/` | rebuildable (from the next rebuild or the installed packages) |
+| `packages/` (installed packages, the repository indexes and their serial floor), `pkg-events` | backed up |
+| `ext`, `ext-svc`, `ext-emit`, `/var/lib/hs-ext`, `/var/lib/private/hs-ext` | backed up (the packages' own state and cursors) |
+| `services.d`, `services.state`, `ports-admin`, `ports-expected`, `gateway-setup.before`, `/var/lib/hs-gateway/acme` | backed up |
+| `notify-channels`, `notify-url`, `notify-rules.d`, `notify-held`, `heartbeat-url`, `matrix-hook`, `media-ntfy`, `event-notify.cursor`, `health.state`, `health-ack`, `expiry` | backed up |
+| `disks/` (mount points of the pool disks) | left out (the data on the disks has its own backup rules) |
+| `detached`, `recovering`, `adopting`, `removals`, `removed`, `incident-paused`, `bulk-closed`, `sync-refused`, `parity-skip`, `parity-limits`, `snapshots-off`, `remote-mounts`, `scrub.state`, `selftest.state`, `disk-tests`, `disk-events`, `spindown-power.tsv` | backed up (marks and history of this disk set) |
+| `disks-seen`, `share-sizes`, `disk-used`, `wear-cache` | rebuildable (a later run records or measures them again) |
+| `disk-key`, `vault-binds`, `vault-header`, `luks-headers`, `zoraxy-admin`, `grafana-admin`, `dc-ca*`, `cf-dns-api-token`, `/var/lib/hs-vault` secrets, `/var/lib/samba/private` | backed up (a secret in the vault only while the vault is open) |
+| `vault-uuid`, `luks-uuids` | backed up; a restore skips them on purpose (`state_skip`) |
+| `restic-password`, `restic-offsite-password`, `backup-offsite.repo`, `backup-offsite.credentials` and their copies in the vault | left out (they protect or name the backup itself) |
+| `backup-offsite.env`, `backup-on`, `backup-off`, `backup-rules/`, `backup-dump` | backed up |
+| `backup.state` | rebuildable (later runs write it again) |
+| `backup-inventory/`, `backup-dc/` | rebuildable on the running server; they stay in the snapshot, because a lost server is rebuilt from that copy |
+| `apps`, `apps-autoupdate.json`, `recipe-*`, `posters`, `blueprints.toml`, `docker-registries.tsv`, `docker-registry-<host>`, `docker-manager-legacy`, `docker-manager-undo`, `unifi*`, `migrate.state` | backed up |
+| `iso/` (while the ISO library is in its default folder) | backed up (an uploaded image may not be available again) |
+| `dhcp-ranges` | rebuildable (`hs net setup` writes it again from the router) |
+| `nodes.tsv`, `vps-key`, `node-key-*`, `tailscale-authkey`, `remote-offers`, `remote-<peer>.cred` | backed up |
+| `deck-history` | rebuildable (it holds the last 24 hours) |
+| `pci-bind.log`, `live-measure-<date>` | backed up (cannot be recorded again) |
+| `docs-site/`, `metrics/`, `reports/`, `testlab/` (runs, ISO cache, golden systems) | rebuildable |
+| `/run/hs-web/*`, `/run/hs/*`, `/run/hs-deck/*`, `/run/hs-ext-cred`, `/run/hs-apps`, `/run/hs-machine-cache` | not kept |
+
+Seen while classifying, read in the code and not in a snapshot: of `/var/lib/hs` the host snapshot leaves out only the disk mount points and the backup's
+own secrets, so rebuildable folders such as `testlab/` (with its cached ISO images, where the test lab is used) are copied too. Leaving them out is a
+change to the backup and is not decided here.
+
+### Lock files
+
+Read in the code on 2026-11-27 (`flock` in `scripts/`, file locks in `rust/`; development tools left out). The column "Takes over" is the map's reading
+and an input for #1339.
+
+| Lock | Held for | Takes over |
+|---|---|---|
+| `/run/hs-bulk.lock` | work that changes the pool: sync, scrub, cache mover, share and disk changes | core job module, the same file as bash (plan 5.2), from P2 |
+| `/run/hs-backup.lock` (`.backup.lock` when `/run` is not writable) | a backup run and other writes to the repository | core, with backup (P7) |
+| `apps-autoupdate.lock` | one automatic update run | core, with apps (P7) |
+| `packages/index/<name>/.lock` | everything that writes a repository index or runs git for it | core package manager (P7) |
+| `testlab/lock` | one test lab run | stays with the test lab |
+| `jobs/<id>.lock` (`job-record.py`, `hobnix job-record`) | one write of one job record | goes when the records are in SQLite (P2) |
+| `api-tokens.json.lock` | one write of the token store | `hobnixd` (P6) |
+| the `.lock` beside the pairing code store (`rust/hobnix-core/src/pair.rs`) | one read and write of the codes | already in the core |
+| the extension state folder itself (`ext_state.py`) | moving a package's state folder | extension host (P3) |
+| `disk-event.lock` | one disk event at a time | core, with storage (P7) |
+| `event-notify.lock` | one notifier run | goes with the notifier (P3) |
+| `.remote.lock` | one mount setup of a remote share | core, with remote (P7) |
+
+`scripts/backup.sh` does not name the bulk lock. Whether any run holds two of these locks at once was not traced; the fixed order of plan 5.2 needs that
+first (#1339).

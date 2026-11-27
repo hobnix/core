@@ -302,7 +302,10 @@ Kept summaries allow some new reports later. What was never saved, or is already
 CPU use, temperatures, disk usage and SMART readings are measurements with their own tables. Today SMART readings are kept 400 days and thinned to one a day
 after 30 (`scripts/state-db.py`); fill levels are kept 400 days. Kept permanently: useful daily disk health and capacity trends, and for temperatures the
 daily low, average and high. Detailed, frequent measurements belong in the metrics system (capability `metrics`, Prometheus). Their design is part of
-health and notifications (section 11).
+health and notifications (section 11, #1380).
+
+**Decided** (2026-11-27): the measurement tables stay in `state.db` in step P2. They cannot be rebuilt, so `state.db` is backed up with SQLite's backup
+support too, not only `history.db`. The health and notifications design says where they live later.
 
 #### Storage, backup, privacy
 
@@ -422,7 +425,11 @@ Each has an owner and a boundary here and gets its detailed design before its mi
 | Package manager | core, daemon for extension services | repositories, signed index, install and update, permissions, extension host, package pages and page blocks; the SDK is only the author's side |
 | Live connections | `hobnix-web` for the browser side, `hobnixd` for who may open one and what it runs | browser terminal, VM console, package terminals and consoles (#1123, #1124), job logs, file transfers: streams, not plain requests |
 | Boot and recovery | bash and core | first setup, locked storage, daemon stopped, failed update |
-| Remote, edge, displays | to be assigned in P0 | peers, nodes, VPS, the deck API: the move must not break them |
+| Remote, edge, displays | core for the reads and the pairing, `hobnixd` for the deck feed (**decided** 2026-11-27, ADR 0033 item 22); moved in P7 | peers, nodes, VPS, the deck API: the move must not break them. `deck-serve.py` stays a server of its own until `hobnix-web` can serve the deck API; the edge-node units stay unchanged until they move |
+
+**Decided** (2026-11-27): systemd timers and the udev, ZED and UPS hooks stay. Each starts the core operation of its area, from the step in which that area
+moves, and works while `hobnixd` is stopped; the daemon only watches for refreshes. The polling programs that move into the daemon (event notifications at
+P3, the deck feed) lose their timers.
 
 ## 12. Rules for all parts
 
@@ -675,12 +682,16 @@ related one: finish, move here, or replace. New issues needed at least for histo
 
 ## 17. Open points
 
-1. The details of history listed at the end of section 6.2.
-2. The local sockets: the poke and the web protocol, their shape and permissions. A socket exists for the live push (`/run/hs/live.sock`).
-3. The list of repair operations that run without a database (section 5.6).
-4. Push for a failed quick job that nobody watches (section 5.5).
-5. `hn` rename: does the Rust CLI start as `hn`, with `hs` as alias?
+None of these is answered yet. Each names the issue that has to answer it (#1337, 2026-11-27). The gaps of the migration map are answered in
+[PLAN-core-daemon-migration.md](PLAN-core-daemon-migration.md#missing-from-the-plan).
+
+1. The details of history listed at the end of section 6.2: #1340.
+2. The local sockets: the poke and the web protocol, their shape and permissions. A socket exists for the live push (`/run/hs/live.sock`). The poke and
+   the daemon: #1341. The web protocol, with the privilege split: #1266.
+3. The list of repair operations that run without a database (section 5.6): #1339.
+4. Push for a failed quick job that nobody watches (section 5.5): #1339.
+5. `hn` rename: does the Rust CLI start as `hn`, with `hs` as alias? Decide before P5: #1381.
 6. German in the remaining bash scripts (`scripts/lib/i18n.sh`, part of the package contract). The web translations are not affected by the English-only
-   CLI; #494 touches package texts.
-7. Python for extensions (section 10).
-8. How the daemon reaches Docker (section 4.2).
+   CLI; #494 touches package texts. #1382.
+7. Python for extensions (section 10): #1383.
+8. How the daemon reaches Docker (section 4.2): #1341.
