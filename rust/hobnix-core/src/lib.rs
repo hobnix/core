@@ -2,6 +2,7 @@
 
 pub mod db;
 pub mod error;
+pub mod events;
 pub mod jobs;
 pub mod log;
 pub mod pair;

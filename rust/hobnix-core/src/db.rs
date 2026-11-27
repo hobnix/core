@@ -19,10 +19,6 @@ const OLDEST_WRITER_DIGITS: usize = 9;
 /// An open state.db that this program may write.
 #[derive(Debug)]
 pub struct StateDb {
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "events.rs, the next step, uses it")
-    )]
     pub(crate) connection: Connection,
 }
 
