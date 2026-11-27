@@ -225,9 +225,9 @@ $PKG repo remove chan
 
 echo "-- show and asset: the plan comes from the verified tag, nothing is installed"
 cd "$R"
-printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > recipes/demo/icon.svg; printf 'PNG' > recipes/demo/shot.png; printf 'secret' > recipes/demo/run.sh.bak
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > recipes/demo/icon.svg; printf 'PNG' > recipes/demo/shot.png; printf 'secret' > recipes/demo/run.sh.bak; head -c 400000 /dev/zero > recipes/demo/big.png
 release v6.0.0 6.0.0 "$WORK/good" ">=1" recipes/demo 'icon = "icon.svg"
-screenshots = ["shot.png"]
+screenshots = ["shot.png", "big.png"]
 description = "A demo."
 [[ask]]
 key = "NAME"
@@ -251,6 +251,7 @@ check "asset gives a screenshot" bash -c "[ \"\$($PKG asset demo shot.png)\" = P
 check "asset refuses a file the manifest does not list" bash -c "! $PKG asset demo run.sh.bak >/dev/null 2>&1"
 check "asset refuses a listed file that is not a picture" bash -c "! $PKG asset demo run.sh >/dev/null 2>&1"
 check "asset refuses a path out of the folder" bash -c "! $PKG asset demo ../index.toml >/dev/null 2>&1"
+check_out "asset refuses a listed picture over the size cap by its size, before reading it" "larger than 307200 bytes" bash -c "$PKG asset demo big.png 2>&1; true"
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/third" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/third.pub")" > "$WORK/evil.signers"
 $PKG repo add bad "$R" --key "$WORK/evil.signers"

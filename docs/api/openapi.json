@@ -10194,6 +10194,73 @@
     }
    }
   },
+  "/pkg/cards": {
+   "get": {
+    "operationId": "pkg.cards",
+    "summary": "what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index of the official signed repository only, - = none)",
+    "x-hs-exit": true,
+    "x-hs-role": "admin",
+    "x-hs-sys": {
+     "words": [
+      "pkg",
+      "cards"
+     ],
+     "script": "pkg.sh",
+     "args": "--cards",
+     "class": "read",
+     "rest": false
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/cards",
+     "kind": "tsv",
+     "ttl": 120,
+     "query": []
+    },
+    "description": "What a store card shows beyond pkg market, one row per package and repository like pkg market. category is one id of config/package-categories.toml or -; icon is ph:<name> (a Phosphor icon) or the file name of an svg icon in the package (served by pkg asset), - = none. category and icon come from package.toml of the newest verified release; a package that cannot be read gives -. verified is the date (YYYY-MM-DD) the index entry says the release last ran on a real server, passed on only for the official repository as the core configures it and signed; - = none (an added or unsigned repository always gives -). The core never writes it.",
+    "responses": {
+     "0": {
+      "description": "ok",
+      "content": {
+       "text/tab-separated-values": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "prefixItems": [
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "name"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "repo"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "category"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "icon"
+           },
+           {
+            "$ref": "#/components/schemas/Field",
+            "title": "verified"
+           }
+          ],
+          "minItems": 5,
+          "maxItems": 5
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "failed; stderr says why, stdout may be empty"
+     }
+    }
+   }
+  },
   "/pkg/index": {
    "get": {
     "operationId": "pkg.index",
@@ -10604,6 +10671,14 @@
      "args": "--show {1} {rest}",
      "class": "read",
      "rest": true
+    },
+    "x-hs-web": {
+     "path": "/api/sys/pkg/show/<name>",
+     "kind": "tsv",
+     "ttl": 60,
+     "query": [
+      "repo"
+     ]
     },
     "parameters": [
      {

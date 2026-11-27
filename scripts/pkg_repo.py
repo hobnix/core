@@ -607,21 +607,36 @@ class Repos:
             if n not in keep and not recent:
                 self.rm_quiet(p)
 
-    def read_at(self, r_name, entry, ref, rel):
-        """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
+    def read_at(self, r_name, entry, ref, rel, limit=None):
+        """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked.
+        limit: a file larger than that many bytes is refused BEFORE it is read (a store picture: nothing big is read on every request)"""
         if not rel or rel.startswith("/") or "\\" in rel or ".." in rel.split("/") or re.match(r"^[A-Za-z]:", rel):
             raise Refused("%s: %r is outside the package folder" % (r_name, rel))
+        too_big = lambda: Refused("%s: %s is larger than %d bytes" % (r_name, rel, limit))
         if not entry.get("_index"):
-            return git("show", "%s:%s/%s" % (ref, entry["path"], rel), cwd=self.clone_dir(r_name))
+            spec = "%s:%s/%s" % (ref, entry["path"], rel)
+            if limit is not None:
+                try:
+                    size = int(git("cat-file", "-s", spec, cwd=self.clone_dir(r_name)).strip() or b"0")
+                except ValueError:
+                    raise Refused("%s: %s is not in the package" % (r_name, rel))
+                if size > limit:
+                    raise too_big()
+            return git("show", spec, cwd=self.clone_dir(r_name))
         base = os.path.realpath(self.verified_dir(r_name, entry))
         full = os.path.realpath(os.path.join(base, rel))
         if os.path.commonpath([base, full]) != base:
             raise Refused("%s: %r is outside the package folder" % (r_name, rel))
         try:
+            if limit is not None and os.path.getsize(full) > limit:
+                raise too_big()
             with open(full, "rb") as f:
-                return f.read()
+                data = f.read() if limit is None else f.read(limit + 1)
         except OSError:
             raise Refused("%s: %s is not in the package" % (r_name, rel))
+        if limit is not None and len(data) > limit:
+            raise too_big()
+        return data
 
     def tags(self, r):
         d = self.clone_dir(r["name"])
@@ -1303,7 +1318,7 @@ class Repos:
         if file not in allowed:
             raise Refused("%s has no store file %s (the icon and the screenshots of its package.toml are served)" % (name, file))
         lim = 20 * 1024 if file == icon else 300 * 1024
-        data = self.read_at(r_name, entry, commit, file)
+        data = self.read_at(r_name, entry, commit, file, limit=lim)      # refused by its size before it is read
         if len(data) > lim:
             raise Refused("%s: %s is larger than %d bytes" % (name, file, lim))
         if file == icon:
@@ -1315,6 +1330,39 @@ class Repos:
         elif not self.pkg.pkg_app.PICTURE.fullmatch(file):
             raise Refused("%s: %s is not a png or webp picture" % (name, file))
         return data
+
+    VERIFIED = re.compile(r"^\d{4}-\d\d-\d\d$")
+
+    OFFICIAL = "official"
+
+    def official(self, r_name):
+        """True for the official repository as config/package-repos.toml names it (a default row, not added) with signed releases"""
+        r = self.all().get(r_name) or {}
+        return r_name == self.OFFICIAL and bool(r.get("default")) and not r.get("unsigned")
+
+    def cards(self):
+        """the lines of `hs sys pkg cards`: what a store card shows beyond pkg market, one line per package and repository (the same rows).
+        package, repo, category, icon (ph:<name> or a file of the package), verified (the date the release last ran on a real server, an optional
+        field of the index entry, only from the official signed repository, - = none). category and icon come from package.toml of the verified release; one that cannot be read gives -."""
+        out = []
+        for pname, rows in sorted(self.catalog(True).items()):
+            for r_name, e, tag, commit in rows:
+                cat, icon = "-", "-"
+                path = str(e.get("path", ""))
+                if not e.get("_unavailable") and re.match(r"^[A-Za-z0-9._/-]+$", path) and ".." not in path.split("/"):
+                    try:
+                        m = tomllib.loads(self.read_at(r_name, e, commit if e.get("_index") else tag, "package.toml").decode("utf-8"))
+                    except Exception:
+                        m = {}
+                    c, i = m.get("category"), m.get("icon")
+                    cat = c if isinstance(c, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c) else "-"
+                    ok = isinstance(i, str) and (self.pkg.pkg_app.ICON_NAME.fullmatch(i) or self.pkg.pkg_app.ICON_FILE.fullmatch(i))
+                    icon = i if ok else "-"
+                # the tested day counts only from the official repository as the core configures it, and signed: an added or unsigned
+                # repository could write any day, so its value is never passed on (the Marketplace then claims nothing)
+                v = e.get("verified") if self.official(r_name) else None
+                out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-"))
+        return out
 
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
@@ -1401,6 +1449,10 @@ def run(pkg, cmd, rest):
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
+        elif cmd == "cards":
+            lines = R.cards()
+            if lines:
+                print("\n".join(lines))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
             # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that

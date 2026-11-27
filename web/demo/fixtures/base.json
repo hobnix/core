@@ -636,6 +636,8 @@
   "recipes/versions": [],
   "pkg/market": [],
   "pkg/states": [],
+  "pkg/cards": [],
+  "pkg/show": [["status", "refused"], ["reason", "Demo mode has no made-up release for this package."]],
   "apps/list": [],
   "apps/health": [],
   "apps/versions": [],
