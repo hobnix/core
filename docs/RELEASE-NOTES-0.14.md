@@ -6,9 +6,9 @@ release. Beta: `v0.14.0-beta.1`.
 ## Read this first
 
 **Nothing of 0.14 has been tested on a real server.** That includes everything in these notes: the new pages, the fixes and the update from 0.13.0.
-The tracker issue [Hardware test: 0.14](https://github.com/hobnix/core/issues/1366) lists the boxes to check on a server, and none is ticked. It may
-not have a box for every change yet. An unticked box is postponed and does not block a release. One fault named below (monthly sums) was seen on a
-server before 0.13.0; its fix was not run on one.
+The tracker issue [Hardware test: 0.14](https://github.com/hobnix/core/issues/1366) lists the boxes to check on a server, and none is ticked. It does
+not have a box for every change. The owner postponed the hardware tests to 0.15; an unticked box does not block a release. One fault named below
+(monthly sums) was seen on a server before 0.13.0; its fix was not run on one.
 
 **On 0.13.0, do not rely on `--dry-run` with the commands below. It was silently dropped or ignored, and the command really ran.**
 
@@ -29,6 +29,13 @@ What changes for you as a server owner:
 - **Monthly sums of extension services work.** On 0.13.0 they were all dropped, for example the plays and watched minutes of Media Hub.
 - **Every package from nixpkgs moves** with this update, not only one.
 - **Authors of Rust extensions:** the SDK is renamed. This is a breaking change.
+
+## Changes since beta.1
+
+- **A capability package's web page works.** Its web declaration in `package.toml` was treated like an app's: a page with a group was refused together
+  with everything else the package declared for the web interface. Its web tables are now checked: the permissions `web.read` and `web.change` are
+  enforced, `hs pkg validate` reports wrong roles and page blocks, and a package whose declared permissions do not cover its web tables is no longer
+  registered ([#1386](https://github.com/hobnix/core/pull/1386)).
 
 ## What is new
 
@@ -114,8 +121,8 @@ To move to the new crates, also change the imports. `Service::start` and `on_eve
 
 ## Upgrade notes
 
-- A beta is a prerelease. A server gets it only if its update channel is `beta` (`hs config set updateChannel beta`). Look first with
-  `hs update --preview`, then run `hs update`. Not tested on hardware yet.
+- A server on the `stable` update channel gets this release with `hs update`. Look first with `hs update --preview`. Not tested on hardware yet.
+- A server that was set to `beta` to try the beta goes back with `hs config set updateChannel stable`.
 - **The nixpkgs pin moved** to a newer revision of `nixos-26.05`, so every package from nixpkgs moves. What else changes with it was not compared.
   SQLite goes from 3.51.2, which has a rare WAL-reset corruption bug, to 3.53.3 ([#1350](https://github.com/hobnix/core/pull/1350)). After the
   update, check that the server boots, `hs` answers, and the web interface and your apps work.
@@ -145,11 +152,15 @@ and same-name packages; long share names; monthly sums; a baseline run; an exten
   web interface cannot delete them and the file manager hides them. This was read from the code, not reproduced.
 - Packages that state no memory or disk need cannot be checked for fit.
 - The new SDK crates are not yet used by the packages in `hobnix/official`.
+- `hs docs build` lists the guide of a capability package under Apps. Read from the code, not run
+  ([#1390](https://github.com/hobnix/core/issues/1390)).
+- `hs event emit` with a payload number too large to store, such as `1e400`, fails and writes no event. Seen on a development PC, not on a server
+  ([#1393](https://github.com/hobnix/core/issues/1393)).
 
 ## Not in this release
 
 - Installing an older version of a package, and holding a package at its version.
-- Other open work of milestone 0.14 is not in this beta.
+- Other open work of milestone 0.14 is not in this release, for example likes and install counts. The Autopilot runner is only a plan.
 - The new core, daemon and job system planned for 0.15. This release has only their design records and migration map
   ([PLAN-core-daemon-migration](PLAN-core-daemon-migration.md)), a build measurement from a development PC, and tests of how app start and stop
   behave today.
