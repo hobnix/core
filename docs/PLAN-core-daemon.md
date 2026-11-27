@@ -1,7 +1,7 @@
 # Plan: one Rust core, a daemon, and thin front ends
 
 Design record. Contributor document, not a guide. Written from design discussions with the maintainer on 2026-11-25. Nothing here is built or run on a
-server. Measured so far: the build on a development PC (section 14.1) and a first part of the baseline on a real server (section 14.2). Nothing of the
+server. Measured so far: the build on a development PC (section 14.1) and the baseline of a real server (section 14.2). Nothing of the
 design is tested on hardware yet.
 
 It extends [PLAN-rust.md](PLAN-rust.md) and ADR 0032 (docs/adr/0032-rust-main-language.md: Rust is the main language). It changes some earlier decisions;
@@ -616,21 +616,29 @@ only the wall time. Not tested on hardware yet.
 
 **Run on the maintainer's server** on 2026-11-27, installed release `v0.13.0-beta.2`, 8 cores. That release has no `hs perf baseline`, so the script ran
 from a separate copy of `develop`, with `HS_BIN` set to the installed `hs.sh` so that the installed reads were timed. The server was not updated.
-**Taken:** the run with no page open and `hs live measure` with a page open. **Open:** the baseline run with a page open, so no CPU or memory number with a
-page open exists yet. It must be taken on the same release with the same apps.
+Both runs of the baseline were taken, 30 minutes each, and `hs live measure` between them. Which page was open is not recorded. Ctrl-C was not tried.
 
-**No page open**, 30 minutes (load 1.62 at the start; 7 of 7 samples saw no open page):
-
-| What | `hs-live` | `hs-web` |
+| What | No page open | One page open |
 |---|---|---|
-| CPU, cores (with everything the service starts) | 0.763 | 0.005 |
-| CPU, cores (the service's own process) | 0.008 | 0.005 |
-| Memory of the service, MiB, average / largest | 192.2 / 233.5 | 269.3 / 270.3 |
-| Memory of the service's own process, MiB, average | 44.3 | 101.3 |
+| Samples that saw an open page | 0 of 7 | 7 of 7 |
+| Load at the start | 1.62 | 2.58 |
+| Whole host, containers and VMs included: CPU, cores | 1.476 | 2.257 |
+| Whole host: processes and threads started a minute | 19209 | 28342 |
+| `hs-live`: CPU, cores (with everything the service starts) | 0.763 | 0.988 |
+| `hs-live`: CPU, cores (the service's own process) | 0.008 | 0.006 |
+| `hs-live`: memory of the service, MiB, average / largest | 192.2 / 233.5 | 200.6 / 238.6 |
+| `hs-live`: memory of its own process, MiB, average | 44.3 | 44.6 |
+| `hs-web`: CPU, cores (with everything the service starts) | 0.005 | 0.276 |
+| `hs-web`: CPU, cores (the service's own process) | 0.005 | 0.034 |
+| `hs-web`: memory of the service, MiB, average / largest | 269.3 / 270.3 | 241.4 / 310.8 |
+| `hs-web`: memory of its own process, MiB, average | 101.3 | 99.4 |
+| Collector: reads a minute | 35.0 | 48.9 |
+| Collector: seconds of read time per second / largest stretch | 0.686 / 2.16 | 0.923 / 2.85 |
+| CPU of the measuring itself, cores | 0.007 | 0.006 |
 
-Neither service restarted. The whole host, containers and VMs included, used 1.476 cores and started 19209 processes and threads a minute; the
-measuring used 0.007 cores. So `hs-live` used about half of the host's CPU time. How many of the started processes are its own is not counted.
-The collector ran 35.0 reads a minute, with 0.686 seconds of read time per second and a largest stretch of 2.16.
+Neither service restarted. The two services together used 0.768 cores with no page open and 1.264 with one, about half of the host's CPU time in both
+runs (52 % and 56 %). The host used 0.781 cores more with a page open; 0.496 of that is in the two services. Where the other 0.285 come from was not
+measured. How many of the started processes are Hobnix's is not counted.
 
 **Page reads:** 21 reads, 34.2 s of wall time and 35.9 s of CPU time in one run each. The split comes from a second run of each read, so its parts do not
 add up to those sums exactly (33.7 s wall, 37.0 s CPU):
@@ -654,7 +662,8 @@ counter steps a minute, 44.4 KiB of payload a minute, 1.2 ms for a commit on ave
 4079.8 KiB).
 
 **Delays that count since the collector first recorded a topic**, not only during the run (median of the last values / worst): change to stored value
-14.6 s / 879 s over 59 topics; stored value to page 9.3 s / 58 s over 19 topics.
+14.6 s / 879 s at the end of the first run and 10.0 s / 879 s at the end of the second, over 59 topics; stored value to page 9.3 s / 58 s over 19 topics,
+the same in both. Only the Live state page records the second one.
 
 One run of each: how much two equal runs differ is not known, so a small later difference says nothing. The release is a beta; a later release on the same
 server also differs in other ways than a port.
