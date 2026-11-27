@@ -2,7 +2,7 @@
 # help: one JSON document with the numbers a status display needs (Stream Deck, wall monitor, Home Assistant)
 # help.de: ein JSON-Dokument mit den Zahlen für eine Statusanzeige (Stream Deck, Wandmonitor, Home Assistant)
 # args: -
-# System command (hs sys deck), read only, needs root for the disk and pool facts (hs-deck.service runs it as root every 10 s and writes
+# System command (hs sys deck), read only, needs root for the disk and pool facts (hs-deck-status.service runs it as root every 60 s and writes
 # /run/hs-deck/deck.json, which scripts/deck-serve.py hands out). No secrets: no names of users, shares, paths or addresses.
 # Counters, not rates: net rx/tx bytes and cpu jiffies are totals since the boot, the client takes two readings and divides by the time between them.
 # A source that cannot be read leaves its key out (null), so a client never shows an old value as a fresh one. The proxyserver sends the same

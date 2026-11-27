@@ -43,7 +43,7 @@ badpy=
 while IFS= read -r c; do
   [ -n "$c" ] || continue
   grep -qxF "$c" <<<"$known" || badpy="$badpy $c"
-done < <(grep -hoE "[\"'](${EMIT_PREFIX})\.[a-z][a-z0-9-]*[\"':]" "${SRC[@]}" | tr -d "\"':" | grep -vxE 'pkg\.(toml|py|json)|code\.json|run\.sh|ext\.service-failed' | sort -u)
+done < <(grep -hoE "[\"'](${EMIT_PREFIX})\.[a-z][a-z0-9-]*[\"':]" "${SRC[@]}" | tr -d "\"':" | grep -vxE 'pkg\.(toml|py|json|sh)|code\.json|run\.sh|ext\.service-failed' | sort -u)
 if [ -z "$badpy" ]; then pass "all Python and Rust codes are listed"; else fail "codes in Python or Rust, not in scripts/lib/error-codes.tsv:$badpy"; fi
 
 echo "-- a code in a variable cannot be checked"

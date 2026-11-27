@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "A service such as Media Hub follows a provider app that restarts or gets another address"
+body  = """A service that uses an integration (Media Hub) follows a provider app that restarts or gets another address, and picks up an address that was not there yet at boot. The service restarts by itself when that happens; an address that changes without a restart of the app can take up to 30 minutes. Not tested on hardware yet."""
