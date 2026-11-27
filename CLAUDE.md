@@ -30,8 +30,11 @@ hobnix/extensions (docs/PLAN-packages.md); the core fetches them with `hs pkg`.
 - **Board:** development and hardware testing are tracked apart. A dev issue: In Review = pull request open; Done = merged and closed (`Closes #N`),
   so milestone progress means "built". The run on a real server is a box in the milestone's tracker issue "Hardware test: <milestone>" (label
   `hardware-test`, no milestone, column Testing while a box is open): `bash scripts/dev/hwtest.sh add <issue> [step ...]` when the PR is merged,
-  `hwtest.sh tick <issue> "<what was seen>"` after a run somebody saw, `hwtest.sh list` is the queue for the server. Never tick a box for a run nobody
-  saw. An unticked box is postponed, not a blocker: it moves on with the next release. Write the "Hardware test" steps into the PR when it is opened.
+  `hwtest.sh tick <issue> "<what was seen>"` after a run somebody saw, `hwtest.sh list` is the queue for the server. A step starts with
+  `[metal]`, `[lab]` or `[lab:<stage>]` (no mark = metal); `tick --box <k>` ticks one box. Never tick a box for a run nobody saw, with one
+  exception: a logged test-lab run (`tick --box <k> --lab <run-id> <commit>`) counts for `[lab]` boxes only, only when the stage covers that
+  step and passed on a commit that contains the change; a metal box still needs somebody who saw the run. The test-lab ticks nothing until it
+  has passed on a real server (#430). An unticked box is postponed, not a blocker: it moves on with the next release. Write the "Hardware test" steps into the PR when it is opened.
   `python3 scripts/dev/untested.py` lists the untested steps per guide.
 
 ## Where the detail is
