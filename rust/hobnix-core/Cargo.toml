@@ -17,3 +17,5 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 hkdf = "0.12"
 sha2 = "0.10"
+# the event writer on state.db (hobnix/core#1336); it links the system SQLite (pkgs/hobnix.nix, scripts/dev/rust-shell.nix)
+rusqlite = { workspace = true }

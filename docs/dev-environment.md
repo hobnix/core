@@ -24,6 +24,8 @@ Add `-v` for a line per test. `grep -n FAIL .work/test-logs/<name>.log` shows wh
 
 Rust: `cargo build` in rust/ (in WSL for a Linux binary), then `scripts/dev/t quick vault-change-rust` runs the shell test against it (skipped without a binary).
 
+hobnix-core links the system SQLite and refuses one with the WAL-reset bug (below 3.51.3, except the fixed 3.50.7 and 3.44.6 lines), and the SQLite of a distribution may be such a one (Debian WSL has 3.46.1). So build and test rust/ with [Nix](https://nixos.org/download/), in the environment of the nixpkgs pin: `nix-shell scripts/dev/rust-shell.nix`, then `cargo ...` in rust/. It has cargo, rustc, clippy, rustfmt, python3 and that SQLite, and a `CARGO_HOME` of its own. `scripts/dev/t quick rust-cargo` and the CI job `rust` use it; the first start downloads about 900 MB from the binary cache.
+
 ## Where each test can run
 
 | Tier | Where | Covers |
@@ -159,9 +161,15 @@ The same model in hobnix/core, hobnix/recipes and hobnix/extensions.
    request is open, Done when it is merged (the issue closes with `Closes #N`). What has to run on a real server is a box in the
    **tracker issue of the milestone**, "Hardware test: <milestone title>" (label `hardware-test`, no milestone, board column Testing while a box
    is open, Done when all are ticked and it closes). One line per merged issue (`- [ ] #N title`), the steps as sub-boxes. At merge:
-   `bash scripts/dev/hwtest.sh add <issue> "step" ...`. After a run somebody saw: `hwtest.sh tick <issue> "what was seen"`, and remove the
-   "Not tested on hardware yet." lines of that change. A change with nothing to run on a server (a decision record, CI, a text) is not added.
-   `hwtest.sh list` is the queue for the next session at the server; `python3 scripts/dev/untested.py --steps` lists the same from the guides'
+   `bash scripts/dev/hwtest.sh add <issue> "step" ...`. A step starts with a mark that says who can run it: `[metal]` (real hardware),
+   `[lab]` (a test-lab VM) or `[lab:<stage>]` (the test-lab stage that covers the step, `a-z`, `0-9`, `-`); no mark counts as `[metal]`, and
+   `add` refuses a mistyped mark. After a run somebody saw: `hwtest.sh tick <issue> "what was seen"` (the issue's line and all its steps), or
+   `hwtest.sh tick <issue> --box <k> "what was seen"` for step `k` only (1 = the first; the issue's line is ticked with its last step).
+   A logged test-lab run counts for `[lab:<stage>]` boxes only, when the stage covers the step and passed on a commit that contains the change:
+   `hwtest.sh tick <issue> --box <k> --lab <run-id> <commit> ["note"]`. The tool cannot check either, so the caller does; the comment says
+   "test-lab" with stage, run id and commit. The test-lab ticks nothing until it has passed on a real server (#430). Remove the
+   "Not tested on hardware yet." lines of a change only after a run on a real server. A change with nothing to run on a server (a decision record, CI, a text) is not added.
+   `hwtest.sh list [milestone] [--lab|--metal]` is the queue for the next session at the server (open boxes by kind, and ticked ones); `python3 scripts/dev/untested.py --steps` lists the same from the guides'
    side (every marker with its heading). A failed run becomes a bug issue linked from the box (it is in the milestone, so the bar drops for a
    real reason). A box that is not ticked is **postponed, not a blocker**: nothing in the release depends on it.
 8. One milestone is *released* at a time, and at most three issues are In Progress. The next milestone may be built on its own long-lived

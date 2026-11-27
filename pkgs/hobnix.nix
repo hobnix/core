@@ -1,7 +1,7 @@
 # The Rust part of the core (rust/, docs/adr/0001-rust-strangler.md): the `hobnix` program that registry rows named rust:<subcommand> run.
 # Locked dependencies, built offline. After changing a dependency in rust/Cargo.toml refresh rust/Cargo.lock (cargo update, commit it);
 # crates from crates.io need no extra hash here because cargoLock.lockFile pins them by checksum.
-{ rustPlatform, lib }:
+{ rustPlatform, lib, pkg-config, sqlite }:
 
 rustPlatform.buildRustPackage {
   pname = "hobnix";
@@ -13,6 +13,12 @@ rustPlatform.buildRustPackage {
   };
   cargoLock.lockFile = ../rust/Cargo.lock;
 
-  # cargo test of the workspace runs in the check phase
+  # the SQLite of the system (rusqlite without `bundled`): the one python links, so both writers of state.db use the same library
+  nativeBuildInputs = [ pkg-config ];
+  buildInputs = [ sqlite ];
+
+  # cargo test of the workspace runs in the check phase. Not the one test of the linked SQLite: a server whose nixpkgs has an older one must
+  # still build (the writer refuses it at runtime). The CI job `rust` runs that test against the SQLite of the pin.
+  checkFlags = [ "--skip=the_linked_sqlite_has_the_wal_reset_fix" ];
   meta.mainProgram = "hobnix";
 }

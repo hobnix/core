@@ -148,7 +148,8 @@ for d in "$repo"/packages/*/ "$repo"/capabilities/*/ "$state"/packages/current/*
   n=$(basename "$d")
   [ ! -f "$tmp/en/$(slug "$n").md" ] || continue
   cp "${d}guide.md" "$tmp/en/$(slug "$n").md"
-  if [ -f "${d}capability.toml" ]; then g=Extensions; else g=Apps; fi
+  # a capability package has no capability.toml: its package.toml says the kind, and it counts like an extension
+  if [ -f "${d}capability.toml" ] || grep -qsE '^kind[[:space:]]*=[[:space:]]*"capability"' "${d}package.toml"; then g=Extensions; else g=Apps; fi
   printf 'en\t%s\t%s\n' "$g" "$n" >> "$cats"
 done
 commands_page en > "$tmp/en/commands.md"

@@ -56,7 +56,7 @@ jobs:
             # capmx: the Nix interface capability packages build against (decision O9 of docs/PLAN-capabilities-repo.md); the matrix runs with --vendor then
             echo "$files" | grep -qE '^(capabilities/(default\.nix|options\.nix|nix-api-level)|configuration\.nix|scripts/pkg[^/]*\.py|scripts/lib/pkg_vendor\.py|scripts/dev/(nix-matrix|official-ref)\.sh)$' || capmx=false
             echo "$files" | grep -qE '^(scripts/pkg|scripts/lib/|scripts/recipes/|packages/|capabilities/|config/package-repos\.toml|scripts/dev/(official-ref|core-names-check)|tests/(core-names|official-ref|profile-core-only|fixtures/official)|tests/lib|tests/pkg|\.github/workflows/ci\.yml)' || pkg=false
-            echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^config/nixpkgs-pin\.toml$|^scripts/dev/rust-size-ratchet\.sh$|^tests/rust-size-ratchet\.(sh|tsv)$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$' || rust=false
+            echo "$files" | grep -qE '^rust/|^\.github/workflows/ci\.yml$|^config/nixpkgs-pin\.toml$|^scripts/dev/rust-size-ratchet\.sh$|^tests/rust-size-ratchet\.(sh|tsv)$|^scripts/vault-change\.sh$|^tests/vault-change(-rust)?\.sh$|^tests/lib\.sh$|^scripts/lib/job\.sh$|^scripts/job-record\.py$|^scripts/jobs-change\.sh$|^scripts/job-reconcile\.sh$|^tests/job-(record|reconcile)(-rust)?\.sh$|^tests/jobs-change\.sh$|^scripts/dev/rust-shell\.nix$|^scripts/state-db\.py$|^scripts/lib/(event-kinds\.tsv|pkg_events\.py|pkg-events/)|^tests/event-writer-(rust|concurrent)\.sh$|^tests/event-writer-sides\.py$' || rust=false
             # ext: the extension crates of hobnix/official are built against the SDK (job ext-crates): only its folder, the workspace files, this workflow
             echo "$files" | grep -qE '^rust/(hobnix-ext-sdk/|hobnix-pkg(-[a-z]+)?/|Cargo\.(toml|lock)$)|^\.github/workflows/ci\.yml$' || ext=false
           fi
@@ -94,6 +94,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: rust
@@ -107,15 +108,35 @@ jobs:
           rustup toolchain install "$ch" --profile minimal --component clippy,rustfmt
           rustc --version
           echo "channel=$ch" >> "$GITHUB_OUTPUT"
+      # hobnix-core links the system SQLite and refuses one with the WAL-reset bug, which the one of ubuntu-latest may have: what compiles
+      # or tests it runs in scripts/dev/rust-shell.nix, the rustc and the SQLite of the nixpkgs pin
+      - name: Read the nixpkgs pin
+        run: bash ../scripts/dev/nixpkgs-pin.sh github-env >> "$GITHUB_ENV"
+      # The same revision and the same cache entry as the `nixos` job: no download per run. scripts/dev/rust-shell.nix takes the unpacked
+      # folder from HOBNIX_NIXPKGS_DIR.
+      - uses: actions/cache@v4
+        with:
+          path: ~/nixpkgs.tar.gz
+          key: nixpkgs-${{ env.NIXPKGS_REV }}
+      - name: Unpack the pinned nixpkgs
+        run: |
+          [ -s ~/nixpkgs.tar.gz ] || curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o ~/nixpkgs.tar.gz "https://github.com/NixOS/nixpkgs/archive/$NIXPKGS_REV.tar.gz"
+          mkdir -p "$RUNNER_TEMP/nixpkgs"
+          tar -xzf ~/nixpkgs.tar.gz -C "$RUNNER_TEMP/nixpkgs" --strip-components=1
+          echo "HOBNIX_NIXPKGS_DIR=$RUNNER_TEMP/nixpkgs" >> "$GITHUB_ENV"
+      - uses: cachix/install-nix-action@v27
       - name: Format
         run: cargo fmt --check
       - name: Clippy
+        shell: nix-shell ../scripts/dev/rust-shell.nix --run "bash -eo pipefail {0}"
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Tests
+        shell: nix-shell ../scripts/dev/rust-shell.nix --run "bash -eo pipefail {0}"
         run: cargo test --locked --all-features
       - name: Docs (every rustdoc warning fails)
         env:
           RUSTDOCFLAGS: -D warnings
+        shell: nix-shell ../scripts/dev/rust-shell.nix --run "bash -eo pipefail {0}"
         run: cargo doc --locked --no-deps --all-features
       - name: File sizes (scripts/dev/rust-size-ratchet.sh, baseline tests/rust-size-ratchet.tsv)
         run: bash ../scripts/dev/rust-size-ratchet.sh check
@@ -141,12 +162,19 @@ jobs:
       # an extension builds the SDK alone: serde_json without hobnix-core's preserve_order (hobnix-pkg/src/wire pins the wire lines either way)
       - name: Tests of the SDK built alone
         run: cargo test --locked -p hobnix-pkg -p hobnix-pkg-command -p hobnix-pkg-service -p hobnix-ext-sdk
+      - name: Build the program
+        shell: nix-shell ../scripts/dev/rust-shell.nix --run "bash -eo pipefail {0}"
+        run: cargo build --locked
       - name: tests/vault-change.sh against the binary, and shell and Rust side by side (tests/vault-change-rust.sh)
-        run: |
-          cargo build --locked
-          HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/vault-change-rust.sh
+        run: HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/vault-change-rust.sh
       - name: tests/job-record.sh, job-reconcile.sh and jobs-change.sh against the binary, and python and Rust side by side (tests/job-record-rust.sh)
         run: HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/job-record-rust.sh
+      # in the nix shell so that the python writer beside the Rust one links the same SQLite, as on a server
+      - name: The event log written by python and Rust, side by side and at the same time
+        shell: nix-shell ../scripts/dev/rust-shell.nix --run "bash -eo pipefail {0}"
+        run: |
+          HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/event-writer-rust.sh
+          HOBNIX_BIN=$PWD/target/debug/hobnix bash ../tests/event-writer-concurrent.sh
       - name: SDK examples, also built statically for musl (tests/ext-sdk-rust.sh runs its musl block when the target is installed)
         run: |
           rustup target add x86_64-unknown-linux-musl

@@ -1,6 +1,6 @@
 # 0033: One Rust core, one daemon, thin front ends
 
-Status: Accepted (2026-11-26) by the owner. The **Decided** items are rules. The acceptance names no Planned item, Proposal or open point: none of them is confirmed by it. Confirmed separately by the owner on 2026-11-26: **P-h** (item 21, one writer of the database).
+Status: Accepted (2026-11-26) by the owner. The **Decided** items are rules. The acceptance names no Planned item, Proposal or open point: none of them is confirmed by it. Confirmed separately by the owner on 2026-11-26: **P-h** (item 21, one writer of the database); on 2026-11-27: **item 22** (owner of remote, edge and displays, #1337).
 Issue: none filed yet (milestone 0.15 "Core and Jobs", step P0 of docs/PLAN-core-daemon.md); the web server record #1266 moves into the same milestone
 and is written with this record or beside it. Related: ADR 0001, 0006, 0012, 0026, 0032, ADR 0034 (job system), docs/PLAN-rust.md,
 docs/PLAN-core-daemon-migration.md (the migration map).
@@ -112,7 +112,8 @@ What is true today, checked in the code of the branch `0.14` on 2026-11-26 (path
 
 22. **Owner of remote, edge and displays** (plan section 11 says "to be assigned in P0"): the migration map proposes the core for the reads and the
     pairing (it is already in `hobnix-core` `pair`), the daemon for the deck feed (`hs-deck-status`, today every 20 s), and `deck-serve.py` staying a
-    separate small server until `hobnix-web` can serve the deck API. Not decided.
+    separate small server until `hobnix-web` can serve the deck API. **Confirmed by the owner on 2026-11-27** (#1337): these areas move in step P7, and the
+    edge-node units stay unchanged until then.
 
 ## What changes in older records on acceptance
 
@@ -143,6 +144,7 @@ The text of these records is not edited. Each has a Status note that points here
 3. German in the remaining bash scripts (`scripts/lib/i18n.sh`, part of the package contract; plan 17.6, ADR 0025).
 4. Python for extensions once PLAN-rust step 8 removes Python from the server image: keep, let packages bring their own, or end it (plan 17.7).
 5. How the daemon reaches Docker (plan 17.8).
-6. Whether events, totals and jobs leave `state.db` for `history.db`, and what stays in `state.db` (Context, disagreement 3).
-7. The owner of remote, edge and displays (Proposal 22).
+6. Whether events, totals and jobs leave `state.db` for `history.db`, and what stays in `state.db` (Context, disagreement 3). Answered: they leave in step
+   P2 (#1340); the measurement tables stay (owner, 2026-11-27, #1337).
+7. The owner of remote, edge and displays (Proposal 22): answered, item 22 is confirmed (2026-11-27).
 8. Not tested on hardware yet.

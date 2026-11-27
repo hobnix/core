@@ -9,6 +9,7 @@ use hobnix_core::Error;
 use hobnix_core::log::{self, Level};
 use std::process::ExitCode;
 
+mod events;
 mod jobs;
 mod pair;
 mod secrets;
@@ -20,6 +21,7 @@ fn run(args: &[String]) -> hobnix_core::Result<u8> {
             println!("hobnix {}", hobnix_core::version());
             Ok(hobnix_core::EXIT_OK)
         }
+        Some("event-emit") => events::run(rest),
         Some("job-record") => jobs::run(rest),
         Some("secrets") => secrets::run(rest),
         Some("remote-codes") => pair::codes(rest),

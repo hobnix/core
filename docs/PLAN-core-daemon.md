@@ -1,7 +1,8 @@
 # Plan: one Rust core, a daemon, and thin front ends
 
 Design record. Contributor document, not a guide. Written from design discussions with the maintainer on 2026-11-25. Nothing here is built or run on a
-server. The only measurement so far is the build in section 14.1, made on a development PC. Not tested on hardware yet.
+server. Measured so far: the build on a development PC (section 14.1) and the baseline of a real server (section 14.2). Nothing of the
+design is tested on hardware yet.
 
 It extends [PLAN-rust.md](PLAN-rust.md) and ADR 0032 (docs/adr/0032-rust-main-language.md: Rust is the main language). It changes some earlier decisions;
 they stay in force until the records of section 16 replace them.
@@ -304,7 +305,10 @@ Kept summaries allow some new reports later. What was never saved, or is already
 CPU use, temperatures, disk usage and SMART readings are measurements with their own tables. Today SMART readings are kept 400 days and thinned to one a day
 after 30 (`scripts/state-db.py`); fill levels are kept 400 days. Kept permanently: useful daily disk health and capacity trends, and for temperatures the
 daily low, average and high. Detailed, frequent measurements belong in the metrics system (capability `metrics`, Prometheus). Their design is part of
-health and notifications (section 11).
+health and notifications (section 11, #1380).
+
+**Decided** (2026-11-27): the measurement tables stay in `state.db` in step P2. They cannot be rebuilt, so `state.db` is backed up with SQLite's backup
+support too, not only `history.db`. The health and notifications design says where they live later.
 
 #### Storage, backup, privacy
 
@@ -424,7 +428,11 @@ Each has an owner and a boundary here and gets its detailed design before its mi
 | Package manager | core, daemon for extension services | repositories, signed index, install and update, permissions, extension host, package pages and page blocks; the SDK is only the author's side |
 | Live connections | `hobnix-web` for the browser side, `hobnixd` for who may open one and what it runs | browser terminal, VM console, package terminals and consoles (#1123, #1124), job logs, file transfers: streams, not plain requests |
 | Boot and recovery | bash and core | first setup, locked storage, daemon stopped, failed update |
-| Remote, edge, displays | to be assigned in P0 | peers, nodes, VPS, the deck API: the move must not break them |
+| Remote, edge, displays | core for the reads and the pairing, `hobnixd` for the deck feed (**decided** 2026-11-27, ADR 0033 item 22); moved in P7 | peers, nodes, VPS, the deck API: the move must not break them. `deck-serve.py` stays a server of its own until `hobnix-web` can serve the deck API; the edge-node units stay unchanged until they move |
+
+**Decided** (2026-11-27): systemd timers and the udev, ZED and UPS hooks stay. Each starts the core operation of its area, from the step in which that area
+moves, and works while `hobnixd` is stopped; the daemon only watches for refreshes. The polling programs that move into the daemon (event notifications at
+P3, the deck feed) lose their timers.
 
 ## 12. Rules for all parts
 
@@ -606,6 +614,62 @@ On a server, the first number to get is today's build: in the repository (`/etc/
 ./pkgs/hobnix.nix {}' --no-out-link` under `time`. If the result is already in the store, add `--check` to build it again. With the Nix daemon `time` gives
 only the wall time. Not tested on hardware yet.
 
+### 14.2 Baseline of a real server, before any port
+
+**Run on the maintainer's server** on 2026-11-27, installed release `v0.13.0-beta.2`, 8 cores. That release has no `hs perf baseline`, so the script ran
+from a separate copy of `develop`, with `HS_BIN` set to the installed `hs.sh` so that the installed reads were timed. The server was not updated.
+Both runs of the baseline were taken, 30 minutes each, and `hs live measure` between them. Which page was open is not recorded. Ctrl-C was not tried.
+
+| What | No page open | One page open |
+|---|---|---|
+| Samples that saw an open page | 0 of 7 | 7 of 7 |
+| Load at the start | 1.62 | 2.58 |
+| Whole host, containers and VMs included: CPU, cores | 1.476 | 2.257 |
+| Whole host: processes and threads started a minute | 19209 | 28342 |
+| `hs-live`: CPU, cores (with everything the service starts) | 0.763 | 0.988 |
+| `hs-live`: CPU, cores (the service's own process) | 0.008 | 0.006 |
+| `hs-live`: memory of the service, MiB, average / largest | 192.2 / 233.5 | 200.6 / 238.6 |
+| `hs-live`: memory of its own process, MiB, average | 44.3 | 44.6 |
+| `hs-web`: CPU, cores (with everything the service starts) | 0.005 | 0.276 |
+| `hs-web`: CPU, cores (the service's own process) | 0.005 | 0.034 |
+| `hs-web`: memory of the service, MiB, average / largest | 269.3 / 270.3 | 241.4 / 310.8 |
+| `hs-web`: memory of its own process, MiB, average | 101.3 | 99.4 |
+| Collector: reads a minute | 35.0 | 48.9 |
+| Collector: seconds of read time per second / largest stretch | 0.686 / 2.16 | 0.923 / 2.85 |
+| CPU of the measuring itself, cores | 0.007 | 0.006 |
+
+Neither service restarted. The two services together used 0.768 cores with no page open and 1.264 with one, about half of the host's CPU time in both
+runs (52 % and 56 %). The host used 0.781 cores more with a page open; 0.496 of that is in the two services. Where the other 0.285 come from was not
+measured. How many of the started processes are Hobnix's is not counted.
+
+**Page reads:** 21 reads, 34.2 s of wall time and 35.9 s of CPU time in one run each. The split comes from a second run of each read, so its parts do not
+add up to those sums exactly (33.7 s wall, 37.0 s CPU):
+
+| Part | Wall, s | CPU, s | Share of CPU |
+|---|---|---|---|
+| command dispatcher | 5.1 | 6.9 | 19 % |
+| external tools (777 calls) | 7.7 | 4.6 | 12 % |
+| rest (the script, its shells, Python, `jq`, tools called by full path) | 20.9 | 25.6 | 69 % |
+
+The slowest reads (wall / CPU, seconds): shares overview 10.5 / 11.1 (9.9 / 10.6 of it in the rest, 8 tool calls), system doctor 8.0 / 7.7 (276 tool
+calls), status 1.9 / 4.0, container list 1.7 / 0.4, pool disks 1.4 / 1.5, job list 1.2 / 1.0. The one read with a non-zero exit is the doctor report,
+which ends with 1 when one of its checks reports a problem. A call spends about 0.2 to 0.45 s of wall time and 0.29 to 0.43 s of CPU in the dispatcher.
+Time outside the external tools is most of the CPU time; how much of it a port removes was not measured.
+
+**Change to page**, `hs live measure`, 10 minutes: 60 probes, none lost, 59 with a stream open, the collector did not restart. The latency is 0 ms at
+the median and 95th percentile and 9 ms at most. **0 does not mean no time:** the script counts from the end of the program that writes the probe and
+turns a negative difference into 0, so here the web server mostly had the change before that program had exited. The write took 75 ms at the median
+(126 ms at most) from start to exit. This number cannot show a gain below that. Database writes: 17.9 stored reads, 12.0 heartbeats and 29.7 change
+counter steps a minute, 44.4 KiB of payload a minute, 1.2 ms for a commit on average, none over 100 ms; `state.db` did not grow (2620 KiB, write-ahead log
+4079.8 KiB).
+
+**Delays that count since the collector first recorded a topic**, not only during the run (median of the last values / worst): change to stored value
+14.6 s / 879 s at the end of the first run and 10.0 s / 879 s at the end of the second, over 59 topics; stored value to page 9.3 s / 58 s over 19 topics,
+the same in both. Only the Live state page records the second one.
+
+One run of each: how much two equal runs differ is not known, so a small later difference says nothing. The release is a beta; a later release on the same
+server also differs in other ways than a port.
+
 ## 15. Steps and milestone
 
 Each step keeps the ADR 0001 method: characterization test first, old and new side by side for one release, a short way back. Reads move before
@@ -677,12 +741,16 @@ related one: finish, move here, or replace. New issues needed at least for histo
 
 ## 17. Open points
 
-1. The details of history listed at the end of section 6.2.
-2. The local sockets: the poke and the web protocol, their shape and permissions. A socket exists for the live push (`/run/hs/live.sock`).
-3. The list of repair operations that run without a database (section 5.6).
-4. Push for a failed quick job that nobody watches (section 5.5).
-5. `hn` rename: does the Rust CLI start as `hn`, with `hs` as alias?
+None of these is answered yet. Each names the issue that has to answer it (#1337, 2026-11-27). The gaps of the migration map are answered in
+[PLAN-core-daemon-migration.md](PLAN-core-daemon-migration.md#missing-from-the-plan).
+
+1. The details of history listed at the end of section 6.2: #1340.
+2. The local sockets: the poke and the web protocol, their shape and permissions. A socket exists for the live push (`/run/hs/live.sock`). The poke and
+   the daemon: #1341. The web protocol, with the privilege split: #1266.
+3. The list of repair operations that run without a database (section 5.6): #1339.
+4. Push for a failed quick job that nobody watches (section 5.5): #1339.
+5. `hn` rename: does the Rust CLI start as `hn`, with `hs` as alias? Decide before P5: #1381.
 6. German in the remaining bash scripts (`scripts/lib/i18n.sh`, part of the package contract). The web translations are not affected by the English-only
-   CLI; #494 touches package texts.
-7. Python for extensions (section 10).
-8. How the daemon reaches Docker (section 4.2).
+   CLI; #494 touches package texts. #1382.
+7. Python for extensions (section 10): #1383.
+8. How the daemon reaches Docker (section 4.2): #1341.
