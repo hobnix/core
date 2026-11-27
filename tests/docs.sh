@@ -9,6 +9,10 @@ FIX=$ROOT/tests/fixtures/pkgtree
 # a package installed from a repository brings its guide.md (the real packages are checked in their own repositories)
 export HS_STATE_DIR=$WORK/state
 mkdir -p "$HS_STATE_DIR/packages/current" && cp -r "$FIX/packages/fixapp" "$HS_STATE_DIR/packages/current/"
+# a capability package has package.toml only, no capability.toml
+mkdir -p "$HS_STATE_DIR/packages/current/fixcap"
+printf 'name = "fixcap"\nkind = "capability"\n' > "$HS_STATE_DIR/packages/current/fixcap/package.toml"
+printf '# Fixture capability\n\nA guide of a capability package, for the test of the page groups.\n' > "$HS_STATE_DIR/packages/current/fixcap/guide.md"
 B="bash $SCRIPTS/docs-build.sh --out $OUT"
 REG=$SCRIPTS/lib/registry.tsv
 DOCS=$ROOT/docs
@@ -127,6 +131,10 @@ if pages.get("install", {}).get("file") != "install.md":
 for n in ("Guides", "Reference"):
     if n not in names:
         bad.append("group missing: " + n)
+group_of = {p["slug"]: g["name"] for g in info["groups"] for p in g["pages"]}
+for slug, group in (("fixapp", "Apps"), ("fixcap", "Extensions")):
+    if group_of.get(slug) != group:
+        bad.append("the guide of %s is under %s, not %s" % (slug, group_of.get(slug), group))
 print("; ".join(bad))
 PY
 )
