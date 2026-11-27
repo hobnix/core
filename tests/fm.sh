@@ -54,6 +54,18 @@ fmsel Avatar -- plan copy --from disk:data-04 --path shares/media/movies --to di
 rm -f "$HS_LOCKED_MARKER"
 echo > "$HS_CAPABILITIES_FILE"; fm locations; check_eq "no capability storage: refused" 1 "$rc"; echo storage > "$HS_CAPABILITIES_FILE"
 
+echo "-- a share with a long name (issue 1245: up to 80 characters, the most Samba takes)"
+L42=data-02-communityapplicationsappdatabackup; L80=$(printf 'a%.0s' $(seq 1 80)); L81=${L80}a
+mkdir -p "$P/shares/$L42" "$P/shares/$L80" "$P/shares/$L81"; echo x > "$P/shares/$L42/f.txt"
+fm locations
+[ -n "$(loc "share:$L42")" ] && [ -n "$(loc "share:$L80")" ] && pass "shares of 42 and 80 characters are listed" || fail "long shares: $out"
+[ -z "$(loc "share:$L81")" ] && pass "81 characters: not listed" || fail "81 listed: $out"
+fm ls "share:$L42"; check_eq "a share of 42 characters can be opened" 0 "$rc"; has f.txt && pass "its file is listed" || fail "ls long: $out"
+fm ls "share:$L81"; check_eq "81 characters: refused" 1 "$rc"
+fm ls "share:-$L42"; check_eq "a leading dash: refused" 1 "$rc"
+fm ls "share:$L42/.."; check_eq "a slash in the name: refused" 1 "$rc"
+rm -rf "$P/shares/$L42" "$P/shares/$L80" "$P/shares/$L81"
+
 echo "-- pair (the same-files rule)"
 fm pair disk:data-04 pool:bulk;     check_eq "disk and its pool: refused" 1 "$rc"; reason | grep -q "^Same files as data-04" && pass "reason names the disk" || fail "pair reason: $out"
 fm pair pool:bulk disk:data-04;     check_eq "pool and its disk: refused (other direction)" 1 "$rc"

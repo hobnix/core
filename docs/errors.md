@@ -10,7 +10,7 @@ A refused or failed plan or start prints `code<TAB><name>` beside `status` and `
 
 The one list is `scripts/lib/error-codes.tsv`: one line per code with the columns `code`, `layer`, `meaning`, `text` and `fix`. A script may print only a code that is listed there (`tests/error-codes.sh` fails otherwise). Add the line in the same change that adds the `refuse_code`, then run `python3 scripts/errors-doc-gen.py write`.
 
-- `run` codes are set by the web server (scripts/web-serve.py) when the script gave no status line.
+- `run` codes are set by the web server (scripts/web-serve.py): when the script gave no status line, or when the server refused a request before any script ran (`share.name-too-long`; such an answer has `error` and `code`).
 - `script` codes are printed by a change script through `refuse_code <code> [<reason>]` (scripts/lib/ui.sh): `status`, `reason` (the given text, else the text below), `fix` (when the list has one) and `code`. A plain `refuse "<text>"` means the code `refused`.
 - A code is `<area>.<what>`, lower case, digits and `-`. It never changes meaning; a rename keeps the old name as an alias for one release.
 
@@ -288,6 +288,22 @@ A commands.tsv row without the flag proto names a [[binary]] program.
 - Text: This package starts its program the wrong way; it cannot be installed.
 - Fix: none
 
+### binary.drift
+
+The commands.tsv rows for a [[binary]] program differ from the rows the SDK's command macro built into it.
+
+- Layer: script
+- Text: The command list of this package does not match its program.
+- Fix: none
+
+### binary.table
+
+The command table that the SDK's command macro built into a [[binary]] program is damaged (not closed, too long, not UTF-8, a forbidden character) or there is a second one.
+
+- Layer: script
+- Text: The command list inside the program of this package is damaged.
+- Fix: none
+
 ### binary.undeclared
 
 A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it.
@@ -298,7 +314,7 @@ A compiled program, or a non-script service exec, is started from a package with
 
 ### binary.sdk-pin
 
-repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N).
+repo-check --release: the Cargo.toml of a package does not take an SDK crate (hobnix-pkg, hobnix-pkg-command, hobnix-pkg-service or the deprecated hobnix-ext-sdk) from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N).
 
 - Layer: script
 - Text: This package is not ready for a release: its extension SDK is not pinned to a core release.
@@ -1159,6 +1175,14 @@ The kind of share is not shares or sensitive.
 - Layer: script
 - Text: The kind is shares or sensitive.
 - Fix: none
+
+### share.name-too-long
+
+The web server refused a change because a share name is too long (a new share: 41 characters; a share that exists: 80).
+
+- Layer: run
+- Text: The share name is too long.
+- Fix: `hs share <share> rename <new>`
 
 ### share.needs-zfs
 
@@ -2886,6 +2910,38 @@ A required part is neither on the server nor offered by a repository.
 
 - Layer: script
 - Text: A required part is not available.
+- Fix: none
+
+### pkg.core-too-old
+
+Install or update was asked for a package whose requires_core is above the API level of this core.
+
+- Layer: script
+- Text: The package needs a newer core: update the server first.
+- Fix: `hs update`
+
+### pkg.core-too-new
+
+Install or update was asked for a package whose requires_core_max is below the API level of this core.
+
+- Layer: script
+- Text: The package does not support this core yet: wait for a release of the package that does.
+- Fix: none
+
+### pkg.other-repo
+
+Install was asked for a package whose name is installed from another repository (or from one that is gone).
+
+- Layer: script
+- Text: A package of this name is installed from another repository: remove it first to switch.
+- Fix: `hs pkg remove <name>`
+
+### pkg.core-range
+
+The requires_core or requires_core_max of a package is not in a valid form.
+
+- Layer: script
+- Text: The package states its core range in a form this server does not accept.
 - Fix: none
 
 ### blueprint.value-missing

@@ -43,7 +43,10 @@ en	Contributing	PLAN-storage-nas
 en	Contributing	PLAN-extensions-access
 en	Contributing	PLAN-package-sdk
 en	Contributing	PLAN-rust
+en	Contributing	PLAN-autopilot
 en	Contributing	PLAN-core-daemon
+en	Contributing	PLAN-core-daemon-migration
+en	Contributing	PLAN-0.14
 en	Contributing	PLAN-jobs
 en	Contributing	PLAN-workloads
 en	Contributing	events
@@ -68,6 +71,7 @@ en	Contributing	RELEASE-NOTES-0.10
 en	Contributing	RELEASE-NOTES-0.11
 en	Contributing	RELEASE-NOTES-0.12
 en	Contributing	RELEASE-NOTES-0.13
+en	Contributing	RELEASE-NOTES-0.14
 en	Contributing	PLAN-docker-instances
 en	Contributing	PLAN-web-design
 en	Contributing	PLAN-selfservice

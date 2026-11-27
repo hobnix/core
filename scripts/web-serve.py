@@ -20,6 +20,8 @@ This file is the whole HTTP side of the entry page:
   GET  /api/proxy/status  the VPS status document (machine.toml proxyStatusUrl, env HS_WEB_PROXY_URL; 404 while not configured), session needed
   GET  /api/docs/index|page/<lang>/<slug>|search?q=  the guides (capability docs; `hs docs build` writes them), session needed
   GET  /api/poster/<file>  a poster the web interface drew ($HS_STATE_DIR/posters, name checked), session needed
+  GET  /api/pkg/asset/<repo>/<name>/<file>  the svg icon or a png/webp screenshot of a package (`hs sys pkg asset`), names checked, type checked
+                      against the bytes, at most 300 KB, sandboxed; session and the role of that row needed
   GET  /theme.css     the colour tokens derived from machine.toml `webAccent`
   GET  /favicon.svg   the logo with that accent (the ring follows light/dark)
   GET  anything else  the built frontend (web/dist), index.html for unknown paths
@@ -557,6 +559,60 @@ def _run(cmd, stdin=None, timeout=10):
 _run_plain = _run      # tests replace _run with a fake; while they do, plans go through that fake and the plan cache is off (see _change)
 
 
+def pkg_asset_type(file, data):
+    """the content type of a package picture, or None: the name says the type and the first bytes must agree (the browser never sniffs)"""
+    if file.endswith(".png"):
+        return "image/png" if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+    if file.endswith(".webp"):
+        return "image/webp" if data[:4] == b"RIFF" and data[8:12] == b"WEBP" else None
+    if file.endswith(".svg"):
+        head = data.lstrip(b"\xef\xbb\xbf \t\r\n")[:5].lower()
+        return "image/svg+xml" if head.startswith((b"<svg", b"<?xml")) else None
+    return None
+
+
+_pkg_assets = {}       # (repo, name, file) -> (time, type, bytes): a page of cards asks for every icon at once; 300 s, at most 200 kept
+_pkg_assets_lock = threading.Lock()
+
+
+def pkg_asset(hs, repo, name, file):
+    """-> (content type, bytes) of a package picture (hs sys pkg asset), (None, b"") when it is refused, too big or not the picture it says"""
+    key = (repo, name, file)
+    with _pkg_assets_lock:
+        hit = _pkg_assets.get(key)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1], hit[2]
+    # at most PKG_ASSET_MAX + 1 bytes are read: a bigger answer is cut off and refused, never held in memory whole; 30 s at most
+    try:
+        p = subprocess.Popen([hs, "sys", "pkg", "asset", name, file, "--repo", repo], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, env=_command_env())
+    except (OSError, subprocess.SubprocessError):
+        return None, b""
+    timer = threading.Timer(30, p.kill)
+    timer.start()
+    try:
+        data = p.stdout.read(PKG_ASSET_MAX + 1)
+        if len(data) > PKG_ASSET_MAX:
+            p.kill()
+        rc = p.wait(timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        p.kill()
+        return None, b""
+    finally:
+        timer.cancel()
+        p.stdout.close()
+    if rc != 0 or not data or len(data) > PKG_ASSET_MAX:
+        return None, b""
+    ctype = pkg_asset_type(file, data)
+    if not ctype:
+        return None, b""
+    with _pkg_assets_lock:
+        if len(_pkg_assets) >= 200:
+            _pkg_assets.pop(min(_pkg_assets, key=lambda k: _pkg_assets[k][0]), None)
+        _pkg_assets[key] = (time.time(), ctype, data)
+    return ctype, data
+
+
 def _client_gone(sock):
     """True when the browser closed the connection (it aborted the request): readable and a peek reads nothing. poll, not select: select
     raises for a descriptor above 1024; an error we cannot read is "not gone" (the plan runs to its end)."""
@@ -1049,7 +1105,15 @@ NAME = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,63}$"
 APP = r"^[a-z0-9][a-z0-9_-]{0,40}$"      # an app (compose project) in the Docker container; logs and files of an app may hold secrets
 UNIT = r"^hs-[A-Za-z0-9@._-]{1,80}$"
 GROUP = r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$"     # group names may hold spaces (Domain Admins); the path segment is unquoted first
-FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
+PKG_NAME = r"^[a-z][a-z0-9-]{0,40}$"      # a package and a repository (the names of scripts/lib/pkg_index.py)
+PKG_REPO = r"^[a-z][a-z0-9-]{0,40}$"
+# a picture of a package: relative, at most four folders, no segment starts with a dot (so no . or ..), svg (the icon) or png/webp (screenshots)
+PKG_ASSET = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}){0,3}\.(svg|png|webp)$"
+PKG_ASSET_MAX = 300 * 1024      # the largest screenshot pkg_repo.py serves (an icon is at most 20 KB)
+FM_LOC = r"^(disk:data-[0-9]{1,3}|pool:(bulk|fast)|cache:bulk|share:[a-z0-9][a-z0-9-]{0,79}|temp:[a-z0-9][a-z0-9-]{0,31})$"     # a place of the file manager
+# a share that EXISTS: up to 80 characters, the most Samba takes. A NEW name is at most 41 (SHARE below); older adoptions made longer ones.
+SHARE_EXISTING = r"^[a-z0-9][a-z0-9-]{0,79}$"
+SHARE_READ = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,79}$"       # the reads of one share: the characters of NAME
 POOL_NAME = r"^[a-z][a-z0-9]{0,11}$"     # a pool name (hs pool: lower case, at most 12 characters; reserved words are refused by the scripts)
 LEGACY_POOLS = [("bulk", "data", "-", "-"), ("fast", "apps", "zfs", "-")]     # no `hs sys pool list` yet: the two fixed pools (kind - = unknown)
 
@@ -1160,10 +1224,10 @@ READS = {
     ("backup", "shares"): {"kind": "tsv", "ttl": 30, "topic": "backup-shares"},
     ("shares", "overview"): {"kind": "tsv", "ttl": 30, "topic": "shares-overview"},
     ("shares", "list"): {"kind": "tsv", "ttl": 30},
-    ("shares", "acl"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "visible"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "mounts"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
-    ("shares", "history"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
+    ("shares", "acl"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "visible"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "mounts"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
+    ("shares", "history"): {"kind": "tsv", "ttl": 30, "args": [SHARE_READ]},
     ("users", "list"): {"kind": "tsv", "ttl": 30, "topic": "users-list"},
     ("users", "groups"): {"kind": "tsv", "ttl": 30, "topic": "users-groups"},
     ("vault", "list"): {"kind": "tsv", "ttl": 60, "topic": "vault-list"},
@@ -1174,7 +1238,7 @@ READS = {
     ("ports", "list"): {"kind": "tsv", "ttl": 60, "topic": "ports-list"},
     ("dns", "list"): {"kind": "tsv", "ttl": 60, "topic": "dns-list"},
     ("cache", "state"): {"kind": "tsv", "ttl": 15},
-    ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [r"^[a-z0-9][a-z0-9-]{0,40}$"]},     # per share: limit, default, skip (share-parity.sh --state)
+    ("share", "parity", "state"): {"kind": "tsv", "ttl": 10, "args": [SHARE_EXISTING]},     # per share: limit, default, skip (share-parity.sh --state)
     ("share", "parity", "refused"): {"kind": "tsv", "ttl": 10},     # the shares the last parity sync stopped for (share-parity.sh --refused)
     ("system", "config"): {"kind": "text", "ttl": 60, "topic": "system-config"},
     ("disk", "results"): {"kind": "tsv", "ttl": 30, "args": [NAME]},
@@ -1221,6 +1285,14 @@ READS = {
     # the Marketplace: everything installable and the repositories it comes from (pkg-change.sh does the changes)
     ("pkg", "market"): {"kind": "tsv", "ttl": 30, "topic": "pkg-market"},
     ("pkg", "states"): {"kind": "tsv", "ttl": 30, "topic": "pkg-states"},   # the lifecycle stage of every package (ADR 0027)
+    ("pkg", "cards"): {"kind": "tsv", "ttl": 120},   # category, icon and tested date of every package (the store cards); the page re-reads it on pkg-market
+    # does an app that is not installed fit this server (pkg-fit.sh): free memory and disk space move, so the page re-reads it with the cards.
+    # ondemand: only a page that shows it makes it run (no warm-up: idle CPU), and no answer older than the ttl is given ("free right now")
+    ("pkg", "fit"): {"kind": "tsv", "ttl": 60, "ondemand": True},
+    # one package from its newest verified release (the package page); the pictures it names come from /api/pkg/asset/<repo>/<name>/<file>
+    ("pkg", "show"): {"kind": "tsv", "ttl": 60, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
+    # the versions the repository's index lists for one package (the package page); it changes with a fetch
+    ("pkg", "history"): {"kind": "tsv", "ttl": 120, "args": [PKG_NAME], "query": {"repo": (PKG_REPO, "--repo")}},
     ("apps", "list"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},
     ("apps", "health"): {"kind": "tsv", "ttl": 30, "topic": "apps-health"},
     ("apps", "versions"): {"kind": "tsv", "ttl": 30, "topic": "apps-list"},   # package, offered and running version and the update policy of every installed app (apps-version.sh)
@@ -1263,7 +1335,7 @@ READS = {
 # Like READS this is a closed list: per area the argument patterns that are allowed (alternatives; each argument must match completely).
 # The script behind it repeats every check at start, and a plan that has a danger line only starts with its confirm_name typed.
 CT = r"^[a-z][a-z0-9-]{0,40}$"
-SHARE = r"^[a-z0-9][a-z0-9-]{0,40}$"
+SHARE = r"^[a-z0-9][a-z0-9-]{0,40}$"      # a NEW share (add, rename --to); one that exists: SHARE_EXISTING
 ONOFF = r"^(on|off)$"
 LABEL = r"^[A-Za-z0-9._-]{1,40}$"
 PARITY_FOLDER = r"^[A-Za-z0-9._ -]{1,80}(/[A-Za-z0-9._ -]{1,80}){0,6}$"     # a folder inside a share (share-parity.sh checks again, no ..)
@@ -1305,9 +1377,9 @@ CONFIG_SET = r"^(" + CONFIG_KEYS + r")=[A-Za-z0-9._#:/ ,\[\]-]{0,80}$"     # one
 CT_PATH = r"^(?!.*\.\.)/[A-Za-z0-9._/-]{0,200}$"
 SHARE_PATH = r"^(?!.*\.\.)/?[A-Za-z0-9_][A-Za-z0-9._/ -]{0,200}$"
 UIDGID = r"^[0-9]{1,7}:[0-9]{1,7}$"
-SHARE_ACCESS = r"^[a-z0-9][a-z0-9-]{0,40}=(read|write|full)$"
+SHARE_ACCESS = r"^[a-z0-9][a-z0-9-]{0,79}=(read|write|full)$"
 SID_LEVEL = r"^S-1-[0-9]{1,12}(-[0-9]{1,12}){1,15}=(none|read|write|full)$"
-KEPT = r"^[a-z0-9][a-z0-9-]{0,40}\.deleted-[0-9]{8}$"
+KEPT = r"^[a-z0-9][a-z0-9-]{0,79}\.deleted-[0-9]{8}$"
 DISKID = r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}$"                 # sda, nvme0n1, ata-WDC_WD40EFRX_WD-1234 (no '/', no '..')
 DISKIDS = r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}(,[A-Za-z0-9][A-Za-z0-9._:+-]{0,100}){0,15}$"
 FSTYPE = r"^(ext4|xfs|btrfs)$"
@@ -1444,7 +1516,7 @@ CHANGES = {
              {"fixed": [MEMBER, r"^move$"], "opts": {"--path": (DISKPATH, False), "--to": (MEMBER, False)}},
              # another disk (USB, hot-plug): mounted read-only and shared by temp-disk.sh, copied into a share, ejected
              {"fixed": [TEMP_PART, r"^temp-mount$"], "opts": {"--name": (TEMP_NAME, False)}},
-             {"fixed": [TEMP_NAME, r"^temp-copy$"], "opts": {"--to": (SHARE, False)}},
+             {"fixed": [TEMP_NAME, r"^temp-copy$"], "opts": {"--to": (SHARE_EXISTING, False)}},
              [TEMP_NAME, r"^temp-eject$"]],
     # run a recipe as a job with the stored answers or the defaults; a recipe that needs something typed is refused by the plan (recipe-change.sh)
     # the services and their routes on the reverse proxy (services-change.sh): apply (red when a route goes public, changes or goes away), adopt, import, forget one
@@ -1555,30 +1627,30 @@ CHANGES = {
                {"fixed": [r"^init$"], "opts": {"--disk": (DISKID, False)}},     # make a free disk the backup disk (red: the kernel name of the disk is typed)
                [r"^drill$", r"^--count$", r"^[0-9]{1,2}$"],
                [r"^browse$", r"^--to$", ONOFF],
-               [r"^toggle$", r"^--name$", NAME, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
+               [r"^toggle$", r"^--name$", SHARE_READ, r"^--kind$", r"^(shares|sensitive|ct)$", r"^--to$", ONOFF],
                [r"^offsite-now$"], [r"^offsite-off$"],
                # the guided off-site target (backup-change.sh offsite-config): keys and passwords are lines on stdin, never an argument
                {"fixed": [r"^offsite-config$"], "stdin": True,
                 "opts": {"--kind": (r"^(s3|rest|sftp|folder|typed)$", False), "--endpoint": (OFFW, False), "--bucket": (OFFW, False), "--prefix": (OFFW, False),
                          "--url": (OFFW, False), "--user": (OFFW, False), "--host": (OFFW, False), "--port": (r"^[0-9]{1,5}$", False),
                          "--path": (OFFW, False), "--repo": (OFFW, False)}}],
-    "shares": [[SHARE, r"^(snapshot|repair)$"],
-               [SHARE, r"^snapshot$", r"^--label$", LABEL],
-               [SHARE, r"^(backup|cache|auto)$", r"^--to$", ONOFF],
-               [SHARE, r"^rollback$", r"^--snapshot$", SNAP],
+    "shares": [[SHARE_EXISTING, r"^(snapshot|repair)$"],
+               [SHARE_EXISTING, r"^snapshot$", r"^--label$", LABEL],
+               [SHARE_EXISTING, r"^(backup|cache|auto)$", r"^--to$", ONOFF],
+               [SHARE_EXISTING, r"^rollback$", r"^--snapshot$", SNAP],
                # parity settings of a share (share-parity.sh): skip needs the folder name typed as --confirm, limit off the share name
-               [SHARE, r"^parity-(skip|keep)$", r"^--folder$", PARITY_FOLDER],
-               [SHARE, r"^parity-limit$", r"^--to$", PARITY_LIMIT],
+               [SHARE_EXISTING, r"^parity-(skip|keep)$", r"^--folder$", PARITY_FOLDER],
+               [SHARE_EXISTING, r"^parity-limit$", r"^--to$", PARITY_LIMIT],
                # forms (web/src/forms/shares): create, permissions, rename, delete, purge a kept folder, restore from the backup
                {"fixed": [SHARE, r"^add$"],
                 "opts": {"--kind": (r"^(shares|sensitive)$", False), "--tier": (r"^(bulk|fast)$", False), "--pool": (POOL, False), "--ct": (CT, False), "--path": (CT_PATH, False), "--as": (UIDGID, False)}},
-               {"fixed": [SHARE, r"^perm$"], "opts": {"--set": (SID_LEVEL, True)}},
-               [SHARE, r"^visibility$", r"^--to$", r"^(visible|hidden)$"],
-               [SHARE, r"^rename$", r"^--to$", SHARE],
-               [SHARE, r"^delete$"],
+               {"fixed": [SHARE_EXISTING, r"^perm$"], "opts": {"--set": (SID_LEVEL, True)}},
+               [SHARE_EXISTING, r"^visibility$", r"^--to$", r"^(visible|hidden)$"],
+               [SHARE_EXISTING, r"^rename$", r"^--to$", SHARE],
+               [SHARE_EXISTING, r"^delete$"],
                [KEPT, r"^purge$"],
                [KEPT, r"^undelete$"],      # bring a kept folder back as the share of its old name (a rename; nothing is overwritten)
-               {"fixed": [SHARE, r"^restore$"], "opts": {"--snapshot": (r"^(latest|[A-Za-z0-9]{1,64})$", False), "--path": (SHARE_PATH, False)}}],
+               {"fixed": [SHARE_EXISTING, r"^restore$"], "opts": {"--snapshot": (r"^(latest|[A-Za-z0-9]{1,64})$", False), "--path": (SHARE_PATH, False)}}],
     "users": [[NAME, r"^(lock|unlock)$"],
               {"fixed": [USER_NEW, r"^user-add$"], "opts": {"--full": (FULL_NAME, False), "--group": (GROUP, True)}, "stdin": True},     # the password: one line on stdin; --group: existing groups to join
               {"fixed": [NAME, r"^password$"], "stdin": True},
@@ -1632,7 +1704,7 @@ CHANGES = {
                [r"^(remove|test)$", NOTIFY_CHANNEL],
                [r"^migrate$"]],
 }
-CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,64}$")
+CONFIRM_RE = re.compile(r"^[A-Za-z0-9._: -]{1,97}$")     # the longest: a kept folder, 80 + .deleted-YYYYMMDD
 
 
 # ─────────────────────── extension packages: reads and changes from their manifests ───────────────────────
@@ -1823,6 +1895,32 @@ def validate_change(body):
             return None
         stdin = b"".join(n.encode("utf-8", "surrogateescape") + b"\0" for n in sel)
     return area, args, confirm, stdin
+
+
+def share_name_refusal(body):
+    """-> why a refused change was refused when a share name is too long (code share.name-too-long), else None. Only names of allowed
+    characters count: anything else stays the general refusal. It only words the answer, it never allows anything."""
+    area, args = body.get("area"), body.get("args")
+    if area not in ("shares", "users") or not isinstance(args, list) or len(args) < 2 or not all(isinstance(a, str) for a in args):
+        return None
+    names = []      # (the name, True = it would be a new share)
+    if area == "shares":
+        name, action = args[0], args[1]
+        if action in ("purge", "undelete"):
+            kept = re.fullmatch(r"(.*)\.deleted-[0-9]{8}", name)
+            name = kept.group(1) if kept else ""
+        names.append((name, action == "add"))
+        if action == "rename" and args[2:3] == ["--to"]:
+            names += [(a, True) for a in args[3:4]]
+    elif args[1] == "group-add":
+        names = [(v.partition("=")[0], False) for f, v in zip(args[2:], args[3:]) if f == "--access"]
+    for name, new in names:
+        if len(name) > (41 if new else 80) and re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+            if new:
+                return "The share name is too long: a new share name has at most 41 characters."
+            return ("The share name is longer than 80 characters, the most Samba takes. Give the share a shorter name on the server: "
+                    "hs share <share> rename <new>")
+    return None
 
 
 CHANGE_LIMIT = 60     # seconds a plan or start may take in _change
@@ -2070,7 +2168,7 @@ class Reads:
                 age = time.time() - hit[0]
                 if age < ttl:
                     return hit[1][0], hit[1][1], age
-                if age < min(ttl * self.cfg.stale_factor, self.cfg.stale_max):
+                if age < min(ttl * self.cfg.stale_factor, self.cfg.stale_max) and not spec.get("ondemand"):
                     self.refresh_async(spec, argv, key)
                     return hit[1][0], hit[1][1], age
         code, obj = self.fetch(spec, argv, key)
@@ -2195,7 +2293,7 @@ class Reads:
             key = tuple(argv)
             # a resolved string topic belongs to the live collector, not the warm-up; a mapping without a match has no topic and can be warmed
             is_topic = isinstance(spec.get("topic"), str)
-            if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache"):
+            if key not in done and spec["ttl"] > 0 and not is_topic and not spec.get("nocache") and not spec.get("ondemand"):
                 done.add(key)
                 out.append((spec, argv, key, every))
         for words in WARM:
@@ -3230,6 +3328,8 @@ def make_handler(app):
                 return self._json(code, obj)
             if path.startswith("/api/poster/"):
                 return self._poster(urllib.parse.unquote(path[len("/api/poster/"):]))
+            if path.startswith("/api/pkg/asset/"):
+                return self._pkg_asset(path[len("/api/pkg/asset/"):])
             if path.startswith("/api/docs/"):
                 return self._docs(path[len("/api/docs/"):], urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
             if path == "/api/changes/seen":
@@ -3266,6 +3366,27 @@ def make_handler(app):
             with open(full, "rb") as f:
                 data = f.read()
             self._headers(200, "image/png", len(data), (("Content-Disposition", 'inline; filename="%s"' % name), ("Cache-Control", "private, max-age=300")))
+            if self.command != "HEAD":
+                self.wfile.write(data)
+
+        def _pkg_asset(self, rest):
+            """GET /api/pkg/asset/<repo>/<name>/<file>: the svg icon or a screenshot of a package (hs sys pkg asset, the role of that row). The bytes
+            come from a repository and are not trusted: the names are checked, the size is capped, the type comes from the name and must match
+            the first bytes (nosniff), and the answer runs nothing: an svg opened on its own is sandboxed by its own CSP."""
+            s = self._session()
+            if not s:
+                return self._json(401, {"error": "not signed in"})
+            parts = [urllib.parse.unquote(x) for x in rest.split("/")]
+            repo, name, file = (parts[0], parts[1], "/".join(parts[2:])) if len(parts) >= 3 else ("", "", "")
+            if not (re.fullmatch(PKG_REPO, repo) and re.fullmatch(PKG_NAME, name) and re.fullmatch(PKG_ASSET, file)):
+                return self._json(404, {"error": "no such picture"})
+            if not self._allowed(s, ["pkg", "asset", name, file]):
+                return
+            ctype, data = pkg_asset(cfg.hs, repo, name, file)
+            if not ctype:
+                return self._json(404, {"error": "no such picture"})
+            self._headers(200, ctype, len(data), (("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"),
+                                                  ("Content-Disposition", 'inline; filename="%s"' % file.rsplit("/", 1)[-1])))
             if self.command != "HEAD":
                 self.wfile.write(data)
 
@@ -3791,6 +3912,9 @@ def make_handler(app):
                 return self._json(403, {"error": "csrf"})
             ch = validate_change(body)
             if ch is None:
+                why = share_name_refusal(body)
+                if why:
+                    return self._json(400, {"error": why, "code": "share.name-too-long"})
                 return self._json(400, {"error": "That change is not allowed."})
             area, args, confirm, stdin = ch
             if area == "pool" and not pool_change_ok(cfg.hs, args):

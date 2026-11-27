@@ -36,7 +36,7 @@ ALLOWED_KEYS = ("language", "timeZone", "keyMap", "icons", "loginMessage", "webA
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")   # C0, DEL, C1 (U+0085 too), line and paragraph separators: splitlines() breaks on them
 MAX_KEY, MAX_TEXT, MAX_LONG = 64, 300, 2000
 LONG_FIELDS = ("description", "description_de")
-TOP_KEYS = ("name", "version", "kind", "title", "title_de", "description", "description_de", "requires_core", "audience", "roles",
+TOP_KEYS = ("name", "version", "kind", "title", "title_de", "description", "description_de", "requires_core", "requires_core_max", "audience", "roles",
             "icon", "category", "upstream", "app_version", "screenshots", "renamed_from")
 TOP_TABLES = ("blueprint", "docker", "machine", "settings", "answers", "meta")
 SCALARS = (str, int, float, bool)
@@ -358,7 +358,8 @@ def listing(R, pkg, lang="en"):
             ver = str(m.get("version", ""))
             st = "new" if n not in have else ("update" if _nums(have[n].get("version", "0")) < _nums(ver) else "applied")
             rq = re.match(r"^>=(\d+)$", str(m.get("requires_core", "")))
-            if rq and int(rq.group(1)) > pkg.api_level():
+            hi = m.get("requires_core_max")      # the optional upper bound (an API level, inclusive)
+            if (rq and int(rq.group(1)) > pkg.api_level()) or (isinstance(hi, int) and not isinstance(hi, bool) and hi < pkg.api_level()):
                 st = "waits"
             bp = m.get("blueprint") or {}
             names = [x for k in LISTS for x in (bp.get(k) if isinstance(bp.get(k), list) else [])] + (["docker"] if "docker" in m else [])

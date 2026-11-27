@@ -8,7 +8,7 @@ pub mod pair_host;
 pub mod secret;
 pub mod secrets;
 
-pub use error::{Error, Result, EXIT_MISSING, EXIT_OK, EXIT_REFUSED};
+pub use error::{EXIT_MISSING, EXIT_OK, EXIT_REFUSED, Error, Result};
 pub use secret::Secret;
 
 /// Version of this build of the Rust part.

@@ -1,21 +1,69 @@
 [workspace]
-resolver = "2"
-members = ["hobnix-core", "hobnix-cli", "hobnix-ext-sdk"]
+resolver = "3"
+members = ["hobnix-core", "hobnix-cli", "hobnix-pkg", "hobnix-pkg-command", "hobnix-pkg-service", "hobnix-pkg-macros", "hobnix-ext-sdk"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "AGPL-3.0-or-later"
 publish = false
+# The oldest rustc that must build these crates (cargo refuses an older one, clippy's incompatible_msrv flags newer std API): hobnix/official
+# builds its extensions against the SDK with its own pinned toolchain (1.94.1, its rust-toolchain.toml; CI job ext-crates checks it). The
+# toolchain of this workspace is newer (rust-toolchain.toml, the rustc of the nixpkgs pin). Raise this only together with official's pin.
+rust-version = "1.94"
 
+# Each version once; a crate writes `name = { workspace = true }` and may add features. serde_json's `preserve_order` is NOT set here:
+# hobnix-core asks for it (its lines are byte-identical to the shell and python they replace, which keep insertion order), and cargo then
+# turns it on for every crate of that build. The SDK's wire lines do not depend on it (hobnix-pkg/src/wire writes sorted keys; a test pins that).
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hobnix-core = { path = "hobnix-core" }
+# The package SDK (docs/PLAN-package-sdk.md). An extension takes them by git tag from this repository (ADR 0031); inside the git checkout
+# these paths resolve, so hobnix-ext-sdk (the deprecated re-export) finds the crates it wraps.
+hobnix-pkg = { path = "hobnix-pkg" }
+hobnix-pkg-command = { path = "hobnix-pkg-command" }
+hobnix-pkg-service = { path = "hobnix-pkg-service" }
+hobnix-pkg-macros = { path = "hobnix-pkg-macros" }
+# The macro crate hobnix-pkg-macros (feature `macros` of hobnix-pkg-command; a package without the feature builds none of these). All three
+# were in Cargo.lock already, through serde_derive; the macro crate adds syn's `full` feature (it parses functions, not only derive input).
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "3", features = ["full"] }
+# Compile-fail tests of the macros (docs/CODE-PRACTICES.md "Rust: procedural macros"): a dev-dependency, never in a program.
+trybuild = "1"
+
+# docs/CODE-PRACTICES.md "Rust: lints". CI runs clippy with -D warnings, so "warn" fails the build. Single restriction lints only, never
+# a whole restriction or nursery group. A file that would need a rewrite carries `#![expect(clippy::x, reason = "ratchet #1307")]`.
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+elided_lifetimes_in_paths = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+many_single_char_names = "allow"
+missing_errors_doc = "allow"
+# restriction lints, one by one
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
 todo = "warn"
+unimplemented = "warn"
 dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+indexing_slicing = "warn"
+string_slice = "warn"
+exit = "warn"
+mem_forget = "warn"
+
+# A wrapping integer is a bug in release too (debug builds check anyway). panic stays "unwind": the SDK's command runner catches a panicking handler (the service runner does not).
+[profile.release]
+overflow-checks = true
+panic = "unwind"

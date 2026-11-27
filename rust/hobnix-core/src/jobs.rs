@@ -3,6 +3,16 @@
 //! The contract is scripts/job-record.py, byte for byte: the same file names, the same JSON layout, the same
 //! messages. Where that program does something that looks accidental it is mirrored on purpose (marked "mirrored").
 //! The two things that touch the machine, `systemctl is-active` and the boot time, sit behind [`System`] so tests use fakes.
+#![expect(
+    clippy::indexing_slicing,
+    clippy::string_slice,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::excessive_nesting,
+    reason = "ratchet #1307: ported line by line from job-record.py (byte-identical output); checked positions and ranges, to be rewritten with get() and try_from"
+)]
 
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -12,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// Records beyond the newest KEEP_COUNT are removed when they are also older than KEEP_DAYS.
+/// Records beyond the newest `KEEP_COUNT` are removed when they are also older than `KEEP_DAYS`.
 pub const KEEP_COUNT: usize = 200;
 pub const KEEP_DAYS: f64 = 30.0;
 /// The values of `--source`.
@@ -153,6 +163,7 @@ pub trait System {
 }
 
 /// The real machine: `HS_SYSTEMCTL` (split like shlex) and `HS_UPTIME_FILE` (default /proc/uptime) as in job-record.py.
+#[derive(Debug)]
 pub struct RealSystem;
 
 impl System for RealSystem {
@@ -369,21 +380,20 @@ fn now_iso() -> String {
 fn random_suffix() -> String {
     let mut letters = String::new();
     let mut buf = [0u8; 32];
-    if let Ok(mut f) = fs::File::open("/dev/urandom") {
-        if f.read_exact(&mut buf).is_ok() {
-            for b in buf {
-                // 208 = 8 * 26: drop the bytes that would make some letters likelier
-                if b < 208 && letters.len() < 4 {
-                    letters.push(char::from(b'a' + b % 26));
-                }
+    if let Ok(mut f) = fs::File::open("/dev/urandom")
+        && f.read_exact(&mut buf).is_ok()
+    {
+        for b in buf {
+            // 208 = 8 * 26: drop the bytes that would make some letters likelier
+            if b < 208 && letters.len() < 4 {
+                letters.push(char::from(b'a' + b % 26));
             }
         }
     }
     if letters.len() < 4 {
         let mut x = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(1)
+            .map_or(1, |d| d.as_nanos() as u64)
             ^ (u64::from(std::process::id()) << 32)
             | 1;
         while letters.len() < 4 {
@@ -485,12 +495,13 @@ fn list_json(dir: &Path) -> Option<Vec<String>> {
     let rd = fs::read_dir(dir).ok()?;
     Some(
         rd.filter_map(|e| e.ok()?.file_name().into_string().ok())
-            .filter(|n| n.ends_with(".json"))
+            .filter(|n| n.ends_with(".json")) // exactly as job-record.py: `.JSON` is not a record
             .collect(),
     )
 }
 
 /// The directory of records and its rate limit.
+#[derive(Debug)]
 pub struct Store {
     pub dir: PathBuf,
     /// Seconds between two step (or progress) writes of one job (`HS_JOB_RATE`, default 1).
@@ -609,7 +620,7 @@ impl Store {
         let _ = fs::remove_file(self.lock_path(id));
     }
 
-    /// Remove records beyond the newest KEEP_COUNT that are also older than KEEP_DAYS, with their `<id>.*` files.
+    /// Remove records beyond the newest `KEEP_COUNT` that are also older than `KEEP_DAYS`, with their `<id>.*` files.
     fn retention(&self) {
         let Some(names) = list_json(&self.dir) else {
             return;
@@ -649,7 +660,10 @@ impl Store {
     }
 
     /// `new`: write a queued record, return its id.
-    #[allow(clippy::too_many_arguments)] // one argument per flag of `new`; a struct would only move them
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one argument per flag of `new`; a struct would only move them"
+    )]
     pub fn new_record(
         &self,
         slug: &str,
@@ -731,7 +745,7 @@ impl Store {
     }
 
     /// `wait`: a question is pending, the state is `waiting`.
-    pub fn wait(&self, id: &str, q: &Question) -> Result<()> {
+    pub fn wait(&self, id: &str, q: &Question<'_>) -> Result<()> {
         if !ASK_KINDS.contains(&q.kind) {
             return Err(failed(format!("bad question kind: {}", q.kind)));
         }
@@ -848,7 +862,7 @@ impl Store {
         Ok(())
     }
 
-    /// `error`: name why an ended job ended (ADR 0018: input_timeout, input_rejected). Only a record that ended; state and exit stay.
+    /// `error`: name why an ended job ended (ADR 0018: `input_timeout`, `input_rejected`). Only a record that ended; state and exit stay.
     /// `code` (ADR 0028) is the catalogue code of the refusal that ended the job; absent when none is known.
     pub fn set_error(
         &self,
@@ -1021,11 +1035,11 @@ impl Store {
                 _ => rec.queued.as_deref(),
             };
             let began = pick.and_then(parse_iso);
-            if let (Some(b), Some(began)) = (boot, began) {
-                if began as f64 >= b {
-                    // started after this boot (a job may be between its record and its unit): not a restart victim
-                    return Ok(None);
-                }
+            if let (Some(b), Some(began)) = (boot, began)
+                && began as f64 >= b
+            {
+                // started after this boot (a job may be between its record and its unit): not a restart victim
+                return Ok(None);
             }
             if sys.unit_alive(rec.unit.as_deref().unwrap_or("")) {
                 return Ok(None);
@@ -1071,8 +1085,7 @@ mod tests {
             let n = COUNTER.fetch_add(1, Ordering::SeqCst);
             let nanos = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
+                .map_or(0, |d| d.as_nanos());
             let p = std::env::temp_dir().join(format!(
                 "hobnix-jobs-test-{}-{n}-{nanos}",
                 std::process::id()
@@ -1191,12 +1204,18 @@ mod tests {
         let text = String::from_utf8(s.get(&id).unwrap()).unwrap();
         assert!(text.contains("\"key\": \"badx key\""));
         s.set_key(&id, "pool sync tank").unwrap();
-        assert!(String::from_utf8(s.get(&id).unwrap())
-            .unwrap()
-            .contains("\"key\": \"pool sync tank\""));
+        assert!(
+            String::from_utf8(s.get(&id).unwrap())
+                .unwrap()
+                .contains("\"key\": \"pool sync tank\"")
+        );
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "ratchet #1307: one long scenario, to be split"
+    )]
     fn new_writes_the_documented_record() {
         let t = Tmp::new();
         let s = t.store();
@@ -1258,10 +1277,11 @@ mod tests {
                 .to_string(),
             "bad source: bogus"
         );
-        assert!(s
-            .new_record("!!!", "d", "", "cli", "", "", "")
-            .unwrap()
-            .contains("-job-"));
+        assert!(
+            s.new_record("!!!", "d", "", "cli", "", "", "")
+                .unwrap()
+                .contains("-job-")
+        );
     }
 
     #[test]
@@ -1358,11 +1378,12 @@ mod tests {
         let s = t.store();
         assert_eq!(s.load("nope").unwrap_err().to_string(), "bad job id");
         let id = "20240101-120000-gone-abcd";
-        assert!(s
-            .run(id)
-            .unwrap_err()
-            .to_string()
-            .starts_with("cannot lock record: "));
+        assert!(
+            s.run(id)
+                .unwrap_err()
+                .to_string()
+                .starts_with("cannot lock record: ")
+        );
         fs::create_dir_all(&s.dir).unwrap();
         #[cfg(unix)]
         assert_eq!(
@@ -1398,7 +1419,7 @@ mod tests {
         let t = Tmp::new();
         let s = t.store();
         fs::create_dir_all(&s.dir).unwrap();
-        let old = SystemTime::now() - Duration::from_secs(40 * 86_400);
+        let old = SystemTime::now() - Duration::from_hours(40 * 24);
         let make = |name: &str, when: SystemTime| {
             let f = fs::File::create(s.dir.join(name)).unwrap();
             f.set_modified(when).unwrap();
@@ -1497,6 +1518,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "ratchet #1307: one long scenario, to be split"
+    )]
     fn waiting_is_kept_by_retention_and_cleared_by_cancel_and_reconcile() {
         let t = Tmp::new();
         let s = t.store();
@@ -1522,18 +1547,21 @@ mod tests {
             None,
             "no default for a secret"
         );
-        assert!(!String::from_utf8(s.get(&id).unwrap())
-            .unwrap()
-            .contains("hunter2"));
-        assert!(s
-            .wait(
+        assert!(
+            !String::from_utf8(s.get(&id).unwrap())
+                .unwrap()
+                .contains("hunter2")
+        );
+        assert!(
+            s.wait(
                 &id,
                 &Question {
                     kind: "bogus",
                     ..Default::default()
                 }
             )
-            .is_err());
+            .is_err()
+        );
         assert_eq!(s.find_unit("hs-job-w-1").unwrap(), id);
         s.resume(&id).unwrap();
         assert_eq!(s.load(&id).unwrap().waiting, None);
@@ -1548,7 +1576,7 @@ mod tests {
         s.cancel(&id, "bob", true).unwrap();
         assert_eq!(s.load(&id).unwrap().waiting, None);
         // retention: an old waiting record survives, an old finished one does not
-        let old = SystemTime::now() - Duration::from_secs(40 * 86_400);
+        let old = SystemTime::now() - Duration::from_hours(40 * 24);
         let w = mk(&s, "hs-job-w-2");
         s.run(&w).unwrap();
         s.wait(

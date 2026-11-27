@@ -1,0 +1,5 @@
+date  = "2026-11-26"
+type  = "feature"
+title = "A package can name the highest core API level it works with (requires_core_max)"
+docs  = "containers-and-apps"
+body  = """Install and update refuse a package whose range does not take this server: "needs a newer core" or "does not support this core yet", before anything is downloaded. An installed package whose range ends below the core after an update is named by hs update and keeps running."""

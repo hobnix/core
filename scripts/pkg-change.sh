@@ -75,7 +75,10 @@ word='^[a-z0-9][a-z0-9-]{0,40}$'
 market() { bash "$pkg" --market 2>/dev/null || true; }
 repos() { bash "$pkg" --repos 2>/dev/null || true; }
 # one line per fact: name, kind, repo, available, installed, state, core, audience, title
-row_of() { market | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }
+# row_of <name> [repo]: the row of that repository; without one the row that carries the installed copy (the market gives it only to the row
+# of the repository it came from), else the first row of the name
+row_of() { market | awk -F'\t' -v n="$1" -v r="${2:-}" '$1 != n { next } r != "" { if ($3 == r) { print; exit } next }
+  first == "" { first = $0 } $5 != "-" && hit == "" { hit = $0 } END { if (r == "" && first != "") print (hit != "" ? hit : first) }'; }
 repo_row() { repos | awk -F'\t' -v n="$1" '$1 == n { print; exit }'; }   # name, address, signed|unsigned, default|added
 # pkg.sh may have refused in the ADR 0028 form already (pkg_refused: status, reason, fix, code, through refuse_code): then exactly those lines
 # are the answer (its own code, not pkg.action-failed) and this exits 1. Returns when the output holds no such refusal.
@@ -92,12 +95,22 @@ repo="" cmd=() red="" long=no fresh=() ftag="" fseen="" wtag="" wseen=""
 case "$action" in
   install|update|remove)
     [[ "$name" =~ $word ]] || refuse_code name.invalid "not a package name (lower case letters, digits and dashes)"
-    row=$(row_of "$name")
+    want=""      # install --repo R: the row of R (the option is read again below)
+    if [ "$action" = install ] && [ "${1:-}" = --repo ]; then want=${2:-}; fi
+    row=$(row_of "$name" "$want")
     [ -n "$row" ] || refuse_code pkg.unknown "There is no package $name in the repositories (fetch them again first)."
     IFS=$'\t' read -r _ kind repo avail inst state core _ title <<<"$row"
     [ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
     r_from=$(repo_row "$repo" | cut -f4)
     [ "$r_from" = added ] && red=$name
+    # a release outside the core range of this server (requires_core, requires_core_max): said before anything is read, with its own code
+    if [ "$state" = waits ] && { { [ "$action" = install ] && [ "$inst" = - ]; } || { [ "$action" = update ] && [ "$inst" != - ]; }; }; then
+      why=$($pkgpy show "$name" --repo "$repo" </dev/null 2>/dev/null | awk -F'\t' '$1 == "reason" { print $2 }') || true   # show exits 1 on its refusal: keep the reason
+      case "$why" in
+        *"does not support this core yet"*) refuse_code pkg.core-too-new "$why" ;;
+        *) refuse_code pkg.core-too-old "${why:-$name $avail needs a newer core: run hs update first}" ;;
+      esac
+    fi
     case "$action" in
       install)
         while [ $# -gt 0 ]; do
@@ -107,6 +120,9 @@ case "$action" in
           esac
         done
         [ "$state" = new ] || refuse_code pkg.installed "$name is installed already (version $inst); use update."
+        # the same name from another repository would replace that copy: the row that carries it names the repository
+        other=$(row_of "$name" | awk -F'\t' '$5 != "-" { print $3 " (version " $5 ")" }')
+        [ -z "$other" ] || refuse_code pkg.installed "$name is installed already from $other; use update."
         cmd=(bash "$pkg" install "$name" --repo "$repo") ;;
       update)
         while [ $# -gt 0 ]; do

@@ -14,13 +14,14 @@ ssh-keygen -q -t ed25519 -N '' -f "$WORK/evil" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/good.pub")" > "$WORK/signers"
 R=$WORK/repo; mkdir -p "$R/recipes/demo"; cd "$R"
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
-release() {   # release <tag> <version> <key> [requires_core] [path] [extra]: package.toml + index.toml at that version, committed and tagged (signed with <key>, "none" = unsigned)
+release() {   # release <tag> <version> <key> [requires_core] [path] [extra] [index extra]: package.toml + index.toml at that version, committed and tagged (signed with <key>, "none" = unsigned)
   local rc=${4:->=1} path=${5:-recipes/demo}
   mkdir -p "$R/recipes/demo"
   printf 'name = "demo"\nversion = "%s"\nkind = "recipe"\ntitle = "Demo"\nrequires_core = "%s"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$2" "$rc" > "$R/recipes/demo/package.toml"
   [ -z "${6:-}" ] || printf '%b\n' "$6" >> "$R/recipes/demo/package.toml"
   printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho demo %s\n' "$2" > "$R/recipes/demo/run.sh"
   printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "%s"\nrequires_core = "%s"\n' "$2" "$path" "$rc" > "$R/index.toml"
+  [ -z "${7:-}" ] || printf '%b\n' "$7" >> "$R/index.toml"
   git add -A && git commit -q -m "demo $2"
   if [ "$3" = none ]; then git tag -a "$1" -m "unsigned $2"; else git -c user.signingkey="$3.pub" tag -s "$1" -m "release $2"; fi
 }
@@ -104,8 +105,37 @@ check_out "a package that needs a newer core is refused" "API level" bash -c "$P
 # the index claims ">=1" but the package itself needs more: refused after the copy is read (an index is not the last word)
 cd "$R"; release v1.4.1 1.4.1 "$WORK/good"
 sed -i 's/^requires_core = .*/requires_core = ">=99"/' "$R/recipes/demo/package.toml"; git add -A; git commit -q -m "package.toml needs more"; git -c user.signingkey="$WORK/good.pub" tag -s v1.4.2 -m x; cd "$ROOT"; $PKG fetch test >/dev/null
-check_out "package.toml above the API level is refused" "package.toml says requires_core" bash -c "$PKG update demo --yes 2>&1; true"
+check_out "package.toml above the API level is refused" "needs a newer core.*(package.toml)" bash -c "$PKG update demo --yes 2>&1; true"
 check "and the installed copy is untouched" grep -q '^version = "1[.]3[.]5"$' "$HS_STATE_DIR/packages/installed.toml"
+
+echo "-- requires_core_max: the highest API level a package works with (#1265)"
+LVL=$(cat "$SCRIPTS/lib/api-level")
+cd "$R" || exit 1; release v1.4.3 1.4.3 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1" "requires_core_max = 1"; cd "$ROOT" || exit 1; $PKG fetch test >/dev/null
+check_out "update of a release whose range ends below this core is refused from the index" "demo does not support this core yet: it works up to core API level 1, this server has $LVL.*the index of test" bash -c "$PKG update demo --yes 2>&1; true"
+check_out "with its error code" "^code${tab}pkg[.]core-too-new$" bash -c "$PKG update demo --yes 2>&1; true"
+check "and the installed copy is untouched" grep -q '^version = "1[.]3[.]5"$' "$HS_STATE_DIR/packages/installed.toml"
+check_eq "updates does not offer it" "" "$($PKG updates)"
+check_out "updates --waits names what it waits for" "^demo${tab}1[.]4[.]3${tab}a release for core API level $LVL [(]it works up to 1[)]$" $PKG updates --waits
+check_out "the marketplace row waits" "^demo${tab}recipe${tab}test${tab}1[.]4[.]3${tab}1[.]3[.]5${tab}waits${tab}" $PKG market
+# a fresh server (a copy of the state without the installed package): install is refused the same way, before anything is read
+cp -r "$HS_STATE_DIR" "$WORK/fresh"; chmod -R u+w "$WORK/fresh/packages/current"; rm -rf "$WORK/fresh/packages/current/demo"; : > "$WORK/fresh/packages/installed.toml"
+check_out "install of it is refused" "demo does not support this core yet" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
+check "and nothing is installed" test ! -e "$WORK/fresh/packages/current/demo"
+cd "$R" || exit 1; release v1.4.4 1.4.4 "$WORK/good" ">=1" recipes/demo "requires_core_max = 1"; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+check_out "package.toml decides too when the index has no upper bound" "does not support this core yet.*(package.toml)" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
+check "and the refused copy is gone" bash -c "! ls -A '$WORK/fresh/packages/current' | grep -q demo"
+cd "$R" || exit 1; release v1.4.5 1.4.5 "$WORK/good" ">=1" recipes/demo 'requires_core_max = "12"' 'requires_core_max = "12"'; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+check_out "a malformed upper bound is refused" "^code${tab}pkg[.]core-range$" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1; true"
+cd "$R" || exit 1; release v1.4.6 1.4.6 "$WORK/good" ">=1" recipes/demo "requires_core_max = $LVL" "requires_core_max = $LVL"; cd "$ROOT" || exit 1; HS_STATE_DIR=$WORK/fresh $PKG fetch test >/dev/null
+check_out "a range that takes this core installs" "demo 1[.]4[.]6 from test" bash -c "HS_STATE_DIR=$WORK/fresh $PKG install demo 2>&1"
+check_eq "and is not reported as beyond its range" "" "$(HS_STATE_DIR=$WORK/fresh $PKG core-beyond)"
+chmod u+w "$WORK/fresh/packages/current/demo" "$WORK/fresh/packages/current/demo/package.toml"
+sed -i "s/^requires_core_max = .*/requires_core_max = 1/" "$WORK/fresh/packages/current/demo/package.toml"
+check_eq "an installed copy whose range ends below the core (after a core update) is reported" "demo${tab}1" "$(HS_STATE_DIR=$WORK/fresh $PKG core-beyond)"
+check "and stays installed" test -f "$WORK/fresh/packages/current/demo/package.toml"
+check_out "the marketplace names it in the title, the row stays current" "^demo${tab}recipe${tab}test${tab}1[.]4[.]6${tab}1[.]4[.]6${tab}current${tab}.*does not support this core yet" bash -c "HS_STATE_DIR=$WORK/fresh $PKG market"
+check_out "an update of the current copy is no refusal" "current" bash -c "HS_STATE_DIR=$WORK/fresh $PKG update demo --yes 2>&1"
+$PKG fetch test >/dev/null
 cd "$R"; release v1.5.0 1.5.0 "$WORK/good" ">=1" "../escape"; cd "$ROOT"; $PKG fetch test >/dev/null
 check_out "a path that leaves the repository is refused" "not allowed" bash -c "$PKG update demo --yes 2>&1; true"
 cd "$R"; release v1.6.0 1.6.0 "$WORK/good" ">=1" recipes/demo '[[events]]\nkind = "done"\nlevel = "loud"\nlabel = "Done"\nmeaning = "x"'; cd "$ROOT"; $PKG fetch test >/dev/null
@@ -195,9 +225,9 @@ $PKG repo remove chan
 
 echo "-- show and asset: the plan comes from the verified tag, nothing is installed"
 cd "$R"
-printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > recipes/demo/icon.svg; printf 'PNG' > recipes/demo/shot.png; printf 'secret' > recipes/demo/run.sh.bak
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > recipes/demo/icon.svg; printf 'PNG' > recipes/demo/shot.png; printf 'secret' > recipes/demo/run.sh.bak; head -c 400000 /dev/zero > recipes/demo/big.png
 release v6.0.0 6.0.0 "$WORK/good" ">=1" recipes/demo 'icon = "icon.svg"
-screenshots = ["shot.png"]
+screenshots = ["shot.png", "big.png"]
 description = "A demo."
 [[ask]]
 key = "NAME"
@@ -221,6 +251,7 @@ check "asset gives a screenshot" bash -c "[ \"\$($PKG asset demo shot.png)\" = P
 check "asset refuses a file the manifest does not list" bash -c "! $PKG asset demo run.sh.bak >/dev/null 2>&1"
 check "asset refuses a listed file that is not a picture" bash -c "! $PKG asset demo run.sh >/dev/null 2>&1"
 check "asset refuses a path out of the folder" bash -c "! $PKG asset demo ../index.toml >/dev/null 2>&1"
+check_out "asset refuses a listed picture over the size cap by its size, before reading it" "larger than 307200 bytes" bash -c "$PKG asset demo big.png 2>&1; true"
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/third" -C test >/dev/null
 printf 'releaser@test namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$WORK/third.pub")" > "$WORK/evil.signers"
 $PKG repo add bad "$R" --key "$WORK/evil.signers"

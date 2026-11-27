@@ -1,0 +1,26 @@
+error[E0080]: evaluation panicked: two commands in commands! have the same words
+  --> tests/ui/commands_same_words.rs:15:5
+   |
+15 |     commands!(package = "demo", script = "@/bin/demo", a, b)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `table::__HOBNIX_LEN` failed inside this call
+   |
+note: inside `hobnix_pkg_command::__private::table_len`
+  --> $RUST/core/src/panic.rs
+   |
+   = note: the failure occurred here
+   |
+  ::: src/table.rs
+   |
+   | /             assert!(
+   | |                 !same(command.words, other.words),
+   | |                 "two commands in commands! have the same words"
+   | |             );
+   | |_____________- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/commands_same_words.rs:15:5
+   |
+15 |     commands!(package = "demo", script = "@/bin/demo", a, b)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this note originates in the macro `commands` (in Nightly builds, run with -Z macro-backtrace for more info)

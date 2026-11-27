@@ -607,21 +607,36 @@ class Repos:
             if n not in keep and not recent:
                 self.rm_quiet(p)
 
-    def read_at(self, r_name, entry, ref, rel):
-        """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked"""
+    def read_at(self, r_name, entry, ref, rel, limit=None):
+        """bytes of <package folder>/<rel> at `ref`; for an index package the folder of the pinned commit after its tree hash was checked.
+        limit: a file larger than that many bytes is refused BEFORE it is read (a store picture: nothing big is read on every request)"""
         if not rel or rel.startswith("/") or "\\" in rel or ".." in rel.split("/") or re.match(r"^[A-Za-z]:", rel):
             raise Refused("%s: %r is outside the package folder" % (r_name, rel))
+        too_big = lambda: Refused("%s: %s is larger than %d bytes" % (r_name, rel, limit))
         if not entry.get("_index"):
-            return git("show", "%s:%s/%s" % (ref, entry["path"], rel), cwd=self.clone_dir(r_name))
+            spec = "%s:%s/%s" % (ref, entry["path"], rel)
+            if limit is not None:
+                try:
+                    size = int(git("cat-file", "-s", spec, cwd=self.clone_dir(r_name)).strip() or b"0")
+                except ValueError:
+                    raise Refused("%s: %s is not in the package" % (r_name, rel))
+                if size > limit:
+                    raise too_big()
+            return git("show", spec, cwd=self.clone_dir(r_name))
         base = os.path.realpath(self.verified_dir(r_name, entry))
         full = os.path.realpath(os.path.join(base, rel))
         if os.path.commonpath([base, full]) != base:
             raise Refused("%s: %r is outside the package folder" % (r_name, rel))
         try:
+            if limit is not None and os.path.getsize(full) > limit:
+                raise too_big()
             with open(full, "rb") as f:
-                return f.read()
+                data = f.read() if limit is None else f.read(limit + 1)
         except OSError:
             raise Refused("%s: %s is not in the package" % (r_name, rel))
+        if limit is not None and len(data) > limit:
+            raise too_big()
+        return data
 
     def tags(self, r):
         d = self.clone_dir(r["name"])
@@ -826,11 +841,9 @@ class Repos:
             raise Refused("%s: the path %r in index.toml is not allowed" % (repo, path))
         if not pkg.NAME.match(name):
             raise Refused("%s: not a package name" % name)
-        rq = pkg.REQUIRES.match(str(entry.get("requires_core", "")))
-        if not rq:
-            raise Refused('%s: requires_core in the index must look like ">=1"' % name)
-        if int(rq.group(1)) > pkg.api_level():
-            raise Refused("%s needs core API level %s, this one has %d: hs update first" % (name, rq.group(1), pkg.api_level()))
+        miss = pkg.core_misfit(name, entry)      # from the index: refused before anything is downloaded
+        if miss:
+            raise Refused("%s (the index of %s)" % (miss[1], repo), miss[0])
         if not pkg.SEMVER.match(str(entry.get("version", ""))):
             raise Refused("%s: the version in the index is not semver" % name)
 
@@ -848,6 +861,12 @@ class Repos:
         r = self.all()[r_name]
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
+        # a copy that came from another repository (also an orphan whose repository is gone) is never replaced by a package of the same name:
+        # switching is a removal first. A record without repo (the old `hs recipe` record) and one without a copy in current/ replace nothing.
+        home = self.pkg.installed().get(name, {}).get("repo")
+        if os.path.isdir(cur) and isinstance(home, str) and home and home != r_name:
+            raise Refused("%s is installed from %s; the package of the same name in %s would replace it. To switch on purpose: hs pkg remove %s, then hs pkg install %s --repo %s"
+                          % (name, home, r_name, name, name, r_name), "pkg.other-repo")
         tmp = os.path.join(self.state, "current", ".new-" + name)
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
@@ -867,10 +886,10 @@ class Repos:
         if m.get("name") != name or m.get("version") != entry["version"]:
             self.rm_quiet(tmp)
             raise Refused("%s: package.toml (name %s, version %s) does not match the index (%s)" % (name, m.get("name"), m.get("version"), entry["version"]))
-        rq = self.pkg.REQUIRES.match(str(m.get("requires_core", "")))
-        if not rq or int(rq.group(1)) > self.pkg.api_level():
+        miss = self.pkg.core_misfit(name, m)       # package.toml decides too, not only the index
+        if miss:
             self.rm_quiet(tmp)
-            raise Refused("%s: package.toml says requires_core %r, this server has API level %d: hs update first" % (name, m.get("requires_core"), self.pkg.api_level()))
+            raise Refused("%s (package.toml)" % miss[1], miss[0])
         for src, v in (("index.toml", entry.get("requires_nix_api")), ("package.toml", m.get("requires_nix_api"))):
             if v is None:
                 continue
@@ -1166,11 +1185,12 @@ class Repos:
         """-> (old commit, new tag, new commit, diff text) or None when the installed package is current"""
         have = self.recorded(name)
         r_name, entry, tag, commit = self.choose_installed(name, have["repo"])
-        self.check_entry(name, entry, r_name)
         if entry.get("yanked"):
+            self.check_entry(name, entry, r_name)
             raise Refused(self.yanked_text(name, entry) + " (the installed copy is %s)" % have.get("version", "?"))
         if commit == have.get("commit"):
-            return None
+            return None     # current, also when its range no longer takes this core (core_beyond reports that; nothing is refused or removed)
+        self.check_entry(name, entry, r_name)
         ev, hv, ht = self.pkg.semver_key(entry["version"]), self.pkg.semver_key(have["version"]), have.get("tag", "")
         indexed = bool(entry.get("_index"))
         # same version under a newer tag: a beta that became the release (release tags only; an index version is what the package says)
@@ -1298,7 +1318,7 @@ class Repos:
         if file not in allowed:
             raise Refused("%s has no store file %s (the icon and the screenshots of its package.toml are served)" % (name, file))
         lim = 20 * 1024 if file == icon else 300 * 1024
-        data = self.read_at(r_name, entry, commit, file)
+        data = self.read_at(r_name, entry, commit, file, limit=lim)      # refused by its size before it is read
         if len(data) > lim:
             raise Refused("%s: %s is larger than %d bytes" % (name, file, lim))
         if file == icon:
@@ -1310,6 +1330,86 @@ class Repos:
         elif not self.pkg.pkg_app.PICTURE.fullmatch(file):
             raise Refused("%s: %s is not a png or webp picture" % (name, file))
         return data
+
+    VERIFIED = re.compile(r"^\d{4}-\d\d-\d\d$")
+
+    OFFICIAL = "official"
+
+    def official(self, r_name):
+        """True for the official repository as config/package-repos.toml names it (a default row, not added) with signed releases"""
+        r = self.all().get(r_name) or {}
+        return r_name == self.OFFICIAL and bool(r.get("default")) and not r.get("unsigned")
+
+    NEED_WORD = re.compile(r"[a-z][a-z0-9-]{0,30}")
+
+    @classmethod
+    def declared(cls, m) -> list:
+        """[needs, ram_mb, disk_gb, gpu] a manifest states, for hs sys pkg fit (scripts/pkg-fit.sh): - = not stated, ? = cannot be told
+        (the manifest was not read, or the value is not what Package-API.md allows). needs is the recipe's list; gpu is yes or no"""
+        if not m:
+            return ["?"] * 4
+        needs = m.get("needs", []) if m.get("kind") == "recipe" else []
+        ok = isinstance(needs, list) and len(needs) <= 10 and all(isinstance(x, str) and cls.NEED_WORD.fullmatch(x) for x in needs)
+        app = m.get("app") if isinstance(m.get("app"), dict) else {}
+        uses = app.get("uses") if isinstance(app.get("uses"), dict) else {}
+
+        def size(k: str) -> str:
+            v = uses.get(k, 0)
+            if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 10_000_000:
+                return "?"
+            return str(v) if v else "-"
+        gpu = uses.get("gpu") is True or (isinstance(m.get("uses"), list) and "gpu" in m["uses"])
+        return [(",".join(needs) or "-") if ok else "?", size("ram_mb"), size("disk_gb"), "yes" if gpu else "no"]
+
+    def cards(self):
+        """the lines of `hs sys pkg cards`: what a store card shows beyond pkg market, one line per package and repository (the same rows).
+        package, repo, category, icon (ph:<name> or a file of the package), verified (the date the release last ran on a real server, an optional
+        field of the index entry, only from the official signed repository, - = none). category and icon come from package.toml of the verified release; one that cannot be read gives -.
+        Then what that manifest states it needs (declared): needs, ram_mb, disk_gb, gpu."""
+        out = []
+        for pname, rows in sorted(self.catalog(True).items()):
+            for r_name, e, tag, commit in rows:
+                cat, icon, m = "-", "-", {}
+                path = str(e.get("path", ""))
+                if not e.get("_unavailable") and re.match(r"^[A-Za-z0-9._/-]+$", path) and ".." not in path.split("/"):
+                    try:
+                        m = tomllib.loads(self.read_at(r_name, e, commit if e.get("_index") else tag, "package.toml").decode("utf-8"))
+                    except Exception:
+                        m = {}
+                    c, i = m.get("category"), m.get("icon")
+                    cat = c if isinstance(c, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c) else "-"
+                    ok = isinstance(i, str) and (self.pkg.pkg_app.ICON_NAME.fullmatch(i) or self.pkg.pkg_app.ICON_FILE.fullmatch(i))
+                    icon = i if ok else "-"
+                # the tested day counts only from the official repository as the core configures it, and signed: an added or unsigned
+                # repository could write any day, so its value is never passed on (the Marketplace then claims nothing)
+                v = e.get("verified") if self.official(r_name) else None
+                out.append(tsv_row(pname, r_name, cat, icon, v if isinstance(v, str) and self.VERIFIED.fullmatch(v) else "-", *self.declared(m)))
+        return out
+
+    def history(self, name, repo=None) -> list:
+        """the lines of `hs sys pkg history`: what the index says of a package's versions. `history TAB index|none` (none: a repository without a
+        signed index keeps no history), then one `version` line for the newest (current) and one per older version the index lists (at most
+        HISTORY_VERSIONS, already cleaned by index_entries), newest first: version, date (first published, - = not given), current|older,
+        withdrawn yes|no, reason, changes. Nothing is fetched and no package file is read. A withdrawn current version is listed too."""
+        rows = [c for c in self.catalog(True).get(name, []) if not repo or c[0] == repo]
+        if not rows:
+            raise Refused("no package %s in the repositories (hs pkg fetch updates them)" % name)
+        if len(rows) > 1:
+            raise Refused("%s is in %s: name one with --repo" % (name, ", ".join(c[0] for c in rows)))
+        entry = rows[0][1]
+        if not entry.get("_index"):
+            return ["history\tnone"]
+
+        def text(v) -> str:
+            return (" ".join(v.split())[:self.pkg_index.HISTORY_TEXT] if isinstance(v, str) else "") or "-"
+
+        def line(r: dict, which: str, changes) -> str:
+            yanked = bool(r.get("yanked"))
+            return tsv_row("version", r.get("version"), r.get("date") or "-", which, "yes" if yanked else "no",
+                           text(r.get("yanked_reason")) if yanked else "-", text(changes))
+        meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+        return (["history\tindex", line(entry, "current", meta.get("changes"))]
+                + [line(r, "older", r.get("changes")) for r in entry.get("versions") or []])
 
     def choose_installed(self, name, repo):
         cat = [c for c in self.catalog(True).get(name, []) if c[0] == repo]
@@ -1330,9 +1430,9 @@ def flag_value(rest, flag):
     return rest[i]
 
 
-def run(pkg, cmd, rest):
+def run(pkg, cmd, rest, repos=None):
     """the commands of pkg.py that need a repository; returns the exit code"""
-    R = Repos(pkg)
+    R = repos or Repos(pkg)
     try:
         if cmd == "repo":
             sub = rest[0] if rest else "list"
@@ -1396,6 +1496,19 @@ def run(pkg, cmd, rest):
         elif cmd == "asset":
             repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
             sys.stdout.buffer.write(R.asset(rest[0], rest[1], repo))
+        elif cmd == "history":
+            repo = rest[rest.index("--repo") + 1] if "--repo" in rest else None
+            print("\n".join(R.history(rest[0], repo)))
+        elif cmd == "market-cards":      # for hs sys pkg fit: both in one process (the signed index checked once), an empty line between them
+            rc = run(pkg, "market", [], R)
+            if rc:
+                return rc
+            print()
+            return run(pkg, "cards", [], R)
+        elif cmd == "cards":
+            lines = R.cards()
+            if lines:
+                print("\n".join(lines))
         elif cmd == "market":
             # everything a person can install, as data (hs sys pkg market): package, kind, repository, available version, installed version
             # (- = no copy in current/), state (new|current|update|waits|orphan), core (yes|no), audience, title. A package of a repository that
@@ -1403,11 +1516,15 @@ def run(pkg, cmd, rest):
             have = pkg.installed()
             cur = os.path.join(R.state, "current")
             seen = set()
+            beyond = dict(pkg.core_beyond())     # installed copies whose requires_core_max is below this core: named in the title, kept as they are
             for pname, rows in sorted(R.catalog(True).items()):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
-                    if os.path.isdir(os.path.join(cur, pname)):
+                    # the copy belongs to the row of the repository it came from (a same-name package of another repository is not its
+                    # update); an entry without repo (the old `hs recipe` record) still goes with every row of the name
+                    home = have.get(pname, {}).get("repo")
+                    if os.path.isdir(os.path.join(cur, pname)) and (not home or home == r_name):
                         inst = str(have.get(pname, {}).get("version", "?"))
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
@@ -1430,9 +1547,13 @@ def run(pkg, cmd, rest):
                         state = "current"
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
-                    seen.add(pname)
+                    if inst != "-" or not os.path.isdir(os.path.join(cur, pname)):
+                        seen.add(pname)     # a copy that no row of its own repository carries is shown as an orphan below
+                    title = e.get("title") or "-"
+                    if inst != "-" and pname in beyond:
+                        title = "%s (the installed copy does not support this core yet: it works up to core API level %d)" % (e.get("title") or pname, beyond[pname])
                     print(tsv_row(pname, e.get("kind", "?"), r_name, ver, inst, state, "yes" if e.get("core") else "no",
-                                  e.get("audience", "generic"), e.get("title") or "-"))
+                                  e.get("audience", "generic"), title))
             if os.path.isdir(cur):
                 for pname in sorted(os.listdir(cur)):
                     if pname in seen or pname.startswith("."):

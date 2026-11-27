@@ -15,7 +15,7 @@
 //                                    addresses were current up to 0.12: kept for 0.13 and 0.14, removed in 0.15 (APPS_REMOVE_IN). They stay when
 //                                    the first table goes.
 // An older address of the first table ends on the new places too. A remote node is not touched at /instances: a peer's own read-only page is there.
-import { P, poolPath, dockerAppPagePath, capabilityPath, extensionPath } from './paths.js';
+import { P, poolPath, dockerAppPagePath, capabilityPath, extensionPath, packagePath } from './paths.js';
 
 export const REMOVE_IN = '0.13';          // MOVED and MOVED_PREFIX
 export const APPS_REMOVE_IN = '0.15';     // MOVED_APPS and MOVED_APPS_PREFIX
@@ -35,6 +35,13 @@ export const MOVED_APPS = Object.freeze({
 export const MOVED_APPS_PREFIX = Object.freeze([
   ['/apps/docker/app/', composeTab],
   ['/instances/ct/', (rest) => `${P.appsGroup}/instance/${rest}`],                      // name and tab stay as written
+]);
+
+// Entry addresses that stay (no removal release): the "Open on my server" button of the website opens <server>/marketplace/<repo>/<package>
+// (docs/PLAN-marketplace-stats.md). Two lowercase words are the page of that package; anything else there is the Marketplace.
+const PKG_WORD = /^[a-z][a-z0-9-]{0,40}$/;
+export const ENTRY_PREFIX = Object.freeze([
+  ['/marketplace/', (rest) => { const w = rest.split('/'); return w.length === 2 && PKG_WORD.test(w[0]) && PKG_WORD.test(w[1]) ? packagePath(w[0], w[1]) : P.marketplace; }],
 ]);
 
 // old inner path -> place key of paths.js (or [key, query])
@@ -118,7 +125,7 @@ export function moved(inner) {
   if (NAMELESS.test(inner)) return [P.appsGroup, {}];
   const row = MOVED_APPS[inner] ?? MOVED[inner];
   if (row) { const [key, query] = Array.isArray(row) ? row : [row, {}]; return [P[key], query]; }
-  for (const [from, to] of [...MOVED_APPS_PREFIX, ...MOVED_PREFIX]) if (inner.startsWith(from) && inner.length > from.length) return [to(inner.slice(from.length)), {}];
+  for (const [from, to] of [...MOVED_APPS_PREFIX, ...MOVED_PREFIX, ...ENTRY_PREFIX]) if (inner.startsWith(from) && inner.length > from.length) return [to(inner.slice(from.length)), {}];
   return [inner, {}];
 }
 

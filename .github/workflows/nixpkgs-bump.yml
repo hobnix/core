@@ -38,6 +38,19 @@ jobs:
           res=$(bash scripts/dev/nixpkgs-pin.sh bump)
           echo "result=$res" >> "$GITHUB_OUTPUT"
           echo "$res"
+      # rust/rust-toolchain.toml must name the rustc of the pin (CI job nixos fails otherwise): it moves in the same pull request. A failed
+      # evaluation fails this run; no pull request is opened with a toolchain that does not match.
+      - uses: cachix/install-nix-action@v27
+        if: steps.pin.outputs.result != 'unchanged'
+      - name: Move the Rust toolchain to the rustc of the new pin
+        id: rust
+        if: steps.pin.outputs.result != 'unchanged'
+        run: |
+          rustc=$(bash scripts/dev/nixpkgs-pin.sh rustc)
+          res=$(HS_NIXPKGS_RUSTC=$rustc bash scripts/dev/nixpkgs-pin.sh toolchain-sync)
+          echo "result=$res" >> "$GITHUB_OUTPUT"
+          echo "rustc=$rustc" >> "$GITHUB_OUTPUT"
+          echo "rustc of the new pin: $rustc ($res)"
       - name: Open the pull request
         if: steps.pin.outputs.result != 'unchanged'
         env:
@@ -45,6 +58,13 @@ jobs:
           BASE: ${{ steps.base.outputs.name }}
         run: |
           read -r old new <<<"${{ steps.pin.outputs.result }}"
+          rustc="${{ steps.rust.outputs.rustc }}"
+          if [ "${{ steps.rust.outputs.result }}" = unchanged ]; then
+            rust_text="The rustc of the new pin is still $rustc: rust/rust-toolchain.toml stays."
+          else
+            read -r rold _ <<<"${{ steps.rust.outputs.result }}"
+            rust_text="The rustc of the new pin is $rustc: rust/rust-toolchain.toml moves from $rold to $rustc in this pull request. The \`rust\` job lints with the new clippy: fix new findings here. The \`rust-version\` in rust/Cargo.toml stays (it follows hobnix/official's toolchain)."
+          fi
           channel=$(bash scripts/dev/nixpkgs-pin.sh get channel)
           branch="chore/nixpkgs-pin-${new:0:7}"
           # an open bump pull request exists already: close it, the new one replaces it
@@ -54,9 +74,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git add config/nixpkgs-pin.toml
-          git commit -m "chore: move the nixpkgs pin of $channel to ${new:0:7}" -m "From ${old:0:7}. Proposed by the weekly workflow nixpkgs-bump."
+          git add config/nixpkgs-pin.toml rust/rust-toolchain.toml
+          git commit -m "chore: move the nixpkgs pin of $channel to ${new:0:7}" -m "From ${old:0:7}. Proposed by the weekly workflow nixpkgs-bump. $rust_text"
           git push origin "$branch"
           gh pr create --base "$BASE" --head "$branch" --title "chore: move the nixpkgs pin of $channel to ${new:0:7}" --body "The weekly job moved \`rev\` in config/nixpkgs-pin.toml from \`$old\` to \`$new\` (head of \`$channel\`).
+
+          $rust_text
 
           Merge when CI is green: the \`nixos\` job evaluates the system and builds the Rust program and the web frontend with this revision. After the merge the binary cache fills on the next CI run on the branch. Servers follow their channel and are not changed by this pull request."

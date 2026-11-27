@@ -15,13 +15,13 @@ ssh-keygen -q -t ed25519 -N '' -f "$WORK/evil" -C test >/dev/null
 GOOD=$(cut -d' ' -f1,2 "$WORK/good.pub"); EVIL=$(cut -d' ' -f1,2 "$WORK/evil.pub")
 R=$WORK/repo; mkdir -p "$R/recipes/demo" "$R/recipes/corer"; cd "$R"
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
-release() {   # release <tag> <demo version> <key>
+release() {   # release <tag> <demo version> <key> [a line for demo in package.toml and index.toml]
   for n in demo corer; do
     v=1.0.0; [ "$n" != demo ] || v=$2
-    printf 'name = "%s"\nversion = "%s"\nkind = "recipe"\ntitle = "The %s package"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$n" "$v" "$n" > "$R/recipes/$n/package.toml"
+    printf 'name = "%s"\nversion = "%s"\nkind = "recipe"\ntitle = "The %s package"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\ncategory = "media"\nicon = "ph:film-strip"\n' "$n" "$v" "$n" > "$R/recipes/$n/package.toml"
     printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho %s %s\n' "$n" "$v" > "$R/recipes/$n/run.sh"
   done
-  printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/demo"\ntitle = "The demo package"\nrequires_core = ">=1"\n\n[package.corer]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/corer"\ntitle = "The corer package"\nrequires_core = ">=1"\ncore = true\n' "$2" > "$R/index.toml"
+  printf '[package.demo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/demo"\ntitle = "The demo package"\nrequires_core = ">=1"\n\n[package.corer]\nversion = "1.0.0"\nkind = "recipe"\npath = "recipes/corer"\ntitle = "The corer package"\nrequires_core = ">=1"\ncore = true\nverified = "2026-01-02"\n' "$2" > "$R/index.toml"
   mkdir -p "$R/blueprints/bp" "$R/blueprints/bpl"   # bp says blueprint in the index; bpl lies there (kind = recipe)
   printf 'name = "bp"
 version = "1.0.0"
@@ -54,6 +54,7 @@ path = "blueprints/bpl"
 title = "Bpl"
 requires_core = ">=1"
 ' >> "$R/index.toml"
+  if [ -n "${4:-}" ]; then printf '%s\n' "$4" >> "$R/recipes/demo/package.toml"; sed -i "/^\[package.demo\]\$/a $4" "$R/index.toml"; fi
   git add -A && git commit -q -m "demo $2" && git -c user.signingkey="$3.pub" tag -s "$1" -m "release $2"
 }
 release v1.0.0 1.0.0 "$WORK/good"
@@ -75,6 +76,20 @@ check_out "the same name twice is refused" "already" bash -c "echo '$GOOD' | $C 
 echo "-- the market"
 check_out "market lists demo as new" "^demo${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}no${tab}generic${tab}The demo package" $PKGSH --market
 check_out "and the core flag of corer" "^corer${tab}recipe${tab}test${tab}1[.]0[.]0${tab}-${tab}new${tab}yes" $PKGSH --market
+check_eq "history: a repository without a signed index keeps none" "history${tab}none" "$($PKGSH --history demo --repo test)"
+check_eq "market-cards is market, an empty line, cards" "$($PKGSH --market; echo; $PKGSH --cards)" "$($PKGSH --market-cards)"
+check_out "fit over the real market and cards: nothing stated is never fits" "^demo${tab}test${tab}unstated${tab}memory${tab}unstated${tab}-${tab}" env HS_INCUS=false bash "$SCRIPTS/pkg-fit.sh"
+# the store cards: category and icon from package.toml, the tested date only from the index entry (corer has one, demo none)
+check_out "cards: demo" "^demo${tab}test${tab}media${tab}ph:film-strip${tab}-${tab}-${tab}-${tab}-${tab}no$" $PKGSH --cards
+check_out "cards: an added repository never passes its verified day on" "^corer${tab}test${tab}media${tab}ph:film-strip${tab}-${tab}-${tab}-${tab}-${tab}no$" $PKGSH --cards
+check_eq "the tested day counts only from the default, signed official repository" "True False False False" "$(python3 -I -c "
+import importlib.util as u
+s = u.spec_from_file_location('pr', '$SCRIPTS/pkg_repo.py'); m = u.module_from_spec(s); s.loader.exec_module(m)
+R = object.__new__(m.Repos)
+for rows in ({'official': {'default': True}}, {'official': {'default': False}}, {'official': {'default': True, 'unsigned': True}}, {'test': {'default': True}}):
+    R.all = lambda rows=rows: rows
+    print(R.official(next(iter(rows))), end=' ')
+" | sed 's/ $//')"
 
 echo "-- a blueprint is applied, never installed"
 check_out "plan: a blueprint is refused with its reason" "blueprint: hs blueprint apply bp" bash -c "$C plan install bp; true"
@@ -117,7 +132,6 @@ check_out "update without the name is refused" "type the name" bash -c "$C start
 check_out "update with it" "^status${tab}done" $C start update demo --confirm demo
 check_out "market: current again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}1[.]1[.]0${tab}current" $PKGSH --market
 check_out "updating a current package is refused" "up to date" bash -c "$C plan update demo; true"
-
 echo "-- remove"
 check_out "a core package cannot be removed" "core package" bash -c "$C start install corer --confirm corer >/dev/null; $C plan remove corer; true"
 check_out "remove plan" "^step${tab}forget" $C plan remove demo
@@ -125,6 +139,15 @@ check_out "remove" "^status${tab}done" $C start remove demo
 check "the files are gone" test ! -e "$HS_STATE_DIR/packages/current/demo"
 check_out "market: new again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}-${tab}new" $PKGSH --market
 check_out "removing what is not installed is refused" "not installed" bash -c "$C plan remove demo; true"
+cd "$R" || exit 1; release v1.1.5 1.1.5 "$WORK/good" "requires_core_max = 1"; cd "$ROOT" || exit 1; $PKGSH fetch test >/dev/null 2>&1
+check_out "market: a release whose range ends below this core waits (requires_core_max, #1265)" "^demo${tab}recipe${tab}test${tab}1[.]1[.]5${tab}-${tab}waits" $PKGSH --market
+check_out "plan: its install is refused with the reason, not as installed already" "^reason${tab}.*does not support this core yet" bash -c "$C plan install demo; true"
+check_out "plan: and its code, before anything is read" "^code${tab}pkg[.]core-too-new$" bash -c "$C plan install demo; true"
+check_out "start: refused the same way" "^code${tab}pkg[.]core-too-new$" bash -c "$C start install demo --confirm demo; true"
+check "and nothing is installed" test ! -e "$HS_STATE_DIR/packages/current/demo"
+AC="bash $SCRIPTS/apps-change.sh"
+check_out "the app install plan says so too, with the code of the range" "^code${tab}pkg[.]core-too-new$" bash -c "$AC plan install demo 2>&1; true"
+check_out "and the reason, not hs update" "^reason${tab}.*does not support this core yet" bash -c "$AC plan install demo 2>&1; true"
 
 echo "-- removing a repository"
 check_out "a default repository stays" "default" bash -c "$C plan repo-remove official; true"
@@ -168,4 +191,43 @@ check_out "text that is no TOML is a finding, not a crash" "^finding${tab}error$
 check_out "an unknown permission is found" "permissions: " bash -c "printf '%s\npermissions = [\"root.all\"]\n' '$GOODDRAFT' | $C plan check-draft; true"
 check_out "a draft is never started" "only checked" bash -c "$C start check-draft </dev/null; true"
 check "a draft writes nothing into the packages" bash -c "! ls '$HS_STATE_DIR/packages/current' | grep -q demo2"
+echo "-- one name in two repositories: the installed copy belongs to the row of its own repository (#933)"
+mkrepo() {   # mkrepo <dir> <version>: a signed repository with the recipe foo at that version
+  mkdir -p "$1/recipes/foo"
+  ( cd "$1" || exit 1
+    [ -d .git ] || { git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false; }
+    printf 'name = "foo"\nversion = "%s"\nkind = "recipe"\ntitle = "Foo"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$2" > recipes/foo/package.toml
+    printf '#!/usr/bin/env bash\n# kind: generic\n# needs: -\n# uses: -\necho foo %s\n' "$2" > recipes/foo/run.sh
+    printf '[package.foo]\nversion = "%s"\nkind = "recipe"\npath = "recipes/foo"\ntitle = "Foo"\nrequires_core = ">=1"\n' "$2" > index.toml
+    git add -A && git commit -q -m "foo $2" && git -c user.signingkey="$WORK/good.pub" tag -s "v$2" -m "release $2" )
+}
+mkrepo "$WORK/alpha" 99.0.0; mkrepo "$WORK/beta" 1.0.0      # alpha is listed first: its row comes first for the name
+echo "$GOOD" | $C start repo-add alpha "$WORK/alpha" --confirm alpha >/dev/null
+echo "$GOOD" | $C start repo-add beta "$WORK/beta" --confirm beta >/dev/null
+check_out "install foo from beta" "^status${tab}done" $C start install foo --repo beta --confirm foo
+check_out "market: the row of beta carries the installed copy" "^foo${tab}recipe${tab}beta${tab}1[.]0[.]0${tab}1[.]0[.]0${tab}current" $PKGSH --market
+check_out "market: the row of alpha is no update of it" "^foo${tab}recipe${tab}alpha${tab}99[.]0[.]0${tab}-${tab}new" $PKGSH --market
+check_eq "market: the copy is no orphan" "0" "$($PKGSH --market | grep -c "^foo${tab}.*${tab}orphan${tab}")"
+check_out "plan: an update says up to date (its own repository has nothing newer)" "up to date" bash -c "$C plan update foo; true"
+check_out "plan: installing the name from alpha is refused, the copy of beta is there" "installed already" bash -c "$C plan install foo --repo alpha; true"
+mkrepo "$WORK/beta" 1.1.0; $PKGSH fetch beta >/dev/null 2>&1
+check_out "plan: the update is the newer release of beta, not alpha's 99.0.0" "^heading${tab}update foo 1[.]0[.]0 -> 1[.]1[.]0$" $C plan update foo
+check_out "start: it installs that release" "^status${tab}done" $C start update foo --confirm foo
+check_out "and installed.toml still names beta" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
+check_out "plan: remove names the package of beta" "^status${tab}ok" $C plan remove foo
+# installing the name from another repository never replaces the copy of beta: not by hand, not by the app install of the web
+check_out "pkg install --repo alpha is refused with its code" "^code${tab}pkg[.]other-repo$" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "and says how to switch on purpose" "hs pkg remove foo" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "the copy of beta stays" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
+check_out "the app install plan from alpha is refused" "^code${tab}pkg[.]other-repo$" bash -c "$AC plan install foo --repo alpha 2>&1; true"
+check_out "an update of beta's own copy still works (same repository)" "current" bash -c "python3 -I $SCRIPTS/pkg.py update foo --yes 2>&1"
+# an orphan: beta's row is gone, the copy stays; alpha's package of the same name does not take its place
+$C start repo-remove beta --confirm beta >/dev/null
+check_out "market: the copy of beta is an orphan" "^foo${tab}[?]${tab}beta${tab}-${tab}1[.]1[.]0${tab}orphan" $PKGSH --market
+check_out "pkg install --repo alpha does not replace the orphan" "^code${tab}pkg[.]other-repo$" bash -c "python3 -I $SCRIPTS/pkg.py install foo --repo alpha 2>&1; true"
+check_out "plan install from alpha is refused" "installed already" bash -c "$C plan install foo --repo alpha; true"
+check_out "the app install plan from alpha is refused" "^code${tab}pkg[.]other-repo$" bash -c "$AC plan install foo --repo alpha 2>&1; true"
+check_out "the orphan is still beta's" '^repo = "beta"$' cat "$HS_STATE_DIR/packages/installed.toml"
+python3 -I "$SCRIPTS/pkg.py" remove foo >/dev/null
+check_out "after remove, alpha's package installs (the switch on purpose)" "foo 99[.]0[.]0 from alpha" python3 -I "$SCRIPTS/pkg.py" install foo --repo alpha
 finish

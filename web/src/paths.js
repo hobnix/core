@@ -38,6 +38,8 @@ export const diskPath = (name, tab = '') => `${P.disks}/${encodeURIComponent(nam
 export const dockerAppPagePath = (name, tab = '') => `${P.appsGroup}/docker-app/${encodeURIComponent(name)}${!tab || tab === 'overview' ? '' : `/${encodeURIComponent(tab)}`}`;
 export const capabilityPath = (name) => `${P.capabilities}/${name}`;
 export const extensionPath = (name) => `/extensions/${name}`;
+// the page of one package in the Marketplace: /apps/marketplace/<repo>/<name> (both names are lowercase words; the builder is the one-segment page)
+export const packagePath = (repo, name) => `${P.marketplace}/${encodeURIComponent(repo)}/${encodeURIComponent(name)}`;
 // the object page of a recipe that declares [web.page] (Apps > Installed > Open)
 export const appPath = (name) => `/apps/${encodeURIComponent(name)}`;
 export const nodePath = (name) => `/node/${encodeURIComponent(name)}`;

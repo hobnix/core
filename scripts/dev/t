@@ -24,7 +24,7 @@ set -- "${args[@]+"${args[@]}"}"
 mode=${1:-quick}
 [ $# -eq 0 ] || shift
 
-HELPERS=" lib lib-poolfakes lib-standins run run-all "
+HELPERS=" lib lib-appfakes lib-poolfakes lib-standins run run-all "
 all_tests() { local f n; for f in tests/*.sh; do n=$(basename "$f" .sh); case "$HELPERS" in *" $n "*) continue ;; esac; echo "$n"; done; }
 needs_root() { grep -q 'need_root' "tests/$1.sh"; }
 is_external() { [ "$1" = zfs-vm ] || [ "$1" = rebuild-vm ]; }
@@ -41,6 +41,8 @@ changed_tests() {
   while read -r f; do
     [ -n "$f" ] || continue
     case "$f" in tests/*.sh) basename "$f" .sh; continue ;; esac
+    # a Rust change also needs fmt, clippy and the cargo tests (tests/rust-cargo.sh)
+    case "$f" in rust/*) echo rust-cargo ;; esac
     stem=$(basename "$f"); stem=${stem%.*}
     [ ${#stem} -ge 3 ] || continue
     grep -lF -- "$stem" tests/*.sh 2>/dev/null | while read -r t; do basename "$t" .sh; done

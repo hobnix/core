@@ -1,4 +1,7 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
+#![expect(
+    clippy::unwrap_used,
+    reason = "test code: a failed unwrap is the failure"
+)]
 use std::process::Command;
 
 fn hobnix(args: &[&str]) -> std::process::Output {
@@ -153,7 +156,9 @@ fn job_record_life_of_a_job() {
     let rec = text(&o.stdout);
     assert!(rec.starts_with("{\n  \"id\": "), "{rec}");
     assert!(rec.contains("\"state\": \"ok\""));
-    assert!(rec.contains("\"step\": {\n    \"n\": 2,\n    \"of\": 2,\n    \"text\": \"last\"\n  }"));
+    assert!(
+        rec.contains("\"step\": {\n    \"n\": 2,\n    \"of\": 2,\n    \"text\": \"last\"\n  }")
+    );
     let o = job(&dir, &["cancel", &id, "--by", "bob", "--safe", "yes"]);
     assert_eq!(o.status.code(), Some(1));
     assert_eq!(text(&o.stderr), "hobnix: job already finished\n");

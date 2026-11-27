@@ -202,6 +202,10 @@ hs ct <name> set disk=50
 `hs ct <name> set` also takes `autostart=on|off` and `docker=yes|no` (restart the instance after changing `docker`). The guided form is
 `hs ct <name> edit`; it shows the current values first.
 
+Every `hs ct <name>` command that changes the instance (`start`, `stop`, `restart`, `remove`, `autostart`, `update`, `set`, `edit`,
+`ip`, `snapshot`, `restore`, `storage`) takes `--dry-run`: it shows what would happen and changes nothing. An unknown or misspelled option
+is refused. `remove` always asks you to type the name. Not tested on hardware yet.
+
 ### Start at boot
 
 ```bash
@@ -448,6 +452,20 @@ Not tested on hardware yet.
 In the web interface this is the **Marketplace** page: every package of every repository with its state (not installed, installed, update),
 Install / Update / Remove, and a Repositories tab to add or remove a repository. Adding a repository asks for its public signing key and for
 the repository name to be typed. Not tested on hardware yet. The commands below do the same.
+
+**Versions.** The page of a package lists the versions that the signed index of its repository names: the newest one and at most 10 older
+ones, each with the day it was first published, its change text, and whether the repository withdrew it (with the reason). That need not be
+every version ever published, and a repository without a signed index has no list. An older version cannot be installed from the page. The
+same data: `hs sys pkg history <name> --repo <repository>`. Not tested on hardware yet.
+
+**Fits this server.** An app that is not installed says on its card and on its page whether it fits: the memory and disk space its package
+states are compared with what this server has. Memory is compared with what is free now and with the total, disk space with the free space
+of the storage pool where the disk of a new container goes (files on shares are not counted). The page lists each figure, and also what the
+install sets up first (Docker, Tailscale) and whether a graphics card is there when the app can use one. These are the package's own
+figures, for one app at a time: they do not promise that the install works. With ZFS the free memory can look smaller than it is, because
+the file cache counts as used, so too little free memory is a note and only more than the total is "does not fit". A package that states
+neither memory nor disk space says "Memory and disk not stated", never "fits". Not tested on hardware yet.
+
 ```bash
 hs pkg list
 ```
@@ -484,7 +502,7 @@ In the web interface, use **Update** on the package in the Marketplace. If the n
 A package update does not touch a running app. For a recipe it replaces the package files; run `hs recipe <name>` to apply them.
 `hs pkg remove <name>` forgets the package files only, never a container or data. It refuses while the package is switched on (`hs ext disable <name>` first) or while another package that is on needs it, and it asks you to type the name. If the server already has a generated capability list (`/var/lib/hs/generated/`), it is rewritten without the package. See the plan first with `hs pkg remove <name> --dry-run`. Not tested on hardware yet.
 
-A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`). `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has: run `hs update` first. There is no upper bound: the core only raises its level and keeps a function for one level after announcing its removal (ADR 0008).
+A package says which core it works with in `requires_core = ">=N"` (the API level in `scripts/lib/api-level`) and, when its author says so, `requires_core_max = M`, the highest level it works with. `hs pkg install` and `hs pkg update` refuse one that needs a newer core than your server has (run `hs update` first) and one that does not support your core yet (wait for a newer release of the package). The Marketplace shows such a release as waiting. When an `hs update` raises the level above what an installed package supports, `hs update` names the package; it stays installed and keeps running, nothing is removed or switched off. Not tested on hardware yet.
 
 A third kind of package is a capability: an optional part of the server itself, which may carry a Nix module and options. It comes from a default repository (`official`) and is built in by `hs rebuild`. `hs pkg list --kind capability` lists them and `hs sys pkg capabilities` shows what the repositories offer. A capability that has a module may come only from a default repository. Install, switch on, rollback and removal are in [Operations](operations.md#optional-parts-from-hobnixcapabilities). Not tested on hardware yet.
 

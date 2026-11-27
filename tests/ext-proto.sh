@@ -110,10 +110,13 @@ row() {   # row <kind> <words> <script> <fixed args> <flags>
   row sys "sys ext fixproto slow" @/ext.py "-" "timeout:1"
   row sys "sys ext fixproto spawn" @/ext.py "$WORK/childpid" "timeout:1"
   row sys "sys ext fixproto fail" @/ext.py "-" "-"
+  row sys "sys ext fixproto own" @/ext.py "-" "reads,proto"
 } > "$PK/fixproto/commands.tsv"
 HS="bash $SCRIPTS/lib/hs.sh"
 export HS_PACKAGES_DIR=$PK
 check "a protocol package's rows carry the flag proto" bash -c ". $SCRIPTS/lib/registry-load.sh; registry_rows | grep -q \"^sys.sys ext fixproto rows.*proto\$\""
+check_eq "a row that has the flag proto itself (the command macro writes it) does not get it twice" "reads,proto" \
+  "$(bash -c ". $SCRIPTS/lib/registry-load.sh; registry_rows" | awk -F'\t' '$2 == "sys ext fixproto own" { print $7 }')"
 $HS sys ext fixproto rows > "$WORK/proto.out" 2> "$WORK/proto.err"; rc=$?
 bash "$PK/fixproto/rows.sh" > "$WORK/twin.out" 2>&1
 check_eq "the protocol row exits 0" 0 "$rc"

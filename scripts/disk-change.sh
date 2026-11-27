@@ -235,7 +235,7 @@ if [ "$action" != test ]; then
     temp-copy)
       [ -n "$row" ] || refuse_code disk.unknown "There is no temp disk called '$disk' mounted."
       [ -n "$to" ] || { printf 'status\tneeds\nneeds\tto\n'; exit 2; }
-      [[ "$to" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || refuse_code name.invalid "that is not a share name"
+      [[ "$to" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]] || refuse_code name.invalid "that is not a share name"
       [ -d "$bulk/shares/$to" ] || refuse_code share.unknown "There is no share '$to' (hs share add $to)."
       cmd=(bash "$tdisk" copy "$disk" "$to") ;;
   esac

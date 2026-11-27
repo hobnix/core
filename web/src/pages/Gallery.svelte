@@ -21,9 +21,9 @@
   import PageTabs from '../ui/PageTabs.svelte';
   import {
     ServerField, ShareField, DiskField, PoolField, InstanceField, UserField,
-    Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Grid, Icon, Kv, Menu, Muted, NetMap, NodePopover,
+    AppIcon, AppTile, Banner, Button, Card, Checkbox, Segmented, ChoiceList, Chip, Combobox, DangerZone, Dialog, Drawer, EmptyState, ErrorNote, Field, Grid, Icon, Kv, Menu, Muted, NetMap, NodePopover,
     Progress, QuickLook, Row, Select, Skeleton, Split, Stack, StageBadge, StateCard, StatusDot, StepList, Stepper, Slider, Switch, TextInput, Textarea,
-    Timeline, Wizard, toast,
+    Screenshots, Timeline, Wizard, toast,
   } from '../ui/index.js';
   import { SMALL, SMALL_RATES, big } from '../netmap/fixtures.js';
   import { theme, toggleTheme } from '../theme.svelte.js';
@@ -113,7 +113,7 @@
       <div class="cell"><small>strong</small><Chip kind="strong">strong</Chip></div>
       <div class="cell"><small>out / in</small><Row><Chip kind="out">outside</Chip><Chip kind="in">this server</Chip></Row></div>
       <div class="cell"><small>tone</small><Row><Chip tone="accent">accent</Chip><Chip tone="soft">soft</Chip><Chip tone="warn">warn</Chip><Chip tone="bad">bad</Chip><Chip tone="info">info</Chip></Row></div>
-      <div class="cell"><small>trust</small><Row><Chip kind="trust" level="official" /><Chip kind="trust" level="signed" tested="2026-11-18" /><Chip kind="trust" level="community" /></Row></div>
+      <div class="cell"><small>trust</small><Row><Chip kind="trust" level="official" tested="2026-11-18" /><Chip kind="trust" level="community" /><Chip kind="trust" level="unsigned" /></Row></div>
       <div class="cell"><small>status</small><Row>{#each ['ok', 'warn', 'bad', 'info', 'off'] as s (s)}<Chip kind="status" state={s} />{/each}</Row></div>
     </Entry>
 
@@ -369,6 +369,22 @@
           {#snippet side()}<Drawer title="tank" onclose={() => (split = false)}><Kv items={[{ k: 'Size', v: '4 TB' }]} /></Drawer>{/snippet}
         </Split>
       </div>
+    </Entry>
+
+    <Entry name="AppIcon" text="The square icon of an app: a Phosphor name, or the app's own picture; a picture that does not load falls back to the icon.">
+      <div class="cell"><small>icon</small><Row><AppIcon icon="film-strip" /><AppIcon icon="film-strip" on /></Row></div>
+      <div class="cell"><small>large</small><AppIcon icon="images" size="lg" /></div>
+      <div class="cell"><small>broken picture</small><AppIcon src="/api/pkg/asset/none/none/icon.svg" icon="package" /></div>
+    </Entry>
+
+    <Entry name="AppTile" text="The store card of an app: icon, name as a link, one line, chips, the state and at most two buttons.">
+      <div class="cell" style="width:280px"><small>not installed</small><AppTile title="jellyfin" line="Watch your films, series and music in the browser, on the TV and on the phone" href="#" icon="film-strip" status="Version 1.1.0">{#snippet meta()}<Chip>Media</Chip>{/snippet}{#snippet actions()}<Button variant="primary" size="sm" icon="download-simple">Install</Button>{/snippet}</AppTile></div>
+      <div class="cell" style="width:280px"><small>installed</small><AppTile title="immich" line="Your own photo and video library" href="#" icon="images" on status="Installed, version 1.0.0">{#snippet actions()}<Button variant="primary" size="sm">Open</Button><Button size="sm">Manage</Button>{/snippet}</AppTile></div>
+      <div class="cell" style="width:280px"><small>add-on</small><AppTile title="posters" kicker="Extension" line="Posters drawn from the web interface" icon="puzzle-piece" status="Installed 1.0.0, 1.1.0 is out" /></div>
+    </Entry>
+
+    <Entry name="Screenshots" text="The pictures of an app in one row that scrolls sideways; each opens on its own. A picture that does not load is left out.">
+      <div class="cell"><small>none loaded</small><Screenshots shots={[{ src: '/api/pkg/asset/none/none/a.png', alt: 'picture 1' }]} /><Muted>(nothing shows when no picture loads)</Muted></div>
     </Entry>
 
     <Entry name="StateCard" text="The card of a Group page: the state of one place.">
