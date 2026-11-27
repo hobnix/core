@@ -1,6 +1,6 @@
 # Plan: autopilot, a runner for board issues
 
-Design record. Contributor document, not a guide. Written 2026-11-27, after 0.13.0. Planned for milestone **0.14**, on the 0.14 SDK crates.
+Design record. Contributor document, not a guide. Written 2026-11-27, after 0.13.0. Planned for milestone **0.15** (moved from 0.14 on 2026-11-27), on the SDK crates of 0.14.
 The runner is not built. A status-only trial of the package exists as a draft (hobnix/official#46) and ran in local checks only. Not tested
 on hardware yet. `autopilot` is a working name.
 
@@ -194,15 +194,15 @@ The package is written against the 0.14 crates from the first commit; `hobnix-ex
   musl build, with its CA list built into the program. A changed CA list needs a new build, and a private CA of the server is not used. The
   build needs a musl C compiler (#1389).
 - A token is a `hobnix_pkg::Secret` in the program, so logs print `***`.
-- On 2026-11-27 the crate split (#1321, #1262), the command macro (#1343, #1263) and the fixes #1317 and #1367 are merged into `0.14`. There
-  is no 0.14 tag yet, so the trial pins commit `91fa6884` of `0.14`. A release of the package pins a core tag, a beta tag `v0.14.0-beta.N`
-  being the first possible one (`binary.sdk-pin`).
+- The crate split (#1321, #1262), the command macro (#1343, #1263) and the fixes #1317 and #1367 are part of 0.14.0, released on
+  2026-11-27. The trial still pins commit `91fa6884`, the one tagged `v0.14.0-beta.1`. A release of the package pins a core tag,
+  `v0.14.0-beta.1` or later (`binary.sdk-pin`). The beta lacks the web fix of #1373, so a run on a server needs 0.14.0 or later.
 - The test harness, templates and CI template (#1264) are open. The package starts without them and takes them over when they exist.
 
 ### Gaps found by reading the code
 
-Found by reading `develop` on 2026-11-27. #1373 (pull request #1386, open on that day) fixes the first three, after tests that showed each
-of them. The first was also seen in `0.14`; the others were not re-read there. The fourth stays for the packaging trial.
+Found by reading `develop` on 2026-11-27, before 0.14.0. #1373 (pull request #1386, part of 0.14.0) fixes the first three, after tests that
+showed each of them. The fourth stays for the packaging trial.
 
 | Gap | Where | Effect |
 | --- | --- | --- |
@@ -221,21 +221,21 @@ Run on 2026-11-27 under WSL, with Rust 1.94.1 and the core at commit `91fa6884`:
   `binary.drift`, and the three command rows load.
 - Without the fix of #1373, `0.14` drops the whole web declaration of the package. With it, the page and its read load.
 - In hobnix/official, validate, repo-check and the tests `guides`, `rust-binaries` and `ext` pass; its other tests were not run.
-- `repo-check --release` rejects the package (`binary.unbuilt`, `binary.sdk-pin`). **The draft must not be merged** before #1388 and a core
-  tag: it would block the next release of every package.
+- `repo-check --release` rejects the package (`binary.unbuilt`, `binary.sdk-pin`). **The draft (official#46) must not be merged** before it
+  pins a core tag: it would block the next release of every package.
 - Not done: install from a repository, evaluation of the Nix module, a rebuild, the page in a browser, anything on a server.
 
 | Further gap | Effect |
 | --- | --- |
-| #1388 | hobnix/official does not build, check or release the Rust program of a capability |
+| #1388 | hobnix/official did not build, check or release the Rust program of a capability. Fixed by official#47 (in its `develop`) |
 | #1389 | the C compiler of the build is not pinned; whether two compilers give the same program is not tested |
 | #1390 | the docs build lists the guide of a capability package under Apps (read in the code, not run) |
 
 ## 8. Steps
 
 Epic #1370. Step 1 is #430, step 2 is #1371 and #1372, steps 3 and 4 are #1374 and #1373 (plus the gaps #1388 to #1390 that the trial
-found), step 5 is #1375 and #1376, step 6 is #1377, steps 7 and 8 are #1378. Step 9 has no issue yet. The web fix (#1373) starts at once: its
-gaps are known from the code.
+found), step 5 is #1375 and #1376, step 6 is #1377, steps 7 and 8 are #1378. Step 9 has no issue yet. The web fix (#1373) and the build
+of capability programs (#1388) are done in 0.14; their runs on a server are still open.
 
 | Step | Content | Needs |
 | --- | --- | --- |
@@ -249,8 +249,8 @@ gaps are known from the code.
 | 8 | Unattended runs | 1, 7, CI secrets checked |
 | 9 | Later: merge small changes into `develop` automatically. Never storage, network, firewall, `.claude/`, `.github/` or release changes | 8, required checks (#439) |
 
-Steps 1, 2, 3 and 5 can start side by side. Steps 1 to 8 are one epic in **0.14**; step 9 comes later. As everywhere, a step is done when it
-is merged, and its run on a server is a box in the 0.14 tracker. Steps 5 and 8 are the exception where the run is the step. Step 1 is #430,
+Steps 1, 2, 3 and 5 can start side by side. Steps 1 to 8 are one epic in **0.15**; step 9 comes later. As everywhere, a step is done when it
+is merged, and its run on a server is a box in the tracker of its milestone. Steps 5 and 8 are the exception where the run is the step. Step 1 is #430,
 which stays in its own milestone.
 
 ## Open points
