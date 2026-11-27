@@ -1,3 +1,12 @@
+# Hobnix 0.13 release notes (0.13.1 and 0.13.0)
+
+## 0.13.1
+
+One fix. Not tested on hardware yet.
+
+- Monthly sums (rollups) of extension services are recorded again, for example the plays and watched minutes of Media Hub. In 0.13.0 every such
+  addition was dropped, with a warning in the service's journal. Dropped sums are not rebuilt.
+
 # Hobnix 0.13.0 release notes
 
 Release notes of "0.13 Package Registry", built from the entries of `docs/changelog/` dated 2026-11-24 to 2026-11-26 and from the closed
