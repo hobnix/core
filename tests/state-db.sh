@@ -148,12 +148,74 @@ python3 "$SCRIPTS/state-db.py" forget nothing >/dev/null 2>&1
 check_eq "opening it for writing migrates to the current version" "$want" "$(uv)"
 check_eq "the old row is still there" "1" "$(python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute("SELECT count(*) FROM events WHERE text=\"old row\"").fetchone()[0])' "$HS_STATE_DB")"
 check_eq "the new columns exist" "yes" "$(python3 -I -c 'import sqlite3,sys; print("yes" if {"level","payload","v","source"} <= {r[1] for r in sqlite3.connect(sys.argv[1]).execute("PRAGMA table_info(events)")} else "no")' "$HS_STATE_DB")"
-# a database of a newer release is refused, not written to
-python3 -I -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("PRAGMA user_version=%d" % (int(sys.argv[2])+1)); c.commit()' "$HS_STATE_DB" "$want"
+# a database of a newer release that does not say who may still write it is refused, not written to
+q() { python3 -I -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); r=c.execute(sys.argv[2]).fetchall(); c.commit(); print("|".join(str(x) for row in r for x in row))' "$HS_STATE_DB" "$1"; }
+oldest() { q "SELECT value FROM meta WHERE key = 'oldest_writer'"; }
+q "DELETE FROM meta WHERE key = 'oldest_writer'" >/dev/null
+q "PRAGMA user_version=$((want + 1))" >/dev/null
 out=$(python3 "$SCRIPTS/state-db.py" forget nothing 2>&1); rc=$?
-check_eq "a newer schema is refused (exit 1)" "1" "$rc"
+check_eq "a newer schema without the number is refused (exit 1)" "1" "$rc"
 check_out "with a reason" "newer release" echo "$out"
 check_eq "and the version is left alone" "$((want + 1))" "$(uv)"
+
+echo "-- the database says who may still write it (#1352)"
+# newer <keeps|raises> <SQL>: this program plus one more schema step, as a later release would be, brings the database forward
+newer() { python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("state_db", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+steps = m.schema_steps(); version = m.SCHEMA_VERSION + 1
+oldest = steps[-1][1] if sys.argv[2] == "keeps" else version
+change = sys.argv[3]
+steps += ((version, oldest, lambda c: c.execute(change)),)
+m.schema_steps = lambda: steps; m.SCHEMA_VERSION = version
+m.open_rw().close()
+' "$(wp "$SCRIPTS")/state-db.py" "$1" "$2"; }
+# the web server's way in: its own connection, without the schema script
+lease() { python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("state_db", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+try:
+    c = m.demand_open()
+except m.SchemaTooNew:
+    sys.exit(3)
+m.demand_put(c, ["t"], 100)
+' "$(wp "$SCRIPTS")/state-db.py"; }
+fresh() { rm -f "$WORK/schema/state.db"*; python3 "$SCRIPTS/state-db.py" forget nothing >/dev/null 2>&1; }
+older_emit() { python3 "$SCRIPTS/state-db.py" emit storage.new S1 "from the older writer" 2>&1; }
+written() { q "SELECT count(*) FROM events WHERE text = 'from the older writer'"; }
+
+fresh
+check_eq "a new database stores the number" "$want" "$(oldest)"
+q "DELETE FROM meta WHERE key = 'oldest_writer'" >/dev/null
+python3 "$SCRIPTS/state-db.py" forget nothing >/dev/null 2>&1
+check_eq "a database from a release without it gets it" "$want" "$(oldest)"
+
+fresh
+newer keeps "ALTER TABLE events ADD COLUMN extra TEXT"
+check_eq "an additive newer release keeps the number" "$want" "$(oldest)"
+out=$(older_emit); rc=$?
+check_eq "the older writer still writes (exit 0)" "0" "$rc"
+check_eq "its event is there" "1" "$(written)"
+check_eq "it does not take the version back" "$((want + 1))" "$(uv)"
+check_eq "nor change the number" "$want" "$(oldest)"
+check_eq "the web server's lease is written too" "0" "$(lease >/dev/null 2>&1; echo $?)"
+
+fresh
+newer raises "ALTER TABLE usage RENAME TO usage_moved"
+check_eq "a breaking newer release raises the number" "$((want + 1))" "$(oldest)"
+out=$(older_emit); rc=$?
+check_eq "the older writer is refused (exit 1)" "1" "$rc"
+check_out "with a reason" "newer release" echo "$out"
+check_eq "no event was written" "0" "$(written)"
+check_eq "the table the newer release moved is not made again" "0" "$(q "SELECT count(*) FROM sqlite_master WHERE name = 'usage'")"
+check_eq "the number stays" "$((want + 1))" "$(oldest)"
+check_eq "the web server's lease is refused too" "3" "$(lease >/dev/null 2>&1; echo $?)"
+check_eq "and wrote nothing" "0" "$(q "SELECT count(*) FROM sqlite_master WHERE name = 'demand'")"
+
+fresh
+q "UPDATE meta SET value = 'garbage' WHERE key = 'oldest_writer'" >/dev/null
+check_eq "a number that cannot be read counts as none: this version still writes" "0" "$(older_emit >/dev/null; echo $?)"
+check_eq "and is repaired" "$want" "$(oldest)"
 export HS_STATE_DB=$prev_db
 
 echo "-- history: the old files are migrated once"
