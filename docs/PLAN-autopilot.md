@@ -1,7 +1,8 @@
 # Plan: autopilot, a runner for board issues
 
 Design record. Contributor document, not a guide. Written 2026-11-27, after 0.13.0. Planned for milestone **0.14**, on the 0.14 SDK crates.
-Nothing here is built or run. Not tested on hardware yet. `autopilot` is a working name.
+The runner is not built. A status-only trial of the package exists as a draft (hobnix/official#46) and ran in local checks only. Not tested
+on hardware yet. `autopilot` is a working name.
 
 The runner takes an approved issue of the active milestone, lets Claude Code build it in a throwaway VM, and opens a pull request. A person
 defines the milestones and issues, approves what runs, merges, tests on hardware and releases.
@@ -189,13 +190,13 @@ The package is written against the 0.14 crates from the first commit; `hobnix-ex
   `cargo test` and `hs pkg validate` fail on drift (`binary.drift`).
 - `Ctx` has no host-command call. The program starts `incus` and `git` itself, which only a command row without `confine` may do. Tests use
   `hobnix_pkg::testing::FakeCtx` and fakes of its own for GitHub and Incus.
-- **`hobnix_pkg::http` speaks plain `http://` only.** GitHub needs TLS, so the package brings its own client (a Rust TLS library in the static
-  musl build) or runs a client installed on the server. To decide in the trial (open point 6).
+- **`hobnix_pkg::http` speaks plain `http://` only.** GitHub needs TLS, so the trial brings `ureq` with `rustls` (`ring`) in the static
+  musl build, with its CA list built into the program. A changed CA list needs a new build, and a private CA of the server is not used. The
+  build needs a musl C compiler (#1389).
 - A token is a `hobnix_pkg::Secret` in the program, so logs print `***`.
-- On 2026-11-27: #1317 is merged into `0.14`; #1321 (crate split, #1262) is open into `0.14`; #1343 (command macro, #1263) and #1367 (a fix
-  for services) are open, stacked on it. A trial may pin a commit (`rev`) of `feature/sdk-command-macro`; that pin moves to a commit on
-  `0.14` after the merge. A release of the package pins a core tag, a beta tag `v0.14.0-beta.N` being the first possible one
-  (`binary.sdk-pin`).
+- On 2026-11-27 the crate split (#1321, #1262), the command macro (#1343, #1263) and the fixes #1317 and #1367 are merged into `0.14`. There
+  is no 0.14 tag yet, so the trial pins commit `91fa6884` of `0.14`. A release of the package pins a core tag, a beta tag `v0.14.0-beta.N`
+  being the first possible one (`binary.sdk-pin`).
 - The test harness, templates and CI template (#1264) are open. The package starts without them and takes them over when they exist.
 
 ### Gaps found by reading the code
@@ -210,20 +211,41 @@ of them. The first was also seen in `0.14`; the others were not re-read there. T
 | Web permissions are checked from `capability.toml` only | `scripts/lib/pkg_perms.py` `folder_problems` | `web.read` and `web.change` are not enforced for a capability package |
 | No capability in hobnix/official yet | `capabilities/` holds only `.gitkeep` | install, vendoring, `[[binary]]` in a capability and the page have not been tried together |
 
+### Seen in the packaging trial
+
+Run on 2026-11-27 under WSL, with Rust 1.94.1 and the core at commit `91fa6884`:
+
+- The static program is 1.7 MB, two builds were identical, and it holds no path of the build machine. One unauthenticated HTTPS request to
+  GitHub got status 200.
+- The core's protocol runner runs both commands, `hs pkg validate` finds no problem and reports a hand-edited `commands.tsv` as
+  `binary.drift`, and the three command rows load.
+- Without the fix of #1373, `0.14` drops the whole web declaration of the package. With it, the page and its read load.
+- In hobnix/official, validate, repo-check and the tests `guides`, `rust-binaries` and `ext` pass; its other tests were not run.
+- `repo-check --release` rejects the package (`binary.unbuilt`, `binary.sdk-pin`). **The draft must not be merged** before #1388 and a core
+  tag: it would block the next release of every package.
+- Not done: install from a repository, evaluation of the Nix module, a rebuild, the page in a browser, anything on a server.
+
+| Further gap | Effect |
+| --- | --- |
+| #1388 | hobnix/official does not build, check or release the Rust program of a capability |
+| #1389 | the C compiler of the build is not pinned; whether two compilers give the same program is not tested |
+| #1390 | the docs build lists the guide of a capability package under Apps (read in the code, not run) |
+
 ## 8. Steps
 
-Epic #1370. Step 1 is #430, step 2 is #1371 and #1372, steps 3 and 4 are #1374 and #1373, step 5 is #1375 and #1376, step 6 is #1377, steps
-7 and 8 are #1378. Step 9 has no issue yet. The web fix (#1373) starts at once: its gaps are known from the code.
+Epic #1370. Step 1 is #430, step 2 is #1371 and #1372, steps 3 and 4 are #1374 and #1373 (plus the gaps #1388 to #1390 that the trial
+found), step 5 is #1375 and #1376, step 6 is #1377, steps 7 and 8 are #1378. Step 9 has no issue yet. The web fix (#1373) starts at once: its
+gaps are known from the code.
 
 | Step | Content | Needs |
 | --- | --- | --- |
 | 1 | The test-lab passes on a real server (#430) | - |
 | 2 | Trackers: `[lab]` and `[metal]` marks, single-box ticks, lab wording, the CLAUDE.md rule; then ticks from test-lab runs | marks: -; lab ticks: 1 |
-| 3 | Packaging trial on the 0.14 crates: a capability that only answers `status`, with a page, installed from a package repository on a server; one HTTPS call to GitHub from the static program | the SDK branches |
+| 3 | Packaging trial on the 0.14 crates: a capability that only answers `status`, with a page, installed from a package repository on a server; one HTTPS call to GitHub from the static program | - |
 | 4 | Fix the gaps the trial confirms | 3 |
 | 5 | VM image and one job: an approved issue to a draft pull request, started by hand and watched; about 10 issues; record time, usage, fix rounds and failures | package secrets (#1125), outbound limit (open point 2) |
 | 6 | Queue: milestone list, retries, `waiting-limit`, untested limit, events | 5 |
-| 7 | The capability complete: timer, page, settings; released from hobnix/official | 4, 6, #1262 and #1263 merged, a 0.14 core tag |
+| 7 | The capability complete: timer, page, settings; released from hobnix/official | 4, 6, a 0.14 core tag |
 | 8 | Unattended runs | 1, 7, CI secrets checked |
 | 9 | Later: merge small changes into `develop` automatically. Never storage, network, firewall, `.claude/`, `.github/` or release changes | 8, required checks (#439) |
 
@@ -245,4 +267,5 @@ which stays in its own milestone.
 3. **The untested limit.** The number of open `[metal]` boxes at which the runner stops.
 4. **Size.** CPU, memory and disk of a job VM beside the services of the server, and beside a test-lab run.
 5. **Name** of the package.
-6. **HTTPS to GitHub:** a TLS library in the program, or a client on the server.
+6. **HTTPS to GitHub:** the trial uses a TLS library in the program (section 7). It stays unless #1389 shows that the build cannot be made
+   reproducible.
