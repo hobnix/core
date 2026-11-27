@@ -6,8 +6,21 @@
 //! passes each `event` to [`Service::on_event`] and sends the `ack` when that returns `Ok`, and returns when the core sends `shutdown`
 //! or closes stdin. Events are delivered at least once: `on_event` must be idempotent (use `EventRow::id` as the key).
 //!
+//! **Before `ready`.** The protocol allows nothing but `ready` first. What `start`, or a thread it started, writes through the SDK
+//! before that (`log`, `emit`, `rollup`, `snapshot`) returns at once, is held back and follows `ready` in the order it was written, so
+//! `start` may wait for such a thread. At most 1000 messages and 4 MiB of lines are held: a newer message that does not fit is
+//! dropped (the call still returns `Ok`), and a `log` line after `ready` says how many were dropped. When `start` fails or panics,
+//! none of them is sent: the SDK writes the held `log` lines to stderr, only counts the other messages there, and later writes fail
+//! with `NotConnected`. What is held is lost when the process ends without unwinding (the core kills a `start` that takes too long,
+//! `std::process::exit`, `panic = "abort"`).
+//!
+//! **stderr.** Today the core's bridge discards the stderr of a service (hobnix/core issue #1368), so nothing that the SDK or the
+//! service writes there can be seen on a server.
+//!
 //! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (`Ctx::shared` gives a handle that
 //! moves to another thread).
+
+mod output;
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -20,17 +33,19 @@ use hobnix_pkg::wire::service::{
     Ack, FromCore, FromService, HEALTH_TEXT_MAX, Rollup, SNAPSHOT_MAX, Snapshot, is_rollup_user,
     is_snapshot_topic,
 };
-use hobnix_pkg::wire::{self, Decoded, Log, ProtocolError, Writer};
+use hobnix_pkg::wire::{self, Decoded, Log, ProtocolError};
 use hobnix_pkg::{Ctx, Error, Event, LogLevel, Secret};
 use serde_json::Value;
 
 pub use hobnix_pkg::Lang;
 pub use hobnix_pkg::wire::service::{EventRow, Health, Init};
 
+use crate::output::{AbandonOnDrop, Output};
+
 /// What a service does; every method has a default, so implement only what you need.
 pub trait Service {
     /// Called once after `init`, before `ready`. An `Err` ends the process with status 1 (the core marks the start failed); the error
-    /// and its causes go to stderr.
+    /// and its causes go to stderr. What is written through `ctx` here is sent after `ready` (see "Before `ready`" in the crate text).
     fn start(&mut self, _init: &Init, _ctx: &dyn Ctx) -> Result<(), Error> {
         Ok(())
     }
@@ -50,7 +65,7 @@ pub trait Service {
 /// The stdin/stdout side of [`Ctx`] for a service: `log`, `emit`, `rollup` and `snapshot` lines on stdout.
 #[derive(Clone)]
 struct StdioCtx {
-    out: Writer,
+    out: Output,
     integrations: Arc<[Integration]>,
 }
 
@@ -140,7 +155,7 @@ pub fn run_with(
     output: impl Write + Send + 'static,
     mut service: impl Service,
 ) -> u8 {
-    let out = Writer::new(output);
+    let out = Output::new(output);
     // Before `ready` only `ready` may be written, so a failure here is reported on stderr only.
     let init = match read_init(&mut input) {
         Ok(init) => init,
@@ -150,12 +165,16 @@ pub fn run_with(
         out: out.clone(),
         integrations: init.integrations.clone().into(),
     };
+    let unready = AbandonOnDrop(&out);
     if let Err(e) = service.start(&init, &ctx) {
+        // first what was held, so that the reason stays the last line
+        out.abandon(&mut io::stderr());
         return die(&format!("start failed: {}", e.chain()));
     }
-    if out.send(&FromService::Ready).is_err() {
+    if out.ready().is_err() {
         return 1;
     }
+    drop(unready);
     let rx = spawn_reader(input);
     let period = Duration::from_secs_f64((init.health_interval / 2.0).clamp(0.05, 150.0));
     let mut next_tick = Instant::now();
@@ -265,12 +284,12 @@ fn classify(line: &str) -> Option<Msg> {
     }
 }
 
-fn send_health(out: &Writer, h: Health) -> Result<(), ProtocolError> {
+fn send_health(out: &Output, h: Health) -> Result<(), ProtocolError> {
     let text = h.text.map(|t| wire::truncate(&t, HEALTH_TEXT_MAX));
     out.send(&FromService::Health(Health { ok: h.ok, text }))
 }
 
-/// The one error line on stderr (part of the protocol: the core keeps it) and exit status 1.
+/// The one error line on stderr and exit status 1 (the bridge discards a service's stderr today, #1368).
 fn die(reason: &str) -> u8 {
     let _ = writeln!(io::stderr(), "hobnix-pkg-service: {reason}");
     1
