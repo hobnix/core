@@ -63,7 +63,8 @@ rc=0; out=$($RUN call --command get --arg "$WORK/listing.tsv" --arg nosuch --arg
 check_out "an unknown integration is bad_request" '"code":"bad_request"' printf '%s' "$out"
 
 echo "-- static musl build"
-if rustup target list --installed 2>/dev/null | grep -q x86_64-unknown-linux-musl; then
+# asked in rust/: the target belongs to the toolchain that rust-toolchain.toml names, not to rustup's default
+if (cd "$ROOT/rust" && rustup target list --installed 2>/dev/null) | grep -q x86_64-unknown-linux-musl; then
   if (cd "$ROOT/rust" && cargo build --locked -q --release --target x86_64-unknown-linux-musl -p hobnix-ext-sdk --example apiprobe) > "$WORK/musl.log" 2>&1; then
     ok_file=$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/examples/apiprobe
     check_out "the musl build is statically linked" 'statically linked|static-pie linked' sh -c "file '$ok_file'"

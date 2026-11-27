@@ -1,10 +1,15 @@
 //! Example service extension: publishes a snapshot with a counter on every tick and counts the events it is subscribed to.
 //!
-//!   cargo build --example ticker
-//!   python3 ../../scripts/lib/ext_service.py run --name ticker --health-interval 1 --run-for 3 -- target/debug/examples/ticker
-#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
-use hobnix_ext_sdk::service::{run, EventRow, Health, Init, Service};
+//! ```sh
+//! cargo build --example ticker
+//! python3 ../../scripts/lib/ext_service.py run --name ticker --health-interval 1 --run-for 3 -- target/debug/examples/ticker
+//! ```
+#![expect(
+    clippy::print_stderr,
+    reason = "diagnostics go to stderr, stdout carries the protocol"
+)]
 use hobnix_ext_sdk::Ctx;
+use hobnix_ext_sdk::service::{EventRow, Health, Init, Service, run};
 use serde_json::json;
 use std::process::ExitCode;
 

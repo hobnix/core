@@ -51,14 +51,17 @@ impl Event {
             payload: None,
         }
     }
+    #[must_use]
     pub fn text(mut self, text: impl Into<String>) -> Self {
         self.text = Some(text.into());
         self
     }
+    #[must_use]
     pub fn level(mut self, level: EventLevel) -> Self {
         self.level = Some(level);
         self
     }
+    #[must_use]
     pub fn payload(mut self, payload: serde_json::Map<String, serde_json::Value>) -> Self {
         self.payload = Some(payload);
         self

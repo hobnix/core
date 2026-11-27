@@ -8,17 +8,17 @@
 //! A slow `on_event` or `tick` delays the heartbeat; keep them short or hand work to your own threads (`Ctx::shared` gives a handle that moves to another thread).
 
 use std::io::{self, BufRead, Write};
-use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::command::Lang;
 use crate::integrations::Integration;
-use crate::proto::{cut, read_line, Line, Out};
+use crate::proto::{Line, Out, cut, read_line, set};
 use crate::{Ctx, Event, LogLevel, VERSION};
 
 /// First message from the core.
@@ -145,10 +145,30 @@ fn valid_name(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-'))
 }
 
-fn read_credential(file: &str) -> Option<String> {
-    let dir = std::env::var_os("CREDENTIALS_DIRECTORY")?;
-    let text = std::fs::read_to_string(std::path::Path::new(&dir).join(file)).ok()?;
+/// `$CREDENTIALS_DIRECTORY`, read where a credential is asked for (the tests pass a folder to the `_in` functions instead).
+fn credentials_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("CREDENTIALS_DIRECTORY").map(std::path::PathBuf::from)
+}
+
+fn read_credential(dir: &std::path::Path, file: &str) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(file)).ok()?;
     Some(text.trim_end().to_string())
+}
+
+/// [`credential_for`] from the folder `dir`.
+pub(crate) fn credential_in(dir: &std::path::Path, name: &str, provider: &str) -> Option<String> {
+    if !valid_name(name) || !valid_name(provider) {
+        return None;
+    }
+    read_credential(dir, &format!("integration-{name}-{provider}"))
+}
+
+/// The deprecated [`credential`] from the folder `dir`.
+fn legacy_credential_in(dir: &std::path::Path, name: &str) -> Option<String> {
+    if !valid_name(name) {
+        return None;
+    }
+    read_credential(dir, &format!("integration-{name}"))
 }
 
 /// The key that the provider package `provider` holds for the integration `name` (declared as `integration:<name>` in `permissions`). The
@@ -156,20 +176,14 @@ fn read_credential(file: &str) -> Option<String> {
 /// never from argv or the environment. The provider is the `package` column of `hs pkg integrations` (or [`crate::integrations::Integration::credential`]).
 /// Trailing whitespace is cut. `None` when there is no such credential (not declared, the provider has no key, the key is locked or missing).
 pub fn credential_for(name: &str, provider: &str) -> Option<String> {
-    if !valid_name(name) || !valid_name(provider) {
-        return None;
-    }
-    read_credential(&format!("integration-{name}-{provider}"))
+    credential_in(&credentials_dir()?, name, provider)
 }
 
 /// Deprecated, goes away after the next release: the old one-name form `integration-<name>` (the first provider with a key, owner not told).
 /// Use [`credential_for`], which names the provider. Same rules as there; `None` when there is no such credential.
 #[deprecated(note = "use credential_for(name, provider): the credential is one per provider")]
 pub fn credential(name: &str) -> Option<String> {
-    if !valid_name(name) {
-        return None;
-    }
-    read_credential(&format!("integration-{name}"))
+    legacy_credential_in(&credentials_dir()?, name)
 }
 
 pub trait Service {
@@ -211,14 +225,9 @@ pub fn run_with(
 ) -> u8 {
     let out = Out::new(output);
     // Before `ready` only `ready` may be written, so a failure here is reported on stderr only.
-    let init: Init = match read_line(&mut input) {
-        Ok(Line::Text(l)) => match parse(&l, "init") {
-            Ok(v) => v,
-            Err(e) => return die(&e),
-        },
-        Ok(Line::Eof) => return die("stdin closed before init"),
-        Ok(Line::TooLong) => return die("init longer than 1 MiB"),
-        Err(e) => return die(&format!("cannot read init: {e}")),
+    let init = match read_init(&mut input) {
+        Ok(init) => init,
+        Err(e) => return die(&e),
     };
     let ctx = StdioCtx {
         out: out.clone(),
@@ -231,34 +240,12 @@ pub fn run_with(
         return 1;
     }
 
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || loop {
-        let msg = match read_line(&mut input) {
-            Ok(Line::Eof) | Err(_) => Msg::Eof,
-            Ok(Line::TooLong) => Msg::Bad("line longer than 1 MiB".into()),
-            Ok(Line::Text(l)) => match classify(&l) {
-                Ok(Some(m)) => m,
-                // a type this version does not know: ignored (ADR 0010 rule 3)
-                Ok(None) => continue,
-                Err(e) => Msg::Bad(e),
-            },
-        };
-        let last = !matches!(msg, Msg::Event(_));
-        if tx.send(msg).is_err() || last {
-            break;
-        }
-    });
-
+    let rx = spawn_reader(input);
     let period = Duration::from_secs_f64((init.health_interval / 2.0).clamp(0.05, 150.0));
     let mut next_tick = Instant::now();
     loop {
         if Instant::now() >= next_tick {
-            let h = service.tick(&ctx);
-            let mut f = json!({"ok": h.ok});
-            if let Some(t) = h.text {
-                f["text"] = json!(cut(&t, 200));
-            }
-            if out.typed("health", f).is_err() {
+            if send_health(&out, service.tick(&ctx)).is_err() {
                 return 1;
             }
             next_tick = Instant::now() + period;
@@ -277,14 +264,60 @@ pub fn run_with(
                     );
                 }
             },
-            Ok(Msg::Shutdown) | Ok(Msg::Eof) | Err(RecvTimeoutError::Disconnected) => return 0,
+            Ok(Msg::Shutdown | Msg::Eof) | Err(RecvTimeoutError::Disconnected) => return 0,
             Ok(Msg::Bad(e)) => return die(&e),
             Err(RecvTimeoutError::Timeout) => {}
         }
     }
 }
 
-#[allow(clippy::print_stderr)] // the one error line on stderr is part of the extension protocol
+/// The first line, which must be `init`; the error is the stderr text.
+fn read_init(input: &mut impl BufRead) -> Result<Init, String> {
+    match read_line(input) {
+        Ok(Line::Text(l)) => parse(&l, "init"),
+        Ok(Line::Eof) => Err("stdin closed before init".into()),
+        Ok(Line::TooLong) => Err("init longer than 1 MiB".into()),
+        Err(e) => Err(format!("cannot read init: {e}")),
+    }
+}
+
+/// Reads stdin on its own thread so `tick` keeps its period while no line comes. It ends after the first message that is not an
+/// event, or when the receiver is gone.
+fn spawn_reader(mut input: impl BufRead + Send + 'static) -> mpsc::Receiver<Msg> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        loop {
+            let msg = match read_line(&mut input) {
+                Ok(Line::Eof) | Err(_) => Msg::Eof,
+                Ok(Line::TooLong) => Msg::Bad("line longer than 1 MiB".into()),
+                Ok(Line::Text(l)) => match classify(&l) {
+                    Ok(Some(m)) => m,
+                    // a type this version does not know: ignored (ADR 0010 rule 3)
+                    Ok(None) => continue,
+                    Err(e) => Msg::Bad(e),
+                },
+            };
+            let last = !matches!(msg, Msg::Event(_));
+            if tx.send(msg).is_err() || last {
+                break;
+            }
+        }
+    });
+    rx
+}
+
+fn send_health(out: &Out, h: Health) -> io::Result<()> {
+    let mut f = json!({"ok": h.ok});
+    if let Some(t) = h.text {
+        set(&mut f, "text", json!(cut(&t, 200)));
+    }
+    out.typed("health", f)
+}
+
+#[expect(
+    clippy::print_stderr,
+    reason = "the one error line on stderr is part of the extension protocol"
+)]
 fn die(reason: &str) -> u8 {
     eprintln!("hobnix-ext-sdk: {reason}");
     1
@@ -292,7 +325,7 @@ fn die(reason: &str) -> u8 {
 
 fn parse<T: serde::de::DeserializeOwned>(line: &str, ty: &str) -> Result<T, String> {
     let v: Value = serde_json::from_str(line).map_err(|_| "a line that is not JSON".to_string())?;
-    if v.get("v").and_then(Value::as_u64) != Some(VERSION as u64) {
+    if v.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
         return Err("unsupported protocol version (this SDK speaks 1)".into());
     }
     if v.get("type").and_then(Value::as_str) != Some(ty) {
@@ -303,7 +336,7 @@ fn parse<T: serde::de::DeserializeOwned>(line: &str, ty: &str) -> Result<T, Stri
 
 fn classify(line: &str) -> Result<Option<Msg>, String> {
     let v: Value = serde_json::from_str(line).map_err(|_| "a line that is not JSON".to_string())?;
-    if v.get("v").and_then(Value::as_u64) != Some(VERSION as u64) {
+    if v.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
         return Err("unsupported protocol version (this SDK speaks 1)".into());
     }
     match v.get("type").and_then(Value::as_str) {
@@ -314,5 +347,45 @@ fn classify(line: &str) -> Result<Option<Msg>, String> {
         Some("shutdown") => Ok(Some(Msg::Shutdown)),
         // `init` twice or a type from a later minor version: not for this loop
         _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One credential per provider (hobnix/core#1135): each row reads only its own file. The folder is passed in, the environment of the
+    /// test process is not changed (tests/ext-sdk-rust.sh covers `$CREDENTIALS_DIRECTORY` end to end).
+    #[test]
+    fn one_credential_per_provider() {
+        let dir = std::env::temp_dir().join(format!("hs-sdk-cred-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("integration-media-jellyfin"), "JELLY\n").unwrap();
+        std::fs::write(dir.join("integration-media-radarr"), "RADAR \n").unwrap();
+        std::fs::write(dir.join("integration-media"), "OLD\n").unwrap();
+
+        assert_eq!(
+            credential_in(&dir, "media", "jellyfin").as_deref(),
+            Some("JELLY")
+        );
+        assert_eq!(
+            credential_in(&dir, "media", "radarr").as_deref(),
+            Some("RADAR")
+        );
+        assert!(credential_in(&dir, "media", "sonarr").is_none());
+        assert!(credential_in(&dir, "media", "../jellyfin").is_none());
+        assert!(credential_in(&dir, "", "jellyfin").is_none());
+
+        let rows = crate::integrations::parse(
+            "radarr\tmedia\trecipe\thttp://x\t/k\t-\tX-Api-Key\nsonarr\tmedia\trecipe\t-\t-\t-\t-\n",
+        );
+        assert_eq!(rows[0].credential_name(), "integration-media-radarr");
+        let of = |r: &Integration| credential_in(&dir, &r.integration, &r.package);
+        assert_eq!(of(&rows[0]).as_deref(), Some("RADAR"));
+        assert!(of(&rows[1]).is_none());
+
+        assert_eq!(legacy_credential_in(&dir, "media").as_deref(), Some("OLD"));
+        assert!(legacy_credential_in(&dir, "../media").is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

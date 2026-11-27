@@ -15,15 +15,15 @@
 //! `run` would force every handler into a named generic fn, and the dynamic call costs nothing next to the write of a line).
 
 use std::io::{self, BufRead, Write};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::integrations::Integration;
-use crate::proto::{cut, one_line, read_line, Line, Out};
+use crate::proto::{Line, Out, cut, one_line, read_line, set};
 use crate::{Ctx, Event, LogLevel, VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -128,6 +128,7 @@ impl Success {
             text: None,
         }
     }
+    #[must_use]
     pub fn with_text(mut self, text: impl Into<String>) -> Self {
         self.text = Some(text.into());
         self
@@ -155,7 +156,7 @@ impl Ctx for StdioCtx {
     fn progress(&self, fraction: Option<f64>, text: &str) -> io::Result<()> {
         let mut f = json!({"text": cut(text, 200)});
         if let Some(x) = fraction.filter(|x| x.is_finite()) {
-            f["fraction"] = json!(x.clamp(0.0, 1.0));
+            set(&mut f, "fraction", json!(x.clamp(0.0, 1.0)));
         }
         self.out.typed("progress", f)
     }
@@ -193,14 +194,14 @@ where
                 "bad_request",
                 &format!("cannot read the request: {e}"),
                 None,
-            )
+            );
         }
     };
     let value: Value = match serde_json::from_str(&line) {
         Ok(v) => v,
         Err(_) => return fail(&out, "bad_request", "the request is not JSON", None),
     };
-    if value.get("v").and_then(Value::as_u64) != Some(VERSION as u64) {
+    if value.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
         let msg = "this extension speaks protocol version 1 only";
         return fail(&out, "unsupported_version", msg, Some(json!([VERSION])));
     }
@@ -215,7 +216,7 @@ where
                 "bad_request",
                 "the first line must be a request",
                 None,
-            )
+            );
         }
     };
     let ctx = StdioCtx { out: out.clone() };
@@ -225,10 +226,10 @@ where
         Ok(s) => {
             let mut f = json!({"ok": true});
             if let Some(d) = s.data {
-                f["data"] = d;
+                set(&mut f, "data", d);
             }
             if let Some(t) = s.text {
-                f["text"] = json!(t);
+                set(&mut f, "text", json!(t));
             }
             match out.typed("result", f) {
                 Ok(()) => 0,
@@ -248,7 +249,7 @@ where
 fn fail(out: &Out, code: &str, message: &str, supported: Option<Value>) -> u8 {
     let mut err = json!({"code": code, "message": one_line(message)});
     if let Some(s) = supported {
-        err["supported"] = s;
+        set(&mut err, "supported", s);
     }
     let _ = out.typed("result", json!({"ok": false, "error": err}));
     1

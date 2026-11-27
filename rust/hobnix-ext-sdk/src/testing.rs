@@ -35,6 +35,23 @@ pub struct FakeCtx {
     integrations: Arc<[Integration]>,
 }
 
+/// Calls, integrations and the names of the credentials; never a credential's key.
+impl std::fmt::Debug for FakeCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let state = self.lock();
+        let credentials: Vec<(&str, &str)> = state
+            .credentials
+            .iter()
+            .map(|(n, p, _)| (n.as_str(), p.as_str()))
+            .collect();
+        f.debug_struct("FakeCtx")
+            .field("calls", &state.calls)
+            .field("integrations", &self.integrations)
+            .field("credentials", &credentials)
+            .finish_non_exhaustive()
+    }
+}
+
 impl FakeCtx {
     /// A fake with no integrations and no credentials.
     pub fn new() -> Self {
@@ -42,12 +59,14 @@ impl FakeCtx {
     }
 
     /// Set the rows [`Ctx::integrations`] returns.
+    #[must_use]
     pub fn with_integrations(mut self, rows: Vec<Integration>) -> Self {
         self.integrations = rows.into();
         self
     }
 
     /// Make `credential(name, provider)` answer `key`.
+    #[must_use]
     pub fn with_credential(self, name: &str, provider: &str, key: &str) -> Self {
         self.lock()
             .credentials
@@ -61,9 +80,15 @@ impl FakeCtx {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the Ctx methods return what this returns"
+    )]
     fn record(&self, call: Call) -> io::Result<()> {
         self.lock().calls.push(call);
         Ok(())
@@ -120,5 +145,13 @@ mod tests {
                 Call::Emit(Event::new("pkg.t.x", "s"))
             ]
         );
+    }
+
+    #[test]
+    fn debug_does_not_show_a_credential() {
+        let ctx = FakeCtx::new().with_credential("media", "jf", "key-4f1c9a");
+        let d = format!("{ctx:?}");
+        assert!(!d.contains("key-4f1c9a"), "{d}");
+        assert!(d.contains("media") && d.contains("jf"), "{d}");
     }
 }
