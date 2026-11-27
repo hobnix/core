@@ -28,7 +28,8 @@ them over by itself (`hs pkg repo migrate`, also run by `hs update`). Design: [d
 - Each repository publishes a signed `index.json`. The server checks the signature and the hash of each package folder; neither the host
   of the index nor the git host is trusted. The default repository is served from `packages.hobnix.dev` (live, signed). Servers on v0.12 keep the old
   rows in `config/package-repos.toml` until they update. See PLAN-registry.
-- `hs pkg fetch` reads the indexes, `hs pkg available` shows what they offer, `hs pkg install <name>` installs one, `hs pkg list` and
+- `hs pkg refresh` fetches the index (a daily timer does it too). `hs pkg fetch` updates the package repositories, `hs pkg available` shows
+  what they offer, `hs pkg install <name>` installs one, `hs pkg update <name>` updates one at a time, and `hs pkg list` and
   `hs pkg updates` show what is installed and what is newer. `hs pkg repo add <name> <url> --key <allowed_signers file>` adds a
   third-party repository.
 - `hs update` pulls this repository, refreshes the indexes and rebuilds.
@@ -36,7 +37,8 @@ them over by itself (`hs pkg repo migrate`, also run by `hs update`). Design: [d
   nothing that was not chosen is installed. See [Install](docs/install.md).
 - Writing a package: [Apps and containers](docs/containers-and-apps.md), [Extensions SDK](docs/extensions-sdk.md), `hs pkg new`.
 
-Not tested on hardware yet: the whole path from the signed index to an installed package on a real server.
+Seen on one real server: installing and updating packages from the official index. Not tested on hardware yet: a community or third-party
+repository.
 
 ## Install and use
 
@@ -79,9 +81,10 @@ the helper that keeps a NixOS home server running.
 
 Large parts of the code, the documentation and the tests of this repository were written with the help of AI coding assistants. The
 maintainer directs, reviews and tests the work, but not everything has been run on every kind of hardware (the guides mark what has not
-been tried yet: "noch nicht erprobt"), and AI-written code can be wrong in ways that look right. This software runs as root on your server
+been tried yet: "Not tested on hardware yet."), and AI-written code can be wrong in ways that look right. This software runs as root on your server
 and touches disks: read what it does, try it in a virtual machine first, and report what you find.
 
 ## Licence
 
-GNU Affero General Public License v3.0 or later. The packages in the package repositories are MIT licensed.
+The core is licensed under the GNU Affero General Public License v3.0 or later. In [hobnix/official](https://github.com/hobnix/official) the
+recipes are MIT and everything else is AGPL-3.0. A community package keeps its author's licence.

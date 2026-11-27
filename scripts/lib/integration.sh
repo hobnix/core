@@ -2,6 +2,7 @@
 # What packages offer to each other: [integrations.<name>] in package.toml (docs/PLAN-packages.md "Integrations", hobnix/core#926). Sourced after ui.sh:
 #   . "$(dirname "$0")/lib/integration.sh"      (needs $here = the scripts folder)
 #   integration_available            names of the packages that are there: recipes installed, extensions and capabilities on
+#   integration_available_strict <name>  the same for the watcher of a running service: fails instead of leaving out a provider Incus did not answer for
 #   integration_credentials <caller>  "<name>, <key file>, <providing package>" tab-separated lines for the declared integration:<name> permissions (for systemd LoadCredential=, see ext.sh svc-run)
 #   integration_key <name> <provider> <caller>   writes the key of the package <provider> (it must be there and offer <name> with a key_file:
 #                                    one integration can have several providers, e.g. jellyfin and radarr under media) on stdout when <caller>
@@ -16,6 +17,19 @@
 integration_available() {
   { bash "$here/recipes-list.sh" --list 2>/dev/null | awk -F'\t' '$4=="installed"{print $1}'
     bash "$here/parts.sh" --list 2>/dev/null | awk -F'\t' '$2=="on"{print $1}'; } || true
+}
+
+integration_available_strict() {   # integration_available_strict <integration>: the same names, but fails when Incus did not answer and a recipe that offers <integration> is therefore "unknown"
+  local recipes unknown offers
+  recipes=$(bash "$here/recipes-list.sh" --list 2>/dev/null) || return 1
+  unknown=$(awk -F'\t' '$4=="unknown"{print $1}' <<<"$recipes")
+  if [ -n "$unknown" ]; then   # without --services this asks Incus nothing
+    # shellcheck disable=SC2086
+    offers=$(python3 -I "$here/pkg.py" integrations --only "$1" $unknown) || return 1
+    [ -z "$offers" ] || return 1
+  fi
+  awk -F'\t' '$4=="installed"{print $1}' <<<"$recipes"
+  { bash "$here/parts.sh" --list 2>/dev/null | awk -F'\t' '$2=="on"{print $1}'; } || true
 }
 
 integration_credentials() {   # integration_credentials <caller>: "<name><TAB><key file><TAB><providing package>" for each declared integration:<name> whose key is readable

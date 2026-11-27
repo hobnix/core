@@ -42,6 +42,7 @@ class Cache(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.file = os.path.join(self.tmp, "cache.json")
         self.cfg = ws.Config()
+        self.cfg.warm_all = True    # HS_WEB_WARM_ALL=1: these tests are about the every-read warm-up (the default is 0, #1320)
         self.cfg.cache_file = self.file
 
     def tearDown(self):
