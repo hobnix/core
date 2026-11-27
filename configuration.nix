@@ -287,7 +287,7 @@ in
   ];
 
   # ──────────────────────── Status document (Stream Deck, wall monitor, Home Assistant) ────────────────────────
-  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 20 s after the last run ended (as root: it
+  # Off unless machine.toml says `deckApi = true`. hs-deck-status writes /run/hs-deck/deck.json every 60 s after the last run ended (as root: it
   # reads disks and pools), hs-deck-api hands out that file (and /disks, /events written next to it) on port 9740, read only, as nobody. Home networks
   # and Tailscale only. Format: scripts/deck-status.sh, test: tests/deck-status.sh
   systemd.services.hs-deck-status = lib.mkIf deckApi {
@@ -304,17 +304,18 @@ in
         bash ${./scripts}/state.sh $what-json > /run/hs-deck/deck-$what.json.new && chmod 644 /run/hs-deck/deck-$what.json.new && mv /run/hs-deck/deck-$what.json.new /run/hs-deck/deck-$what.json || true
       done
     '';
-    # A timer that starts 20 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
-    # The history is hourly medians and a display reads the counters twice, so 20 s is plenty.
+    # A timer that starts 60 s after the LAST RUN ENDED (not on a 10 s clock): a run that takes longer than the clock left the unit "activating" for good.
+    # The history is hourly medians and a display reads the counters twice, so 60 s is plenty (#1320; hs-deck-api answers 503 after 150 s, HS_DECK_STALE).
   };
   systemd.timers.hs-deck-status = lib.mkIf deckApi {
     wantedBy = [ "timers.target" ];
-    timerConfig = { OnBootSec = "30s"; OnUnitInactiveSec = "20s"; AccuracySec = "1s"; };
+    timerConfig = { OnBootSec = "30s"; OnUnitInactiveSec = "60s"; AccuracySec = "1s"; };
   };
   systemd.services.hs-deck-api = lib.mkIf deckApi {
     description = "Read-only status endpoint for displays (port 9740)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network.target" ];
+    environment.HS_DECK_STALE = "150";    # the status timer writes every 60 s after the last run (#1320)
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${./scripts}/deck-serve.py 9740 /run/hs-deck/deck.json";
       DynamicUser = true;

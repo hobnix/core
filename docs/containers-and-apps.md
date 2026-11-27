@@ -202,6 +202,10 @@ hs ct <name> set disk=50
 `hs ct <name> set` also takes `autostart=on|off` and `docker=yes|no` (restart the instance after changing `docker`). The guided form is
 `hs ct <name> edit`; it shows the current values first.
 
+Every `hs ct <name>` command that changes the instance (`start`, `stop`, `restart`, `remove`, `autostart`, `update`, `set`, `edit`,
+`ip`, `snapshot`, `restore`, `storage`) takes `--dry-run`: it shows what would happen and changes nothing. An unknown or misspelled option
+is refused. `remove` always asks you to type the name. Not tested on hardware yet.
+
 ### Start at boot
 
 ```bash

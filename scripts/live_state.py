@@ -511,7 +511,8 @@ def cli_check(out=None, docs=None, delays=None):
                 continue
             idle = (info.get(topic) or {}).get("idle")
             ttl = _ttl(d, interval, info.get(topic))
-            if idle:
+            failed = bool(d.get("err")) and (d.get("ts_err") or 0) > d["ts"]
+            if idle and not failed:      # a failing topic keeps its own ttl: the health note must not come later (#1320)
                 ttl = max(ttl, 3 * idle)      # D14: a topic nobody watches runs at its idle interval, that is not a stale topic
             st = status_of(dict(checked_doc(d, hb, now), ttl=ttl), interval, now)
             if st in ("expired", "error"):

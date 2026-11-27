@@ -14,6 +14,7 @@ EXT_GROUPS = ("storage", "instances", "apps", "network", "people", "system", "ba
 EXT_TEMPLATES = ("list", "object", "feed")
 EXT_WORD = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")      # a word of a live read: it becomes part of a topic name (hs:v1:ext-<name>-<words>)
 LIVE_MIN, LIVE_MAX = 10, 3600
+LIVE_IDLE = 300      # a package live read that no open page wants is read at most this often (#1320, D14); a longer `live` stays
 LIVE_LOCKED = ("run", "skip")
 TOPIC_MAX = 100
 NEEDS_MAX = 8
@@ -447,13 +448,14 @@ def ext_snapshots(on=None):
 
 def ext_live_rows(log=None):
     """-> (rows, info) of the live reads of the packages whose whole declaration is good: rows are (topic, words list, seconds, lock mode) like
-    live_state.topics(), info is {topic: {"cap": name|None, "groups": {"ext-<name>"}}}."""
+    live_state.topics(), info is {topic: {"cap": name|None, "groups": {"ext-<name>"}, "idle": seconds}}. `idle` makes every package read on
+    demand (D14): `live` seconds while an open stream wants the topic, else max(LIVE_IDLE, live)."""
     rows, info = [], {}
     for name, r_new, _, _ in ext_declarations(log):
         for words, spec in r_new.items():
             if "topic" in spec:
                 rows.append((spec["topic"], list(words), spec["live"], spec["locked"]))
-                info[spec["topic"]] = {"cap": spec["cap"], "groups": {"ext-" + name}}
+                info[spec["topic"]] = {"cap": spec["cap"], "groups": {"ext-" + name}, "idle": max(LIVE_IDLE, spec["live"])}
                 if spec.get("needs"):
                     info[spec["topic"]]["needs"] = tuple(spec["needs"])
     return rows, info

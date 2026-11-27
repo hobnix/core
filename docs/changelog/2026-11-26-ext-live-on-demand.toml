@@ -1,0 +1,6 @@
+date  = "2026-11-26"
+type  = "change"
+title = "Live reads of packages are read often only while a page shows them"
+body  = """With no page open, a live read of a package now runs every 5 minutes, or at its own interval if that is longer. This saves CPU. Opening a page reads it at once, and while the page is open it runs at the interval the package asks for.
+
+A program that reads such an answer without an open page can get one that is up to that old."""

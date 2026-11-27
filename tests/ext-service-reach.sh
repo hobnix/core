@@ -79,7 +79,7 @@ python3 -I - "$SCRIPTS" "$WORK" <<'PY' > "$WORK/roll.txt" 2>&1 || true
 import importlib.util, os, sys
 s = importlib.util.spec_from_file_location("es", os.path.join(sys.argv[1], "lib", "ext_service.py")); es = importlib.util.module_from_spec(s); s.loader.exec_module(es)
 pk = os.path.join(sys.argv[2], "pk", "rl"); os.makedirs(pk)
-open(os.path.join(pk, "package.toml"), "w").write('name = "rl"\n[[events]]\nkind = "pkg.rl.watch"\nretention = "metric"\n[[events]]\nkind = "pkg.rl.other"\n')
+open(os.path.join(pk, "package.toml"), "w").write('name = "rl"\n[[events]]\nkind = "watch"\nretention = "metric"\n[[events]]\nkind = "other"\n')
 log = os.path.join(sys.argv[2], "roll.log"); sh = os.path.join(sys.argv[2], "roll.sh")
 open(sh, "w", newline="\n").write('#!/bin/sh\necho "$@" >> %s\n' % log); os.chmod(sh, 0o755)
 os.environ["HS_EXT_ROLLUP"] = sh
