@@ -19,6 +19,9 @@ rust-version = "1.94"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hobnix-core = { path = "hobnix-core" }
+# state.db (hobnix/core#1336), with the system SQLite, not `bundled`: the python writers of the same file link that one. No default
+# features: the statement cache and the SQLite built for wasm are not used.
+rusqlite = { version = "0.43", default-features = false }
 # The package SDK (docs/PLAN-package-sdk.md). An extension takes them by git tag from this repository (ADR 0031); inside the git checkout
 # these paths resolve, so hobnix-ext-sdk (the deprecated re-export) finds the crates it wraps.
 hobnix-pkg = { path = "hobnix-pkg" }
