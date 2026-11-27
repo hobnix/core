@@ -330,7 +330,7 @@ class Config:
         self.stale_max = float(env("HS_WEB_STALE_MAX", "1800"))      # up to half an hour old is shown at once (X-HS-Age says how old) while a fresh answer is read
         self.plan_ttl = float(env("HS_WEB_PLAN_TTL", "60"))   # a finished plan is answered again for this many seconds (same area and args); 0 = off
         self.cache_file = env("HS_WEB_CACHE_FILE", "/run/hs-web/cache.json")   # the answers survive a restart of this service (tmpfs: not a reboot); "" = memory only
-        self.warm_all = env("HS_WEB_WARM_ALL", "1") == "1"            # keep every read without arguments warm (see Warmer), not only the common ones
+        self.warm_all = env("HS_WEB_WARM_ALL", "0") == "1"          # keep every read without arguments warm (see Warmer), not only the common ones
         self.warm_idle_ttl = float(env("HS_WEB_WARM_IDLE_TTL", "120")) # such a read that nobody has asked for is read again at most this often
         self.seen_for = float(env("HS_WEB_SEEN_FOR", "1800"))         # a read somebody asked for stays in the warm-up for this many seconds
         self.warm_active = float(env("HS_WEB_WARM_ACTIVE", "300"))    # the warm-up runs while a session was seen within this many seconds
