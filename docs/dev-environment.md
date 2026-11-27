@@ -24,6 +24,8 @@ Add `-v` for a line per test. `grep -n FAIL .work/test-logs/<name>.log` shows wh
 
 Rust: `cargo build` in rust/ (in WSL for a Linux binary), then `scripts/dev/t quick vault-change-rust` runs the shell test against it (skipped without a binary).
 
+hobnix-core links the system SQLite and refuses one with the WAL-reset bug (below 3.51.3, except the fixed 3.50.7 and 3.44.6 lines), and the SQLite of a distribution may be such a one (Debian WSL has 3.46.1). So build and test rust/ with [Nix](https://nixos.org/download/), in the environment of the nixpkgs pin: `nix-shell scripts/dev/rust-shell.nix`, then `cargo ...` in rust/. It has cargo, rustc, clippy, rustfmt, python3 and that SQLite, and a `CARGO_HOME` of its own. `scripts/dev/t quick rust-cargo` and the CI job `rust` use it; the first start downloads about 900 MB from the binary cache.
+
 ## Where each test can run
 
 | Tier | Where | Covers |

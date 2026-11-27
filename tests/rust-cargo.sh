@@ -2,6 +2,11 @@
 # The local routine for rust/ (docs/CODE-PRACTICES.md "Rust: checks"): cargo fmt --check, clippy and test with all features, the SDK built
 # alone. `scripts/dev/t changed` picks it for any change under rust/ (scripts/dev/tests-for.sh). Skipped (77) without cargo, off Linux, and in
 # CI, where the job `rust` runs the same commands on the pinned toolchain. Set CARGO_TARGET_DIR to keep builds out of the worktree.
+# Where nix is there the whole test runs in scripts/dev/rust-shell.nix: hobnix-core refuses a SQLite with the WAL-reset bug, and the one
+# of a distribution may have it (Debian's does).
+if [ -z "${CI:-}${HOBNIX_RUST_SHELL:-}" ] && [ "$(uname -s)" = Linux ] && command -v nix-shell >/dev/null; then
+  exec nix-shell "$(dirname "$0")/../scripts/dev/rust-shell.nix" --run "$(printf 'exec bash %q' "$0")"
+fi
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 [ -z "${CI:-}" ] || { echo "  skip  CI runs these in the job rust"; exit 77; }
