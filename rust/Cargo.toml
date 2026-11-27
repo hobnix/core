@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["hobnix-core", "hobnix-cli", "hobnix-ext-sdk"]
+members = ["hobnix-core", "hobnix-cli", "hobnix-pkg", "hobnix-pkg-command", "hobnix-pkg-service", "hobnix-ext-sdk"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,11 +14,16 @@ rust-version = "1.94"
 
 # Each version once; a crate writes `name = { workspace = true }` and may add features. serde_json's `preserve_order` is NOT set here:
 # hobnix-core asks for it (its lines are byte-identical to the shell and python they replace, which keep insertion order), and cargo then
-# turns it on for every crate of that build. The SDK's wire lines do not depend on it (proto.rs writes sorted keys; a test pins that).
+# turns it on for every crate of that build. The SDK's wire lines do not depend on it (hobnix-pkg/src/wire writes sorted keys; a test pins that).
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hobnix-core = { path = "hobnix-core" }
+# The package SDK (docs/PLAN-package-sdk.md). An extension takes them by git tag from this repository (ADR 0031); inside the git checkout
+# these paths resolve, so hobnix-ext-sdk (the deprecated re-export) finds the crates it wraps.
+hobnix-pkg = { path = "hobnix-pkg" }
+hobnix-pkg-command = { path = "hobnix-pkg-command" }
+hobnix-pkg-service = { path = "hobnix-pkg-service" }
 
 # docs/CODE-PRACTICES.md "Rust: lints". CI runs clippy with -D warnings, so "warn" fails the build. Single restriction lints only, never
 # a whole restriction or nursery group. A file that would need a rewrite carries `#![expect(clippy::x, reason = "ratchet #1307")]`.

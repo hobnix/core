@@ -12,14 +12,19 @@ use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+use crate::Secret;
+
 const MAX_BODY: usize = 16 << 20;
 
+/// Why a request failed.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum HttpError {
     /// The URL is not `http://host[:port]/path`.
     BadUrl(String),
     /// `https://` (see the module text).
     TlsUnsupported,
+    /// Connect, read or write failed, or timed out.
     Io(std::io::Error),
     /// The answer is not HTTP/1.x, or is cut off, or too large.
     BadResponse(String),
@@ -41,22 +46,47 @@ impl std::fmt::Display for HttpError {
         }
     }
 }
-impl std::error::Error for HttpError {}
+impl std::error::Error for HttpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            HttpError::Io(e) => Some(e),
+            HttpError::Json(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 impl From<std::io::Error> for HttpError {
     fn from(e: std::io::Error) -> Self {
         HttpError::Io(e)
     }
 }
 
+/// An answer of the server.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Response {
+    /// The status code (`200`).
     pub status: u16,
     /// Header names lower-cased.
     pub headers: Vec<(String, String)>,
+    /// The body, at most 16 MiB.
     pub body: Vec<u8>,
 }
 
 impl Response {
+    /// A response with `status`, `headers` (names are lower-cased here) and `body`; for a test of code that reads one.
+    pub fn new(status: u16, headers: Vec<(String, String)>, body: Vec<u8>) -> Self {
+        let headers = headers
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v))
+            .collect();
+        Response {
+            status,
+            headers,
+            body,
+        }
+    }
+    /// The first header called `name` (any case).
     pub fn header(&self, name: &str) -> Option<&str> {
         let n = name.to_ascii_lowercase();
         self.headers
@@ -64,9 +94,11 @@ impl Response {
             .find(|(k, _)| *k == n)
             .map(|(_, v)| v.as_str())
     }
+    /// The body as text (invalid UTF-8 is replaced).
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
+    /// The body as JSON; [`HttpError::Json`] when it is not.
     pub fn json(&self) -> Result<Value, HttpError> {
         serde_json::from_slice(&self.body).map_err(HttpError::Json)
     }
@@ -81,10 +113,47 @@ impl Response {
     }
 }
 
+/// The value of a request header. Made from a `String`, a `&str` or a [`Secret`]; never printed (it can be the integration key).
+#[derive(Clone)]
+pub struct HeaderValue(String);
+
+impl std::fmt::Debug for HeaderValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("***")
+    }
+}
+
+impl From<String> for HeaderValue {
+    fn from(v: String) -> Self {
+        HeaderValue(v)
+    }
+}
+impl From<&String> for HeaderValue {
+    fn from(v: &String) -> Self {
+        HeaderValue(v.clone())
+    }
+}
+impl From<&str> for HeaderValue {
+    fn from(v: &str) -> Self {
+        HeaderValue(v.to_owned())
+    }
+}
+impl From<Secret> for HeaderValue {
+    fn from(v: Secret) -> Self {
+        HeaderValue(v.expose().to_owned())
+    }
+}
+impl From<&Secret> for HeaderValue {
+    fn from(v: &Secret) -> Self {
+        HeaderValue(v.expose().to_owned())
+    }
+}
+
+/// A blocking client: a timeout and headers sent with every request.
 #[derive(Clone)]
 pub struct Client {
     timeout: Duration,
-    headers: Vec<(String, String)>,
+    headers: Vec<(String, HeaderValue)>,
 }
 
 /// Header names only: a value can be the integration key.
@@ -108,6 +177,7 @@ impl Default for Client {
 }
 
 impl Client {
+    /// A client with a 10 s timeout and no headers.
     pub fn new() -> Self {
         Self::default()
     }
@@ -117,9 +187,10 @@ impl Client {
         self.timeout = t;
         self
     }
-    /// A header sent with every request, e.g. the key header from the integration listing. A line break in it is refused when sending.
+    /// A header sent with every request, e.g. the key header from the integration listing with the key as a [`Secret`]. A line break in
+    /// it is refused when sending.
     #[must_use]
-    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<HeaderValue>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
     }
@@ -132,6 +203,7 @@ impl Client {
         let b = serde_json::to_vec(body).map_err(HttpError::Json)?;
         self.request("POST", url, Some(&b))?.ok()?.json()
     }
+    /// GET; any status is an `Ok` response.
     pub fn get(&self, url: &str) -> Result<Response, HttpError> {
         self.request("GET", url, None)
     }
@@ -145,7 +217,7 @@ impl Client {
     ) -> Result<Response, HttpError> {
         let (host, port, path) = parse_url(url)?;
         let bad = |s: &str| s.contains(['\r', '\n']);
-        if self.headers.iter().any(|(k, v)| bad(k) || bad(v)) {
+        if self.headers.iter().any(|(k, v)| bad(k) || bad(&v.0)) {
             return Err(HttpError::BadUrl("header with a line break".into()));
         }
         let addr = (host.as_str(), port)
@@ -156,12 +228,12 @@ impl Client {
         s.set_read_timeout(Some(self.timeout))?;
         s.set_write_timeout(Some(self.timeout))?;
         let mut head = format!(
-            "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: hobnix-ext-sdk\r\nAccept: application/json\r\nConnection: close\r\n"
+            "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: hobnix-pkg\r\nAccept: application/json\r\nConnection: close\r\n"
         );
         for (k, v) in &self.headers {
             head.push_str(k);
             head.push_str(": ");
-            head.push_str(v);
+            head.push_str(&v.0);
             head.push_str("\r\n");
         }
         if let Some(b) = json_body {

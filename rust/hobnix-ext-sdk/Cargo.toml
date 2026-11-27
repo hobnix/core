@@ -1,6 +1,6 @@
 [package]
 name = "hobnix-ext-sdk"
-description = "Rust SDK for Hobnix extensions: the extension side of the command protocol (ADR 0010) and the service protocol (ADR 0011)"
+description = "Deprecated: re-exports the hobnix-pkg crates under the old paths for one release (0.14), then it is removed"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,5 +11,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
+hobnix-pkg = { workspace = true }
+hobnix-pkg-command = { workspace = true }
+hobnix-pkg-service = { workspace = true }
 serde_json = { workspace = true }

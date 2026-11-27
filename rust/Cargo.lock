@@ -161,7 +161,33 @@ dependencies = [
 name = "hobnix-ext-sdk"
 version = "0.1.0"
 dependencies = [
+ "hobnix-pkg",
+ "hobnix-pkg-command",
+ "hobnix-pkg-service",
+ "serde_json",
+]
+
+[[package]]
+name = "hobnix-pkg"
+version = "0.1.0"
+dependencies = [
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hobnix-pkg-command"
+version = "0.1.0"
+dependencies = [
+ "hobnix-pkg",
+ "serde_json",
+]
+
+[[package]]
+name = "hobnix-pkg-service"
+version = "0.1.0"
+dependencies = [
+ "hobnix-pkg",
  "serde_json",
 ]
 

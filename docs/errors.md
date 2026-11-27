@@ -298,7 +298,7 @@ A compiled program, or a non-script service exec, is started from a package with
 
 ### binary.sdk-pin
 
-repo-check --release: the Cargo.toml of a package does not take hobnix-ext-sdk from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N).
+repo-check --release: the Cargo.toml of a package does not take an SDK crate (hobnix-pkg, hobnix-pkg-command, hobnix-pkg-service or the deprecated hobnix-ext-sdk) from the core by a release tag (vX.Y.Z, or a beta tag vX.Y.Z-beta.N).
 
 - Layer: script
 - Text: This package is not ready for a release: its extension SDK is not pinned to a core release.

@@ -23,7 +23,8 @@ import re
 import stat
 import tomllib
 
-SDK = "hobnix-ext-sdk"
+# the SDK crates (docs/PLAN-package-sdk.md); hobnix-ext-sdk is the deprecated re-export of 0.14
+SDK = ("hobnix-pkg", "hobnix-pkg-command", "hobnix-pkg-service", "hobnix-ext-sdk")
 SDK_URLS = ("https://github.com/hobnix/core", "https://github.com/hobnix/core.git")
 SDK_TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?")
 TARGETS = ("x86_64-unknown-linux-musl",)
@@ -209,13 +210,13 @@ def sdk_pin_problems(folder):
     for label, table in _dependency_tables(doc):
         for key, dep in table.items():
             name = dep.get("package", key) if isinstance(dep, dict) else key
-            if name != SDK or (isinstance(dep, dict) and dep.get("workspace") is True):
+            if name not in SDK or (isinstance(dep, dict) and dep.get("workspace") is True):
                 continue
             ok = (not label.startswith("patch.") and isinstance(dep, dict) and str(dep.get("git", "")) in SDK_URLS
                   and SDK_TAG.fullmatch(str(dep.get("tag", ""))) and not {"rev", "branch", "path"} & set(dep))
             if not ok:
                 out.append(("binary.sdk-pin", "Cargo.toml [%s]: a release takes %s from %s by tag = \"vX.Y.Z\" (a core release tag, or a beta tag vX.Y.Z-beta.N; a rev, "
-                            "branch, path or patch is for develop only)" % (label, SDK, SDK_URLS[0])))
+                            "branch, path or patch is for develop only)" % (label, name, SDK_URLS[0])))
     return out
 
 

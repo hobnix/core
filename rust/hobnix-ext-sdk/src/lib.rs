@@ -1,69 +1,20 @@
-//! SDK for Hobnix extensions written in Rust.
+//! **Deprecated** (0.14): the SDK is now the crates `hobnix-pkg` (base), `hobnix-pkg-command` and `hobnix-pkg-service`. This crate
+//! re-exports them under the old paths for one release and is removed after it (docs/PLAN-package-sdk.md, docs/extensions-sdk.md).
 //!
-//! The extension side of two protocols, both JSON Lines with `"v": 1`:
-//! - [`command`]: one process per call, one request on stdin, progress/log/event lines and exactly one result on stdout
-//!   (docs/adr/0010-extension-command-protocol.md, docs/api/ext-protocol-v1.schema.json).
-//! - [`service`]: one long-running process, `init`/`event`/`shutdown` in, `ready`/`health`/`ack`/`log`/`emit`/`snapshot`/`rollup` out
-//!   (docs/adr/0011-extension-service-lifecycle.md, docs/api/ext-service-v1.schema.json).
+//! Not every extension written against 0.13 compiles unchanged: docs/extensions-sdk.md "Moving from `hobnix-ext-sdk`" lists what needs an
+//! edit. For these signatures that the new API changed, this crate keeps the old one and adapts:
+//! - [`Ctx`] is the old trait: `credential` returns `Option<String>` (the new one returns a `Secret`) and `event` is still there. Every
+//!   `hobnix_pkg::Ctx` (the runners' contexts, `testing::FakeCtx`) is one.
+//! - [`service::Service`] is the old trait with `Result<(), String>`; [`service::run`] adapts it to the new one (`hobnix_pkg::Error`).
+//! - [`command::Request`] is the old struct that a test can build with a literal (the new one is `#[non_exhaustive]`).
+//! - [`service::credential_for`] returns `Option<String>`; the one-name [`service::credential`] stays deprecated here.
 //!
-//! [`Ctx`] is what a handler asks of the host (credential, integrations, emit, log, progress). It is a trait: [`command::run`] and
-//! [`service::run`] hand the handler a `&dyn Ctx`, and [`testing::FakeCtx`] stands in for it in a test.
-//!
-//! Helpers for a service that talks to an integration: [`http`] (blocking client, plain http only, no TLS), [`integrations`] (the
-//! `hs pkg integrations` listing as typed rows) and [`service::credential`] (the key from `$CREDENTIALS_DIRECTORY`).
-//!
-//! Rules the SDK keeps for you: stdout carries nothing but protocol lines (use `eprintln!` for diagnostics, never `println!`),
-//! every line is under 1 MiB, free text is cut to the schema limits, and event kinds are checked against `pkg.<name>.<kind>`
-//! before they are written.
-//!
-//! The core calls commands (ADR 0010) and services (ADR 0011) through this protocol; ADR 0031 describes how a Rust extension is built, shipped and run.
-//! A service must not call `hs`: what it needs from the core arrives as protocol data.
+//! The entry points (`command::run`, `service::run`, their `run_with`, `service::credential_for`) are marked deprecated, so a build says
+//! what to move to. Wire output is the new crates' and stays byte for byte what 0.13 wrote.
 
 pub mod command;
 mod ctx;
-pub mod http;
-pub mod integrations;
-mod proto;
 pub mod service;
-pub mod testing;
 
 pub use ctx::Ctx;
-pub use proto::{EventLevel, LogLevel, MAX_LINE, VERSION};
-
-/// A message the extension asks the core to write to the event log (`event` in a command, `emit` in a service).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Event {
-    /// `pkg.<package>.<kind>`; must be declared in the package's `[[events]]`, the core drops others.
-    pub kind: String,
-    pub subject: String,
-    pub text: Option<String>,
-    pub level: Option<EventLevel>,
-    pub payload: Option<serde_json::Map<String, serde_json::Value>>,
-}
-
-impl Event {
-    pub fn new(kind: impl Into<String>, subject: impl Into<String>) -> Self {
-        Event {
-            kind: kind.into(),
-            subject: subject.into(),
-            text: None,
-            level: None,
-            payload: None,
-        }
-    }
-    #[must_use]
-    pub fn text(mut self, text: impl Into<String>) -> Self {
-        self.text = Some(text.into());
-        self
-    }
-    #[must_use]
-    pub fn level(mut self, level: EventLevel) -> Self {
-        self.level = Some(level);
-        self
-    }
-    #[must_use]
-    pub fn payload(mut self, payload: serde_json::Map<String, serde_json::Value>) -> Self {
-        self.payload = Some(payload);
-        self
-    }
-}
+pub use hobnix_pkg::{Event, EventLevel, LogLevel, MAX_LINE, VERSION, http, integrations, testing};

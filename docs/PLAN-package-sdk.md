@@ -1,10 +1,10 @@
 # Plan: one SDK for packages
 
-Design record. Contributor document, not a guide. Written 2026-11-24 during 0.13. Builds on ADR 0010 (command protocol), ADR 0011 (service lifecycle), ADR 0014 (permissions), ADR 0015 (Wasm: deferred) and docs/PLAN-packages.md, PLAN-extensions-access.md (SDK #240). Nothing here is built; the build is planned for 0.14. Not tested on hardware yet.
+Design record. Contributor document, not a guide. Written 2026-11-24 during 0.13. Builds on ADR 0010 (command protocol), ADR 0011 (service lifecycle), ADR 0014 (permissions), ADR 0015 (Wasm: deferred) and docs/PLAN-packages.md, PLAN-extensions-access.md (SDK #240). Step 2 (the split) is built in 0.14 (#1262, #1309); the rest is planned. Not tested on hardware yet.
 
 ## Where we are
 
-- `rust/hobnix-ext-sdk` is the extension side of two protocols: `command` (one process per call, one JSON line in, JSON Lines out) and `service` (long-running, init/event/shutdown), plus `http`, `integrations` and `Event`. Shell and Python helpers and a Go example exist for authors in other languages (docs/extensions-sdk.md).
+- Before 0.14, `rust/hobnix-ext-sdk` was the extension side of two protocols: `command` (one process per call, one JSON line in, JSON Lines out) and `service` (long-running, init/event/shutdown), plus `http`, `integrations` and `Event`. Shell and Python helpers and a Go example exist for authors in other languages (docs/extensions-sdk.md).
 - A command lives in two places: a row in the package's `commands.tsv` (name, flags, help; a `proto` flag when a program speaks the protocol) and a `match req.words()` in the program. Nothing checks that they agree (observed in `command.rs` and PLAN-packages.md; not tested).
 - Recipes and capabilities do not use an SDK. A recipe is a `package.toml` plus a shell script; a capability is a `module.nix` plus its contract.
 - ADR 0010 already allows any executable that speaks the protocol, so commands written in Rust are possible today. The bash commands of existing extensions are history and convenience, not a limit of the protocol. (Check with the authors before changing them.)
@@ -26,7 +26,7 @@ One shared base and one crate per package kind. The current `hobnix-ext-sdk` is 
 
 | Crate | Content |
 |---|---|
-| `hobnix-pkg` | Manifest types, error type, `Ctx`, `Event`, logging, `Secret`, line limits, the version constant |
+| `hobnix-pkg` | Manifest types, error type, `Ctx`, `Event`, logging, `Secret`, line limits, the version constant; the wire messages of both protocols (`wire`) |
 | `hobnix-pkg-command` | The command runner and the `#[command]` macro |
 | `hobnix-pkg-service` | The service lifecycle (init, event, health, snapshot, rollup, shutdown) |
 | `hobnix-pkg-recipe` | Hooks for install, configure, update and remove; instance helpers; `docs_hint` |
@@ -96,11 +96,33 @@ A new ADR amends ADR 0015 when this is picked up; this plan does not.
 | Step | Release | Content |
 |---|---|---|
 | 1 | 0.13 | This document; `Ctx` as a trait inside the current SDK without renaming (small, internal) |
-| 2 | 0.14 | Split and rename to `hobnix-pkg*`; `hobnix-ext-sdk` re-exports; migrate `hobnix/official` extensions |
+| 2 | 0.14 | Split and rename to `hobnix-pkg*`; `hobnix-ext-sdk` re-exports; migrate `hobnix/official` extensions (built, see "Step 2 as built"; the migration of `hobnix/official` is open) |
 | 3 | 0.14 | `#[command]` macro, generated `commands.tsv`, drift check in `hs pkg validate` |
 | 4 | 0.14 | `hobnix-pkg-test`, Rust templates, CI template |
 | 5 | when two Rust recipes exist | `hobnix-pkg-recipe` |
 | 6 | when a trigger of ADR 0015 fires | Wasm spike, then a Wasm command pilot |
+
+## Step 2 as built (0.14)
+
+- `hobnix-pkg` holds `Ctx` (credential now returns `Secret`; `&C` and `Arc<C>` of a `Ctx` are one), `Event`, `LogLevel`, `EventLevel`, `Lang`,
+  `Secret`, `Error` (a kind that maps to the command codes, a message, a cause), `credentials`, `integrations`, `http` (header values made
+  from a `Secret` are never printed) and `testing::FakeCtx`. No manifest types yet: they come with the macro (step 3).
+- `hobnix_pkg::wire` (#1309, step P1 "shared protocol types" of docs/PLAN-core-daemon.md pulled forward): every message of both protocols is
+  a type with `Serialize` and `Deserialize`, grouped by direction (`command::FromCore`, `command::FromExtension`, `service::FromCore`,
+  `service::FromService`). `encode` writes sorted keys (the bytes do not depend on `serde_json/preserve_order`), `decode` checks `v` and
+  returns `Decoded::Unknown` for a type it does not know; `Writer` and `read_line` keep the 1 MiB limit. The runners are built on them, and
+  a later host in the core uses the same types. No host is in this step and no dependency was added. Tests pin the bytes of every
+  extension line and the round trip of the lines the Python host writes (keys sorted).
+- Growable types are `#[non_exhaustive]` with constructors; `Lang::Other`, `Caller::Other` and `ResultCode::Other` take values a newer core
+  sends. `Integration` and `Health` are not `#[non_exhaustive]` yet: extensions of 0.13 (media-hub) build them with struct literals, and they
+  are the same types through the shim. They get the attribute when `hobnix-ext-sdk` is removed.
+- `hobnix-ext-sdk` keeps the 0.13 signatures where the new ones differ: its own `Ctx` trait (credential as `String`, `event`, a blanket
+  implementation for every `hobnix_pkg::Ctx`), its own `Service` trait with `Result<(), String>` and an adapter, its own `Request` struct,
+  `service::credential_for` as `String`. Its entry points are `#[deprecated]`. Its test file is the one of 0.13, unchanged but for the
+  attribute; the examples of 0.13 and the crates of `hobnix/official` build against it.
+- **Decided by the owner, 2026-11-26:** the old name does not promise an unchanged build. The types it re-exports are the new ones, so some code of
+  0.13 needs an edit (the list is in [extensions-sdk](extensions-sdk.md)). Copies of the 0.13 types for one release were rejected as too much
+  throwaway code. A crate that keeps its old pin is not affected.
 
 ## Open points
 
