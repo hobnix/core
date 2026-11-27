@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "A same-name package of another repository is no longer shown as an update"
+body  = """The Marketplace gives the installed version and the update only to the row of the repository the package came from. Install, update and remove read that row too."""

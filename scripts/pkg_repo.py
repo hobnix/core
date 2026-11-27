@@ -846,6 +846,12 @@ class Repos:
         r = self.all()[r_name]
         self.check_entry(name, entry, r_name)
         cur = os.path.join(self.state, "current", name)
+        # a copy that came from another repository (also an orphan whose repository is gone) is never replaced by a package of the same name:
+        # switching is a removal first. A record without repo (the old `hs recipe` record) and one without a copy in current/ replace nothing.
+        home = self.pkg.installed().get(name, {}).get("repo")
+        if os.path.isdir(cur) and isinstance(home, str) and home and home != r_name:
+            raise Refused("%s is installed from %s; the package of the same name in %s would replace it. To switch on purpose: hs pkg remove %s, then hs pkg install %s --repo %s"
+                          % (name, home, r_name, name, name, r_name), "pkg.other-repo")
         tmp = os.path.join(self.state, "current", ".new-" + name)
         self.rm_quiet(tmp)
         os.makedirs(os.path.dirname(cur), exist_ok=True)
@@ -1407,7 +1413,10 @@ def run(pkg, cmd, rest):
                 for r_name, e, tag, _ in rows:
                     ver = str(e.get("version"))
                     inst = "-"
-                    if os.path.isdir(os.path.join(cur, pname)):
+                    # the copy belongs to the row of the repository it came from (a same-name package of another repository is not its
+                    # update); an entry without repo (the old `hs recipe` record) still goes with every row of the name
+                    home = have.get(pname, {}).get("repo")
+                    if os.path.isdir(os.path.join(cur, pname)) and (not home or home == r_name):
                         inst = str(have.get(pname, {}).get("version", "?"))
                     if e.get("_unavailable"):       # not offered; an installed copy is shown as it is, with the reason in the title
                         if inst != "-":
@@ -1430,7 +1439,8 @@ def run(pkg, cmd, rest):
                         state = "current"
                     if state in ("new", "update") and pkg.waits_for(e):
                         state = "waits"   # a release whose needs this core does not meet: shown, not installable (hs update first)
-                    seen.add(pname)
+                    if inst != "-" or not os.path.isdir(os.path.join(cur, pname)):
+                        seen.add(pname)     # a copy that no row of its own repository carries is shown as an orphan below
                     title = e.get("title") or "-"
                     if inst != "-" and pname in beyond:
                         title = "%s (the installed copy does not support this core yet: it works up to core API level %d)" % (e.get("title") or pname, beyond[pname])
