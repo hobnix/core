@@ -17,6 +17,8 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ sqlite ];
 
-  # cargo test of the workspace runs in the check phase
+  # cargo test of the workspace runs in the check phase. Not the one test of the linked SQLite: a server whose nixpkgs has an older one must
+  # still build (the writer refuses it at runtime). The CI job `rust` runs that test against the SQLite of the pin.
+  checkFlags = [ "--skip=the_linked_sqlite_has_the_wal_reset_fix" ];
   meta.mainProgram = "hobnix";
 }

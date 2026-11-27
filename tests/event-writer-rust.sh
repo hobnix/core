@@ -2,7 +2,11 @@
 # What writing one event does (hobnix/core#1336, ADR 0001): every row and exit code of `state-db.py emit`, written down as expected values.
 # The same cases then run against the Rust writer of the core (`hobnix event-emit`), and both write seeded random events side by side. The
 # binary: HOBNIX_BIN, else rust/target/debug|release/hobnix (build it in scripts/dev/rust-shell.nix); without one, or off Linux, only the
-# python writer runs. No root, python3 only.
+# python writer runs. No root, python3 only. Where nix is there it runs in scripts/dev/rust-shell.nix, so that both writers have the pin's
+# SQLite (a binary that was built with an older SQLite of the system refuses to write, and that fails here).
+if [ -z "${CI:-}${HOBNIX_RUST_SHELL:-}" ] && [ "$(uname -s)" = Linux ] && command -v nix-shell >/dev/null; then
+  exec nix-shell "$(dirname "$0")/../scripts/dev/rust-shell.nix" --run "$(printf 'exec bash %q' "$0")"
+fi
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/lib.sh"
 command -v python3 >/dev/null || { echo "python3 missing: skipped"; exit 0; }
