@@ -1,17 +1,20 @@
 <script>
-  import { P } from '../paths.js';
-  // The Marketplace: every package of every repository (recipes and extensions are both just packages), and the repositories they come from.
-  // Reads: hs sys pkg market / repos. Changes: hs sys pkg plan|start (install, update, remove, fetch, repo-add, repo-remove); a package or repository
-  // that came from a repository somebody added is red (the typed word is its name).
+  import { P, packagePath, appPath } from '../paths.js';
+  // The Marketplace as a store (#474): cards of the apps first, add-ons (extensions, capabilities, blueprints) on their own tab, Installed and
+  // Updates with a count, and the repositories, the package builder and the full package table on Advanced. A card opens the page of its package.
+  // An app that is not installed says on its card whether it fits this server (#793, hs sys pkg fit).
+  // Reads: hs sys pkg market / states / cards / fit / repos, services app / tiles (where Open goes). Changes: the install dialog (plan and typed
+  // confirmation) and the plans of hs sys pkg (update, remove, fetch, repo-add, repo-remove) and parts (turn on/off); a package or repository that
+  // came from a repository somebody added is red (the typed word is its name).
   import { poll, rows, refresh } from '../data.svelte.js';
-  import { openPlan, openCreate } from '../ui.svelte.js';
+  import { openPlan, openCreate, ui } from '../ui.svelte.js';
   import Chip from '../ui/Chip.svelte';
   import { rowstate } from '../rowstate.svelte.js';
-  import { ErrorNote } from '../ui/index.js';
+  import { ErrorNote, AppTile, Grid, EmptyState, Row } from '../ui/index.js';
   import { route, go } from '../route.svelte.js';
+  import { link } from './instances/ct.js';
   import { start } from '../api.js';
   import RepoAdd from '../forms/ops/RepoAdd.svelte';
-  import InstallDialog from '../forms/ops/InstallDialog.svelte';
   import Table from '../shell/Table.svelte';
   import PageHeader from '../shell/PageHeader.svelte';
   import PageState from '../shell/PageState.svelte';
@@ -21,35 +24,55 @@
   import StatusDot from '../ui/StatusDot.svelte';
   import StageBadge from '../ui/StageBadge.svelte';
   import { parseStates, stageActions } from './states.js';
+  import { parseCards, parseRepos, storeRows, rowsOf, tabsOf, TABS, categoriesOf, filterRows, categoryLabel, kindLabel, stateLine, cardActions, openHref, trustOf, testedText, isApp, parseFit, fitLabel, fitReason } from './market.js';
+  import { runAction, busyOf, failureOf, needOf } from './marketrun.js';
 
   const market = poll('/api/sys/pkg/market', 30000);
   const repoList = poll('/api/sys/pkg/repos', 30000);
   // the lifecycle stage and flags of every package (ADR 0027); the table still reads the market for the versions and `core`
   const stateList = poll('/api/sys/pkg/states', 30000);
+  // category, icon and tested date of each card; it changes with a fetch, so it follows the market topic
+  const cardList = poll('/api/sys/pkg/cards', 120000, 'pkg-market');
+  // where Open goes: the dashboard link of a service in one of the app's instances
+  const svcApp = poll('/api/sys/services/app', 60000);
+  const tiles = poll('/api/sys/services/tiles', 60000);
   const stageOf = $derived(parseStates(rows(stateList)));
-  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states'];
+  const PATHS = ['/api/sys/pkg/market', '/api/sys/pkg/repos', '/api/sys/pkg/states', '/api/sys/pkg/cards'];
+  const FIT = '/api/sys/pkg/fit';
 
-  // name, kind, repository, available version, installed version (- = none), state (new|current|update|waits|orphan), core, audience, title
-  const pkgs = $derived(rows(market).map((r) => ({ name: r[0], kind: r[1], repo: r[2], avail: r[3], inst: r[4] === '-' ? '' : r[4], state: r[5], core: r[6] === 'yes', title: r[8] === '-' ? '' : r[8] })));
-  // name, address, signed|unsigned, default|added
-  const repos = $derived(rows(repoList).map((r) => ({ name: r[0], url: r[1], signed: r[2] === 'signed', from: r[3] })));
+  const store = $derived(storeRows(rows(market), parseCards(rows(cardList))));
+  // name, kind, repository, available version, installed version, state, core, title (the Advanced table)
+  const pkgs = $derived(store);
+  const repos = $derived(parseRepos(rows(repoList)));
   const updates = $derived(pkgs.filter((p) => p.state === 'update').length);
+  // the recipes that declare a [web.page]: Open goes to that page when no address of the app is known
+  const withPage = $derived(new Set((ui.features.extensions ?? []).filter((e) => e.kind === 'recipe').map((e) => e.name)));
+  const openOf = (p) => openHref(stageOf.get(p.name)?.instances, rows(svcApp), rows(tiles)) || (withPage.has(p.name) ? appPath(p.name) : '');
 
-  const tabs = [{ id: 'packages', label: 'Packages' }, { id: 'repos', label: 'Repositories' }];
-  const tab = $derived(tabs.some((t) => t.id === route.query.tab) ? route.query.tab : 'packages');
-  const pick = (id) => go(id === 'packages' ? P.marketplace : `${P.marketplace}?tab=${id}`);
+  const tabs = $derived(tabsOf(store));
+  const tab = $derived(TABS.includes(route.query.tab) ? route.query.tab : route.query.tab === 'repos' ? 'advanced' : 'apps');   // ?tab=repos: the old Repositories tab
+  const pick = (id) => go(id === 'apps' ? P.marketplace : `${P.marketplace}?tab=${id}`);
+
+  // does a not-installed app fit this server: read only while the page shows it (the Apps tab with an app that is not installed)
+  const showsFit = $derived(tab === 'apps' && store.some((p) => isApp(p) && !p.installed));
+  const fitList = poll(() => (showsFit ? FIT : ''), 120000, 'pkg-market');
+  const fit = $derived(parseFit(rows(fitList)));
+  const fitOf = (p) => (showsFit && isApp(p) && !p.installed ? fit.get(`${p.repo}/${p.name}`) : undefined);
+  // what a refresh reads again
+  const paths = () => (showsFit ? [...PATHS, FIT] : PATHS);
 
   let q = $state('');
-  let kind = $state('all');
-  let show = $state('all');
-  const shown = $derived(pkgs.filter((p) => (kind === 'all' || p.kind === kind)
-    && (show === 'all' || (show === 'installed' ? p.state !== 'new' : show === 'updates' ? p.state === 'update' : p.state === 'new'))
-    && (!q.trim() || (p.name + ' ' + p.title).toLowerCase().includes(q.trim().toLowerCase()))));
+  let category = $state('all');
+  const inTab = $derived(rowsOf(tab, store));
+  const cats = $derived(categoriesOf(inTab));
+  $effect(() => { if (!cats.some((c) => c.value === category)) category = 'all'; });
+  const cards = $derived(filterRows(inTab, { q, category }));
+  const emptyText = { apps: 'No app is offered yet. Use Check for updates to read the repositories.', addons: 'No add-on is offered yet.',
+    installed: 'Nothing is installed from a repository yet.', updates: 'Everything installed is up to date.' };
 
-  const kindLabel = (k) => (k === 'recipe' ? 'App' : k === 'extension' ? 'Extension' : 'Package');
   const kindIcon = (k) => (k === 'extension' ? 'puzzle-piece' : 'package');
   const stateDot = (p) => (p.state === 'current' ? 'ok' : p.state === 'update' || p.state === 'waits' || p.state === 'orphan' ? 'warn' : 'off');
-  const stateText = (p) => (p.state === 'new' ? 'not installed' : p.state === 'current' ? `installed ${p.inst}` : p.state === 'update' ? `${p.inst} → ${p.avail}` : 'repository gone');
+  const stateText = (p) => (p.state === 'new' ? 'not installed' : p.state === 'current' ? `installed ${p.inst}` : p.state === 'update' ? `${p.inst} → ${p.avail}` : p.state === 'waits' ? 'needs a newer Hobnix' : 'repository gone');
   const columns = [
     { key: 'sel', label: '', sort: false, width: '44px' },
     { key: 'go', label: '', sort: false }, { key: 'name', label: 'Package' }, { key: 'title', label: 'What it is' },
@@ -60,10 +83,10 @@
     { key: 'tools', label: '', sort: false, align: 'right' },
   ];
 
-  const install = (p) => openCreate(InstallDialog, { pkg: p.name, repo: p.repo });
-  const update = (p) => openPlan('pkg', ['update', p.name], `Update ${p.name}`);
-  const turn = (p, want) => openPlan('parts', [want, p.name], `${want === 'enable' ? 'Turn on' : 'Turn off'} ${p.name}`);
-  const remove = (p) => openPlan('pkg', ['remove', p.name], `Remove ${p.name}`);
+  const install = (p) => runAction('install', p);
+  const update = (p) => runAction('update', p);
+  const turn = (p, want) => runAction(want, p);
+  const remove = (p) => runAction('remove', p);
   const fetchAll = () => openPlan('pkg', ['fetch'], 'Read the repositories again');
   const addRepo = () => openCreate(RepoAdd, {});
   const dropRepo = (r) => openPlan('pkg', ['repo-remove', r.name], `Remove the repository ${r.name}`);
@@ -75,16 +98,15 @@
   const busyNow = $derived(['pkg', 'apps', 'parts'].some((a) => rowstate.pending(a)));
   let wasBusy = false;
   $effect(() => {
-    if (wasBusy && !busyNow) refresh(PATHS);
+    if (wasBusy && !busyNow) refresh(paths());
     wasBusy = busyNow;
   });
   // the pending word of a package row, from its job
   const doing = (p) => (rowstate.pending('apps', ['install', p.name]) ? 'Installing…' : rowstate.pending('pkg', ['update', p.name]) ? 'Updating…'
     : rowstate.pending('pkg', ['remove', p.name]) ? 'Removing…' : rowstate.pending('parts', ['enable', p.name]) ? 'Turning on…' : rowstate.pending('parts', ['disable', p.name]) ? 'Turning off…' : '');
-  const failure = (p) => rowstate.failed('apps', ['install', p.name]) ?? rowstate.failed('pkg', ['update', p.name]) ?? rowstate.failed('pkg', ['remove', p.name])
-    ?? rowstate.failed('parts', ['enable', p.name]) ?? rowstate.failed('parts', ['disable', p.name]);
+  const failure = failureOf;
 
-  // ═══ bulk selection ═══
+  // ═══ bulk selection (Advanced: the full table) ═══
   let selected = $state(new Set());
   const toggle = (name, checked) => { const s = new Set(selected); if (checked) s.add(name); else s.delete(name); selected = s; };
   const selectedPkgs = $derived(pkgs.filter((p) => selected.has(p.name)));
@@ -126,7 +148,7 @@
         bulkSummary.push({ name: p.name, ok: r.ok, reason: r.reason, status: r.status });
       }
       selected = new Set();
-      await refresh(PATHS);
+      await refresh(paths());
       showSummary = true;
     } finally {
       bulkBusy = false;
@@ -139,30 +161,94 @@
 </script>
 
 <PageHeader title="Marketplace"
-            sub={market.loaded && !market.error ? `${pkgs.length} packages from ${repos.length} repositories${updates ? ` · ${updates} update${updates > 1 ? 's' : ''}` : ''}` : 'Apps and extensions from the repositories you trust.'}>
+            sub={market.loaded && !market.error ? `${store.filter((p) => p.kind === 'recipe').length} apps and ${store.filter((p) => p.kind !== 'recipe').length} add-ons${updates ? ` · ${updates} update${updates > 1 ? 's' : ''}` : ''}` : 'Apps and add-ons from the repositories you trust.'}>
   {#snippet actions()}
     <Button icon="arrows-clockwise" busy={rowstate.pending('pkg', ['fetch'])} busyLabel="Checking…" tooltip={'Read the repositories again and find the newest releases'} onclick={fetchAll}>Check for updates</Button>
-    <Button icon="hammer" tooltip={'Write the manifest of a new app or extension'} onclick={() => go(P.builder)}>Package builder</Button>
-    <Button variant="primary" tooltip={'Add a repository of packages'} onclick={addRepo}><i class="ph ph-plus"></i>Add repository</Button>
+    {#if tab === 'advanced'}
+      <Button icon="hammer" tooltip={'Write the manifest of a new app or extension'} onclick={() => go(P.builder)}>Package builder</Button>
+      <Button variant="primary" icon="plus" tooltip={'Add a repository of packages'} onclick={addRepo}>Add repository</Button>
+    {/if}
   {/snippet}
 </PageHeader>
 
-<PageTabs {tabs} {tab} onpick={pick} />
+<PageTabs {tabs} {tab} onpick={pick} controlled />
 
-{#if tab === 'packages'}
-  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !pkgs.length}
-             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(PATHS)}>
+{#if tab !== 'advanced'}
+  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={false} retry={() => refresh(paths())}>
     <div class="bar">
-      {#each [['all', 'All'], ['recipe', 'Apps'], ['extension', 'Extensions']] as [k, l]}
-        <Button variant={kind === k ? 'primary' : 'ghost'} size="sm" onclick={() => (kind = k)}>{l}</Button>
-      {/each}
-      <span class="sep"></span>
-      {#each [['all', 'Any'], ['installed', 'Installed'], ['updates', 'Updates'], ['new', 'Not installed']] as [k, l]}
-        <Button variant={show === k ? 'primary' : 'ghost'} size="sm" onclick={() => (show = k)}>{l}</Button>
-      {/each}
-      <div class="find"><TextInput bind:value={q} placeholder="Search packages" ariaLabel="Search packages" autocomplete="off" /></div>
+      {#if cats.length > 2}
+        <div class="cats" role="group" aria-label="Categories">
+          {#each cats as c (c.value)}
+            <Button variant={category === c.value ? 'primary' : 'ghost'} size="sm" aria-pressed={category === c.value} onclick={() => (category = c.value)}>{c.label} <span class="cnt">{c.count}</span></Button>
+          {/each}
+        </div>
+      {/if}
+      <div class="find"><TextInput bind:value={q} type="search" placeholder={tab === 'addons' ? 'Search add-ons' : 'Search apps'} ariaLabel="Search" autocomplete="off" /></div>
     </div>
 
+    {#if showsFit && fitList.error && fitList.data == null}<Muted as="p">Whether apps fit this server could not be checked: {fitList.error.message}</Muted>{/if}
+
+    {#if !inTab.length}
+      <EmptyState icon={tab === 'updates' ? 'check-circle' : 'storefront'} title={tab === 'updates' ? 'No updates' : 'Nothing here yet'} text={emptyText[tab]} />
+    {:else if !cards.length}
+      <EmptyState icon="magnifying-glass" title="Nothing matches" text="Try another word or category." />
+    {:else}
+      <Grid min="250" gap="4">
+        {#each cards as p (p.repo + '/' + p.name)}
+          {@const acts = cardActions(p, openOf(p))}
+          <AppTile title={p.name} line={p.title} href={packagePath(p.repo, p.name)} icon={p.icon} src={p.src} on={p.installed}
+                   kicker={p.kind === 'recipe' ? '' : kindLabel(p.kind)} status={doing(p) || stateLine(p)}>
+            {#snippet meta()}
+              {#if p.category}<Chip>{categoryLabel(p.category)}</Chip>{/if}
+              {#if trustOf(p.repo, repos)}<Chip kind="trust" level={trustOf(p.repo, repos)} title={`From the repository ${p.repo}. ${testedText(p.verified, trustOf(p.repo, repos))}`} />{/if}
+              <Muted>{testedText(p.verified, trustOf(p.repo, repos))}</Muted>
+              {#if fitOf(p)}
+                {@const f = fitOf(p)}
+                <Row gap="2" wrap style="flex-basis:100%">
+                  <Chip kind="fit" level={f.verdict}>{fitLabel(f)}</Chip>
+                  {#if fitReason(f)}<Muted>{fitReason(f)}</Muted>{/if}
+                </Row>
+              {/if}
+              {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
+            {/snippet}
+            {#snippet actions()}
+              {#each acts as a (a.id)}
+                <Button need={needOf(a.id)} variant={a.primary ? 'primary' : 'secondary'} size="sm" icon={a.icon} disabled={!!a.reason} reason={a.reason}
+                        busy={busyOf(a.id, p)} tooltip={`${a.label} ${p.name}`} aria-label="{a.label} {p.name}" onclick={() => runAction(a.id, p, openOf(p))}>{a.label}</Button>
+              {/each}
+            {/snippet}
+          </AppTile>
+        {/each}
+      </Grid>
+    {/if}
+  </PageState>
+{:else}
+  <h2 class="sect">Repositories</h2>
+  <PageState loading={!repoList.loaded} error={repoList.error?.message} hasData={repoList.data != null} empty={repoList.loaded && !repoList.error && !repos.length}
+             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(paths())}>
+    <div class="card tc">
+      <Table id="repos" columns={repoColumns} rows={repos} key="name" loading={!repoList.loaded} empty="No repository.">
+        {#snippet cell(r, col)}
+          {#if col.key === 'name'}
+            <span class="nm"><i class="ph ph-database"></i>{r.name}</span>
+          {:else if col.key === 'url'}
+            <span class="ds">{r.url}</span>
+          {:else if col.key === 'signed'}
+            <StatusDot state={r.signed ? 'ok' : 'bad'} label={r.signed ? 'signed releases only' : 'unsigned'} />
+          {:else if col.key === 'from'}
+            {r.from === 'default' ? 'this project' : 'added by you'}
+          {:else if r.from === 'added'}
+            <Button need="admin" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
+          {/if}
+        {/snippet}
+      </Table>
+    </div>
+    <div class="note">Packages run as root on this server. A release is used only when its signature verifies against the key the repository was added with.</div>
+  </PageState>
+
+  <h2 class="sect">All packages</h2>
+  <PageState loading={!market.loaded} error={market.error?.message} hasData={market.data != null} empty={market.loaded && !market.error && !pkgs.length}
+             emptyIcon="storefront" emptyTitle="Nothing to install yet" emptyText="No release of any repository has been read. Use Check for updates." retry={() => refresh(paths())}>
     {#if selected.size}
       <div class="bulk">
         <span class="bulk-count">{selected.size} selected</span>
@@ -174,9 +260,8 @@
     {/if}
 
     <div class="card tc">
-      <Table id="market" {columns} rows={shown} key="name" loading={!market.loaded} empty="No package matches.">
+      <Table id="market" {columns} rows={pkgs} key="name" loading={!market.loaded} empty="No package.">
         {#snippet cell(p, col)}
-          {@const on = p.state !== 'new'}
           {#if col.key === 'sel'}
             <Switch box checked={selected.has(p.name)} onchange={(c) => toggle(p.name, c)} label="Select {p.name}" />
           {:else if col.key === 'go'}
@@ -186,7 +271,7 @@
               <Button need="admin" variant="primary" size="sm" busy={rowstate.pending('pkg', ['update', p.name])} busyLabel="Updating…" tooltip={`Update to ${p.avail}: shows what changed first`} onclick={() => update(p)}>Update</Button>
             {/if}
           {:else if col.key === 'name'}
-            <span class="nm"><i class="ph ph-{kindIcon(p.kind)}" style="color:{p.state === 'new' ? 'var(--fg-3)' : 'var(--accent-ink)'}"></i>{p.name}</span>
+            <a class="nm" {...link(packagePath(p.repo, p.name))}><i class="ph ph-{kindIcon(p.kind)}" style="color:{p.state === 'new' ? 'var(--fg-3)' : 'var(--accent-ink)'}"></i>{p.name}</a>
             <div class="in">{kindLabel(p.kind)}{p.core ? ' · the server needs it' : ''}</div>
             {#if failure(p)}{@const f = failure(p)}<ErrorNote error={f.error} ondismiss={() => rowstate.dismiss(f.id)} />{/if}
           {:else if col.key === 'title'}
@@ -211,34 +296,12 @@
       </Table>
     </div>
   </PageState>
-{:else}
-  <PageState loading={!repoList.loaded} error={repoList.error?.message} hasData={repoList.data != null} empty={repoList.loaded && !repoList.error && !repos.length}
-             emptyIcon="database" emptyTitle="No repositories" emptyText="Add a repository to see its packages." retry={() => refresh(PATHS)}>
-    <div class="card tc">
-      <Table id="repos" columns={repoColumns} rows={repos} key="name" loading={!repoList.loaded} empty="No repository.">
-        {#snippet cell(r, col)}
-          {#if col.key === 'name'}
-            <span class="nm"><i class="ph ph-database"></i>{r.name}</span>
-          {:else if col.key === 'url'}
-            <span class="ds">{r.url}</span>
-          {:else if col.key === 'signed'}
-            <StatusDot state={r.signed ? 'ok' : 'bad'} label={r.signed ? 'signed releases only' : 'unsigned'} />
-          {:else if col.key === 'from'}
-            {r.from === 'default' ? 'this project' : 'added by you'}
-          {:else if r.from === 'added'}
-            <Button need="admin" variant="ghost" class="btn-icon" icon="trash" busy={rowstate.pending('pkg', ['repo-remove', r.name])} tooltip={'Take this repository out (installed packages stay)'} aria-label="Remove {r.name}" onclick={() => dropRepo(r)} />
-          {/if}
-        {/snippet}
-      </Table>
-    </div>
-    <div class="note">Packages run as root on this server. A release is used only when its signature verifies against the key the repository was added with.</div>
-  </PageState>
 {/if}
 
 {#if bulkOpen}
   <Dialog title="Bulk change" panel="dialog" width="460px" onclose={cancelBulk}>
     <div class="bulkd">
-      <h3 class:{bad}={bulkOpen.action === 'remove'}>
+      <h3 class:bad={bulkOpen.action === 'remove'}>
         {bulkOpen.action === 'install' ? 'Install the selected packages'
          : bulkOpen.action === 'update' ? 'Update the selected packages'
          : 'Remove the selected packages'}
@@ -263,10 +326,10 @@
 {#if showSummary}
   <Dialog title="Result" panel="dialog" width="460px" onclose={dismissSummary}>
     <div class="bulkd">
-      <h3 class:{bad}={failedCount > 0}>{failedCount > 0 ? 'Some changes failed' : 'All changes finished'}</h3>
+      <h3 class:bad={failedCount > 0}>{failedCount > 0 ? 'Some changes failed' : 'All changes finished'}</h3>
       <ul class="bulk-list">
         {#each bulkSummary as r}
-          <li class:{bad}={!r.ok}>{r.name} <Muted>{r.ok ? 'finished' : (r.reason ?? ('status: ' + (r.status ?? 'failed')))}</Muted></li>
+          <li class:bad={!r.ok}>{r.name} <Muted>{r.ok ? 'finished' : (r.reason ?? ('status: ' + (r.status ?? 'failed')))}</Muted></li>
         {/each}
       </ul>
       <div class="bulk-foot">
@@ -277,10 +340,13 @@
 {/if}
 
 <style>
-  .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-  .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
-  .find { margin-left: auto; max-width: 240px; }
-  .nm { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; }
+  .bar { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin: 14px 0 14px; }
+  .cats { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+  .cnt { font: 500 10.5px var(--mono); opacity: 0.75; }
+  .find { margin-left: auto; width: 240px; max-width: 100%; }
+  .sect { margin: 18px 0 8px; font-size: 15px; font-weight: 600; }
+  .nm { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; color: var(--fg); text-decoration: none; }
+  a.nm:hover { text-decoration: underline; }
   .nm i { font-size: 18px; }
   .ds { font-size: 12.5px; color: var(--fg-3); }
   .in { font-size: 12px; color: var(--fg-3); margin-left: 26px; }
@@ -297,4 +363,5 @@
   .bulk-list li.bad { color: var(--bad-ink); }
   .bulk-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--line); }
   .bad { color: var(--bad-ink); }
+  @media (max-width: 640px) { .find { margin-left: 0; width: 100%; } }
 </style>

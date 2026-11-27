@@ -2095,6 +2095,43 @@ export interface SysOperations {
     exit: number;
     lines: ([name: Field, repo: Field, available: Field, installed: Field, state: "new" | "current" | "update", requires: Field, type: "feature" | "provider" | "-", title: Field])[];
   };
+  "pkg.cards": {
+    /** what a store card shows beyond pkg market, as data: name, repo, category (- = none), icon (ph:<name> or a file of the package, - = none), verified (YYYY-MM-DD the release last ran on a real server, from the index of the official signed repository only, - = none); then what the package states it needs: needs (comma list), ram_mb, disk_gb (- = not stated, ? = cannot be told), gpu (yes|no|?) */
+    words: ["pkg", "cards"];
+    path: "/pkg/cards";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: [name: Field, repo: Field, category: Field, icon: Field, verified: Field, needs: Field, ram_mb: Field, disk_gb: Field, gpu: Field][];
+  };
+  "pkg.fit": {
+    /** does an app that is not installed fit this server, as data: name, repo, verdict (fits|note|no|unstated|unknown), check (core|memory|disk|gpu|share|docker|tailscale|need), level (ok|note|no|unstated|unknown), need, have, total (- = not known; memory and disk in bytes) */
+    words: ["pkg", "fit"];
+    path: "/pkg/fit";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { };
+    stdin: "none";
+    exit: number;
+    lines: ([name: Field, repo: Field, verdict: "fits" | "note" | "no" | "unstated" | "unknown", check: "core" | "memory" | "disk" | "gpu" | "share" | "docker" | "tailscale" | "need", level: "ok" | "note" | "no" | "unstated" | "unknown", need: Field, have: Field, total: Field])[];
+  };
+  "pkg.history.by_name": {
+    /** the versions of a package as its repository's signed index lists them, as data: history TAB index|none, then version TAB version, date (- = none), current|older, withdrawn yes|no, reason, changes (- = none); nothing is installed */
+    words: ["pkg", "history", "<name>"];
+    path: "/pkg/history/{name}";
+    method: "get";
+    class: "read";
+    role: "admin";
+    params: { name: string; };
+    stdin: "none";
+    exit: number;
+    lines: ([tag: "history", source: "index" | "none"]
+      | [tag: "version", version: Field, date: Field, which: "current" | "older", withdrawn: "yes" | "no", reason: Field, changes: Field])[];
+  };
   "pkg.index": {
     /** the state of the package index as key TAB value lines: repo, last_ok, last_try (epoch seconds), error (- = none), expires (- = unknown), notified; nothing before the first fetch */
     words: ["pkg", "index"];

@@ -1,6 +1,6 @@
 # 0004: The job record
 
-Status: Accepted (2026-11-10)
+Status: Accepted (2026-11-10). Later: ADR 0034 (accepted 2026-11-26, Decided items) changes parts of this record, see "What changes in older records on acceptance" there. Until a step is built, this record applies as written.
 Issue: hobnix/server#131 (epic #128)
 
 ## Context

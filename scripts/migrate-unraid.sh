@@ -249,7 +249,7 @@ done
 if $merge; then
   extra+=("note"$'\t'"Folders with the same name on several disks become one share, like Unraid's user shares. Reserved names (shares, sensitive, global, homes, printers) get the suffix -adopted")
 else
-  extra+=("note"$'\t'"Every folder becomes its own share <disk>-<folder>")
+  extra+=("note"$'\t'"Every folder becomes its own share <disk>-<folder> (a name over 41 characters is shortened, the plan says how)")
 fi
 if $chown; then extra+=("note"$'\t'"All files are given to the share owner (chown, slow on big disks)")
 else extra+=("note"$'\t'"Files keep their owner nobody:users (99:100); Samba reads them as the share owner. Use --chown to hand them over"); fi

@@ -13,7 +13,7 @@ export const ICONS = [
   'hard-drives', 'hash', 'heartbeat', 'hourglass-medium', 'hourglass-simple-low', 'house', 'house-line', 'info', 'key', 'keyboard', 'lightning',
   'link-break', 'list', 'list-bullets', 'list-checks', 'list-magnifying-glass', 'lock', 'lock-key', 'lock-key-open', 'lock-open', 'lock-simple',
   'magic-wand', 'magnifying-glass', 'memory', 'monitor', 'network', 'package', 'password', 'pause', 'pause-circle', 'pencil-simple', 'play', 'plug',
-  'plugs', 'plugs-connected', 'plus', 'power', 'prohibit', 'pulse', 'push-pin', 'puzzle-piece', 'ruler', 'scroll', 'seal-check', 'share-network',
+  'plugs', 'plugs-connected', 'plus', 'power', 'prohibit', 'pulse', 'push-pin', 'puzzle-piece', 'question', 'ruler', 'scroll', 'seal-check', 'share-network',
   'shield', 'shield-check', 'shipping-container', 'sign-in', 'sign-out', 'sliders', 'sliders-horizontal', 'sparkle', 'squares-four', 'stack',
   'stack-plus', 'stethoscope', 'stop', 'storefront', 'swap', 'tag', 'terminal-window', 'thermometer', 'trash', 'trash-simple', 'tray',
   'tray-arrow-down', 'usb', 'user', 'user-plus', 'users-four', 'users-three', 'vault', 'video-camera', 'warning', 'warning-circle',

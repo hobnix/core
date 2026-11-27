@@ -145,6 +145,7 @@ share.exists	Eine Freigabe mit diesem Namen gibt es bereits.
 share.folder-invalid	Das ist kein Ordner innerhalb der Freigabe.
 share.instance-unknown	Keine solche Instanz gefunden.
 share.kind-invalid	Die Art ist shares oder sensitive.
+share.name-too-long	Der Name der Freigabe ist zu lang.
 share.needs-zfs	Wiederherstellungspunkte brauchen den ZFS-Aufbau.
 share.no-snapshots	Diese Freigabe hat keine Wiederherstellungspunkte.
 share.not-kept	Hier kann nur ein behaltener Ordner geändert werden.
@@ -361,6 +362,10 @@ pkg.ambiguous	Das Paket ist in mehr als einem Repository.
 pkg.added-repo	Installiere dieses Paket aus dem Marktplatz.
 pkg.role-part	Ein benötigtes Teil folgt der Rolle dieses Servers.
 pkg.require-missing	Ein benötigtes Teil ist nicht verfügbar.
+pkg.core-too-old	Das Paket braucht einen neueren Kern: aktualisiere zuerst den Server.
+pkg.core-too-new	Das Paket unterstützt diesen Kern noch nicht: warte auf eine Version des Pakets, die das tut.
+pkg.other-repo	Ein Paket dieses Namens ist aus einem anderen Repository installiert: entferne es zuerst, um zu wechseln.
+pkg.core-range	Das Paket gibt seinen Kernbereich in einer Form an, die dieser Server nicht annimmt.
 blueprint.value-missing	Die Option braucht einen Wert.
 blueprint.unreadable	Der Bauplan kann nicht verwendet werden.
 blueprint.role	Dieser Bauplan ist für eine andere Rolle.

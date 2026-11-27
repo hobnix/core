@@ -22,6 +22,9 @@ eq('shares: kind', shareOptions(SH, { kind: 'sensitive' }).map((o) => o.value), 
 eq('shares: kind list', shareOptions(SH, { kind: ['shares', 'sensitive'] }).map((o) => o.value), ['media', 'photos']);
 eq('shares: exclude', shareOptions(SH, { exclude: 'media' }).map((o) => o.value), ['photos']);
 eq('shares: none', shareOptions([]), []);
+// issue 1245: a share that exists is offered up to 80 characters (Samba's limit)
+const LONG = 'data-02-communityapplicationsappdatabackup', MAX = 'a'.repeat(80);
+eq('shares: long names', shareOptions([[LONG, 'shares'], [MAX, 'shares'], [MAX + 'a', 'shares'], ['-x', 'shares'], ['a/b', 'shares']]).map((o) => o.value), [LONG, MAX]);
 
 // the group value: { scope, peer, share }, two servers may hold the same share name
 eq('encode local', encodeShare(shareValue('local', '', 'media')), 'local:media');

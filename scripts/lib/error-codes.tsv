@@ -1,5 +1,5 @@
 # Error codes (ADR 0028). code<TAB>layer<TAB>meaning<TAB>text<TAB>fix; "-" for none. Generated page: docs/errors.md (python3 scripts/errors-doc-gen.py write).
-# layer run = set by the web server when a plan or start gave no status line; script = printed by a change script (refuse_code in scripts/lib/ui.sh).
+# layer run = set by the web server itself (a plan or start that gave no status line, or a request it refused with a code); script = printed by a change script (refuse_code in scripts/lib/ui.sh).
 # A code never changes meaning; a rename keeps the old name as an alias for one release.
 refused	script	A plain refuse "<text>" without a more exact code	The server did not do this.	-
 run.timeout	run	The time limit of the web server passed before the command ended	The server stopped waiting. A start may still be running or be partly done: check Jobs and the page before you try again.	-
@@ -148,6 +148,7 @@ share.exists	script	A share of that name exists already	A share of that name exi
 share.folder-invalid	script	The folder is not a folder inside the share	That is not a folder inside the share.	-
 share.instance-unknown	script	The instance named for a share does not exist	No such instance was found.	-
 share.kind-invalid	script	The kind of share is not shares or sensitive	The kind is shares or sensitive.	-
+share.name-too-long	run	The web server refused a change because a share name is too long (a new share: 41 characters; a share that exists: 80)	The share name is too long.	hs share <share> rename <new>
 share.needs-zfs	script	Snapshots need the ZFS layout	Snapshots need the ZFS layout.	-
 share.no-snapshots	script	The share has no snapshots	This share has no snapshots.	-
 share.not-kept	script	Only a kept folder of a deleted share can be removed or brought back	Only a kept folder can be changed here.	-
@@ -368,6 +369,10 @@ pkg.ambiguous	script	A package is in more than one repository.	The package is in
 pkg.added-repo	script	A package of an added repository is not installed together with others.	Install this package from the Marketplace.	-
 pkg.role-part	script	A required part follows the role of the server and is not switched by hand.	A required part follows the role of this server.	-
 pkg.require-missing	script	A required part is neither on the server nor offered by a repository.	A required part is not available.	-
+pkg.core-too-old	script	Install or update was asked for a package whose requires_core is above the API level of this core.	The package needs a newer core: update the server first.	hs update
+pkg.core-too-new	script	Install or update was asked for a package whose requires_core_max is below the API level of this core.	The package does not support this core yet: wait for a release of the package that does.	-
+pkg.other-repo	script	Install was asked for a package whose name is installed from another repository (or from one that is gone).	A package of this name is installed from another repository: remove it first to switch.	hs pkg remove <name>
+pkg.core-range	script	The requires_core or requires_core_max of a package is not in a valid form.	The package states its core range in a form this server does not accept.	-
 blueprint.value-missing	script	An option was given without its value.	The option needs a value.	-
 blueprint.unreadable	script	The blueprint does not exist, cannot be read or has problems.	The blueprint cannot be used.	-
 blueprint.role	script	The blueprint is not made for the role of this server.	This blueprint is for another role.	-

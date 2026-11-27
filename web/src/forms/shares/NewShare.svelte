@@ -40,7 +40,7 @@
 
 <CreateDialog title="New share" area="shares" {args} {onclose} {ondone}>
   {#snippet form()}
-    <Field label="Name" error={name && !nameOk ? 'Lowercase letters, digits and “-”, starting with a letter or digit.' : ''}>
+    <Field label="Name" error={name && !nameOk ? name.length > 41 ? 'A new share name has at most 41 characters.' : 'Lowercase letters, digits and “-”, starting with a letter or digit.' : ''}>
       <TextInput bind:value={name} placeholder="photos" autocomplete="off" spellcheck={false} />
     </Field>
 

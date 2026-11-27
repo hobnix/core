@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 """scripts/web-serve.py: the `shares` entries of CHANGES that the share forms use (add, perm, rename, delete, purge, restore)."""
+import contextlib
+import http.client
 import importlib.util
+import io
+import json
 import os
+import tempfile
+import threading
 import unittest
 
 here = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("web_serve", os.path.join(here, "..", "scripts", "web-serve.py"))
 ws = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ws)
+os.environ["HS_WEB_QUIET"] = "1"
 
 SID = "S-1-5-21-1111111111-2222222222-3333333333-1105"
+LONG = "data-02-communityapplicationsappdatabackup"     # 42 characters: adopting a disk made it (issue 1245)
+MAX = "a" * 80                                          # the longest name Samba takes
+KEPT_DAY = ".deleted-20261012"
 
 
 def ok(args, area="shares"):
@@ -84,6 +94,156 @@ class Shapes(unittest.TestCase):
     def test_confirm_word_for_delete(self):
         self.assertIsNotNone(ws.validate_change({"area": "shares", "args": ["media", "delete"], "confirm": "media"}))
         self.assertIsNone(ws.validate_change({"area": "shares", "args": ["media", "delete"], "confirm": "me;dia"}))
+
+
+class LongNames(unittest.TestCase):
+    """issue 1245: a share that exists can be changed up to 80 characters; a new name stays at most 41."""
+
+    def existing(self, name):
+        return [[name, "delete"], [name, "snapshot"], [name, "repair"], [name, "backup", "--to", "on"], [name, "perm", "--set", SID + "=read"],
+                [name, "visibility", "--to", "hidden"], [name, "rename", "--to", "movies"], [name, "restore", "--snapshot", "latest"],
+                [name, "rollback", "--snapshot", "snap1"], [name, "parity-skip", "--folder", "downloads"], [name, "parity-limit", "--to", "off"],
+                [name + KEPT_DAY, "purge"], [name + KEPT_DAY, "undelete"]]
+
+    def test_long_existing_share(self):
+        self.assertEqual(len(LONG), 42)
+        for name in (LONG, MAX):
+            for a in self.existing(name):
+                self.assertTrue(ok(a), a)
+
+    def test_81_refused(self):
+        for a in self.existing(MAX + "a"):
+            self.assertFalse(ok(a), a)
+
+    def test_class_stays_strict(self):
+        for bad in ("-" + LONG, "--confirm", "../" + LONG, LONG + "/..", LONG + "/x", "." + LONG, LONG + ".x", LONG.upper(), LONG + " x",
+                    LONG + "\n", LONG + ";x", ""):
+            for a in self.existing(bad):
+                self.assertFalse(ok(a), a)
+
+    def test_confirm_word(self):
+        # delete types the share, purge types the kept folder (80 + 17 characters)
+        for name, action in ((LONG, "delete"), (MAX, "delete"), (MAX + KEPT_DAY, "purge")):
+            self.assertIsNotNone(ws.validate_change({"area": "shares", "args": [name, action], "confirm": name}), name)
+        self.assertIsNone(ws.validate_change({"area": "shares", "args": [LONG, "delete"], "confirm": "a" * 98}))
+
+    def test_create_limit_unchanged(self):
+        self.assertTrue(ok(["a" * 41, "add", "--kind", "shares"]))
+        self.assertFalse(ok(["a" * 42, "add", "--kind", "shares"]))
+        self.assertTrue(ok([LONG, "rename", "--to", "a" * 41]))
+        self.assertFalse(ok(["media", "rename", "--to", "a" * 42]))
+
+    def test_other_places_a_share_is_named(self):
+        for name, want in ((LONG, True), (MAX, True), (MAX + "a", False), ("-x", False), ("a/b", False), ("..", False)):
+            self.assertEqual(ok(["Family", "group-add", "--access", name + "=read"], area="users"), want, name)
+            self.assertEqual(ok(["usb", "temp-copy", "--to", name], area="disk"), want, name)
+            self.assertEqual(bool(ws.re.fullmatch(ws.FM_LOC, "share:" + name)), want, name)
+            self.assertEqual(bool(ws.re.fullmatch(ws.READS[("share", "parity", "state")]["args"][0], name)), want, name)
+
+    def test_backup_switch(self):
+        for name, want in ((LONG, True), (MAX, True), (MAX + "a", False), ("-x", False), ("a/b", False)):
+            self.assertEqual(ok(["toggle", "--name", name, "--kind", "shares", "--to", "off"], area="backup"), want, name)
+
+    def test_reads_of_a_long_share(self):
+        for word in ("acl", "visible", "mounts", "history"):
+            pat = ws.READS[("shares", word)]["args"][0]
+            self.assertTrue(ws.re.fullmatch(pat, MAX), word)
+            self.assertTrue(ws.re.fullmatch(pat, "Photos_2024"), word)
+            for bad in (MAX + "a", "-x", "a/b", "..", "a b"):
+                self.assertIsNone(ws.re.fullmatch(pat, bad), (word, bad))
+
+    def test_reason(self):
+        why = ws.share_name_refusal({"area": "shares", "args": [MAX + "a", "delete"]})
+        self.assertIn("longer than 80 characters", why)
+        self.assertIn("rename", why)
+        for body in ({"area": "shares", "args": ["a" * 42, "add"]}, {"area": "shares", "args": ["media", "rename", "--to", "a" * 42]}):
+            self.assertIn("at most 41 characters", ws.share_name_refusal(body))
+        for body in ({"area": "shares", "args": [MAX + "a" + KEPT_DAY, "purge"]},
+                     {"area": "users", "args": ["Family", "group-add", "--access", MAX + "a=read"]}):
+            self.assertIn("longer than 80 characters", ws.share_name_refusal(body))
+        # not a length problem: the general refusal stays
+        for body in ({"area": "shares", "args": [LONG, "delete"]}, {"area": "shares", "args": ["../" + MAX, "delete"]},
+                     {"area": "shares", "args": ["-" + MAX, "delete"]}, {"area": "shares", "args": ["media" + KEPT_DAY, "purge"]},
+                     {"area": "shares", "args": [MAX, "purge"]}, {"area": "ct", "args": [MAX + "a", "delete"]},
+                     {"area": "shares", "args": "x"}, {"area": "shares", "args": [1, 2]}, {"area": "shares", "args": []}, {}):
+            self.assertIsNone(ws.share_name_refusal(body), body)
+
+
+class FakeAuth:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def storage_locked(self):
+        return False
+
+    def domain_password_ok(self, user, password):
+        return True
+
+    def domain_is_admin(self, user):
+        return True
+
+    def domain_role(self, user):
+        return "admin"
+
+    def local_fingerprint(self, user, fresh=False):
+        return ""
+
+    def local_password_ok(self, user, password):
+        return False
+
+
+class Answer(unittest.TestCase):
+    """what the page gets for a refused plan and start (real server, fake _run)"""
+
+    def setUp(self):
+        tmp = tempfile.mkdtemp()
+        with open(os.path.join(tmp, "index.html"), "w") as f:
+            f.write("app")
+        cfg = ws.Config()
+        cfg.root, cfg.workgroup, cfg.realm, cfg.fail_delay, cfg.hs = tmp, "HOME", "ad.home.lan", 0, "/nonexistent/hs"
+        self.srv = ws.Server(("127.0.0.1", 0), ws.make_handler(ws.App(cfg, FakeAuth(cfg))))
+        self.port = self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.calls = []
+        self.real_run = ws._run
+
+        def fake(cmd, stdin=None, timeout=10):
+            self.calls.append(cmd)
+            return 0, "status\tok\nheading\tx\n"
+        ws._run = fake
+        _, data, r = self.post("/api/login", {"realm": "domain", "user": "anna", "password": "pw"})
+        self.ck = {"Cookie": (r.getheader("Set-Cookie") or "").split(";")[0], "X-CSRF-Token": json.loads(data)["csrf"]}
+        self.calls.clear()
+
+    def tearDown(self):
+        ws._run = self.real_run
+        self.srv.shutdown()
+        self.srv.server_close()
+
+    def post(self, path, body, headers=None):
+        h = {"Content-Type": "application/json", "Origin": "http://127.0.0.1:%d" % self.port, **(headers or {})}
+        c = http.client.HTTPConnection("127.0.0.1", self.port)
+        c.request("POST", path, json.dumps(body), h)
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data, r
+
+    def test_long_share_reaches_the_script(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            status, _, _ = self.post("/api/plan", {"area": "shares", "args": [LONG, "delete"]}, self.ck)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.calls[-1][-4:], ["shares", "plan", LONG, "delete"])
+
+    def test_too_long_says_so(self):
+        for verb in ("plan", "start"):
+            status, data, _ = self.post("/api/" + verb, {"area": "shares", "args": [MAX + "a", "delete"]}, self.ck)
+            out = json.loads(data)
+            self.assertEqual((status, out.get("code")), (400, "share.name-too-long"), out)
+            self.assertIn("longer than 80 characters", out["error"])
+        status, data, _ = self.post("/api/plan", {"area": "shares", "args": ["../x", "delete"]}, self.ck)
+        self.assertEqual((status, json.loads(data)), (400, {"error": "That change is not allowed."}))
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":

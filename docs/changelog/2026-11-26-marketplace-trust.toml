@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "feature"
+title = "The Marketplace says in words who vouches for an app and whether it was tested on a real server"
+body  = """Every card and package page says "Official, signed" (only the official Hobnix repository, with a checked signature), "Community" (a signed repository added on this server) or "Community, unsigned". For the official repository it also says "Tested on a real server on <day>" when its index names that day, and "Not tested on a real server" otherwise; any other repository shows "No Hobnix test date", whatever its index says; the package page says what tested covers. The day is an optional field of the index that older servers ignore. Not tested on hardware yet."""
