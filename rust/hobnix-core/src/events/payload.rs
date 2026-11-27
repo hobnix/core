@@ -287,13 +287,31 @@ fn write_string(units: &[u16], out: &mut String) {
     out.push('"');
 }
 
+/// The shortest digits that read back, in `{:e}` form, the ones python picks. Where the number lies exactly between two of them
+/// (`868321580294690.25`), `{:e}` takes the upper one and python the even one, which rounding to that many digits gives. At a power
+/// of two the rounded digits may not read back; then the shortest ones stand.
+fn shortest(number: f64) -> Option<String> {
+    let short = format!("{number:e}");
+    let (mantissa, _) = short.split_once('e')?;
+    let after_point = mantissa
+        .chars()
+        .filter(char::is_ascii_digit)
+        .count()
+        .checked_sub(1)?;
+    let rounded = format!("{number:.after_point$e}");
+    let reads_back = rounded
+        .parse::<f64>()
+        .is_ok_and(|read| read.to_bits() == number.to_bits());
+    Some(if reads_back { rounded } else { short })
+}
+
 /// python's `repr(float)`: the shortest digits that read back, with an exponent below 1e-4 and from 1e16 on.
 fn float_text(number: f64) -> Option<String> {
     if !number.is_finite() {
         return None;
     }
-    // `{:e}` gives the shortest digits as `-d.ddde-7`
-    let scientific = format!("{number:e}");
+    // `-d.ddde-7`
+    let scientific = shortest(number)?;
     let (mantissa, exponent) = scientific.split_once('e')?;
     let exponent: i32 = exponent.parse().ok()?;
     let sign = if mantissa.starts_with('-') { "-" } else { "" };
@@ -376,6 +394,11 @@ mod tests {
                 r#"{"x":5e-324,"y":1.7976931348623157e+308,"z":123456.789}"#,
             ),
             (r#"{"x":1e-400}"#, r#"{"x":0.0}"#),
+            // exactly between two shortest forms: the even digit, as python takes it
+            (
+                r#"{"x":868321580294690.25,"y":-1423040717810925.25,"z":868321580294690.75}"#,
+                r#"{"x":868321580294690.2,"y":-1423040717810925.2,"z":868321580294690.8}"#,
+            ),
             (
                 r#"{"big":123456789012345678901234567890}"#,
                 r#"{"big":123456789012345678901234567890}"#,
