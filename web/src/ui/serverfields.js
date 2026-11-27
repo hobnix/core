@@ -10,6 +10,9 @@ const ctOf = (r) => ({ name: r[0], type: r[1] ?? '', state: r[2] ?? '' });
 const isRunning = (c) => /running/i.test(c.state);
 const KIND_WORD = { shares: 'share', sensitive: 'sensitive' };
 
+// The name of a share that exists: up to 80 characters, Samba's limit (a NEW share has at most 41; scripts/web-serve.py SHARE_EXISTING).
+export const EXISTING_SHARE = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
 // `shares overview` rows: name, kind (shares|sensitive|other), path, cache, size_bytes ... ; "other" rows are no shares of the file server
 export function shareOf(r) {
   return { name: r[0] ?? '', kind: r[1] ?? '', bytes: Number(r[4]) || 0 };
@@ -17,7 +20,7 @@ export function shareOf(r) {
 export function shareOptions(rowList, { kind, exclude } = {}) {
   const kinds = asList(kind), skip = asList(exclude);
   return rowList.map(shareOf)
-    .filter((s) => /^[a-z0-9][a-z0-9-]{0,40}$/.test(s.name) && s.kind !== 'other' && (!kinds.length || kinds.includes(s.kind)) && !skip.includes(s.name))
+    .filter((s) => EXISTING_SHARE.test(s.name) && s.kind !== 'other' && (!kinds.length || kinds.includes(s.kind)) && !skip.includes(s.name))
     .map((s) => ({ value: s.name, label: s.name, detail: [KIND_WORD[s.kind] ?? s.kind, s.bytes ? sizeTxt(s.bytes) : ''].filter(Boolean).join(' · ') }));
 }
 

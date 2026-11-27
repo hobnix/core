@@ -12,14 +12,19 @@ use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+use crate::Secret;
+
 const MAX_BODY: usize = 16 << 20;
 
+/// Why a request failed.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum HttpError {
     /// The URL is not `http://host[:port]/path`.
     BadUrl(String),
     /// `https://` (see the module text).
     TlsUnsupported,
+    /// Connect, read or write failed, or timed out.
     Io(std::io::Error),
     /// The answer is not HTTP/1.x, or is cut off, or too large.
     BadResponse(String),
@@ -41,22 +46,47 @@ impl std::fmt::Display for HttpError {
         }
     }
 }
-impl std::error::Error for HttpError {}
+impl std::error::Error for HttpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            HttpError::Io(e) => Some(e),
+            HttpError::Json(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 impl From<std::io::Error> for HttpError {
     fn from(e: std::io::Error) -> Self {
         HttpError::Io(e)
     }
 }
 
+/// An answer of the server.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Response {
+    /// The status code (`200`).
     pub status: u16,
     /// Header names lower-cased.
     pub headers: Vec<(String, String)>,
+    /// The body, at most 16 MiB.
     pub body: Vec<u8>,
 }
 
 impl Response {
+    /// A response with `status`, `headers` (names are lower-cased here) and `body`; for a test of code that reads one.
+    pub fn new(status: u16, headers: Vec<(String, String)>, body: Vec<u8>) -> Self {
+        let headers = headers
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v))
+            .collect();
+        Response {
+            status,
+            headers,
+            body,
+        }
+    }
+    /// The first header called `name` (any case).
     pub fn header(&self, name: &str) -> Option<&str> {
         let n = name.to_ascii_lowercase();
         self.headers
@@ -64,9 +94,11 @@ impl Response {
             .find(|(k, _)| *k == n)
             .map(|(_, v)| v.as_str())
     }
+    /// The body as text (invalid UTF-8 is replaced).
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
+    /// The body as JSON; [`HttpError::Json`] when it is not.
     pub fn json(&self) -> Result<Value, HttpError> {
         serde_json::from_slice(&self.body).map_err(HttpError::Json)
     }
@@ -81,10 +113,47 @@ impl Response {
     }
 }
 
+/// The value of a request header. Made from a `String`, a `&str` or a [`Secret`]; never printed (it can be the integration key).
+#[derive(Clone)]
+pub struct HeaderValue(String);
+
+impl std::fmt::Debug for HeaderValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("***")
+    }
+}
+
+impl From<String> for HeaderValue {
+    fn from(v: String) -> Self {
+        HeaderValue(v)
+    }
+}
+impl From<&String> for HeaderValue {
+    fn from(v: &String) -> Self {
+        HeaderValue(v.clone())
+    }
+}
+impl From<&str> for HeaderValue {
+    fn from(v: &str) -> Self {
+        HeaderValue(v.to_owned())
+    }
+}
+impl From<Secret> for HeaderValue {
+    fn from(v: Secret) -> Self {
+        HeaderValue(v.expose().to_owned())
+    }
+}
+impl From<&Secret> for HeaderValue {
+    fn from(v: &Secret) -> Self {
+        HeaderValue(v.expose().to_owned())
+    }
+}
+
+/// A blocking client: a timeout and headers sent with every request.
 #[derive(Clone)]
 pub struct Client {
     timeout: Duration,
-    headers: Vec<(String, String)>,
+    headers: Vec<(String, HeaderValue)>,
 }
 
 /// Header names only: a value can be the integration key.
@@ -108,16 +177,20 @@ impl Default for Client {
 }
 
 impl Client {
+    /// A client with a 10 s timeout and no headers.
     pub fn new() -> Self {
         Self::default()
     }
     /// Timeout for the connect and for each read and write (default 10 s).
+    #[must_use]
     pub fn timeout(mut self, t: Duration) -> Self {
         self.timeout = t;
         self
     }
-    /// A header sent with every request, e.g. the key header from the integration listing. A line break in it is refused when sending.
-    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+    /// A header sent with every request, e.g. the key header from the integration listing with the key as a [`Secret`]. A line break in
+    /// it is refused when sending.
+    #[must_use]
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<HeaderValue>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
     }
@@ -130,6 +203,7 @@ impl Client {
         let b = serde_json::to_vec(body).map_err(HttpError::Json)?;
         self.request("POST", url, Some(&b))?.ok()?.json()
     }
+    /// GET; any status is an `Ok` response.
     pub fn get(&self, url: &str) -> Result<Response, HttpError> {
         self.request("GET", url, None)
     }
@@ -143,7 +217,7 @@ impl Client {
     ) -> Result<Response, HttpError> {
         let (host, port, path) = parse_url(url)?;
         let bad = |s: &str| s.contains(['\r', '\n']);
-        if self.headers.iter().any(|(k, v)| bad(k) || bad(v)) {
+        if self.headers.iter().any(|(k, v)| bad(k) || bad(&v.0)) {
             return Err(HttpError::BadUrl("header with a line break".into()));
         }
         let addr = (host.as_str(), port)
@@ -154,16 +228,18 @@ impl Client {
         s.set_read_timeout(Some(self.timeout))?;
         s.set_write_timeout(Some(self.timeout))?;
         let mut head = format!(
-            "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: hobnix-ext-sdk\r\nAccept: application/json\r\nConnection: close\r\n"
+            "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: hobnix-pkg\r\nAccept: application/json\r\nConnection: close\r\n"
         );
         for (k, v) in &self.headers {
-            head.push_str(&format!("{k}: {v}\r\n"));
+            head.push_str(k);
+            head.push_str(": ");
+            head.push_str(&v.0);
+            head.push_str("\r\n");
         }
         if let Some(b) = json_body {
-            head.push_str(&format!(
-                "Content-Type: application/json\r\nContent-Length: {}\r\n",
-                b.len()
-            ));
+            head.push_str("Content-Type: application/json\r\nContent-Length: ");
+            head.push_str(&b.len().to_string());
+            head.push_str("\r\n");
         }
         head.push_str("\r\n");
         s.write_all(head.as_bytes())?;
@@ -182,10 +258,10 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
     }
     let bad = || HttpError::BadUrl(redact_url(url));
     let rest = url.strip_prefix("http://").ok_or_else(bad)?;
-    let (auth, path) = match rest.find('/') {
-        Some(i) => (&rest[..i], &rest[i..]),
-        None => (rest, "/"),
-    };
+    let (auth, path) = rest
+        .find('/')
+        .and_then(|i| rest.split_at_checked(i))
+        .unwrap_or((rest, "/"));
     if auth.is_empty() || auth.contains('@') || path.contains(['\r', '\n', ' ']) {
         return Err(bad());
     }
@@ -235,7 +311,11 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| bad("no end of headers"))?;
-    let head = std::str::from_utf8(&raw[..end]).map_err(|_| bad("headers are not text"))?;
+    // `end` is where the four bytes were found: both parts exist
+    let (Some(head), Some(rest)) = (raw.get(..end), raw.get(end + 4..)) else {
+        return Err(bad("no end of headers"));
+    };
+    let head = std::str::from_utf8(head).map_err(|_| bad("headers are not text"))?;
     let mut lines = head.split("\r\n");
     let mut parts = lines.next().unwrap_or("").splitn(3, ' ');
     if !parts.next().is_some_and(|v| v.starts_with("HTTP/1.")) {
@@ -249,7 +329,6 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         .filter_map(|l| l.split_once(':'))
         .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string()))
         .collect();
-    let rest = &raw[end + 4..];
     let find = |n: &str| {
         headers
             .iter()
@@ -265,10 +344,7 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         if n > MAX_BODY {
             return Err(bad("body too large"));
         }
-        if rest.len() < n {
-            return Err(bad("body cut off"));
-        }
-        rest[..n].to_vec()
+        rest.get(..n).ok_or_else(|| bad("body cut off"))?.to_vec()
     } else {
         rest.to_vec()
     };

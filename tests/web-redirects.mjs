@@ -118,5 +118,11 @@ eq('the removal release is set', /^\d+\.\d+$/.test(REMOVE_IN), true);
 eq('the plan names the removal release', readFileSync(here('../docs/PLAN-navigation.md'), 'utf8').includes(`remove in ${REMOVE_IN}`), true);
 eq('keyOf covers every row (sanity)', Object.values(ALL).filter((v) => !keyOf[P[Array.isArray(v) ? v[0] : v]]).length, 0);
 
+// the entry address of "Open on my server" (docs/PLAN-marketplace-stats.md): kept with no removal release
+eq('/marketplace/<repo>/<name> is the package page', redirect('/marketplace/official/jellyfin', L), `/node/${L}${P.marketplace}/official/jellyfin`);
+eq('/marketplace/<one word> is the Marketplace', redirect('/marketplace/a', L), `/node/${L}${P.marketplace}`);
+eq('/marketplace/ with a dot word is the Marketplace', redirect('/marketplace/x/..', L), `/node/${L}${P.marketplace}`);
+eq('/marketplace/builder stays the builder', redirect('/marketplace/builder', L), `/node/${L}${P.builder}`);
+
 console.log(`  -> ${ok} ok, ${bad} failed`);
 process.exit(bad ? 1 : 0);

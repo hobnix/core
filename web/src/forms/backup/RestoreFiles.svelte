@@ -4,6 +4,7 @@
   // nothing but the restored subtree changes owner. A share that was deleted can still be typed in: that is what a restore is for.
   import CreateDialog from '../../shell/CreateDialog.svelte';
   import { poll, rows } from '../../data.svelte.js';
+  import { EXISTING_SHARE } from '../../ui/serverfields.js';
   import { Field, TextInput, Select, Muted, ShareField } from '../../ui';
 
   let { share: first = '', onclose, ondone = () => {} } = $props();
@@ -18,7 +19,7 @@
   let share = $state(first);
   let snapshot = $state('latest');
   let path = $state('');
-  const shareOk = $derived(/^[a-z0-9][a-z0-9-]{0,40}$/.test(share));
+  const shareOk = $derived(EXISTING_SHARE.test(share));
   const pathOk = $derived(path === '' || (/^\/?[A-Za-z0-9_][A-Za-z0-9._\/ -]*$/.test(path) && !path.includes('..')));
   const args = () => {
     if (!shareOk || !pathOk || !/^(latest|[A-Za-z0-9]{1,64})$/.test(snapshot)) return null;
@@ -30,7 +31,7 @@
 
 <CreateDialog title="Restore files from the backup" kicker="Restore" area="shares" {args} {onclose} {ondone}>
   {#snippet form()}
-    <Field label="Share" error={share && !shareOk ? 'A share name: lower-case letters, digits and hyphens.' : ''}>
+    <Field label="Share" error={share && !shareOk ? 'A share name: lower-case letters, digits and hyphens, at most 80.' : ''}>
       <ShareField bind:value={share} free more={names} placeholder="Choose or type a share" />
     </Field>
     <Field label="Restore point">

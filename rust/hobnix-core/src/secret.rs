@@ -34,8 +34,8 @@ mod tests {
     #[test]
     fn never_printed() {
         let s = Secret::new("hunter2");
-        assert_eq!(format!("{}", s), "***");
-        assert_eq!(format!("{:?}", s), "***");
+        assert_eq!(format!("{s}"), "***");
+        assert_eq!(format!("{s:?}"), "***");
         assert_eq!(s.expose(), "hunter2");
     }
 }

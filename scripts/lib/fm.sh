@@ -98,7 +98,7 @@ fm_resolve() {
   local id=$1 n dir
   LID=$id; LKIND=""; LLABEL=""; LROOT=""; LFS="-"; LSIZE=0; LFREE=0; LADD=no; LMOD=no; LREASON="-"; LPOOL="-"; LDISK="-"
   LUSABLE=yes; LERR=""; LCODE=""; LAK=$id; LREL=""; LTOP=no; LSNAP=no; LLOCK=no
-  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:[a-z][a-z0-9]{0,11}|cache:bulk|share:[a-z0-9][a-z0-9-]{0,40}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; LCODE=fm.location-unknown; return 1; }
+  [[ $id =~ ^(disk:data-[0-9]{1,3}|pool:[a-z][a-z0-9]{0,11}|cache:bulk|share:[a-z0-9][a-z0-9-]{0,79}|temp:[a-z0-9][a-z0-9-]{0,31})$ ]] || { LERR="unknown location $id"; LCODE=fm.location-unknown; return 1; }
   LKIND=${id%%:*}; n=${id#*:}; LLABEL=$n
   if storage_locked; then LUSABLE=no; LERR="The encrypted storage is locked: unlock it first (hs unlock)."; LCODE=fm.storage-locked; LREASON="storage locked"; return 1; fi
   local sr; sr=$(fm_snapraid_pool || true)

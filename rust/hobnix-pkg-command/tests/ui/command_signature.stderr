@@ -1,0 +1,29 @@
+error: a command is not async
+ --> tests/ui/command_signature.rs:5:1
+  |
+5 | async fn not_async(_ctx: &dyn Ctx) -> Result<Success, Failure> {
+  | ^^^^^
+
+error: a command returns Result<Success, E> with E: Into<Failure>
+  --> tests/ui/command_signature.rs:10:4
+   |
+10 | fn no_result(_ctx: &dyn Ctx) {}
+   |    ^^^^^^^^^
+
+error: a command takes (ctx: &dyn Ctx), (ctx: &dyn Ctx, args: A) or (ctx: &dyn Ctx, args: A, req: &Request)
+  --> tests/ui/command_signature.rs:13:10
+   |
+13 | fn no_ctx() -> Result<Success, Failure> {
+   |          ^^
+
+error: a command has no generic parameters
+  --> tests/ui/command_signature.rs:18:11
+   |
+18 | fn generic<T>(_ctx: &dyn Ctx) -> Result<Success, Failure> {
+   |           ^^^
+
+error: #[command] goes on a function
+  --> tests/ui/command_signature.rs:23:1
+   |
+23 | struct NotAFunction;
+   | ^^^^^^

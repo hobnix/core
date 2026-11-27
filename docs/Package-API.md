@@ -28,6 +28,12 @@ All keys are optional. A manifest written before level 9 validates unchanged. A 
 The package index (`index.toml`) carries `icon`, `category` and `app_version` as well (optional); `pkg.py repo-check` compares them with the
 package. Description, pictures and `[app.uses]` are read from the package itself.
 
+**What the Marketplace does with a recipe's needs** (`hs sys pkg fit`, no key of its own): `[app.uses] ram_mb` (MiB) is compared with the
+server's memory (above the total: does not fit; above what is free now: a note), `disk_gb` (GiB) with the free space of the storage pool where
+a new container's disk goes (above it: does not fit), `[app.uses] gpu` or `uses = ["gpu"]` with the graphics card (never in the way), and
+`needs` with what is set up. A key that is absent or 0 is "not stated"; a recipe with neither `ram_mb` nor `disk_gb` is never shown as
+fitting. State what the app needs to run well, not the smallest value it starts with. Not tested on hardware yet.
+
 ### `[app]` tables
 
 ```toml
@@ -163,6 +169,26 @@ Not tested on hardware yet: only a fake `systemd-run` that records its arguments
 `kind = "blueprint"` (docs/PLAN-registry.md "Blueprints"): an ordered package list plus fill-only config, no script and no Nix. A blueprint says
 `requires_core = ">=11"`, so a core that does not know the kind (level 10 or lower) refuses it instead of installing it. Validated by
 `scripts/lib/pkg_blueprint.py`; a blueprint is applied (`hs blueprint apply`, a later release), never installed.
+
+## The core range: `requires_core` and `requires_core_max` (hobnix/core#1265)
+
+A package states the range of API levels it works with:
+
+```toml
+requires_core = ">=9"       # the lowest level, required, always exactly this form
+requires_core_max = 12      # optional: the highest level it works with (inclusive); leave it out for no upper bound
+```
+
+- `hs pkg install` and `hs pkg update` refuse a package whose range does not take the server's level, from the index before anything is downloaded
+  and again from the package.toml that was read: "needs a newer core" (`pkg.core-too-old`, run `hs update`) or "does not support this core
+  yet" (`pkg.core-too-new`, wait for a release of the package that does). A malformed range is `pkg.core-range`. `hs ext enable` refuses the same.
+- `hs pkg validate` checks that `requires_core_max` is a whole number and not below the level of `requires_core`. Write the same value into
+  index.toml when your repository has one; the repository check compares them.
+- Keep `requires_core` as `">=N"`. Released cores refuse a whole signed index when one entry has another form; the upper bound is a key of its
+  own for that reason. A core before this change ignores `requires_core_max` (the top level of package.toml has no unknown-key check, unlike `[app]`; a blueprint
+  with the key is refused by such a core), so the key needs no higher `requires_core`.
+- After a core update, an installed package whose range ends below the new level stays installed and keeps running. `hs update` names it, the
+  Marketplace shows it, and no update is offered until a release whose range takes the new level. Not tested on hardware yet.
 
 ## What the core refuses (hobnix/core#1072)
 

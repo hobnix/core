@@ -45,6 +45,6 @@ export function findingsOf(list) {
   return [...f.filter((x) => x.level === 'error'), ...f.filter((x) => x.level !== 'error')];
 }
 
-// the form field a finding belongs to (name, version, kind, title, requires_core -> requires, script, permissions, the store fields), '' for none
-const FIELD_OF = { requires_core: 'requires', description_de: 'descriptionDe', app_version: 'appVersion' };
+// the form field a finding belongs to (name, version, kind, title, requires_core and requires_core_max -> requires, script, permissions, the store fields), '' for none
+const FIELD_OF = { requires_core: 'requires', requires_core_max: 'requires', description_de: 'descriptionDe', app_version: 'appVersion' };
 export const fieldOf = (where) => FIELD_OF[where] || (['name', 'version', 'kind', 'title', 'audience', 'script', 'permissions', 'description', 'icon', 'category'].includes(where) ? where : '');

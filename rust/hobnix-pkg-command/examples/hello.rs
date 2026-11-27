@@ -1,20 +1,21 @@
 //! Example command extension: `hs ext hello greet [name]` and `hs ext hello count <n>`.
 //!
 //! Try it without the core, with the reference runner:
-//!   cargo build --example hello
-//!   python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
-#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
-use hobnix_ext_sdk::command::{run, Failure, Request, Success};
-use hobnix_ext_sdk::{Ctx, Event, LogLevel};
+//! ```sh
+//! cargo build --example hello
+//! python3 ../../scripts/lib/ext_proto.py call --command greet --arg Ada -- target/debug/examples/hello
+//! ```
+use hobnix_pkg::{Ctx, Event, LogLevel};
+use hobnix_pkg_command::{Failure, Request, Success, run};
 use serde_json::json;
 use std::process::ExitCode;
 
 fn handle(req: &Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
     match req.words().as_slice() {
         ["greet"] => {
-            let name = req.argv.first().map(String::as_str).unwrap_or("world");
+            let name = req.argv.first().map_or("world", String::as_str);
             let _ = ctx.log(LogLevel::Info, "greeting");
-            let _ = ctx.event(&Event::new("pkg.hello.greeted", name));
+            let _ = ctx.emit(&Event::new("pkg.hello.greeted", name));
             let greeting = format!("hello {name}");
             Ok(Success::data(json!({ "greeting": greeting })).with_text(greeting))
         }

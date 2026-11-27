@@ -25,7 +25,9 @@ and `rollback` do not restart a running service; services run as uid 0 (#1134); 
 2. **One Cargo workspace per crate.** Each crate (`extensions/<name>/{Cargo.toml, Cargo.lock, src/, tests/}`) is its own workspace root, so an SDK bump rebuilds only what
    changed. Shared crates, if any, are path dependencies outside the package tree. Rust extensions are AGPL-3.0 like the SDK.
 3. **SDK pin.** The SDK stays in the core (`rust/hobnix-ext-sdk`, the owner of the protocol). A crate pins it by git `rev` on `develop`; `repo-check --release` requires a
-   core `vX.Y.Z` tag (or a beta tag `vX.Y.Z-beta.N`) for the pin on `main`.
+   core `vX.Y.Z` tag (or a beta tag `vX.Y.Z-beta.N`) for the pin on `main`. Since 0.14 the SDK is the crates `rust/hobnix-pkg`,
+   `hobnix-pkg-command` and `hobnix-pkg-service` (docs/PLAN-package-sdk.md); `hobnix-ext-sdk` re-exports them for one release. The rule is
+   the same for each of them.
 4. **Service identity and state.** A service runs as a transient unit with `DynamicUser=yes`, `User=hsx-<name>` (at most 31 characters; a longer name is cut to 14 and gets
    `_<12 hex of sha256(name)>`), `StateDirectory=hs-ext/<name>`, `UMask=0077`. `fs.write:/var/lib/hs/<own name>` stands for the state directory; the unit finds it at
    `/var/lib/hs-ext/<name>` (`$STATE_DIRECTORY`), not bound: with DynamicUser the folder on disk is owned by nobody (0700) and only systemd's own mount shows it to the service user (VM run, systemd 260.4), a `BindPaths=` bind gets Permission denied. The old path is not in the unit (`/var/lib/hs` is an empty tmpfs). Any other `fs.write` is refused with the new code `ext.dynamic-write`. The first start

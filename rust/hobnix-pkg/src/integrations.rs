@@ -1,21 +1,29 @@
 //! The integration listing of the core: `hs pkg integrations [--only <name>] <available package names...>` prints one tab-separated
-//! row per integration block (package, integration, source, api_url, key_file, extras, key_header); an empty field is `-`.
+//! row per integration block (`package`, `integration`, `source`, `api_url`, `key_file`, `extras`, `key_header`); an empty field is `-`.
 //! [`parse`] turns that text into typed rows. How the extension gets the text (runs `hs`, or reads a file the core wrote) is its business.
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-/// Also the shape of one entry of `init.integrations` (docs/api/ext-service-v1.schema.json): absent optional fields are `None` or empty.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+use crate::Secret;
+
+/// One integration row. Also the shape of one entry of `init.integrations` (docs/api/ext-service-v1.schema.json): absent optional fields
+/// are `None` or empty. Written the way the core writes it: `api_url` and `key_header` always (`null` when `None`), `key_file` only when set.
+///
+/// Not `#[non_exhaustive]` yet: extensions of 0.13 build rows with a struct literal in their tests. Use [`Integration::new`] in new code;
+/// the attribute comes when the deprecated `hobnix-ext-sdk` is removed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Integration {
+    /// The provider package; names the credential `integration-<integration>-<package>`.
     pub package: String,
+    /// The integration name (`media`).
     pub integration: String,
     /// Kind of the package (`recipe`, `extension`, ...).
     pub source: String,
     /// Where the API is (`http://127.0.0.1:8096`); `None` when the core could not resolve `{port}`.
     pub api_url: Option<String>,
     /// Never set in `init.integrations` (the core sends no key paths).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_file: Option<String>,
     /// The `k=v` pairs beyond the common fields.
     #[serde(default)]
@@ -26,29 +34,55 @@ pub struct Integration {
 }
 
 impl Integration {
+    /// A row of `package` for `integration` from a package of kind `source`, with no address, key file, extras or key header.
+    pub fn new(
+        package: impl Into<String>,
+        integration: impl Into<String>,
+        source: impl Into<String>,
+    ) -> Self {
+        Integration {
+            package: package.into(),
+            integration: integration.into(),
+            source: source.into(),
+            api_url: None,
+            key_file: None,
+            extras: BTreeMap::new(),
+            key_header: None,
+        }
+    }
+
     /// Name of the systemd credential that holds the key of this row: `integration-<integration>-<package>`.
     pub fn credential_name(&self) -> String {
         format!("integration-{}-{}", self.integration, self.package)
     }
 
-    /// The key of this row from `$CREDENTIALS_DIRECTORY` (see [`crate::service::credential_for`]); `None` when the service did not get
-    /// one (not declared, the provider has no key, the vault is locked).
-    pub fn credential(&self) -> Option<String> {
-        crate::service::credential_for(&self.integration, &self.package)
+    /// The key of this row from `$CREDENTIALS_DIRECTORY` (see [`crate::credentials::credential_for`]); `None` when the process did not
+    /// get one (not declared, the provider has no key, the vault is locked).
+    pub fn credential(&self) -> Option<Secret> {
+        crate::credentials::credential_for(&self.integration, &self.package)
     }
 }
 
-/// Rows of `hs pkg integrations`. Lines with fewer than 6 fields are skipped (the listing had 6 columns before key_header was added,
+/// Rows of `hs pkg integrations`. Lines with fewer than 6 fields are skipped (the listing had 6 columns before `key_header` was added,
 /// so a 6-field line is accepted with `key_header` `None`); blank lines too.
 pub fn parse(text: &str) -> Vec<Integration> {
     let opt = |s: &str| (s != "-" && !s.is_empty()).then(|| s.to_string());
     text.lines()
         .filter_map(|l| {
             let f: Vec<&str> = l.split('\t').collect();
-            if f.len() < 6 {
+            let [
+                package,
+                integration,
+                source,
+                api_url,
+                key_file,
+                extras,
+                rest @ ..,
+            ] = f.as_slice()
+            else {
                 return None;
-            }
-            let extras = opt(f[5])
+            };
+            let extras = opt(extras)
                 .map(|e| {
                     e.split(',')
                         .filter_map(|kv| kv.split_once('='))
@@ -57,13 +91,13 @@ pub fn parse(text: &str) -> Vec<Integration> {
                 })
                 .unwrap_or_default();
             Some(Integration {
-                package: f[0].into(),
-                integration: f[1].into(),
-                source: f[2].into(),
-                api_url: opt(f[3]),
-                key_file: opt(f[4]),
+                package: (*package).into(),
+                integration: (*integration).into(),
+                source: (*source).into(),
+                api_url: opt(api_url),
+                key_file: opt(key_file),
                 extras,
-                key_header: f.get(6).and_then(|h| opt(h)),
+                key_header: rest.first().and_then(|h| opt(h)),
             })
         })
         .collect()

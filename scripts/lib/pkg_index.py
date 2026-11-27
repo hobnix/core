@@ -221,6 +221,8 @@ def entry_of(checkout, path, extra, commit, yanked, assets_dir):
     e = {"kind": m.get("kind"), "version": version, "path": path, "commit": commit, "tree": tree_hash(folder),
          "requires_core": m.get("requires_core"), "yanked": (name, version) in yanked,
          "needs": needs, "core": extra.get("core") is True, "meta": meta}
+    if m.get("requires_core_max") is not None:     # optional upper bound (an API level, inclusive); an older client ignores the key
+        e["requires_core_max"] = m["requires_core_max"]
     if (name, version) in yanked and yanked[(name, version)]:
         e["yanked_reason"] = yanked[(name, version)]
     bins = binaries_of(folder, m)
@@ -239,7 +241,7 @@ HISTORY_TEXT = 500         # characters of `changes` and `yanked_reason` in an o
 MAX_COMMIT_TIME = 253402300799   # 9999-12-31T23:59:59Z: a later committer date is nonsense and the commit is skipped
 MAX_INDEX_BUILD = 10 * 1024 * 1024   # the client refuses 20 MiB (MAX_INDEX in pkg_repo.py); a build stays well below
 HISTORY_MAX_BYTES = 1 << 30
-ROW_KEYS = ("version", "date", "path", "commit", "tree", "requires_core", "yanked", "changes", "yanked_reason")
+ROW_KEYS = ("version", "date", "path", "commit", "tree", "requires_core", "requires_core_max", "yanked", "changes", "yanked_reason")
 
 
 def _vkey(text):
@@ -309,6 +311,8 @@ def history_of(git_dir, tip, path, name, version, yanked, seconds=None):
             v = m.get("version")
             if m.get("name") != name or not isinstance(v, str) or not SEMVER.fullmatch(v) or not REQUIRES.match(str(m.get("requires_core", ""))):
                 continue
+            if _max_problem(m):
+                continue
         except Exception:      # a manifest that is not valid, too deep (RecursionError), too large (MemoryError) or a git that failed: skipped
             continue
         newest.setdefault(v, (c, m))
@@ -327,6 +331,8 @@ def history_of(git_dir, tip, path, name, version, yanked, seconds=None):
                 raw = m.get("meta", {}) if isinstance(m.get("meta"), dict) else {}
                 row = {"version": v, "date": day(v), "path": path, "commit": c, "tree": tree, "requires_core": m["requires_core"],
                        "yanked": (name, v) in yanked}
+                if m.get("requires_core_max") is not None:
+                    row["requires_core_max"] = m["requires_core_max"]
                 changes = raw.get("changes") or m.get("changes")
                 if isinstance(changes, str):
                     row["changes"] = changes[:HISTORY_TEXT]
@@ -342,6 +348,14 @@ def history_of(git_dir, tip, path, name, version, yanked, seconds=None):
     return date, rows
 
 
+def _max_problem(m):
+    """True when `requires_core_max` is there but not a whole number from the level of `requires_core` (an absent one is no upper bound)."""
+    hi, rq = m.get("requires_core_max"), REQUIRES.match(str(m.get("requires_core", "")))
+    if hi is None:
+        return False
+    return isinstance(hi, bool) or not isinstance(hi, int) or (rq is not None and hi < int(rq.group(1)))
+
+
 def _row_problems(row, e):
     """[text] for one `versions` row of entry `e`."""
     if not isinstance(row, dict):
@@ -350,6 +364,8 @@ def _row_problems(row, e):
     for k, rx in (("version", SEMVER), ("date", TIME), ("commit", COMMIT), ("tree", TREE), ("requires_core", REQUIRES)):
         if not isinstance(row.get(k), str) or not rx.match(row[k]):
             out.append(f"{k} is not valid")
+    if _max_problem(row):
+        out.append("requires_core_max is not valid")
     if row.get("path") != e.get("path"):
         out.append("path is not the path of the entry")
     if not isinstance(row.get("yanked"), bool):
@@ -465,6 +481,8 @@ def validate(doc, now=None, warnings=None, strict=False):
             w("tree is not sha256:<64 hex>")
         if not REQUIRES.match(str(e.get("requires_core", ""))):
             w('requires_core must look like ">=13"')
+        elif strict and _max_problem(e):     # a client does not refuse the index for it: pkg_repo refuses that one package at install
+            w("requires_core_max is not a whole number from the level of requires_core")
         p = str(e.get("path", ""))
         if not re.match(r"^[A-Za-z0-9._/-]+$", p) or ".." in p.split("/") or p.startswith("/"):
             w("path is not allowed")
@@ -482,6 +500,8 @@ def validate(doc, now=None, warnings=None, strict=False):
                 w("binaries is not a list of {bin, target, sha256 (64 hex), size}")
         if strict and "date" in e and not (isinstance(e["date"], str) and TIME.match(e["date"])):
             w("date is not a UTC time like 2026-11-22T04:00:00Z")
+        if strict and "verified" in e and not (isinstance(e["verified"], str) and re.fullmatch(r"\d{4}-\d\d-\d\d", e["verified"])):
+            w("verified is not a day like 2026-11-22")
         if strict and "versions" in e:
             vs = e["versions"]
             if not isinstance(vs, list) or len(vs) > HISTORY_VERSIONS:
@@ -808,7 +828,7 @@ def _index_toml(packages: dict[str, dict]) -> str:
 
 def _pins_entry(m: dict, up: dict) -> dict:
     e = {"path": f"{m['kind']}s/{m['name']}", "version": up.get("version"), "kind": up.get("kind"), "requires_core": up.get("requires_core"),
-         "core": False, "source": m["source"], "source_commit": m["commit"]}
+         "requires_core_max": up.get("requires_core_max"), "core": False, "source": m["source"], "source_commit": m["commit"]}
     for k in ("icon", "category", "app_version", "audience"):
         e[k] = up.get(k)
     return e

@@ -1,15 +1,16 @@
 //! Example: call the JSON API of an integration the way media-hub does. `apiprobe get <listing-file> <integration> <path>` takes the
 //! row of the integration from a file with the output of `hs pkg integrations`, reads its key from `$CREDENTIALS_DIRECTORY`
 //! (`integration-<name>-<provider>`, the row's package), sends it in the row's key header and answers with the JSON of the API. Plain http only (see
-//! `hobnix_ext_sdk::http`).
+//! `hobnix_pkg::http`).
 //!
-//!   cargo build --example apiprobe
-//!   cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
-#![allow(clippy::print_stdout, clippy::print_stderr)] // an example talks to its terminal
-use hobnix_ext_sdk::command::{run, Failure, Request, Success};
-use hobnix_ext_sdk::http::Client;
-use hobnix_ext_sdk::integrations;
-use hobnix_ext_sdk::Ctx;
+//! ```sh
+//! cargo build --example apiprobe
+//! cargo build --release --target x86_64-unknown-linux-musl --example apiprobe   # static binary; `rustup target add` it first
+//! ```
+use hobnix_pkg::Ctx;
+use hobnix_pkg::http::Client;
+use hobnix_pkg::integrations;
+use hobnix_pkg_command::{Failure, Request, Success, run};
 use std::process::ExitCode;
 use std::time::Duration;
 

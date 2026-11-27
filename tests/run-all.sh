@@ -28,7 +28,7 @@ declare -A EXTERNAL=(
   [zfs-vm]="needs Incus with KVM and the internet (a throwaway VM)|HS_TEST_VM"
   [rebuild-vm]="needs Incus with KVM and the internet (two throwaway VMs)|HS_TEST_VM"
 )
-HELPERS=" lib lib-poolfakes lib-standins run run-all "
+HELPERS=" lib lib-appfakes lib-poolfakes lib-standins run run-all "
 
 list=false verbose=false root_only=false jobs=1 shard_i=1 shard_n=1
 only=()

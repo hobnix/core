@@ -1,5 +1,10 @@
-//! The SDK against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)] // test code: a failed unwrap is the failure
+//! The 0.13 API through the deprecated re-export, against the wire format of ADR 0010 and 0011, with in-memory pipes (no processes).
+//! This file is the test of 0.13 unchanged: only this comment and the deprecation in the attribute below are new.
+#![expect(
+    clippy::unwrap_used,
+    deprecated,
+    reason = "test code: a failed unwrap is the failure; the 0.13 entry points it calls are deprecated"
+)]
 
 use std::io::{Cursor, Write};
 use std::sync::{Arc, Mutex};
@@ -8,7 +13,7 @@ use hobnix_ext_sdk::command::{self, ErrorCode, Failure, Success};
 use hobnix_ext_sdk::service::{self, EventRow, Health, Init, Service};
 use hobnix_ext_sdk::testing::{Call, FakeCtx};
 use hobnix_ext_sdk::{Ctx, Event, LogLevel};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[derive(Clone, Default)]
 struct Buf(Arc<Mutex<Vec<u8>>>);
@@ -172,7 +177,8 @@ impl Service for Probe {
 fn svc_input(lines: &[Value]) -> Cursor<Vec<u8>> {
     let mut s = String::new();
     for l in lines {
-        s += &format!("{l}\n");
+        s.push_str(&l.to_string());
+        s.push('\n');
     }
     Cursor::new(s.into_bytes())
 }
@@ -206,16 +212,19 @@ fn service_ready_first_acks_handled_events_and_stops_on_shutdown() {
         .map(|m| m["id"].as_u64().unwrap())
         .collect();
     assert_eq!(acks, [1, 3]);
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "log" && m["level"] == "error"));
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "emit" && m["kind"] == "pkg.demo.seen"));
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "log" && m["level"] == "error")
+    );
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "emit" && m["kind"] == "pkg.demo.seen")
+    );
     assert!(out.iter().any(|m| m["type"] == "health" && m["ok"] == true));
-    assert!(out
-        .iter()
-        .any(|m| m["type"] == "snapshot" && m["topic"] == "t"));
+    assert!(
+        out.iter()
+            .any(|m| m["type"] == "snapshot" && m["topic"] == "t")
+    );
 }
 
 #[test]
@@ -297,7 +306,7 @@ fn service_rollup_message_and_credential() {
     assert!(service::credential_for("Bad Name", "jellyfin").is_none());
     assert!(service::credential_for("media", "../x").is_none());
     assert!(service::credential_for("media", "").is_none());
-    #[allow(deprecated)]
+    #[expect(deprecated, reason = "the old one-name form is tested until it goes")]
     {
         assert!(service::credential("Bad Name").is_none());
     }
@@ -308,7 +317,7 @@ fn service_rollup_message_and_credential() {
 fn greet(req: &command::Request, ctx: &dyn Ctx) -> Result<Success, Failure> {
     let failed = |e: std::io::Error| Failure::failed(e.to_string());
     ctx.progress(Some(0.5), "half").map_err(failed)?;
-    ctx.emit(&Event::new("pkg.demo.greeted", &req.argv[0]))
+    ctx.emit(&Event::new("pkg.demo.greeted", req.argv.first().unwrap()))
         .map_err(failed)?;
     Ok(Success::text("done"))
 }

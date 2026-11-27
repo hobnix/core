@@ -1,0 +1,123 @@
+//! The checks of the texts that go into a `commands.tsv` row: one tab-separated line, so no tab, line break or other control character.
+
+use syn::{Error, LitStr, Result};
+
+/// A help text: not empty, not `-` (that means "none" in the row), no control character (tab, line break, NUL, ESC, ...) and no line or
+/// paragraph separator (U+2028, U+2029). `hs help` prints it as it is, and `scripts/lib/pkg_binary.py` of the core refuses the same set.
+pub(crate) fn help(lit: &LitStr) -> Result<String> {
+    let s = lit.value();
+    if s.trim().is_empty() || s == "-" {
+        return Err(Error::new(
+            lit.span(),
+            "the help text must not be empty or -",
+        ));
+    }
+    if s.contains(|c: char| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) {
+        return Err(Error::new(
+            lit.span(),
+            "the help text must be one line without tabs or other control characters",
+        ));
+    }
+    Ok(s)
+}
+
+/// One word: a lower-case letter or digit first, then letters, digits and `-`.
+pub(crate) fn is_word(w: &str) -> bool {
+    let mut chars = w.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// Command words: one or more words separated by one space.
+pub(crate) fn words(lit: &LitStr) -> Result<String> {
+    let s = lit.value();
+    if s.split(' ').all(is_word) {
+        Ok(s)
+    } else {
+        Err(Error::new(
+            lit.span(),
+            "the name must be words of a-z, 0-9 and -, separated by one space",
+        ))
+    }
+}
+
+/// One word (a topic or a package name).
+pub(crate) fn word(lit: &LitStr, what: &str) -> Result<String> {
+    let s = lit.value();
+    if is_word(&s) {
+        Ok(s)
+    } else {
+        Err(Error::new(
+            lit.span(),
+            format!("{what} must be one word of a-z, 0-9 and -"),
+        ))
+    }
+}
+
+/// The program of a package: `@/` and a relative path of letters, digits, `.`, `_`, `-` and `/`, without `..`.
+pub(crate) fn script(lit: &LitStr) -> Result<String> {
+    let s = lit.value();
+    let ok = s.strip_prefix("@/").is_some_and(|p| {
+        !p.is_empty()
+            && p.split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..")
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-/".contains(c))
+    });
+    if ok {
+        Ok(s)
+    } else {
+        Err(Error::new(
+            lit.span(),
+            "script must be @/<path in the package>, as in commands.tsv",
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proc_macro2::Span;
+
+    fn lit(s: &str) -> LitStr {
+        LitStr::new(s, Span::call_site())
+    }
+
+    #[test]
+    fn refuses_texts_that_break_a_row() {
+        assert!(help(&lit("show it")).is_ok());
+        for bad in [
+            "",
+            " ",
+            "-",
+            "a\tb",
+            "a\nb",
+            "a\rb",
+            "a\0b",
+            "a\u{1b}[31mb",
+            "a\u{b}b",
+            "a\u{c}b",
+            "a\u{1c}b",
+            "a\u{7f}b",
+            "a\u{85}b",
+            "a\u{2028}b",
+            "a\u{2029}b",
+        ] {
+            assert!(help(&lit(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn checks_words_and_scripts() {
+        assert!(words(&lit("record session")).is_ok());
+        for bad in ["", "Status", "a  b", " a", "-a", "a_b", "<x>"] {
+            assert!(words(&lit(bad)).is_err(), "{bad:?}");
+        }
+        assert!(script(&lit("@/bin/demo")).is_ok());
+        for bad in ["bin/demo", "@/", "@/../x", "@/a//b", "@/a b", "@/./a"] {
+            assert!(script(&lit(bad)).is_err(), "{bad:?}");
+        }
+    }
+}

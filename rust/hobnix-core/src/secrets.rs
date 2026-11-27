@@ -83,7 +83,7 @@ impl VaultState {
     }
 }
 
-/// Where the scripts are (HS_SCRIPTS, as `hs` exports it).
+/// Where the scripts are (`HS_SCRIPTS`, as `hs` exports it).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paths {
     pub vault: String,
@@ -129,11 +129,12 @@ pub struct Plan {
 pub trait Host {
     /// stdout of `bash <vault> usage` (stdin /dev/null, stderr dropped); "" when it cannot run
     fn vault_usage(&self, vault: &str) -> String;
-    /// starts the job through hs_job of `job_lib`, returns the unit name
+    /// starts the job through `hs_job` of `job_lib`, returns the unit name
     fn start_job(&self, job_lib: &str, job: &JobSpec) -> Result<String>;
 }
 
 /// The real host: child processes.
+#[derive(Debug)]
 pub struct SystemHost {
     caller: String,
 }
@@ -207,6 +208,10 @@ fn job(slug: &str, description: &str, argv: Vec<String>) -> JobSpec {
 }
 
 /// What the action would do. Refuses when the vault is not in the state the action needs.
+#[expect(
+    clippy::too_many_lines,
+    reason = "ratchet #1307: one arm per action; split into a function per action"
+)]
 pub fn plan(action: &Action, paths: &Paths, host: &dyn Host) -> Result<Plan> {
     if !matches!(action, Action::SecretsFix) {
         match VaultState::from_usage(&host.vault_usage(&paths.vault)) {

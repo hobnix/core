@@ -1,3 +1,7 @@
+# The rustc of the nixpkgs pin (config/nixpkgs-pin.toml): servers build rust/ with exactly that one (pkgs/hobnix.nix), so CI and developers
+# lint and test with it too. Not edited by hand: `bash scripts/dev/nixpkgs-pin.sh toolchain-sync` writes it (the weekly bump does), and the
+# CI job `nixos` fails when it differs from the pin (`nixpkgs-pin.sh toolchain-check`). rustup >= 1.28 may not install it by itself:
+# `rustup toolchain install` in this folder does.
 [toolchain]
-channel = "stable"
+channel = "1.95.0"
 components = ["clippy", "rustfmt"]
