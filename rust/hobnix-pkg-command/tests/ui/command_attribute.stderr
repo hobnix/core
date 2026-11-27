@@ -1,0 +1,49 @@
+error: #[command] needs reads or changes
+ --> tests/ui/command_attribute.rs:4:1
+  |
+4 | #[command(name = "a", help = "x")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `command` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: the name must be words of a-z, 0-9 and -, separated by one space
+ --> tests/ui/command_attribute.rs:9:18
+  |
+9 | #[command(name = "Big", reads, help = "x")]
+  |                  ^^^^^
+
+error: reads or changes is given twice
+  --> tests/ui/command_attribute.rs:14:30
+   |
+14 | #[command(name = "a", reads, changes, help = "x")]
+   |                              ^^^^^^^
+
+error: the help text must be one line without tabs or other control characters
+  --> tests/ui/command_attribute.rs:19:37
+   |
+19 | #[command(name = "a", reads, help = "two\tcolumns")]
+   |                                     ^^^^^^^^^^^^^^
+
+error: the help text must be one line without tabs or other control characters
+  --> tests/ui/command_attribute.rs:24:52
+   |
+24 | #[command(name = "a", reads, help = "x", help_de = "a\u{1b}[31mred")]
+   |                                                    ^^^^^^^^^^^^^^^^
+
+error: the help text must be one line without tabs or other control characters
+  --> tests/ui/command_attribute.rs:29:48
+   |
+29 | #[command(name = "a", reads, help = "x", sys = "two\u{2028}lines")]
+   |                                                ^^^^^^^^^^^^^^^^^^
+
+error: timeout is a number of seconds from 1 to 3600
+  --> tests/ui/command_attribute.rs:34:52
+   |
+34 | #[command(name = "a", reads, help = "x", timeout = 7200)]
+   |                                                    ^^^^
+
+error: unknown key; the keys are name, reads, changes, help, help_de, topic, timeout and sys
+  --> tests/ui/command_attribute.rs:39:42
+   |
+39 | #[command(name = "a", reads, help = "x", colour = "red")]
+   |                                          ^^^^^^

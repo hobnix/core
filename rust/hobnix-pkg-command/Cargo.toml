@@ -13,3 +13,15 @@ workspace = true
 [dependencies]
 hobnix-pkg = { workspace = true }
 serde_json = { workspace = true }
+hobnix-pkg-macros = { workspace = true, optional = true }
+
+[features]
+# `#[command]`, `commands!` and `#[derive(Args)]`: the dispatch and the commands.tsv rows from the code (docs/PLAN-package-sdk.md)
+macros = ["dep:hobnix-pkg-macros"]
+
+[dev-dependencies]
+trybuild = { workspace = true }
+
+[[example]]
+name = "hello_macro"
+required-features = ["macros"]

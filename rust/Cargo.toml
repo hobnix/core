@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["hobnix-core", "hobnix-cli", "hobnix-pkg", "hobnix-pkg-command", "hobnix-pkg-service", "hobnix-ext-sdk"]
+members = ["hobnix-core", "hobnix-cli", "hobnix-pkg", "hobnix-pkg-command", "hobnix-pkg-service", "hobnix-pkg-macros", "hobnix-ext-sdk"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,6 +24,14 @@ hobnix-core = { path = "hobnix-core" }
 hobnix-pkg = { path = "hobnix-pkg" }
 hobnix-pkg-command = { path = "hobnix-pkg-command" }
 hobnix-pkg-service = { path = "hobnix-pkg-service" }
+hobnix-pkg-macros = { path = "hobnix-pkg-macros" }
+# The macro crate hobnix-pkg-macros (feature `macros` of hobnix-pkg-command; a package without the feature builds none of these). All three
+# were in Cargo.lock already, through serde_derive; the macro crate adds syn's `full` feature (it parses functions, not only derive input).
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "3", features = ["full"] }
+# Compile-fail tests of the macros (docs/CODE-PRACTICES.md "Rust: procedural macros"): a dev-dependency, never in a program.
+trybuild = "1"
 
 # docs/CODE-PRACTICES.md "Rust: lints". CI runs clippy with -D warnings, so "warn" fails the build. Single restriction lints only, never
 # a whole restriction or nursery group. A file that would need a rewrite carries `#![expect(clippy::x, reason = "ratchet #1307")]`.

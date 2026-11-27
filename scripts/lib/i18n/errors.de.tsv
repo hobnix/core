@@ -35,6 +35,8 @@ binary.sdk-pin	Dieses Paket ist nicht bereit für ein Release: Sein Erweiterungs
 binary.arch	Dieses Paket braucht einen x86_64-Server. Es wurde nicht installiert.
 binary.unbuilt	Dieses Paket hat noch kein gebautes Programm. Es kann nicht installiert werden.
 binary.runner	Dieses Paket startet sein Programm auf die falsche Weise. Es kann nicht installiert werden.
+binary.drift	Die Befehlsliste dieses Pakets passt nicht zu seinem Programm.
+binary.table	Die Befehlsliste im Programm dieses Pakets ist beschädigt.
 binary.undeclared	Dieses Paket startet ein Programm ohne angegebene Prüfsumme.
 code.unknown	Der andere Server kennt diesen Code nicht: falsch, schon benutzt oder abgelaufen.
 code.rate	Von hier kamen zu viele falsche Codes. Warte eine Minute und versuche es noch einmal.

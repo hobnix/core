@@ -288,6 +288,22 @@ A commands.tsv row without the flag proto names a [[binary]] program.
 - Text: This package starts its program the wrong way; it cannot be installed.
 - Fix: none
 
+### binary.drift
+
+The commands.tsv rows for a [[binary]] program differ from the rows the SDK's command macro built into it.
+
+- Layer: script
+- Text: The command list of this package does not match its program.
+- Fix: none
+
+### binary.table
+
+The command table that the SDK's command macro built into a [[binary]] program is damaged (not closed, too long, not UTF-8, a forbidden character) or there is a second one.
+
+- Layer: script
+- Text: The command list inside the program of this package is damaged.
+- Fix: none
+
 ### binary.undeclared
 
 A compiled program, or a non-script service exec, is started from a package without a [[binary]] that declares it.

@@ -1,6 +1,6 @@
 # Plan: one SDK for packages
 
-Design record. Contributor document, not a guide. Written 2026-11-24 during 0.13. Builds on ADR 0010 (command protocol), ADR 0011 (service lifecycle), ADR 0014 (permissions), ADR 0015 (Wasm: deferred) and docs/PLAN-packages.md, PLAN-extensions-access.md (SDK #240). Step 2 (the split) is built in 0.14 (#1262, #1309); the rest is planned. Not tested on hardware yet.
+Design record. Contributor document, not a guide. Written 2026-11-24 during 0.13. Builds on ADR 0010 (command protocol), ADR 0011 (service lifecycle), ADR 0014 (permissions), ADR 0015 (Wasm: deferred) and docs/PLAN-packages.md, PLAN-extensions-access.md (SDK #240). Step 2 (the split) is built in 0.14 (#1262, #1309), and so are the commands registered from code (#1263); the rest is planned. Not tested on hardware yet.
 
 ## Where we are
 
@@ -27,7 +27,7 @@ One shared base and one crate per package kind. The current `hobnix-ext-sdk` is 
 | Crate | Content |
 |---|---|
 | `hobnix-pkg` | Manifest types, error type, `Ctx`, `Event`, logging, `Secret`, line limits, the version constant; the wire messages of both protocols (`wire`) |
-| `hobnix-pkg-command` | The command runner and the `#[command]` macro |
+| `hobnix-pkg-command` | The command runner and the `#[command]` macro (from `hobnix-pkg-macros`, feature `macros`) |
 | `hobnix-pkg-service` | The service lifecycle (init, event, health, snapshot, rollup, shutdown) |
 | `hobnix-pkg-recipe` | Hooks for install, configure, update and remove; instance helpers; `docs_hint` |
 | `hobnix-pkg-test` | A fake core for tests (dev dependency) |
@@ -50,6 +50,12 @@ From the attributes and the argument struct, the build produces:
 - the dispatch: the `match` is generated, so a command without a handler cannot exist
 
 `hs pkg validate` fails when the committed `commands.tsv` differs from the generated one (drift). Generation is at build time, not at run time, because the core must know a package's commands, hash and permissions before it starts the program (PLAN-packages.md `binary.undeclared`). The macro lives behind a feature so a package can still write rows by hand.
+
+Built in 0.14 (#1263), as an attribute crate `hobnix-pkg-macros` behind the feature `macros` of `hobnix-pkg-command` (usage: docs/extensions-sdk.md "Write it in Rust"):
+- `#[command(...)]` keeps the function and adds a hidden constant; `#[derive(Args)]` makes the schema and the reader of the arguments (positional: required, then `Option<T>`, then one `Vec<T>`); `commands!(package = "...", script = "@/...", f, g)` lists the functions and is the dispatch.
+- The rows are built by const evaluation into one byte string in the program (`TABLE_START`, then the rows, then a NUL). `python3 scripts/pkg.py validate` reads it from the `[[binary]]` file without running the program and refuses a `commands.tsv` whose rows for that program differ (`binary.drift`, in order; comment lines and rows of other programs are ignored). Because no program is committed on `develop` (ADR 0031), `Commands::check(include_str!("../commands.tsv"))` in `cargo test` is the drift check there. A program without the marker is not checked. A table that is not closed by a NUL within 256 KiB, is not UTF-8 or holds a control character other than tab and line feed (or U+2028, U+2029) fails with `binary.table`, and so does a second marker; the macro refuses those characters in help texts at build time. The program is mapped, not read into memory. A program must not use `TABLE_START` itself at run time: the bytes could count as a second table.
+- Not built: the argument schema is not written to any file (only `Command::args()` in the program), so `hs help`, completion and web forms do not use it yet; the rows carry `-` as their argument field. Permissions in code are not part of it.
+- Measured 2026-11-26 in WSL (32 CPUs), from an empty target dir, `cargo build --release`: the example without the macros (`hello`) 5.4 s, with them (`hello_macro`) 5.7 s; with `-j 1` 26.2 s and 26.6 s. syn, quote and proc-macro2 are built in both cases (serde_derive needs them); the macros add syn's `full` feature and the macro crate. `nix-build pkgs/hobnix.nix` (it builds every workspace member, the macro crate too, and runs the tests) took 20 s before and 22 s after, with the vendored crates already in the store. The attribute crate stays; the `build.rs` fallback is not needed.
 
 ### `Ctx`: everything a package asks of the host
 

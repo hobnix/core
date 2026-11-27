@@ -1,0 +1,23 @@
+error: a Vec field takes the rest of the arguments, so it must be the last field
+ --> tests/ui/args_derive.rs:7:5
+  |
+7 |     last: String,
+  |     ^^^^
+
+error: a required field cannot come after an Option field
+  --> tests/ui/args_derive.rs:13:5
+   |
+13 |     second: String,
+   |     ^^^^^^
+
+error: Args needs named fields: the names are the argument names
+  --> tests/ui/args_derive.rs:17:13
+   |
+17 | struct Tuple(String);
+   |             ^^^^^^^^
+
+error: Args goes on a struct
+  --> tests/ui/args_derive.rs:20:6
+   |
+20 | enum NotAStruct {
+   |      ^^^^^^^^^^
