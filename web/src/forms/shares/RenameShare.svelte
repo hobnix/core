@@ -11,7 +11,7 @@
 
 <CreateDialog title="Rename {share}" kicker="Change" area="shares" {args} {onclose} {ondone}>
   {#snippet form()}
-    <Field label="New name" error={to && !ok ? 'Lowercase letters, digits and “-”, different from the current name.' : ''}>
+    <Field label="New name" error={to && !ok ? to.length > 41 ? 'A new share name has at most 41 characters.' : 'Lowercase letters, digits and “-”, different from the current name.' : ''}>
       <TextInput bind:value={to} placeholder={share} autocomplete="off" spellcheck={false} />
     </Field>
     <div class="hint">The folder on every disk, the Samba share with its permissions, the backup switch and the mounts of instances move to the new name.</div>

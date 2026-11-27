@@ -1,0 +1,7 @@
+date  = "2026-11-26"
+type  = "fix"
+title = "A share with a long name can be deleted and changed in the web interface again"
+docs  = "storage-and-disks"
+body  = """A share with more than 41 characters, made by taking over a disk, was refused with "That change is not allowed". The web interface now changes every share that exists up to 80 characters, and says so when a name is too long. A new share still has at most 41.
+
+Taking over a disk no longer makes a longer name: it is shortened, the plan shows it, and two folders never end up in one share. Not tested on hardware yet."""

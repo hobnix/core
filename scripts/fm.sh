@@ -87,7 +87,7 @@ collect_ids() {   # fills ids: every location id
     if fm_ismnt "$pr"; then
       for d in "$pr"/shares/*/ "$pr"/sensitive/*/; do
         [ -d "$d" ] || continue
-        n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || continue
+        n=$(basename "$d"); [[ $n =~ ^[a-z0-9][a-z0-9-]{0,79}$ ]] || continue
         case " ${ids[*]} " in *" share:$n "*) continue ;; esac
         ids+=("share:$n")
       done

@@ -199,6 +199,27 @@ if _unraid_need cryptsetup mkfs.ext4 && dm_works && unraid_disk ue1 300M; then
   export HS_DISK_PASSPHRASE=$UNRAID_PASS
 else skip "LUKS key slot: ${UNRAID_WHY:-device-mapper is not usable here}"; fi
 
+echo "-- long folder names (issue 1245): the share is cut to 41 characters, the plan says so, two folders never become one share"
+wipefs -a -q /dev/disk/by-id/ata-TEST_sps1 /dev/disk/by-id/ata-TEST_sps2 /dev/disk/by-id/ata-TEST_sps3 2>/dev/null || true
+LONGDIR=CommunityApplicationsAppdataBackup
+dev=$(mkloop long1 300M); mkfs.ext4 -q -F "$dev" >/dev/null 2>&1
+m=$WORK/m-long1; mkdir -p "$m"; mount "$dev" "$m"; mkdir -p "$m/$LONGDIR"; echo l > "$m/$LONGDIR/f"; umount "$m"
+sum=$(md5sum < "$dev")
+out=$(pool bulk --role adopt --disks ata-TEST_long1 --dry-run 2>&1 || true)
+check_out "the plan says the name is shortened" "shortened: '$LONGDIR' is too long for a share name" echo "$out"
+planned=$(sed -n "s/^ *$LONGDIR -> //p" <<<"$out" | head -n 1)
+check_eq "the planned share name has 41 characters" 41 "${#planned}"
+check_eq "the dry run wrote nothing" "$sum" "$(md5sum < "$dev")"
+echo bulk | pool bulk --role adopt --disks ata-TEST_long1 >"$WORK/adopt-long1.log" 2>&1
+where=$(findmnt -rn -o TARGET --source "$(readlink -f /dev/disk/by-id/ata-TEST_long1)" | head -n 1)
+check_eq "the folder got the planned name" l "$(cat "$where/shares/$planned/f" 2>/dev/null)"
+dev=$(mkloop twins 300M); mkfs.ext4 -q -F "$dev" >/dev/null 2>&1
+m=$WORK/m-twins; mkdir -p "$m"; mount "$dev" "$m"; mkdir -p "$m/My Media" "$m/my-media"; umount "$m"
+sum=$(md5sum < "$dev")
+if out=$(echo bulk | pool bulk --role adopt --disks ata-TEST_twins 2>&1); then fail "two folders with one share name must be refused"; else pass "two folders with one share name are refused"; fi
+check_out "the refusal says why" "Two folders never become one share" echo "$out"
+check_eq "nothing was written to the refused disk" "$sum" "$(md5sum < "$dev")"
+
 echo "-- the disk with a dirty or foreign filesystem is refused, not changed"
 dev=$(mkloop ntfsish 100M)
 printf 'NTFS    ' | dd of="$dev" bs=1 seek=3 conv=notrunc 2>/dev/null
