@@ -37,7 +37,12 @@ Issue: hobnix/server#238 (epic #197). Command extensions are ADR 0010 (#237), pe
    `health` for 3 times `health_interval`; it goes back to `running` with the next good `health`), `stopping`, `stopped`, `failed`.
 6. **Start.** After `init` the service has 30 s to send `ready`; nothing but `ready` may come before it. No `ready` is `failed`
    (`start_timeout`) and the process is killed. A service starts doing its work only after `init`: it reads its configuration from files the
-   way commands do (scripts/lib/setting.sh); `init` carries no secrets (ADR 0010 rule 9); its `integrations` rows are data only (provider, URL, header name), the keys stay systemd credentials.
+   way commands do (scripts/lib/setting.sh); `init` carries no secrets (ADR 0010 rule 9); its `integrations` rows are data only (provider, URL, header name), the keys stay systemd credentials. The rows are those of the moment of the start. When they change (a provider instance stopped, started or got another
+   address), the bridge stops the process as in rule 7 and starts it again in the same unit with a new `init`; this is no systemd restart and does not
+   count towards rule 2. A service needs no change: it reads the rows at start (#1328). The bridge sees a change after a lifecycle event of the
+   provider instance in Incus, after the start while an address is still missing, and with a check every 30 minutes (for an address that changed
+   without an event); two such restarts are at least 20 s apart, and a listing that fails changes nothing. A service without a provider instance is
+   not watched. Not tested on hardware yet.
 7. **Stop.** `shutdown` is written, stdin closed, and the service has `grace_ms` (10 s) to exit by itself. Then SIGTERM to the process
    group, 2 s later SIGKILL to the group: the same stop as a timeout in ADR 0010. The unit's `TimeoutStopSec` is above the sum.
 8. **Health.** The service sends `health` at least every `health_interval` seconds, with `ok: false` and a one-line English `text` when it
@@ -61,7 +66,7 @@ Issue: hobnix/server#238 (epic #197). Command extensions are ADR 0010 (#237), pe
     with one `warn` log line a minute (a stuck loop must not fill the log, whose retention is 5000 rows).
 13. **Reference and proof.** scripts/lib/ext_service.py is the supervisor of rules 4 to 9 and 11 (state changes, ready timeout, heartbeat,
     delivery with acks and the cursor file, shutdown, SIGTERM, SIGKILL) without systemd; tests/fixtures/ext-service/svc.py is a service
-    speaking the protocol; tests/ext-service.sh covers them. Rules 2 and 3 are built (configuration.nix `hs-ext-svc@`, `hs ext svc-run|status|start|stop`; the unit is only evaluated in CI, not tested on hardware yet) and the event `ext.service-failed` is emitted by the bridge after the fifth failure in 10 minutes. Rules 9 (delivery from the log), 10 (the topic store) and 12 were built afterwards (step 5 of docs/PLAN-extensions-access.md).
+    speaking the protocol; tests/ext-service.sh covers them, and tests/ext-integration-watch.sh the new `init` after changed integration rows (rule 6). Rules 2 and 3 are built (configuration.nix `hs-ext-svc@`, `hs ext svc-run|status|start|stop`; the unit is only evaluated in CI, not tested on hardware yet) and the event `ext.service-failed` is emitted by the bridge after the fifth failure in 10 minutes. Rules 9 (delivery from the log), 10 (the topic store) and 12 were built afterwards (step 5 of docs/PLAN-extensions-access.md).
 
 ## Consequences
 

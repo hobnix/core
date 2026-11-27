@@ -20,8 +20,16 @@ dry=()
 args=()
 for a in "$@"; do if [ "$a" = --dry-run ]; then dry=(--dry-run); else args+=("$a"); fi; done
 set -- ${args[@]+"${args[@]}"}
+refuse_word() { warn "$(t "Unknown option or word: '%s'. Nothing was changed." "$1")"; usage; }
 [ $# -ge 1 ] || usage
 ct=$1; verb=${2:-show}
+# what is not known is refused before anything happens (#1354: `clear --dryrun` cleared the reservation)
+for a in "$@"; do [[ "$a" != -* ]] || refuse_word "$a"; done
+case "$verb" in
+  show|clear) [ $# -le 2 ] || refuse_word "$3" ;;
+  set)        [ $# -le 3 ] || refuse_word "$4" ;;
+  *)          refuse_word "$verb" ;;
+esac
 "$incus" info "$ct" >/dev/null 2>&1 || fail "$(t "No instance called '%s'. See: hs ct list" "$ct")"
 mac=$("$incus" config device get "$ct" eth0 hwaddr 2>/dev/null || true)
 [ -n "$mac" ] || mac=$("$incus" config get "$ct" volatile.eth0.hwaddr 2>/dev/null || true)
@@ -39,5 +47,4 @@ case "$verb" in
          note "$(t 'The instance takes it over after a restart: hs ct %s restart' "$ct")" ;;
   clear) bash "$unifi" clear-ip "$mac" ${dry[@]+"${dry[@]}"}
          note "$(t 'The instance gets a new address after a restart: hs ct %s restart' "$ct")" ;;
-  *)     usage ;;
 esac

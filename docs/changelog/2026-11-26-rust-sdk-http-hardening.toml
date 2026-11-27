@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "security"
+title = "Rust extension SDK: no crash on a bad chunk size, keys stay out of debug and error texts"
+body  = """The HTTP client of the Rust SDK returns an error instead of crashing when a server sends an absurd chunk size. Its debug output shows header names only, not their values (one can be the integration key), and an error about a bad URL no longer shows the query or a user name and password. The pairing codes of remote shares no longer show their derived key in debug output."""
