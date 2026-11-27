@@ -192,6 +192,10 @@ check_eq "demo is still on" "on" "$($HS sys ext list | awk -F'\t' '$1 == "demo" 
 $HS ext disable needy >/dev/null 2>&1
 check "after the dependent is off it can go" $HS ext disable demo
 check_out "a package that needs a newer core is refused" "needs core API level 999" $HS ext enable future
+mkdir -p "$PK/past"; manifest past 'requires_core_max = 1'
+printf 'user\text past x\t@/x.sh\t-\tx\tx\ttopic:system,reads\n' > "$PK/past/commands.tsv"
+check_out "a package whose range ends below this core is refused (requires_core_max, #1265)" "does not support this core yet: it works up to core API level 1" $HS ext enable past
+check_eq "and stays off" "off" "$($HS sys ext list | awk -F'\t' '$1 == "past" { print $2 }')"
 
 echo "-- a capability package may own its name (default repositories only)"
 capmf() {   # capmf <name>: package.toml of a capability package

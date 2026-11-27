@@ -131,6 +131,14 @@ if [ -f "$repo/scripts/pkg.py" ] && ! bad=$(python3 -I "$repo/scripts/pkg.py" co
     exit 1
   fi
 fi
+# An installed package whose requires_core_max is below the pulled core is named, never removed or switched off: it keeps running as it is,
+# and no update of it is offered until a release whose range takes this core (docs/PLAN-packages.md, "The core API").
+if [ -f "$repo/scripts/pkg.py" ] && beyond=$(python3 -I "$repo/scripts/pkg.py" core-beyond 2>/dev/null) && [ -n "$beyond" ]; then
+  while IFS=$'\t' read -r pname pmax; do
+    [ -n "$pname" ] || continue
+    warn "$(t '%s does not support this core yet (it works up to core API level %s): it stays installed and keeps running' "$pname" "$pmax")"
+  done <<< "$beyond"
+fi
 
 # The package repositories: fetch the signed index and move installed packages to the repository that replaced theirs (hs pkg repo migrate).
 # Never fatal: with the index host down the update still succeeds, the installed packages keep running and the next fetch heals the rest.

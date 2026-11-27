@@ -359,6 +359,9 @@ pkg.ambiguous	Das Paket ist in mehr als einem Repository.
 pkg.added-repo	Installiere dieses Paket aus dem Marktplatz.
 pkg.role-part	Ein benötigtes Teil folgt der Rolle dieses Servers.
 pkg.require-missing	Ein benötigtes Teil ist nicht verfügbar.
+pkg.core-too-old	Das Paket braucht einen neueren Kern: aktualisiere zuerst den Server.
+pkg.core-too-new	Das Paket unterstützt diesen Kern noch nicht: warte auf eine Version des Pakets, die das tut.
+pkg.core-range	Das Paket gibt seinen Kernbereich in einer Form an, die dieser Server nicht annimmt.
 blueprint.value-missing	Die Option braucht einen Wert.
 blueprint.unreadable	Der Bauplan kann nicht verwendet werden.
 blueprint.role	Dieser Bauplan ist für eine andere Rolle.

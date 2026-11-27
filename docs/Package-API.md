@@ -164,6 +164,26 @@ Not tested on hardware yet: only a fake `systemd-run` that records its arguments
 `requires_core = ">=11"`, so a core that does not know the kind (level 10 or lower) refuses it instead of installing it. Validated by
 `scripts/lib/pkg_blueprint.py`; a blueprint is applied (`hs blueprint apply`, a later release), never installed.
 
+## The core range: `requires_core` and `requires_core_max` (hobnix/core#1265)
+
+A package states the range of API levels it works with:
+
+```toml
+requires_core = ">=9"       # the lowest level, required, always exactly this form
+requires_core_max = 12      # optional: the highest level it works with (inclusive); leave it out for no upper bound
+```
+
+- `hs pkg install` and `hs pkg update` refuse a package whose range does not take the server's level, from the index before anything is downloaded
+  and again from the package.toml that was read: "needs a newer core" (`pkg.core-too-old`, run `hs update`) or "does not support this core
+  yet" (`pkg.core-too-new`, wait for a release of the package that does). A malformed range is `pkg.core-range`. `hs ext enable` refuses the same.
+- `hs pkg validate` checks that `requires_core_max` is a whole number and not below the level of `requires_core`. Write the same value into
+  index.toml when your repository has one; the repository check compares them.
+- Keep `requires_core` as `">=N"`. Released cores refuse a whole signed index when one entry has another form; the upper bound is a key of its
+  own for that reason. A core before this change ignores `requires_core_max` (the top level of package.toml has no unknown-key check, unlike `[app]`; a blueprint
+  with the key is refused by such a core), so the key needs no higher `requires_core`.
+- After a core update, an installed package whose range ends below the new level stays installed and keeps running. `hs update` names it, the
+  Marketplace shows it, and no update is offered until a release whose range takes the new level. Not tested on hardware yet.
+
 ## What the core refuses (hobnix/core#1072)
 
 All rules fail closed. Not tested on hardware yet.

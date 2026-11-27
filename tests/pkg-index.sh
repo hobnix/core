@@ -243,6 +243,26 @@ else
   skip "needs Pillow for the asset resizing"
 fi
 
+echo "-- requires_core_max: an upper bound of its own, requires_core stays \">=N\" (#1265)"
+RM=$WORK/rmax; mkdir -p "$RM/recipes/top"
+printf 'name = "top"\nversion = "2.0.0"\nkind = "recipe"\ntitle = "Top"\nrequires_core = ">=3"\nrequires_core_max = 12\n' > "$RM/recipes/top/package.toml"
+check "build carries the field" $IDX build "$RM" --repo official --out "$WORK/rmax-out" --serial 1 --commit $C --skip-assets
+check_eq "the entry has requires_core >=3 and requires_core_max 12" ">=3 12" "$(python3 -c "import json; e=json.load(open('$WORK/rmax-out/index.json'))['packages']['top']; print(e['requires_core'], e['requires_core_max'])")"
+check "the index validates (strict)" $IDX validate "$WORK/rmax-out/index.json"
+pim() { python3 -I -c "
+import importlib.util as u, json
+s=u.spec_from_file_location('pi','$SCRIPTS/lib/pkg_index.py'); m=u.module_from_spec(s); s.loader.exec_module(m)
+d=json.load(open('$WORK/rmax-out/index.json')); e=d['packages']['top']
+$1"; }
+check_eq "a client (non-strict) accepts the index" "" "$(pim "print('; '.join(m.validate(d)))")"
+check_eq "a malformed bound fails the build check, not a client" "1 0" "$(pim "e['requires_core_max']='12'; print(len(m.validate(d, strict=True)), len(m.validate(d)))")"
+check_eq "a bound below requires_core is malformed" "1" "$(pim "e['requires_core_max']=2; print(len(m.validate(d, strict=True)))")"
+check_eq "a history row keeps the bound, a row with a malformed one is left out" "1.0.0:12 -" "$(pim "
+r={'version':'1.0.0','date':'2026-01-01T00:00:00Z','path':e['path'],'commit':'a'*40,'tree':'sha256:'+'0'*64,'requires_core':'>=3','requires_core_max':12,'yanked':False}
+print(' '.join('%s:%s' % (x['version'], x['requires_core_max']) for x in m.clean_history(dict(e, versions=[r]))['versions']), ' '.join(x['version'] for x in m.clean_history(dict(e, versions=[dict(r, requires_core_max=True)]))['versions']) or '-')")"
+sed -i 's/^requires_core_max = 12$/requires_core_max = "12"/' "$RM/recipes/top/package.toml"
+check "a package.toml with a malformed bound does not build" bash -c "! $IDX build '$RM' --repo official --out '$WORK/rmax-bad' --serial 1 --commit $C --skip-assets >/dev/null 2>&1"
+
 echo "-- the CI workflow stub"
 W=$ROOT/.github/workflows/package-index.yml
 check "the workflow exists" test -f "$W"

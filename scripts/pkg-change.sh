@@ -98,6 +98,14 @@ case "$action" in
     [ "$kind" != blueprint ] || refuse_code pkg.blueprint "$name is a blueprint: hs blueprint apply $name"
     r_from=$(repo_row "$repo" | cut -f4)
     [ "$r_from" = added ] && red=$name
+    # a release outside the core range of this server (requires_core, requires_core_max): said before anything is read, with its own code
+    if [ "$state" = waits ] && { { [ "$action" = install ] && [ "$inst" = - ]; } || { [ "$action" = update ] && [ "$inst" != - ]; }; }; then
+      why=$($pkgpy show "$name" --repo "$repo" </dev/null 2>/dev/null | awk -F'\t' '$1 == "reason" { print $2 }') || true   # show exits 1 on its refusal: keep the reason
+      case "$why" in
+        *"does not support this core yet"*) refuse_code pkg.core-too-new "$why" ;;
+        *) refuse_code pkg.core-too-old "${why:-$name $avail needs a newer core: run hs update first}" ;;
+      esac
+    fi
     case "$action" in
       install)
         while [ $# -gt 0 ]; do

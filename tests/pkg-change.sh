@@ -15,7 +15,7 @@ ssh-keygen -q -t ed25519 -N '' -f "$WORK/evil" -C test >/dev/null
 GOOD=$(cut -d' ' -f1,2 "$WORK/good.pub"); EVIL=$(cut -d' ' -f1,2 "$WORK/evil.pub")
 R=$WORK/repo; mkdir -p "$R/recipes/demo" "$R/recipes/corer"; cd "$R"
 git init -q . && git config user.email t@t && git config user.name t && git config gpg.format ssh && git config commit.gpgsign false
-release() {   # release <tag> <demo version> <key>
+release() {   # release <tag> <demo version> <key> [a line for demo in package.toml and index.toml]
   for n in demo corer; do
     v=1.0.0; [ "$n" != demo ] || v=$2
     printf 'name = "%s"\nversion = "%s"\nkind = "recipe"\ntitle = "The %s package"\nrequires_core = ">=1"\naudience = "generic"\nneeds = []\nuses = []\ninput = "none"\nscript = "run.sh"\n' "$n" "$v" "$n" > "$R/recipes/$n/package.toml"
@@ -54,6 +54,7 @@ path = "blueprints/bpl"
 title = "Bpl"
 requires_core = ">=1"
 ' >> "$R/index.toml"
+  if [ -n "${4:-}" ]; then printf '%s\n' "$4" >> "$R/recipes/demo/package.toml"; sed -i "/^\[package.demo\]\$/a $4" "$R/index.toml"; fi
   git add -A && git commit -q -m "demo $2" && git -c user.signingkey="$3.pub" tag -s "$1" -m "release $2"
 }
 release v1.0.0 1.0.0 "$WORK/good"
@@ -117,7 +118,6 @@ check_out "update without the name is refused" "type the name" bash -c "$C start
 check_out "update with it" "^status${tab}done" $C start update demo --confirm demo
 check_out "market: current again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}1[.]1[.]0${tab}current" $PKGSH --market
 check_out "updating a current package is refused" "up to date" bash -c "$C plan update demo; true"
-
 echo "-- remove"
 check_out "a core package cannot be removed" "core package" bash -c "$C start install corer --confirm corer >/dev/null; $C plan remove corer; true"
 check_out "remove plan" "^step${tab}forget" $C plan remove demo
@@ -125,6 +125,12 @@ check_out "remove" "^status${tab}done" $C start remove demo
 check "the files are gone" test ! -e "$HS_STATE_DIR/packages/current/demo"
 check_out "market: new again" "^demo${tab}recipe${tab}test${tab}1[.]1[.]0${tab}-${tab}new" $PKGSH --market
 check_out "removing what is not installed is refused" "not installed" bash -c "$C plan remove demo; true"
+cd "$R" || exit 1; release v1.1.5 1.1.5 "$WORK/good" "requires_core_max = 1"; cd "$ROOT" || exit 1; $PKGSH fetch test >/dev/null 2>&1
+check_out "market: a release whose range ends below this core waits (requires_core_max, #1265)" "^demo${tab}recipe${tab}test${tab}1[.]1[.]5${tab}-${tab}waits" $PKGSH --market
+check_out "plan: its install is refused with the reason, not as installed already" "^reason${tab}.*does not support this core yet" bash -c "$C plan install demo; true"
+check_out "plan: and its code, before anything is read" "^code${tab}pkg[.]core-too-new$" bash -c "$C plan install demo; true"
+check_out "start: refused the same way" "^code${tab}pkg[.]core-too-new$" bash -c "$C start install demo --confirm demo; true"
+check "and nothing is installed" test ! -e "$HS_STATE_DIR/packages/current/demo"
 
 echo "-- removing a repository"
 check_out "a default repository stays" "default" bash -c "$C plan repo-remove official; true"
