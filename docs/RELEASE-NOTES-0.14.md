@@ -1,3 +1,15 @@
+# Hobnix 0.14.1 release notes
+
+One change on top of 0.14.0. **It has not been tested on a real server.** The notes of 0.14.0 follow below.
+
+- **The state database says which older releases may still write it**
+  ([#1352](https://github.com/hobnix/core/issues/1352)). `state.db` now stores the oldest schema version that may still write it, today 2. If a
+  later release changes the database in a way this release can live with, it keeps that number. After you go back to 0.14.1, events and live updates
+  then keep working. A change this release cannot live with raises the number, and 0.14.1 then does not write, as before. 0.14.0 and older do not
+  read the number: if a later release raises the schema version and you go back to one of them, events and live updates stop.
+
+A server on the `stable` update channel gets this release with `hs update`. Not tested on hardware yet.
+
 # Hobnix 0.14.0 release notes
 
 Release notes of "0.14 Marketplace", built from the entries of `docs/changelog/` that are new since `v0.13.0` and from the pull requests of this

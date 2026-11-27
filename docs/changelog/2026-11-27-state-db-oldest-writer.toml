@@ -1,0 +1,4 @@
+date  = "2026-11-27"
+type  = "fix"
+title = "The state database says which older releases may still write it, for later rollbacks"
+body  = """The state database now stores the oldest schema version that may still write it. A later release that changes the database in a way this one can live with keeps that number, so after going back to this release, events and live updates keep working. A change this release cannot live with raises the number, and it then refuses to write, as before. Releases older than this one do not read the number. Not tested on hardware yet."""
