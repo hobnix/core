@@ -1,0 +1,4 @@
+date = "2026-11-26"
+type = "fix"
+title = "hs commands start much faster when extensions are installed"
+body = "Building the command list started hundreds of programs on every hs call, and the web interface calls hs all the time. The packages are now read once per call. The rules for what a package may not do are the same."

@@ -1,0 +1,4 @@
+date  = "2026-11-26"
+type  = "change"
+title = "Idle server uses less CPU: rarely used pages are read on first open, displays update every 60 s"
+body  = """With no page open, the web interface no longer keeps every read warm. Pages that are rarely used are read when they are first opened, so their first load can be slower. The status document for displays is written every 60 s instead of every 20 s, and the displays update at that rate. Not tested on hardware yet."""

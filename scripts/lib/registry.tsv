@@ -14,6 +14,7 @@ user	smoke	smoke.sh	{rest}	quick check that the commands work here: needed progr
 user	cheatsheet	cheatsheet.sh	{rest}	one-page German cheat sheet of the most useful commands (Markdown, to print)	Spickzettel auf einer Seite mit den wichtigsten Befehlen (Markdown, zum Ausdrucken)	topic:docs,reads
 user	jobs reconcile	job-reconcile.sh	-	-	-	nohelp,topic:system,changes
 user	timing	read-timing.sh	{rest}	how long the reads of the interface take (every tab loads through them), slowest first; needs root	wie lange die Lesezugriffe der Oberfläche dauern (jeder Reiter lädt damit), die langsamsten zuerst	nohelp,topic:system,reads
+user	perf baseline	perf-baseline.sh	{rest}	the performance baseline: CPU and memory of the live collector and web server, CPU per read and where it goes, compare two runs; needs root	-	topic:system,reads
 user	live load	live-load.sh	{rest}	what the live-state collector costs now: CPU seconds and reads per topic in the last minute	was der Live-Zustand-Sammler gerade kostet: CPU-Sekunden und Lesevorgänge je Thema in der letzten Minute	reads,topic:system
 user	live measure	live-measure.sh	{rest}	measure the live state on the state database for a while (writes per minute, database growth, change latency) and write a result file; needs root	-	nohelp,long,topic:system,changes
 user	motd	motd.sh	{rest}	three status lines: problems, last backup, system (also shown at SSH login)	drei Statuszeilen: Probleme, letztes Backup, System (erscheint auch beim SSH-Login)	topic:system,reads
@@ -45,7 +46,7 @@ user	update	update.sh	-	-	-	long,topic:system,changes,cheat:update
 user	backup now	backup.sh	now	-	-	long,nohelp,topic:backup,changes,cheat:backup,capability:backup
 user	backup drill	backup.sh	drill	-	-	long,nohelp,topic:backup,changes,capability:backup
 user	backup drill ct	backup.sh	drill ct	restore a container from the backup into a throwaway instance without a network, boot it and delete it (the one drilled longest ago, smallest first); also checks the domain controller backup file	einen Container aus dem Backup in eine Wegwerf-Instanz ohne Netzwerk zurückholen, starten und wieder löschen (den, der am längsten nicht dran war, kleinster zuerst); prüft auch die Sicherungsdatei des Domänencontrollers	long,nohelp,topic:backup,changes,capability:backup
-user	backup drill ct <ct>	backup.sh	drill ct {1}	the same drill for one named container	dieselbe Wiederherstellungsprobe für einen bestimmten Container	long,nohelp,topic:backup,changes,capability:backup
+user	backup drill ct <ct>	backup.sh	drill ct {1} {?--repo=}	the same drill for one named container	dieselbe Wiederherstellungsprobe für einen bestimmten Container	long,nohelp,topic:backup,changes,capability:backup
 user	backup verify	backup.sh	verify	-	-	long,nohelp,topic:backup,changes,capability:backup
 user	backup prune	backup.sh	prune	give space back now: delete leftovers of a run that ran out of space, apply the retention, prune (--dry-run shows what would go)	Platz sofort freigeben: Reste eines am Platzmangel gescheiterten Laufs löschen, Aufbewahrung anwenden, bereinigen (--dry-run zeigt, was wegfiele)	long,topic:backup,changes,capability:backup
 user	backup report	backup.sh	report	send the report of the restore drills as a push message now (it goes out by itself on the 25th of every month; --dry-run only shows it)	den Bericht über die Wiederherstellungsproben als Push-Nachricht jetzt senden (er geht jeden Monat am 25. von selbst raus; --dry-run zeigt ihn nur)	topic:backup,changes,capability:backup
@@ -98,20 +99,20 @@ user	snapshots <share> on	snapshots-auto.sh	{1} on	switch the automatic snapshot
 user	snapshots <share> off	snapshots-auto.sh	{1} off	switch the automatic snapshots of a share off	die automatischen Schnappschüsse einer Freigabe ausschalten	nohelp,topic:backup,changes,capability:backup
 user	ct list	status.sh	-	containers and VMs with state, address and pinned MAC	Container und VMs mit Zustand, Adresse und festgelegter MAC	topic:instances,reads,cheat:server,capability:incus
 user	ct add	ct-guided.sh	add {rest}	create an instance (guided): hs ct add [name] [--kind empty|docker|vm] [--ram MB] ...	Instanz anlegen (geführt): hs ct add [Name] [--kind empty|docker|vm] [--ram MB] ...	guided,topic:instances,changes,capability:incus
-user	ct <ct> start	manage-ct.sh	{1} --start	start an instance	Instanz starten	topic:instances,changes,capability:incus
-user	ct <ct> stop	manage-ct.sh	{1} --stop	stop an instance	Instanz anhalten	topic:instances,changes,capability:incus
-user	ct <ct> restart	manage-ct.sh	{1} --restart	restart an instance	Instanz neu starten	topic:instances,changes,cheat:trouble,capability:incus
-user	ct <ct> remove	manage-ct.sh	{1} --delete	delete an instance (asks you to type its name)	Instanz löschen (der Name muss getippt werden)	guided,topic:instances,changes,capability:incus
-user	ct <ct> set	manage-ct.sh	{1} --set {rest}	change ram, cpu, disk, autostart, docker: hs ct <ct> set ram=2048 cpu=2	RAM, CPU, Platte, Autostart, Docker ändern: hs ct <ct> set ram=2048 cpu=2	topic:instances,changes,capability:incus
-user	ct <ct> autostart <state>	manage-ct.sh	{1} --set autostart={2}	start an instance at every boot: on, or off = Incus restores its last state; hs ct <ct> autostart on	eine Instanz bei jedem Start des Servers starten: on, oder off = Incus stellt den letzten Zustand wieder her; hs ct <ct> autostart on	topic:instances,changes,capability:incus
+user	ct <ct> start	manage-ct.sh	{1} --start --hs-words {rest}	start an instance	Instanz starten	topic:instances,changes,capability:incus
+user	ct <ct> stop	manage-ct.sh	{1} --stop --hs-words {rest}	stop an instance	Instanz anhalten	topic:instances,changes,capability:incus
+user	ct <ct> restart	manage-ct.sh	{1} --restart --hs-words {rest}	restart an instance	Instanz neu starten	topic:instances,changes,cheat:trouble,capability:incus
+user	ct <ct> remove	manage-ct.sh	{1} --delete --hs-words {rest}	delete an instance (asks you to type its name)	Instanz löschen (der Name muss getippt werden)	guided,topic:instances,changes,capability:incus
+user	ct <ct> set	manage-ct.sh	{1} --set --hs-words {rest}	change ram, cpu, disk, autostart, docker: hs ct <ct> set ram=2048 cpu=2	RAM, CPU, Platte, Autostart, Docker ändern: hs ct <ct> set ram=2048 cpu=2	topic:instances,changes,capability:incus
+user	ct <ct> autostart <state>	manage-ct.sh	{1} --autostart {2} --hs-words {rest}	start an instance at every boot: on, or off = Incus restores its last state; hs ct <ct> autostart on	eine Instanz bei jedem Start des Servers starten: on, oder off = Incus stellt den letzten Zustand wieder her; hs ct <ct> autostart on	topic:instances,changes,capability:incus
 user	ct <ct> ip	ct-guided.sh	ip {1} {rest}	fixed address (guided): shows the current one; hs ct <ct> ip 10.10.95.25	feste Adresse (geführt): zeigt die aktuelle; hs ct <ct> ip 10.10.95.25	guided,topic:instances,changes,capability:incus
 user	ct <ct> snapshot	ct-guided.sh	snapshot {1} {rest}	snapshots (guided): create, restore, delete; hs ct <ct> snapshot [label]	Schnappschüsse (geführt): anlegen, zurückgehen, löschen; hs ct <ct> snapshot [Name]	guided,topic:instances,changes,capability:incus
 user	ct <ct> snapshots	manage-ct.sh	{1} --snapshots	list the snapshots of an instance	Schnappschüsse einer Instanz auflisten	topic:instances,reads,capability:incus
-user	ct <ct> restore	manage-ct.sh	{1} --restore {rest}	go back to a snapshot: hs ct <ct> restore <snapshot>	zu einem Schnappschuss zurückkehren: hs ct <ct> restore <Schnappschuss>	topic:instances,changes,capability:incus
-user	ct <ct> update	manage-ct.sh	{1} --update	snapshot, then update the software inside	Schnappschuss machen, dann die Software darin aktualisieren	long,topic:instances,changes,capability:incus
+user	ct <ct> restore	manage-ct.sh	{1} --restore --hs-words {rest}	go back to a snapshot: hs ct <ct> restore <snapshot>	zu einem Schnappschuss zurückkehren: hs ct <ct> restore <Schnappschuss>	topic:instances,changes,capability:incus
+user	ct <ct> update	manage-ct.sh	{1} --update --hs-words {rest}	snapshot, then update the software inside	Schnappschuss machen, dann die Software darin aktualisieren	long,topic:instances,changes,capability:incus
 user	ct <ct> storage	ct-guided.sh	storage {1} {rest}	attach storage (guided): a share folder, a sensitive folder or a fast volume	Speicher einhängen (geführt): Freigaben-Ordner, sensibler Ordner oder fast-Volume	guided,topic:instances,changes,capability:incus
-user	ct <ct> storage add	manage-ct.sh	{1} --add-storage {rest}	mount fast|shares|sensitive storage: hs ct <ct> storage add <kind> <name> <path> [--readonly] [--as uid:gid]	Speicher einhängen (fast|shares|sensitive): hs ct <ct> storage add <Art> <Name> <Pfad> [--readonly] [--as uid:gid]	topic:instances,changes,capability:incus
-user	ct <ct> storage remove	manage-ct.sh	{1} --remove-storage {rest}	unmount a storage device: hs ct <ct> storage remove <device>	Speicher aushängen: hs ct <ct> storage remove <Gerät>	topic:instances,changes,capability:incus
+user	ct <ct> storage add	manage-ct.sh	{1} --add-storage --hs-words {rest}	mount fast|shares|sensitive storage: hs ct <ct> storage add <kind> <name> <path> [--readonly] [--as uid:gid]	Speicher einhängen (fast|shares|sensitive): hs ct <ct> storage add <Art> <Name> <Pfad> [--readonly] [--as uid:gid]	topic:instances,changes,capability:incus
+user	ct <ct> storage remove	manage-ct.sh	{1} --remove-storage --hs-words {rest}	unmount a storage device: hs ct <ct> storage remove <device>	Speicher aushängen: hs ct <ct> storage remove <Gerät>	topic:instances,changes,capability:incus
 user	ct <ct> shell	ct-access.sh	{1} shell	a shell inside the instance	eine Shell in der Instanz	topic:instances,changes,capability:incus
 user	ct <ct> exec	ct-access.sh	{1} exec {rest}	run one command inside: hs ct <ct> exec <command>	einen Befehl darin ausführen: hs ct <ct> exec <Befehl>	topic:instances,changes,capability:incus
 user	ct <ct> logs	ct-access.sh	{1} logs {rest}	the last lines of the journal inside: hs ct <ct> logs [lines]	die letzten Zeilen des Journals darin: hs ct <ct> logs [Zeilen]	guided,topic:instances,reads,cheat:trouble,capability:incus
@@ -120,17 +121,17 @@ user	ct update-all	ct-update-all.sh	{rest}	snapshot and update every running con
 user	user list	users-show.sh	users	users of the domain with state and groups	Benutzer der Domäne mit Zustand und Gruppen	topic:users,reads,cheat:users,capability:samba
 user	user <user> show	users-show.sh	users {1}	one user with state and groups	ein Benutzer mit Zustand und Gruppen	topic:users,reads,capability:samba
 user	user add	user-guided.sh	add {rest}	create a user (guided; the password is asked next): hs user add [name] [--full "Full Name"]	Benutzer anlegen (geführt; danach das Passwort): hs user add [Name] [--full "Voller Name"]	guided,topic:users,changes,cheat:users,capability:samba
-user	user <user> passwd	manage-users.sh	--password {1}	set a new password (typed on the terminal)	neues Passwort setzen (wird am Terminal getippt)	guided,topic:users,changes,cheat:users,capability:samba
+user	user <user> passwd	manage-users.sh	--password {1} {?--dry-run} {?--stdin}	set a new password (typed on the terminal)	neues Passwort setzen (wird am Terminal getippt)	guided,topic:users,changes,cheat:users,capability:samba
 user	user <user> lock	user-guided.sh	lock {1} {rest}	lock or unlock an account (shows what it will do)	Konto sperren oder entsperren (zeigt, was passiert)	guided,topic:users,changes,capability:samba
-user	user <user> unlock	manage-users.sh	--enable {1}	unlock an account	Konto entsperren	topic:users,changes,capability:samba
-user	user <user> remove	manage-users.sh	--delete {1}	delete an account (asks you to type the name)	Konto löschen (der Name muss getippt werden)	guided,topic:users,changes,capability:samba
-user	user <user> join <group>	manage-users.sh	--member {2} {1} add	put a user into a group	Benutzer in eine Gruppe aufnehmen	topic:users,changes,capability:samba
-user	user <user> leave <group>	manage-users.sh	--member {2} {1} remove	take a user out of a group	Benutzer aus einer Gruppe nehmen	topic:users,changes,capability:samba
+user	user <user> unlock	manage-users.sh	--enable {1} {?--dry-run}	unlock an account	Konto entsperren	topic:users,changes,capability:samba
+user	user <user> remove	manage-users.sh	--delete {1} {?--dry-run}	delete an account (asks you to type the name)	Konto löschen (der Name muss getippt werden)	guided,topic:users,changes,capability:samba
+user	user <user> join <group>	manage-users.sh	--member {2} {1} add {?--dry-run}	put a user into a group	Benutzer in eine Gruppe aufnehmen	topic:users,changes,capability:samba
+user	user <user> leave <group>	manage-users.sh	--member {2} {1} remove {?--dry-run}	take a user out of a group	Benutzer aus einer Gruppe nehmen	topic:users,changes,capability:samba
 user	user flush	manage-users.sh	--flush	make the file server forget cached users and groups	den Dateiserver gecachte Benutzer und Gruppen vergessen lassen	topic:users,changes,capability:ad
 user	group list	users-show.sh	groups	groups of the domain with their members	Gruppen der Domäne mit ihren Mitgliedern	topic:users,reads
 user	group <group> show	users-show.sh	groups {1}	one group with its members	eine Gruppe mit ihren Mitgliedern	topic:users,reads
 user	group add	user-guided.sh	group-add {rest}	create a group: hs group add [name]	Gruppe anlegen: hs group add [Name]	guided,topic:users,changes
-user	group <group> remove	manage-users.sh	--group-delete {1}	delete a group	Gruppe löschen	guided,topic:users,changes
+user	group <group> remove	manage-users.sh	--group-delete {1} {?--dry-run}	delete a group	Gruppe löschen	guided,topic:users,changes
 user	group roles	users-roles.sh	{rest}	create the groups of the web interface roles (hn-viewers, hn-app-managers) in the domain: plan first, then the typed domain name	die Gruppen der Rollen der Weboberfläche (hn-viewers, hn-app-managers) in der Domäne anlegen: erst der Plan, dann der getippte Domänenname	topic:users,changes,capability:ad
 user	backup status	backup.sh	status	what is in the backup, how big, how old	was im Backup ist, wie groß, wie alt	nohelp,topic:backup,reads,cheat:backup,capability:backup
 user	backup list	backup.sh	list	list the snapshots	die Schnappschüsse auflisten	nohelp,topic:backup,reads,capability:backup
@@ -201,6 +202,7 @@ user	dc cert sign	dc-cert.sh	sign {rest}	sign a request with the CA (only names 
 user	dc cert install	dc-cert.sh	install {rest}	put the signed certificate into the domain controller and restart its Samba: hs dc cert install --cert <file> [--yes]	das unterschriebene Zertifikat in den Domänencontroller einsetzen und dessen Samba neu starten: hs dc cert install --cert <Datei> [--yes]	topic:users,changes,capability:ad
 user	dc cert show	dc-cert.sh	show {rest}	names and end date of the certificate a domain controller uses: hs dc cert show [--dc <instance>]	Namen und Ablaufdatum des Zertifikats, das ein Domänencontroller benutzt: hs dc cert show [--dc <Instanz>]	topic:users,reads,capability:ad
 user	net ip <ct>	net-ip.sh	{1} show	the fixed address of an instance: hs net ip <ct> [set <address>|clear]	die feste Adresse einer Instanz: hs net ip <ct> [set <Adresse>|clear]	topic:network,changes,capability:network
+user	net ip <ct> show	net-ip.sh	{1} show	the same, with the word show	dasselbe, mit dem Wort show	nohelp,topic:network,changes,capability:network
 user	net ip <ct> set	net-ip.sh	{1} set {rest}	reserve an address for an instance	eine Adresse für eine Instanz reservieren	nohelp,topic:network,changes,capability:network
 user	net ip <ct> clear	net-ip.sh	{1} clear {rest}	remove the reservation of an instance	die Reservierung einer Instanz entfernen	nohelp,topic:network,changes,capability:network
 user	job list	jobs.sh	-	scheduled jobs and the ones running now	geplante Aufträge und die gerade laufenden	topic:jobs,reads,cheat:server
@@ -307,7 +309,7 @@ user	disk erc	disk-erc.sh	{rest}	set the error recovery time (7 s) on disks in a
 user	disk spindown	disk-spindown.sh	{rest}	power state of the spinning disks and the standby timer (diskSpindownMinutes, per pool diskSpindownPools in machine.toml): hs disk spindown status|apply|power|log [hours]	Stromzustand der drehenden Platten und der Standby-Timer (diskSpindownMinutes in machine.toml): hs disk spindown status|apply|power|log [Stunden] (log misst, welche Platte wann aufwacht und welche Dienste liefen; root)	topic:disks,changes,capability:storage
 sys	sys disk event <action> <name>	disk-event.sh	{1} {2}	a disk was plugged in or taken out (udev, hs-disk-event@.service): log it, push a message, never touch the disk	-
 sys	sys disk-health list	disk-health.sh	--list	SMART findings per disk	-
-sys	sys state forget <serial>	state.sh	forget {1} --yes	remove a MISSING disk from the inventory for good (no question: the caller asked; a disk that is present is refused)	-
+sys	sys state forget <serial>	state.sh	forget {1} --yes {?--yes}	remove a MISSING disk from the inventory for good (no question: the caller asked; a disk that is present is refused)	-
 sys	sys state collect	state.sh	collect {rest}	read the disks and update the state database (the one writer; root)	-
 sys	sys state disks	state.sh	disks	the disk inventory: serial, model, size, name, state ok|missing|unknown, role, pool, first and last seen, worse, note	-
 sys	sys state events	state.sh	events {rest}	disk events from the state database: time, kind, serial, text	-
@@ -399,7 +401,7 @@ sys	sys backup overview	backup.sh	--overview	every share, instance and always-in
 sys	sys backup plan <action>	backup-change.sh	plan {1} {rest}	what switching a share or instance, backing up now, a check, a restore drill or browsing would do, as data: status and plan lines (never asks; exit 0 ok, 1 refused, 2 something missing)	-
 sys	sys backup start <action>	backup-change.sh	start {1} {rest}	do it as a background job (hs sys backup start toggle --name <n> --kind shares|sensitive|ct --to on|off | now | verify | drill [--count N] | browse --to on|off | offsite-config --kind s3|rest|sftp|folder|typed [--endpoint E --bucket B | --url U --user N | --host H --user N --path P | --path P | --repo R]: the secrets are lines on stdin, answers status done, secret password once for a new repository)	-
 sys	sys backup rules <ct>	backup.sh	--rules {1}	which parts of an instance are in the backup, as data: partial yes|no, include path and bytes, exclude glob, dump path and bytes (- when the size is unknown)	-
-sys	sys backup snapshots <tag>	backup.sh	--snapshots {1}	the snapshots with one tag (shares, host or ct:<name>)	-
+sys	sys backup snapshots <tag>	backup.sh	--snapshots {1} {?--repo=}	the snapshots with one tag (shares, host or ct:<name>)	-
 sys	sys backup snapshots	backup.sh	--snapshots	the snapshots of the shares in the backup (id, time, tags)	-
 sys	sys shares plan <share> <action>	share-change.sh	plan {1} {2} {rest}	what a change of a share would do, as data: status, plan lines, confirm_name (never asks; exit 2 = something is missing)	-
 sys	sys shares start <share> <action>	share-change.sh	start {1} {2} {rest}	do a change of a share as a background job; needs --confirm <share> when the plan has a danger line	-
@@ -533,7 +535,7 @@ sys	sys recipes asks <recipe>	recipe-asks.sh	{1}	the questions a recipe wants an
 sys	sys recipes steps <recipe>	recipe-steps.sh	{1}	the steps a recipe groups its questions into, as data: step id, label, help, the keys asked in it (- when empty); no rows when the recipe declares no steps	-
 sys	sys admin plan <action>	admin-change.sh	plan {1} {rest}	what a test push message, pinning the MACs, moving the upload cache or cleaning the fans would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
 sys	sys admin start <action>	admin-change.sh	start {1} {rest}	do it (hs sys admin start test-push | pin-macs | cache-mover | fans-clean [--seconds N]); the first two answer done, the others start a job	-
-sys	sys backup find <word>	backup.sh	--find {1}	files whose name contains a word, in every snapshot, as data: snapshot, time, path, type, bytes (at most 200; mounts the backup disk, can take a while)	-
+sys	sys backup find <word>	backup.sh	--find {1} {?--repo=}	files whose name contains a word, in every snapshot, as data: snapshot, time, path, type, bytes (at most 200; mounts the backup disk, can take a while)	-
 sys	sys dc state	dc-cert.sh	state	the CA of this setup and the certificate of the domain controller as key and value lines: ca, ca_until, dc, cert, subject, names, valid_until, days_left, checked	-
 sys	sys dc plan <action>	dc-change.sh	plan {1} {rest}	what making the CA or renewing the certificate of the domain controller would do, as data: status, plan lines (never asks; exit 0 ok, 1 refused)	-
 sys	sys dc start <action>	dc-change.sh	start {1} {rest}	do it (hs sys dc start ca | renew [--dc <instance>] --confirm <instance>); ca answers done, renew starts a job	-

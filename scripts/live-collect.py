@@ -534,6 +534,7 @@ class Collector:
         self.busy_log = collections.deque()      # (time of the end, seconds) of every read (last window)
         self.rusage0 = _cpu_seconds()
         self.soft = set()                        # topics whose pending wake came only from the group `any` (no change of their own area)
+        self.failing = set()                     # topics whose last read failed: they are retried at their interval, also while nobody watches
         self.leases = {}                         # D14: topic -> time the lease runs out, as listen() saw the table `demand` last (`*` = every topic)
         self.pending = set()                     # changed topics that wait for the next wave
         self.wcond = threading.Condition()
@@ -578,7 +579,7 @@ class Collector:
         with self.tlock:
             items = list(self.events.items())
             info = dict(self.info)
-        woken, queued = [], 0
+        woken, queued, skipped = [], 0, 0
         t_trig = since if since else time.time()
         for t, ev in items:
             hard = soft = False
@@ -591,6 +592,9 @@ class Collector:
                 elif "any" in groups:
                     soft = True
             if not (hard or soft):
+                continue
+            if topic.startswith("@") and self.idle_now(t):
+                skipped += 1
                 continue
             self.trig.setdefault(t, t_trig)      # the earliest trigger of the next read starts its delay measure
             if ev.is_set():
@@ -605,8 +609,8 @@ class Collector:
         # one journal line per request (journalctl -u hs-live): which topics it woke, so a stale page can be traced to a missing or late refresh
         if queued and not woken:
             return                              # all of it was queued already: nothing new to say (a burst filled the journal)
-        log("refresh %s -> %s%s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic"),
-                                    " (+%d already queued)" % queued if queued else ""))
+        log("refresh %s -> %s%s%s" % (topic, "all %d topics" % len(woken) if topic == "*" else (", ".join(woken) or "no topic"),
+                                      " (+%d already queued)" % queued if queued else "", " (+%d idle skipped)" % skipped if skipped else ""))
 
     def collect(self, topic, words, mode="run"):
         """One read of one topic. Returns True when the output differs from the last read (new gen, published); an identical read writes nothing."""
@@ -701,12 +705,22 @@ class Collector:
         ls_ = self.leases
         return max(ls_.get(topic, 0), ls_.get("*", 0)) > now
 
+    def idle_now(self, t):
+        """True for a demand topic that no open page wants now: a group wake and a wave pass it by (a named event, its name, `*` and a lease do not)"""
+        return bool((self.info.get(t) or {}).get("idle")) and not self.leased(t)
+
     def pace(self, topic, interval):
         """seconds between two reads of a topic: its interval, or its idle interval (live-topics.tsv column 9, D14) while nobody wants it"""
         idle = (self.info.get(topic) or {}).get("idle")
-        if idle and not self.leased(topic):
+        if idle and not self.leased(topic) and topic not in self.failing:
             return max(idle, interval)
         return interval
+
+    def wait_for(self, topic, interval):
+        """seconds until the next timed read: pace x stretch, but the idle interval of a topic nobody watches is the safety net and is never stretched"""
+        pace = self.pace(topic, interval)
+        idle = self.idle_now(topic) and topic not in self.failing
+        return max(pace if idle else pace * self.stretch(), self.gap(topic, 0))
 
     def _meta(self, topic):
         """(src, ttl) of a topic for its document: the words of the read and the seconds it counts as fresh (live-topics.tsv column 8, else 3 x interval)"""
@@ -722,12 +736,14 @@ class Collector:
         with self.lock:
             old = self.db.get(topic) or {}
             if rc == 0 or out:
+                self.failing.discard(topic)
                 if old.get("err"):
                     ev.append(("live.collector-recovered", "live state '%s' reads again" % topic))
                 if old and old.get("rc") == rc and old.get("payload") == out and not old.get("err"):
                     return False
                 self.db.put(topic, out, rc, ms, src, ttl, now)
                 return True
+            self.failing.add(topic)
             text = ls.clean(err or "no output")
             if old.get("err") == text and old.get("rc") == rc:
                 log("topic %s failed (rc %s): %s" % (topic, rc, text))
@@ -761,6 +777,8 @@ class Collector:
             with self.tlock:
                 if t not in self.events:          # an extension topic went away
                     continue
+            if self.idle_now(t):
+                continue
             wait = self.last_read.get(t, 0) + self.gap(t, self.min_gap) - time.time()
             if wait > 0:
                 self.stop.wait(wait)
@@ -793,7 +811,7 @@ class Collector:
                 log("state.db down (%s), retry in 5 s" % e)
                 self.stop.wait(5)
                 continue
-            if ev.wait(timeout=max(self.pace(topic, interval) * self.stretch(), self.gap(topic, 0))):
+            if ev.wait(timeout=self.wait_for(topic, interval)):
                 # woken by a refresh, not by the interval: a topic is not read again sooner than min_gap after its last read (any_gap when only the
                 # group `any` woke it); refreshes that arrive meanwhile are the same read
                 while not self.stop.is_set() and not mine.is_set():
