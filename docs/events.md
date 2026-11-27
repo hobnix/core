@@ -36,6 +36,10 @@ The payload is optional extra data for programs. Rules:
 - Keys are only added, never removed or given a new meaning. If that is not possible, add a new kind. The row field `v` is the version of the row layout, not of a payload.
 - Keep it short: a payload over 1 KB is a sign that the data belongs in a file or a job record.
 
+## Writers
+
+The writer in use is `scripts/state-db.py emit` (`hs event emit`, and `event_emit` in `scripts/lib/event.sh`). The Rust part of the core has a second one, `hobnix event-emit`, with the same arguments, exit codes, rows and retention (hobnix/core#1336). It exists for tests and nothing calls it. Python owns the database while both exist: the Rust writer creates and migrates nothing, so it refuses a missing file, a schema older than its own, a newer one that does not allow it (`meta.oldest_writer`), a file that is not in WAL mode, and a SQLite with the WAL-reset bug. `tests/event-writer-rust.sh` holds both writers to the same cases, `tests/event-writer-concurrent.sh` runs them at the same time. They differ in two corners: a payload nested more than 1000 levels deep is stored as NULL by the Rust writer (Python stores it, or fails and writes no row at several thousand levels), and the Rust writer refuses an argument that is not UTF-8. Not tested on hardware yet.
+
 ## Today
 
 <!-- BEGIN generated from scripts/lib/event-kinds.tsv (python3 scripts/events-doc-gen.py write) -->
