@@ -72,6 +72,7 @@ Docs page shows them under *Apps* and *Extensions*.
 | [PLAN-core-daemon-migration](PLAN-core-daemon-migration.md) | Migration map of Core and Jobs: every command, service, timer, route, stored file and package hook with its new owner and step (P0, nothing built) |
 | [PLAN-0.14](PLAN-0.14.md) | What milestone 0.14 builds first, what moves forward from 0.15 and what waits (plan) |
 | [PLAN-workloads](PLAN-workloads.md) | Milestone 0.13: one list Apps & VMs, a page per Docker app, breadcrumbs, tree marks, early data |
+| [PLAN-game-servers](PLAN-game-servers.md) | Native game servers: recipe runner and SDK, volumes and their backups, ingress, the extension `game-servers` (draft plan, nothing built) |
 | [RELEASE-PROCESS](RELEASE-PROCESS.md) | develop, release branch, main, tags, hotfixes, the milestone branch, ruleset proposals |
 | [RELEASE-0.1-checklist](RELEASE-0.1-checklist.md) | The steps to release 0.1.0, what CI and the ISO need, blockers found |
 | [RELEASE-NOTES-0.1](RELEASE-NOTES-0.1.md) | Draft release notes of 0.1.0, with the hardware-UNVERIFIED parts |
