@@ -78,7 +78,7 @@ Shell stays for glue (ADR 0001 "Stays"; docs/PLAN-rust.md for the list). Practic
 - `set -euo pipefail`, quoted expansions, `local` for function variables, `readonly` for constants, no backticks, no `eval`.
 - **Names:** variables and functions in full lower-case words (`pool_name`, `list_disks`); environment variables the interface depends on keep their `HS_` names. One function does one thing; a function over about 40 lines is a candidate for a helper or for Rust.
 - **Output** only through `scripts/lib/ui.sh`; machine-readable lines never change shape (CLAUDE.md, `.claude/rules/shell.md`).
-- **Size limit:** a script over about 300 lines that parses structured data (JSON, `zfs` or `incus` output) or keeps state moves to Rust when it is next changed, if the ADR 0001 checklist allows it. A pipeline of other tools stays shell.
+- **Size limit:** a script over about 300 lines that parses structured data (JSON, `zfs` or `incus` output) or keeps state moves to Rust in 0.15 (ADR 0035). A pipeline of other tools stays shell.
 - **Secrets** only through `scripts/lib/secret.sh`, never argv or the environment.
 
 ## Python
